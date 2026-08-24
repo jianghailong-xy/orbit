@@ -684,6 +684,10 @@ func runLoop(cfg *RunnerConfig) bool {
 	agentDirs := newAgentDirProbe(agentDirProbeTimeout)
 	go agentDirs.run(loopCtx)
 
+	// Where a clone for a workspace created from a git URL lands on this machine. A fact of the
+	// account this process runs as, so it is resolved once rather than on every beat.
+	machineReposRoot := reposRoot()
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
@@ -706,6 +710,9 @@ func runLoop(cfg *RunnerConfig) bool {
 		mergeOutcomes := map[manualWorktreeOperationKey]mergeOutcome{}
 		commitOutcomes := map[manualWorktreeOperationKey]commitOutcome{}
 		artifactNow := map[string]bool{}
+		// Workspaces whose clone is running, so the at-least-once redelivery doesn't start a
+		// second git clone into the same directory while the first is still writing it.
+		cloningNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		runHeartbeatTicks(hbStop, ticker.C, func() {
@@ -736,6 +743,7 @@ func runLoop(cfg *RunnerConfig) bool {
 				AgentDirProbes:       agentDirs.snapshot(),
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
+				ReposRoot:            machineReposRoot,
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
@@ -984,6 +992,46 @@ func runLoop(cfg *RunnerConfig) bool {
 					delete(artifactNow, req.RequestID)
 					mergeMu.Unlock()
 				}(a)
+			}
+			// Clone the repositories behind workspaces the user created from a git URL. Off the
+			// heartbeat goroutine: a clone of a real repository takes minutes, and the heartbeat
+			// is what keeps this runner's live sessions from being reaped. Skipped while draining
+			// for the same reason merges are — this process is about to be replaced, and its
+			// successor gets the request on the next beat.
+			if !draining {
+				for _, c := range resp.CloneRequests {
+					if c.WorkspaceID == "" || c.RepoURL == "" {
+						continue
+					}
+					mergeMu.Lock()
+					busy := cloningNow[c.WorkspaceID]
+					if !busy {
+						cloningNow[c.WorkspaceID] = true
+					}
+					mergeMu.Unlock()
+					if busy {
+						continue
+					}
+					heartbeatOps.Add(1)
+					go func(req CloneCommand) {
+						defer heartbeatOps.Done()
+						defer func() {
+							mergeMu.Lock()
+							delete(cloningNow, req.WorkspaceID)
+							mergeMu.Unlock()
+						}()
+						out := cloneRepo(machineReposRoot, req.RepoURL)
+						if err := t.cloneResult(CloneResultRequest{
+							WorkspaceID: req.WorkspaceID, Status: out.Status, Path: out.Path,
+							DefaultBranch: out.DefaultBranch, Reused: out.Reused,
+							Stderr: out.Stderr, Message: out.Message,
+						}); err != nil {
+							// The request stays pending server-side and is redelivered; the
+							// second run finds the checkout it just made and reports it reused.
+							logln("clone-result POST failed for", req.WorkspaceID+":", err)
+						}
+					}(c)
+				}
 			}
 			// Drive the browser-less sign-in the user started from the web. Both actions are
 			// idempotent: the server redelivers each one until a status report moves it on,

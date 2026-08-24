@@ -542,6 +542,12 @@ func (t *Transport) repoCleanupResult(b RepoCleanupResultRequest) error {
 	return t.do(nil, "POST", "/runner/repo-cleanup-result", b, nil, 15*time.Second)
 }
 
+// cloneResult reports the outcome of a heartbeat-delivered CloneCommand: where the checkout is
+// and what the remote's default branch is, or git's own words for why there is no checkout.
+func (t *Transport) cloneResult(b CloneResultRequest) error {
+	return t.do(nil, "POST", "/runner/clone-result", b, nil, 15*time.Second)
+}
+
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.
 func (t *Transport) commitResult(sessionID string, b CommitResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/commit-result", b, nil, 15*time.Second)

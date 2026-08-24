@@ -543,6 +543,12 @@ export class RunnerApiController {
         // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
         // the stored value — NULL there means "never told us" and stays unrestricted.
         runsAsRoot: dto?.runsAsRoot ?? undefined,
+        // The directory this machine clones into, under which a workspace created from a git URL
+        // gets its checkout. An empty string is treated as no report, exactly like the omission an
+        // older runner sends: NULL here means "this machine never told us where it clones", and
+        // the answer to that is to leave it off the clone targets — not to store a root nobody
+        // named and then write a checkout to it.
+        reposRoot: dto?.reposRoot || undefined,
         // Runtime-owned default snapshot. Omission means an older runner and preserves the
         // previous value; an explicit {} clears stale values so catalog/static fallback applies.
         runtimeDefaultModels:

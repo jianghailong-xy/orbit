@@ -85,6 +85,11 @@ type HeartbeatRequest struct {
 	// RepoHealthReport). Nil until the first scan completes — an omitted field leaves the
 	// server's last snapshot alone rather than claiming every checkout is clean.
 	Repos []RepoHealthReport `json:"repos,omitempty"`
+	// ReposRoot is the directory a clone of <owner>/<repo> lands under on this machine, as
+	// <reposRoot>/<owner>-<repo>. Omitted when this account has no resolvable home, which the
+	// control plane reads as "no root reported" and answers by not offering this machine as a
+	// clone target — never by inventing a path to write a checkout to.
+	ReposRoot string `json:"reposRoot,omitempty"`
 	// RunsAsRoot reports whether this process is root, which costs the machine one permission
 	// mode: claude refuses Bypass under root ("--dangerously-skip-permissions cannot be used with
 	// root/sudo privileges") and exits before its first stream-json message, so a session asking
@@ -263,6 +268,44 @@ type HeartbeatResponse struct {
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`
+	// Repositories to clone for workspaces the user created from a git URL, one per workspace
+	// still waiting for its checkout. Redelivered every heartbeat until we report an outcome
+	// (see CloneCommand). Absent on older control planes → nothing to clone.
+	CloneRequests []CloneCommand `json:"cloneRequests,omitempty"`
+}
+
+// CloneCommand mirrors @orbit/shared: clone RepoURL onto this machine for WorkspaceID. The target
+// path is not sent — it is <reposRoot>/<owner>-<repo>, derived here from the URL, because the
+// repos root is this machine's fact. No credential travels with it either: the clone runs with
+// whatever git credentials the machine already has, and Orbit stores no token to send.
+//
+// Redelivered every heartbeat until the control plane records an outcome, so acting on it must be
+// idempotent — which it is: a second delivery lands on a directory that is already a checkout of
+// this same remote, and is reported as reusable rather than cloned again.
+type CloneCommand struct {
+	WorkspaceID string `json:"workspaceId"`
+	RepoURL     string `json:"repoUrl"`
+	// RequestedAt is when the user asked, echoed back so a redelivery is recognizable in logs.
+	RequestedAt string `json:"requestedAt,omitempty"`
+}
+
+// CloneResultRequest mirrors @orbit/shared RunnerCloneResult: how the clone went. Path and
+// DefaultBranch are what the workspace is configured from; Stderr is git's own output, verbatim.
+type CloneResultRequest struct {
+	WorkspaceID string `json:"workspaceId"`
+	Status      string `json:"status"` // "done" | "failed"
+	// Path is where the checkout actually is — reported rather than assumed, since the control
+	// plane never chose it.
+	Path string `json:"path,omitempty"`
+	// DefaultBranch is the remote's own default, which the workspace merges into. Empty for a
+	// repository with no commits yet.
+	DefaultBranch string `json:"defaultBranch,omitempty"`
+	// Reused: the checkout was already on the disk, so nothing was cloned.
+	Reused bool `json:"reused,omitempty"`
+	// Stderr is git's message byte for byte, never parsed or rewritten. Empty for a failure git
+	// never saw (an unusable URL, an unwritable repos root) — Message carries those.
+	Stderr  string `json:"stderr,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // RepoCleanupCommand mirrors @orbit/shared: repair the shared checkout at Root — rescue whatever

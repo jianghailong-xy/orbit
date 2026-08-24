@@ -427,6 +427,46 @@ export interface RunnerRepoCleanupResult {
   message?: string;
 }
 
+/** Control plane → runner: clone `repoUrl` onto this machine for the workspace waiting on it.
+ *
+ *  No path travels with it: the checkout lands at `<reposRoot>/<owner>-<repo>`, derived by the
+ *  runner from the URL, because the repos root is that machine's own fact. No credential travels
+ *  with it either — the clone runs with whatever git credentials the machine already has (ssh key,
+ *  credential helper, gh auth), and Orbit stores no token to send.
+ *
+ *  Redelivered every heartbeat until the control plane records an outcome. Acting on it twice is
+ *  safe: the second run finds a checkout of this same remote where it would have cloned, and
+ *  reports it reused. */
+export interface CloneCommand {
+  workspaceId: string;
+  repoUrl: string;
+  /** When the user asked, echoed back for log correlation. */
+  requestedAt?: string;
+}
+
+/** Runner → control plane: how the clone went (POST /runner/clone-result).
+ *
+ *  `path` and `defaultBranch` are what the workspace is then configured from — reported rather
+ *  than assumed, since the control plane chose neither. */
+export interface RunnerCloneResult {
+  workspaceId: string;
+  status: 'done' | 'failed';
+  /** Where the checkout actually is. */
+  path?: string;
+  /** The remote's own default branch, read from what the clone recorded for it. Absent for a
+   *  repository with no commits yet, which has no default branch to report. */
+  defaultBranch?: string;
+  /** The directory already held a checkout of this same remote, so nothing was cloned. */
+  reused?: boolean;
+  /** Git's own stderr, byte for byte. Never parsed, summarized or rewritten anywhere between the
+   *  machine and the screen: the runner is the only thing that can see this machine's credentials
+   *  and network, and a translation of git's message is the layer that eventually explains the
+   *  wrong problem. Absent for a failure git never saw (an unusable URL, an unwritable repos
+   *  root) — `message` carries those, plus what is in the way when the directory is occupied. */
+  stderr?: string;
+  message?: string;
+}
+
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
  *  the same snapshot at turn boundaries). */
 export interface SessionLiveState {
@@ -495,6 +535,10 @@ export interface RunnerHeartbeatResponse {
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;
+  /** Repositories to clone on this machine, one per workspace created from a git URL that is
+   *  still waiting for its checkout. Absent on older control planes (an older runner ignores the
+   *  field → the workspace stays CLONING until its runner is upgraded). */
+  cloneRequests?: CloneCommand[];
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */
