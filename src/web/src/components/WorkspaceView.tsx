@@ -691,6 +691,20 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   return { text: statusLabel(s), tone: 'preview' };
 };
 
+/**
+ * Where the header's "back" goes for a session that coordinates a project, and what it is called.
+ *
+ * A coordinator conversation is opened from a project's page and executes no task, so the task
+ * link beside it never applies and the way back used to be the browser's own button. Reads the
+ * session DETAIL's `projectId`/`projectTitle`: the link only exists in that direction — a session
+ * row carries no project column — so a list row cannot answer this, and the button appears once
+ * the detail lands.
+ */
+export function projectBackLink(session: any): { path: string; title: string | null } | null {
+  if (!session?.projectId) return null;
+  return { path: `/projects/${encodeId(session.projectId)}`, title: session.projectTitle ?? null };
+}
+
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
 export function statusLabel(session: any): string {
@@ -1384,6 +1398,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
+  // The project this conversation coordinates, if any — see projectBackLink. Read off
+  // `selectedSession` rather than `selected`, since only the detail payload carries it.
+  const projectBack = projectBackLink(selectedSession);
   const selectedLifecycleState = selectedSession
     ? sessionLifecycleStateOf(
         selectedSession,
@@ -4580,6 +4597,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               >
                 <ArrowLeftOutlined />
                 <span className="workspace-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>
+              </button>
+            )}
+            {projectBack && !composing && (
+              <button
+                type="button"
+                className="workspace-header-task"
+                title={projectBack.title ? `Back to project · ${projectBack.title}` : 'Back to project'}
+                onClick={() => navigate(projectBack.path)}
+              >
+                <ArrowLeftOutlined />
+                <span className="workspace-header-task-name">{projectBack.title ?? 'Back to project'}</span>
               </button>
             )}
             {editingTitle && selected && !composing ? (

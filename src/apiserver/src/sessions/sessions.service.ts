@@ -2041,6 +2041,11 @@ export class SessionsService {
             tag: { select: { id: true, name: true, color: true, isSystem: true, position: true } },
           },
         },
+        // The project this session coordinates, if it is one. The link only exists in this
+        // direction — a Session has no project column — so a client that opened the conversation
+        // from a project page has no other way to find its way back. At most one row (the unique
+        // index behind Project.coordinatorSessionId), reached through that index.
+        coordinatorForProject: { select: { id: true, title: true } },
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -2062,11 +2067,20 @@ export class SessionsService {
       ? { ...session, runtimeSessionId: SessionsService.RESUMABLE_PROJECTION, numTurns: 0 }
       : session;
     // Flatten the join to a picker-ordered `tags` array (system first), matching the list payload.
-    const { tagLinks, ...rest } = projected;
+    // The coordinated project is flattened the same way and for the same reason `taskTitle` is:
+    // a name beside its id, so a client can label the link without a second request. Both keys are
+    // always present — null on the ordinary session that coordinates nothing — and `projectId` is
+    // rendered base62 by PublicIdInterceptor like every other address in the payload.
+    const { tagLinks, coordinatorForProject, ...rest } = projected;
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
-    return withSessionCapabilities({ ...rest, tags });
+    return withSessionCapabilities({
+      ...rest,
+      tags,
+      projectId: coordinatorForProject?.id ?? null,
+      projectTitle: coordinatorForProject?.title ?? null,
+    });
   }
 
   /**
