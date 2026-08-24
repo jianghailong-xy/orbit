@@ -230,7 +230,7 @@ struct ImagePagerView: View {
             }
         }
         .frame(width: size.width, height: size.height)
-        .task(id: att.id) { await store.load(att.id) }
+        .loadsAttachmentImage(att.id, from: store)
     }
 
     @ViewBuilder

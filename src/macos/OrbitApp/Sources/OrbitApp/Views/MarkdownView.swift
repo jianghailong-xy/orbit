@@ -386,7 +386,7 @@ private struct MarkdownImageView: View {
                 placeholder
             }
         }
-        .task(id: id) { await store.load(id) }
+        .loadsAttachmentImage(id, from: store)
     }
 
     /// iOS: a tap opens the shared full-screen zoomable viewer (pinch/pan, Copy/Save) — the same

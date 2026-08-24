@@ -52,7 +52,7 @@ struct ChatAttachmentImage: View {
                     .frame(width: 120, height: 90)
             }
         }
-        .task(id: attachment.id) { await store.load(attachment.id) }
+        .loadsAttachmentImage(attachment.id, from: store)
     }
 }
 
@@ -105,7 +105,7 @@ struct ChatAttachmentThumb: View {
                     .frame(width: Self.side, height: Self.side)
             }
         }
-        .task(id: attachment.id) { await store.load(attachment.id) }
+        .loadsAttachmentImage(attachment.id, from: store)
     }
 }
 
