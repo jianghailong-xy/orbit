@@ -1362,9 +1362,11 @@ model ConversationTurn {
   session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   seq             Int // server-assigned, per-session delivery ordering
   clientTurnId    String    @map("client_turn_id") // client-supplied idempotency key
-  // message | steer | shell | interrupt | end | reload | diff (see ConversationTurnKind).
-  // A plain string, so a new kind needs no migration. `steer` is a message written into the
-  // turn already running instead of queued behind its result.
+  // message | steer | shell | interrupt | end | reload | setconfig | diff (see
+  // ConversationTurnKind). A plain string, so a new kind needs no migration. `steer` is a
+  // message written into the turn already running instead of queued behind its result;
+  // `setconfig` is the half of a config change a resident engine can just be told about,
+  // split off from `reload` so it need not wait for the running turn to end.
   kind            String    @default("message")
   content         String? // user message text (null for interrupt/end)
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED

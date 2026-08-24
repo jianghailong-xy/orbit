@@ -78,7 +78,7 @@ test('a steer is gated ON a live engine turn, and an executable turn is still ga
 
 test('a steer outranks the queued messages it was sent past', async () => {
   const sql = await leaseSQL();
-  assert.match(sql, /ORDER BY \(CASE WHEN[\s\S]*?WHEN turn\."kind" IN \('reload', 'steer'\) THEN 1 ELSE 2 END\), turn\."seq" ASC/);
+  assert.match(sql, /ORDER BY \(CASE WHEN[\s\S]*?WHEN turn\."kind" IN \('reload', 'steer'\) THEN 2 ELSE 3 END\), turn\."seq" ASC/);
 });
 
 /**

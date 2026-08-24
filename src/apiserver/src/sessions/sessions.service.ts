@@ -4742,14 +4742,17 @@ export class SessionsService {
   }
 
   /**
-   * Change the model / permission mode / effort / provider of an already-started session. The live
-   * runtime process was spawned with the old model/permission-mode flags, so we
-   * persist the new values and enqueue a `reload` control turn: the runner tears the
-   * process down and re-spawns it with --resume + the new flags (full context kept).
-   * The reload is deferred by the inbox lease until no message is in flight, so changing
-   * config mid-turn doesn't abort the running turn — it applies between turns (the next
-   * queued message then runs under the new config). A not-yet-claimed (PENDING) session
-   * needs no reload: the claim reads the new value.
+   * Change the model / permission mode / effort / provider of an already-started session.
+   *
+   * The new values are persisted and a control turn is queued for the live runtime, and which
+   * turn that is depends on what moved. Effort and provider are spawn-only: the process was
+   * built with them, so a `reload` — tear down, re-spawn with --resume and the new flags, full
+   * context kept — is the only way to change them, and the inbox holds it until no message is
+   * in flight so it cannot abort a running turn. Model and permission mode are not spawn-only:
+   * a resident engine can be told about them, so they travel as `setconfig`, which the inbox
+   * hands over mid-turn. A PATCH that moves both queues both, setconfig first.
+   *
+   * A not-yet-claimed (PENDING) session needs neither: the claim reads the new values.
    */
   async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
     if (
@@ -4760,9 +4763,9 @@ export class SessionsService {
     ) {
       throw new BadRequestException('nothing to update');
     }
-    // Retried whole: a locked re-read decides what the new config may be, and the reload nudge
+    // Retried whole: a locked re-read decides what the new config may be, and the inbox nudge
     // below happens once, after commit.
-    const needsReload = await withTransactionRetry(this.prisma, async (tx) => {
+    const queuedControlTurn = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize config patches with each other and with claim/end transitions. The effective
       // model/mode pair must be derived from the latest row: two concurrent partial PATCHes must
       // not restore each other's stale model or leave Auto paired with an unsupported model.
@@ -4829,28 +4832,55 @@ export class SessionsService {
 
       if (session.status === RunStatus.PENDING) return false;
       // A claim marks the row RUNNING before buildSession lazily seeds the opening prompt. A
-      // config PATCH in that small window must seed it first; otherwise reload would become the
-      // first turn and the claim path could mistake that control turn for the opening message.
+      // config PATCH in that small window must seed it first; otherwise the control turn would
+      // become the first turn and the claim path could mistake it for the opening message.
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
-      // Live session (RUNNING/AWAITING_INPUT/INTERRUPTED): enqueue the reload under this same row
-      // lock, so its payload is exactly the pair committed above. The inbox lease applies it
-      // between turns. `effort: undefined` is omitted by JSON.stringify when it did not change.
-      await this.insertTurnLocked(tx, id, {
-        kind: 'reload',
-        content: JSON.stringify({
-          model: exec.model,
-          permissionMode: normalizedPermissionMode,
-          effort: normalizedEffort,
-          // The identity only. It tells the runner its process environment is stale — the
-          // credential behind it is resolved when the inbox delivers this turn, so a decrypted
-          // provider key never lands in conversation_turn.
-          provider: next.changed ? next.provider : undefined,
-        }),
-        clientTurnId: randomUUID(),
-      });
+      // Which half of the config actually moved decides what is queued. Effort and provider are
+      // spawn-only — they are decided when the process is built, so the only way to change them
+      // is to build another one, and that is what `reload` is. Model and permission mode are not:
+      // a resident engine can be told about them, so they go out as `setconfig`, which the inbox
+      // hands over mid-turn instead of holding until the running turn ends.
+      const respawns =
+        next.changed || (dto.effort !== undefined && normalizedEffort !== session.effort);
+      // …and the control frame goes whenever the live half moved. A PATCH that moved nothing at
+      // all still sends one rather than falling silent: re-stating the committed pair is what
+      // this kind costs, and it is cheaper than the reload that used to be sent here.
+      const setsLiveConfig =
+        !respawns ||
+        exec.model !== session.model ||
+        normalizedPermissionMode !== session.permissionMode;
+      // Both are enqueued under this same row lock, so their payload is exactly the pair
+      // committed above. Order matters when both go: the re-spawn re-applies every flag anyway,
+      // so putting it last keeps the control frame from being work that is immediately redone.
+      if (setsLiveConfig) {
+        await this.insertTurnLocked(tx, id, {
+          kind: 'setconfig',
+          content: JSON.stringify({
+            model: exec.model,
+            permissionMode: normalizedPermissionMode,
+          }),
+          clientTurnId: randomUUID(),
+        });
+      }
+      // `effort: undefined` is omitted by JSON.stringify when it did not change.
+      if (respawns) {
+        await this.insertTurnLocked(tx, id, {
+          kind: 'reload',
+          content: JSON.stringify({
+            model: exec.model,
+            permissionMode: normalizedPermissionMode,
+            effort: normalizedEffort,
+            // The identity only. It tells the runner its process environment is stale — the
+            // credential behind it is resolved when the inbox delivers this turn, so a decrypted
+            // provider key never lands in conversation_turn.
+            provider: next.changed ? next.provider : undefined,
+          }),
+          clientTurnId: randomUUID(),
+        });
+      }
       return true;
     }, loggedRetry(this.logger, 'sessions.updateConfig'));
-    if (needsReload) this.realtime.notifyInbox(id);
+    if (queuedControlTurn) this.realtime.notifyInbox(id);
     return { ok: true };
   }
 

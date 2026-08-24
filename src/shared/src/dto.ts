@@ -841,6 +841,15 @@ export interface ApprovalDecisionResponse {
 // 'reload' carries no user text: it tells the runner the session's model /
 // permission-mode changed, so it should re-spawn claude with --resume + the new
 // flags (full context preserved). The new config rides in the turn's `content` JSON.
+// It is reserved for the SPAWN-ONLY half of a config change — effort and provider are
+// process-construction facts, so the only way to apply them is to build a new process.
+// 'setconfig' is the other half: model and permission mode are things a resident engine
+// can be told, so this asks the runner to say them over the live session instead of
+// tearing it down. Same payload shape, minus the spawn-only fields. It is deliverable
+// mid-turn for the same reason interrupt is — nothing about it needs the engine to be
+// idle — and like reload it occupies no in-flight slot. When one PATCH moves both halves
+// the server queues both, setconfig first, so the re-spawn that follows carries every
+// new flag rather than re-doing what the control frame just did.
 // 'diff' is a fire-and-forget control turn (no text, no claude): it asks the runner to
 // recompute the live worktree diff and push it back, so an opened file's diff reflects
 // the current worktree even when the stored snapshot lagged (the heartbeat refreshes the
@@ -852,7 +861,15 @@ export interface ApprovalDecisionResponse {
 // It is deliberately its own kind rather than a relaxation of the message gate — a steer
 // neither occupies the single in-flight slot nor waits for it, and it settles its own turn
 // on the engine's echo rather than on a `result`, which belongs to the turn it joined.
-export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload' | 'shell' | 'diff' | 'steer';
+export type ConversationTurnKind =
+  | 'message'
+  | 'interrupt'
+  | 'end'
+  | 'reload'
+  | 'setconfig'
+  | 'shell'
+  | 'diff'
+  | 'steer';
 
 /** An attachment as handed to the runner on the inbox: the id to fetch its bytes with
  *  (runner-scoped `GET /runner/sessions/:id/attachments/:attId`), its MIME type, and the

@@ -1814,7 +1814,12 @@ export class RunnerApiController {
             AND (
               -- interrupt/end land immediately, even mid-message (interrupt is the point).
               -- diff is read-only and runtime-independent, so it may land while idle too.
-              (turn."kind" IN ('interrupt', 'end', 'diff')
+              -- setconfig is here for the same reason: model and permission mode are said to a
+              -- resident engine rather than built into it, so nothing about the frame needs the
+              -- engine to be idle, and waiting for it would be the whole delay this kind exists
+              -- to remove. Its spawn-only sibling reload stays gated below: that one really
+              -- does have to replace the process the running turn is executing in.
+              (turn."kind" IN ('interrupt', 'end', 'diff', 'setconfig')
                 AND (turn."status" = 'PENDING' OR (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
@@ -1871,7 +1876,7 @@ export class RunnerApiController {
                   ))
                 ))
             )
-          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" IN ('reload', 'steer') THEN 1 ELSE 2 END), turn."seq" ASC
+          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" = 'setconfig' THEN 1 WHEN turn."kind" IN ('reload', 'steer') THEN 2 ELSE 3 END), turn."seq" ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
