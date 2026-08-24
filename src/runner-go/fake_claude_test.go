@@ -46,7 +46,8 @@ func TestMain(m *testing.M) {
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
 	// Emit: system_init | assistant | tool_use | tool_result | result | control_request |
-	// control_response | replay_user | stop_reading | eof (eof exits, closing stdout).
+	// control_response | replay_user | local_command_stdout | stop_reading | eof (eof exits,
+	// closing stdout).
 	//
 	// replay_user is what --replay-user-messages does: echo the user frame just awaited
 	// back on stdout, verbatim, as the CLI does when it reads one off stdin.
@@ -264,6 +265,17 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		}
 		return assistantFrame(sessionID, map[string]interface{}{
 			"type": "tool_use", "id": s.ToolUseID, "name": s.ToolName, "input": input,
+		}), nil
+	case "local_command_stdout":
+		// What the CLI writes after it services a set_model control_request: a user-role
+		// message whose content is one bare string, not a list of blocks. Its own traffic,
+		// not a turn anybody sent — and the shape is the point, so it is written out here
+		// rather than assembled from anything the runner shares.
+		return marshalFrame(map[string]interface{}{
+			"type": "user", "session_id": sessionID, "parent_tool_use_id": nil,
+			"message": map[string]interface{}{
+				"role": "user", "content": "<local-command-stdout>" + s.Text + "</local-command-stdout>",
+			},
 		}), nil
 	case "tool_result":
 		// Tool results come back as a user-role message, per the Anthropic message protocol.

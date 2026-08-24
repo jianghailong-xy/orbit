@@ -27,6 +27,14 @@ type deliverySession struct {
 	events  []RunEvent
 	settled []TurnCompleteRequest
 	fake    *fakeClaude
+	// Whether the run asked its supervisor to re-spawn. This is the whole difference between
+	// a config change that landed in the running process and one that cost the session that
+	// process: it is what makes the outer loop bring another claude up and emit `resumed`.
+	// Written once, before the run's goroutine closes `done`, and read only after it has.
+	reload bool
+	// The claim the run was driven with. Its Agent is what the NEXT process would be built
+	// from, so a test that changed a setting mid-session reads the result here.
+	job *ClaimedSession
 }
 
 func (r *deliverySession) record(turnID, eventType string, payload map[string]interface{}) {
@@ -203,10 +211,12 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 	ctx, cancel := context.WithTimeout(context.Background(), fakeClaudeTimeout)
 	defer cancel()
 	dir, job := t.TempDir(), claudeSpawnJob(t)
+	run.job = job
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runClaudeSessionProcess(ctx, context.Background(), NewTransport(api.URL, "runner-token"),
+		_, _, run.reload = runClaudeSessionProcess(ctx, context.Background(),
+			NewTransport(api.URL, "runner-token"),
 			job, "11111111-1111-4111-8111-111111111111", dir, dir, emit, emitFor, setTurn, true, nil,
 			complete, func(context.Context) bool { return true }, func(error) {})
 	}()
