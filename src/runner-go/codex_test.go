@@ -594,6 +594,109 @@ func TestHandleCodexItemProcessesCompletedAssistantText(t *testing.T) {
 	}
 }
 
+// Codex's built-in image generation reports the file it wrote as `savedPath` and nothing else
+// links it, so the item is the only chance to surface the image. Shape confirmed against a real
+// app-server thread/resume: {type, id, status, revisedPrompt, result, transparentBackground,
+// failure, savedPath} — `result` is a multi-MB base64 PNG, which is why the durable event
+// carries an attachment ref instead.
+func TestHandleCodexItemImageGenerationAttachesSavedPath(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "imageGeneration", "id": "exec-1", "status": "completed",
+		"savedPath": "/root/.codex/generated_images/th-1/exec-1.png",
+	}
+	var got []emittedEvent
+	var result codexTurnResult
+	var last strings.Builder
+	emit := func(eventType string, payload map[string]interface{}) {
+		got = append(got, emittedEvent{eventType, payload})
+	}
+	handleCodexItem(map[string]interface{}{"item": item}, emit, &result, &last, true, func(text string) string {
+		return strings.ReplaceAll(text, "/root/.codex/generated_images/th-1/exec-1.png", "orbit-attachment:att-1")
+	})
+	if len(got) != 1 || got[0].typ != evAssistant {
+		t.Fatalf("events = %+v, want one assistant event", got)
+	}
+	if want := "![generated image](orbit-attachment:att-1)"; got[0].payload["text"] != want {
+		t.Fatalf("text = %q, want %q", got[0].payload["text"], want)
+	}
+	// The session's last-reply preview is prose, not an attachment ref.
+	if result.Result != "" || last.Len() != 0 {
+		t.Fatalf("image folded into the reply preview: result=%q last=%q", result.Result, last.String())
+	}
+}
+
+// A started item carries no savedPath yet. Emitting anything for it would either duplicate the
+// image or leave a tool_result that latches onto the previous tool card.
+func TestHandleCodexItemImageGenerationIgnoresStarted(t *testing.T) {
+	item := map[string]interface{}{"type": "imageGeneration", "id": "exec-1", "status": "inProgress"}
+	if got := captureCodexItem(item, false); len(got) != 0 {
+		t.Fatalf("events = %+v, want none", got)
+	}
+}
+
+// Failed generation (failure instead of a path) and a file that could not be uploaded are both
+// "the model said it drew something and there is nothing here" — say which one it was.
+func TestHandleCodexItemImageGenerationNoticesWhenNoImage(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		saved    string
+		rewrite  assistantTextProcessor
+		wantKind string
+	}{
+		{"failed", "", nil, "codex-image-generation-failed"},
+		{"unattached", "/root/.codex/generated_images/th-1/exec-1.png", nil, "codex-image-generation-unattached"},
+		{"upload-failed", "/root/.codex/generated_images/th-1/exec-1.png", func(s string) string { return s }, "codex-image-generation-unattached"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := map[string]interface{}{"type": "imageGeneration", "id": "exec-1", "status": "completed"}
+			if tc.saved != "" {
+				item["savedPath"] = tc.saved
+			}
+			var got []emittedEvent
+			var result codexTurnResult
+			var last strings.Builder
+			emit := func(eventType string, payload map[string]interface{}) {
+				got = append(got, emittedEvent{eventType, payload})
+			}
+			handleCodexItem(map[string]interface{}{"item": item}, emit, &result, &last, true, tc.rewrite)
+			if len(got) != 1 || got[0].typ != evSystem {
+				t.Fatalf("events = %+v, want one system notice", got)
+			}
+			if got[0].payload["noticeKind"] != tc.wantKind {
+				t.Fatalf("noticeKind = %v, want %q", got[0].payload["noticeKind"], tc.wantKind)
+			}
+			if s, _ := got[0].payload["notice"].(string); s == "" {
+				t.Fatal("notice text is empty")
+			}
+		})
+	}
+}
+
+// The CLI/exec stream spells it snake_case, the app-server camelCase (see the casing note in
+// handleCodexItem) — both must reach the same branch.
+func TestHandleCodexItemImageGenerationCasing(t *testing.T) {
+	for _, itemType := range []string{"imageGeneration", "image_generation"} {
+		t.Run(itemType, func(t *testing.T) {
+			item := map[string]interface{}{
+				"type": itemType, "id": "exec-1", "status": "completed",
+				"savedPath": "/gen/x.png",
+			}
+			var got []emittedEvent
+			var result codexTurnResult
+			var last strings.Builder
+			emit := func(eventType string, payload map[string]interface{}) {
+				got = append(got, emittedEvent{eventType, payload})
+			}
+			handleCodexItem(map[string]interface{}{"item": item}, emit, &result, &last, true, func(text string) string {
+				return strings.ReplaceAll(text, "/gen/x.png", "orbit-attachment:att-1")
+			})
+			if len(got) != 1 || got[0].typ != evAssistant {
+				t.Fatalf("events = %+v, want one assistant event", got)
+			}
+		})
+	}
+}
+
 // The app-server carries shell output under `aggregatedOutput`, not
 // output/stdout/stderr — the tool_result must read it or the shell card is blank.
 func TestHandleCodexItemAppServerCommand(t *testing.T) {
@@ -826,6 +929,75 @@ func TestRewriteLocalMarkdownImagesUploadsGeneratedImage(t *testing.T) {
 	)
 	if got != `[download PNG](orbit-attachment:att-1 "exec-1.png")` {
 		t.Fatalf("rewritten = %q", got)
+	}
+}
+
+// The two halves of the fix composed: the synthesized markdown handleCodexItem builds for a
+// generated image has to survive the rewrite's own regex and root check, which is the seam a
+// unit test of either half alone would miss. Uses the real rewriter, not a stub.
+func TestHandleCodexItemImageGenerationThroughRealRewrite(t *testing.T) {
+	home := t.TempDir()
+	genDir := filepath.Join(home, ".codex", "generated_images", "thread-1")
+	if err := os.MkdirAll(genDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	saved := filepath.Join(genDir, "exec-1.png")
+	if err := os.WriteFile(saved, []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	roots := []string{t.TempDir(), codexGeneratedImagesDir([]string{"HOME=" + home}, "/work")}
+
+	// Both the generated file and one outside every root, which must not be uploaded.
+	outside := filepath.Join(t.TempDir(), "elsewhere.png")
+	if err := os.WriteFile(outside, []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name       string
+		path       string
+		wantEvent  string
+		wantUpload bool
+	}{
+		{"generated", saved, evAssistant, true},
+		{"outside roots", outside, evSystem, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			uploaded := 0
+			rewrite := func(text string) string {
+				return rewriteLocalMarkdownImagesWithUploader(context.Background(), text, roots,
+					func(ctx context.Context, path, mimeType string) (string, error) {
+						uploaded++
+						if mimeType != "image/png" {
+							t.Fatalf("mime = %q, want image/png", mimeType)
+						}
+						return "att-1", nil
+					})
+			}
+			var got []emittedEvent
+			var result codexTurnResult
+			var last strings.Builder
+			emit := func(eventType string, payload map[string]interface{}) {
+				got = append(got, emittedEvent{eventType, payload})
+			}
+			item := map[string]interface{}{
+				"type": "imageGeneration", "id": "exec-1", "status": "completed", "savedPath": tc.path,
+			}
+			handleCodexItem(map[string]interface{}{"item": item}, emit, &result, &last, true, rewrite)
+			if len(got) != 1 || got[0].typ != tc.wantEvent {
+				t.Fatalf("events = %+v, want one %s", got, tc.wantEvent)
+			}
+			if want := 0; !tc.wantUpload && uploaded != want {
+				t.Fatalf("uploads = %d, want %d", uploaded, want)
+			}
+			if tc.wantUpload {
+				if uploaded != 1 {
+					t.Fatalf("uploads = %d, want 1", uploaded)
+				}
+				if want := "![generated image](orbit-attachment:att-1)"; got[0].payload["text"] != want {
+					t.Fatalf("text = %q, want %q", got[0].payload["text"], want)
+				}
+			}
+		})
 	}
 }
 

@@ -595,6 +595,45 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 			"content":   planChecklist(rows),
 			"isError":   codexItemIsError(item),
 		})
+	// Codex's built-in image generation. The PNG lands under CODEX_HOME/generated_images and
+	// the completed item names it in `savedPath`; nothing in the reply text links it, so until
+	// now the file stayed on the runner and the turn rendered as a claim to have drawn
+	// something with nothing to show. processAssistant is the reply rewrite
+	// (rewriteLocalMarkdownImages), so handing it a synthesized markdown image uploads the file
+	// and hands back a durable `orbit-attachment:` ref — and its root allowlist is what keeps a
+	// path from outside the session's own directories out of the upload.
+	case strings.Contains(lower, "imagegeneration") || strings.Contains(lower, "image_generation"):
+		if !completed {
+			// Only the completed item carries savedPath, and no card is emitted at start —
+			// a tool_result with nothing to pair to would attach itself to the previous tool.
+			return
+		}
+		saved := firstString(item, "savedPath", "saved_path")
+		if saved == "" {
+			// The item carries a failure instead of a path. Say so: silence here reads as if
+			// the model never tried, which is the same symptom as an image that won't render.
+			emit(evSystem, map[string]interface{}{
+				"notice":     "Codex could not generate the image.",
+				"noticeKind": "codex-image-generation-failed",
+			})
+			return
+		}
+		md := ""
+		if processAssistant != nil {
+			md = processAssistant(fmt.Sprintf("![generated image](%s)", saved))
+		}
+		if !strings.Contains(md, "orbit-attachment:") {
+			// Upload failed, or the path sits outside the upload roots. Emitting the raw local
+			// path instead would render as a broken image on every client.
+			emit(evSystem, map[string]interface{}{
+				"notice":     "Codex generated an image, but it could not be attached to this session.",
+				"noticeKind": "codex-image-generation-unattached",
+			})
+			return
+		}
+		// Deliberately not folded into lastAssistant/result.Result: that string is the session's
+		// last-reply preview, and an attachment ref is not something to show in a list.
+		emit(evAssistant, map[string]interface{}{"text": md})
 	case strings.Contains(lower, "tool"):
 		name := codexToolItemName(item)
 		if !completed {
