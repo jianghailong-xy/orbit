@@ -10,15 +10,19 @@
 /**
  * What to render in place of an empty transcript.
  *
- * - `queued` — the session is waiting for a runner slot; the centered "waiting for a slot" pane
- *   states that, and outranks everything else because it is a real status, not a loading state.
+ * - `queued` — the session has not been claimed by a runner yet; the centered pane names whichever
+ *   gate the server found holding it, and outranks everything else because it is a real status,
+ *   not a loading state.
+ * - `starting` — a runner has it and is building the runtime (checkout, engine, tools). Also a
+ *   real status, and the reason `waiting` below is not the honest answer here: the transcript is
+ *   empty because nothing has run, not because the workspace is thinking.
  * - `skeleton` — a tail page is in flight for a session with no cached transcript. Not knowing yet
  *   whether the session is empty or merely unloaded, the honest placeholder is "loading".
  * - `waiting` — the load finished and the session really is empty, but it is live: the workspace has
  *   genuinely not said anything yet.
  * - `null` — nothing to say (there are events, or the session is ended and empty).
  */
-export type TranscriptPlaceholder = 'queued' | 'skeleton' | 'waiting' | null;
+export type TranscriptPlaceholder = 'queued' | 'starting' | 'skeleton' | 'waiting' | null;
 
 export function transcriptPlaceholder(view: {
   /** A session row has resolved, from either the list or its detail. */
@@ -27,6 +31,8 @@ export function transcriptPlaceholder(view: {
   trashed: boolean;
   /** Run state of the open session, e.g. 'QUEUED' | 'RUNNING' | 'AWAITING_INPUT'. */
   runState: string | null;
+  /** Whether that RUNNING session's engine is still coming up (see sessionIsStarting). */
+  starting?: boolean;
   /** Whether that run state is a live one (see isSessionLive). */
   live: boolean;
   eventCount: number;
@@ -41,6 +47,9 @@ export function transcriptPlaceholder(view: {
   // deep link, where the transcript loads before any row has resolved.
   const known = view.hasSession && !view.trashed;
   if (known && view.runState === 'QUEUED') return 'queued';
+  // Before `seeding`, for the same reason `queued` is: a status we know outranks a fetch we are
+  // still doing. The transcript of a session whose engine has not spoken is empty, not unloaded.
+  if (known && view.starting) return 'starting';
   if (view.seeding) return 'skeleton';
   if (known && view.live && !view.streaming) return 'waiting';
   return null;

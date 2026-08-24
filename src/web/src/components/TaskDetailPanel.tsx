@@ -36,7 +36,7 @@ import {
   sessionRunStateOf,
   type SessionRunState,
 } from '../lib/sessionState';
-import { PENDING_SLOT_LABEL } from '../lib/runnerSlots';
+import { QUEUED_LABEL } from '../lib/runnerSlots';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
 import { TaskAttributionCard } from './TaskAttributionCard';
@@ -59,7 +59,10 @@ const TDP_WIDTH_DEFAULT = 600;
 
 // A run's outcome badge is independent of whether its session is Open, Completed or in Trash.
 const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
-  QUEUED: { label: PENDING_SLOT_LABEL, tone: 'muted' },
+  // This badge is keyed on run state alone and has no queued-gate fields to read, so it says
+  // the state rather than guessing at a cause. Capacity is named where it is known (see
+  // queuedLabel), not here.
+  QUEUED: { label: QUEUED_LABEL, tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
   SUCCEEDED: { label: 'Succeeded', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },

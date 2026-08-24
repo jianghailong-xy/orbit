@@ -2573,6 +2573,9 @@ export class RunnerApiController {
           cancelRequestedAt: true,
           runningBgShells: true,
           runningSubagents: true,
+          // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
+          // while this is still null, and the row is held FOR UPDATE across that decision.
+          engineStartedAt: true,
         },
       });
       // The owner fence alone is insufficient when the same runner process
@@ -2713,6 +2716,17 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
+      // When the engine first spoke for this run — see Session.engineStartedAt. `undefined`
+      // from the reducer above means nothing in this batch came from the engine at all, which
+      // is the case that matters: the runner emits the user turn itself (seq 1) seconds before
+      // the runtime is up, so "any durable event" would end the starting state while the CLI
+      // was still booting. Every value it does return — a spawn handshake, a generation event
+      // from a reused warm process, a turn ending — is the engine talking.
+      // Fill only while unset, like runtimeSessionId above: one-shot per run (the claim clears
+      // it), so a redelivered batch cannot push the stamp later than the first arrival.
+      if (!session.engineStartedAt && engineTurnActive !== undefined) {
+        sessionData.engineStartedAt = new Date();
+      }
       Object.assign(sessionData, {
         ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
         ...(frontier ? { lastToolUse: frontier.tool } : {}),

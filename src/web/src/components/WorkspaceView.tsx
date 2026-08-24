@@ -179,6 +179,7 @@ import {
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
+  sessionIsStarting,
   sessionLifecycleLabel,
   sessionLifecycleStateOf,
   sessionRetryPending,
@@ -201,10 +202,13 @@ import {
   sessionSendDispositionOf,
 } from '../lib/sessionCapabilities';
 import {
-  PENDING_SLOT_LABEL,
-  PENDING_SLOT_TITLE,
+  STARTING_DESCRIPTION,
+  STARTING_LABEL,
+  STARTING_TITLE,
   type QueuedGate,
   pendingSlotDescription,
+  queuedLabel,
+  queuedTitle,
   runnerSlotUsage,
 } from '../lib/runnerSlots';
 
@@ -657,6 +661,10 @@ const sentLine = (text: string): SessionLine => ({
 
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
+  // Outranks the generating preview below, which would otherwise echo the message back as
+  // though it had been read. It has not: the runtime is still being built (see
+  // sessionIsStarting). Blue, because this is progress — just not the agent's yet.
+  if (live && sessionIsStarting(s)) return { text: `${STARTING_LABEL}…`, tone: 'running' };
   if (live && isGenerating(s, state)) {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
@@ -673,7 +681,7 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
-  if (live && state === 'QUEUED') return { text: PENDING_SLOT_LABEL, tone: 'queued' };
+  if (live && state === 'QUEUED') return { text: queuedLabel(s), tone: 'queued' };
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
@@ -710,6 +718,7 @@ export function projectBackLink(session: any): { path: string; title: string | n
 export function statusLabel(session: any): string {
   const state = sessionRunStateOf(session);
   if (state === 'SUCCEEDED') return 'Succeeded';
+  if (sessionIsStarting(session)) return STARTING_LABEL;
   if (isGenerating(session, state))
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
@@ -720,7 +729,7 @@ export function statusLabel(session: any): string {
   }
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return PENDING_SLOT_LABEL; // PENDING
+  return queuedLabel(session); // PENDING
 }
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = the run reported success, red = real failure,
@@ -736,6 +745,14 @@ export function StatusIcon({ session }: { session: any }) {
     return (
       <Tooltip title="Succeeded">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
+      </Tooltip>
+    );
+  // Same spinner as Running — it is genuinely working — with the honest tooltip. A separate
+  // glyph would read as a fourth outcome for something that is two seconds long.
+  if (sessionIsStarting(session))
+    return (
+      <Tooltip title={STARTING_TITLE}>
+        <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
       </Tooltip>
     );
   if (isGenerating(session, state)) {
@@ -813,7 +830,7 @@ export function StatusIcon({ session }: { session: any }) {
     );
   // PENDING — waiting for an active turn slot
   return (
-    <Tooltip title={PENDING_SLOT_TITLE}>
+    <Tooltip title={queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -2068,6 +2085,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     hasSession: !!selected,
     trashed: selectedTrashed,
     runState: selected ? sessionRunStateOf(selectedSession ?? selected) : null,
+    starting: selected ? sessionIsStarting(selectedSession ?? selected) : false,
     live: selected ? isSessionLive(selectedSession ?? selected) : false,
     eventCount: events.length,
     seeding,
@@ -4846,8 +4864,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     <span />
                     <span />
                   </div>
-                  <div className="chat-queued-title">{PENDING_SLOT_TITLE}</div>
+                  <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
                   <div className="chat-queued-desc">{slotWaitDescription}</div>
+                </div>
+              )}
+              {placeholder === 'starting' && (
+                <div className="chat-queued-state">
+                  <div className="chat-queued-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="chat-queued-title">{STARTING_TITLE}</div>
+                  <div className="chat-queued-desc">{STARTING_DESCRIPTION}</div>
                 </div>
               )}
               {/* An unvisited session's history is still in flight: hold the shape of a
@@ -4869,8 +4898,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
                 events.length > 0 && (
                 <div className="chat-note chat-slot-wait">
-                  <span>{PENDING_SLOT_TITLE}</span>
+                  <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
+                </div>
+              )}
+              {selected &&
+                !selectedTrashed &&
+                sessionIsStarting(selectedSession ?? selected) &&
+                events.length > 0 && (
+                <div className="chat-note chat-slot-wait">
+                  <span>{STARTING_TITLE}</span>
+                  <span>{STARTING_DESCRIPTION}</span>
                 </div>
               )}
               {localStatusCards.map((card) => (

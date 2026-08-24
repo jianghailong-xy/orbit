@@ -970,6 +970,15 @@ model Session {
   // `status` remains the sole source of truth for runner-slot accounting, so a self-driven
   // turn never consumes a permit it did not acquire.
   engineTurnActive     Boolean   @default(false) @map("engine_turn_active")
+  // When the engine first spoke for the CURRENT run: cleared by every claim, stamped by the
+  // first event the engine itself produced (a spawn handshake, or any generation event when a
+  // warm process is reused and there is no handshake). RUNNING with this still null is the
+  // gap between acquiring a slot and the runtime being ready — a git worktree checkout, a CLI
+  // cold start, an MCP handshake — which is several seconds and which `status` alone cannot
+  // see, so the clients drew it as "Running" while the agent had not yet read the prompt.
+  // Display only, like engineTurnActive: slot accounting stays on `status`. Doubles as the
+  // server-side startup measurement (engineStartedAt - lastTurnAt).
+  engineStartedAt      DateTime? @map("engine_started_at")
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).

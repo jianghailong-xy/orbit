@@ -599,6 +599,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         title: true,
         status: true,
         engineTurnActive: true,
+        engineStartedAt: true,
         endReason: true,
         completedAt: true,
         archivedAt: true,
@@ -651,6 +652,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
       retryAt: s.retryAt ? s.retryAt.toISOString() : null,
+      // Null is a value here, not "unchanged": it is how a row learns that a claim reset the
+      // session to starting again, which is exactly the transition this field exists to show.
+      engineStartedAt: s.engineStartedAt ? s.engineStartedAt.toISOString() : null,
     };
   }
 

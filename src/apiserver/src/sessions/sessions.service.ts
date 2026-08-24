@@ -108,6 +108,7 @@ import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
   retireSessionInboxGeneration,
+  worktreeOperationFenceSql,
 } from '../common/session-inbox-fence';
 import {
   TaskCompletionPolicyValue,
@@ -116,6 +117,7 @@ import {
 import { truncatePayload } from './truncate-payload';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
 import {
+  SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
   withSessionCapabilities,
   withSessionState,
@@ -1836,6 +1838,7 @@ export class SessionsService {
       runningBgCount: number;
       runningSubagentCount: number;
       engineTurnActive: boolean;
+      engineStartedAt: Date | null;
       workspaceId: string | null;
       workspaceName: string | null;
       workspaceModel: string | null;
@@ -1894,6 +1897,7 @@ export class SessionsService {
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
+        s.engine_started_at AS "engineStartedAt",
         a.id    AS "workspaceId",
         a.name  AS "workspaceName",
         a.model AS "workspaceModel",
@@ -1921,6 +1925,17 @@ export class SessionsService {
         SELECT reason, active, "limit" FROM (
           SELECT
             CASE
+              -- First, because it subsumes every gate below: a runner that is not polling will
+              -- not claim this row whatever the counts say, and "waiting for a slot" on an idle
+              -- machine is the least useful thing the UI could tell someone. Same rule
+              -- deriveSessionCapabilities resumes on, so one runner cannot read online here and
+              -- offline there.
+              WHEN r.id IS NULL
+                   OR r.status = 'OFFLINE'
+                   OR r.last_heartbeat_at IS NULL
+                   OR r.last_heartbeat_at
+                      < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
+                THEN 'runner_offline'
               WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
               WHEN s.root_session_id IS NOT NULL
@@ -1929,6 +1944,11 @@ export class SessionsService {
               WHEN s.batch_id IS NOT NULL
                    AND ${batchActiveTurns('s')} >= s.batch_max_concurrent
                 THEN 'batch_at_capacity'
+              -- Last, so a row that was already explained by capacity keeps that explanation.
+              -- This one holds for seconds while a merge/commit finishes on the checkout, and
+              -- it is the claim's own fence, not a second copy of it.
+              WHEN ${worktreeOperationFenceSql('s')}
+                THEN 'worktree_op_pending'
             END AS reason,
             ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
             r.max_concurrent AS runner_limit,
@@ -1993,6 +2013,7 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
+        engineStartedAt: r.engineStartedAt,
         workspace: r.workspaceId
           ? { id: r.workspaceId, name: r.workspaceName, model: r.workspaceModel, effort: r.workspaceEffort }
           : null,

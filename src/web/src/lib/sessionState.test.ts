@@ -9,6 +9,7 @@ import {
   sessionLifecycleLabel,
   sessionLifecycleStateOf,
   sessionHoldsRunnerSlot,
+  sessionIsStarting,
   sessionRetryPending,
   sessionRunStateOf,
   sessionRunStatusOf,
@@ -274,5 +275,29 @@ describe('sessionEndedBanner', () => {
     ).toBe(
       'Session succeeded. The previous session context is no longer available. Sending a message starts a new session.',
     );
+  });
+});
+
+describe('sessionIsStarting', () => {
+  it('is the gap between holding a slot and the engine being up', () => {
+    expect(sessionIsStarting({ runState: 'RUNNING', engineStartedAt: null })).toBe(true);
+    expect(
+      sessionIsStarting({ runState: 'RUNNING', engineStartedAt: '2026-08-24T00:00:00.000Z' }),
+    ).toBe(false);
+  });
+
+  // The rolling-upgrade hazard, and the reason the check is strict. A control plane that never
+  // sends the field would otherwise park every running session under a startup label forever —
+  // a permanent lie in place of a five-second one.
+  it('treats an absent field as "keep the old two-state behaviour"', () => {
+    expect(sessionIsStarting({ runState: 'RUNNING' })).toBe(false);
+  });
+
+  // Starting is a refinement of RUNNING, not a state of its own: a queued session has no engine
+  // to be starting, and a parked one already had its handshake.
+  it('is only ever true of a RUNNING session', () => {
+    expect(sessionIsStarting({ runState: 'QUEUED', engineStartedAt: null })).toBe(false);
+    expect(sessionIsStarting({ runState: 'AWAITING_INPUT', engineStartedAt: null })).toBe(false);
+    expect(sessionIsStarting({ runState: 'ENDED', engineStartedAt: null })).toBe(false);
   });
 });

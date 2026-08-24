@@ -60,3 +60,47 @@ test('undecided batches leave the stored value alone', () => {
     undefined,
   );
 });
+
+/**
+ * The reducer does double duty: `undefined` is also how the ingest decides whether the engine has
+ * spoken at all for this run, which is what stamps Session.engineStartedAt.
+ *
+ * The distinction that matters is the runner's own opening `user` event. It is durable, it is
+ * seq 1, and on this deployment it lands roughly two seconds before the runtime is up — so a
+ * cruder "any durable event" rule would end the starting state while the CLI was still booting,
+ * which is the whole gap the state exists to show.
+ */
+test('the runner echoing the prompt is not the engine speaking', () => {
+  assert.equal(
+    engineTurnActiveAfter([
+      { seq: 1, type: RunEventType.USER, payload: { text: 'ship it' } },
+    ]),
+    undefined,
+  );
+});
+
+test('a spawn handshake is the engine speaking, even though it decides "idle"', () => {
+  // Both a cold spawn (init) and a resume (resumed) count: each is the runtime announcing
+  // itself, and neither leaves the engine mid-turn — so the value is false, not undefined.
+  for (const subtype of ['init', 'resumed']) {
+    assert.equal(
+      engineTurnActiveAfter([
+        { seq: 1, type: RunEventType.USER, payload: { text: 'ship it' } },
+        { seq: 2, type: RunEventType.SYSTEM, payload: { subtype } },
+      ]),
+      false,
+    );
+  }
+});
+
+test('a reused warm process is the engine speaking without any handshake', () => {
+  // A claim that lands on a resident engine never re-emits init; its first generation event is
+  // the only signal that it has the turn, and it must end the starting state just the same.
+  assert.equal(
+    engineTurnActiveAfter([
+      { seq: 1, type: RunEventType.USER, payload: { text: 'again' } },
+      { seq: 2, type: RunEventType.TOOL_USE, payload: { name: 'Read' } },
+    ]),
+    true,
+  );
+});

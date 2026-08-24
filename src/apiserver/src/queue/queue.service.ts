@@ -9,7 +9,7 @@ import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
-import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
+import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -113,6 +113,13 @@ export class QueueService {
           END,
           "started_at" = COALESCE("started_at", now()),
           "last_turn_at" = now(),
+          -- A claim hands this run to a runner; the runtime that will serve it does not exist
+          -- yet (cold spawn) or has not been handed the turn yet (warm reuse). Either way the
+          -- engine has not spoken for THIS run, which is what the column means — so every
+          -- claim clears it and the next engine-produced event stamps it again. Deliberately
+          -- unconditional: COALESCE here would leave a resumed session permanently reading
+          -- "ready" and hide exactly the cold-start it exists to show.
+          "engine_started_at" = NULL,
           "updated_at" = now()
         WHERE id = (
           SELECT s.id FROM "session" s
@@ -159,26 +166,9 @@ export class QueueService {
             -- turn would run concurrently with the mutation. Mirrors, in SQL, the staleness
             -- bound of pendingWorktreeOperationMayBeExecuting: a dead owner past the margin
             -- stops fencing so a crashed operation can't wedge the turn forever (a live
-            -- runner also fails it via failAbandonedWorktreeOperations).
-            -- NULL-safe equality: plain "= 'pending'" is SQL NULL (not false) for the
-            -- common case of a session that has never had a merge/commit, and NOT(NULL)
-            -- is NULL too — which a WHERE clause treats as non-matching, excluding the
-            -- row from every claim forever. IS NOT DISTINCT FROM always yields a real
-            -- boolean.
-            AND NOT (
-              s."merge_status" IS NOT DISTINCT FROM 'pending'
-              AND (
-                s."merge_requested_at" IS NULL
-                OR s."merge_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
-              )
-            )
-            AND NOT (
-              s."commit_status" IS NOT DISTINCT FROM 'pending'
-              AND (
-                s."commit_requested_at" IS NULL
-                OR s."commit_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
-              )
-            )
+            -- runner also fails it via failAbandonedWorktreeOperations). Shared with the
+            -- session list, which names this gate to the user, so the two cannot drift.
+            AND NOT ${worktreeOperationFenceSql('s')}
           -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
           -- runner idle while work waits; ordering gives the same protection without that —
           -- the tree already holding the most active turns is picked last, so one tree may use

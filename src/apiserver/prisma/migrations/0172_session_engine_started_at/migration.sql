@@ -1,0 +1,17 @@
+-- Split "the session holds a slot" from "the engine is ready", which `status` conflated.
+--
+-- A session goes RUNNING the instant a runner's claim wins the row. Everything the runtime needs
+-- to actually exist happens after that: a `git worktree add`, a CLI cold start, an MCP handshake.
+-- Measured on this deployment that gap is ~5s at p50 — 40x the time the same session spends
+-- queued — and for all of it the clients drew a spinner labelled "Running" while the agent had
+-- not yet read the prompt.
+--
+-- `engine_started_at` is the missing boundary: cleared by every claim, stamped by the first event
+-- the engine itself produced. RUNNING with it null is "starting"; RUNNING with it set is running.
+-- It is display state only — `status` remains the sole source of truth for slot accounting, so a
+-- client that never learns about this column keeps behaving exactly as it does today.
+--
+-- Nullable with no default, so this is a catalog-only change: no heap rewrite, no backfill, and
+-- therefore no second migration to split one off into. Existing rows read NULL, which for a row
+-- that is not RUNNING is never consulted, and for one that is resolves on its next event batch.
+ALTER TABLE "session" ADD COLUMN "engine_started_at" timestamp(3);

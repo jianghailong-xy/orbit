@@ -86,3 +86,30 @@ describe('firstPaintSlice', () => {
     expect(firstPaintSlice([])).toEqual({ now: [], deferred: false });
   });
 });
+
+describe('the starting pane', () => {
+  // An empty transcript on a RUNNING session used to mean only one thing ("the workspace has
+  // not spoken"), which reads as thinking. Most of the time it means the engine does not exist
+  // yet, and that is a different sentence.
+  const running = { ...base, runState: 'RUNNING', eventCount: 0 };
+
+  it('outranks the loading skeleton, like the queued pane does', () => {
+    expect(transcriptPlaceholder({ ...running, starting: true, seeding: true })).toBe('starting');
+  });
+
+  it('gives way to the queued pane, which is the earlier truth', () => {
+    expect(
+      transcriptPlaceholder({ ...running, runState: 'QUEUED', starting: true }),
+    ).toBe('queued');
+  });
+
+  it('falls back to waiting once the engine has spoken', () => {
+    expect(transcriptPlaceholder({ ...running, starting: false })).toBe('waiting');
+    // A server too old to report it says nothing, and nothing is what the caller passes.
+    expect(transcriptPlaceholder(running)).toBe('waiting');
+  });
+
+  it('never paints over a transcript that already has events', () => {
+    expect(transcriptPlaceholder({ ...running, starting: true, eventCount: 3 })).toBeNull();
+  });
+});

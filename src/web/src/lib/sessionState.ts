@@ -57,6 +57,8 @@ export interface SessionStateSource {
   error?: string | null;
   /** When the server will re-send the message this run's failure killed. See sessionRetryPending. */
   retryAt?: string | null;
+  /** When the engine first spoke for the current run. See sessionIsStarting. */
+  engineStartedAt?: string | null;
 }
 
 const SESSION_RUN_STATE_SET = new Set<string>(SESSION_RUN_STATES);
@@ -207,6 +209,22 @@ export const sessionRetryPending = (session: SessionStateSource, now = Date.now(
   // the sweep that fires it is seconds away, and the card says "re-sending your message".
   return Number.isFinite(at) && at > now - RETRY_STALE_MS;
 };
+
+/**
+ * Whether this session holds a slot but its runtime is not up yet.
+ *
+ * RUNNING is acquired by the claim that wins the row; the runtime that serves it is created
+ * afterwards — a git worktree checkout, a CLI cold start, an MCP handshake. That gap is seconds,
+ * and drawing it as Running claims the agent is working on a prompt it has not read. It is not
+ * queueing either: nothing is contended, nothing the user can do shortens it, and the slot is
+ * already spent — so it is its own state, and only the engine's own first event ends it.
+ *
+ * Strictly `null`, never `undefined`: a control plane too old to send the field says nothing
+ * about the runtime, and guessing "starting" there would park every running session under a
+ * startup label forever. Absent means "keep the two-state behaviour".
+ */
+export const sessionIsStarting = (session: SessionStateSource): boolean =>
+  sessionRunStateOf(session) === 'RUNNING' && session.engineStartedAt === null;
 
 /** States that can accept another turn without reviving/recreating the session. */
 export const isSessionLive = (session: SessionStateSource): boolean =>

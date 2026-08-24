@@ -101,6 +101,14 @@ export interface ControlSessionSummary {
    *  since it is how the row learns the retries ran out; only an absent key means "unchanged",
    *  and only an older control plane omits it. */
   retryAt?: string | null;
+  /** When the engine first spoke for the current run, or null while it has not. Part of the
+   *  summary because `runStatus: RUNNING` alone cannot distinguish a session whose agent is
+   *  working from one whose runtime is still coming up — a checkout, a CLI cold start and an
+   *  MCP handshake, seconds during which the clients otherwise draw a working spinner for an
+   *  agent that has not read the prompt. Always sent (as null while starting); an absent key
+   *  means only that an older control plane does not know about it, and a client that has
+   *  never seen it simply keeps today's two-state behaviour. */
+  engineStartedAt?: string | null;
 }
 
 /** `data` for `session.ended`. */

@@ -29,6 +29,42 @@ export function isTerminalResumeHandoffOwner(owner: string | null | undefined): 
 export const WORKTREE_OPERATION_STALE_MS = 5 * 60_000;
 
 /**
+ * The same fence as `pendingWorktreeOperationMayBeExecuting`, as SQL: true while a merge or
+ * commit still executing on this session's checkout must hold its turn back.
+ *
+ * Two callers must agree on it exactly — the claim queue, which refuses to hand the session a
+ * slot while it holds, and the session list, which uses it to tell a waiting user that a git
+ * operation (not capacity) is what they are waiting on. Written twice they drift, and a UI that
+ * confidently names the wrong gate is worse than one that names none; the spawn-tree caps are
+ * shared for the same reason (see session-tree-sql.ts).
+ *
+ * NULL-safe equality throughout: plain `= 'pending'` is SQL NULL for the common case of a session
+ * that never merged, and `NOT(NULL)` is NULL too — which a WHERE clause treats as non-matching,
+ * excluding the row from every claim forever.
+ *
+ * `sessionAlias` is however the calling query names the session table.
+ */
+export function worktreeOperationFenceSql(sessionAlias: string): Prisma.Sql {
+  const s = Prisma.raw(sessionAlias);
+  return Prisma.sql`(
+    (
+      ${s}."merge_status" IS NOT DISTINCT FROM 'pending'
+      AND (
+        ${s}."merge_requested_at" IS NULL
+        OR ${s}."merge_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
+      )
+    )
+    OR (
+      ${s}."commit_status" IS NOT DISTINCT FROM 'pending'
+      AND (
+        ${s}."commit_requested_at" IS NULL
+        OR ${s}."commit_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
+      )
+    )
+  )`;
+}
+
+/**
  * Whether a pending heartbeat-delivered Git operation may already have local
  * side effects. Modern rows carry both an operation UUID and an owner; a row
  * that has neither is a stale orphan (not an in-flight operation) and must
