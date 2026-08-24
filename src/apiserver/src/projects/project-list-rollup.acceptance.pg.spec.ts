@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import { CreatorType, PrismaClient, ProjectStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
-import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -95,7 +94,7 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
   await verifyCoordinatorPgIdentity(identity);
 
   const db = prismaClientFor(URL);
-  const svc = new ProjectsService(db as unknown as PrismaService, {} as unknown as SessionsService);
+  const svc = new ProjectsService(db as unknown as PrismaService);
 
   try {
     await t.test('the four named boundaries, hand-counted AND equal to the project page', async () => {

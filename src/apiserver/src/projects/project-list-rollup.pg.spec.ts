@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import { CreatorType, PrismaClient, ProjectStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
-import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -114,10 +113,10 @@ test('the project index buckets every project in one pass and agrees with the pr
       },
     }) as unknown as PrismaService;
 
-    const projects = new ProjectsService(counting, {} as unknown as SessionsService);
+    const projects = new ProjectsService(counting);
     // The parity side reads through the plain client, so a fault in the proxy cannot make both
     // sides of the comparison wrong in the same direction.
-    const page = new ProjectsService(db as unknown as PrismaService, {} as unknown as SessionsService);
+    const page = new ProjectsService(db as unknown as PrismaService);
 
     try {
       const ownerId = randomUUID();

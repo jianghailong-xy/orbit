@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import { CreatorType, PrismaClient, ProjectStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
-import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -112,8 +111,8 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
     },
   }) as unknown as PrismaService;
 
-  const svc = new ProjectsService(counting, {} as unknown as SessionsService);
-  const plain = new ProjectsService(db as unknown as PrismaService, {} as unknown as SessionsService);
+  const svc = new ProjectsService(counting);
+  const plain = new ProjectsService(db as unknown as PrismaService);
 
   try {
     await t.test('the four named boundaries, hand-counted, self-consistent AND equal to the page', async () => {
