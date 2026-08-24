@@ -204,6 +204,18 @@ final class ConsoleModel {
     private static let tailPage = 200
     /// Page size for scroll-up history fetches (web parity — `OLDER_PAGE`). See `loadOlder()`.
     private static let olderPage = 200
+    /// Ceiling on the transcript items kept in memory, and the hysteresis above it before a trim
+    /// fires. See `TranscriptReducer.trimOlder` for what a trim moves; this is only the number.
+    ///
+    /// Read off docs/ios-perf-baseline.md §7, which measured `TranscriptRows.build` — 90–96% of a
+    /// streaming turn's main-thread cost — as linear in the item count: 528 items → 1.22 ms,
+    /// 1,055 → 2.44 ms, 4,490 → 13.63 ms (x86 harness). At the effective ceiling of 1,200 items
+    /// that is ≈ 2.8 ms, about a sixth of the 16.7 ms a 60fps frame has, and — the point — it stops
+    /// growing with the session instead of reaching 80% of the budget on a long one. 1,200 items is
+    /// also ≈ 10 tail pages of scrollback held locally; past that the load-earlier row fetches, as
+    /// it already does today.
+    private static let maxWindowItems = 1000
+    private static let windowTrimSlack = 200
 
     private var reducer = TranscriptReducer()
     private let stream: EventStreaming
@@ -332,6 +344,9 @@ final class ConsoleModel {
     /// Cancel the live SSE loop and drop its connection. The reducer state stays cached, so a later
     /// `startStreaming()` resumes from `maxSeq` (no full replay). Safe when not streaming.
     func stopStreaming() {
+        // Nobody is reading a console that isn't focused, so it must not stay latched out of the
+        // window cap on account of where its transcript happened to be scrolled when it lost focus.
+        readingHistory = false
         streamTask?.cancel()
         streamTask = nil
         worktreePollTask?.cancel()
@@ -546,6 +561,7 @@ final class ConsoleModel {
     }
     private func publishStateNow() {
         publishScheduled = false
+        trimWindow()
         stateRevision &+= 1
         state = reducer.state
         clearAwaitingReplyIfSatisfied()
@@ -580,6 +596,41 @@ final class ConsoleModel {
     /// `stateRevision` bump and re-pins that row, holding what the user was reading steady (web
     /// keeps `scrollTop` constant in a layout effect; SwiftUI's List needs an explicit scrollTo).
     private var prependAnchorID: String?
+
+    /// True while the reader has scrolled up off the live tail — fed by `TranscriptView`'s
+    /// `atBottom`. It gates the window cap, and only that.
+    private var readingHistory = false
+
+    /// Tell the console whether the reader is up in the history rather than pinned at the live tail.
+    ///
+    /// The cap trims the HEAD of the window, which is the mirror image of the prepend jump
+    /// `prependAnchorID` exists to compensate for: doing it while the reader is up there would pull
+    /// rows out from under them. Pinned at the bottom it is invisible — the view re-pins to the tail
+    /// on every publish anyway, and the dropped rows are a thousand items above the viewport.
+    ///
+    /// Coming back down is also the moment to reclaim what a long scroll-up run paged in: `loadOlder`
+    /// grows the window a page at a time, and on an IDLE session the only publishes are that method's
+    /// own — which skip the cap by design — so without enforcing it here the window would stay over
+    /// the ceiling until the next streamed event. Deliberately not guarded on a change of value: the
+    /// transcript re-asserts "pinned at the tail" whenever it appears or switches session, and each
+    /// of those is a legitimate place to enforce the cap. A call under the ceiling costs one compare.
+    func setReadingHistory(_ reading: Bool) {
+        readingHistory = reading
+        if !reading, trimWindow() { publishStateNow() }
+    }
+
+    /// Enforce `maxWindowItems`, unless the reader is up in the history (see `setReadingHistory`) or
+    /// a page is being grafted onto the head right this moment — trimming inside `loadOlder` would
+    /// throw away the fetch it just made.
+    ///
+    /// Gated to the same OS floor as `TranscriptView.canPageOlder`: below it the load-earlier row is
+    /// never offered at all, so a trimmed row would be one the reader could never get back.
+    @discardableResult
+    private func trimWindow() -> Bool {
+        guard #available(iOS 18, macOS 15, *) else { return false }
+        guard !readingHistory, !loadingOlder else { return false }
+        return reducer.trimOlder(keeping: Self.maxWindowItems, slack: Self.windowTrimSlack)
+    }
 
     /// Consume the pending prepend anchor (nil when the last publish wasn't a prepend).
     func takePrependAnchor() -> String? {

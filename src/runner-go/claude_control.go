@@ -41,8 +41,15 @@ import (
 // their stop did not take.
 const claudeInterruptTimeout = 30 * time.Second
 
-// The interrupt control subtype, named once so the frame builder and the waiter agree.
-const ctrlInterrupt = "interrupt"
+// The control subtypes Orbit sends, named once so the frame builder and the waiter agree.
+// interrupt takes no arguments; the other two each carry theirs beside the subtype in the
+// request object — {"subtype":"set_permission_mode","mode":"acceptEdits"} and
+// {"subtype":"set_model","model":"claude-sonnet-5"}.
+const (
+	ctrlInterrupt         = "interrupt"
+	ctrlSetPermissionMode = "set_permission_mode"
+	ctrlSetModel          = "set_model"
+)
 
 var (
 	// The CLI answered, and its answer was a refusal. Carried through with the CLI's own
@@ -115,15 +122,26 @@ func controlIDGeneration(id string) uint64 {
 	return n
 }
 
-// requestControl sends one control_request through the same single-writer queue every
+// requestControl sends one control_request carrying nothing but its subtype — all an
+// interrupt is, and the spelling every caller with no arguments to pass keeps.
+func (r *claudeRuntime) requestControl(subtype string) (*controlWaiter, error) {
+	return r.requestControlWith(subtype, nil)
+}
+
+// requestControlWith sends one control_request through the same single-writer queue every
 // other frame goes through, and registers the waiter its answer will resolve.
+//
+// payload is the subtype's own arguments, merged into the request object by
+// controlRequestFrame. It changes nothing about the answer: a request that carries a mode
+// or a model is correlated by id, timed out and discarded across a re-spawn exactly like
+// one that carries nothing.
 //
 // Registered before the frame is handed over, so an answer cannot arrive before there is
 // anywhere to route it; and reserved before the waiter exists, so a runtime that will
 // never carry the frame — a closed stdin, a CLI that stopped reading, a process already
 // gone — is reported as the failure it is instead of leaving a request outstanding for
 // something that was never sent.
-func (r *claudeRuntime) requestControl(subtype string) (*controlWaiter, error) {
+func (r *claudeRuntime) requestControlWith(subtype string, payload map[string]interface{}) (*controlWaiter, error) {
 	slot, err := r.reserve()
 	if err != nil {
 		return nil, err
@@ -145,7 +163,7 @@ func (r *claudeRuntime) requestControl(subtype string) (*controlWaiter, error) {
 	}
 	r.control[w.id] = w
 	r.mu.Unlock()
-	receipt := slot.commit(controlRequestFrame(w.id, subtype))
+	receipt := slot.commit(controlRequestFrame(w.id, subtype, payload))
 	// The writer answers on its own schedule, and a frame it establishes will never
 	// arrive is a request that can never be answered. Settle it the moment that is known
 	// rather than making the caller sit out the full deadline for a reply that is not

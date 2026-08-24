@@ -117,6 +117,51 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertTrue(b.state.hasMoreOlder)
     }
 
+    /// The full chain the in-memory window cap depends on: trim → write the snapshot → rehydrate
+    /// from it → page the trimmed history back in. A snapshot is the whole reducer, so a restored
+    /// session has to carry not just the shortened window but the moved cursor AND the pruned dedup
+    /// set — miss either and scrolling up on a reopened app shows a hole (or a duplicate) exactly
+    /// where the trim was.
+    func testTrimmedWindowSurvivesTheSnapshotAndStillPagesBack() throws {
+        let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let store = FileTranscriptStore(directory: dir)
+        func replies(_ seqs: ClosedRange<Int>) -> [RunEvent] {
+            seqs.map { RunEvent(seq: $0, type: .assistant, payload: .object(["text": .string("m\($0)")])) }
+        }
+
+        var live = TranscriptReducer()
+        live.applyTailPage(EventPage(events: replies(1...60), hasMore: false))
+        XCTAssertTrue(live.trimOlder(keeping: 20))            // seqs 1…40 dropped, cursor at 41
+        let full = try JSONEncoder().encode(live)
+        store.save(sessionID: "s1", reducer: live)
+
+        // A snapshot of a trimmed window is smaller for the same reason the app wanted the cap —
+        // it is the item array that dominates (docs/ios-perf-baseline.md §6).
+        var untrimmed = TranscriptReducer()
+        untrimmed.applyTailPage(EventPage(events: replies(1...60), hasMore: false))
+        XCTAssertLessThan(full.count, (try JSONEncoder().encode(untrimmed)).count / 2)
+
+        guard let restored0 = store.load(sessionID: "s1") else {
+            return XCTFail("a trimmed snapshot must still decode")
+        }
+        var restored = restored0
+        XCTAssertEqual(restored.state.items.count, 20)
+        XCTAssertEqual(restored.state.oldestSeq, 41)
+        XCTAssertTrue(restored.state.hasMoreOlder, "the trim boundary survives as pageable history")
+        XCTAssertEqual(restored.state.maxSeq, 60, "and the resume cursor is untouched")
+
+        // Scroll up on the restored session: the dropped page grafts back, once, in order.
+        restored.prependOlder(EventPage(events: replies(21...40), hasMore: true))
+        XCTAssertEqual(restored.state.items.map { $0.asAssistant?.text }, (21...60).map { "m\($0)" })
+        XCTAssertEqual(restored.state.oldestSeq, 21)
+        XCTAssertEqual(Set(restored.state.items.map(\.id)).count, 40, "no id collisions after rehydrate")
+
+        // …and the live stream resumes on top of it exactly as before.
+        restored.apply(RunEvent(seq: 61, type: .assistant, payload: .object(["text": .string("m61")])))
+        XCTAssertEqual(restored.state.items.count, 41)
+        XCTAssertEqual(restored.state.maxSeq, 61)
+    }
+
     // MARK: - FileTranscriptStore
 
     private func tempDir() -> URL {

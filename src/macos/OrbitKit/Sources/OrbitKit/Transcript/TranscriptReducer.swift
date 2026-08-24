@@ -14,11 +14,18 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     public var status: RunStatus = .pending
     /// Durable high-water seq — the `?sinceSeq=` value to reconnect with.
     public var maxSeq: Int = 0
-    /// Oldest durable seq folded into this window — the `before=` cursor for pulling the previous
+    /// Oldest durable seq STILL HELD in this window — the `before=` cursor for pulling the previous
     /// history page when the user scrolls up (web parity: AgentView's `oldestSeqRef`).
+    ///
+    /// "Still held", not "oldest ever seen": `trimOlder` caps the window by dropping the head, and
+    /// moves this cursor forward onto the oldest item that survived. The two readings coincide
+    /// until the first trim, which is why snapshots written before the cap existed rehydrate
+    /// correctly under it.
     public var oldestSeq: Int?
-    /// Whether the server holds events older than `oldestSeq` (the last fetched page's `hasMore`).
-    /// Gates the transcript's load-earlier row.
+    /// Whether anything older than `oldestSeq` can still be paged in — the last fetched page's
+    /// `hasMore`, OR the fact that this window has been trimmed (`trimOlder` forces it true, since
+    /// what it dropped is now server-side history like any other). Gates the transcript's
+    /// load-earlier row.
     public var hasMoreOlder: Bool = false
     /// Context-window occupancy (tokens) reported by the runner, for the composer's context gauge.
     /// nil until the first usage-bearing event arrives (older runners omit it) → the gauge is
@@ -211,6 +218,72 @@ public struct TranscriptReducer: Sendable, Codable {
         // page is older by construction; the low-water cursor already moved above.)
         if let i = openAssistant { openAssistant = i + sub.state.items.count }
         if let i = openThinking { openThinking = i + sub.state.items.count }
+    }
+
+    /// Cap the in-memory window: drop the oldest items until only the newest `maxItems` remain, and
+    /// move the history cursor onto the boundary so what was dropped reads as ordinary server-side
+    /// history — the scroll-up path (`prependOlder`) pages it straight back.
+    ///
+    /// Why there is a cap at all: `state.items` used to only grow, and a session watched all the way
+    /// through fed three separate symptoms at once, each linear in the item count — snapshot write
+    /// amplification, `TranscriptRows.build` cost, and resident memory
+    /// (docs/ios-perf-baseline.md §3.3 / §6 / §7).
+    ///
+    /// Three things move together, or the reader sees a hole:
+    ///  - `state.oldestSeq` now means "the oldest seq still in memory". It is the `before=` cursor
+    ///    either way, and it has to name a row that survived — so the split is pushed forward to the
+    ///    first item carrying a durable seq of its own.
+    ///  - `state.hasMoreOlder` is forced true: whatever the last page said, there IS history before
+    ///    this window now, because we just dropped some of it ourselves.
+    ///  - the trimmed seqs leave `seen`. This is the part that is easy to get backwards. Keeping
+    ///    them looks like duplicate protection, but `prependOlder` filters its page against `seen`
+    ///    and returns early when nothing is fresh — *after* moving `oldestSeq` back — so a
+    ///    paged-back trimmed region would be skipped wholesale: precisely the hole this avoids.
+    ///    Dropping them is safe from both directions: a page fetched `before=oldestSeq` can only
+    ///    carry seqs below the cut (an overlap at or above it is still in `seen`, so still deduped),
+    ///    and the live stream resumes from `maxSeq`, far above the cut, so a trimmed seq can never
+    ///    arrive there twice.
+    ///
+    /// `slack` is hysteresis: nothing is dropped until the window passes `maxItems + slack`, so a
+    /// streaming session trims once per `slack` new items instead of on every published snapshot.
+    /// Returns whether anything was dropped.
+    @discardableResult
+    public mutating func trimOlder(keeping maxItems: Int, slack: Int = 0) -> Bool {
+        guard maxItems > 0, state.items.count > maxItems + max(0, slack) else { return false }
+        var split = state.items.count - maxItems
+        // Not every row carries a seq (a user bubble, an error line, a locally-minted tool card at
+        // seq 0), and the cursor must land on one that is still on screen — walk forward to the
+        // first that does rather than guess at a cursor.
+        while split < state.items.count, Self.durableSeq(state.items[split]) == nil { split += 1 }
+        // Never cut into — or past — a bubble still being streamed into: both open cursors are item
+        // INDICES, and that bubble is what the next delta appends to.
+        let openFloor = min(openAssistant ?? Int.max, openThinking ?? Int.max)
+        guard split > 0, split < state.items.count, split <= openFloor,
+              let newOldest = Self.durableSeq(state.items[split]) else { return false }
+
+        state.items.removeFirst(split)
+        if let i = openAssistant { openAssistant = i - split }
+        if let i = openThinking { openThinking = i - split }
+        state.oldestSeq = newOldest
+        state.hasMoreOlder = true
+        seen = seen.filter { $0 >= newOldest }
+        return true
+    }
+
+    /// The seq a retained item can pin the history cursor to: the event that PRODUCED the row, so a
+    /// tool card answers with its call rather than its result. nil where a row has no durable event
+    /// of its own (a user bubble, an error line) or was minted locally (seq 0).
+    private static func durableSeq(_ item: TranscriptItem) -> Int? {
+        let seq: Int?
+        switch item {
+        case .assistant(let b):         seq = b.seq
+        case .thinking(let b):          seq = b.seq
+        case .toolCall(let c):          seq = c.inputSeq
+        case .interrupt(_, let s):      seq = s
+        case .autoRetry(let n):         seq = n.seq
+        case .user, .error, .authError: seq = nil
+        }
+        return (seq ?? 0) > 0 ? seq : nil
     }
 
     /// Show a user bubble immediately on send, before the server's `user` event echoes back.

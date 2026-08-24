@@ -54,14 +54,32 @@ func userFrame(sessionID string, content []map[string]interface{}) string {
 	})
 }
 
-// controlRequestFrame asks the CLI to do something out of band of the conversation
-// (currently only ctrlInterrupt). requestID is what the matching control_response echoes,
-// and is what routes that answer back to this request (claude_control.go).
-func controlRequestFrame(requestID, subtype string) string {
+// controlRequestFrame asks the CLI to do something out of band of the conversation —
+// stop the current turn (ctrlInterrupt), change the permission mode
+// (ctrlSetPermissionMode), switch model (ctrlSetModel). requestID is what the matching
+// control_response echoes, and is what routes that answer back to this request
+// (claude_control.go).
+//
+// payload carries whatever the subtype needs beyond its name, and goes in the SAME object
+// the subtype lives in — {"subtype":"set_model","model":"…"}, not nested under a key of
+// its own, which is where the CLI reads those fields from. A subtype that takes no
+// arguments passes nil.
+//
+// An optional field the caller is not using is simply absent from the map, and stays
+// absent from the frame: an omitted key and a null one are different statements to the
+// CLI, so set_model without a system_prompt must not carry the key at all.
+func controlRequestFrame(requestID, subtype string, payload map[string]interface{}) string {
+	request := make(map[string]interface{}, len(payload)+1)
+	for k, v := range payload {
+		request[k] = v
+	}
+	// Written last: the subtype is what the CLI dispatches on, so a stray payload key
+	// cannot quietly turn this into a request for something else.
+	request["subtype"] = subtype
 	return marshalFrame(map[string]interface{}{
 		"type":       frameControlRequest,
 		"request_id": requestID,
-		"request":    map[string]interface{}{"subtype": subtype},
+		"request":    request,
 	})
 }
 

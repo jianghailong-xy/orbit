@@ -1032,6 +1032,125 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items.first?.asTool?.status, .ok)
     }
 
+    // MARK: - in-memory window cap (trimOlder — the "items only ever grew" fix)
+
+    /// One assistant bubble per seq, so item count and seq line up and a trim boundary is readable.
+    private func replies(_ seqs: ClosedRange<Int>) -> [RunEvent] {
+        seqs.map { RunEvent(seq: $0, type: .assistant, payload: .object(["text": .string("m\($0)")])) }
+    }
+
+    func testTrimOlderKeepsTheNewestItemsAndMovesTheCursorForward() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: replies(1...50), hasMore: false))
+        XCTAssertEqual(r.state.oldestSeq, 1)
+        XCTAssertFalse(r.state.hasMoreOlder, "the page said history starts here")
+
+        XCTAssertTrue(r.trimOlder(keeping: 20))
+        XCTAssertEqual(r.state.items.count, 20)
+        XCTAssertEqual(r.state.items.first?.asAssistant?.text, "m31")
+        XCTAssertEqual(r.state.items.last?.asAssistant?.text, "m50", "the live tail is never touched")
+        XCTAssertEqual(r.state.oldestSeq, 31, "the cursor names the oldest seq STILL IN MEMORY")
+        XCTAssertTrue(r.state.hasMoreOlder, "what we dropped is now history to page back in")
+        XCTAssertEqual(r.state.maxSeq, 50, "the reconnect cursor must not move")
+    }
+
+    func testTrimOlderIsANoOpUntilTheWindowPassesMaxPlusSlack() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: replies(1...30), hasMore: false))
+
+        XCTAssertFalse(r.trimOlder(keeping: 20, slack: 10), "30 items is exactly 20 + 10 — not yet")
+        XCTAssertEqual(r.state.items.count, 30)
+        XCTAssertEqual(r.state.oldestSeq, 1)
+        XCTAssertFalse(r.state.hasMoreOlder, "a no-op trim must not invent history")
+
+        r.apply(RunEvent(seq: 31, type: .assistant, payload: .object(["text": .string("m31")])))
+        XCTAssertTrue(r.trimOlder(keeping: 20, slack: 10), "31 items > 30 — trim back to 20")
+        XCTAssertEqual(r.state.items.count, 20,
+                       "the slack is hysteresis before the next trim, not a second ceiling")
+    }
+
+    /// The whole point of the cap: what it drops must come back on scroll-up, in order, exactly
+    /// once. This is the chain that breaks if the trimmed seqs are left in the dedup set —
+    /// `prependOlder` would filter the page to nothing and skip the region for good.
+    func testTrimmedHistoryPagesBackInWithoutHolesOrDuplicates() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: replies(1...50), hasMore: false))
+        r.trimOlder(keeping: 20)                     // seqs 1…30 dropped, cursor at 31
+
+        // The scroll-up fetch the transcript would make: `before=oldestSeq`, newest-page-first.
+        XCTAssertEqual(r.state.oldestSeq, 31)
+        r.prependOlder(EventPage(events: replies(21...30), hasMore: true))
+        XCTAssertEqual(r.state.items.count, 30)
+        XCTAssertEqual(r.state.items.map { $0.asAssistant?.text },
+                       (21...50).map { "m\($0)" }, "the dropped page grafts back, in order")
+        XCTAssertEqual(r.state.oldestSeq, 21)
+        XCTAssertEqual(Set(r.state.items.map(\.id)).count, 30, "no id collisions with the live window")
+
+        // And again, all the way to the top.
+        r.prependOlder(EventPage(events: replies(1...20), hasMore: false))
+        XCTAssertEqual(r.state.items.map { $0.asAssistant?.text }, (1...50).map { "m\($0)" })
+        XCTAssertEqual(r.state.oldestSeq, 1)
+        XCTAssertFalse(r.state.hasMoreOlder, "back at the start of the session")
+        XCTAssertEqual(r.state.maxSeq, 50)
+    }
+
+    /// A page that overlaps the retained window (the server handed back one row too many) must still
+    /// be deduped — trimming `seen` below the cursor must not open a duplicate above it.
+    func testPageOverlappingTheRetainedWindowIsStillDeduped() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: replies(1...50), hasMore: false))
+        r.trimOlder(keeping: 20)                     // cursor at 31
+
+        r.prependOlder(EventPage(events: replies(28...35), hasMore: true))
+        XCTAssertEqual(r.state.items.map { $0.asAssistant?.text }, (28...50).map { "m\($0)" },
+                       "31…35 were already on screen and must not fold a second time")
+    }
+
+    /// Both open-bubble cursors are item INDICES. A trim that cut into (or past) the bubble a
+    /// `text_delta` is still streaming into would send the next delta somewhere else entirely.
+    func testTrimOlderNeverCutsIntoTheOpenStreamingBubble() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: replies(1...50), hasMore: false))
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("Hel")])))
+        XCTAssertEqual(r.state.items.count, 51)
+
+        XCTAssertTrue(r.trimOlder(keeping: 20))
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("lo")])))
+        r.apply(RunEvent(seq: 51, type: .assistant, payload: .object(["text": .string("Hello")])))
+        XCTAssertEqual(r.state.items.count, 20, "the live bubble finalized in place, no second copy")
+        XCTAssertEqual(r.state.items.last?.asAssistant?.text, "Hello")
+
+        // Defensive half: an open block sitting BELOW the cut leaves nothing safe to drop, so the
+        // window is left alone rather than trimmed to a cursor that would strand it.
+        var s = TranscriptReducer()
+        s.apply(RunEvent(seq: 0, type: .thinkingDelta, payload: .object(["delta": .string("hmm")])))
+        s.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("Hi")])))
+        for ev in replies(1...10) { s.apply(ev) }
+        XCTAssertFalse(s.trimOlder(keeping: 2), "the open thinking block is item 0 — don't cut past it")
+        XCTAssertEqual(s.state.items.count, 11)
+        XCTAssertEqual(s.state.oldestSeq, 1, "a refused trim leaves the cursor where it was")
+    }
+
+    /// The cursor has to name a row that survived. A user bubble carries no seq of its own, so the
+    /// split walks forward to the first row that does rather than guessing a `before=` value.
+    func testTrimOlderSplitsAtARowThatCarriesASeq() {
+        var r = TranscriptReducer()
+        var events = replies(1...20)
+        events.append(RunEvent(seq: 21, type: .user, payload: .object(["text": .string("and now?")])))
+        events.append(contentsOf: replies(22...24))
+        r.applyTailPage(EventPage(events: events, hasMore: false))
+        XCTAssertEqual(r.state.items.count, 24)
+
+        // A nominal split of 20 lands on the seq-less user bubble; it moves to the reply after it.
+        XCTAssertTrue(r.trimOlder(keeping: 4))
+        XCTAssertEqual(r.state.oldestSeq, 22)
+        XCTAssertEqual(r.state.items.count, 3, "the user bubble went with the seq it can't name")
+        XCTAssertEqual(r.state.items.first?.asAssistant?.text, "m22")
+        // …and paging back returns it, because seq 21 left the dedup set with everything below 22.
+        r.prependOlder(EventPage(events: [events[20]], hasMore: true))
+        XCTAssertEqual(r.state.items.first?.asUser?.text, "and now?")
+    }
+
     /// The server's authoritative list (GET .../background) is seeded via `seedBackground`. It must
     /// (1) surface shells the loaded window never held, (2) recover an agent shell's output that the
     /// live (broadcast-only) tail never persisted, and (3) NOT clobber the fresher live output/state of

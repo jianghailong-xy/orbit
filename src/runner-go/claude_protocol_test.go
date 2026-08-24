@@ -77,7 +77,7 @@ func TestUserFrameKeepsContentBlockOrder(t *testing.T) {
 }
 
 func TestControlRequestFrame(t *testing.T) {
-	m := decodeFrame(t, controlRequestFrame("req-7", "interrupt"))
+	m := decodeFrame(t, controlRequestFrame("req-7", "interrupt", nil))
 	if m["type"] != "control_request" {
 		t.Errorf("type = %v, want control_request", m["type"])
 	}
@@ -90,10 +90,67 @@ func TestControlRequestFrame(t *testing.T) {
 	}
 }
 
+// The frames for the subtypes that carry an argument, pinned whole. Both shapes are the
+// CLI's own, taken off the wire rather than derived: the argument sits in the same object
+// as the subtype, and nowhere else.
+//
+// The literals read alphabetically because encoding/json sorts a map's keys, while the
+// CLI's documentation writes subtype first; member order carries no meaning in JSON. What
+// they pin is that the bytes are exactly this, with nothing extra in them.
+func TestControlRequestFrameCarriesTheSubtypesArgument(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		id      string
+		subtype string
+		payload map[string]interface{}
+		want    string
+	}{
+		{
+			name: "set_permission_mode", id: "req-3-1", subtype: ctrlSetPermissionMode,
+			payload: map[string]interface{}{"mode": "acceptEdits"},
+			want:    `{"request":{"mode":"acceptEdits","subtype":"set_permission_mode"},"request_id":"req-3-1","type":"control_request"}` + "\n",
+		},
+		{
+			name: "set_model", id: "req-3-2", subtype: ctrlSetModel,
+			payload: map[string]interface{}{"model": "claude-sonnet-5"},
+			want:    `{"request":{"model":"claude-sonnet-5","subtype":"set_model"},"request_id":"req-3-2","type":"control_request"}` + "\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := controlRequestFrame(tc.id, tc.subtype, tc.payload); got != tc.want {
+				t.Errorf("frame =\n\t%q\nwant\n\t%q", got, tc.want)
+			}
+		})
+	}
+}
+
+// set_model also takes a system_prompt, which Orbit never sets. Omitted has to mean absent:
+// carrying the key with an empty value would ask the CLI to replace its system prompt with
+// nothing, which is a different request from the one being made.
+func TestControlRequestFrameOmitsAnUnusedOptionalField(t *testing.T) {
+	frame := controlRequestFrame("req-3-2", ctrlSetModel, map[string]interface{}{"model": "claude-sonnet-5"})
+	if strings.Contains(frame, "system_prompt") {
+		t.Errorf("frame carries a system_prompt nobody set: %s", frame)
+	}
+}
+
+// Interrupt is the one control frame in production use, so payloads must leave it byte for
+// byte what it was before they existed — nothing merged in, and nil and an empty map saying
+// the same thing.
+func TestControlRequestFrameInterruptBytesUnchanged(t *testing.T) {
+	const want = `{"request":{"subtype":"interrupt"},"request_id":"req-7","type":"control_request"}` + "\n"
+	if got := controlRequestFrame("req-7", ctrlInterrupt, nil); got != want {
+		t.Errorf("interrupt frame =\n\t%q\nwant\n\t%q", got, want)
+	}
+	if got := controlRequestFrame("req-7", ctrlInterrupt, map[string]interface{}{}); got != want {
+		t.Errorf("interrupt frame with an empty payload =\n\t%q\nwant\n\t%q", got, want)
+	}
+}
+
 // A control_response answers exactly one request, and says so inside its response object.
 // Routing a reply to the caller waiting on it depends on that id surviving the round trip.
 func TestControlResponseCorrelatesByRequestID(t *testing.T) {
-	sent := decodeFrame(t, controlRequestFrame("req-1", "can_use_tool"))
+	sent := decodeFrame(t, controlRequestFrame("req-1", "can_use_tool", nil))
 	id, _ := sent["request_id"].(string)
 
 	answer := decodeFrame(t, controlResponseFrame(id, map[string]interface{}{"behavior": "allow"}))

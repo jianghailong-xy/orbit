@@ -144,7 +144,7 @@ func TestFakeClaudeAnswersInterruptWithMatchingRequestID(t *testing.T) {
 	)
 	run := f.start("-p")
 
-	run.send(controlRequestFrame("req-42", "interrupt"))
+	run.send(controlRequestFrame("req-42", "interrupt", nil))
 	answer, ok := parseControlResponse(run.nextOfType("control_response"))
 	if !ok {
 		t.Fatal("the fake's answer is not a control_response")
