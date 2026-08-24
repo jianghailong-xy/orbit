@@ -33,6 +33,7 @@ import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
+import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
 import {
   DEFAULT_BLOCKING_LIMIT,
   MAX_BLOCKING_LIMIT,
@@ -538,6 +539,11 @@ export class ProjectsService {
    * The task tally is a `_count`, not an embedded task array. `GET /task-lists/:id` embeds its
    * list's tasks and had to grow a `?tasks=none` escape hatch when one list reached 27k of them;
    * starting from the count is the same decision made once instead of twice.
+   *
+   * `_count.tasks` is kept and is no longer the number a reader acts on: it counts DONE and
+   * CANCELLED alongside the rest, so it says how big a project is and nothing about where it
+   * stands. `buckets` and `lastActivityAt` are that — see `readProjectListRollups`, which
+   * produces them for the WHOLE page in one grouped query rather than once per project.
    */
   async list(ownerId: string, status?: ProjectStatus) {
     const projects = await this.prisma.project.findMany({
@@ -547,7 +553,13 @@ export class ProjectsService {
     });
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    return projects.map(withCoordination);
+    const rollups = await readProjectListRollups(this.prisma, ownerId, status);
+    return projects.map((project) => ({
+      ...withCoordination(project),
+      // A project with no tasks has no group in the aggregate. It reports five zeroes and no
+      // activity, rather than dropping the fields and making every client handle two shapes.
+      ...(rollups.get(project.id) ?? emptyProjectListRollup()),
+    }));
   }
 
   /**

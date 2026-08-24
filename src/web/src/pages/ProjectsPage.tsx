@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -12,8 +13,19 @@ import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
-import { ProjectPanoramaHeader } from '../components/ProjectPanoramaHeader';
+import { ProjectSections } from '../components/ProjectSections';
+import {
+  ProjectPanoramaHeader,
+  type ProjectPanoramaBuckets,
+} from '../components/ProjectPanoramaHeader';
+import { ProjectsToolbar, type ProjectFilter } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
+import { markdownToPlainText } from '../lib/markdownText';
+import {
+  attentionChipOf,
+  projectAttentionSections,
+  spotlitProjectIds,
+} from '../lib/projectAttention';
 import {
   providersQuery,
   runnersQuery,
@@ -48,6 +60,12 @@ interface Project {
   createdAt: string;
   updatedAt: string;
   _count: { tasks: number };
+  /** Where the project's work stands, from the endpoint's own grouped aggregate. This — not
+   *  `_count.tasks`, which counts settled work alongside the rest — is what sections and orders
+   *  the list; see lib/projectAttention. */
+  buckets: ProjectPanoramaBuckets;
+  /** The most recent write to any of its tasks, or null on a project that has none yet. */
+  lastActivityAt: string | null;
 }
 
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
@@ -69,9 +87,10 @@ const STATUS_COLOR: Record<Project['status'], string> = {
   CANCELLED: 'default',
 };
 
-// Row text, not the full field — a project's goal can run to MAX_PROJECT_GOAL_CHARS (4,000 in the
-// apiserver DTO), far past what a list row should show, and a task's acceptance criteria is the
-// same shape of field read in the same shape of row.
+// Row text, not the full field — a task's acceptance criteria runs far past what a list row should
+// show. Read only by the detail page's task rows now: the projects list truncates its goal with
+// the box instead (see .project-row-goal), a cut that does not depend on how wide each character
+// happens to be, and so gives every row of that list the same height.
 const ROW_EXCERPT_LENGTH = 180;
 
 function excerpt(text: string | null | undefined, empty: string): string {
@@ -80,18 +99,121 @@ function excerpt(text: string | null | undefined, empty: string): string {
   return trimmed.length > ROW_EXCERPT_LENGTH ? `${trimmed.slice(0, ROW_EXCERPT_LENGTH)}…` : trimmed;
 }
 
-/** Read-only index of the signed-in user's projects — newest first, no row interaction. */
+/**
+ * WHICH projects to ask for — the status filter goes on the wire, never over the loaded array.
+ *
+ * `?status=` has been the endpoint's own narrowing since it was written; filtering client-side
+ * would mean fetching every project in order to hide most of them, and would make the list of what
+ * is in progress depend on how much of the list had been loaded. 'ALL' sends no parameter at all,
+ * which is how the endpoint spells "no narrowing" (see ProjectsController.parseStatus).
+ */
+export function projectsPath(filter: ProjectFilter): string {
+  return filter === 'ALL' ? '/projects' : `/projects?status=${filter}`;
+}
+
+/** The cache entry `projectsPath(filter)` fills. The filter is PART OF THE KEY because it is part
+ *  of the request: two filters are two different answers, and sharing one entry between them would
+ *  show the previous filter's rows under the new filter's name. `['projects']` stays the prefix,
+ *  so one invalidation after a write still refreshes every filter's entry. */
+export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter] {
+  return ['projects', filter];
+}
+
+/**
+ * Whether one project answers what was typed in the search box.
+ *
+ * Client-side on purpose: an owner has tens of projects, all of them already on this page, so a
+ * round trip per keystroke would buy nothing. Title AND goal, because the goal is what a project
+ * is actually recognised by once titles start to look alike.
+ *
+ * The goal is matched with its Markdown REMOVED, so what is searched is what the row displays: a
+ * goal written as `**Ship** the new site` has to be found by "ship the new site", which the source
+ * text does not contain. Blank search matches everything — an empty box is not a filter.
+ */
+export function matchesProjectSearch(
+  project: Pick<Project, 'title' | 'goal'>,
+  search: string,
+): boolean {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return true;
+  if (project.title.toLowerCase().includes(needle)) return true;
+  return markdownToPlainText(project.goal).toLowerCase().includes(needle);
+}
+
+/**
+ * Which empty this is — or null, when the list has rows to show.
+ *
+ * The two are different situations and must not share a sentence. "No projects yet" is a statement
+ * about the account, and it is only TRUE when nothing is being narrowed: said over a search that
+ * matched nothing, it tells a reader with eighteen projects that they have none, and the way out
+ * (clear the search) is the one thing it does not suggest. So the create CTA belongs to the first
+ * and the way back belongs to the second.
+ */
+export function projectsEmptyKind(
+  loadedCount: number,
+  matchCount: number,
+  filter: ProjectFilter,
+  search: string,
+): 'none' | 'no-match' | null {
+  if (matchCount > 0) return null;
+  return loadedCount === 0 && filter === 'ALL' && search.trim() === '' ? 'none' : 'no-match';
+}
+
+/** What the no-match empty says: whichever narrowing is responsible, named back to the reader. The
+ *  search wins when both are on, because it is the one that was just typed. */
+export function noMatchDescription(filter: ProjectFilter, search: string): string {
+  const term = search.trim();
+  if (term) return `No projects match “${term}”`;
+  return filter === 'OPEN' ? 'No projects are in progress' : 'No completed projects';
+}
+
+/** Index of the signed-in user's projects: search and status filter above, then the four sections
+ *  in attention order — what has stalled, what only needs closing, what is already running, what
+ *  is finished and folded — and a way to start one from either the toolbar or an empty page. */
 export function ProjectsPage() {
+  const [filter, setFilter] = useState<ProjectFilter>('ALL');
+  const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
   const projects = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => api<Project[]>('/projects'),
+    queryKey: projectsQueryKey(filter),
+    queryFn: () => api<Project[]>(projectsPath(filter)),
   });
+  const matches = useMemo(
+    () => (projects.data ?? []).filter((p) => matchesProjectSearch(p, search)),
+    [projects.data, search],
+  );
+  // Stalled, Wrapping up, In progress, Completed — in that order, off the buckets and
+  // `lastActivityAt` every row carries. The rules and the reason for that order live in
+  // lib/projectAttention; the server's unrendered `createdAt desc` no longer orders anything here.
+  const sections = useMemo(() => projectAttentionSections(matches), [matches]);
+  // The two biggest piles of startable work nobody is starting — the head of Stalled — get a wash
+  // of amber behind them. Two and no more: see spotlitProjectIds for why a tint that covers a
+  // whole section stops being a signal.
+  const spotlit = useMemo(() => spotlitProjectIds(sections), [sections]);
+  // ONE instant for the whole render, read here rather than per row: the badges are ages, and two
+  // rows reading the clock a millisecond apart could land either side of a day boundary and
+  // disagree about how long the same silence has been. Re-read on every render, so a page left
+  // open does not keep reporting the age it had when it mounted.
+  const now = Date.now();
+  const empty = projectsEmptyKind(projects.data?.length ?? 0, matches.length, filter, search);
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <Typography.Title level={2} className="page-title">
         Projects
       </Typography.Title>
+
+      {/* Above the loading/error branches, not inside the loaded one: the search box and the
+          filter are how a slow or failed read is retried differently, and a toolbar that appears
+          only once rows do would take the controls away exactly when they are needed. */}
+      <ProjectsToolbar
+        search={search}
+        onSearchChange={setSearch}
+        filter={filter}
+        onFilterChange={setFilter}
+        onNewProject={() => setCreating(true)}
+      />
+      <NewProjectModal open={creating} onClose={() => setCreating(false)} />
 
       {projects.isLoading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
@@ -109,37 +231,209 @@ export function ProjectsPage() {
             </Button>
           }
         />
-      ) : (projects.data?.length ?? 0) === 0 ? (
-        <Empty description="No projects yet" style={{ marginTop: 48 }} />
+      ) : empty === 'none' ? (
+        // The account has nothing at all — so the page's job is not to report that, it is to
+        // offer the one thing a reader can do about it. A description with no control under it is
+        // where a new owner's first visit used to end.
+        <Empty description="No projects yet" style={{ marginTop: 48 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+            New project
+          </Button>
+        </Empty>
+      ) : empty === 'no-match' ? (
+        // The projects exist; this view is hiding them. No create CTA here — a project is not what
+        // this reader is missing — just the sentence naming what narrowed the list, and the way
+        // back out of it.
+        <Empty description={noMatchDescription(filter, search)} style={{ marginTop: 48 }}>
+          <Button
+            onClick={() => {
+              setSearch('');
+              setFilter('ALL');
+            }}
+          >
+            {search.trim() ? 'Clear search' : 'Show all projects'}
+          </Button>
+        </Empty>
       ) : (
-        <List
-          dataSource={projects.data}
-          rowKey="id"
-          renderItem={(p) => (
-            <List.Item>
-              {/* One link spanning the whole row — meta and count alike — so the entire row is a
-                  single click and a single tab stop, rather than a title-sized target with dead
-                  space either side. The short public id, never the raw UUID: the same spelling
-                  every other link in the app is built with (see encodeId). */}
-              <Link
-                to={`/projects/${encodeURIComponent(encodeId(p.id))}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', color: 'inherit' }}
+        <ProjectSections
+          sections={sections}
+          renderProject={(p) => {
+            // The same field the detail page renders as Markdown, degraded to the line it reads
+            // as — a row that shows `## 现状缺口` or `**一个依赖字段都没有**` is showing source,
+            // not a goal. Not sliced to a character count: how many rendered lines 180 characters
+            // occupy depends on how much of them is CJK, which is what had these rows jumping
+            // between one and three lines. The box truncates instead (see .project-row-goal).
+            const goal = markdownToPlainText(p.goal) || 'No goal set';
+            // What is WRONG with this row, past which section it landed in — how long it has been
+            // quiet, or that it is finished and still open. Null on most rows, which is the point
+            // (see attentionChipOf).
+            const chip = attentionChipOf(p, now);
+            return (
+              <List.Item
+                className={`project-row${spotlit.has(p.id) ? ' project-row-spotlit' : ''}`}
+                style={{ padding: '11px 10px' }}
               >
-                <List.Item.Meta
-                  title={
-                    <span>
-                      {p.title} <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
-                    </span>
-                  }
-                  description={excerpt(p.goal, 'No goal set')}
-                />
-                <div>{p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}</div>
-              </Link>
-            </List.Item>
-          )}
+                {/* One link spanning the whole row — meta and count alike — so the entire row is a
+                    single click and a single tab stop, rather than a title-sized target with dead
+                    space either side. The short public id, never the raw UUID: the same spelling
+                    every other link in the app is built with (see encodeId). */}
+                <Link
+                  to={`/projects/${encodeURIComponent(encodeId(p.id))}`}
+                  className="project-row-link"
+                >
+                  <div className="project-row-main">
+                    <div className="project-row-head">
+                      <span className="project-row-title">{p.title}</span>
+                      {chip ? (
+                        <span className={`project-row-chip project-row-chip-${chip.tone}`}>
+                          {chip.text}
+                        </span>
+                      ) : null}
+                      <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
+                    </div>
+                    <div className="project-row-goal">{goal}</div>
+                  </div>
+                  <div className="project-row-count">
+                    {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
+                  </div>
+                </Link>
+              </List.Item>
+            );
+          }}
         />
       )}
     </div>
+  );
+}
+
+/**
+ * What the New project form holds while it is being filled in.
+ *
+ * Two fields, and deliberately not four. A project's acceptance criteria and instructions are long
+ * prose read as prompts, edited on the project's own page beside what they are about; asking for
+ * them at the moment somebody is naming a project would turn "start something" into a form.
+ */
+export interface NewProjectDraft {
+  title: string;
+  goal?: string;
+}
+
+/** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
+export const EMPTY_NEW_PROJECT_DRAFT: NewProjectDraft = { title: '' };
+
+/** Whether the dialog's Create button may fire. A title of nothing but spaces names a project
+ *  nobody can find again — and is what the server's own `@MinLength(1)` refuses, which the trim in
+ *  `newProjectBody` is what makes reachable. Exported and total, because the button itself lives
+ *  behind a portal that a static render produces no markup for. */
+export function canCreateProject(draft: NewProjectDraft): boolean {
+  return draft.title.trim().length > 0;
+}
+
+/** The body `POST /projects` is given. A goal of nothing but spaces is sent as no goal at all
+ *  rather than as an empty string: blank and absent must not be two different stored states (the
+ *  same rule UpdateProjectDto states for clearing one). */
+export function newProjectBody(draft: NewProjectDraft): Record<string, string> {
+  const body: Record<string, string> = { title: draft.title.trim() };
+  const goal = draft.goal?.trim();
+  if (goal) body.goal = goal;
+  return body;
+}
+
+export function createProject(draft: NewProjectDraft): Promise<Project> {
+  return api<Project>('/projects', { method: 'POST', body: newProjectBody(draft) });
+}
+
+/** What a newly created project changes. `['projects']` is the PREFIX of every filter's entry, so
+ *  this refreshes the list under whichever filter is showing and the ones that are not — a project
+ *  created while Completed is selected must not be missing from All when it is switched back to. */
+export function invalidateAfterProjectCreate(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: ['projects'] });
+}
+
+/** The New project form's fields, in one state. Exported for the reason NewProjectTaskForm is: an
+ *  antd Modal renders through a portal, which a static render produces no markup at all for, so
+ *  the body has to be mountable on its own to be assertable at all. */
+export function NewProjectForm({
+  draft,
+  onChange,
+  error,
+  pending,
+}: {
+  draft: NewProjectDraft;
+  onChange: (draft: NewProjectDraft) => void;
+  error?: Error | null;
+  pending?: boolean;
+}) {
+  return (
+    <>
+      <FormRow label="Title">
+        <Input
+          autoFocus
+          value={draft.title}
+          disabled={pending}
+          onChange={(e) => onChange({ ...draft, title: e.target.value })}
+          placeholder="What this project is called"
+        />
+      </FormRow>
+      <FormRow label="Goal">
+        <Input.TextArea
+          rows={3}
+          value={draft.goal ?? ''}
+          disabled={pending}
+          onChange={(e) => onChange({ ...draft, goal: e.target.value })}
+          placeholder="Optional. What this project is trying to achieve."
+        />
+      </FormRow>
+
+      {/* The server's own message, inline and verbatim — see NewProjectTaskForm's note on why
+          there is no second Retry control beside it. */}
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Project could not be created"
+          description={error.message}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** The New project dialog: a name, optionally what it is for, and nothing else. */
+export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<NewProjectDraft>(EMPTY_NEW_PROJECT_DRAFT);
+  const create = useMutation({
+    mutationFn: (values: NewProjectDraft) => createProject(values),
+    onSuccess: () => {
+      setDraft(EMPTY_NEW_PROJECT_DRAFT);
+      onClose();
+      invalidateAfterProjectCreate(qc);
+    },
+  });
+
+  return (
+    <Modal
+      title="New project"
+      open={open}
+      // Cancel keeps what was typed and drops a failed attempt's error — the same bargain the New
+      // task dialog strikes, for the same reason.
+      onCancel={() => {
+        create.reset();
+        onClose();
+      }}
+      onOk={() => create.mutate(draft)}
+      okText="Create project"
+      confirmLoading={create.isPending}
+      okButtonProps={{ disabled: !canCreateProject(draft) }}
+    >
+      <NewProjectForm
+        draft={draft}
+        onChange={setDraft}
+        error={create.error}
+        pending={create.isPending}
+      />
+    </Modal>
   );
 }
 
