@@ -279,17 +279,25 @@ describe('ProjectCoordinatorCard — LIVE', () => {
     expect(body).toContain('3rd coordinator of this project');
   });
 
-  it('names the conversation, the workspace and the agent', () => {
+  it('names the conversation and labels the workspace and agent roles explicitly', () => {
     const body = text(paint(liveStatus()));
     expect(body).toContain('协调：实施 Project 公平调度域改造');
+    expect(body).toContain('Workspace');
     expect(body).toContain('orbit-main');
+    expect(body).toContain('Agent');
     expect(body).toContain('Claude Opus 5');
   });
 
-  it('says how much work waits on it, and that none of it starts by itself', () => {
+  it('says how much work it coordinates and identifies dispatch as manual', () => {
     const body = text(paint(liveStatus(), { openTaskCount: 8 }));
-    expect(body).toContain('8 open tasks are dispatched from here');
-    expect(body).toContain('none of them starts automatically');
+    expect(body).toContain('Manual dispatch');
+    expect(body).toContain('8 open tasks are coordinated from this conversation');
+  });
+
+  it('prints an honest zero instead of falling back to an unknown open-task count', () => {
+    const body = text(paint(liveStatus(), { openTaskCount: 0 }));
+    expect(body).toContain('No open tasks remain');
+    expect(body).not.toContain('Open tasks are coordinated');
   });
 
   it('reads Working while the engine is producing output', () => {
@@ -304,7 +312,9 @@ describe('ProjectCoordinatorCard — LIVE', () => {
   });
 
   it('reads Needs you when a turn has ended without one', () => {
-    expect(pillOf(paint(liveStatus()))).toContain('Needs you');
+    const html = paint(liveStatus());
+    expect(pillOf(html)).toContain('Needs you');
+    expect(buttonLabels(html)).toContain('Reply to coordinator');
   });
 
   it('reads Needs you — not Working — while an approval card is up', () => {
@@ -455,8 +465,8 @@ describe('ProjectCoordinatorCard — colour is never the only channel', () => {
 });
 
 describe('ProjectCoordinatorCard — layout', () => {
-  it('is a fixed 352px column on desktop and full width when narrow', () => {
-    expect(paint(liveStatus(), { layout: 'desktop' })).toMatch(/width:352px/);
+  it('fills the column assigned by the command-centre grid in both layouts', () => {
+    expect(paint(liveStatus(), { layout: 'desktop' })).toMatch(/width:100%/);
     expect(paint(liveStatus(), { layout: 'narrow' })).toMatch(/width:100%/);
   });
 
@@ -464,8 +474,7 @@ describe('ProjectCoordinatorCard — layout', () => {
     for (const status of [neverOpenedStatus(), liveStatus(), trashedStatus(), unavailableStatus()]) {
       const desktop = pillOf(paint(status, { layout: 'desktop' }));
       const narrow = pillOf(paint(status, { layout: 'narrow' }));
-      // The surface tint differs (desktop parks this in the header's driving seat); the state it
-      // reports must not.
+      // The responsive parent changes the available column; the state itself must not change.
       expect(narrow).toContain(desktop.slice(desktop.indexOf('data-glyph=')));
     }
   });

@@ -152,14 +152,13 @@ const attributionKeys = (projectUuid: string) => {
 
 // Every entry the head and the panorama cards register, in the order they mount:
 //
-//  1. the four buckets — asked for by the header's `Running` tally, which is why it comes FIRST,
-//     and read again by the panorama card lower down off the same entry, so it costs one request;
+//  1. the four buckets — asked for by the work overview, the first card in the command centre;
 //  2. the Coordinator surface's own read, under the SAME `['project', id]` prefix as the document,
 //     which is what makes one invalidation after a coordinator write refresh both;
 //  3. the blocking ranking.
 //
 // Three, not five: the acceptance card reads the project document under `['project', id]` — the
-// entry the page already holds — and the chain strip deliberately shares the header's `panorama`
+// entry the page already holds — and the chain strip deliberately shares the overview's `panorama`
 // key, so neither adds a request. Spelled out rather than imported, for the same reason tasksKey
 // is: a key the page changed unilaterally should break these tests.
 const headerKeys = (projectUuid: string) => {
@@ -985,7 +984,7 @@ describe('ProjectsPage — creating a project', () => {
 
 
 describe('ProjectDetailPage', () => {
-  it('renders the title, status, total tasks, per-status tallies and the full long-form fields', () => {
+  it('renders the title, human status, total tasks and the full long-form fields without duplicate tallies', () => {
     // Longer than the list row's 180-char cap: the detail page is where a goal is read in full,
     // so it must arrive uncut rather than re-truncated here.
     const longGoal = 'Ship the new marketing site. '.repeat(10).trim();
@@ -993,10 +992,10 @@ describe('ProjectDetailPage', () => {
     qc.setQueryData(['project', encodeId(P1)], detail({ goal: longGoal }));
     const html = renderDetail(qc, encodeId(P1));
     expect(html).toContain('Website Revamp');
-    expect(html).toContain('OPEN');
+    expect(html).toContain('Open');
     expect(html).toContain('5 tasks');
-    expect(html).toContain('OPEN 2'); // tasksByStatus, one tag per status the server returned
-    expect(html).toContain('DONE 3');
+    expect(html).not.toContain('OPEN 2');
+    expect(html).not.toContain('DONE 3');
     expect(html).toContain('Goal');
     expect(html).toContain(longGoal); // in full — no excerpt, no ellipsis
     expect(html).not.toContain('…');
@@ -1050,7 +1049,6 @@ describe('ProjectDetailPage', () => {
     const html = renderDetail(qc, encodeId(P2));
     expect(html).toContain('Legacy Cleanup');
     expect(html).toContain('0 tasks');
-    expect(html).toContain('No tasks yet');
     expect(html).toContain('No goal set');
     expect(html).toContain('No acceptance criteria set');
     expect(html).toContain('No instructions set');
@@ -1221,8 +1219,8 @@ describe('ProjectDetailPage — top-level tasks', () => {
     const out = html();
     expect(out).toContain('Tasks');
     expect(out).toContain('No top-level tasks yet');
-    // Distinct from the per-status tally's own empty line, which is about a different count.
-    expect(out).toContain('OPEN 2');
+    // Distinct from the project-wide total beside the title, which is about every level.
+    expect(out).toContain('5 tasks');
   });
 
   it('spins under the Tasks heading while the page is still loading', () => {

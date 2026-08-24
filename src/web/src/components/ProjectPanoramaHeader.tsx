@@ -178,7 +178,7 @@ function Kpi({
     <div
       style={{
         background: attention ? 'var(--warning-bg)' : 'var(--bg-raised)',
-        padding: '13px 15px 14px',
+        padding: '14px 15px 15px',
       }}
     >
       <div
@@ -186,7 +186,7 @@ function Kpi({
           display: 'flex',
           alignItems: 'center',
           gap: 7,
-          fontSize: 12,
+          fontSize: 12.5,
           color: 'var(--text-2)',
           marginBottom: 3,
           whiteSpace: 'nowrap',
@@ -195,10 +195,10 @@ function Kpi({
         <Glyph shape={glyph} color={color} />
         {label}
       </div>
-      <div style={{ fontSize: 29, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.12, fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: 28, fontWeight: 650, letterSpacing: '-0.025em', lineHeight: 1.12, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 1 }}>{footnote}</div>
+      <div style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-4)', marginTop: 2 }}>{footnote}</div>
     </div>
   );
 }
@@ -267,9 +267,47 @@ export function BucketMeter({
 }
 
 
-/** Ready work exists and nothing is picking it up. The card names the shape of the stall and
- *  points at the page where the usual cause (a provider refusing the assignee) is resolved. */
+/** Ready work exists and nothing is picking it up. This is deliberately a compact secondary
+ *  action: when the coordinator also needs a reply, that conversation remains the page's primary
+ *  CTA instead of competing with a second large blue button. */
 function StalledBanner({ buckets }: { buckets: ProjectPanoramaBuckets }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '10px 12px',
+        alignItems: 'flex-start',
+        marginTop: 16,
+        padding: '12px 14px',
+        background: 'var(--warning-bg)',
+        border: '1px solid var(--warning-border)',
+        borderRadius: 8,
+      }}
+    >
+      <span style={{ paddingTop: 3 }}>
+        <Glyph shape="triangle" color="var(--warning-solid)" size={11} />
+      </span>
+      <div style={{ flex: '1 1 260px', minWidth: 0, fontSize: 13, lineHeight: 1.55 }}>
+        <b style={{ color: 'var(--text-1)' }}>Dispatch needs attention</b>
+        <div style={{ color: 'var(--text-2)', marginTop: 2 }}>
+          {buckets.ready} task{buckets.ready === 1 ? ' is' : 's are'} ready, but nothing is running.
+          {' '}Check the assignees&apos; runner and provider.
+        </div>
+      </div>
+      <Link to="/providers">
+        <Button size="small">
+          Check providers
+        </Button>
+      </Link>
+    </div>
+  );
+}
+
+/** Every task has settled but the goal-level project status has not. This is a legitimate
+ *  wrapping-up state, not a contradiction between the blue OPEN tag and a full green meter, so
+ *  the detail page says the missing sentence explicitly. */
+function WrappingUpBanner({ settled }: { settled: number }) {
   return (
     <div
       style={{
@@ -277,29 +315,22 @@ function StalledBanner({ buckets }: { buckets: ProjectPanoramaBuckets }) {
         gap: 12,
         alignItems: 'flex-start',
         marginTop: 16,
-        padding: '13px 15px',
-        background: 'var(--warning-bg)',
-        border: '1px solid var(--warning-border)',
+        padding: '12px 14px',
+        background: 'var(--brand-tint)',
+        border: '1px solid var(--brand-border)',
         borderRadius: 8,
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.35, color: 'var(--warning)' }}>
-        ▲
+      <span style={{ paddingTop: 3 }}>
+        <Glyph shape="check" color="var(--brand)" size={12} />
       </span>
-      <div style={{ flex: 1, fontSize: 13, lineHeight: 1.65 }}>
-        <b>
-          {buckets.ready} task{buckets.ready === 1 ? '' : 's'} ready, {buckets.running} running.
-        </b>
-        <div style={{ color: 'var(--text-2)', marginTop: 3 }}>
-          Ready work is not being picked up. Check that the assignees have a runner online and a
-          provider that is not refusing them.
+      <div style={{ minWidth: 0, fontSize: 13, lineHeight: 1.55 }}>
+        <b style={{ color: 'var(--text-1)' }}>Ready to wrap up</b>
+        <div style={{ color: 'var(--text-2)', marginTop: 2 }}>
+          All {settled} task{settled === 1 ? ' is' : 's are'} settled. The project stays open until
+          its outcome is confirmed.
         </div>
       </div>
-      <Link to="/providers">
-        <Button type="primary" size="small">
-          Check providers
-        </Button>
-      </Link>
     </div>
   );
 }
@@ -309,17 +340,19 @@ function StalledBanner({ buckets }: { buckets: ProjectPanoramaBuckets }) {
 function Card({ hint, children }: { hint?: string; children: ReactNode }) {
   return (
     <section
+      className="project-work-overview"
+      aria-label="Work overview"
       style={{
         background: 'var(--bg-raised)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 10,
         padding: '18px 20px',
-        marginBottom: 14,
+        height: '100%',
       }}
     >
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <Typography.Title level={5} style={{ margin: 0 }}>
-          Where the work stands
+          Work overview
         </Typography.Title>
         {hint ? <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{hint}</span> : null}
       </header>
@@ -328,7 +361,15 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
   );
 }
 
-export function ProjectPanoramaHeader({ projectId }: { projectId: string }) {
+export function ProjectPanoramaHeader({
+  projectId,
+  projectStatus,
+}: {
+  projectId: string;
+  /** Goal-level status. Task completion does not close a project, so this is what lets the card
+   *  identify the useful in-between state: every task settled, project still open. */
+  projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
+}) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
   const buckets = panorama.data?.buckets;
   const stalled = buckets ? stalledOnReady(buckets) : false;
@@ -367,20 +408,27 @@ export function ProjectPanoramaHeader({ projectId }: { projectId: string }) {
 
   const { shape } = panorama.data;
   const loaded = panorama.data.buckets;
+  const settled = loaded.done + loaded.cancelled;
+  const wrappingUp =
+    projectStatus === 'OPEN'
+    && loaded.running === 0
+    && loaded.ready === 0
+    && loaded.blocked === 0
+    && settled > 0;
   const footnotes: Record<BucketKey, string> = {
-    running: 'dispatched, session live',
-    ready: 'unblocked, not dispatched',
-    blocked: 'waiting on prerequisites',
+    running: 'active sessions',
+    ready: 'can start now',
+    blocked: 'waiting on dependencies',
     done:
       shape.taskCount > 0
-        ? `${Math.round((loaded.done / shape.taskCount) * 100)}% of ${shape.taskCount}`
+        ? `${Math.round((loaded.done / shape.taskCount) * 100)}% complete`
         : 'no tasks yet',
   };
 
   return (
     <Card
-      hint={`${shape.taskCount} task${shape.taskCount === 1 ? '' : 's'} · ${shape.edgeCount} dependency edge${
-        shape.edgeCount === 1 ? '' : 's'
+      hint={`${shape.taskCount} task${shape.taskCount === 1 ? '' : 's'} · ${shape.edgeCount} dependenc${
+        shape.edgeCount === 1 ? 'y' : 'ies'
       }`}
     >
       <div
@@ -417,6 +465,8 @@ export function ProjectPanoramaHeader({ projectId }: { projectId: string }) {
       {stalled ? (
         <StalledBanner buckets={loaded} />
       ) : null}
+
+      {wrappingUp ? <WrappingUpBanner settled={settled} /> : null}
     </Card>
   );
 }

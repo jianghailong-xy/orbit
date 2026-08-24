@@ -295,7 +295,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // Each block found by what it SAYS, not by a test id: these are the headings a reader steers
     // by, and a rename that leaves them unfindable is the thing worth failing on.
     const coordinator = at('aria-label="Coordinator"');
-    const header = at('Where the work stands');
+    const header = at('Work overview');
     const graph = at('>Task graph<');
     const chain = at('aria-label="Chain progress"');
     const goal = at('Ship the new marketing site');
@@ -304,11 +304,11 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const acceptance = at('Acceptance</div>');
 
     expect(header).toBeGreaterThan(-1);
-    // The coordinator is part of the page HEAD — the same block as the title and the tallies —
-    // and therefore ahead of every card. It used to sit below Goal / Acceptance / Instructions,
-    // which is where a reader looking for the way to drive this project stopped finding it.
+    // Work state establishes context, then the coordinator offers the action on it. Both belong to
+    // one command-centre grid and both stay ahead of the graph and long-form project fields.
     expect(coordinator).toBeGreaterThan(-1);
-    expect(coordinator).toBeLessThan(header);
+    expect(coordinator).toBeGreaterThan(header);
+    expect(coordinator).toBeLessThan(graph);
     // The picture the counts above are a summary of, then the chain reading of the same shape.
     expect(graph).toBeGreaterThan(header);
     expect(chain).toBeGreaterThan(graph);
@@ -338,7 +338,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // ...and nothing else on the page notices. The page's own title first, then all four of the
     // other blocks: this is the whole point of the cards being siblings rather than nested.
     expect(shows('Website Revamp')).toBe(true);
-    expect(shows('Where the work stands')).toBe(true);
+    expect(shows('Work overview')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
     expect(shows('aria-label="Chain progress"')).toBe(true);
@@ -349,7 +349,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('Project could not be loaded')).toBe(false);
   });
 
-  it('keeps the page standing when dispatch health omits its refusal breakdown', async () => {
+  it('keeps the page standing in a stalled dispatch state', async () => {
     const stalled = panorama('chain');
     serve({
       [`${base}/panorama`]: () =>
@@ -357,13 +357,12 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
           ...stalled,
           buckets: { ...stalled.buckets, running: 0 },
         }),
-      [`${base}/panorama/dispatch-health`]: () =>
-        Promise.resolve({ windowHours: 24, dispatch: { applied: 0, refused: 0 } }),
     });
     await mount(page());
 
     expect(shows('Website Revamp')).toBe(true);
-    expect(shows('Where the work stands')).toBe(true);
+    expect(shows('Work overview')).toBe(true);
+    expect(shows('Dispatch needs attention')).toBe(true);
     expect(shows('Unblocks the most work')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
@@ -385,7 +384,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('aria-label="Chain progress"')).toBe(false);
     expect(shows('Step 6 / 39')).toBe(false);
     // Same page otherwise — a mesh loses the strip, not the panorama.
-    expect(shows('Where the work stands')).toBe(true);
+    expect(shows('Work overview')).toBe(true);
   });
 
   it('sends no panorama request at all for a project that did not load', async () => {
@@ -402,7 +401,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(apiMock.mock.calls.map(([path]) => String(path))).toEqual([base]);
 
     // Nothing painted a shell of itself either.
-    expect(shows('Where the work stands')).toBe(false);
+    expect(shows('Work overview')).toBe(false);
     expect(shows('Unblocks the most work')).toBe(false);
     expect(shows('What the coordinator has been doing')).toBe(false);
   });
@@ -421,7 +420,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
 
     // Below the panorama, which is the move this assembly made: what the project was set up to be
     // is read once, where the panorama is what a reader comes back for.
-    expect(at('Where the work stands')).toBeLessThan(at('Ship the new marketing site'));
+    expect(at('Work overview')).toBeLessThan(at('Ship the new marketing site'));
     expect(at('Ship the new marketing site')).toBeLessThan(at('>Tasks<'));
     // ...and below the coordinator, which is the move THIS one made. Compared as indices into the
     // markup rather than by walking the DOM, so it holds whatever the two are nested in.
@@ -440,19 +439,19 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(countOf('aria-label="Chain progress"')).toBe(1);
   });
 
-  it('counts what is RUNNING beside the per-status tallies, which never can', async () => {
+  it('keeps live and persisted task state in one overview instead of repeating header tags', async () => {
     serve();
     await mount(page());
 
-    // `tasksByStatus` is `{ OPEN: 2, DONE: 3 }` and there is no third key — dispatch never writes
-    // IN_PROGRESS, so the status tags alone file a task with an agent working on it under OPEN.
-    // The panorama's `running: 1` is the only reading of "moving" this page has.
+    // Dispatch never writes IN_PROGRESS, so the panorama's live-session join is the only honest
+    // reading of moving work. It appears once in the overview; OPEN/DONE header tags no longer
+    // repeat a second, less useful account above it.
     expect(shows('Running 1')).toBe(true);
-    expect(shows('OPEN 2')).toBe(true);
-    expect(shows('DONE 3')).toBe(true);
-    // In the head, beside the title — not down in the panorama card, which has its own.
-    expect(at('Running 1')).toBeLessThan(at('Where the work stands'));
-    // One request for the two readers: the tally and the panorama card share the cache entry.
+    expect(shows('OPEN 2')).toBe(false);
+    expect(shows('DONE 3')).toBe(false);
+    expect(at('Running 1')).toBeGreaterThan(at('Work overview'));
+    expect(countOf('>Running</div>')).toBe(1);
+    // One overview reader, one request.
     expect(panoramaCalls().filter((path) => path === `${base}/panorama`)).toHaveLength(1);
   });
 
@@ -465,7 +464,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('Retry')).toBe(true);
     // ...and it costs the reader the card, not the page.
     expect(shows('Website Revamp')).toBe(true);
-    expect(shows('Where the work stands')).toBe(true);
+    expect(shows('Work overview')).toBe(true);
     expect(shows('Ship the new marketing site')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
     expect(shows('Project could not be loaded')).toBe(false);

@@ -8,8 +8,6 @@ import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   stalledOnReady,
-  topRefusals,
-  type DispatchHealth,
   type ProjectPanorama,
 } from './ProjectPanoramaHeader';
 
@@ -28,7 +26,6 @@ const PROJECT = '3CuIHiSJZBQ7nLVUwc7ekz';
 // Both keys spelled out rather than imported from the component: a key the component changes
 // unilaterally has to break these tests, which it cannot do if both sides read one constant.
 const panoramaKey = ['project', PROJECT, 'panorama'];
-const healthKey = ['project', PROJECT, 'panorama', 'dispatch-health'];
 
 function newClient() {
   // refetchOnMount/retryOnMount:false keep a seeded entry (success OR error) from being treated as
@@ -38,11 +35,11 @@ function newClient() {
   });
 }
 
-function render(qc: QueryClient) {
+function render(qc: QueryClient, projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED') {
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <ProjectPanoramaHeader projectId={PROJECT} />
+        <ProjectPanoramaHeader projectId={PROJECT} projectStatus={projectStatus} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -52,20 +49,6 @@ function render(qc: QueryClient) {
 const panorama = (over: Partial<ProjectPanorama['buckets']> = {}, shape: Partial<ProjectPanorama['shape']> = {}): ProjectPanorama => ({
   buckets: { running: 0, ready: 4, blocked: 30, done: 5, cancelled: 0, ...over },
   shape: { taskCount: 39, edgeCount: 41, ratio: 41 / 39, maxDepth: 12, form: 'chain', ...shape },
-});
-
-const health = (over: Partial<DispatchHealth> = {}): DispatchHealth => ({
-  windowHours: 24,
-  dispatch: { applied: 47, refused: 361 },
-  // Server-ordered by count descending, which is the order the card is required to keep.
-  refusals: [
-    { refusalCode: 'PROVIDER_UNAVAILABLE', count: 318, lastSeenAt: '2026-08-22T09:00:00.000Z' },
-    { refusalCode: 'WHO_NOT_IN_TEAM', count: 36, lastSeenAt: '2026-08-22T08:00:00.000Z' },
-    { refusalCode: 'STALE_SNAPSHOT', count: 6, lastSeenAt: '2026-08-22T07:00:00.000Z' },
-    { refusalCode: 'UNSPECIFIED', count: 1, lastSeenAt: '2026-08-22T06:00:00.000Z' },
-  ],
-  openBlockers: [],
-  ...over,
 });
 
 /** Every `<svg data-glyph=…>` in the markup, in document order, with its own inner geometry. */
@@ -89,7 +72,7 @@ describe('ProjectPanoramaHeader', () => {
     // Every bucket's own label, as text...
     for (const label of ['Running', 'Ready', 'Blocked', 'Done']) expect(html).toContain(label);
     // ...and every number, as visible text in its cell rather than only inside the meter's label.
-    const cells = [...html.matchAll(/font-size:29px[^"]*">(\d+)<\/div>/g)].map((m) => m[1]);
+    const cells = [...html.matchAll(/font-size:28px[^"]*">(\d+)<\/div>/g)].map((m) => m[1]);
     expect(cells).toEqual(['0', '4', '30', '5']);
 
     // The whole point of the card: 4 and 30 are two numbers, and the 34 that today's `OPEN` tally
@@ -97,19 +80,17 @@ describe('ProjectPanoramaHeader', () => {
     expect(html).not.toContain('OPEN');
     expect(cells).not.toContain('34');
     // Each number says what it counts, so "4" is not a bare figure the reader has to interpret.
-    expect(html).toContain('unblocked, not dispatched');
-    expect(html).toContain('waiting on prerequisites');
-    expect(html).toContain('13% of 39'); // 5 of 39 tasks
+    expect(html).toContain('can start now');
+    expect(html).toContain('waiting on dependencies');
+    expect(html).toContain('13% complete'); // 5 of 39 tasks
   });
 
   it('does not raise the banner when something is running, however much is ready', () => {
     const qc = newClient();
     qc.setQueryData(panoramaKey, panorama({ running: 2 }));
-    qc.setQueryData(healthKey, health()); // the refusals are in cache and must still not be shown
     const html = render(qc);
 
-    expect(html).not.toContain('ready, 0 running');
-    expect(html).not.toContain('PROVIDER_UNAVAILABLE');
+    expect(html).not.toContain('Dispatch needs attention');
     expect(html).not.toContain('Check providers');
     // ...and the Ready cell drops its amber with it: nothing on this card is asking for attention.
     expect(html).not.toContain('var(--warning-bg)');
@@ -119,7 +100,9 @@ describe('ProjectPanoramaHeader', () => {
 
   it('separates the four buckets by shape, not by colour alone', () => {
     const qc = newClient();
-    qc.setQueryData(panoramaKey, panorama());
+    // Something is running so the dispatch banner does not add its own triangle to this assertion
+    // about the four bucket marks.
+    qc.setQueryData(panoramaKey, panorama({ running: 2 }));
     const html = render(qc);
 
     const marks = glyphs(html);
@@ -184,10 +167,27 @@ describe('ProjectPanoramaHeader', () => {
     expect(html).not.toContain('NaN');
   });
 
+  it('explains the legitimate all-settled-but-still-open wrapping-up state', () => {
+    const qc = newClient();
+    qc.setQueryData(
+      panoramaKey,
+      panorama(
+        { running: 0, ready: 0, blocked: 0, done: 9, cancelled: 0 },
+        { taskCount: 9, edgeCount: 10 },
+      ),
+    );
+
+    const open = render(qc, 'OPEN');
+    expect(open).toContain('Ready to wrap up');
+    expect(open).toContain('All 9 tasks are settled');
+    expect(open).toContain('project stays open');
+    expect(render(qc, 'DONE')).not.toContain('Ready to wrap up');
+  });
+
   it('renders the loading and error states, and neither throws', () => {
     // Loading: nothing seeded, so the query is pending with its fetch not yet dispatched.
     const loading = render(newClient());
-    expect(loading).toContain('Where the work stands');
+    expect(loading).toContain('Work overview');
     expect(loading).toContain('ant-spin');
     expect(loading).not.toContain('could not be loaded');
   });

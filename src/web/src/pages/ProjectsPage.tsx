@@ -24,7 +24,6 @@ import {
   Glyph,
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
-  projectPanoramaQuery,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
 import { ProjectsToolbar, type ProjectFilter } from '../components/ProjectsToolbar';
@@ -96,6 +95,12 @@ const STATUS_COLOR: Record<Project['status'], string> = {
   OPEN: 'blue',
   DONE: 'green',
   CANCELLED: 'default',
+};
+
+const STATUS_LABEL: Record<Project['status'], string> = {
+  OPEN: 'Open',
+  DONE: 'Completed',
+  CANCELLED: 'Cancelled',
 };
 
 // Row text, not the full field — a task's acceptance criteria runs far past what a list row should
@@ -524,10 +529,9 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
   );
 }
 
-/** Where the header stops having room for a column beside the title. Kept identical to the
- *  `.project-detail-header` media query in index.css — the stylesheet stacks the two blocks and
- *  this decides which of the coordinator card's two layouts goes into the second one. */
-const PROJECT_HEADER_NARROW_QUERY = '(max-width: 860px)';
+/** Where the command centre stops having enough room for four readable work buckets beside the
+ *  coordinator. Kept identical to `.project-command-center` in index.css. */
+const PROJECT_COMMAND_NARROW_QUERY = '(max-width: 920px)';
 
 /** Read-only detail for one project: what it's for, how anyone would know it got there, and where
  *  its tasks stand — down to a row per top-level task, and from there down to whichever levels
@@ -545,11 +549,7 @@ export function ProjectDetailPage() {
     enabled: Boolean(id),
   });
   const p = project.data;
-  // Which of the coordinator card's two layouts the header has room for. A hook rather than a
-  // media query alone: the two are different copy and a different surface, not a different width
-  // (see `CoordinatorCardLayout`), so the stylesheet cannot decide it on its own.
-  const narrow = useMediaQuery(PROJECT_HEADER_NARROW_QUERY);
-  const byStatus = Object.entries(p?.tasksByStatus ?? {});
+  const narrow = useMediaQuery(PROJECT_COMMAND_NARROW_QUERY);
 
   return (
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
@@ -586,39 +586,35 @@ export function ProjectDetailPage() {
         />
       ) : p ? (
         <>
-          {/* The page head: what this project is and where its work stands on the left, and the
-              way a person DRIVES it on the right. One block, because the coordinator is not a
-              footnote to the fields below — it is the conversation every decision about this
-              project is made in, and burying it under Goal / Acceptance / Instructions is how it
-              stopped being read. Below 860px the card drops under the title as a full-width bar;
-              `.project-detail-header` in index.css stacks at the same width this hook watches. */}
-          <div className="project-detail-header">
-            <div className="project-detail-header-main">
-              <Typography.Title level={2} className="page-title">
-                {p.title} <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
-              </Typography.Title>
-              <ProjectHeaderTallies projectId={id} total={p._count.tasks} byStatus={byStatus} />
+          {/* Project identity gets one quiet row of its own. The old head put a tall Coordinator
+              card beside two lines of title metadata, creating a large dead rectangle under the
+              title. Work state and the way to act on it now form the balanced command centre
+              directly below instead. */}
+          <header className="project-detail-identity">
+            <Typography.Title level={2} className="page-title">
+              {p.title}
+            </Typography.Title>
+            <div className="project-detail-meta">
+              <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
+              <span>
+                {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
+              </span>
             </div>
+          </header>
+
+          {/* One command centre, two responsibilities: the work account establishes context on
+              the left, then the coordinator offers the primary human action on the right. On
+              narrow screens they remain in this reading/focus order and stack full-width. */}
+          <div className="project-command-center">
+            <ProjectPanoramaHeader projectId={id} projectStatus={p.status} />
+            {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
+                but turn a present map with no OPEN row into the honest zero the card can say. */}
             <ProjectCoordinatorSection
               projectId={id}
               layout={narrow ? 'narrow' : 'desktop'}
-              openTaskCount={p.tasksByStatus?.OPEN}
+              openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
             />
           </div>
-
-          {/* The panorama. Every card below is a SIBLING of the others — none of them wraps
-              another — on the same terms the coordinator section has always been a sibling of the
-              fields around it: each one runs its own query and draws its own loading and error
-              state, so a panorama endpoint that 500s costs the reader that one card and leaves
-              the rest of the page standing.
-
-              Ordered as the project reads top to bottom rather than by how complete each block
-              is: where the work stands, the picture those counts summarize, what the project was
-              set up to be, the tasks themselves, and then what to unblock, whether it is passing
-              and what the coordinator has been doing. All of it inside this branch for the reason
-              the tasks section already was — a project that 404s must not put a row of doomed
-              requests on the wire. */}
-          <ProjectPanoramaHeader projectId={id} />
 
           {/* Directly under the counts it is the picture of, so the graph lands where a reader is
               already looking. Every project gets one, at any size: the section draws whatever the
@@ -794,7 +790,7 @@ export function ProjectCoordinatorSection({
 
   return (
     <div
-      className="project-detail-header-coordinator"
+      className="project-command-coordinator"
       style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
     >
       {status.isPending ? (
@@ -802,7 +798,9 @@ export function ProjectCoordinatorSection({
           aria-label="Coordinator"
           style={{
             boxSizing: 'border-box',
-            width: layout === 'desktop' ? 352 : '100%',
+            width: '100%',
+            height: '100%',
+            minHeight: 220,
             padding: 32,
             textAlign: 'center',
             background: 'var(--bg-raised)',
@@ -963,52 +961,6 @@ function CoordinatorRebindDialog({
         />
       ) : null}
     </Modal>
-  );
-}
-
-/**
- * The header's tallies: how much work this project holds, how it is filed, and how much of it is
- * actually MOVING.
- *
- * `Running` is not one of `tasksByStatus`'s keys and never will be — dispatch does not write
- * `IN_PROGRESS` (see `ProjectPanoramaHeader`), so the row of status tags beside it files a task
- * with an agent working on it under OPEN. It comes from the panorama, which joins the live
- * sessions, and shares that card's cache entry: the number costs no second request.
- *
- * Shown only once that read has landed. A `Running 0` painted while the answer is still in flight
- * is the one reading of this number nobody can act on — "nothing is moving" and "we do not know
- * yet" are different facts.
- */
-function ProjectHeaderTallies({
-  projectId,
-  total,
-  byStatus,
-}: {
-  projectId: string;
-  total: number;
-  byStatus: Array<[string, number]>;
-}) {
-  const panorama = useQuery(projectPanoramaQuery(projectId));
-  const running = panorama.data?.buckets.running;
-
-  return (
-    <div>
-      <span style={{ marginRight: 8 }}>
-        {total} task{total === 1 ? '' : 's'}
-      </span>
-      {byStatus.length === 0 ? (
-        <Typography.Text type="secondary">No tasks yet</Typography.Text>
-      ) : (
-        <>
-          {running === undefined ? null : <Tag color="processing">Running {running}</Tag>}
-          {byStatus.map(([status, n]) => (
-            <Tag key={status}>
-              {status} {n}
-            </Tag>
-          ))}
-        </>
-      )}
-    </div>
   );
 }
 

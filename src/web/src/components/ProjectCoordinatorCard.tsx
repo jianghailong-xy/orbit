@@ -105,8 +105,8 @@ export type CoordinatorAction =
   | 'bind-workspace'
   | 'rebind-workspace';
 
-/** Desktop parks the card in the header's right-hand column; narrow lays it out as a full-width
- *  status bar in the page flow. */
+/** The command-centre parent owns width. The layout marker remains part of the presentational
+ *  contract so responsive variants can be introduced without making this card read the viewport. */
 export type CoordinatorCardLayout = 'desktop' | 'narrow';
 
 type Tone = 'neutral' | 'brand' | 'warning' | 'error';
@@ -233,7 +233,8 @@ function StatusPill({ label, tone, glyph }: { label: string; tone: Tone; glyph: 
   );
 }
 
-/** A workspace or agent, named. The square is decoration; the name is the information. */
+/** A workspace or agent name. The square remains a quick visual cue, while the role is printed by
+ *  `IdentityRow` so two identical names never collapse into an unexplained "orbit orbit". */
 function NameChip({ name, tone }: { name: string; tone: 'neutral' | 'brand' }) {
   return (
     <span
@@ -260,6 +261,32 @@ function NameChip({ name, tone }: { name: string; tone: 'neutral' | 'brand' }) {
         {name}
       </span>
     </span>
+  );
+}
+
+function IdentityRow({
+  label,
+  name,
+  tone,
+}: {
+  label: 'Workspace' | 'Agent';
+  name: string;
+  tone: 'neutral' | 'brand';
+}) {
+  return (
+    <div
+      aria-label={`${label}: ${name}`}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '72px minmax(0, 1fr)',
+        alignItems: 'center',
+        gap: 8,
+        minWidth: 0,
+      }}
+    >
+      <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{label}</span>
+      <NameChip name={name} tone={tone} />
+    </div>
   );
 }
 
@@ -328,13 +355,12 @@ export function ProjectCoordinatorCard({
         ? { label: 'Deleted', tone: 'neutral', glyph: 'diamond' }
         : { label: 'Cannot be opened', tone: 'error', glyph: 'diamond' });
 
-  // The surface takes the state's tone in two cases: a refusal, which has to be impossible to
-  // scroll past, and — on desktop only — a live coordinator that is doing or wanting something,
-  // where this card is the header's driving seat. Narrow lays it out in the page flow underneath
-  // the project title, and a tinted full-width bar there would shout over the title itself.
-  const tinted =
-    status.state === 'UNAVAILABLE' || (layout === 'desktop' && live !== null && live.tone !== 'neutral');
-  const surface = tinted ? TONES[pill.tone] : null;
+  // The whole card used to turn amber while it needed a reply, then sat beside a second amber
+  // dispatch warning. A slim semantic accent preserves the state without making two large warning
+  // surfaces compete. An actual refusal still owns the full error surface because no press can
+  // succeed until it is repaired.
+  const unavailableSurface = status.state === 'UNAVAILABLE' ? TONES.error : null;
+  const liveAccent = live && live.tone !== 'neutral' ? TONES[live.tone] : null;
 
   return (
     <section
@@ -343,14 +369,15 @@ export function ProjectCoordinatorCard({
       aria-label="Coordinator"
       style={{
         boxSizing: 'border-box',
-        width: layout === 'desktop' ? 352 : '100%',
-        flex: layout === 'desktop' ? 'none' : undefined,
+        width: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        background: surface ? surface.bg : 'var(--bg-raised)',
-        border: `1px solid ${surface ? surface.border : 'var(--border-subtle)'}`,
+        background: unavailableSurface ? unavailableSurface.bg : 'var(--bg-raised)',
+        border: `1px solid ${unavailableSurface ? unavailableSurface.border : 'var(--border-subtle)'}`,
+        boxShadow: liveAccent ? `inset 3px 0 0 ${liveAccent.mark}` : undefined,
         borderRadius: 10,
-        padding: 16,
+        padding: '18px 18px 16px',
       }}
     >
       <header
@@ -370,7 +397,7 @@ export function ProjectCoordinatorCard({
           coordination={coordination}
           readAt={status.readAt}
           openTaskCount={openTaskCount}
-          rule={surface ? surface.border : 'var(--border-subtle)'}
+          needsReply={live?.label === 'Needs you'}
           onAction={onAction}
         />
       ) : status.state === 'TRASHED' ? (
@@ -449,19 +476,24 @@ function Live({
   coordination,
   readAt,
   openTaskCount,
-  rule,
+  needsReply,
   onAction,
 }: {
   session: CoordinatorSession;
   coordination: CoordinatorStatus['coordination'];
   readAt: string;
   openTaskCount?: number;
-  /** The divider's colour. On a tinted surface a neutral rule vanishes into the tint. */
-  rule: string;
+  needsReply: boolean;
   onAction?: (action: CoordinatorAction) => void;
 }) {
   const age = lastActive(session, readAt);
   const which = `${nth(coordination.coordinatorGeneration)} coordinator of this project`;
+  const dispatchCopy =
+    typeof openTaskCount !== 'number'
+      ? 'Open tasks are coordinated from this conversation.'
+      : openTaskCount === 0
+        ? 'No open tasks remain.'
+        : `${openTaskCount} open task${openTaskCount === 1 ? ' is' : 's are'} coordinated from this conversation.`;
 
   return (
     <>
@@ -470,23 +502,34 @@ function Live({
       </p>
       <p style={{ ...MUTED, margin: '3px 0 0' }}>{age ? `${age} · ${which}` : which}</p>
 
-      <div style={{ height: 1, background: rule, margin: '12px 0' }} />
+      <div style={{ height: 1, background: 'var(--border-subtle)', margin: '12px 0' }} />
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
-        {coordination.workspaceName ? <NameChip name={coordination.workspaceName} tone="neutral" /> : null}
-        {coordination.agentName ? <NameChip name={coordination.agentName} tone="brand" /> : null}
+      <div style={{ display: 'grid', gap: 7 }}>
+        {coordination.workspaceName ? (
+          <IdentityRow label="Workspace" name={coordination.workspaceName} tone="neutral" />
+        ) : null}
+        {coordination.agentName ? (
+          <IdentityRow label="Agent" name={coordination.agentName} tone="brand" />
+        ) : null}
       </div>
 
-      <p style={{ ...BODY, margin: '8px 0 0' }}>
-        {typeof openTaskCount === 'number'
-          ? `${openTaskCount} open task${openTaskCount === 1 ? '' : 's'} ${openTaskCount === 1 ? 'is' : 'are'} dispatched from here`
-          : 'Open tasks are dispatched from here'}
-        {' — none of them starts automatically.'}
-      </p>
+      <div
+        style={{
+          marginTop: 12,
+          padding: '10px 12px',
+          borderRadius: 8,
+          background: 'var(--fill-inset)',
+        }}
+      >
+        <div style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-3)', marginBottom: 2 }}>
+          Manual dispatch
+        </div>
+        <div style={{ ...BODY, lineHeight: 1.5 }}>{dispatchCopy}</div>
+      </div>
 
       <div style={ACTIONS}>
         <Button type="primary" block onClick={() => onAction?.('open')}>
-          Open coordinator
+          {needsReply ? 'Reply to coordinator' : 'Open coordinator'}
         </Button>
       </div>
     </>
