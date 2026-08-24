@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
+import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import { ProjectDetailPage } from './ProjectsPage';
 
 /**
@@ -20,7 +21,14 @@ import { ProjectDetailPage } from './ProjectsPage';
  * 404 branch sends no requests" would pass on a page that sent all of them. The requests have to
  * actually be dispatched for their absence to mean anything.
  */
-vi.mock('../api', () => ({ api: vi.fn() }));
+vi.mock('../api', async (importOriginal) => ({
+  // Everything but the transport: the page branches on `error instanceof ApiError`, so the class
+  // has to be the real one — a stand-in would let that branch pass against a shape the client
+  // never throws — and `restoreSession` is a named helper that would otherwise reach real fetch.
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(),
+  restoreSession: vi.fn(),
+}));
 // The graph section reaches its drawing module through a `lazy()` boundary; it is stubbed here for
 // the reason ProjectTasksGraph's own suite stubs it — React Flow measures with a ResizeObserver
 // jsdom does not have, and what this file is about is which block comes after which.
@@ -50,7 +58,6 @@ const DETAIL = {
   updatedAt: '2026-01-02T00:00:00Z',
   _count: { tasks: 5 },
   tasksByStatus: { OPEN: 2, DONE: 3 },
-  coordinatorSessionId: null,
   // Read by the acceptance card off this same document, which is why the card adds no request.
   acceptance: {
     total: 2,
@@ -116,55 +123,49 @@ const TASKS = {
   nextCursor: null,
 };
 
-/** Enough of GET …/coordinator/status for the surface to paint — every absent fact carrying its
- *  reason, which is the shape a project nobody has coordinated actually returns. */
-const COORDINATOR = {
+/**
+ * `GET …/coordinator/status` for a project nobody has ever coordinated.
+ *
+ * The shape frozen in `docs/project-coordinator-status-contract.md` and mirrored by
+ * `CoordinatorStatus`, which is what the card reads — every absent fact carrying its own reason
+ * rather than being dropped, so "never opened" is told apart from "this server does not report
+ * one". Typed, so a field renamed on the contract fails HERE rather than as a blank card.
+ */
+const COORDINATOR: CoordinatorStatus = {
   projectId: PROJECT,
   readAt: '2026-08-20T10:00:00.000Z',
-  project: {
-    title: 'Website Revamp', status: 'OPEN',
-    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z',
-    taskCount: 5, tasksByStatus: { OPEN: 2, DONE: 3 },
-  },
+  state: 'NEVER_OPENED',
   coordination: {
-    agentId: null, agentIdAbsentReason: 'NO_COORDINATOR_AGENT', agentName: null,
-    identitySource: 'DERIVED', workspaceId: null,
-    workspaceIdAbsentReason: 'NO_COORDINATION_WORKSPACE', generation: '0',
-    sessionId: null, sessionIdAbsentReason: 'COORDINATOR_NEVER_OPENED',
-    session: null, sessionAbsentReason: 'COORDINATOR_NEVER_OPENED',
+    sessionId: null,
+    sessionIdAbsentReason: 'COORDINATOR_NEVER_OPENED',
+    session: null,
+    sessionAbsentReason: 'COORDINATOR_NEVER_OPENED',
+    coordinatorGeneration: '0',
+    workspaceId: null,
+    workspaceIdAbsentReason: 'NO_COORDINATION_WORKSPACE',
+    workspaceName: null,
+    workspaceNameAbsentReason: 'NO_COORDINATION_WORKSPACE',
+    agentId: null,
+    agentIdAbsentReason: 'NO_COORDINATOR_AGENT',
+    agentName: null,
+    agentNameAbsentReason: 'NO_COORDINATOR_AGENT',
   },
-  policy: {
-    coordinatorEnabled: false, automationPolicy: 'MANUAL', configRevision: '0',
-    maxConcurrentTasks: 1, sessionBudgetPerDay: null, sessionBudgetPerDayAbsentReason: 'UNLIMITED',
-  },
-  consumption: {
-    tasksInFlight: 0, concurrencyRemaining: 1, coordinatorSessionsLast24h: 0,
-    budgetRemaining: null, budgetRemainingAbsentReason: 'UNLIMITED',
-    budgetWindowStartedAt: '2026-08-19T10:00:00.000Z',
-  },
-  runtime: {
-    runState: 'PLANNING', lease: null, leaseAbsentReason: 'NOT_LEASED',
-    fencingToken: '0', acceptanceAttempt: '0',
-  },
-  nextWake: {
-    at: null, reason: null, absentReason: 'NO_WAKE_SCHEDULED',
-    candidates: [], candidatesAbsentReason: 'NO_DECISION_YET', flooredBy: null, decisionId: null,
-  },
-  decisions: [], decisionsEmptyReason: 'NO_DECISION_YET',
-  pendingActions: [], pendingActionsEmptyReason: 'NO_PENDING_ACTION',
-  blockers: { open: [], openEmptyReason: 'NO_OPEN_BLOCKER', resolved: [] },
-  events: { pending: [], pendingEmptyReason: 'NO_PENDING_EVENT', recent: [] },
-  acceptance: {
-    criteria: null, criteriaAbsentReason: 'NO_ACCEPTANCE_CRITERIA', attempt: '0',
-    run: null, runAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
-    doneGate: {
-      allowed: false, runId: null, refusalCode: 'ACCEPTANCE_MISSING', reason: null,
-      acceptanceDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    },
-    lastRun: null, lastRunAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
-    evidence: {
-      verifications: { total: 0, pending: 0, pass: 0, fail: 0, inconclusive: 0, unresolvedFailures: 0 },
-      merges: [], mergesEmptyReason: 'NO_MERGE_EVIDENCE',
+  openability: {
+    canOpen: true,
+    willCreate: true,
+    refusalCode: null,
+    refusalDetail: null,
+    refusalCodeAbsentReason: 'NOTHING_REFUSES',
+    requiredAction: null,
+    requiredActionAbsentReason: 'NOTHING_REFUSES',
+    landing: {
+      workspaceId: '3CuIHiSJZBQ7nLVUwc7ekz',
+      workspaceIdAbsentReason: null,
+      workspaceName: 'orbit-main',
+      workspaceNameAbsentReason: null,
+      agentId: null,
+      agentName: null,
+      fixed: false,
     },
   },
 };
@@ -281,13 +282,19 @@ const shows = (text: string): boolean => container.innerHTML.includes(text);
  *  how a merge that kept both sides' copy of the fields shipped unnoticed. */
 const countOf = (text: string): number => container.innerHTML.split(text).length - 1;
 
-describe('ProjectDetailPage — the panorama, assembled', () => {
+// Past the 5s default, because each of these mounts the WHOLE page: six answered reads, three
+// Markdown fields, the panorama's meter, the ranking, the acceptance column and now the
+// coordinator card, all through `act` on real timers. It takes about a second on an idle machine
+// and several on a busy one — and a run that runs out of time here poisons every test after it,
+// since the shared root is left mounted. Not a hang budget: a slow-render one.
+describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, () => {
   it('lays the four blocks out in the order the reader asks for them', async () => {
     serve();
     await mount(page());
 
     // Each block found by what it SAYS, not by a test id: these are the headings a reader steers
     // by, and a rename that leaves them unfindable is the thing worth failing on.
+    const coordinator = at('aria-label="Coordinator"');
     const header = at('Where the work stands');
     const graph = at('>Task graph<');
     const chain = at('aria-label="Chain progress"');
@@ -297,6 +304,11 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     const acceptance = at('Acceptance</div>');
 
     expect(header).toBeGreaterThan(-1);
+    // The coordinator is part of the page HEAD — the same block as the title and the tallies —
+    // and therefore ahead of every card. It used to sit below Goal / Acceptance / Instructions,
+    // which is where a reader looking for the way to drive this project stopped finding it.
+    expect(coordinator).toBeGreaterThan(-1);
+    expect(coordinator).toBeLessThan(header);
     // The picture the counts above are a summary of, then the chain reading of the same shape.
     expect(graph).toBeGreaterThan(header);
     expect(chain).toBeGreaterThan(graph);
@@ -411,6 +423,10 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     // is read once, where the panorama is what a reader comes back for.
     expect(at('Where the work stands')).toBeLessThan(at('Ship the new marketing site'));
     expect(at('Ship the new marketing site')).toBeLessThan(at('>Tasks<'));
+    // ...and below the coordinator, which is the move THIS one made. Compared as indices into the
+    // markup rather than by walking the DOM, so it holds whatever the two are nested in.
+    expect(at('aria-label="Coordinator"')).toBeLessThan(at('>Goal</h5>'));
+    expect(at('aria-label="Coordinator"')).toBeLessThan(at('Ship the new marketing site'));
 
     // Once each — the assembly places these, it does not repeat them. Ordering assertions read the
     // first match and stay green on a page that draws the whole block a second time lower down.
@@ -422,5 +438,36 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(countOf('Land behind a flag, then flip it')).toBe(1);
     // The chain strip sat inside the same duplicated run and drew twice with them.
     expect(countOf('aria-label="Chain progress"')).toBe(1);
+  });
+
+  it('counts what is RUNNING beside the per-status tallies, which never can', async () => {
+    serve();
+    await mount(page());
+
+    // `tasksByStatus` is `{ OPEN: 2, DONE: 3 }` and there is no third key — dispatch never writes
+    // IN_PROGRESS, so the status tags alone file a task with an agent working on it under OPEN.
+    // The panorama's `running: 1` is the only reading of "moving" this page has.
+    expect(shows('Running 1')).toBe(true);
+    expect(shows('OPEN 2')).toBe(true);
+    expect(shows('DONE 3')).toBe(true);
+    // In the head, beside the title — not down in the panorama card, which has its own.
+    expect(at('Running 1')).toBeLessThan(at('Where the work stands'));
+    // One request for the two readers: the tally and the panorama card share the cache entry.
+    expect(panoramaCalls().filter((path) => path === `${base}/panorama`)).toHaveLength(1);
+  });
+
+  it('keeps a coordinator that cannot be READ to the coordinator', async () => {
+    serve({ [`${base}/coordinator/status`]: () => Promise.reject(new Error('Internal Server Error')) });
+    await mount(page());
+
+    // A read that failed is the one thing on this surface Retry is the right answer to...
+    expect(shows('Coordinator could not be read')).toBe(true);
+    expect(shows('Retry')).toBe(true);
+    // ...and it costs the reader the card, not the page.
+    expect(shows('Website Revamp')).toBe(true);
+    expect(shows('Where the work stands')).toBe(true);
+    expect(shows('Ship the new marketing site')).toBe(true);
+    expect(shows('Design the landing page')).toBe(true);
+    expect(shows('Project could not be loaded')).toBe(false);
   });
 });

@@ -5,11 +5,11 @@ import { SessionRunState, type SessionLifecycleState } from '@orbit/shared';
 /**
  * A project's coordination session, drawn as the four states it can actually be in.
  *
- * Replaces `ProjectCoordinatorControl` (ProjectsPage.tsx), which drew one: a button that said
- * *Open coordinator* whatever the truth was. Pressing it when the conversation was in Trash
- * silently opened a blank new one; pressing it when the workspace was disabled returned the same
- * 409 forever behind a *Retry* that could never succeed; and the first press bound the project to
- * a workspace, permanently, without ever saying so.
+ * Replaces the one-button Coordinator section ProjectsPage used to carry below the fields, which
+ * drew one state: a button that said *Open coordinator* whatever the truth was. Pressing it when
+ * the conversation was in Trash silently opened a blank new one; pressing it when the workspace
+ * was disabled returned the same 409 forever behind a *Retry* that could never succeed; and the
+ * first press bound the project to a workspace, permanently, without ever saying so.
  *
  * Reads `GET /projects/:id/coordinator/status`, whose shape is frozen in
  * `docs/project-coordinator-status-contract.md`. Every field this card renders comes from that

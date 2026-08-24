@@ -9,6 +9,7 @@ import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
+import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { ProjectCrossingRow, ReopenImpact, TaskAttribution } from './attribution';
 import {
   activeTasksPath,
@@ -327,6 +328,29 @@ export const taskCountsQuery = (listId?: string, labels: string[] = []) =>
     staleTime: 10_000,
   });
 
+/**
+ * `GET /projects/:id/coordinator/status` — what this project's coordination IS, and what pressing
+ * the button would do if it were pressed right now.
+ *
+ * The response type is the CARD's, imported rather than restated: the payload is frozen in
+ * `docs/project-coordinator-status-contract.md` and mirrored once, in the component that reads
+ * every field of it. A second declaration here would be a copy free to drift from the thing that
+ * renders it, which is the drift this module exists to prevent.
+ *
+ * Keyed under `['project', projectId]` like the panorama below, so the invalidation a project
+ * write already fires refreshes it too. Polled, because everything on it moves without this tab
+ * doing anything — the coordinator answers, a turn ends, a workspace is disabled — and faster than
+ * the panorama's 30s: this one carries a live conversation's state, and a stale reading of it is
+ * what puts a reader in front of a button that no longer does what it says.
+ */
+export const projectCoordinatorStatusQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'coordinator', 'status'] as const,
+    queryFn: () =>
+      api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
+    refetchInterval: 15_000,
+  });
+
 /** One entry of the blocking-root leaderboard: an unfinished task and how much unfinished work
  *  sits behind it. `downstreamBlocked` is the TRANSITIVE closure — every task that waits on this
  *  one however indirectly — not the count of its direct edges, which carries no decision value. */
@@ -352,9 +376,9 @@ export interface ProjectBlockingLeaderboard {
   truncated: { reason: string; maxTasks: number } | null;
 }
 
-/** Keyed UNDER `['project', projectId]`, like the coordinator status above, so the invalidation a
- *  project write already fires refreshes the ranking too. `limit` is in the key because it is in
- *  the URL: two cards asking for different depths are two different answers. */
+/** Keyed UNDER `['project', projectId]`, like `projectCoordinatorStatusQuery` above, so the
+ *  invalidation a project write already fires refreshes the ranking too. `limit` is in the key
+ *  because it is in the URL: two cards asking for different depths are two different answers. */
 export const projectPanoramaBlockingQuery = (projectId: string, limit = 5) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama', 'blocking', limit] as const,
