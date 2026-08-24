@@ -740,8 +740,9 @@ final class ConsoleModel {
 
     // What we believe the server's stored config is — set on load, updated after each push.
     // A picker's onChange fires even when loadContext adopts the server's value programmatically;
-    // without this the adopted value would echo straight back as a PATCH, and a live PATCH
-    // re-spawns claude (see SessionsService.updateConfig). So we only push genuine user edits.
+    // without this the adopted value would echo straight back as a PATCH, and every live PATCH
+    // costs the session something — a control frame at least, and a re-spawn when the change is
+    // one only a new process can carry (see `applyConfig`). So we only push genuine user edits.
     private var syncedConfig: (model: String, permissionMode: String, effort: String)?
 
     /// Load the footer context once: the owning agent's name + the runner's plan usage, and
@@ -990,7 +991,18 @@ final class ConsoleModel {
     /// like web's configMut); on a terminal/draft session the local value is kept and carried
     /// by the next resume. Pass only the field that changed (effort uses its raw value so
     /// Default sends "" to clear it). No-op when the value equals the synced server config —
-    /// that filters the programmatic adopt in `loadContext` from re-spawning the session.
+    /// that filters the programmatic adopt in `loadContext` from re-sending a change nobody made.
+    ///
+    /// WHEN the pushed change takes hold is not one answer for all four fields, and the server
+    /// decides it (SessionsService.updateConfig), not this call. Effort and provider are decided
+    /// when the engine process is built, so they queue a `reload`: the runner re-spawns with
+    /// --resume once the running turn ends, and they govern the NEXT turn. Model and permission
+    /// mode are handed to a resident Claude Code over its control channel (`set_model` /
+    /// `set_permission_mode`) as a `setconfig` the inbox delivers mid-turn, so they take hold
+    /// where the running turn stands. Those control frames are the claude runtime's alone — a
+    /// Codex / Kimi / OpenCode session still re-spawns for all four. Web says as much in the
+    /// pill tooltips (`configPillHints`); nothing here shows the difference yet, so this comment
+    /// is where the two clients agree on it.
     func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                      provider: String? = nil) async {
         guard isLive else { return }
