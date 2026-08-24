@@ -364,7 +364,16 @@ export const projectPanoramaBlockingQuery = (projectId: string, limit = 5) =>
       ),
   });
 
-/** Keyed under `['project', projectId]` like the rest, so a project write invalidates it too. */
+/**
+ * Keyed under `['project', projectId]` like the rest, so a project write invalidates it too.
+ *
+ * Polled on the same cadence as the panorama header and the chain progress above it, because the
+ * marks now carry live run state (`running` / `queued`) and nothing else would ever bring it in:
+ * the control-plane stream refreshes `['tasks']`, `['sessions']` and `['workspaces']`, never
+ * `['project', id]`, and a run started by a coordinator or another tab is not a write this tab
+ * makes. Left unpolled, a reader watching the picture would see the task start only if they
+ * happened to reload the page.
+ */
 export const projectDependencyGraphQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'dependency-graph'] as const,
@@ -372,6 +381,7 @@ export const projectDependencyGraphQuery = (projectId: string) =>
       api<ProjectDependencyGraphResponse>(
         `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
       ),
+    refetchInterval: 30_000,
   });
 
 // ── Unit L7: the attribution boundary, and the two writes that cross it ───────────────────────

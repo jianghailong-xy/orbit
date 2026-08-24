@@ -13,6 +13,7 @@ import {
   ProjectIdentitySource,
   ProjectRole,
   ProjectStatus,
+  RunStatus,
   TaskStatus,
 } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
@@ -847,6 +848,12 @@ export class ProjectsService {
    * `truncated` now means only what its name says: the project is larger than one request reads,
    * or its fold is larger than one response carries. Neither has ever been true in this database.
    *
+   * ## Live runs
+   *
+   * Each mark carries `running` / `queued` from the Sessions on its tasks, not just the task's
+   * stored status — see `liveTaskState` below for why the column alone cannot say whether a task
+   * is being worked on.
+   *
    * An edge with one end outside the project is dropped rather than drawn to a stub node: it
    * belongs to another project's plan, and a node this page cannot open is worse than a missing
    * line. What a task waits on across that boundary is what the task page's `dependencyState`
@@ -864,7 +871,11 @@ export class ProjectsService {
       select: { id: true, title: true, status: true, parentTaskId: true },
     });
     const overCeiling = rows.length > PROJECT_GRAPH_MAX_TASKS;
-    const tasks = overCeiling ? rows.slice(0, PROJECT_GRAPH_MAX_TASKS) : rows;
+    const rowsInGraph = overCeiling ? rows.slice(0, PROJECT_GRAPH_MAX_TASKS) : rows;
+    const liveByTaskId = rowsInGraph.length
+      ? await this.liveTaskState(ownerId, projectId)
+      : new Map<string, { running: boolean; queued: boolean }>();
+    const tasks = rowsInGraph.map((task) => ({ ...task, ...(liveByTaskId.get(task.id) ?? {}) }));
 
     // Scoped by the two ends' project rather than by a list of task ids: the id list would be as
     // long as the project, and a 23,442-element `IN` is a query plan nobody wants.
@@ -895,6 +906,53 @@ export class ProjectsService {
       truncated: overCeiling || fold.truncated,
       limits: { maxTasks: PROJECT_GRAPH_MAX_TASKS, maxMarks: DEFAULT_FOLD_OPTIONS.maxMarks },
     };
+  }
+
+  /**
+   * Which of this project's tasks have a run on them right now: `running` = a RUNNING Session,
+   * `queued` = a PENDING one with nothing running yet.
+   *
+   * The graph needs this because `Task.status` does not carry it. Dispatch opens a Session and
+   * leaves the row `OPEN` — only `reclaimStalledTask` and a retry ever write `IN_PROGRESS` — so a
+   * project graph drawn from the column alone reports the task somebody is watching as untouched,
+   * which is exactly the state a reader opens the picture to find.
+   *
+   * The same two flags, derived the same way, as `TasksService.withRunning`: the task list, the
+   * task-rooted graph and this canvas must not describe one running task in three ways. Scoped by
+   * the tasks' PROJECT rather than by their ids, for the reason the edge query is — the id list is
+   * as long as the project, and a 23,442-element `IN` is a query plan nobody wants.
+   */
+  private async liveTaskState(
+    ownerId: string,
+    projectId: string,
+  ): Promise<Map<string, { running: boolean; queued: boolean }>> {
+    const busy = await this.prisma.session.groupBy({
+      by: ['taskId', 'status'],
+      where: {
+        ownerId,
+        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+        task: { ownerId, projectId },
+      },
+      _count: { _all: true },
+    });
+    const running = new Set(
+      busy.filter((row) => row.status === RunStatus.RUNNING).map((row) => row.taskId),
+    );
+    const queued = new Set(
+      busy.filter((row) => row.status === RunStatus.PENDING).map((row) => row.taskId),
+    );
+    const live = new Map<string, { running: boolean; queued: boolean }>();
+    for (const taskId of new Set([...running, ...queued])) {
+      if (!taskId) continue;
+      // A task with both is simply running; `queued` is only meaningful when nothing is running
+      // yet. `session_task_execution_claim_idx` makes that pair impossible anyway — this is here
+      // so the two flags mean the same thing they mean in `TasksService.withRunning`.
+      live.set(taskId, {
+        running: running.has(taskId),
+        queued: queued.has(taskId) && !running.has(taskId),
+      });
+    }
+    return live;
   }
 
   /**
