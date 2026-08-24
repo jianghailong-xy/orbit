@@ -20,7 +20,7 @@ function makeService(
   rows: SessionRow[],
   opts: {
     resume?: () => Promise<unknown>;
-    events?: Array<{ type: string; payload: unknown }>;
+    events?: Array<{ type: string; payload: unknown; turnId?: string }>;
     /**
      * §13.1 AG6: the task ids the owner-scoped EXISTS would return for this batch. Modelled as the
      * ANSWER rather than as child rows, because the whole point of that query is that the predicate
@@ -44,6 +44,14 @@ function makeService(
      * carried — i.e. a demotion to a salvage conversation committing in between.
      */
     startsTaskWorkAtSettle?: boolean;
+    /**
+     * The session's attachment rows, in the state the failure left them: each one stamped with
+     * the turn it was sent on. The retry copies these, so a fake that only counted them could
+     * not see the thing this exists for — which bytes reached the new turn.
+     */
+    attachments?: Array<Record<string, unknown>>;
+    /** The id of the seeded first turn, when the fixture has one (the prompt's own uploads). */
+    seedTurnId?: string;
     /** What the commit-race branch re-reads for this session AFTER a refused resume. */
     raceReadRow?: {
       terminalReason: string | null; supersededByTaskId: string | null;
@@ -54,6 +62,10 @@ function makeService(
 ) {
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const resumed: Array<{ id: string; content: string }> = [];
+  // Kept apart from `resumed` so every assertion above stays a statement about the message.
+  const resumedAttachments: string[][] = [];
+  const attachments = (opts.attachments ?? []).map((a) => ({ ...a }));
+  let copied = 0;
   const prisma = {
     // The only raw query this service makes is §13.1 AG6's batch EXISTS.
     // §13.1 AG6's settles run inside a transaction that locks the task first, so the fake models
@@ -185,11 +197,45 @@ function makeService(
         return matching.slice(-args.take).reverse();
       },
     },
+    conversationTurn: {
+      findUnique: async () => (opts.seedTurnId ? { id: opts.seedTurnId } : null),
+    },
+    attachment: {
+      // The turn scope is the whole question — "which images went with THIS message" — so the
+      // fake answers it rather than handing back everything the session ever carried.
+      findMany: async (args: { where: { sessionId: string; turnId: string } }) =>
+        attachments.filter(
+          (a) => a.sessionId === args.where.sessionId && a.turnId === args.where.turnId,
+        ),
+      create: async (args: { data: Record<string, unknown> }) => {
+        const copy = { id: `copy-${++copied}`, turnId: null, ...args.data };
+        attachments.push(copy);
+        return { id: copy.id };
+      },
+      deleteMany: async (args: { where: { id: { in: string[] }; turnId: null } }) => {
+        const doomed = attachments.filter(
+          (a) => args.where.id.in.includes(a.id as string) && a.turnId == null,
+        );
+        for (const d of doomed) attachments.splice(attachments.indexOf(d), 1);
+        return { count: doomed.length };
+      },
+    },
   };
   const sessions = {
-    resume: async (_owner: string, id: string, dto: { content: string }) => {
+    resume: async (
+      _owner: string,
+      id: string,
+      dto: { content: string; attachmentIds?: string[] },
+    ) => {
       if (opts.resume) await opts.resume();
       resumed.push({ id, content: dto.content });
+      resumedAttachments.push(dto.attachmentIds ?? []);
+      // What resume() does with them, so the copies a failed re-send must clean up are
+      // distinguishable from the ones that became a turn's images.
+      for (const attId of dto.attachmentIds ?? []) {
+        const copy = attachments.find((a) => a.id === attId);
+        if (copy) copy.turnId = 'turn-retry';
+      }
       return { turnId: 't', seq: 1 };
     },
   } as unknown as SessionsService;
@@ -209,7 +255,7 @@ function makeService(
   const settled = () =>
     published.filter((p) => p.payload.final && !p.payload.retryAt).map((p) => p.id);
   const service = new AutoRetryService(prisma as never, sessions, realtime as never);
-  return { service, updates, resumed, rows, published, settled };
+  return { service, updates, resumed, resumedAttachments, attachments, rows, published, settled };
 }
 
 function row(over: SessionRow = {}): SessionRow {
@@ -431,6 +477,100 @@ test('falls back to the opening prompt when the very first turn hit the limit', 
   const { service, resumed } = makeService([row({ numTurns: 0 })], { events: [] });
   await service.sweep(NOW);
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'opening prompt' }]);
+});
+
+/** One image as the killed turn left it: stamped with the turn it was sent on. */
+function image(over: Record<string, unknown> = {}) {
+  return {
+    id: 'att-1',
+    ownerId: 'owner-1',
+    sessionId: 'session-1',
+    turnId: 'turn-9',
+    mimeType: 'image/png',
+    sizeBytes: 3,
+    fileName: 'shot.png',
+    data: Uint8Array.from([1, 2, 3]),
+    createdAt: PAST,
+    ...over,
+  };
+}
+
+// The retry re-sent the words alone, so the agent answered about a screenshot it had never been
+// shown — and the transcript showed a second bubble of the same sentence with the picture gone.
+test('re-sends the images that went with the message', async () => {
+  const { service, resumed, resumedAttachments, attachments } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: 'the original message' }, turnId: 'turn-9' }],
+    attachments: [image()],
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original message' }]);
+  assert.deepEqual(resumedAttachments, [['copy-1']]);
+  const copy = attachments.find((a) => a.id === 'copy-1')!;
+  assert.deepEqual(copy.data, Uint8Array.from([1, 2, 3]), 'the bytes, not a reference to a row');
+  assert.equal(copy.fileName, 'shot.png');
+  assert.equal(copy.sessionId, 'session-1');
+  assert.equal(
+    attachments.find((a) => a.id === 'att-1')!.turnId,
+    'turn-9',
+    'a copy, never a re-point: the attempt that failed keeps the image in its own bubble',
+  );
+});
+
+// A message is text AND what was sent with it. An image-only turn carries no text, so the words
+// come from further back — and taking the newest turn's images would re-send a pairing the
+// person never wrote.
+test('takes the images from the turn its text came from', async () => {
+  const { service, resumedAttachments, attachments } = makeService([row()], {
+    events: [
+      { type: 'user', payload: { text: 'the original message' }, turnId: 'turn-8' },
+      { type: 'user', payload: { text: '' }, turnId: 'turn-9' },
+    ],
+    attachments: [
+      image({ id: 'att-8', turnId: 'turn-8', fileName: 'asked-about.png' }),
+      image({ id: 'att-9', turnId: 'turn-9', fileName: 'sent-later.png' }),
+    ],
+  });
+  await service.sweep(NOW);
+  const sent = resumedAttachments[0].map(
+    (id) => attachments.find((a) => a.id === id)!.fileName,
+  );
+  assert.deepEqual(sent, ['asked-about.png']);
+});
+
+test('leaves no copies behind when the re-send fails', async () => {
+  const { service, attachments, rows } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: 'the original message' }, turnId: 'turn-9' }],
+    attachments: [image()],
+    resume: async () => {
+      throw new Error('runner offline');
+    },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(
+    attachments.map((a) => a.id),
+    ['att-1'],
+    'nothing was re-sent, so the copies made for it are bytes with no bubble',
+  );
+  assert.equal(rows[0].retryAttempts, 1, 'and the dispatch failure still backs off as it did');
+});
+
+// The 0-turn case: the quota or the outage answered the very first message, which the runner
+// never got far enough to announce as a user event. Its uploads are the compose page's, parked
+// on the seeded first turn — the prompt goes back out with them or the retry re-asks a question
+// about nothing.
+test('carries the opening prompt uploads on a first-run retry', async () => {
+  const { service, resumed, resumedAttachments, attachments } = makeService(
+    [row({ numTurns: 0 })],
+    {
+      events: [],
+      seedTurnId: 'turn-seed',
+      attachments: [image({ id: 'att-seed', turnId: 'turn-seed' })],
+    },
+  );
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'opening prompt' }]);
+  assert.deepEqual(resumedAttachments, [['copy-1']]);
+  assert.equal(attachments.find((a) => a.id === 'copy-1')!.fileName, 'shot.png');
 });
 
 test('loses the claim to a user message that lands first', async () => {

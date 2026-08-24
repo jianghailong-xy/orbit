@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Prisma, RunStatus } from '@prisma/client';
 import {
   RunEventType,
+  lastUserMessage,
   lastUserMessageText,
   planUsageBlockedUntil,
   type PlanUsage,
@@ -295,7 +296,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        const content = await this.messageToResend(session.id, session.prompt, session.numTurns);
+        const { content, attachmentsOf } = await this.messageToResend(
+          session.id,
+          session.prompt,
+          session.numTurns,
+        );
         if (!content) {
           // Nothing to re-send (no user message, no opening prompt to fall back on). Sending
           // an invented "continue" would be us writing in the user's voice.
@@ -344,12 +349,24 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         if (claimed.count === 0) continue;
         released.set(quotaKey, (released.get(quotaKey) ?? 0) + 1);
 
+        // Everything the user sent WITH those words. Copied here rather than when the message was
+        // chosen, so a sweep that loses the claim above leaves no orphan blobs behind, and inside
+        // the try so a failed copy takes the ordinary backoff instead of escaping the sweep.
+        const attachmentIds: string[] = [];
         try {
+          if (attachmentsOf) {
+            attachmentIds.push(...(await this.copyAttachments(session.id, attachmentsOf)));
+          }
           await this.sessions.resume(session.ownerId, session.id, {
             content,
+            attachmentIds,
             clientTurnId: randomUUID(),
           });
         } catch (error) {
+          // Nothing was re-sent, so the copies made for it are not history — just bytes. Dropped
+          // before anything else in this catch, which has paths that rethrow and paths that end
+          // the retry, and would leak a copy of every image on each of them otherwise.
+          await this.discardCopies(attachmentIds);
           // §13.6 SU6, at the only point left where it can still surprise this sweep: the claim
           // above and the resume below are two transactions, so a supersession can commit between
           // them. The resume is then refused — correctly — but the ordinary catch would treat it as
@@ -496,12 +513,19 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** The message this retry re-sends: the session's latest user message. */
+  /**
+   * The message this retry re-sends: the session's latest user message, whole.
+   *
+   * `attachmentsOf` is the turn that message was sent on, because the words are only half of
+   * it — a screenshot the user sent with them is a row hanging off that turn, and a retry that
+   * re-sent the text alone asked the model about a picture it was never shown. Null when there
+   * is nothing to carry.
+   */
   private async messageToResend(
     sessionId: string,
     prompt: string,
     numTurns: number,
-  ): Promise<string> {
+  ): Promise<{ content: string; attachmentsOf: string | null }> {
     // The user events themselves, not a tail of the whole stream: the latest one is near the
     // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
     // message that provoked it — 400+ on the sessions that surfaced this — so a fixed window
@@ -512,9 +536,82 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       where: { sessionId, type: RunEventType.USER },
       orderBy: { seq: 'desc' },
       take: 20,
-      select: { type: true, payload: true },
+      select: { type: true, payload: true, turnId: true },
     });
-    return lastUserMessageText(recent.reverse(), prompt, numTurns);
+    const events = recent.reverse();
+    const content = lastUserMessageText(events, prompt, numTurns);
+    if (!content) return { content: '', attachmentsOf: null };
+    // The turn THAT message came from — the same event `lastUserMessageText` took the words
+    // from, never merely the session's latest turn: pairing this text with a later turn's
+    // images would re-send a message the user never wrote.
+    const chosen = lastUserMessage(events);
+    return {
+      content,
+      // No user event means the text above is the opening-prompt fallback, which the runner
+      // never got to announce. Its uploads are the compose page's, and the claim parked them
+      // on the seeded first turn.
+      attachmentsOf: chosen ? chosen.turnId : await this.seededTurnId(sessionId),
+    };
+  }
+
+  /** The turn the opening prompt was seeded as, found by the fixed id both seed paths use. */
+  private async seededTurnId(sessionId: string): Promise<string | null> {
+    const seed = await this.prisma.conversationTurn.findUnique({
+      where: {
+        sessionId_clientTurnId: {
+          sessionId,
+          clientTurnId: SessionsService.initialTurnClientId(sessionId),
+        },
+      },
+      select: { id: true },
+    });
+    return seed?.id ?? null;
+  }
+
+  /**
+   * The attachments sent with the message being re-sent, copied for the turn this retry is
+   * about to write. Returns the copies' ids, in the shape `resume` links: owned by the same
+   * person, scoped to the session, not yet on a turn.
+   *
+   * Copies rather than re-points, even though it duplicates the bytes. An attachment belongs to
+   * exactly one turn and cascade-deletes with it, and the turn a retry writes is a QUEUED one —
+   * an interrupt, a withdrawal or an end deletes it. Moving the rows would put the only copy of
+   * the user's image behind that, so the failed attempt's bubble would lose its picture the
+   * first time a retry was cancelled. The copies die with the session either way.
+   */
+  private async copyAttachments(sessionId: string, turnId: string): Promise<string[]> {
+    const sent = await this.prisma.attachment.findMany({
+      where: { sessionId, turnId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const copies: string[] = [];
+    for (const a of sent) {
+      const copy = await this.prisma.attachment.create({
+        data: {
+          ownerId: a.ownerId,
+          sessionId,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          fileName: a.fileName,
+          data: a.data,
+        },
+        select: { id: true },
+      });
+      copies.push(copy.id);
+    }
+    return copies;
+  }
+
+  /** Drop copies made for a re-send that did not happen. `turnId: null` is the whole guard:
+   *  one that did reach a turn is that turn's image now, not this sweep's to delete. */
+  private async discardCopies(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      await this.prisma.attachment.deleteMany({ where: { id: { in: ids }, turnId: null } });
+    } catch {
+      // Bytes nobody will ever see, in the failure path of a retry that still has a backoff to
+      // arm. Losing the cleanup must not lose that too; the session's deletion collects them.
+    }
   }
 
   /**
