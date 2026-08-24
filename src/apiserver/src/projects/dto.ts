@@ -240,6 +240,19 @@ export class OpenProjectCoordinatorDto {
   @IsOptional() @IsPublicId() workspaceId?: string;
 }
 
+export class RebindProjectCoordinatorDto {
+  /**
+   * Where this project's coordinator belongs from now on.
+   *
+   * Required, and with no `null` spelling. Clearing a landing is not the other half of moving one:
+   * it is how a project reaches `COORDINATOR_UNAVAILABLE` — the state this endpoint exists to
+   * resolve — and offering it here would be offering the owner a way to break the thing they came
+   * to fix. A project that should stop being coordinated turns its coordinator off
+   * (`coordinatorEnabled`), which says so where every reader already looks.
+   */
+  @IsPublicId() workspaceId!: string;
+}
+
 // ── Project acceptance (contract §13.4 / §13.5) ──────────────────────────────────────────────
 
 export const MAX_ACCEPTANCE_SUMMARY_CHARS = 4_000;

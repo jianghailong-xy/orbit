@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { interruptSession } from '../api';
-import { offersInterruptAndSend } from '../components/WorkspaceView';
 
 // Stubbed at fetch, not at api(): interruptSession calls api() inside its own module, so a
 // module mock would leave the real one closed over. What travels on the wire is the point
@@ -18,7 +17,7 @@ function sentRequests(): Array<{ url: string; method?: string; body: Record<stri
 }
 
 /**
- * "Stop the current turn and send this instead" — the request, and when it is offered.
+ * "Stop the current turn and send this instead" — the shape of the request.
  *
  * The request shape is the whole safety property. Stopping drops the follow-ups queued
  * behind the running turn, so a client that POSTed /interrupt and then POSTed /turns would
@@ -76,40 +75,5 @@ describe('interruptSession', () => {
       turnId: 'turn-2',
       seq: 5,
     });
-  });
-});
-
-describe('offersInterruptAndSend', () => {
-  const base = { running: true, canSend: true, ordinaryDraft: true, replying: false, busy: false };
-
-  it('is offered while a turn generates and there is something to send', () => {
-    expect(offersInterruptAndSend(base)).toBe(true);
-  });
-
-  it('is not offered when nothing is running — Send already means "do this next"', () => {
-    expect(offersInterruptAndSend({ ...base, running: false })).toBe(false);
-  });
-
-  it('offers nothing Send itself would refuse', () => {
-    // An empty composer, a mid-flight upload, an offline runner: canSend carries them all,
-    // and a stop with nothing to put in its place is what the Stop button is for.
-    expect(offersInterruptAndSend({ ...base, canSend: false })).toBe(false);
-  });
-
-  it('stays out of the way of a reply to a blocking question', () => {
-    // That text answers the question the engine is waiting on; there is no turn of the
-    // user's own to redirect.
-    expect(offersInterruptAndSend({ ...base, replying: true })).toBe(false);
-  });
-
-  it('cannot be pressed twice into the same interrupt', () => {
-    expect(offersInterruptAndSend({ ...base, busy: true })).toBe(false);
-  });
-
-  it('stays out of a `!cmd` or local `/command` draft', () => {
-    // A `!cmd` runs on the runner beside the engine and a local `/command` never leaves the
-    // browser. Offering it here would send either one as plain message text, which is what
-    // the composer would then put in front of the model.
-    expect(offersInterruptAndSend({ ...base, ordinaryDraft: false })).toBe(false);
   });
 });

@@ -1,36 +1,122 @@
 import dagre from '@dagrejs/dagre';
-import type { TaskDependencyGraphEdge, TaskDependencyGraphNode } from './taskDependencyGraph';
+import {
+  getTaskDependencyVisualState,
+  type TaskDependencyGraphNode,
+} from './taskDependencyGraph';
 
 /**
- * One task in a project's dependency graph.
+ * One task in a project's dependency graph, drawn as itself.
  *
- * Deliberately `TaskDependencyGraphNode` plus one field rather than a parallel shape: the same
+ * Deliberately `TaskDependencyGraphNode` plus two fields rather than a parallel shape: the same
  * canvas vocabulary reads both this graph and the single-task one, and two words for "a task on a
  * graph" is how two views drift into rendering the same status differently. `parentTaskId` is the
- * addition — a project graph has a task tree to fold away, a task-rooted graph has none.
+ * addition a project needs — it has a task tree to fold into boxes, a task-rooted graph has none.
  */
-export interface ProjectDependencyGraphNode extends TaskDependencyGraphNode {
+export interface ProjectTaskMark extends TaskDependencyGraphNode {
+  kind: 'TASK';
+  taskId: string;
   parentTaskId: string | null;
 }
 
+/** How many tasks of each status sit behind one folded mark. */
+export type MarkStatusCounts = Record<string, number>;
+
+/** A straight run of tasks the server folded into one mark. `members` is the run, in order. */
+export interface ProjectRunMark {
+  kind: 'RUN';
+  id: string;
+  title: string;
+  taskCount: number;
+  statusCounts: MarkStatusCounts;
+  parentTaskId: string | null;
+  members: Array<{ taskId: string; title: string; status: string }>;
+  /** False when the run is longer than the response carries members for. */
+  expandable: boolean;
+}
+
+/** One stage of a motif the project repeats — the same task, in every instance of the pattern. */
+export interface ProjectMotifMark {
+  kind: 'MOTIF';
+  id: string;
+  title: string;
+  instanceCount: number;
+  taskCount: number;
+  statusCounts: MarkStatusCounts;
+  parentTaskId: null;
+  /** A few of the real tasks behind it, failures and running work first. */
+  samples: Array<{ taskId: string; title: string; status: string }>;
+}
+
 /**
- * `GET /projects/:id/dependency-graph` — the whole project at once, not a page of it.
+ * A mark: the unit this canvas draws.
  *
- * `edges` point prerequisite → dependent, the same direction the task-rooted graph uses. Edges
- * with one end outside the project are not in here at all: the server drops them rather than
- * inventing a stub node this page could not open.
+ * Not a task, because a project of 23,442 tasks has no drawing made of 23,442 anything. The
+ * server folds first (`apiserver/src/projects/project-graph-fold.ts`) and what arrives is what
+ * survives folding — every task behind exactly one mark, however many tasks there are.
+ */
+export type ProjectGraphMark = ProjectTaskMark | ProjectRunMark | ProjectMotifMark;
+
+/** Kept as the old name so the rest of the canvas keeps reading "a node on this graph". */
+export type ProjectDependencyGraphNode = ProjectGraphMark;
+
+/** Prerequisite → dependent, between marks rather than between tasks. */
+export interface ProjectGraphMarkEdge {
+  sourceMarkId: string;
+  targetMarkId: string;
+}
+
+/**
+ * `GET /projects/:id/dependency-graph` — the whole project at once, folded, not a page of it.
+ *
+ * Edges point prerequisite → dependent, the same direction the task-rooted graph uses. Edges with
+ * one end outside the project are not in here at all: the server drops them rather than inventing
+ * a node this page could not open.
  */
 export interface ProjectDependencyGraphResponse {
-  nodes: ProjectDependencyGraphNode[];
-  edges: TaskDependencyGraphEdge[];
-  /** The project has more tasks than one response carries. Never true at a drawable size. */
+  marks: ProjectGraphMark[];
+  edges: ProjectGraphMarkEdge[];
+  /** Tasks behind the marks — the project's own size, not the number of things drawn. */
+  taskCount: number;
+  /** True when at least one mark stands for more than one task. */
+  folded: boolean;
+  /** The project is bigger than one request reads, or its fold than one response carries. */
   truncated: boolean;
-  limits: { maxNodes: number };
+  limits: { maxTasks: number; maxMarks: number };
+}
+
+/** What a mark says it is, for a reader and for a screen reader. */
+export function markTaskCount(mark: ProjectGraphMark): number {
+  return mark.kind === 'TASK' ? 1 : mark.taskCount;
+}
+
+/**
+ * The one status a folded mark reports, for the edges leaving it and the colour it carries.
+ *
+ * A fold is as done as its least done task: anything failed makes it failed, anything running
+ * makes it active, and only a mark with nothing left in it reads as complete. Reading it the
+ * other way — "mostly done, call it done" — is how a picture tells a reader work has landed that
+ * has not.
+ */
+export function markStatus(mark: ProjectGraphMark): string {
+  if (mark.kind === 'TASK') return mark.status;
+  const counts = mark.statusCounts;
+  if ((counts.FAILED ?? 0) > 0) return 'FAILED';
+  if ((counts.IN_PROGRESS ?? 0) > 0) return 'IN_PROGRESS';
+  if ((counts.OPEN ?? 0) > 0) return 'OPEN';
+  return 'DONE';
 }
 
 /** Matches `.tdg-node` in index.css — the project graph reuses the task graph's node chrome. */
 export const PROJECT_GRAPH_NODE_WIDTH = 204;
 export const PROJECT_GRAPH_NODE_HEIGHT = 76;
+/** Matches `.pdg-fold`: wider for a normalized title, taller for the bar and the counts. */
+export const PROJECT_GRAPH_FOLD_WIDTH = 252;
+export const PROJECT_GRAPH_FOLD_HEIGHT = 96;
+
+export const markWidth = (mark: ProjectGraphMark) =>
+  mark.kind === 'TASK' ? PROJECT_GRAPH_NODE_WIDTH : PROJECT_GRAPH_FOLD_WIDTH;
+export const markHeight = (mark: ProjectGraphMark) =>
+  mark.kind === 'TASK' ? PROJECT_GRAPH_NODE_HEIGHT : PROJECT_GRAPH_FOLD_HEIGHT;
 const GROUP_PADDING = 14;
 /** Room above the members for the box's own title and status. */
 const GROUP_HEADER = 40;
@@ -63,7 +149,7 @@ export interface ProjectDependencyLayout {
   groups: ProjectGraphGroup[];
   placements: ProjectGraphPlacement[];
   /** Every dependency edge whose two ends are both drawn — which, after grouping, is all of them. */
-  edges: TaskDependencyGraphEdge[];
+  edges: ProjectGraphMarkEdge[];
 }
 
 /**
@@ -122,23 +208,23 @@ function dagreLayout(
  * lives in `components/ProjectDependencyGraph.tsx`.
  */
 export function layoutProjectDependencyGraph(
-  graph: ProjectDependencyGraphResponse,
+  graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'>,
 ): ProjectDependencyLayout {
-  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  const byId = new Map(graph.marks.map((node) => [node.id, node]));
   // A parent is only a box when at least one of its children is on this canvas. A task whose
   // subtasks all live outside the project is an ordinary node, not an empty frame.
   const parents = new Set<string>();
-  for (const node of graph.nodes) {
+  for (const node of graph.marks) {
     if (node.parentTaskId && byId.has(node.parentTaskId)) parents.add(node.parentTaskId);
   }
   // Edges that name a task this graph does not carry are dropped rather than drawn to nothing.
   const edges = graph.edges.filter(
-    (edge) => byId.has(edge.sourceTaskId) && byId.has(edge.targetTaskId),
+    (edge) => byId.has(edge.sourceMarkId) && byId.has(edge.targetMarkId),
   );
 
-  const members = new Map<string, ProjectDependencyGraphNode[]>();
-  const standalone: ProjectDependencyGraphNode[] = [];
-  for (const node of graph.nodes) {
+  const members = new Map<string, ProjectGraphMark[]>();
+  const standalone: ProjectGraphMark[] = [];
+  for (const node of graph.marks) {
     const groupId = groupIdOf(node, byId, parents);
     if (groupId === null) {
       if (!parents.has(node.id)) standalone.push(node);
@@ -155,14 +241,10 @@ export function layoutProjectDependencyGraph(
   for (const [groupId, group] of members) {
     const ids = new Set(group.map((node) => node.id));
     const inner = dagreLayout(
-      group.map((node) => ({
-        id: node.id,
-        width: PROJECT_GRAPH_NODE_WIDTH,
-        height: PROJECT_GRAPH_NODE_HEIGHT,
-      })),
+      group.map((node) => ({ id: node.id, width: markWidth(node), height: markHeight(node) })),
       edges
-        .filter((edge) => ids.has(edge.sourceTaskId) && ids.has(edge.targetTaskId))
-        .map((edge) => ({ source: edge.sourceTaskId, target: edge.targetTaskId })),
+        .filter((edge) => ids.has(edge.sourceMarkId) && ids.has(edge.targetMarkId))
+        .map((edge) => ({ source: edge.sourceMarkId, target: edge.targetMarkId })),
       'TB',
     );
     // dagre's own margin is not the box's padding, so normalize to (0,0) and apply the padding
@@ -181,8 +263,8 @@ export function layoutProjectDependencyGraph(
       const x = at.x - minX + GROUP_PADDING;
       const y = at.y - minY + GROUP_HEADER;
       memberPositions.set(node.id, { x, y });
-      maxX = Math.max(maxX, x + PROJECT_GRAPH_NODE_WIDTH);
-      maxY = Math.max(maxY, y + PROJECT_GRAPH_NODE_HEIGHT);
+      maxX = Math.max(maxX, x + markWidth(node));
+      maxY = Math.max(maxY, y + markHeight(node));
     }
     groupSizes.set(groupId, {
       width: maxX + GROUP_PADDING,
@@ -198,11 +280,7 @@ export function layoutProjectDependencyGraph(
     return groupIdOf(node, byId, parents) ?? taskId;
   };
   const units = [
-    ...standalone.map((node) => ({
-      id: node.id,
-      width: PROJECT_GRAPH_NODE_WIDTH,
-      height: PROJECT_GRAPH_NODE_HEIGHT,
-    })),
+    ...standalone.map((node) => ({ id: node.id, width: markWidth(node), height: markHeight(node) })),
     ...[...members.keys()].map((groupId) => ({
       id: groupId,
       width: groupSizes.get(groupId)!.width,
@@ -211,8 +289,8 @@ export function layoutProjectDependencyGraph(
   ];
   const unitEdges = new Map<string, { source: string; target: string }>();
   for (const edge of edges) {
-    const source = unitOf(edge.sourceTaskId);
-    const target = unitOf(edge.targetTaskId);
+    const source = unitOf(edge.sourceMarkId);
+    const target = unitOf(edge.targetMarkId);
     // A dependency between two subtasks of one parent is real, but it does not move the box it is
     // inside: as a unit edge it would be a self-loop, which dagre cannot rank.
     if (source === target) continue;
@@ -237,4 +315,129 @@ export function layoutProjectDependencyGraph(
   ];
 
   return { groups, placements, edges };
+}
+
+/**
+ * What the canvas needs to decide where to open: how big the drawing is, and where the work is.
+ *
+ * A project can be far wider than any screen — a 118-task chain lays out about 32,000px across —
+ * and fitting that to a strip 1,100px wide produces a row of dashes rather than a plan. So the
+ * view is given a second option: open on the frontier at a zoom that keeps titles, and let the
+ * reader zoom out to the whole shape when the shape is what they want.
+ *
+ * Only top-level units are measured. A subtask's coordinates are relative to the box it sits in,
+ * so it is inside its box's rectangle by construction and cannot extend these bounds.
+ */
+export interface ProjectGraphOverview {
+  /** The rectangle every drawn thing sits inside, in canvas coordinates. */
+  bounds: { x: number; y: number; width: number; height: number };
+  /**
+   * Where the work has got to: the leftmost unit that is not finished — the first task a reader
+   * scanning the plan left to right still has ahead of them. Null only for an empty canvas; a
+   * plan that is entirely done points at its last unit, which is where its story ends.
+   */
+  frontier: { x: number; y: number } | null;
+  /** Units on the canvas: standalone tasks and boxes, not the subtasks inside them. */
+  unitCount: number;
+}
+
+export function projectGraphOverview(layout: ProjectDependencyLayout): ProjectGraphOverview {
+  const units = [
+    ...layout.groups.map((group) => ({
+      task: group.task,
+      x: group.x,
+      y: group.y,
+      width: group.width,
+      height: group.height,
+    })),
+    ...layout.placements
+      .filter((placement) => placement.groupId === null)
+      .map((placement) => ({
+        task: placement.task,
+        x: placement.x,
+        y: placement.y,
+        width: markWidth(placement.task),
+        height: markHeight(placement.task),
+      })),
+  ].sort((a, b) => a.x - b.x || a.y - b.y);
+
+  if (units.length === 0) {
+    return { bounds: { x: 0, y: 0, width: 0, height: 0 }, frontier: null, unitCount: 0 };
+  }
+
+  const minX = Math.min(...units.map((unit) => unit.x));
+  const minY = Math.min(...units.map((unit) => unit.y));
+  const maxX = Math.max(...units.map((unit) => unit.x + unit.width));
+  const maxY = Math.max(...units.map((unit) => unit.y + unit.height));
+  const unfinished = units.find(
+    (unit) => getTaskDependencyVisualState({ status: markStatus(unit.task) }) !== 'complete',
+  );
+  const frontier = unfinished ?? units[units.length - 1];
+
+  return {
+    bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+    frontier: { x: frontier.x, y: frontier.y },
+    unitCount: units.length,
+  };
+}
+
+/**
+ * A folded run, opened: the mark gives way to the tasks it stood for.
+ *
+ * Done here rather than by asking the server again, because the run already arrived with its
+ * members — a fold is a way of DRAWING a project, not a way of withholding it. Opening one is
+ * therefore instant and offline, and closing it again costs nothing.
+ *
+ * The run's own edges move to its ends: whatever waited on the run now waits on its last task,
+ * and whatever the run waited on is now what its first task waits on. Everything between them is
+ * the chain the fold was hiding.
+ */
+export function expandRunMarks(
+  graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'>,
+  expandedIds: ReadonlySet<string>,
+): Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> {
+  const opened = graph.marks.filter(
+    (mark): mark is ProjectRunMark =>
+      mark.kind === 'RUN' && mark.expandable && expandedIds.has(mark.id) && mark.members.length > 0,
+  );
+  if (opened.length === 0) return graph;
+
+  const ends = new Map<string, { first: string; last: string }>();
+  const marks: ProjectGraphMark[] = [];
+  const edges = [...graph.edges];
+  for (const mark of graph.marks) {
+    const run = opened.find((candidate) => candidate.id === mark.id);
+    if (!run) {
+      marks.push(mark);
+      continue;
+    }
+    ends.set(run.id, {
+      first: run.members[0].taskId,
+      last: run.members[run.members.length - 1].taskId,
+    });
+    run.members.forEach((member, index) => {
+      marks.push({
+        kind: 'TASK',
+        id: member.taskId,
+        taskId: member.taskId,
+        title: member.title,
+        status: member.status,
+        parentTaskId: run.parentTaskId,
+      });
+      if (index > 0) {
+        edges.push({
+          sourceMarkId: run.members[index - 1].taskId,
+          targetMarkId: member.taskId,
+        });
+      }
+    });
+  }
+
+  return {
+    marks,
+    edges: edges.map((edge) => ({
+      sourceMarkId: ends.get(edge.sourceMarkId)?.last ?? edge.sourceMarkId,
+      targetMarkId: ends.get(edge.targetMarkId)?.first ?? edge.targetMarkId,
+    })),
+  };
 }

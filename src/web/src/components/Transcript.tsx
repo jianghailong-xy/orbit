@@ -60,6 +60,7 @@ export const AttachmentResolverContext =
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
 import Markdown, { defaultUrlTransform } from 'react-markdown';
+import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -1633,34 +1634,6 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
       {children}
     </a>
   );
-}
-
-// A remark plugin turning every single newline into a hard break — what remark-breaks does, inlined
-// rather than pulling in a dependency for it. Used for user messages only (`MD breaks`): those are
-// typed in a composer where Enter means "new line", so CommonMark's soft break (which collapses to a
-// space) would silently reflow a message the sender laid out by hand. Assistant Markdown keeps the
-// standard semantics. `code`/`inlineCode`/`html` nodes hold no children and no 'text' node, so their
-// contents are never touched.
-function remarkHardBreaks() {
-  return (tree: any) => {
-    const walk = (node: any) => {
-      if (!Array.isArray(node.children)) return;
-      const out: any[] = [];
-      for (const child of node.children) {
-        if (child.type === 'text' && child.value.includes('\n')) {
-          child.value.split(/\r?\n/).forEach((part: string, i: number) => {
-            if (i) out.push({ type: 'break' });
-            if (part) out.push({ type: 'text', value: part });
-          });
-        } else {
-          walk(child);
-          out.push(child);
-        }
-      }
-      node.children = out;
-    };
-    walk(tree);
-  };
 }
 
 export const MD = memo(function MD({

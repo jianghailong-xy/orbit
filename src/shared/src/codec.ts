@@ -91,6 +91,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'focusTaskId',
   'sourceTaskId',
   'targetTaskId',
+  // The project graph's ends, which name a MARK rather than a task: one task, or the run of them
+  // a fold stands for. Same rule for the same reason — a mark id that is a task's id is encoded
+  // in `marks[].id`, so an edge naming it in the other spelling matches no mark and the whole
+  // picture loses its arrows. A synthetic mark id (`run:3`) is not a uuid, so it passes through
+  // both here and in `id` untouched, and the two spellings still agree.
+  'sourceMarkId',
+  'targetMarkId',
   'verifiesTaskId',
   // §13.5's supersession link: the later attempt that took a cancelled one's place. An address a
   // reader hands straight to task_get, exactly like `parentTaskId` beside it.

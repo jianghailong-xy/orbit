@@ -950,7 +950,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		done:            make(chan struct{}),
 		orbitExecutable: orbitCLIExecutable(),
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startSessionProcess(cmd); err != nil {
 		cancel()
 		return nil, err
 	}

@@ -222,61 +222,66 @@ body {
 /* Toasts (AntD message): a top-right notification stack. The transcript is a growing content
    stream, so a centred overlay lands right on whatever you just scrolled to; parking the cards
    in the corner keeps the conversation column and the session title clear. AntD has no
-   placement option for message, so we right-align its full-width wrapper. Fixed width keeps a
-   stack's edges flush; text-align:start because the wrapper's alignment would otherwise
-   ragged-right the wrapped lines. Vertically the holder hugs the top edge (AntD's own 8px, plus
-   the notch inset) and the card paints 8px lower again via the wrapper's padding, so it starts
-   level with the lifecycle notifications below — one origin for both toast surfaces. Sitting
-   over the header band is fine here: the cards take no clicks (see below), so the controls
-   underneath stay live.
-   !important only on the declarations AntD itself sets: its cssinjs rules are injected after
-   this stylesheet and read `:where(.css-hash).ant-message .ant-message-notice …`, i.e.
-   specificity (0,2,0)/(0,3,0) — nothing we can write flatly outranks them. The ones AntD
-   leaves alone (width, the card's text-align, user-select) land without it. */
+   placement option for message, so we re-anchor each notice inside its own list. Fixed width
+   keeps a stack's edges flush; text-align:start because the list's alignment would otherwise
+   ragged-right the wrapped lines. Sitting over the header band is fine here: the cards take no
+   clicks (see below), so the controls underneath stay live.
+   The card is `-notice`; `-notice-wrapper` is the icon+text row inside it. That pairing is
+   inverted from v5, where the wrapper was the outer box — decorating the wrapper paints a
+   second card inside AntD's own, which reads as a white slab around the toast.
+   Vertically: v6 pads the list by 24px and positions the card inside that padding, so the
+   holder's top edge sits 24px above the card's. 16px plus the notch inset therefore lands the
+   card level with the lifecycle notifications below — one origin for both toast surfaces.
+   !important only where a flat selector has to outrank AntD: its cssinjs rules read
+   `:where(.css-hash).ant-message .ant-message-notice …`, i.e. specificity (0,2,0)/(0,3,0). The
+   card rule qualifies through the list instead and needs none. */
 /* Normally level with the notification stack's origin; when that stack has cards up, it parks
    below them instead of underneath them — lib/toast.tsx measures it into --toast-stack-top
    (0px when the stack is empty, so max() falls back to the normal top). */
 .ant-message {
-  top: max(calc(env(safe-area-inset-top, 0px) + 8px), var(--toast-stack-top, 0px)) !important;
+  top: max(calc(env(safe-area-inset-top, 0px) + 16px), var(--toast-stack-top, 0px)) !important;
   transition: top 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 /* AntD 6 centres each notice by hand — inset-inline-start:50% plus a -50% translate on a
    shrink-to-fit box — so right-aligning the stack means replacing that pair, not justifying the
-   list around it. Three classes to outrank AntD's own (0,2,0) rule without !important on
-   `transform`: an important transform would also outrank the entrance keyframes below and turn
-   the slide into a bare fade. */
-.ant-message.ant-message-list .ant-message-list-content > .ant-message-notice {
-  inset-inline-start: auto;
-  inset-inline-end: 0;
-  transform: none;
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-}
-/* Same card as the lifecycle notification below — radius, padding, border, shadow and icon
+   list around it. 16px inside the list's own 24px padding puts the card's right edge where the
+   lifecycle card's sits; max-width keeps a 16px gutter on the other side once the viewport is
+   too narrow for the full 360px. Four classes to outrank AntD's own (0,2,0) rules without
+   !important on `transform`: an important transform would also outrank the entrance keyframes
+   below and turn the slide into a bare fade.
+   Same card as the lifecycle notification below — radius, padding, border, shadow and icon
    metrics are shared, so two cards stacked in one corner read as one family rather than as two
    systems that happen to overlap. AntD's own defaults for this surface are 8px radius,
    9px/12px padding, a three-layer shadow and 16px icons. */
-.ant-message-notice-wrapper {
+.ant-message.ant-message-list .ant-message-list-content > .ant-message-notice {
+  inset-inline-start: auto;
+  inset-inline-end: max(16px, env(safe-area-inset-right, 0px));
+  transform: none;
   width: 360px;
-  max-width: calc(100vw - 32px);
-  padding: 12px 16px !important;
+  max-width: calc(100vw - 56px);
+  padding: 12px 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px !important;
-  background: var(--bg-raised) !important;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1) !important;
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
   text-align: start;
-  gap: 16px !important;
-  /* Toasts don't take clicks — the card floats over the header's right edge and used to
-     swallow them (it blocked the double-click-to-rename target). Interactive cards opt back
-     in below. */
-  pointer-events: none !important;
 }
-:root[data-theme='dark'] .ant-message-notice-wrapper {
+:root[data-theme='dark'] .ant-message-notice {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35) !important;
 }
+/* Toasts don't take clicks — the card floats over the header's right edge and used to swallow
+   them (it blocked the double-click-to-rename target). Interactive cards opt back in below. */
+.ant-message-notice {
+  pointer-events: none !important;
+}
 /* 20px glyph inset 16px, text at 52px — the lifecycle card's icon column, so the two surfaces
-   share a text edge. One palette too: AntD's message icons default to its own token colours,
-   which are a different red (#f54a45) and orange (#ff8800) from the semantic vars every other
-   status surface in the app resolves through. */
+   share a text edge. The gap is the row's, so it goes on the row. One palette too: AntD's
+   message icons default to its own token colours, which are a different red (#f54a45) and
+   orange (#ff8800) from the semantic vars every other status surface in the app resolves
+   through. */
+.ant-message-notice-wrapper {
+  gap: 16px !important;
+}
 .ant-message-notice-icon {
   font-size: 20px !important;
 }
@@ -295,10 +300,10 @@ body {
 .ant-message-error > .ant-message-notice-icon {
   color: var(--error-solid) !important;
 }
-.ant-message-notice-wrapper:has(.toast-err) {
+.ant-message-notice:has(.toast-err) {
   pointer-events: auto !important;
 }
-.ant-message-notice-wrapper:has(.toast-err) {
+.ant-message-notice:has(.toast-err) {
   user-select: text;
 }
 /* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
@@ -544,8 +549,8 @@ body {
 }
 
 /* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
-   × instead of centred against the whole block. AntD 6 folded v5's inner content row into the
-   card itself, so this lands on the card rather than on a child of it. */
+   × instead of centred against the whole block. The icon and the text are the two children of
+   the notice's own row, so this lands on the row rather than on the card around it. */
 .ant-message-notice-wrapper:has(.toast-err) {
   align-items: flex-start;
 }
@@ -7137,30 +7142,151 @@ html[data-theme='dark'] .session-tag-chip {
   pointer-events: none;
 }
 
-/* --- Project task section: List | Graph ------------------------------------------------- */
-.ptv-toggle-option {
-  padding: 3px 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12.5px;
+/* A fold: one mark standing for a run of tasks, or for one stage of a motif the project repeats.
+   Dashed and tinted like `.tdg-aggregate-node`, which is the task graph's collapsed branch — the
+   vocabulary is deliberately shared, so "dashed means there is more behind this" is learned once. */
+.pdg-fold {
+  position: relative;
+  width: 252px;
+  height: 96px;
+  border: 1px dashed var(--brand-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand-tint) 30%, var(--bg-raised));
+  box-shadow: 0 2px 7px rgba(31, 35, 41, 0.05);
+}
+.pdg-fold.state-failed {
+  border-color: var(--error-border);
+  background: color-mix(in srgb, var(--error-bg) 45%, var(--bg-raised));
+}
+.pdg-fold.is-open {
+  border-style: solid;
+}
+.pdg-fold-main {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
 }
-.ptv-toggle-option:hover {
-  border-color: var(--brand-border);
-  color: var(--text-1);
+.pdg-fold-main:disabled {
+  cursor: default;
 }
-.ptv-toggle-option.is-selected {
-  border-color: var(--brand);
-  background: var(--brand-tint);
-  color: var(--brand-strong);
-  font-weight: 600;
-}
-.ptv-toggle-option:focus-visible {
+.pdg-fold-main:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+.pdg-fold-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.pdg-fold-title {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdg-fold-count {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pdg-fold-bar {
+  display: flex;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+}
+.pdg-fold-seg.is-done {
+  background: var(--success);
+}
+.pdg-fold-seg.is-active {
+  background: var(--brand);
+}
+/* A floor, not a fair share: 24 failures in 6,118 tasks is 0.4% of the bar, and the whole reason
+   to look at a folded batch is to see that they are there. */
+.pdg-fold-seg.is-failed {
+  min-width: 5px;
+  background: var(--error-solid);
+}
+.pdg-fold-seg.is-cancelled {
+  background: var(--text-4);
+  opacity: 0.6;
+}
+.pdg-fold-seg.is-open {
+  background: var(--text-4);
+  opacity: 0.3;
+}
+.pdg-fold-legend {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdg-fold-legend .is-failed {
+  color: var(--error-solid);
+  font-weight: 650;
+}
+.pdg-fold .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bg-raised);
+  background: var(--brand-border);
+  pointer-events: none;
+}
+.pdg-fold-samples {
+  display: flex;
+  min-width: 220px;
+  max-width: 380px;
+  flex-direction: column;
+  gap: 6px;
+}
+.pdg-fold-samples-head {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pdg-fold-sample {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-1);
+}
+.pdg-fold-sample:hover {
+  background: var(--bg-sunken);
+}
+.pdg-fold-sample-title {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A parent task folded into the frame its subtasks sit in — see ProjectDependencyGraph.tsx for
    why parent/child is a box here and never an edge. */
 .pdg-group {

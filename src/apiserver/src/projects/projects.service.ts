@@ -29,6 +29,7 @@ import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
 import { CreateProjectDto, ReopenProjectDto, UpdateProjectDto } from './dto';
 import { admitReopen, reopenImpact, type ReopenImpact } from './project-attribution-surface';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
+import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import {
   DEFAULT_BLOCKING_LIMIT,
@@ -47,6 +48,15 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
  * resolves it.
  */
 export const COORDINATOR_UNAVAILABLE_CODE = 'COORDINATOR_UNAVAILABLE';
+
+/**
+ * "This project's coordinator is a conversation somebody is still in."
+ *
+ * Exported for `COORDINATOR_UNAVAILABLE_CODE`'s reason, and spelled exactly as §7.5's rotation
+ * spells it in the action audit: one situation, one name, whether it was reached by the loop
+ * declining to rotate or by an owner trying to move the landing out from under a live run.
+ */
+export const COORDINATOR_SESSION_LIVE_CODE = 'COORDINATOR_SESSION_LIVE';
 
 /**
  * What a project created from inside a session is bound to: the conversation it is coordinated
@@ -172,7 +182,15 @@ function projectTaskDependencyState(
  * picture is still readable — the client refuses to draw long before this — so it is a fence
  * against an unbounded response rather than a display limit.
  */
-const PROJECT_DEPENDENCY_GRAPH_MAX_NODES = 500;
+/**
+ * The most tasks one project graph request reads before it gives up on being complete.
+ *
+ * Not a drawing limit — the fold decides what is drawn. This is the ceiling on how much of a
+ * project one request will hold in memory to fold at all, and it sits far above the largest
+ * project here (23,442 tasks) so that `truncated` means "this project is bigger than anything we
+ * have ever seen" rather than "you have more than thirty tasks".
+ */
+const PROJECT_GRAPH_MAX_TASKS = 50_000;
 
 const COORDINATION_INCLUDE = {
   members: { where: { role: ProjectRole.COORDINATOR }, select: { agentId: true } },
@@ -250,6 +268,16 @@ export class ProjectsService {
   private static readonly NO_SUCH_AGENT =
     'no such agent to coordinate this project — coordinatorAgentId must name an agent of this ' +
     'account that has not been deleted';
+
+  /** The same answer for a landing, which is a workspace rather than an identity and so has one
+   *  more way to be unusable: `enabled`. A disabled landing is refused HERE rather than left to
+   *  `sessions.create`, because accepting it would write the `COORDINATOR_UNAVAILABLE` this call
+   *  exists to resolve — the owner would rebind, get a 200, and find the coordinator just as
+   *  unopenable as before. See `lastCoordinatorWorkspace` for the read side of the same two
+   *  conditions. */
+  private static readonly NO_SUCH_LANDING =
+    'no such workspace to coordinate this project in — workspaceId must name an agent of this ' +
+    'account that has not been deleted or disabled';
 
   /**
    * One wording for "the session you said you are in is not one I will make a coordinator of",
@@ -788,8 +816,7 @@ export class ProjectsService {
   }
 
   /**
-   * This project's dependency graph: every task filed under it, and every dependency edge whose
-   * BOTH ends are also filed under it.
+   * This project's dependency graph, folded to something a canvas can hold.
    *
    * Its own endpoint rather than `GET /tasks/:id/dependency-graph` pointed at the project's first
    * task, which was the cheaper option and was evaluated first. Three things make that endpoint
@@ -802,10 +829,17 @@ export class ProjectsService {
    *   - its depth is capped at `MAX_DEPENDENCY_GRAPH_MAX_DEPTH` (32), and a chain-shaped project
    *     of 118 tasks is 117 levels deep.
    *
-   * The response deliberately reuses that endpoint's vocabulary — `nodes`, `edges` carrying
-   * `sourceTaskId` -> `targetTaskId` in prerequisite-to-dependent order, `truncated` — so the
-   * client reads both graphs with one set of words (`web/src/lib/taskDependencyGraph.ts`) instead
-   * of a second one that means the same things.
+   * ## Marks, not rows
+   *
+   * What comes back is `marks`: a mark is one task, or a folded run of them, or one stage of a
+   * motif that repeats across the project (`project-graph-fold.ts` decides which, and why). This
+   * replaced a plain `take: 500` ordered by `created_at`, which was truncation by clock — on the
+   * 23,442-task batch project here it drew 500 arbitrary tasks, silently dropped 22,942, and the
+   * 500 it drew were 125 disconnected stubs of a pipeline. Folding that same project answers with
+   * eight marks that account for every one of its tasks.
+   *
+   * `truncated` now means only what its name says: the project is larger than one request reads,
+   * or its fold is larger than one response carries. Neither has ever been true in this database.
    *
    * An edge with one end outside the project is dropped rather than drawn to a stub node: it
    * belongs to another project's plan, and a node this page cannot open is worse than a missing
@@ -815,36 +849,45 @@ export class ProjectsService {
   async dependencyGraph(ownerId: string, projectId: string) {
     await this.assertOwned(ownerId, projectId);
 
-    // One row past the cap, so a project too large to answer for is REPORTED as truncated rather
-    // than served short and read as the whole plan.
+    // One row past the ceiling, so a project too large to answer for is REPORTED as truncated
+    // rather than served short and read as the whole plan.
     const rows = await this.prisma.task.findMany({
       where: { ownerId, projectId },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: PROJECT_DEPENDENCY_GRAPH_MAX_NODES + 1,
+      take: PROJECT_GRAPH_MAX_TASKS + 1,
       select: { id: true, title: true, status: true, parentTaskId: true },
     });
-    const truncated = rows.length > PROJECT_DEPENDENCY_GRAPH_MAX_NODES;
-    const nodes = truncated ? rows.slice(0, PROJECT_DEPENDENCY_GRAPH_MAX_NODES) : rows;
-    const ids = nodes.map((node) => node.id);
-    const edges = ids.length
+    const overCeiling = rows.length > PROJECT_GRAPH_MAX_TASKS;
+    const tasks = overCeiling ? rows.slice(0, PROJECT_GRAPH_MAX_TASKS) : rows;
+
+    // Scoped by the two ends' project rather than by a list of task ids: the id list would be as
+    // long as the project, and a 23,442-element `IN` is a query plan nobody wants.
+    const dependencies = tasks.length
       ? await this.prisma.taskDependency.findMany({
-          where: { taskId: { in: ids }, dependsOnTaskId: { in: ids } },
+          where: { task: { ownerId, projectId }, dependsOnTask: { ownerId, projectId } },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           select: { taskId: true, dependsOnTaskId: true },
         })
       : [];
 
-    return {
-      nodes,
+    const fold = foldProjectGraph(
+      tasks,
       // `depends_on_task_id` is the PREREQUISITE and `task_id` is the task waiting on it — the
       // opposite order to how the column names read, and the one thing here that is easy to get
       // backwards. Arrows flow prerequisite -> dependent, so the prerequisite is the source.
-      edges: edges.map((edge) => ({
+      dependencies.map((edge) => ({
         sourceTaskId: edge.dependsOnTaskId,
         targetTaskId: edge.taskId,
       })),
-      truncated,
-      limits: { maxNodes: PROJECT_DEPENDENCY_GRAPH_MAX_NODES },
+    );
+
+    return {
+      marks: fold.marks,
+      edges: fold.edges,
+      taskCount: fold.taskCount,
+      folded: fold.folded,
+      truncated: overCeiling || fold.truncated,
+      limits: { maxTasks: PROJECT_GRAPH_MAX_TASKS, maxMarks: DEFAULT_FOLD_OPTIONS.maxMarks },
     };
   }
 

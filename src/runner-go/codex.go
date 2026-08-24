@@ -392,7 +392,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		emit(evError, map[string]interface{}{"message": "failed to prepare codex stderr: " + err.Error()})
 		return result
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startSessionProcess(cmd); err != nil {
 		result.Status = stFailed
 		result.Subtype = "spawn_failed"
 		result.Error = err.Error()

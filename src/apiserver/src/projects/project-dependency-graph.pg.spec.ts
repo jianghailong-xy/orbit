@@ -15,6 +15,11 @@ import { ProjectsService } from './projects.service';
 /**
  * `GET /projects/:id/dependency-graph` against a real, fully migrated PostgreSQL.
  *
+ * The endpoint answers in `marks` — a mark being one task, a folded run of them, or one stage of
+ * a repeated motif — and the fold's own rules are asserted without a database in
+ * `project-graph-fold.spec.ts`. Every fixture here is far below the fold threshold, so each mark
+ * is one task and these cases read as they always did.
+ *
  * What is under test is not "does it return rows" but the three properties that made it a new
  * endpoint instead of a reuse of `GET /tasks/:id/dependency-graph` pointed at the project's first
  * task. Each has a case below named after it:
@@ -121,10 +126,12 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
       const graph = await service.dependencyGraph(fixture.ownerId, fixture.projectId);
 
       assert.deepEqual(
-        graph.nodes.map((node) => node.id).sort(),
+        graph.marks.map((mark) => mark.id).sort(),
         Object.values(fixture.ids).sort(),
       );
       assert.equal(graph.truncated, false);
+      assert.equal(graph.folded, false, 'four tasks are drawn as four tasks');
+      assert.equal(graph.taskCount, 4);
       assert.equal(graph.edges.length, 2);
     });
 
@@ -134,7 +141,7 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
       const graph = await service.dependencyGraph(fixture.ownerId, fixture.projectId);
 
       assert.deepEqual(graph.edges, [
-        { sourceTaskId: fixture.ids.first, targetTaskId: fixture.ids.second },
+        { sourceMarkId: fixture.ids.first, targetMarkId: fixture.ids.second },
       ]);
     });
 
@@ -149,7 +156,7 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
 
       const graph = await service.dependencyGraph(here.ownerId, here.projectId);
 
-      assert.deepEqual(graph.nodes.map((node) => node.id), [here.ids.mine]);
+      assert.deepEqual(graph.marks.map((mark) => mark.id), [here.ids.mine]);
       assert.deepEqual(graph.edges, [], 'an edge with one end outside the project is not drawn');
     });
 
@@ -161,7 +168,7 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
       });
 
       const graph = await service.dependencyGraph(fixture.ownerId, fixture.projectId);
-      const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+      const byId = new Map(graph.marks.map((mark) => [mark.id, mark]));
 
       assert.equal(byId.get(fixture.ids.child)?.parentTaskId, fixture.ids.parent);
       assert.equal(byId.get(fixture.ids.parent)?.parentTaskId, null);
@@ -176,8 +183,9 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
 
       const graph = await service.dependencyGraph(fixture.ownerId, fixture.projectId);
 
-      assert.deepEqual(graph.nodes, []);
+      assert.deepEqual(graph.marks, []);
       assert.deepEqual(graph.edges, []);
+      assert.equal(graph.taskCount, 0);
       assert.equal(graph.truncated, false);
     });
 
