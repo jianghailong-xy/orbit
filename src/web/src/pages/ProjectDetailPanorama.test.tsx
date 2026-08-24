@@ -276,6 +276,10 @@ function page(urlId: string = PROJECT): ReactElement {
 /** Where a piece of text sits in the rendered page, as an index into its markup. */
 const at = (text: string): number => container.innerHTML.indexOf(text);
 const shows = (text: string): boolean => container.innerHTML.includes(text);
+/** How many times a piece of text is on the page. `at`/`shows` both answer off the FIRST match, so
+ *  a block rendered twice reads identically to one rendered once through them — which is exactly
+ *  how a merge that kept both sides' copy of the fields shipped unnoticed. */
+const countOf = (text: string): number => container.innerHTML.split(text).length - 1;
 
 describe('ProjectDetailPage — the panorama, assembled', () => {
   it('lays the four blocks out in the order the reader asks for them', async () => {
@@ -407,5 +411,16 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     // is read once, where the panorama is what a reader comes back for.
     expect(at('Where the work stands')).toBeLessThan(at('Ship the new marketing site'));
     expect(at('Ship the new marketing site')).toBeLessThan(at('>Tasks<'));
+
+    // Once each — the assembly places these, it does not repeat them. Ordering assertions read the
+    // first match and stay green on a page that draws the whole block a second time lower down.
+    expect(countOf('>Goal</h5>')).toBe(1);
+    expect(countOf('Ship the new marketing site')).toBe(1);
+    expect(countOf('>Acceptance criteria</h5>')).toBe(1);
+    expect(countOf('Lighthouse ≥ 90 on every page')).toBe(1);
+    expect(countOf('>Instructions</h5>')).toBe(1);
+    expect(countOf('Land behind a flag, then flip it')).toBe(1);
+    // The chain strip sat inside the same duplicated run and drew twice with them.
+    expect(countOf('aria-label="Chain progress"')).toBe(1);
   });
 });

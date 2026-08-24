@@ -323,21 +323,6 @@ export function ProjectDetailPage() {
             <ProjectAcceptanceCard projectId={id} />
           </div>
 
-          {/* Draws nothing at all unless this project is a chain: it reads the same shape the
-              header above does and returns null for a mesh, so the strip is not something this
-              page decides to show — it is something a chain-shaped project has. */}
-          <ProjectChainProgress projectId={id} />
-
-          {/* Below the panorama, not above it. These three are what the project was SET UP to be
-              — read once, when it is being understood or changed — where everything above is
-              where it stands right now, which is what a reader comes back for. */}
-          <Field label="Goal" text={p.goal} empty="No goal set" />
-          <Field
-            label="Acceptance criteria"
-            text={p.acceptanceCriteria}
-            empty="No acceptance criteria set"
-          />
-          <Field label="Instructions" text={p.instructions} empty="No instructions set" />
           {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator
               because both are things a PERSON answers, and §7 RB2 is explicit that these two are
