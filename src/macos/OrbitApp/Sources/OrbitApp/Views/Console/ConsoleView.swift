@@ -283,8 +283,16 @@ struct TranscriptView: View {
                 }
                 recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
             }
+            // The in-memory window cap trims the HEAD of the transcript, so it may only run while
+            // the reader is pinned at the live tail — see `ConsoleModel.setReadingHistory`.
+            // `initial: true` so a console opened (or switched to) already at the bottom is capped
+            // without waiting for a scroll that may never come.
+            .onChange(of: atBottom, initial: true) { _, pinned in
+                console.setReadingHistory(!pinned)
+            }
             .onChange(of: console.sessionID) {
                 atBottom = true; ruler.reset(); stuckID = nil
+                console.setReadingHistory(false)
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
             // A message the user just sent forces the transcript back to the live tail — even if

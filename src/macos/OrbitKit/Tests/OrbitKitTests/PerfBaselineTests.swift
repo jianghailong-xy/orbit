@@ -126,6 +126,21 @@ final class PerfBaselineTests: XCTestCase {
 
     // MARK: - helpers
 
+    /// The shipped in-memory window cap, mirrored from `ConsoleModel.maxWindowItems` /
+    /// `windowTrimSlack` (OrbitApp can't be imported here — it's SwiftUI/Apple-only). The `capped`
+    /// rows below are what the app actually holds after the cap landed; the uncapped rows next to
+    /// them are the pre-cap baseline the doc's §6/§7 tables were measured from, kept in the same
+    /// run so before/after is same-machine by construction.
+    private static let windowMaxItems = 1000
+    private static let windowSlack = 200
+
+    /// A copy of `r` trimmed the way a console pinned at the live tail trims itself.
+    private func capped(_ r: TranscriptReducer) -> TranscriptReducer {
+        var t = r
+        t.trimOlder(keeping: Self.windowMaxItems, slack: Self.windowSlack)
+        return t
+    }
+
     private func median(_ xs: [Double]) -> Double { xs.sorted()[xs.count / 2] }
 
     private func timeIt(_ reps: Int, _ body: () -> Void) -> Double {
@@ -173,7 +188,8 @@ final class PerfBaselineTests: XCTestCase {
             var watched = TranscriptReducer()
             for e in events { watched.apply(e) }
 
-            for (label, reducer) in [("opened", opened), ("watched", watched)] {
+            for (label, reducer) in [("opened", opened), ("watched", watched),
+                                     ("capped", capped(watched))] {
                 let encoded = try JSONEncoder().encode(reducer)
                 let encodeMs = timeIt(5) { _ = try? JSONEncoder().encode(reducer) }
                 let saveMs = timeIt(5) { store.save(sessionID: "s-\(label)-\(n)", reducer: reducer) }
@@ -204,13 +220,15 @@ final class PerfBaselineTests: XCTestCase {
         for n in [200, 1000, 2000, 8519] {
             var reducer = TranscriptReducer()
             reducer.applyTailPage(EventPage(events: Self.makeEvents(n), hasMore: true))
-            let state = reducer.state
-            var rows = 0
-            let ms = timeIt(20) {
-                rows = TranscriptRows.build(state: state, statusCards: [], canPageOlder: true,
-                                            showWorkingIndicator: true).count
+            for (label, state) in [("uncapped", reducer.state), ("capped", capped(reducer).state)] {
+                var rows = 0
+                let ms = timeIt(20) {
+                    rows = TranscriptRows.build(state: state, statusCards: [], canPageOlder: true,
+                                                showWorkingIndicator: true).count
+                }
+                report(String(format: "rowsbuild events=%d window=%@ items=%d rows=%d ms=%.2f",
+                              n, label, state.items.count, rows, ms))
             }
-            report(String(format: "rowsbuild events=%d items=%d rows=%d ms=%.2f", n, state.items.count, rows, ms))
         }
     }
 
@@ -247,10 +265,20 @@ final class PerfBaselineTests: XCTestCase {
 
     func testStreamingTurnMainThreadCost() throws {
         try skipUnlessEnabled()
-        // A console already holding a tail page, then a turn streams into it.
-        var reducer = TranscriptReducer()
-        reducer.applyTailPage(EventPage(events: Self.makeEvents(1000), hasMore: true))
+        // Two windows, because the cost is linear in the window and the cap is about the second one:
+        //  • 1,000 events — a freshly opened session (the original baseline row);
+        //  • 8,519 events — the sampled long session watched all the way through, which is the shape
+        //    that used to have no ceiling at all. `capped` is what the app holds there now.
+        for (events, cap) in [(1000, false), (8519, false), (8519, true)] {
+            var reducer = TranscriptReducer()
+            reducer.applyTailPage(EventPage(events: Self.makeEvents(events), hasMore: true))
+            if cap { reducer = capped(reducer) }
+            streamOneTurn(into: &reducer, window: events, capped: cap)
+        }
+    }
 
+    /// 200 `text_delta`s through the three things a streaming frame does on the main thread.
+    private func streamOneTurn(into reducer: inout TranscriptReducer, window: Int, capped cap: Bool) {
         var rng = RNG(seed: 11)
         let deltas = (0..<200).map { _ in Self.words[rng.int(0...Self.words.count - 1)] + " " }
 
@@ -272,8 +300,9 @@ final class PerfBaselineTests: XCTestCase {
             _ = parseMarkdownBlocks(String(stable))
             mdMs += Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
         }
-        report(String(format: "streaming deltas=%d window_items=%d apply_ms=%.1f rowsbuild_ms=%.1f markdown_ms=%.1f total_ms=%.1f per_delta_ms=%.2f",
-                      deltas.count, reducer.state.items.count, applyMs, rowsMs, mdMs,
+        report(String(format: "streaming events=%d window=%@ deltas=%d window_items=%d apply_ms=%.1f rowsbuild_ms=%.1f markdown_ms=%.1f total_ms=%.1f per_delta_ms=%.2f",
+                      window, cap ? "capped" : "uncapped", deltas.count, reducer.state.items.count,
+                      applyMs, rowsMs, mdMs,
                       applyMs + rowsMs + mdMs, (applyMs + rowsMs + mdMs) / Double(deltas.count)))
     }
 
