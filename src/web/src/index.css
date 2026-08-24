@@ -9156,6 +9156,31 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
 }
 
+/* The project page's head: what the project IS on the left, and the coordinator — the conversation
+   every decision about it is made in — in its own column on the right. Not a card below the fields,
+   which is where it used to sit and where it stopped being read. `flex-start` so the card keeps its
+   own height rather than being stretched to the title block's. Below 860px, the same width the
+   panorama pair stacks at, there is no room for a second column: the card drops under the title as
+   a full-width bar, and ProjectsPage watches this exact query so it hands the card the matching
+   layout rather than the same one squeezed. */
+.project-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.project-detail-header-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+@media (max-width: 860px) {
+  .project-detail-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* The panorama's middle row: the blocking ranking beside the acceptance card, at the 1.32 : 1 the
    design calls for — the ranking carries a horizontal bar per row and goes unreadable first when
    the column narrows, and acceptance is a column of short lines that does not. `start` rather than

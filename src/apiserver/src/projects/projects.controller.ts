@@ -22,6 +22,7 @@ import {
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
+  RebindProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
   UpdateProjectDto,
@@ -437,5 +438,39 @@ export class ProjectsController {
     @Body() dto: OpenProjectCoordinatorDto,
   ) {
     return this.projects.coordinator(user.userId, id, dto?.workspaceId);
+  }
+
+  /**
+   * What this project's coordination is, and what the button above would do if pressed right now.
+   *
+   * A GET beside the POST it predicts, and a read in the strict sense: no body, no lock, no write.
+   * The card needs to know whether a coordinator exists, whether the conversation is alive, whether
+   * it is in Trash and whether the press would refuse — all four BEFORE the press, which is the one
+   * thing pressing it can never tell you.
+   */
+  @Get(':id/coordinator/status')
+  coordinatorStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.coordinatorStatus(user.userId, id);
+  }
+
+  /**
+   * Move this project's coordination workspace — the action the 409 above tells the owner to take.
+   *
+   * Every `COORDINATOR_UNAVAILABLE` ends in the same instruction ("rebind this project's
+   * coordination workspace, then open the coordinator again") and names `USER` as the one who can
+   * carry it out. This is what it names. A route of its own rather than a field on `PATCH :id`, on
+   * purpose: moving a coordinator is a decision with a conversation attached to it, and it should
+   * not be reachable by a request that meant to rename something.
+   *
+   * `workspaceId` is required and has no `null` spelling — clearing a landing is how a project
+   * REACHES the state this endpoint exists to leave (see `RebindProjectCoordinatorDto`).
+   */
+  @Post(':id/coordinator/rebind')
+  rebindCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RebindProjectCoordinatorDto,
+  ) {
+    return this.projects.rebindCoordinator(user.userId, id, dto.workspaceId);
   }
 }

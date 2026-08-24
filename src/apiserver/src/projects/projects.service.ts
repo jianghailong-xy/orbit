@@ -16,7 +16,13 @@ import {
   RunStatus,
   TaskStatus,
 } from '@prisma/client';
-import { toUuid } from '@orbit/shared';
+import {
+  type SessionFilingState,
+  type SessionLifecycleState,
+  type SessionRunState,
+  toUuid,
+} from '@orbit/shared';
+import { isSessionGenerating } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
@@ -32,6 +38,7 @@ import { admitReopen, reopenImpact, type ReopenImpact } from './project-attribut
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
+import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import {
@@ -229,6 +236,131 @@ function withCoordination<T extends WithCoordination>(
     coordinatorGeneration: runtime?.coordinatorGeneration ?? 0n,
   };
 }
+
+/**
+ * The four buckets a project's coordination sorts into.
+ *
+ * A project-coordination bucket rather than a session run state, which is the distinction the
+ * whole card turns on: a LIVE coordinator sitting in a workspace that was disabled underneath it
+ * is still LIVE, because `coordinator`'s reuse branch returns the bound session and never reaches
+ * the landing. The truth table is in `docs/project-coordinator-status-contract.md`.
+ */
+export type ProjectCoordinationState = 'NEVER_OPENED' | 'LIVE' | 'TRASHED' | 'UNAVAILABLE';
+
+/** The read's name for the 400 `coordinatorLanding` throws when a FIRST coordinator has nowhere to
+ *  open. The other refusal it predicts already has a name clients switch on
+ *  (`COORDINATOR_UNAVAILABLE_CODE`), and this one is given a name for the same reason. */
+const NO_LANDING_WORKSPACE_CODE = 'NO_LANDING_WORKSPACE';
+
+/** The session columns the coordinator status read needs. `archivedAt` is here only because
+ *  `withSessionState` folds it into `completedAt`; it is never served under its own name. */
+const COORDINATOR_STATUS_SESSION_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  endReason: true,
+  startedAt: true,
+  finishedAt: true,
+  completedAt: true,
+  archivedAt: true,
+  deletedAt: true,
+  engineTurnActive: true,
+} satisfies Prisma.SessionSelect;
+
+type CoordinatorStatusSessionRow = Prisma.SessionGetPayload<{
+  select: typeof COORDINATOR_STATUS_SESSION_SELECT;
+}>;
+
+/**
+ * What `GET /projects/:id/coordinator/status` serves.
+ *
+ * Every fact with no value is `null` beside a closed-set `<field>AbsentReason` rather than dropped
+ * — that is what lets a client tell "this project has never had a coordinator" from "this server
+ * does not report one". Nothing is ever omitted from the body.
+ */
+export interface ProjectCoordinatorStatus {
+  projectId: string;
+  readAt: Date;
+  state: ProjectCoordinationState;
+  coordination: {
+    sessionId: string | null;
+    sessionIdAbsentReason: CoordinatorSessionAbsentReason;
+    session: {
+      id: string;
+      title: string;
+      runStatus: RunStatus;
+      runState: SessionRunState;
+      lifecycleState: SessionLifecycleState;
+      /** @deprecated Compatibility mirror of `lifecycleState`, as on every Session payload. */
+      filingState: SessionFilingState;
+      endReason: string | null;
+      endReasonAbsentReason: 'SESSION_NOT_ENDED' | null;
+      startedAt: Date | null;
+      startedAtAbsentReason: 'SESSION_NEVER_STARTED' | null;
+      finishedAt: Date | null;
+      finishedAtAbsentReason: 'SESSION_STILL_RUNNING' | null;
+      completedAt: Date | null;
+      completedAtAbsentReason: 'SESSION_NOT_COMPLETED' | null;
+      deletedAt: Date | null;
+      deletedAtAbsentReason: 'SESSION_NOT_TRASHED' | null;
+      engineTurnActive: boolean;
+      pendingApprovals: number;
+    } | null;
+    sessionAbsentReason: CoordinatorSessionAbsentReason;
+    /** Serialised as a decimal string by the global `BigInt.prototype.toJSON`: the counter only
+     *  ever goes up, and JSON numbers are doubles. */
+    coordinatorGeneration: bigint;
+    workspaceId: string | null;
+    workspaceIdAbsentReason: CoordinationWorkspaceAbsentReason;
+    workspaceName: string | null;
+    workspaceNameAbsentReason: CoordinationWorkspaceAbsentReason | 'COORDINATION_WORKSPACE_TRASHED';
+    agentId: string | null;
+    agentIdAbsentReason: 'NO_COORDINATOR_AGENT' | null;
+    agentName: string | null;
+    agentNameAbsentReason: 'NO_COORDINATOR_AGENT' | null;
+  };
+  openability: {
+    canOpen: boolean;
+    willCreate: boolean;
+    refusalCode: typeof COORDINATOR_UNAVAILABLE_CODE | typeof NO_LANDING_WORKSPACE_CODE | null;
+    /** A refinement of `refusalCode`, null exactly when that is — so it shares
+     *  `refusalCodeAbsentReason` rather than carrying a second one. */
+    refusalDetail: CoordinatorRefusalDetail;
+    refusalCodeAbsentReason: 'NOTHING_REFUSES' | null;
+    requiredAction: string | null;
+    requiredActionAbsentReason: 'NOTHING_REFUSES' | null;
+    landing: {
+      workspaceId: string | null;
+      workspaceIdAbsentReason: LandingAbsentReason;
+      workspaceName: string | null;
+      workspaceNameAbsentReason: LandingAbsentReason;
+      /** Always null. A landing is a place, not an identity, and `WorkspaceAliasInterceptor` would
+       *  otherwise invent one from the `workspaceId` beside it. */
+      agentId: null;
+      agentName: null;
+      fixed: boolean;
+    };
+  };
+}
+
+/** Told apart by the WORKSPACE, never by the generation — a first bind is generation 0 by design. */
+type CoordinatorSessionAbsentReason = 'COORDINATOR_NEVER_OPENED' | 'COORDINATOR_SESSION_PURGED' | null;
+
+/** The pointer is emptied by a workspace HARD delete only; a soft delete leaves it standing. */
+type CoordinationWorkspaceAbsentReason =
+  | 'NO_COORDINATION_WORKSPACE'
+  | 'COORDINATION_WORKSPACE_PURGED'
+  | null;
+
+type CoordinatorRefusalDetail =
+  | 'WORKSPACE_TRASHED'
+  | 'WORKSPACE_DISABLED'
+  | 'WORKSPACE_UNBOUND'
+  | 'WORKSPACE_FORGOTTEN'
+  | 'NO_TASK_ASSIGNEE'
+  | null;
+
+type LandingAbsentReason = 'COORDINATOR_ALREADY_LIVE' | 'LANDING_REFUSED' | null;
 
 /**
  * Projects: what a body of work is trying to achieve, and how anyone would know it got there.
@@ -614,16 +746,6 @@ export class ProjectsService {
     }
     return readProjectBlockingLeaderboard(this.prisma, ownerId, projectId, limit);
   }
-
-  /** The stored outcome, or undefined when a row predates the audit fields this read projects.
-   *  `outcome` is a JSON column, so its shape is a claim about older rows rather than a type. */
-
-  /** One decision, with the actions it produced and the two run states it moved between. */
-
-  /** One outbox row. `dedupeKey` carries embedded ids for the same reason an action key does. */
-
-  /** The coordinator conversation's run and lifecycle state, derived the one way every other
-   *  Session payload derives it — a second mapping here is a second answer to "is it finished". */
 
   /**
    * One level of the project's task tree, newest first.
@@ -1747,6 +1869,397 @@ export class ProjectsService {
   }
 
   /**
+   * Move where this project's coordinator opens — the endpoint `coordinator` says is not it.
+   *
+   * §7.5 freezes a rotation as "the SESSION is replaced; the agent and the workspace are not", and
+   * every automatic path is held to it: `coordinator` refuses a different workspace with
+   * `ELSEWHERE`, and `coordinatorLanding` turns a landing that has gone dead into
+   * `COORDINATOR_UNAVAILABLE` rather than quietly borrowing another. Both of those name the same
+   * addressee — the owner — and until this door existed there was nothing for them to open:
+   * `REBIND_REQUIRED_ACTION` was an instruction with no verb behind it, and the card's only
+   * affordance was a Retry that returned the same 409 forever.
+   *
+   * This is an owner's explicit decision, which is why it is a route of its own rather than a field
+   * on `PATCH :id`: moving a coordinator is not something that should be reachable by a request
+   * that meant to rename something. It is the rule's exit, not a hole in it — `coordinator` still
+   * refuses to move one as a side effect of being asked for one.
+   *
+   * WHAT IT WRITES is `coordinator_workspace_id`, and nothing else.
+   *
+   *   * not `coordinator_session_id`: pointing a project at a different conversation is a ROTATION,
+   *     which is the thing §7.5 froze. See the refusal below for what that costs;
+   *   * not the coordinator identity — the `project_member` COORDINATOR row is WHO coordinates, and
+   *     PAC R3 forbids deriving either of those from the other. An owner who means to move both
+   *     sends `coordinatorAgentId` to `PATCH :id` as well, and gets to see it was two decisions;
+   *   * not `coordinator_generation`: `project_coordinator_rotation_count` (migration 0112) counts
+   *     one session pointer swapped for a different one, so a write that touches no pointer spends
+   *     no generation. Nothing here has to arrange that — it follows from writing one column.
+   *
+   * The one write this DOES have a consequence for is the identity of a project that has none:
+   * `project_coordinator_companions_bind` fires on NULL → set and seats a COORDINATOR membership
+   * from the new landing when the project has no coordinator row at all. That is the database's own
+   * invariant ("a project that names a coordination workspace HAS a coordinator"), it only ever
+   * FILLS what nobody wrote, and it is left alone here for the same reason `create` leaves it alone.
+   *
+   * Not part of the authorization set, for `coordinatorAgentId`'s reason: it says where the next
+   * coordinator opens, not what a coordinator may do. So it bumps no `configRevision`, and a
+   * revision read before it is still the revision an authorization edit was composed against.
+   */
+  async rebindCoordinator(
+    ownerId: string,
+    id: string,
+    workspaceId: string,
+  ): Promise<{
+    projectId: string;
+    coordinatorWorkspaceId: string;
+    /** Untouched by this call, and served so that "untouched" is visible rather than promised. */
+    coordinatorSessionId: string | null;
+    /** False when the project already recorded this landing — a replay writes nothing. */
+    moved: boolean;
+  }> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      // The landing FIRST, and that order is `lock-order.ts` rather than preference: `workspace` is
+      // rank 15 and `project` is rank 40, so reading the project before the workspace would lock
+      // upward — the exact shape rank 15 exists to keep out of these paths. Nothing here needs the
+      // project row in order to know which landing was named, so the ranks and the data agree. The
+      // visible consequence is that a caller who owns neither is answered about the landing rather
+      // than about the project; neither refusal confirms the other's row exists, so nothing leaks.
+      //
+      // `FOR SHARE` because a workspace is SOFT-deleted and disabling one is an ordinary UPDATE of
+      // a non-key column: the foreign key this row is about to be referenced by takes FOR KEY
+      // SHARE, which neither of those conflicts with, so without this lock the check and the write
+      // straddle them and the project commits pointing at a landing that just went dead.
+      //
+      // The four conditions are `lastCoordinatorWorkspace`'s, exactly — unknown, another owner's,
+      // trashed, disabled — so the read side of "can this project's coordinator open where it
+      // belongs" and the write side of "may it belong here" cannot come to disagree. Deliberately
+      // NOT `runner_id IS NOT NULL`: an unbound workspace is refused by `sessions.create` rather
+      // than by the column, it is a landing whose owner can bind a runner to it without moving
+      // anything, and `NO_SUCH_LANDING` does not claim to have checked it.
+      const [target] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "workspace"
+         WHERE "id" = ${workspaceId}::uuid AND "owner_id" = ${ownerId}::uuid
+           AND "deleted_at" IS NULL AND "enabled" = TRUE
+         FOR SHARE`);
+      if (!target) throw new BadRequestException(ProjectsService.NO_SUCH_LANDING);
+
+      // Then the project under its own lock. This reads a pointer that `coordinator`'s
+      // compare-and-swap also writes, and what it read has to still be true at the commit that
+      // moves the landing out from under it. `FOR NO KEY UPDATE` rather than `FOR UPDATE` — this
+      // settles nothing about acceptance, and §8.6 LO3 forbids starting weak and upgrading, so the
+      // strength is chosen here.
+      const [locked] = await tx.$queryRaw<Array<{
+        coordinator_workspace_id: string | null;
+        coordinator_session_id: string | null;
+      }>>(Prisma.sql`
+        SELECT "coordinator_workspace_id", "coordinator_session_id"
+          FROM "project"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('project not found');
+
+      // Already there, answered as a no-op and answered BEFORE the pointer check below: a client
+      // retrying a request whose response it never saw must not be told its own rebind was refused,
+      // and a call that moves nothing has no reason to care what the conversation it is leaving
+      // alone happens to be doing.
+      if (locked.coordinator_workspace_id === target.id) {
+        return {
+          projectId: id,
+          coordinatorWorkspaceId: target.id,
+          coordinatorSessionId: locked.coordinator_session_id,
+          moved: false,
+        };
+      }
+
+      // The pair, which is what `project_coordinator_pointer_guard` (migration 0126, deliberately
+      // KEPT by 0164) rules on: a project may not name a coordination workspace AND a coordinator
+      // session that does not run in it. The guard is a BEFORE trigger over both columns, so a
+      // landing that moves away from a standing pointer is not a row this database will hold — it
+      // raises COORDINATOR_POINTER_RELOCATED, which would reach the caller as a 500 about nothing
+      // they can act on.
+      //
+      // So the pointer is CHECKED here rather than cleared. Clearing it is the other way to satisfy
+      // the guard and it is a rotation by another name: `coordinator` would then open a second
+      // conversation about work that has already been discussed in one, which is the defect the
+      // whole binding exists to prevent. Told instead, the owner decides — the conversation is
+      // theirs to end and delete, and this endpoint is not allowed to do it on their behalf.
+      //
+      // Read without a lock: `session` is rank 30 and the project row is already held at 40, so
+      // locking one here would be locking upward. It does not need one — the guard re-reads the
+      // same row inside the UPDATE below, so a session that moves under us fails the write rather
+      // than passing this check, and the failure is the same refusal arriving from the database.
+      if (locked.coordinator_session_id != null) {
+        const [bound] = await tx.$queryRaw<Array<{ workspace_id: string | null }>>(Prisma.sql`
+          SELECT "workspace_id" FROM "session" WHERE "id" = ${locked.coordinator_session_id}::uuid`);
+        if (bound?.workspace_id !== target.id) throw ProjectsService.coordinatorSessionLive();
+      }
+
+      // One column, one statement. `updateMany` rather than `update` so the owner predicate travels
+      // with the WRITE as well as with the read above: this is a write, and a write that carries
+      // its own tenant scope stays correct if the read is ever moved, cached or refactored.
+      await tx.project.updateMany({
+        where: { id, ownerId },
+        data: { coordinatorWorkspaceId: target.id },
+      });
+
+      return {
+        projectId: id,
+        coordinatorWorkspaceId: target.id,
+        coordinatorSessionId: locked.coordinator_session_id,
+        moved: true,
+      };
+    }, loggedRetry(this.logger, 'projects.rebindCoordinator'));
+  }
+
+  /**
+   * What this project's coordination IS, and what pressing "open the coordinator" would do.
+   *
+   * A read, and only a read: it takes no lock, opens nothing and writes nothing. The card it feeds
+   * has to know whether a coordinator exists, whether the conversation is alive, whether it is in
+   * Trash and whether the button would refuse — all four BEFORE the press, which is what the POST
+   * alone can never say.
+   *
+   * `openability` is therefore a projection of the branches `coordinator` and `coordinatorLanding`
+   * would take rather than a second set of rules, so a card built on this and the button behind it
+   * cannot come to describe one project two ways. It is a prediction from committed rows and the
+   * POST is what decides: it cannot see a workspace disabled BETWEEN this read and the press, and
+   * it does not model refusals that are not about the landing (a provider that is not configured).
+   * A client still handles a 409 or a 400 — this exists so the common cases are visible before the
+   * press, not so the press becomes infallible.
+   *
+   * Every absent fact is `null` beside a closed-set reason rather than dropped. `ELSEWHERE` is
+   * deliberately not modelled: it is a property of the request body, and this endpoint takes none.
+   */
+  async coordinatorStatus(ownerId: string, projectId: string): Promise<ProjectCoordinatorStatus> {
+    const readAt = new Date();
+    const project = await this.prisma.project.findFirst({
+      // The same 404 every other project read gives an id belonging to somebody else, decided by
+      // this query's own owner predicate rather than by a second lookup — so there is no window in
+      // which the row is checked and then read.
+      where: { id: projectId, ownerId },
+      select: {
+        id: true,
+        coordinatorSessionId: true,
+        coordinatorWorkspaceId: true,
+        coordinatorSession: { select: COORDINATOR_STATUS_SESSION_SELECT },
+        // Not re-scoped to `ownerId`: the column is only ever written to a workspace this owner
+        // already owns (`createProjectInSession`, and the swap in `coordinator` behind
+        // `lastCoordinatorWorkspace` / `busiestAssignee`), and it is reached here through a project
+        // this query has already proved is theirs.
+        coordinatorWorkspace: {
+          select: { name: true, deletedAt: true, enabled: true, runnerId: true },
+        },
+        members: {
+          where: { role: ProjectRole.COORDINATOR },
+          select: { agentId: true, agent: { select: { name: true } } },
+        },
+        runtime: { select: { coordinatorGeneration: true } },
+      },
+    });
+    if (!project) throw new NotFoundException('project not found');
+
+    const session = project.coordinatorSession;
+    const workspace = project.coordinatorWorkspace;
+    // The same fold every other project payload takes, so "generation 0" cannot come to mean two
+    // things. The agent's NAME is read off the membership row before the fold drops it.
+    const { coordinatorAgentId, coordinatorGeneration } = withCoordination(project);
+    const agentName = project.members[0]?.agent.name ?? null;
+    const agentAbsentReason = coordinatorAgentId == null ? ('NO_COORDINATOR_AGENT' as const) : null;
+
+    // Which of the recorded landing's columns refuses, if any — read ONCE, because `state` and
+    // `openability.refusalDetail` are the same fact seen from two sides and must not be able to
+    // drift apart. The first two conditions are `lastCoordinatorWorkspace`'s own filter; the third
+    // is `sessions.create` refusing an unbound workspace, which `coordinator` translates on the
+    // fixed branch — it is here so this read can say WHICH refusal rather than merely that there
+    // is one. Evaluated in the order `coordinatorLanding` reaches them.
+    const landingRefusal: CoordinatorRefusalDetail =
+      workspace == null
+        ? null
+        : workspace.deletedAt != null
+          ? 'WORKSPACE_TRASHED'
+          : !workspace.enabled
+            ? 'WORKSPACE_DISABLED'
+            : workspace.runnerId == null
+              ? 'WORKSPACE_UNBOUND'
+              : null;
+    const landingUsable = workspace != null && landingRefusal == null;
+
+    // The four states, in the order the truth table decides them.
+    let state: ProjectCoordinationState;
+    if (session != null && session.deletedAt == null) state = 'LIVE';
+    else if (project.coordinatorWorkspaceId != null) {
+      state = landingUsable ? 'TRASHED' : 'UNAVAILABLE';
+    } else if (project.coordinatorSessionId != null) state = 'UNAVAILABLE';
+    else state = 'NEVER_OPENED';
+
+    // Told apart by the WORKSPACE, not by the generation: both columns are written in the same
+    // statement whenever a coordinator is bound, so a FIRST coordinator that was purged still sits
+    // at generation 0. The generation is the fallback for the one case where the workspace was
+    // hard-deleted too.
+    const sessionAbsentReason: CoordinatorSessionAbsentReason =
+      project.coordinatorSessionId != null
+        ? null
+        : project.coordinatorWorkspaceId != null || coordinatorGeneration > 0n
+          ? 'COORDINATOR_SESSION_PURGED'
+          : 'COORDINATOR_NEVER_OPENED';
+
+    // The mirror image. Only a workspace HARD delete empties this pointer (the FK's SET NULL); a
+    // soft delete leaves it standing, which is why a trashed workspace is still POINTED AT here.
+    const workspaceAbsentReason: CoordinationWorkspaceAbsentReason =
+      project.coordinatorWorkspaceId != null
+        ? null
+        : project.coordinatorSessionId != null || coordinatorGeneration > 0n
+          ? 'COORDINATION_WORKSPACE_PURGED'
+          : 'NO_COORDINATION_WORKSPACE';
+    // The id survives a soft delete because it is what the owner needs in order to restore it; the
+    // name does not, so nothing can print a workspace that is in Trash as though it were there.
+    const workspaceNameAbsentReason =
+      workspace == null
+        ? workspaceAbsentReason
+        : workspace.deletedAt != null
+          ? ('COORDINATION_WORKSPACE_TRASHED' as const)
+          : null;
+
+    // Only a generating session can be holding a live approval, and the count is gated exactly the
+    // way the session list gates it — including a self-driven turn, which stays at AWAITING_INPUT
+    // while it runs and whose prompt is no less blocking for it.
+    const pendingApprovals =
+      session != null && isSessionGenerating(session)
+        ? await this.prisma.approval.count({ where: { sessionId: session.id, status: 'PENDING' } })
+        : 0;
+
+    // What the POST would do if pressed right now, branch for branch.
+    let refusalCode: ProjectCoordinatorStatus['openability']['refusalCode'] = null;
+    let refusalDetail: CoordinatorRefusalDetail = null;
+    let landingWorkspaceId: string | null = null;
+    let landingWorkspaceName: string | null = null;
+    if (state === 'LIVE') {
+      // Nothing to predict: the reuse branch hands the bound session back and never reaches the
+      // landing, which is why a live coordinator in a workspace that was disabled underneath it
+      // still opens.
+    } else if (workspace != null) {
+      if (landingRefusal != null) {
+        refusalCode = COORDINATOR_UNAVAILABLE_CODE;
+        refusalDetail = landingRefusal;
+      } else {
+        landingWorkspaceId = project.coordinatorWorkspaceId;
+        landingWorkspaceName = workspace.name;
+      }
+    } else if (project.coordinatorSessionId != null) {
+      // It had a coordinator and no longer records where it ran. Picking a new home for it is
+      // precisely what §7.5 forbids, so there is nothing to offer.
+      refusalCode = COORDINATOR_UNAVAILABLE_CODE;
+      refusalDetail = 'WORKSPACE_FORGOTTEN';
+    } else {
+      // The free branch: only a project that has never had one gets to choose, and what it chooses
+      // is where this project's work already runs.
+      const borrowed = await this.busiestAssignee(project.id);
+      const home =
+        borrowed == null
+          ? null
+          : await this.prisma.workspace.findUnique({
+              where: { id: borrowed },
+              select: { id: true, name: true },
+            });
+      if (home == null) {
+        refusalCode = NO_LANDING_WORKSPACE_CODE;
+        refusalDetail = 'NO_TASK_ASSIGNEE';
+      } else {
+        landingWorkspaceId = home.id;
+        landingWorkspaceName = home.name;
+      }
+    }
+    const landingAbsentReason: LandingAbsentReason =
+      landingWorkspaceId != null ? null : state === 'LIVE' ? 'COORDINATOR_ALREADY_LIVE' : 'LANDING_REFUSED';
+    // One wording per refusal, taken from the throw itself rather than restated — two phrasings
+    // would read as two different rules to anyone who hit both the button and this card.
+    const requiredAction =
+      refusalCode == null
+        ? null
+        : refusalCode === COORDINATOR_UNAVAILABLE_CODE
+          ? ProjectsService.REBIND_REQUIRED_ACTION
+          : ProjectsService.NO_LANDING_WORKSPACE;
+    const nothingRefuses = refusalCode == null ? ('NOTHING_REFUSES' as const) : null;
+
+    return {
+      projectId: project.id,
+      readAt,
+      state,
+      coordination: {
+        sessionId: project.coordinatorSessionId,
+        sessionIdAbsentReason: sessionAbsentReason,
+        session: session == null ? null : ProjectsService.coordinatorSessionState(session, pendingApprovals),
+        sessionAbsentReason,
+        coordinatorGeneration,
+        // All four of these names are emitted even when null. `WorkspaceAliasInterceptor` only ever
+        // ADDS the missing half of a workspace/agent pair, so a `workspaceId` served without an
+        // `agentId` beside it comes back with `agentId` silently set to the WORKSPACE's id — and an
+        // explicit null is what suppresses that.
+        workspaceId: project.coordinatorWorkspaceId,
+        workspaceIdAbsentReason: workspaceAbsentReason,
+        workspaceName: workspaceNameAbsentReason == null && workspace != null ? workspace.name : null,
+        workspaceNameAbsentReason,
+        agentId: coordinatorAgentId,
+        agentIdAbsentReason: agentAbsentReason,
+        agentName,
+        agentNameAbsentReason: agentAbsentReason,
+      },
+      openability: {
+        canOpen: refusalCode == null,
+        // False only on the reuse branch. Everywhere else the press makes a new conversation —
+        // whether it would be allowed to is `canOpen`, which is a different question.
+        willCreate: state !== 'LIVE',
+        refusalCode,
+        refusalDetail,
+        refusalCodeAbsentReason: nothingRefuses,
+        requiredAction,
+        requiredActionAbsentReason: nothingRefuses,
+        landing: {
+          workspaceId: landingWorkspaceId,
+          workspaceIdAbsentReason: landingAbsentReason,
+          workspaceName: landingWorkspaceName,
+          workspaceNameAbsentReason: landingAbsentReason,
+          // Constant null, for the reason the four above are always emitted: a landing is a place,
+          // not an identity, and the alias mirror would otherwise invent one.
+          agentId: null,
+          agentName: null,
+          fixed: project.coordinatorWorkspaceId != null,
+        },
+      },
+    };
+  }
+
+  /** The coordinator conversation's run and lifecycle state, derived the one way every other
+   *  Session payload derives it — a second mapping here is a second answer to "is it finished". */
+  private static coordinatorSessionState(
+    session: CoordinatorStatusSessionRow,
+    pendingApprovals: number,
+  ): NonNullable<ProjectCoordinatorStatus['coordination']['session']> {
+    const derived = withSessionState(session);
+    return {
+      id: session.id,
+      title: session.title,
+      runStatus: derived.runStatus,
+      runState: derived.runState,
+      lifecycleState: derived.lifecycleState,
+      filingState: derived.filingState,
+      endReason: session.endReason,
+      endReasonAbsentReason: session.endReason == null ? 'SESSION_NOT_ENDED' : null,
+      startedAt: session.startedAt,
+      startedAtAbsentReason: session.startedAt == null ? 'SESSION_NEVER_STARTED' : null,
+      finishedAt: session.finishedAt,
+      finishedAtAbsentReason: session.finishedAt == null ? 'SESSION_STILL_RUNNING' : null,
+      // The canonical fold of the legacy `archivedAt` mirror, not a second reading of it.
+      completedAt: derived.completedAt,
+      completedAtAbsentReason: derived.completedAt == null ? 'SESSION_NOT_COMPLETED' : null,
+      deletedAt: session.deletedAt,
+      deletedAtAbsentReason: session.deletedAt == null ? 'SESSION_NOT_TRASHED' : null,
+      engineTurnActive: session.engineTurnActive,
+      pendingApprovals,
+    };
+  }
+
+  /**
    * Where this project's coordinator may open, and whether that was fixed or chosen.
    *
    * A project that records a coordination workspace opens there, and the answer is `fixed`. Not as
@@ -1797,10 +2310,7 @@ export class ProjectsService {
     }
     const chosen = workspaceId ?? (await this.busiestAssignee(project.id));
     if (!chosen) {
-      throw new BadRequestException(
-        'no workspace to open the coordinator in — none of this project’s tasks has an assignee ' +
-          'to borrow one from. Assign a task, or pass workspaceId.',
-      );
+      throw new BadRequestException(ProjectsService.NO_LANDING_WORKSPACE);
     }
     return { workspaceId: chosen, fixed: false };
   }
@@ -1826,9 +2336,43 @@ export class ProjectsService {
       code: COORDINATOR_UNAVAILABLE_CODE,
       message: `${reason} — its coordinator cannot be opened anywhere else`,
       owner: 'USER',
+      requiredAction: ProjectsService.REBIND_REQUIRED_ACTION,
+    });
+  }
+
+  /**
+   * The other refusal a rebind can give: "this project is still bound to a conversation, and it
+   * does not run where you are moving the project to".
+   *
+   * `project_coordinator_pointer_guard` (0126) is what makes this a refusal rather than a policy:
+   * a project may not name a coordination workspace and a coordinator session that runs somewhere
+   * else, so moving the landing away from a standing pointer is a row the database will not hold.
+   * The endpoint says so in words the owner can act on instead of letting a plpgsql exception
+   * arrive as a 500 about `COORDINATOR_POINTER_RELOCATED`.
+   *
+   * `COORDINATOR_SESSION_LIVE` covers a pointer into Trash as well as one into a running turn,
+   * because the two are one situation to the guard and to the caller: the pointer STANDS, and what
+   * frees the project is the same act either way. The required action says both halves of it — a
+   * soft delete leaves the pointer exactly where it was, and only the permanent delete empties it
+   * (the FK is SET NULL).
+   *
+   * Structured for `coordinatorUnavailable`'s reason, and `owner: USER` for the same one: nothing
+   * the server retries changes it. It carries no ids, because error bodies are the one response
+   * `PublicIdInterceptor` does not rewrite and a uuid put in here would go out raw.
+   */
+  private static coordinatorSessionLive(): ConflictException {
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: COORDINATOR_SESSION_LIVE_CODE,
+      message:
+        'this project is still bound to a coordinator conversation, and that conversation does ' +
+        'not run in the workspace you are moving it to — a project cannot name one place and be ' +
+        'coordinated from another',
+      owner: 'USER',
       requiredAction:
-        'rebind this project’s coordination workspace (or restore/enable the one it names), then ' +
-        'open the coordinator again',
+        'delete this project’s coordinator conversation — Trash it, then delete it permanently, ' +
+        'which is what empties the pointer — and then rebind its coordination workspace',
     });
   }
 
@@ -1919,4 +2463,22 @@ export class ProjectsService {
     'this project already has a coordinator, and it runs in a different workspace — open it where ' +
     'it is, or delete it first. Moving a coordinator is not something this endpoint does as a side ' +
     'effect of asking for one.';
+
+  /**
+   * The one thing that clears `COORDINATOR_UNAVAILABLE`, in the words the refusal itself uses.
+   *
+   * Named rather than written twice because `coordinatorStatus` predicts this refusal before the
+   * press and `coordinatorUnavailable` delivers it after: two phrasings of one required action
+   * would read as two different rules to anyone who saw both.
+   */
+  private static readonly REBIND_REQUIRED_ACTION =
+    'rebind this project’s coordination workspace (or restore/enable the one it names), then ' +
+    'open the coordinator again';
+
+  /** The 400 a FIRST coordinator gets when this project has nowhere to borrow a workspace from.
+   *  Named for the same reason `REBIND_REQUIRED_ACTION` is: the read predicts it, the throw
+   *  delivers it, and they have to say the same thing. */
+  private static readonly NO_LANDING_WORKSPACE =
+    'no workspace to open the coordinator in — none of this project’s tasks has an assignee ' +
+    'to borrow one from. Assign a task, or pass workspaceId.';
 }

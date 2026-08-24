@@ -5,16 +5,22 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import { api } from '../api';
+import { ApiError, api, restoreSession } from '../api';
 import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
 import { ProjectBlockingLeaderboard } from '../components/ProjectBlockingLeaderboard';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
+import {
+  ProjectCoordinatorCard,
+  type CoordinatorAction,
+  type CoordinatorCardLayout,
+} from '../components/ProjectCoordinatorCard';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
-import { ProjectPanoramaHeader } from '../components/ProjectPanoramaHeader';
+import { ProjectPanoramaHeader, projectPanoramaQuery } from '../components/ProjectPanoramaHeader';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
+  projectCoordinatorStatusQuery,
   providersQuery,
   runnersQuery,
   workspacesQuery,
@@ -28,6 +34,8 @@ import {
 } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
+import { useToast } from '../lib/toast';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -57,10 +65,6 @@ interface ProjectDetail extends Project {
   acceptanceCriteria?: string | null;
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
-  /** The session this project is coordinated from, null on one that has never had a coordinator.
-   *  Only the LABEL below depends on it — opening always goes through the server, which is what
-   *  repairs a pointer that has since gone to Trash. */
-  coordinatorSessionId?: string | null;
 }
 
 const STATUS_COLOR: Record<Project['status'], string> = {
@@ -173,12 +177,16 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
   );
 }
 
+/** Where the header stops having room for a column beside the title. Kept identical to the
+ *  `.project-detail-header` media query in index.css — the stylesheet stacks the two blocks and
+ *  this decides which of the coordinator card's two layouts goes into the second one. */
+const PROJECT_HEADER_NARROW_QUERY = '(max-width: 860px)';
+
 /** Read-only detail for one project: what it's for, how anyone would know it got there, and where
  *  its tasks stand — down to a row per top-level task, and from there down to whichever levels
  *  the reader opens. Still no writes: every row is read-only, however deep it sits. */
 export function ProjectDetailPage() {
   const params = useParams();
-  const navigate = useNavigate();
   // The route param can still arrive as a raw UUID (an old bookmark, a pasted link), so normalize
   // before it reaches either the cache key or the URL — otherwise the same project caches twice.
   // Stays nullable: an id we don't have is a different state from one we do, and collapsing it to
@@ -190,24 +198,10 @@ export function ProjectDetailPage() {
     enabled: Boolean(id),
   });
   const p = project.data;
-
-  // Declared here, above the branch that decides whether the project loaded, because a hook cannot
-  // live inside it — the section it drives renders further down. Keyed by project, so two projects
-  // open in two tabs cannot read each other's in-flight or failed state.
-  const coordinator = useMutation({
-    mutationKey: ['project', id, 'coordinator'],
-    mutationFn: async () => {
-      // Not reachable from the button, which only exists inside the loaded branch — but the id is
-      // nullable up here, and a guard is what keeps `/projects/null/coordinator` off the wire
-      // rather than narrowing the type with an assertion that would send it.
-      if (!id) throw new Error('This link is missing a project id.');
-      return openProjectCoordinator(id);
-    },
-    // The id that gets navigated to is the one the SERVER just returned, never the pointer the
-    // project document arrived with: on a trashed binding those are two different sessions, and
-    // only the returned one is the live conversation.
-    onSuccess: (result) => navigate(coordinatorSessionPath(result.sessionId)),
-  });
+  // Which of the coordinator card's two layouts the header has room for. A hook rather than a
+  // media query alone: the two are different copy and a different surface, not a different width
+  // (see `CoordinatorCardLayout`), so the stylesheet cannot decide it on its own.
+  const narrow = useMediaQuery(PROJECT_HEADER_NARROW_QUERY);
   const byStatus = Object.entries(p?.tasksByStatus ?? {});
 
   return (
@@ -245,23 +239,24 @@ export function ProjectDetailPage() {
         />
       ) : p ? (
         <>
-          <Typography.Title level={2} className="page-title">
-            {p.title} <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
-          </Typography.Title>
-
-          <div style={{ marginBottom: 24 }}>
-            <span style={{ marginRight: 8 }}>
-              {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
-            </span>
-            {byStatus.length === 0 ? (
-              <Typography.Text type="secondary">No tasks yet</Typography.Text>
-            ) : (
-              byStatus.map(([status, n]) => (
-                <Tag key={status}>
-                  {status} {n}
-                </Tag>
-              ))
-            )}
+          {/* The page head: what this project is and where its work stands on the left, and the
+              way a person DRIVES it on the right. One block, because the coordinator is not a
+              footnote to the fields below — it is the conversation every decision about this
+              project is made in, and burying it under Goal / Acceptance / Instructions is how it
+              stopped being read. Below 860px the card drops under the title as a full-width bar;
+              `.project-detail-header` in index.css stacks at the same width this hook watches. */}
+          <div className="project-detail-header">
+            <div className="project-detail-header-main">
+              <Typography.Title level={2} className="page-title">
+                {p.title} <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
+              </Typography.Title>
+              <ProjectHeaderTallies projectId={id} total={p._count.tasks} byStatus={byStatus} />
+            </div>
+            <ProjectCoordinatorSection
+              projectId={id}
+              layout={narrow ? 'narrow' : 'desktop'}
+              openTaskCount={p.tasksByStatus?.OPEN}
+            />
           </div>
 
           {/* The panorama. Every card below is a SIBLING of the others — none of them wraps
@@ -298,16 +293,6 @@ export function ProjectDetailPage() {
             empty="No acceptance criteria set"
           />
           <Field label="Instructions" text={p.instructions} empty="No instructions set" />
-
-          {/* The way a person drives this project: open the conversation with its coordinator.
-              A sibling of the fields above, not a wrapper — a coordinator that fails to open
-              costs the reader the coordinator and nothing else. */}
-          <ProjectCoordinatorControl
-            bound={Boolean(p.coordinatorSessionId)}
-            pending={coordinator.isPending}
-            error={coordinator.error}
-            onOpen={() => coordinator.mutate()}
-          />
 
           {/* The same tasks the graph above draws, as an indented topological plan — and the only
               one of the two that is exact at any size. Inside this branch on purpose: the tasks
@@ -353,10 +338,11 @@ export const coordinatorSessionPath = (sessionId: string): string =>
 /**
  * Resolve-or-create this project's one coordinator session.
  *
- * A POST every time, including from a project whose detail payload already names a coordinator.
- * The pointer it carries can be stale — the session behind it may since have gone to Trash — and
- * the server is what notices and replaces it, handing back the live conversation. Deep-linking
- * straight to `coordinatorSessionId` would skip that repair and land the reader inside Trash.
+ * A POST every time, including from a project whose status read already names a coordinator. The
+ * pointer it carries can be stale — the session behind it may since have gone to Trash — and the
+ * server is what notices and replaces it, handing back the live conversation. Following
+ * `coordination.sessionId` straight to a route would skip that repair and land the reader inside
+ * Trash.
  *
  * The body is `{}` rather than nothing: `workspaceId` is what picks where a FIRST coordinator
  * opens, and this unit deliberately has no picker, so it sends none and lets the server's own
@@ -368,59 +354,313 @@ export function openProjectCoordinator(projectId: string): Promise<CoordinatorRe
 }
 
 /**
- * The Coordinator section as a function of its state alone.
+ * The Coordinator, as the project header's right-hand column.
  *
- * Presentational, and exported for the same reason ProjectTaskLevel is: a static render cannot
- * press the button, so handing each state in directly is the only way to assert what pending and
- * failed actually put on screen.
+ * Self-contained on the same terms as every other card on this page: it runs its own read, draws
+ * its own loading and failure, and a status endpoint that 500s costs the reader the coordinator
+ * and nothing else. Exported because a static render cannot press a button — mounting this
+ * directly is the only way to assert what each press does.
  *
- * One control for both labels. `bound` changes what the button is called — a project that already
- * has a coordinator is being reopened, not started — and nothing else: both spellings fire the
- * same resolve-or-create request, because which of the two it turns out to be is the server's
- * answer, not this component's guess.
+ * WHAT IT ADDS to the card it wraps is the three things a presentational component cannot do: the
+ * POST, the navigation, and the one sentence the POST's answer can force. Everything about which
+ * of the four states is on screen is the card's, and everything about what a press COSTS is here.
  */
-export function ProjectCoordinatorControl({
-  bound,
-  pending,
-  error,
-  onOpen,
+export function ProjectCoordinatorSection({
+  projectId,
+  layout,
+  openTaskCount,
 }: {
-  bound: boolean;
-  pending: boolean;
-  error: Error | null;
-  onOpen: () => void;
+  projectId: string;
+  layout: CoordinatorCardLayout;
+  /** Open tasks in this project — the card says what the conversation is FOR, and the status
+   *  payload deliberately carries no task tally. */
+  openTaskCount?: number;
 }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [rebinding, setRebinding] = useState(false);
+  const status = useQuery(projectCoordinatorStatusQuery(projectId));
+
+  const open = useMutation({
+    mutationKey: ['project', projectId, 'coordinator'],
+    mutationFn: async () => {
+      // Read BEFORE the press, because afterwards it is gone: `created` alone cannot tell a FIRST
+      // coordinator from a REPLACEMENT for one that went to Trash, and only the second costs the
+      // reader a conversation. The pair does tell them apart.
+      const bound = status.data?.coordination.sessionId != null;
+      return { ...(await openProjectCoordinator(projectId)), bound };
+    },
+    onSuccess: (result) => {
+      // The id navigated to is the SERVER's, never the pointer the status read arrived with: on a
+      // trashed binding those are two different sessions and only the returned one is live.
+      navigate(coordinatorSessionPath(result.sessionId));
+      if (result.bound && result.created) {
+        // The one case where following the button lands somewhere other than where the reader was
+        // going. Said on the way in rather than left to be discovered from an empty transcript.
+        toast.warning(
+          'This is a NEW coordinator conversation — the previous one was gone, and its history did not come with it.',
+        );
+      }
+    },
+  });
+
+  const failure = open.error;
+  const unavailable = isCoordinatorUnavailable(failure);
+  // Where the reader is sent to repair a landing. The BOUND workspace, not the landing the status
+  // proposed: `COORDINATOR_UNAVAILABLE` is a refusal ABOUT the workspace this project is tied to,
+  // and on `WORKSPACE_FORGOTTEN` there is no id left to send anyone to.
+  const boundWorkspaceId = status.data?.coordination.workspaceId ?? null;
+
+  const restore = useMutation({
+    mutationFn: async () => {
+      const sessionId = status.data?.coordination.sessionId;
+      if (!sessionId) throw new Error('There is no conversation left to restore.');
+      return restoreSession(sessionId);
+    },
+    // The project's own document names the pointer this just brought back, so both entries under
+    // `['project', id]` are refreshed by the one invalidation.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
+  });
+
+  const act = (action: CoordinatorAction): void => {
+    switch (action) {
+      case 'open':
+      case 'start':
+        open.mutate();
+        return;
+      // Both are "this project's coordinator should open somewhere else", which is one write.
+      case 'change-workspace':
+      case 'rebind-workspace':
+        setRebinding(true);
+        return;
+      // The workspace itself is what is broken; it is repaired where it is configured.
+      case 'enable-workspace':
+      case 'restore-workspace':
+      case 'bind-workspace':
+        if (boundWorkspaceId) navigate(`/workspaces/${encodeURIComponent(encodeId(boundWorkspaceId))}`);
+        return;
+      case 'restore-session':
+        restore.mutate();
+    }
+  };
+
   return (
-    <div style={{ marginBottom: 24 }}>
-      <Typography.Title level={4}>Coordinator</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        A project has exactly one coordinator session. Opening it here reuses that conversation, or
-        starts it if there is none yet.
-      </Typography.Paragraph>
-
-      {/* `disabled` as well as `loading`: the spinner says a request is in flight, but only the
-          disabled state stops a second press from opening a second one. */}
-      <Button type="primary" loading={pending} disabled={pending} onClick={onOpen}>
-        {bound ? 'Open coordinator' : 'Start coordinator'}
-      </Button>
-
-      {/* The server's own message, verbatim. On the one failure a reader can act on — no workspace
-          to open in — it names both ways out, and this unit has no picker of its own to offer
-          instead. Inline, so a failure here leaves the project and its tasks where they were. */}
-      {error ? (
+    <div
+      className="project-detail-header-coordinator"
+      style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
+    >
+      {status.isPending ? (
+        <div
+          aria-label="Coordinator"
+          style={{
+            boxSizing: 'border-box',
+            width: layout === 'desktop' ? 352 : '100%',
+            padding: 32,
+            textAlign: 'center',
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 10,
+          }}
+        >
+          <Spin />
+        </div>
+      ) : status.isError ? (
+        // A READ that failed, which is the one thing here Retry is the right answer to.
         <Alert
-          style={{ marginTop: 16 }}
           type="error"
           showIcon
-          message="Coordinator could not be opened"
-          description={error.message}
+          message="Coordinator could not be read"
+          description={status.error instanceof Error ? status.error.message : undefined}
           action={
-            <Button size="small" danger onClick={onOpen}>
+            <Button size="small" danger onClick={() => status.refetch()}>
               Retry
             </Button>
           }
         />
+      ) : (
+        <>
+          <ProjectCoordinatorCard
+            status={status.data}
+            layout={layout}
+            openTaskCount={openTaskCount}
+            onAction={act}
+          />
+          {/* A press that was refused. `COORDINATOR_UNAVAILABLE` is a property of committed rows,
+              so the same press returns the same 409 forever — it gets the two writes that can
+              actually change the answer instead of a Retry that cannot. */}
+          {failure ? (
+            <Alert
+              type="error"
+              showIcon
+              message={unavailable ? 'The coordinator cannot be opened' : 'Coordinator could not be opened'}
+              description={failure.message}
+              action={
+                unavailable ? (
+                  <Button size="small" onClick={() => setRebinding(true)}>
+                    Rebind workspace…
+                  </Button>
+                ) : (
+                  <Button size="small" danger onClick={() => open.mutate()}>
+                    Retry
+                  </Button>
+                )
+              }
+            />
+          ) : null}
+          {restore.error ? (
+            <Alert type="error" showIcon message="Could not restore" description={restore.error.message} />
+          ) : null}
+        </>
+      )}
+
+      {rebinding ? (
+        <CoordinatorRebindDialog
+          projectId={projectId}
+          currentWorkspaceId={boundWorkspaceId}
+          onClose={() => setRebinding(false)}
+        />
       ) : null}
+    </div>
+  );
+}
+
+/** The refusal this page answers with a repair instead of a Retry. Read off the machine `code`
+ *  the server sent, never the prose: 409 is several different refusals and only this one is
+ *  fixed by moving the project's coordination workspace. */
+export const COORDINATOR_UNAVAILABLE = 'COORDINATOR_UNAVAILABLE';
+
+export function isCoordinatorUnavailable(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && error.code === COORDINATOR_UNAVAILABLE;
+}
+
+/** What POST /projects/:id/coordinator/rebind answers with. `moved` is false when the project
+ *  already recorded this landing — a replay writes nothing. */
+export interface CoordinatorRebindResult {
+  projectId: string;
+  coordinatorWorkspaceId: string;
+  coordinatorSessionId: string | null;
+  moved: boolean;
+}
+
+/**
+ * Move where this project's coordinator opens.
+ *
+ * The verb behind every `COORDINATOR_UNAVAILABLE`, whose `requiredAction` has always read "rebind
+ * this project's coordination workspace, then open the coordinator again". It writes the landing
+ * and nothing else — not the session pointer, which is a rotation, and not the coordinator
+ * identity — so a project with a live conversation keeps it and opens the NEXT one elsewhere.
+ */
+export function rebindProjectCoordinator(
+  projectId: string,
+  workspaceId: string,
+): Promise<CoordinatorRebindResult> {
+  return api<CoordinatorRebindResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } });
+}
+
+/** Pick the workspace this project's coordinator opens in. Mounted only while open, so a project
+ *  page that nobody rebinds never asks for the workspace list. */
+function CoordinatorRebindDialog({
+  projectId,
+  currentWorkspaceId,
+  onClose,
+}: {
+  projectId: string;
+  currentWorkspaceId: string | null;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const workspaces = useQuery(workspacesQuery());
+  const [picked, setPicked] = useState<string | undefined>(undefined);
+  const rebind = useMutation({
+    mutationFn: (workspaceId: string) => rebindProjectCoordinator(projectId, workspaceId),
+    onSuccess: () => {
+      // Both the project document and the status read live under this prefix, and the refusal the
+      // card is showing is decided by the row this just wrote.
+      void qc.invalidateQueries({ queryKey: ['project', projectId] });
+      onClose();
+    },
+  });
+
+  return (
+    <Modal
+      open
+      title="Rebind coordination workspace"
+      okText="Rebind"
+      okButtonProps={{ disabled: !picked, loading: rebind.isPending }}
+      onOk={() => picked && rebind.mutate(picked)}
+      onCancel={onClose}
+    >
+      <Typography.Paragraph type="secondary">
+        The coordinator opens in this workspace from now on. The conversation already recorded is
+        left where it is — this decides where the NEXT one opens.
+      </Typography.Paragraph>
+      <Select
+        style={{ width: '100%' }}
+        placeholder="Workspace"
+        loading={workspaces.isPending}
+        value={picked}
+        onChange={setPicked}
+        options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({
+          value: w.id,
+          label: w.id === currentWorkspaceId ? `${w.name} (current)` : w.name,
+        }))}
+      />
+      {rebind.error ? (
+        <Alert
+          style={{ marginTop: 12 }}
+          type="error"
+          showIcon
+          message="Could not rebind"
+          description={rebind.error.message}
+        />
+      ) : null}
+    </Modal>
+  );
+}
+
+/**
+ * The header's tallies: how much work this project holds, how it is filed, and how much of it is
+ * actually MOVING.
+ *
+ * `Running` is not one of `tasksByStatus`'s keys and never will be — dispatch does not write
+ * `IN_PROGRESS` (see `ProjectPanoramaHeader`), so the row of status tags beside it files a task
+ * with an agent working on it under OPEN. It comes from the panorama, which joins the live
+ * sessions, and shares that card's cache entry: the number costs no second request.
+ *
+ * Shown only once that read has landed. A `Running 0` painted while the answer is still in flight
+ * is the one reading of this number nobody can act on — "nothing is moving" and "we do not know
+ * yet" are different facts.
+ */
+function ProjectHeaderTallies({
+  projectId,
+  total,
+  byStatus,
+}: {
+  projectId: string;
+  total: number;
+  byStatus: Array<[string, number]>;
+}) {
+  const panorama = useQuery(projectPanoramaQuery(projectId));
+  const running = panorama.data?.buckets.running;
+
+  return (
+    <div>
+      <span style={{ marginRight: 8 }}>
+        {total} task{total === 1 ? '' : 's'}
+      </span>
+      {byStatus.length === 0 ? (
+        <Typography.Text type="secondary">No tasks yet</Typography.Text>
+      ) : (
+        <>
+          {running === undefined ? null : <Tag color="processing">Running {running}</Tag>}
+          {byStatus.map(([status, n]) => (
+            <Tag key={status}>
+              {status} {n}
+            </Tag>
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -1021,9 +1261,9 @@ function FormRow({ label, children }: { label: string; children: ReactNode }) {
 /**
  * The New task form's fields, in one state.
  *
- * Presentational and exported for the same reason ProjectCoordinatorControl is — and here it is
- * also the only way: an antd Modal renders through a portal, which a static render produces no
- * markup at all for, so the body has to be mountable on its own to be assertable at all.
+ * Presentational and exported for the same reason ProjectTaskLevel is — and here it is also the
+ * only way: an antd Modal renders through a portal, which a static render produces no markup at
+ * all for, so the body has to be mountable on its own to be assertable at all.
  *
  * It does read its own option sources rather than take them as props. They are the same three the
  * task panel's pickers use, at the same keys: the owner's workspaces, the configured (BYOK)
