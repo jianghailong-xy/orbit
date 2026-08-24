@@ -812,7 +812,16 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
     .map(([level, tasks]) => ({
       key: `level-${level}`,
       level,
-      heading: level === 0 ? 'Level 0 · ready now' : `Level ${level} · waits on level ${level - 1}`,
+      // "ready" is a fact about the graph — nothing in this project is holding these up. It is not
+      // a fact about what happens next, and the heading must not let it be read as one: tasks here
+      // are dispatched by the coordinator (dispatch_authority COORDINATOR), the auto-run sweep
+      // takes only LEGACY and stands down on these, so a level 0 band left alone runs never. The
+      // page head's coordinator card makes the same claim from the other side — "tasks never start
+      // on their own" — and these two sentences have to keep agreeing.
+      heading:
+        level === 0
+          ? 'Level 0 · ready — the coordinator starts these'
+          : `Level ${level} · waits on level ${level - 1}`,
       tasks,
     }));
   if (done.length > 0) groups.push({ key: 'done', level: null, heading: 'Done', tasks: done });

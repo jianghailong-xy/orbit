@@ -105,8 +105,10 @@ describe('ProjectTasks — topological bands', () => {
     expect(bandKeys(out)).toEqual(['level-0', 'level-1', 'level-2']);
 
     // The heading is the whole message: level 0 is what nothing in this project is holding up,
-    // and every level after it names what it is queued behind.
-    expect(out).toContain('Level 0 · ready now');
+    // and every level after it names what it is queued behind. Read as a predicate rather than as
+    // a fixed sentence — the wording of level 0's half is free to change, what it claims is not.
+    expect(band(out, 'level-0')).toMatch(/Level 0\b/);
+    expect(band(out, 'level-0')).toMatch(/\bready\b/i);
     expect(out).toContain('Level 1 · waits on level 0');
     expect(out).toContain('Level 2 · waits on level 1');
 
@@ -118,6 +120,27 @@ describe('ProjectTasks — topological bands', () => {
     expect(band(out, 'level-0')).toContain('2 tasks');
     expect(band(out, 'level-1')).toContain('1 task');
     expect(out).not.toContain('1 tasks'); // the singular, spelled correctly
+  });
+
+  it('says who starts level 0, and never that it is already starting', () => {
+    // Two rows, so the claim is read off a band header and not off a single task's own row.
+    const { out } = withPage([
+      task({ id: T1, title: 'Draft the schema', topoLevel: 0 }),
+      task({ id: T2, title: 'Pick the palette', topoLevel: 0 }),
+    ]);
+    const heading = band(out, 'level-0');
+
+    // The header used to read `ready now`, which promised a start nothing was going to make:
+    // tasks in a project carry dispatch_authority COORDINATOR, the auto-run sweep takes only
+    // LEGACY rows and stands down on these, and the control loop that once picked them up is
+    // gone. Unblocked, then, but not on its way — and the header has to name whose move it is.
+    expect(heading).not.toMatch(/ready now/i);
+    expect(heading).toMatch(/coordinator/i);
+
+    // Which is the same thing the coordinator card in the page head says from its side ("tasks
+    // never start on their own"). If one of the two is ever softened, they stop agreeing, and a
+    // reader is owed one answer about who starts this work rather than two.
+    expect(heading).not.toMatch(/automatic|starts itself|starting now|will start/i);
   });
 
   it('sorts the bands but never the rows inside one', () => {
