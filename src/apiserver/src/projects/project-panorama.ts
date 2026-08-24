@@ -18,7 +18,7 @@ const MESH_EDGE_RATIO = 1.5;
 const MESH_MAX_TASKS = 30;
 
 /**
- * How this project's work is distributed, with `OPEN` split into the two things it conflates.
+ * How this project's work is distributed, with `OPEN` split into the three things it conflates.
  *
  * `tasksByStatus` (see `ProjectsService.get`) reports one OPEN number, and across the deployment
  * that number is 233 tasks waiting on a prerequisite and 29 that could start right now — the same
@@ -26,11 +26,18 @@ const MESH_MAX_TASKS = 30;
  * what this endpoint exists for: `ready > 0` with `running == 0` is a stalled project, and no
  * combined count can say so.
  *
+ * `running` is the third thing that OPEN hides, and the reason it is not simply
+ * `status = 'IN_PROGRESS'`: dispatch opens a Session and leaves the task row OPEN, so a project
+ * with three live runs used to report `running: 0` — and, worse, raise the stalled banner, which
+ * exists to say the queue is not being served. A task with a live Session is counted here and is
+ * therefore NOT in `ready`, whose card reads "unblocked, not dispatched".
+ *
  * A task in status FAILED is in none of these buckets, deliberately: it is neither work in flight
  * nor work settled, and folding it into `cancelled` would report a run that broke as a decision
  * somebody made. `shape.taskCount` still counts it, so the buckets need not sum to the total.
  */
 export interface ProjectPanoramaBuckets {
+  /** Work in flight: a task with a live Session on it, or one the row itself calls IN_PROGRESS. */
   running: number;
   ready: number;
   blocked: number;
@@ -92,16 +99,37 @@ export async function readProjectPanorama(
   const facts = projectTaskDependencyFactsSql(ownerId, projectId);
   // An aggregate with no GROUP BY returns exactly one row over zero input rows, which is what
   // makes an empty project a row of zeroes rather than an empty result to guess at.
+  //
+  // `live` is the dispatch half of `running`, and the join is a derived table rather than an
+  // `EXISTS` per task so a 23,442-task project costs one small index scan instead of 23,442
+  // probes: `session_task_execution_claim_idx` is partial over exactly these statuses, so the
+  // subquery reads the live sessions and nothing else.
+  //
+  // PENDING counts with RUNNING — both mean a session holds this task, which is what `ready`'s
+  // "not dispatched" denies — and the pair is the same one `TasksService.withRunning` derives, so
+  // the header, the task list and the project graph cannot disagree about a running task. Only an
+  // OPEN task is promoted: a re-run opened against a task that is already DONE must not take it
+  // back out of `done`, which is what the chain strip counts progress with.
   const [row] = await prisma.$queryRaw<PanoramaRow[]>(Prisma.sql`
-    SELECT (count(*) FILTER (WHERE f."status" = 'IN_PROGRESS'))::int AS "running",
-           (count(*) FILTER (WHERE f."status" = 'OPEN' AND f."unmetCount" = 0))::int AS "ready",
-           (count(*) FILTER (WHERE f."status" = 'OPEN' AND f."unmetCount" > 0))::int AS "blocked",
+    SELECT (count(*) FILTER (WHERE f."status" = 'IN_PROGRESS'
+                                OR (f."status" = 'OPEN' AND live.task_id IS NOT NULL)))::int AS "running",
+           (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
+                               AND f."unmetCount" = 0))::int AS "ready",
+           (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
+                               AND f."unmetCount" > 0))::int AS "blocked",
            (count(*) FILTER (WHERE f."status" = 'DONE'))::int AS "done",
            (count(*) FILTER (WHERE f."status" = 'CANCELLED'))::int AS "cancelled",
            count(*)::int AS "taskCount",
            coalesce(sum(f."projectPrerequisiteCount"), 0)::int AS "edgeCount",
            coalesce(max(f."topoLevel"), 0)::int AS "maxDepth"
-      FROM (${facts}) f`);
+      FROM (${facts}) f
+      LEFT JOIN (
+        SELECT DISTINCT s.task_id
+          FROM session s
+         WHERE s.owner_id = ${ownerId}::uuid
+           AND s.status IN ('PENDING', 'RUNNING')
+           AND s.task_id IS NOT NULL
+      ) live ON live.task_id = f."taskId"`);
 
   const taskCount = row?.taskCount ?? 0;
   const edgeCount = row?.edgeCount ?? 0;
