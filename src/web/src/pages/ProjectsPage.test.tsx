@@ -11,7 +11,6 @@ import { PANORAMA_BUCKETS } from '../components/ProjectPanoramaHeader';
 import {
   EMPTY_NEW_TASK_DRAFT,
   NewProjectTaskForm,
-  ProjectCoordinatorControl,
   ProjectDetailPage,
   ProjectTaskLevel,
   ProjectsPage,
@@ -42,7 +41,16 @@ import {
 // against an accidental live call and as the place a URL shows up when a test calls a registered
 // queryFn by hand (see urlOf); the source-level endpoint check below is what fixes the shape of
 // every call, including the ones no test invokes.
-vi.mock('../api', () => ({ api: vi.fn(() => new Promise(() => {})) }));
+vi.mock('../api', async (importOriginal) => ({
+  // `ApiError` REAL, not restated: the page decides whether a refused press gets a Retry by asking
+  // `error instanceof ApiError && error.status === 409 && error.code === …`, and a stand-in class
+  // here would let that branch pass against a shape the client never throws.
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(() => new Promise(() => {})),
+  // Named helper rather than an inline `api(...)`, so the source scan below cannot see it — stub
+  // it or a Restore press would reach the real fetch.
+  restoreSession: vi.fn(() => new Promise(() => {})),
+}));
 // The project page now draws the dependency graph itself, behind a `lazy()` boundary. A static
 // render only ever paints that boundary's fallback, so pulling React Flow into this
 // node-environment suite would buy nothing but its import cost — the graph is asserted in
@@ -56,6 +64,15 @@ vi.mock('../components/ProjectDependencyGraph', async () => {
 });
 
 const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.meta.url)), 'utf8');
+/** The shared query factories, read for the one endpoint this page reaches through them. */
+const queriesSource = readFileSync(
+  fileURLToPath(new URL('../lib/queries.ts', import.meta.url)),
+  'utf8',
+);
+/** An `api(...)` call with its whole argument list. Two levels of nesting so neither
+ *  encodeURIComponent(...) nor the encodeId(...) inside it cuts the match short — a call this
+ *  cannot parse drops out of the list entirely, which fails the assertion too. */
+const API_CALL = /\bapi(?:<[^>]*>)?\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/g;
 
 // Real UUIDs, not placeholder strings: the row link runs them through encodeId, which throws on
 // anything that is neither spelling — so a fake id here would fail the render, not the assertion.
@@ -121,10 +138,6 @@ function newClient() {
 // unilaterally should break these tests, which it can't do if both sides read one constant.
 const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'tasks', 'root'];
 
-// The Coordinator surface's own entry, under the SAME `['project', id]` prefix as the document —
-// which is what makes one invalidation after a control write refresh both. Spelled out here for
-// the same reason tasksKey is: a key the page changed unilaterally should break these tests.
-
 // Unit L7's two entries, under the same `['project', id]` prefix and for the same reason: what a
 // person is asked to ANSWER about this project (the crossings queue) and what reopening it would
 // cost. Both mount with the page, so an invalidation after either write refreshes them together
@@ -137,14 +150,23 @@ const attributionKeys = (projectUuid: string) => {
   ];
 };
 
-// Every entry the panorama cards register, in the order they mount. Three, not four: the
-// acceptance card reads the project document under `['project', id]` — the entry the page already
-// holds — and the chain strip deliberately shares the header's `panorama` key and the ranking's
-// `blocking` one, so neither adds a request.
-const panoramaKeys = (projectUuid: string) => {
+// Every entry the head and the panorama cards register, in the order they mount:
+//
+//  1. the four buckets — asked for by the header's `Running` tally, which is why it comes FIRST,
+//     and read again by the panorama card lower down off the same entry, so it costs one request;
+//  2. the Coordinator surface's own read, under the SAME `['project', id]` prefix as the document,
+//     which is what makes one invalidation after a coordinator write refresh both;
+//  3. the blocking ranking.
+//
+// Three, not five: the acceptance card reads the project document under `['project', id]` — the
+// entry the page already holds — and the chain strip deliberately shares the header's `panorama`
+// key, so neither adds a request. Spelled out rather than imported, for the same reason tasksKey
+// is: a key the page changed unilaterally should break these tests.
+const headerKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
     ['project', id, 'panorama'],
+    ['project', id, 'coordinator', 'status'],
     ['project', id, 'panorama', 'blocking', 5],
   ];
 };
@@ -198,16 +220,12 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the coordinator POST, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if an eighth
-    // api(...) call is added anywhere in the file. The arg pattern allows two levels of nesting so
-    // that neither encodeURIComponent(...) nor the encodeId(...) inside it cuts the match short —
-    // a call it cannot parse drops out of this list entirely, which fails the assertion too.
-    const apiCalls = [
-      ...source.matchAll(/\bapi(?:<[^>]*>)?\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/g),
-    ].map(
+    // Fails if any call grows extra args or a query string, if a path changes, or if a ninth
+    // api(...) call is added anywhere in the file (see API_CALL for what it can parse).
+    const apiCalls = [...source.matchAll(API_CALL)].map(
       // A call wrapped across lines keeps its trailing comma; the URL is what this asserts on.
       (m) => m[1].trim().replace(/,$/, ''),
     );
@@ -228,6 +246,10 @@ describe('ProjectsPage', () => {
       // than followed. Method and body are held here as literally as the path, because an empty
       // body is the whole contract of this unit.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} }",
+      // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
+      // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
+      // one would be a way to REACH the state it exists to leave.
+      "`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } }",
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
@@ -266,12 +288,29 @@ describe('ProjectsPage', () => {
     expect(source).toContain(
       [
         'import {',
+        '  projectCoordinatorStatusQuery,',
         '  providersQuery,',
         '  runnersQuery,',
         '  workspacesQuery,',
         "} from '../lib/queries';",
       ].join('\n'),
     );
+
+    // The page's SEVENTH endpoint — the read the coordinator card is drawn from. Its `api(...)`
+    // lives in lib/queries.ts, so the scan above cannot see it and the list would under-report
+    // what this page puts on the wire. Read out of that one factory (the rest of the module
+    // belongs to other pages) and asserted to be exactly one call at exactly this path, so the
+    // two assertions together are the whole of it.
+    const factory =
+      queriesSource.match(/export const projectCoordinatorStatusQuery = \([\s\S]*?\n  \}\);/)?.[0] ?? '';
+    expect(factory).not.toBe('');
+    expect([...factory.matchAll(API_CALL)].map((m) => m[1].trim())).toEqual([
+      '`/projects/${encodeURIComponent(projectId)}/coordinator/status`',
+    ]);
+
+    // ...and one more that no regex can see: a named helper imported from the api client. Held by
+    // the import line itself, so a second one added here has to be added here too.
+    expect(source).toContain("import { ApiError, api, restoreSession } from '../api';");
   });
 
   it('renders each project’s title, status, task count and goal/fallback', () => {
@@ -1156,7 +1195,7 @@ describe('ProjectDetailPage — top-level tasks', () => {
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
-      ...panoramaKeys(P1),
+      ...headerKeys(P1),
       ...attributionKeys(P1),
     ]);
   });
@@ -1346,7 +1385,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
-      ...panoramaKeys(P1),
+      ...headerKeys(P1),
       ...attributionKeys(P1),
     ]);
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();

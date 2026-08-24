@@ -8,7 +8,12 @@ import { useEffect, useState } from 'react';
 export const MOBILE_QUERY = '(max-width: 960px)';
 
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  // Guarded rather than read straight: this also runs under `renderToStaticMarkup`, where there
+  // is no window at all. "No window" answers false — the desktop reading — and the effect below
+  // corrects it on the first commit in a browser.
+  const [matches, setMatches] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  );
   useEffect(() => {
     const mql = window.matchMedia(query);
     const onChange = (): void => setMatches(mql.matches);

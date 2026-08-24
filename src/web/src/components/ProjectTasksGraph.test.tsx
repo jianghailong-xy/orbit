@@ -68,7 +68,10 @@ async function mount(node: ReactElement): Promise<void> {
 
 const testid = (name: string) => container.querySelector(`[data-testid="${name}"]`);
 
-describe('ProjectTasksGraph', () => {
+// Past the 5s default: `vi.resetModules()` above means each test re-imports this component and
+// everything under it (antd included) from cold before it can mount, which takes seconds on a
+// loaded machine. A budget for a slow import, not for a hang — the assertions are unchanged.
+describe('ProjectTasksGraph', { timeout: 20_000 }, () => {
   it('draws the graph on its own, with nothing for the reader to select first', async () => {
     const Section = await loadSection();
     await mount(<Section projectId="p1" />);
