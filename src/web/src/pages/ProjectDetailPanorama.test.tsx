@@ -315,16 +315,17 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // What the project was SET UP to be, between the picture and the list that carries it out —
     // the graph and the list are two readings of one thing, and the fields are what they are for.
     expect(goal).toBeGreaterThan(chain);
-    expect(tasks).toBeGreaterThan(goal);
-    // The three cards a reader consults less often than either, in their own order after both.
+    // What it was set up to be, then how anyone would know it got there, then the work itself.
+    // Acceptance is the OUTCOME measure, and it leads the task list rather than trailing it:
+    // "did this meet its bar" is the question the counts below cannot answer.
+    expect(acceptance).toBeGreaterThan(goal);
+    expect(tasks).toBeGreaterThan(acceptance);
+    // The cards a reader consults less often than either, in their own order after both.
     expect(ranking).toBeGreaterThan(tasks);
-    // Side by side, so the ranking leads and acceptance follows within the same row.
-    expect(acceptance).toBeGreaterThan(ranking);
 
-    // And the pair really is a pair — one grid, two cards, neither wrapping the other.
-    const pair = container.querySelector('.project-panorama-pair');
-    expect(pair).not.toBeNull();
-    expect(pair!.children.length).toBe(2);
+    // The ranking is full width now rather than the wide half of a pair — it carries a horizontal
+    // bar per row and was the half that needed the width, and the pair went with acceptance.
+    expect(container.querySelector('.project-panorama-pair')).toBeNull();
   });
 
   it('keeps a card that fails to that card, and the rest of the page standing', async () => {
@@ -410,13 +411,22 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     serve();
     await mount(page());
 
-    // The three free-text fields, in full and under their own labels.
+    // The two remaining free-text fields, in full and under their own labels.
     expect(shows('Goal')).toBe(true);
     expect(shows('Ship the new marketing site')).toBe(true);
-    expect(shows('Acceptance criteria')).toBe(true);
-    expect(shows('Lighthouse ≥ 90 on every page')).toBe(true);
     expect(shows('Instructions')).toBe(true);
     expect(shows('Land behind a flag, then flip it')).toBe(true);
+
+    // Acceptance is not a third one any more. It used to be BOTH a field of authored text and a
+    // card of the same sentences with verdicts against them — the server makes one criterion out
+    // of every non-blank line of that field, so the two were always the same list, and only the
+    // lower one said what a run had concluded. What is left is the standing.
+    expect(shows('Acceptance criteria')).toBe(false);
+    expect(shows('Every page scores 90 or better')).toBe(true);
+    expect(shows('No console errors on load')).toBe(true);
+    // This fixture's authored text differs from its parsed criteria on purpose: it is how a
+    // second copy of the list would be caught if one ever came back.
+    expect(shows('Lighthouse ≥ 90 on every page')).toBe(false);
 
     // Below the panorama, which is the move this assembly made: what the project was set up to be
     // is read once, where the panorama is what a reader comes back for.
@@ -431,8 +441,8 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // first match and stay green on a page that draws the whole block a second time lower down.
     expect(countOf('>Goal</h5>')).toBe(1);
     expect(countOf('Ship the new marketing site')).toBe(1);
-    expect(countOf('>Acceptance criteria</h5>')).toBe(1);
-    expect(countOf('Lighthouse ≥ 90 on every page')).toBe(1);
+    expect(countOf('>Acceptance</div>')).toBe(1);
+    expect(countOf('Every page scores 90 or better')).toBe(1);
     expect(countOf('>Instructions</h5>')).toBe(1);
     expect(countOf('Land behind a flag, then flip it')).toBe(1);
     // The chain strip sat inside the same duplicated run and drew twice with them.

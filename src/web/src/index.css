@@ -9204,20 +9204,122 @@ html[data-theme='dark'] .session-tag-chip {
   }
 }
 
-/* The panorama's middle row: the blocking ranking beside the acceptance card, at the 1.32 : 1 the
-   design calls for — the ranking carries a horizontal bar per row and goes unreadable first when
-   the column narrows, and acceptance is a column of short lines that does not. `start` rather than
-   the default stretch so neither card is padded out to the other's height; they are two cards, not
-   two halves of one. Below 860px there is no longer room for two of either, so they stack. */
-.project-panorama-pair {
-  display: grid;
-  grid-template-columns: 1.32fr 1fr;
-  gap: 14px;
-  align-items: start;
+/* The acceptance section: the stated criteria and the latest attempt's verdict on each, as one
+   full-width card between the goal and the task list. It used to be the narrow half of a 1.32 : 1
+   pair with the blocking ranking, which had the widths backwards — the ranking is horizontal bars
+   that need room, and criteria are whole sentences that were being wrapped to four lines each.
+
+   The card's body padding is 0 and every block below sets its own, so a row spans the full width:
+   a failed criterion's tint and left accent reach the card edge instead of floating inside a
+   24px gutter. */
+.acceptance-card {
+  margin-bottom: 24px;
 }
-@media (max-width: 860px) {
-  .project-panorama-pair {
-    grid-template-columns: 1fr;
+.acceptance-head-extra {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.acceptance-standing-figure {
+  text-align: right;
+}
+/* Neutral until a run has earned a colour: `{total} unjudged` is a count of what is stated, and
+   painting it green or red would be this card reporting a verdict nobody reached. */
+.acceptance-score {
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.acceptance-score.is-ran {
+  color: var(--success);
+}
+/* One segment per criterion, in stated order — segment three is criterion three. Fixed width so
+   the segments of a 7-criterion project and a 20-criterion one are read on the same scale. */
+.acceptance-meter {
+  display: flex;
+  gap: 2px;
+  width: 154px;
+  margin-top: 6px;
+}
+.acceptance-meter > i {
+  height: 6px;
+  border-radius: 2px;
+}
+.acceptance-standing {
+  padding: 12px 24px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.acceptance-block {
+  padding: 12px 24px;
+}
+.acceptance-criteria {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.acceptance-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+/* A failed criterion is the one row a reader is scanning 53 of them for. Tint plus an edge accent
+   plus the badge: three signals, only one of which is a hue. */
+.acceptance-row.is-fail {
+  background: var(--error-bg);
+}
+.acceptance-row.is-fail::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+  background: var(--error-solid);
+}
+.acceptance-row-no {
+  flex: none;
+  width: 20px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.acceptance-row-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.66;
+}
+/* A rail, not a column that hugs its badge: right-aligned in a fixed width, the verdicts line up
+   as one vertical stripe however long the sentences beside them are. Sized for INCONCLUSIVE. */
+.acceptance-row-verdict {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  width: 118px;
+}
+.acceptance-note {
+  padding: 10px 24px 12px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* On a phone the rail costs a third of the line. The verdict goes under its criterion instead,
+   still left-of-nothing so the eye finds it in the same place on every row. */
+@media (max-width: 560px) {
+  .acceptance-row {
+    flex-wrap: wrap;
+  }
+  .acceptance-row-verdict {
+    justify-content: flex-start;
+    width: auto;
+    margin-inline-start: 32px;
   }
 }
 

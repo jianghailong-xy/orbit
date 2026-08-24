@@ -627,14 +627,19 @@ export function ProjectDetailPage() {
               because on a chain it is the reading the graph cannot give. */}
           <ProjectChainProgress projectId={id} />
 
-          {/* Between the picture and the list: these three are what the project was SET UP to be,
-              which is what a reader needs in hand before reading the tasks that carry it out. */}
+          {/* Between the picture and the list: what the project was SET UP to be, which is what a
+              reader needs in hand before reading the tasks that carry it out. */}
           <Field label="Goal" text={p.goal} empty="No goal set" />
-          <Field
-            label="Acceptance criteria"
-            text={p.acceptanceCriteria}
-            empty="No acceptance criteria set"
-          />
+
+          {/* The criteria live HERE and nowhere else on this page. There used to be a
+              `Field label="Acceptance criteria"` in this slot as well as the card below the task
+              list, and the server parses one criterion out of every non-blank line of that same
+              field — so the two were always the same sentences, and only the lower one carried the
+              verdicts. One section now carries both, in the slot the stated criteria always had:
+              after the goal, above the plan, and above the task list rather than buried under it,
+              because "did it meet its bar" outranks "how far along is it". */}
+          <ProjectAcceptanceCard projectId={id} />
+
           <Field label="Instructions" text={p.instructions} empty="No instructions set" />
 
           {/* The same tasks the graph above draws, as an indented topological plan — and the only
@@ -644,12 +649,10 @@ export function ProjectDetailPage() {
               — the same spelling the project query above is keyed and fetched with. */}
           <ProjectTasks projectId={id} />
 
-          {/* 1.32 : 1, and one column below 860px. The ranking carries a bar per row and needs
-              the width; acceptance is a column of short lines and does not. */}
-          <div className="project-panorama-pair">
-            <ProjectBlockingLeaderboard projectId={id} />
-            <ProjectAcceptanceCard projectId={id} />
-          </div>
+          {/* Full width, on its own. It shared a 1.32 : 1 row with the acceptance card until
+              acceptance moved up under the goal; the ranking carries a horizontal bar per row and
+              was the half that needed the width all along. */}
+          <ProjectBlockingLeaderboard projectId={id} />
 
           {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator

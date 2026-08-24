@@ -999,7 +999,11 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('Goal');
     expect(html).toContain(longGoal); // in full — no excerpt, no ellipsis
     expect(html).not.toContain('…');
-    expect(html).toContain('Acceptance criteria');
+    // The criteria have one home: the Acceptance section, not a second heading of their own.
+    // This fixture carries no `acceptance` payload, so what shows is the card's fallback — the
+    // authored text, which is the only account of them a server like that can give.
+    expect(html).toContain('Acceptance');
+    expect(html).not.toContain('Acceptance criteria');
     expect(html).toContain('Lighthouse ≥ 90 on every page');
     expect(html).toContain('Instructions');
     expect(html).toContain('Land behind a flag, then flip it');
@@ -1050,7 +1054,10 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('Legacy Cleanup');
     expect(html).toContain('0 tasks');
     expect(html).toContain('No goal set');
-    expect(html).toContain('No acceptance criteria set');
+    // Acceptance is no longer one of the free-text fields, so its empty state is the section's
+    // own: this fixture's server reports no standing at all, and there is no authored text under
+    // it either. What a project with criteria and no run says is the card suite's.
+    expect(html).toContain('does not report acceptance standing');
     expect(html).toContain('No instructions set');
   });
 

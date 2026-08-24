@@ -1,7 +1,12 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Skeleton, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Skeleton, Tag, Typography } from 'antd';
+import Markdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { remarkHardBreaks } from '../lib/remarkHardBreaks';
+import { ago } from '../lib/runnerEngines';
 
 /**
  * The OUTCOME half of "is this project done", drawn from `GET /projects/:id` → `acceptance`.
@@ -11,13 +16,25 @@ import { api } from '../api';
  * how many of the stated criteria the LATEST acceptance attempt concluded PASS about — and, for
  * the common case where no attempt has ever run, says exactly that instead of implying a score.
  *
- * TWO THINGS THIS FILE IS CAREFUL ABOUT
+ * THIS IS THE PROJECT PAGE'S ONE HOME FOR THE CRITERIA. The page used to render them twice: once
+ * as the authored `acceptanceCriteria` free text under its own heading, and again here with a
+ * verdict per row. That was not a coincidence to be tidied up — the server's `parseCriteria` makes
+ * one criterion out of every non-blank line of that same field, so the two lists were always the
+ * same sentences, and neither said which was authoritative. The reader who stopped at the first
+ * one never learnt that acceptance had never run. So the field is gone and this card carries both
+ * halves: what was stated, and what the latest attempt concluded about each of them.
  *
- *  - **A verdict is text before it is a colour.** Every badge carries PASS / FAIL / — as glyphs.
- *    Hue is the second signal, never the only one.
+ * THREE THINGS THIS FILE IS CAREFUL ABOUT
+ *
+ *  - **A verdict is text before it is a colour.** Every badge carries PASS / FAIL / — as glyphs,
+ *    and the meter in the head carries its reading in `aria-label`. Hue is the second signal.
  *  - **Never run is not zero.** A project with 53 stated criteria and no run is the normal state,
- *    not a failing one. It gets a stated empty state and no ratio at all, because "0 / 53" and
+ *    not a failing one. It gets a stated standing and no ratio at all, because "0 / 53" and
  *    "0 / 0" both read as a score somebody earned.
+ *  - **Losing the field must not lose the text.** A server that does not report `acceptance` still
+ *    has the authored criteria in the document, and this card renders them as Markdown in that
+ *    case — otherwise removing the heading above would have cost that reader the criteria
+ *    entirely.
  */
 
 /** One stated criterion and what the latest attempt currently says about it.
@@ -40,11 +57,13 @@ export interface ProjectAcceptanceSummary {
   criteria: AcceptanceCriterionStanding[];
 }
 
-/** The only part of the project detail document this card reads. Optional because a server that
- *  predates the field serves the rest of the document unchanged, and that is a different answer
- *  from "never run" — see {@link ProjectAcceptanceCard}. */
+/** The parts of the project detail document this card reads. `acceptance` is optional because a
+ *  server that predates the field serves the rest of the document unchanged, and that is a
+ *  different answer from "never run"; `acceptanceCriteria` is the authored free text the criteria
+ *  are parsed from, which is what this card falls back to in exactly that case. */
 interface ProjectAcceptanceDetail {
   acceptance?: ProjectAcceptanceSummary | null;
+  acceptanceCriteria?: string | null;
 }
 
 /**
@@ -57,7 +76,7 @@ interface ProjectAcceptanceDetail {
  */
 const VERDICT: Record<
   AcceptanceCriterionStanding['verdict'],
-  { label: string; accessible: string; color: string; background: string; border: string }
+  { label: string; accessible: string; color: string; background: string; border: string; fill: string }
 > = {
   PASS: {
     label: 'PASS',
@@ -65,6 +84,7 @@ const VERDICT: Record<
     color: 'var(--success)',
     background: 'var(--success-bg)',
     border: 'var(--success-border)',
+    fill: 'var(--success-solid)',
   },
   FAIL: {
     label: 'FAIL',
@@ -72,6 +92,7 @@ const VERDICT: Record<
     color: 'var(--error)',
     background: 'var(--error-bg)',
     border: 'var(--error-border)',
+    fill: 'var(--error-solid)',
   },
   INCONCLUSIVE: {
     label: 'INCONCLUSIVE',
@@ -79,6 +100,7 @@ const VERDICT: Record<
     color: 'var(--warning)',
     background: 'var(--warning-bg)',
     border: 'var(--warning-border)',
+    fill: 'var(--warning-solid)',
   },
   UNDECIDED: {
     label: '—',
@@ -86,6 +108,7 @@ const VERDICT: Record<
     color: 'var(--text-3)',
     background: 'var(--fill-muted)',
     border: 'var(--border)',
+    fill: 'var(--border)',
   },
 };
 
@@ -104,8 +127,10 @@ export function VerdictBadge({ verdict }: { verdict: AcceptanceCriterionStanding
         borderColor: v.border,
         fontVariantNumeric: 'tabular-nums',
         marginInlineEnd: 0,
-        minWidth: 52,
         textAlign: 'center',
+        // INCONCLUSIVE is the longest label there is; the rail below is sized for it, and every
+        // shorter badge is right-aligned inside that rail rather than stretched to fill it.
+        fontSize: verdict === 'INCONCLUSIVE' ? 10.5 : undefined,
       }}
     >
       {v.label}
@@ -113,26 +138,124 @@ export function VerdictBadge({ verdict }: { verdict: AcceptanceCriterionStanding
   );
 }
 
+/** How many criteria a card lists before it stops and says how many more there are. Twelve rather
+ *  than all of them because the section sits between the goal and the task list: a 53-criterion
+ *  project would otherwise push the rest of the page off the screen. */
+export const CRITERIA_PREVIEW = 12;
+
+/** Above this many criteria the meter stops being one segment per criterion — 53 hairlines are a
+ *  texture, not a reading — and becomes one proportional run per verdict. */
+export const METER_SEGMENT_LIMIT = 24;
+
+export interface AcceptanceTally {
+  pass: number;
+  fail: number;
+  inconclusive: number;
+  undecided: number;
+  total: number;
+}
+
+/** What the criteria rows add up to. Derived from the rows rather than read off `passed`/`total`,
+ *  because the meter and the breakdown sentence are readings OF THE ROWS — a meter that disagreed
+ *  with the list under it would be the more confusing of the two errors. */
+export function tally(criteria: AcceptanceCriterionStanding[]): AcceptanceTally {
+  const t: AcceptanceTally = { pass: 0, fail: 0, inconclusive: 0, undecided: 0, total: criteria.length };
+  for (const c of criteria) {
+    if (c.verdict === 'PASS') t.pass += 1;
+    else if (c.verdict === 'FAIL') t.fail += 1;
+    else if (c.verdict === 'INCONCLUSIVE') t.inconclusive += 1;
+    else t.undecided += 1;
+  }
+  return t;
+}
+
+/**
+ * The meter, as weighted runs left to right.
+ *
+ * Under the limit there is one segment per criterion IN STATED ORDER, so segment three is
+ * criterion three — the meter indexes the list under it rather than summarizing it. Over the
+ * limit that reading is not available at any width, so it collapses to one run per verdict,
+ * proportional to how many criteria hold it.
+ */
+export function meterSegments(
+  criteria: AcceptanceCriterionStanding[],
+): Array<{ verdict: AcceptanceCriterionStanding['verdict']; weight: number }> {
+  if (criteria.length === 0) return [];
+  if (criteria.length <= METER_SEGMENT_LIMIT) {
+    return criteria.map((c) => ({ verdict: c.verdict, weight: 1 }));
+  }
+  const t = tally(criteria);
+  return (
+    [
+      ['PASS', t.pass],
+      ['FAIL', t.fail],
+      ['INCONCLUSIVE', t.inconclusive],
+      ['UNDECIDED', t.undecided],
+    ] as const
+  )
+    .filter(([, n]) => n > 0)
+    .map(([verdict, n]) => ({ verdict, weight: n }));
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** What the meter says in words, for a reader who is not being shown its colours. */
+export function meterReading(t: AcceptanceTally, ran: boolean): string {
+  if (!ran) return `${plural(t.total, 'criterion', 'criteria')} stated, none judged`;
+  const parts = [`${t.pass} passed`];
+  if (t.fail > 0) parts.push(`${t.fail} failed`);
+  if (t.inconclusive > 0) parts.push(`${t.inconclusive} inconclusive`);
+  if (t.undecided > 0) parts.push(`${t.undecided} not judged`);
+  return `${parts.join(', ')} of ${plural(t.total, 'criterion', 'criteria')}`;
+}
+
+/**
+ * The one sentence above the list: what this project's acceptance standing IS.
+ *
+ * Three states, three sentences, and none of them a ratio the reader has to interpret. The
+ * never-run one keeps saying "unknown, not zero" because that is the whole point of not printing
+ * `0 / 53` — a reader who saw the number would have read a verdict nobody reached.
+ */
+export function standingLine(acceptance: ProjectAcceptanceSummary, now: number): string {
+  const t = tally(Array.isArray(acceptance.criteria) ? acceptance.criteria : []);
+  if (acceptance.lastRunAt === null) {
+    if (acceptance.total === 0) {
+      return 'No criteria are stated for this project, so there is nothing for a run to conclude.';
+    }
+    return `Never run — ${plural(acceptance.total, 'criterion', 'criteria')} stated. This project's standing is unknown, not zero.`;
+  }
+  const problems = [
+    t.fail > 0 ? `${t.fail} failed` : null,
+    t.inconclusive > 0 ? `${t.inconclusive} inconclusive` : null,
+    t.undecided > 0 ? `${t.undecided} still unjudged` : null,
+  ].filter((s): s is string => s !== null);
+  const rest = problems.length === 0 ? 'every stated criterion passed' : problems.join(', ');
+  return `Judged ${ago(acceptance.lastRunAt, now)} — ${rest}.`;
+}
+
+/** A criterion is one LINE of the authored field, so it is rendered as inline Markdown: emphasis,
+ *  code spans and links come out as themselves, and the block elements a stray `## heading` line
+ *  would otherwise produce are flattened, because a row is one row whatever the author typed. */
+const Flat = ({ children }: { children?: ReactNode }) => <>{children}</>;
+const INLINE_ONLY = { p: Flat, h1: Flat, h2: Flat, h3: Flat, h4: Flat, h5: Flat, h6: Flat };
+
 /** Every stated criterion with what the latest attempt says about it, in the order they were
  *  stated. Rendered on a never-run project too: the criteria are stated facts, they are simply
  *  unjudged, and listing them is how a reader sees what a run would have to conclude. */
 export function AcceptanceCriteriaList({ criteria }: { criteria: AcceptanceCriterionStanding[] }) {
   return (
-    <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-      {criteria.map((c, i) => (
-        <li
-          key={c.key}
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            padding: '6px 0',
-            // Between rows only: a rule on the first one would double up with the card head's.
-            borderTop: i === 0 ? undefined : '1px solid var(--border-subtle)',
-          }}
-        >
-          <VerdictBadge verdict={c.verdict} />
-          <span style={{ flex: 1, minWidth: 0 }}>{c.text}</span>
+    <ul className="acceptance-criteria">
+      {criteria.map((c) => (
+        <li key={c.key} className={`acceptance-row${c.verdict === 'FAIL' ? ' is-fail' : ''}`}>
+          <span className="acceptance-row-no">{c.ordinal}</span>
+          <span className="acceptance-row-text">
+            <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
+              {c.text}
+            </Markdown>
+          </span>
+          <span className="acceptance-row-verdict">
+            <VerdictBadge verdict={c.verdict} />
+          </span>
         </li>
       ))}
     </ul>
@@ -143,11 +266,53 @@ export function AcceptanceCriteriaList({ criteria }: { criteria: AcceptanceCrite
  *  task tally is not read as the answer. */
 function OutcomeNote() {
   return (
-    <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+    <div className="acceptance-note">
       Task completion is a process measure; acceptance is the outcome measure — a project can
       finish every task and still meet none of the criteria it was stated for.
-    </Typography.Paragraph>
+    </div>
   );
+}
+
+/** The head's right-hand column: the standing as a number, and the meter as a picture of the same
+ *  rows. No ratio before a run has earned one — `{total} unjudged` is a count of what is stated,
+ *  which is a fact, where `0 / {total}` would be a score. */
+function Standing({
+  acceptance,
+  ran,
+}: {
+  acceptance: ProjectAcceptanceSummary;
+  ran: boolean;
+}) {
+  const criteria = Array.isArray(acceptance.criteria) ? acceptance.criteria : [];
+  const t = tally(criteria);
+  const segments = meterSegments(criteria);
+  return (
+    <div className="acceptance-standing-figure">
+      <div className={`acceptance-score${ran ? ' is-ran' : ''}`}>
+        {ran ? `${acceptance.passed} / ${acceptance.total} PASS` : `${acceptance.total} unjudged`}
+      </div>
+      {segments.length > 0 ? (
+        <div className="acceptance-meter" role="img" aria-label={meterReading(t, ran)}>
+          {segments.map((s, i) => (
+            <i
+              key={i}
+              style={{ flex: s.weight, background: VERDICT[s.verdict].fill }}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** What the list shows before and after the button is pressed. Exported because a static render
+ *  cannot press it: the collapsed state is what the card's own suite asserts on, and both
+ *  readings are asserted here. */
+export function criteriaPreview(
+  criteria: AcceptanceCriterionStanding[],
+  expanded: boolean,
+): AcceptanceCriterionStanding[] {
+  return expanded ? criteria : criteria.slice(0, CRITERIA_PREVIEW);
 }
 
 /**
@@ -157,8 +322,8 @@ function OutcomeNote() {
  * the document that page already holds instead of opening a second read of it — and a write that
  * invalidates the project refreshes both.
  *
- * `action` is where the "run acceptance" control goes: the card owns the never-run state and its
- * layout, but not the decision of what starting a run does, which belongs to whoever mounts it.
+ * `action` is where the "run acceptance" control goes: the card owns its head and its states, but
+ * not the decision of what starting a run does, which belongs to whoever mounts it.
  */
 export function ProjectAcceptanceCard({
   projectId,
@@ -172,55 +337,86 @@ export function ProjectAcceptanceCard({
     queryFn: () => api<ProjectAcceptanceDetail>(`/projects/${encodeURIComponent(projectId)}`),
     enabled: Boolean(projectId),
   });
+  // Collapsed until asked: see CRITERIA_PREVIEW. A static render cannot press the button, which
+  // is why the slice is `criteriaPreview` — the function this reads through is the one the suite
+  // asserts both readings of.
+  const [expanded, setExpanded] = useState(false);
 
   const acceptance = detail.data?.acceptance ?? null;
   const criteria = Array.isArray(acceptance?.criteria) ? acceptance.criteria : [];
   // A ratio is shown only once an attempt exists to have earned it. Before that there is nothing
   // to put here that is not a score: "0 / 0" and "0 / 53" both read as a result.
   const ran = acceptance !== null && acceptance.lastRunAt !== null;
+  const shown = criteriaPreview(criteria, expanded);
+  const authored = detail.data?.acceptanceCriteria?.trim();
 
   return (
     <Card
+      className="acceptance-card"
       title="Acceptance"
+      styles={{ body: { padding: 0 } }}
       extra={
-        ran ? (
-          <Typography.Text style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {`${acceptance.passed} / ${acceptance.total}`}
-          </Typography.Text>
-        ) : null
+        // Nothing stated, nothing to figure: `0 unjudged` is the same mistake as `0 / 0` — a
+        // number in the place a score goes, for a project that was never held to anything.
+        detail.data && acceptance !== null && acceptance.total > 0 ? (
+          <div className="acceptance-head-extra">
+            <Standing acceptance={acceptance} ran={ran} />
+            {action}
+          </div>
+        ) : (
+          action
+        )
       }
     >
       {detail.isPending ? (
-        <Skeleton active title={false} paragraph={{ rows: 3 }} />
+        <div className="acceptance-block">
+          <Skeleton active title={false} paragraph={{ rows: 3 }} />
+        </div>
       ) : detail.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="Acceptance standing could not be loaded"
-          description={detail.error instanceof Error ? detail.error.message : undefined}
-        />
+        <div className="acceptance-block">
+          <Alert
+            type="error"
+            showIcon
+            message="Acceptance standing could not be loaded"
+            description={detail.error instanceof Error ? detail.error.message : undefined}
+          />
+        </div>
       ) : acceptance === null ? (
-        // Not the same as never run: this server did not answer the question at all, and saying
-        // "never run" for it would be this card inventing a fact.
-        <Typography.Text type="secondary">
-          This server build does not report acceptance standing.
-        </Typography.Text>
+        // Not the same as never run: this server did not answer the question at all, so there are
+        // no verdicts to draw. The authored criteria are still in the document, and they are the
+        // only place this reader can see what the project is held to — the page has no other.
+        <>
+          <div className="acceptance-standing">
+            This server build does not report acceptance standing
+            {authored ? ' — showing the stated criteria as written.' : '.'}
+          </div>
+          {authored ? (
+            <div className="acceptance-block md">
+              <Markdown
+                remarkPlugins={[remarkGfm, remarkHardBreaks]}
+                rehypePlugins={[rehypeHighlight]}
+              >
+                {authored}
+              </Markdown>
+            </div>
+          ) : null}
+        </>
       ) : (
         <>
-          {ran ? null : (
-            <div style={{ marginBottom: criteria.length > 0 ? 12 : 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <Typography.Text strong>Acceptance has never been run</Typography.Text>
-                {action}
-              </div>
-              <Typography.Paragraph type="secondary" style={{ marginTop: 4, marginBottom: 0 }}>
-                {acceptance.total === 0
-                  ? 'No criteria are stated for this project, so there is nothing for a run to conclude.'
-                  : `${acceptance.total} criteria are stated and none has been judged. This project's standing is unknown, not zero.`}
-              </Typography.Paragraph>
+          <div className="acceptance-standing">{standingLine(acceptance, Date.now())}</div>
+          <AcceptanceCriteriaList criteria={shown} />
+          {criteria.length > shown.length ? (
+            // Says what it is hiding. A list that stopped at twelve without naming the other
+            // forty-one would read as a complete list of twelve.
+            <div className="acceptance-block">
+              <Button size="small" onClick={() => setExpanded(true)}>
+                {`Show all ${acceptance.total} criteria`}
+              </Button>
+              <Typography.Text type="secondary" style={{ marginInlineStart: 10, fontSize: 12 }}>
+                {`${criteria.length - shown.length} more not shown`}
+              </Typography.Text>
             </div>
-          )}
-          <AcceptanceCriteriaList criteria={criteria} />
+          ) : null}
           <OutcomeNote />
         </>
       )}

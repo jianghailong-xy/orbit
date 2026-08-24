@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Project detail — one home for Acceptance</title>
+<style>
+:root{
+  --brand:#3370ff; --brand-bg:#eaf1ff;
+  --t1:#1f2329; --t2:#646a73; --t3:#8f959e;
+  --bd:#dee0e3; --bd2:#eceef1; --muted:#f1f1f4; --sunken:#f7f8fa;
+  --ok:#1a7f37; --ok-bg:#e8f6ec; --ok-bd:#b6e7c4; --ok-solid:#2ea121;
+  --err:#cf3b35; --err-bg:#fdeceb; --err-bd:#f8c9c6; --err-solid:#f54a45;
+  --warn:#c2710c; --warn-bg:#fff5e6; --warn-bd:#ffdca8; --warn-solid:#ff8800;
+  --mark:#ff8800;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  color:var(--t1);background:#e9ebef;-webkit-font-smoothing:antialiased;
+  font-size:14px;line-height:1.5714285714285714}
+.sheet{width:1560px;background:#fff;margin:0 auto;position:relative;padding:0 0 34px}
+.sheet.hide{display:none}
+.sheet-hd{display:flex;align-items:baseline;gap:12px;padding:26px 40px 18px;border-bottom:1px solid var(--bd2)}
+.sheet-hd h1{font-size:19px;font-weight:650;letter-spacing:-.01em}
+.sheet-hd .k{font-size:12px;color:var(--t3);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.sheet-hd .sub{font-size:13px;color:var(--t2);margin-left:auto;max-width:640px;text-align:right;line-height:1.6}
+.body{display:flex;gap:26px;padding:26px 40px 0}
+/* ---- fake app page (content max-width 1040 in the real app, scaled to 760 here) ---- */
+.page{width:1062px;flex:none;padding-left:22px}
+.crumb{font-size:13px;color:var(--brand);margin-bottom:14px}
+.ptitle{font-size:24px;font-weight:650;letter-spacing:-.025em;line-height:1.18}
+.pmeta{display:flex;align-items:center;gap:9px;margin:10px 0 18px;color:var(--t2);font-size:12.5px}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;font-size:11.5px;
+  border:1px solid var(--bd);background:var(--muted);color:var(--t2);font-weight:500}
+.tag.open{border-color:#bcd3ff;background:var(--brand-bg);color:var(--brand)}
+/* grey placeholders for the parts of the page this change does not touch */
+.ph{border:1px dashed var(--bd);border-radius:8px;background:var(--sunken);color:var(--t3);
+  font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px}
+.ph .n{font-weight:600;color:var(--t2);font-size:12.5px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) 258px;gap:12px;margin-bottom:16px}
+/* real cards */
+.card{border:1px solid var(--bd);border-radius:8px;background:#fff}
+.card>.hd{padding:11px 16px;border-bottom:1px solid var(--bd2);display:flex;align-items:center;gap:12px}
+.card>.hd .t{font-size:15px;font-weight:600}
+.card>.hd .x{margin-left:auto;font-size:13px;color:var(--t2);font-variant-numeric:tabular-nums}
+.card>.bd{padding:14px 16px}
+/* field (Goal / Instructions / Acceptance criteria) */
+.field{margin-bottom:20px}
+.field h5{font-size:15px;font-weight:600;margin-bottom:7px}
+.field ol{margin:0;padding-left:22px}
+.field ol li{font-size:13.5px;line-height:1.72;color:var(--t1);margin-bottom:4px}
+.field p{font-size:13.5px;color:var(--t2)}
+/* the old narrow acceptance list */
+.oldlist{list-style:none}
+.oldlist li{display:flex;gap:9px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--bd2);font-size:13px;line-height:1.62}
+.oldlist li:first-child{border-top:0}
+.badge{flex:none;min-width:48px;text-align:center;height:20px;line-height:18px;border-radius:4px;font-size:11.5px;
+  border:1px solid var(--bd);background:var(--muted);color:var(--t3);font-weight:500;font-variant-numeric:tabular-nums}
+.badge.pass{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-bd)}
+.badge.fail{color:var(--err);background:var(--err-bg);border-color:var(--err-bd)}
+.badge.inc{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-bd);font-size:10.5px;letter-spacing:-.2px}
+.note{font-size:11.5px;color:var(--t3);line-height:1.6;margin-top:11px}
+/* ---------- the redesigned Acceptance section ---------- */
+.acc{border:1px solid var(--bd);border-radius:8px;background:#fff;margin-bottom:20px}
+.acc>.hd{display:flex;align-items:flex-start;gap:16px;padding:13px 16px 12px;border-bottom:1px solid var(--bd2)}
+.acc>.hd .lt{min-width:0}
+.acc>.hd .t{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.acc>.hd .st{font-size:12.5px;color:var(--t2);margin-top:3px;line-height:1.55}
+.acc>.hd .rt{margin-left:auto;flex:none;text-align:right}
+.acc>.hd .score{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.acc>.hd .score.never{color:var(--t2);font-weight:600}
+.acc>.hd .score.pass{color:var(--ok)}
+.meter{display:flex;gap:2px;width:154px;margin-top:6px}
+.meter i{flex:1;height:6px;border-radius:2px;background:var(--bd)}
+.meter i.p{background:var(--ok-solid)} .meter i.f{background:var(--err-solid)} .meter i.i{background:var(--warn-solid)}
+.meter.prop{gap:0;border-radius:3px;overflow:hidden}
+.meter.prop i{border-radius:0}
+.acc .sub2{font-size:11.5px;color:var(--t3);margin-top:5px;font-variant-numeric:tabular-nums}
+.btn{height:28px;padding:0 11px;border-radius:6px;border:1px solid var(--bd);background:#fff;color:var(--t1);
+  font-size:12.5px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.opt{border-style:dashed;color:var(--t2)}
+.opttag{font-size:10px;color:var(--mark);border:1px solid #ffd9a8;background:#fff6ea;border-radius:3px;padding:0 4px;margin-left:6px;font-weight:600;vertical-align:2px}
+/* criteria rows */
+.crit{list-style:none}
+.crit>li{display:flex;align-items:flex-start;gap:12px;padding:9px 16px 9px 16px;border-top:1px solid var(--bd2);position:relative}
+.crit>li:first-child{border-top:0}
+.crit .no{flex:none;width:18px;text-align:right;color:var(--t3);font-size:12.5px;font-variant-numeric:tabular-nums;padding-top:1px}
+.crit .tx{flex:1;min-width:0;font-size:13.5px;line-height:1.66}
+.crit .vd{flex:none;width:118px;display:flex;justify-content:flex-end;padding-top:1px}
+.crit>li.failrow{background:#fffaf9}
+.crit>li.failrow::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--err-solid)}
+.crit code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;
+  background:var(--muted);border-radius:3px;padding:1px 4px}
+.acc>.ft{padding:9px 16px 11px;border-top:1px solid var(--bd2);font-size:11.5px;color:var(--t3);line-height:1.6}
+.acc .raw{padding:14px 16px}
+.acc .raw ol{margin:0;padding-left:22px}
+.acc .raw li{font-size:13.5px;line-height:1.7;margin-bottom:3px}
+.acc .empty{padding:16px;font-size:13px;color:var(--t2)}
+/* ---- annotation column ---- */
+.notes{width:400px;flex:none;padding-top:2px}
+.notes h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);font-weight:700;margin-bottom:10px}
+.an{display:flex;gap:9px;margin-bottom:13px;font-size:12.5px;line-height:1.65;color:var(--t2)}
+.an b{color:var(--t1);font-weight:600}
+.pin{flex:none;width:18px;height:18px;border-radius:50%;background:var(--mark);color:#fff;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;margin-top:1px}
+.pin.g{background:var(--ok-solid)}
+.pin.n{background:#c7ccd4}
+.verdict{margin-top:16px;padding:12px 13px;border:1px solid var(--bd2);border-radius:8px;background:var(--sunken);
+  font-size:12.5px;line-height:1.7;color:var(--t2)}
+.verdict b{color:var(--t1)}
+.kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:#fff;border:1px solid var(--bd2);border-radius:3px;padding:0 4px}
+/* the orange "same content twice" markers */
+.mk{position:relative;outline:2px solid var(--mark);outline-offset:5px;border-radius:4px}
+.mk>.mkno{position:absolute;top:-16px;left:-18px;width:22px;height:22px;border-radius:50%;background:var(--mark);color:#fff;
+  font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 0 0 3px #fff}
+.mk.r>.mkno{left:auto;right:-18px}
+.dupband{margin:22px 0 4px;padding:9px 12px;border-left:3px solid var(--mark);background:#fff8ef;font-size:12.5px;color:#8a5200;line-height:1.6}
+.states{padding:22px 40px 0}
+.states h3{font-size:13px;font-weight:700;color:var(--t2);margin:0 0 9px;letter-spacing:.02em}
+.states h3 span{font-weight:400;color:var(--t3)}
+.states .st-blk{margin-bottom:24px}
+.states .wrap{width:1040px}
+#s-states{width:1120px}
+</style></head>
+<body>
+
+<!-- ============================== SHEET 1 — BEFORE ============================== -->
+<section class="sheet" id="s-before">
+  <div class="sheet-hd">
+    <span class="k">Before</span>
+    <h1>项目详情页：同一份 acceptance criteria 被画了两遍</h1>
+    <div class="sub">服务端的 <code>parseCriteria</code> 是「一非空行 = 一条」，所以下面 ② 的列表本质是 ① 作者原文的逐行拷贝——不是巧合，是结构性重复。</div>
+  </div>
+  <div class="body">
+    <div class="page">
+      <div class="crumb">← All projects</div>
+      <div class="ptitle">web:顶层「新建 workspace」三步引导流程</div>
+      <div class="pmeta"><span class="tag open">Open</span><span>3 tasks</span></div>
+      <div class="row2">
+        <div class="ph" style="height:96px"><span class="n">Work account</span> · panorama 四桶</div>
+        <div class="ph" style="height:96px"><span class="n">Coordinator</span></div>
+      </div>
+      <div class="ph" style="height:74px"><span class="n">Tasks graph</span></div>
+      <div class="field"><h5>Goal</h5><p>让「新建 workspace」不再要求用户先手动 clone 仓库、再粘贴绝对路径。</p></div>
+
+      <div class="field mk" style="margin-bottom:26px">
+        <span class="mkno">1</span>
+        <h5>Acceptance criteria</h5>
+        <ol>
+          <li>在 web 顶层点「新建 workspace」,贴一个仓库 URL、选一台机器,能建出一个可用的 workspace —— 全程不需要事先手动 clone,也不需要输入任何绝对路径。</li>
+          <li>clone 期间该 workspace 以 CLONING 状态出现在 sidebar 中它所属机器的分组下,用户可以离开页面;完成后它自动带上 worktree 隔离(enableWorktree=true)和从 remote 默认分支探测到的 defaultMergeTarget,名字取自仓库名。</li>
+          <li>clone 失败时该 workspace 留在列表里(不消失),失败卡片原样回显 git 的 stderr,并提供重试 / 改 URL / 换机器 / 删除四个出口。</li>
+          <li>账号下只有一台 runner 时,「选机器」这一步完全不出现。</li>
+          <li>目标机器上已存在同 remote 的 checkout 时,创建流程显式提供「复用该 checkout」和「再 clone 一份」两个选项,不自动替用户选。</li>
+          <li>RunnerDetailPage 的 Add workspace 按钮和 RunnerRegisterGuide 的 Create a workspace 按钮都跳到同一个新建流程(机器一步预填),产品里只剩一份 workspace 创建 UI。</li>
+          <li>CLONING 状态的 workspace 拒绝开新 session,并给出「仍在克隆」的明确原因,而不是让它看起来可用然后在 spawn 时报 ENOENT。</li>
+        </ol>
+      </div>
+
+      <div class="field"><h5>Instructions</h5><p>先接线 <code>POST /workspaces</code> 的 clone 分支……</p></div>
+      <div class="ph" style="height:62px"><span class="n">Tasks</span> · 拓扑清单</div>
+
+      <div class="row2" style="grid-template-columns:1.32fr 1fr;margin-top:16px">
+        <div class="card" style="align-self:start">
+          <div class="hd"><span class="t">Unblocks the most work</span><span class="x">Table view</span></div>
+          <div class="bd"><div class="ph" style="height:78px;margin:0;border-style:solid;border-color:var(--bd2)">每行一条水平条 · 需要宽度</div></div>
+        </div>
+        <div class="card mk r" style="align-self:start">
+          <span class="mkno">2</span>
+          <div class="hd"><span class="t">Acceptance</span></div>
+          <div class="bd">
+            <div style="font-weight:600;font-size:13.5px">Acceptance has never been run</div>
+            <div style="font-size:12.5px;color:var(--t2);margin:4px 0 12px;line-height:1.6">7 criteria are stated and none has been judged. This project's standing is unknown, not zero.</div>
+            <ul class="oldlist">
+              <li><span class="badge">—</span><span>在 web 顶层点「新建 workspace」,贴一个仓库 URL、选一台机器,能建出一个可用的 workspace —— 全程不需要事先手动 clone,也不需要输入任何绝对路径。</span></li>
+              <li><span class="badge">—</span><span>clone 期间该 workspace 以 CLONING 状态出现在 sidebar 中它所属机器的分组下,用户可以离开页面;完成后它自动带上 worktree 隔离(enableWorktree=true)和从 remote 默认分支探测到的 defaultMergeTarget,名字取自仓库名。</span></li>
+              <li><span class="badge">—</span><span>clone 失败时该 workspace 留在列表里(不消失),失败卡片原样回显 git 的 stderr,并提供重试 / 改 URL / 换机器 / 删除四个出口。</span></li>
+              <li><span class="badge">—</span><span>账号下只有一台 runner 时,「选机器」这一步完全不出现。</span></li>
+              <li><span class="badge">—</span><span>目标机器上已存在同 remote 的 checkout 时,创建流程显式提供「复用该 checkout」和「再 clone 一份」两个选项,不自动替用户选。</span></li>
+              <li><span class="badge">—</span><span>RunnerDetailPage 的 Add workspace 按钮和 RunnerRegisterGuide 的 Create a workspace 按钮都跳到同一个新建流程(机器一步预填),产品里只剩一份 workspace 创建 UI。</span></li>
+              <li><span class="badge">—</span><span>CLONING 状态的 workspace 拒绝开新 session,并给出「仍在克隆」的明确原因,而不是让它看起来可用然后在 spawn 时报 ENOENT。</span></li>
+            </ul>
+            <div class="note">Task completion is a process measure; acceptance is the outcome measure — a project can finish every task and still meet none of the criteria it was stated for.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h4>四个问题</h4>
+      <div class="an"><span class="pin">1</span><div><b>作者原文</b>，全宽 Markdown。<code>ProjectsPage.tsx:633–637</code> 的 <code>Field label="Acceptance criteria"</code>。这里没有任何判定信息——读完它的人不知道 acceptance 从没跑过。</div></div>
+      <div class="an"><span class="pin">2</span><div><b>同样 7 行 + 判定徽章</b>，在 1.32:1 里那个 1fr 的窄列（<code>ProjectsPage.tsx:649–652</code>）。<b>宽度分配反了</b>。CSS 注释写的是「acceptance is a column of <b>short</b> lines and does not [need width]」——中文长句不是 short lines，每条被压成 3–4 行。</div></div>
+      <div class="an"><span class="pin">3</span><div><b>没人说谁是权威。</b>两处内容一样、措辞一样、都没标注关系。用户要在半页之外自己发现「哦，下面那个才带结论」。</div></div>
+      <div class="an"><span class="pin">4</span><div><b>never-run 花掉两段散文。</b>「从未跑过」是常态而不是异常，却在最窄的列里占了 5 行——而真正该抢眼的「7 条一条都没判」反而没有可扫读的图形。</div></div>
+      <div class="verdict">
+        <b>成因（不是巧合）：</b>服务端 <code>parseCriteria</code> 把 <code>acceptance_criteria</code> 的<b>每一非空行</b>剥掉列表符号后当作一条，于是 ② 的 <code>criteria[]</code> 恒等于 ① 的正文逐行切分。<br>
+        <b>唯一的信息差：</b>① 会渲染 Markdown（粗体 / <span class="kbd">code</span> / 链接），② 只显示纯文本源码。合并时必须把这半点差补回去。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SHEET 2 — AFTER ============================== -->
+<section class="sheet" id="s-after">
+  <div class="sheet-hd">
+    <span class="k">After</span>
+    <h1>一个 Acceptance 区块：陈述与判定同一行</h1>
+    <div class="sub">删掉独立的「Acceptance criteria」字段，把 Acceptance 提到 Goal 之下、全宽，一行一条 criterion，判定走右侧固定栏。排行榜拿回它本来就需要的宽度。</div>
+  </div>
+  <div class="body">
+    <div class="page">
+      <div class="crumb">← All projects</div>
+      <div class="ptitle">web:顶层「新建 workspace」三步引导流程</div>
+      <div class="pmeta"><span class="tag open">Open</span><span>3 tasks</span></div>
+      <div class="row2">
+        <div class="ph" style="height:96px"><span class="n">Work account</span> · panorama 四桶</div>
+        <div class="ph" style="height:96px"><span class="n">Coordinator</span></div>
+      </div>
+      <div class="ph" style="height:74px"><span class="n">Tasks graph</span></div>
+      <div class="field"><h5>Goal</h5><p>让「新建 workspace」不再要求用户先手动 clone 仓库、再粘贴绝对路径。</p></div>
+
+      <div class="acc" id="acc-main">
+        <div class="hd">
+          <div class="lt">
+            <div class="t">Acceptance</div>
+            <div class="st">Never run — 7 criteria stated, standing unknown (not zero).</div>
+          </div>
+          <div class="rt">
+            <div class="score never">7 unjudged</div>
+            <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <button class="btn opt" style="margin-left:14px">Start acceptance run<span class="opttag">P2</span></button>
+        </div>
+        <ul class="crit">
+          <li><span class="no">1</span><span class="tx">在 web 顶层点「新建 workspace」,贴一个仓库 URL、选一台机器,能建出一个可用的 workspace —— 全程不需要事先手动 clone,也不需要输入任何绝对路径。</span><span class="vd"><span class="badge">—</span></span></li>
+          <li><span class="no">2</span><span class="tx">clone 期间该 workspace 以 CLONING 状态出现在 sidebar 中它所属机器的分组下,用户可以离开页面;完成后它自动带上 worktree 隔离(<code>enableWorktree=true</code>)和从 remote 默认分支探测到的 defaultMergeTarget,名字取自仓库名。</span><span class="vd"><span class="badge">—</span></span></li>
+          <li><span class="no">3</span><span class="tx">clone 失败时该 workspace 留在列表里(不消失),失败卡片原样回显 git 的 stderr,并提供重试 / 改 URL / 换机器 / 删除四个出口。</span><span class="vd"><span class="badge">—</span></span></li>
+          <li><span class="no">4</span><span class="tx">账号下只有一台 runner 时,「选机器」这一步完全不出现。</span><span class="vd"><span class="badge">—</span></span></li>
+          <li><span class="no">5</span><span class="tx">目标机器上已存在同 remote 的 checkout 时,创建流程显式提供「复用该 checkout」和「再 clone 一份」两个选项,不自动替用户选。</span><span class="vd"><span class="badge">—</span></span></li>
+          <li><span class="no">6</span><span class="tx">RunnerDetailPage 的 Add workspace 按钮和 RunnerRegisterGuide 的 Create a workspace 按钮都跳到同一个新建流程(机器一步预填),产品里只剩一份 workspace 创建 UI。</span><span class="vd"><span class="badge">—</span></span></li>
+          <li><span class="no">7</span><span class="tx">CLONING 状态的 workspace 拒绝开新 session,并给出「仍在克隆」的明确原因,而不是让它看起来可用然后在 spawn 时报 ENOENT。</span><span class="vd"><span class="badge">—</span></span></li>
+        </ul>
+        <div class="ft">Task completion is a process measure; acceptance is the outcome measure — a project can finish every task and still meet none of the criteria it was stated for.</div>
+      </div>
+
+      <div class="field"><h5>Instructions</h5><p>先接线 <code>POST /workspaces</code> 的 clone 分支……</p></div>
+      <div class="ph" style="height:62px"><span class="n">Tasks</span> · 拓扑清单</div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="hd"><span class="t">Unblocks the most work</span><span class="x">Table view</span></div>
+        <div class="bd"><div class="ph" style="height:78px;margin:0;border-style:solid;border-color:var(--bd2)">现在是全宽 —— 横条终于有地方读了</div></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h4>改了什么</h4>
+      <div class="an"><span class="pin g">✓</span><div><b>只剩一处。</b>删掉 <code>Field label="Acceptance criteria"</code>；criteria 只在 Acceptance 区块里出现，<b>每条自带它的判定</b>。再没有「读了一遍却不知道结论」的路径。</div></div>
+      <div class="an"><span class="pin g">✓</span><div><b>位置：Goal 之下、Instructions 之上。</b>阅读顺序变成「为什么做 → 怎么算做到 → 怎么做」，而且结论落在任务清单<b>之上</b>，不再埋在整页最底部。</div></div>
+      <div class="an"><span class="pin g">✓</span><div><b>全宽后多数条 1 行、最长 2 行</b>（原来 3–4 行）。序号 18px + 正文 + 118px 判定栏：判定在右侧对齐成一条竖列，53 条也能一眼扫完哪条红了。</div></div>
+      <div class="an"><span class="pin g">✓</span><div><b>7 段计量条 = 每条一段</b>，段序对应下面的行序，不是聚合百分比。never-run 时全灰——「未知」被画成了图形，而不是写成一段散文，更不会退化成读着像分数的 <code>0 / 7</code>。<br><span style="color:var(--t3)">超过 ~24 条时退化为按比例堆叠条（见状态表 e）。</span></div></div>
+      <div class="an"><span class="pin g">✓</span><div><b>criterion 正文按 inline Markdown 渲染</b>，把合并后唯一会丢的东西补回来（<code>**粗体**</code>、<span class="kbd">code</span>、链接）。今天 ② 只显示源码。</div></div>
+      <div class="an"><span class="pin n">·</span><div><b>排行榜升为全宽。</b>CSS 注释自己写着「排行榜有横条、先读不了」——它本来就该拿宽度。<code>.project-panorama-pair</code> 随之删除。</div></div>
+      <div class="verdict">
+        <b>标了 <span class="opttag" style="margin:0">P2</span> 的按钮不在这次范围里。</b><code>POST /projects/:id/acceptance/runs</code> 已经存在，卡片也早留了 <code>action</code> 插槽，但接线是另一个改动。本次只做去重 + 版式，按钮位置先占住。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SHEET 3 — STATES ============================== -->
+<section class="sheet" id="s-states">
+  <div class="sheet-hd">
+    <span class="k">States</span>
+    <h1>合并后这一个区块必须能说的五件事</h1>
+    <div class="sub">删掉的那个字段今天承担着「服务端没报 acceptance 时仍能看到原文」；合并后这份责任必须落在同一个区块里，否则去重就是丢信息。</div>
+  </div>
+  <div class="states">
+
+    <div class="st-blk"><h3>a · 判定完成 <span>— 5 PASS / 1 FAIL / 1 INCONCLUSIVE，计量条按行序着色，FAIL 行带 2px 左沿</span></h3>
+      <div class="wrap"><div class="acc">
+        <div class="hd">
+          <div class="lt"><div class="t">Acceptance</div>
+            <div class="st">Attempt 2, judged 2026-08-24 14:22 · criteria unchanged since.</div></div>
+          <div class="rt"><div class="score pass">5 / 7 PASS</div>
+            <div class="meter"><i class="p"></i><i class="p"></i><i class="f"></i><i class="p"></i><i class="p"></i><i class="p"></i><i class="i"></i></div>
+            <div class="sub2">1 FAIL · 1 inconclusive</div></div>
+          <button class="btn" style="margin-left:14px">Re-run</button>
+        </div>
+        <ul class="crit">
+          <li><span class="no">1</span><span class="tx">在 web 顶层点「新建 workspace」,贴一个仓库 URL、选一台机器,能建出一个可用的 workspace —— 全程不需要事先手动 clone,也不需要输入任何绝对路径。</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+          <li><span class="no">2</span><span class="tx">clone 期间该 workspace 以 CLONING 状态出现在 sidebar 中它所属机器的分组下,用户可以离开页面;完成后它自动带上 worktree 隔离(<code>enableWorktree=true</code>)和从 remote 默认分支探测到的 defaultMergeTarget,名字取自仓库名。</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+          <li class="failrow"><span class="no">3</span><span class="tx">clone 失败时该 workspace 留在列表里(不消失),失败卡片原样回显 git 的 stderr,并提供重试 / 改 URL / 换机器 / 删除四个出口。</span><span class="vd"><span class="badge fail">FAIL</span></span></li>
+          <li><span class="no">4</span><span class="tx">账号下只有一台 runner 时,「选机器」这一步完全不出现。</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+          <li><span class="no">5</span><span class="tx">目标机器上已存在同 remote 的 checkout 时,创建流程显式提供「复用该 checkout」和「再 clone 一份」两个选项,不自动替用户选。</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+          <li><span class="no">6</span><span class="tx">RunnerDetailPage 的 Add workspace 按钮和 RunnerRegisterGuide 的 Create a workspace 按钮都跳到同一个新建流程(机器一步预填),产品里只剩一份 workspace 创建 UI。</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+          <li><span class="no">7</span><span class="tx">CLONING 状态的 workspace 拒绝开新 session,并给出「仍在克隆」的明确原因,而不是让它看起来可用然后在 spawn 时报 ENOENT。</span><span class="vd"><span class="badge inc">INCONCLUSIVE</span></span></li>
+        </ul>
+        <div class="ft">Task completion is a process measure; acceptance is the outcome measure — a project can finish every task and still meet none of the criteria it was stated for.</div>
+      </div></div>
+    </div>
+
+    <div class="st-blk"><h3>b · 一条都没写 <span>— 不画空列表，也不说「0 / 0」</span></h3>
+      <div class="wrap"><div class="acc">
+        <div class="hd">
+          <div class="lt"><div class="t">Acceptance</div>
+            <div class="st">No criteria are stated, so there is nothing for a run to conclude.</div></div>
+          <div class="rt"><div class="score never" style="color:var(--t3)">Not stated</div></div>
+          <button class="btn opt" style="margin-left:14px">Edit project<span class="opttag">P2</span></button>
+        </div>
+        <div class="ft">Task completion is a process measure; acceptance is the outcome measure — a project can finish every task and still meet none of the criteria it was stated for.</div>
+      </div></div>
+    </div>
+
+    <div class="st-blk"><h3>c · 这台服务端不报 acceptance（<code>acceptance == null</code>）<span>— 被删掉那个字段今天唯一不可替代的作用：仍然要能看见原文</span></h3>
+      <div class="wrap"><div class="acc">
+        <div class="hd">
+          <div class="lt"><div class="t">Acceptance</div>
+            <div class="st">This server build does not report acceptance standing — showing the stated criteria as written.</div></div>
+        </div>
+        <div class="raw"><ol>
+          <li>在 web 顶层点「新建 workspace」,贴一个仓库 URL、选一台机器,能建出一个可用的 workspace。</li>
+          <li>clone 期间该 workspace 以 CLONING 状态出现在 sidebar 中它所属机器的分组下。</li>
+          <li>…（<b>作者原文</b>，按 Markdown 渲染，无判定栏——因为这台服务端一个字都没说）</li>
+        </ol></div>
+      </div></div>
+    </div>
+
+    <div class="st-blk"><h3>d · 读失败 / 加载中 <span>— 区块自负其责，一个 500 不带走整页</span></h3>
+      <div class="wrap" style="display:flex;gap:14px">
+        <div class="acc" style="flex:1;margin:0">
+          <div class="hd"><div class="lt"><div class="t">Acceptance</div></div></div>
+          <div class="empty" style="display:flex;gap:9px;align-items:flex-start">
+            <span class="badge fail" style="min-width:auto;padding:0 6px">!</span>
+            <div><b style="font-weight:600">Acceptance standing could not be loaded</b>
+            <div style="color:var(--t2);margin-top:2px">HTTP 500 · <span class="btn" style="height:22px;padding:0 8px;margin-left:4px">Retry</span></div></div>
+          </div>
+        </div>
+        <div class="acc" style="flex:1;margin:0">
+          <div class="hd"><div class="lt"><div class="t">Acceptance</div></div>
+            <div class="rt"><div class="meter" style="opacity:.5"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+          <div class="raw"><div style="height:11px;background:var(--muted);border-radius:4px;margin-bottom:9px"></div>
+            <div style="height:11px;background:var(--muted);border-radius:4px;width:88%;margin-bottom:9px"></div>
+            <div style="height:11px;background:var(--muted);border-radius:4px;width:64%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="st-blk"><h3>e · 长清单（53 条）<span>— 计量条退化为按比例堆叠；行版式不变，判定竖列照样能扫</span></h3>
+      <div class="wrap"><div class="acc">
+        <div class="hd">
+          <div class="lt"><div class="t">Acceptance</div>
+            <div class="st">Attempt 1, judged 2026-08-24 09:05 · 53 criteria stated.</div></div>
+          <div class="rt"><div class="score pass">41 / 53 PASS</div>
+            <div class="meter prop"><i class="p" style="flex:41"></i><i class="f" style="flex:7"></i><i class="i" style="flex:2"></i><i style="flex:3"></i></div>
+            <div class="sub2">7 FAIL · 2 inconclusive · 3 unjudged</div></div>
+          <button class="btn" style="margin-left:14px">Re-run</button>
+        </div>
+        <ul class="crit">
+          <li><span class="no">1</span><span class="tx">…</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+          <li class="failrow"><span class="no">2</span><span class="tx">…</span><span class="vd"><span class="badge fail">FAIL</span></span></li>
+          <li><span class="no">3</span><span class="tx">…</span><span class="vd"><span class="badge pass">PASS</span></span></li>
+        </ul>
+        <div class="ft" style="display:flex;align-items:center;gap:10px"><button class="btn" style="height:24px">Show all 53 criteria</button><span>默认只画前 12 条 —— 不静默截断，说清截了多少</span></div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<script>
+// ?only=before|after|states —— 单张出图用；不带参数就是完整设计文档
+var only = new URLSearchParams(location.search).get('only');
+if (only) {
+  document.querySelectorAll('.sheet').forEach(function (s) {
+    if (s.id !== 's-' + only) s.classList.add('hide');
+  });
+  document.body.style.background = '#fff';
+}
+// 供 --dump-dom 量高度用
+window.addEventListener('load', function () {
+  var pre = document.createElement('pre');
+  pre.id = 'measure';
+  pre.textContent = JSON.stringify({ h: Math.ceil(document.body.scrollHeight) });
+  pre.style.display = 'none';
+  document.body.appendChild(pre);
+});
+</script>
+</body></html>
