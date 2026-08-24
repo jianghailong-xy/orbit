@@ -346,6 +346,11 @@ export interface RunnerHeartbeatRequest {
    *  ROOT_REFUSED_PERMISSION_MODES). Absent on older runners, which are left unrestricted —
    *  an unknown must not withdraw a mode that works. */
   runsAsRoot?: boolean;
+  /** Root directory this machine clones repositories into: a clone of `<owner>/<repo>` lands at
+   *  `<reposRoot>/<owner>-<repo>`. Absent on older runners, which leaves the stored value NULL —
+   *  and a machine with no reported root is not offered as a clone target at all, rather than
+   *  having one guessed for it. */
+  reposRoot?: string;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,

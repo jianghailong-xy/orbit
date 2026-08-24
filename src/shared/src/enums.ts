@@ -255,6 +255,23 @@ export enum RunnerStatus {
 }
 
 /**
+ * Where a workspace's working directory is in its lifecycle. Only a workspace Orbit clones from a
+ * git remote ever leaves READY.
+ *
+ * There is no UNKNOWN, and the field is never null: a workspace whose `repoUrl` is null simply
+ * never told us which repo it is, and a second way to say "we don't know" here would leave every
+ * client guessing which of the two a row means.
+ */
+export enum WorkspaceProvisionState {
+  /** The directory is on the machine and usable. Everything not created from a repo URL. */
+  READY = 'READY',
+  /** A clone is in flight on the runner; the directory is not usable yet. */
+  CLONING = 'CLONING',
+  /** The clone did not finish; the workspace carries git's stderr verbatim. */
+  FAILED = 'FAILED',
+}
+
+/**
  * Claude Code permission modes. Values map 1:1 to the Agent SDK `permissionMode`
  * option / the `--permission-mode` CLI flag.
  */
