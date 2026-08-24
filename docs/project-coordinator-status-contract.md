@@ -317,10 +317,11 @@ Per state, in words:
   `openability.landing` already names and `landing.fixed = true` says cannot be redirected.
 - **`UNAVAILABLE`** — `refusalDetail` picks the sentence and the affordance:
   `WORKSPACE_DISABLED` → enable it (an endpoint exists, below); `WORKSPACE_TRASHED` → restore it;
-  `WORKSPACE_UNBOUND` → bind it to a runner; `WORKSPACE_FORGOTTEN` → rebind, **for which no
-  endpoint exists**. `coordination.workspaceId` / `workspaceName` name the workspace in the first
-  three; in the fourth they are `null` with reason `COORDINATION_WORKSPACE_PURGED`, which is
-  precisely why that case has nothing to offer.
+  `WORKSPACE_UNBOUND` → bind it to a runner; `WORKSPACE_FORGOTTEN` → rebind, which is
+  `POST /projects/:id/coordinator/rebind` (§3 below). `coordination.workspaceId` / `workspaceName`
+  name the workspace in the first three; in the fourth they are `null` with reason
+  `COORDINATION_WORKSPACE_PURGED`, which is precisely why that case has no *repair* to offer —
+  there is no workspace left to name — and why rebinding to a different one is its only way out.
 
 ## Deliberately excluded
 
@@ -377,29 +378,71 @@ Two caveats for a picker built on it:
   `busiestAssignee` (`src/apiserver/src/projects/projects.service.ts:1844`), which is private to
   the service and is surfaced only as `openability.landing`.
 
-### 3. Rebind the coordination workspace — **does not exist**
+### 3. Rebind the coordination workspace — **exists**
 
-There is no endpoint that changes `project.coordinator_workspace_id` on a project that already has
-one. The evidence:
+`POST /api/projects/:id/coordinator/rebind`
+(`src/apiserver/src/projects/projects.controller.ts:468`), body
+`{"workspaceId": "<workspace public id>"}`.
 
-- the column has exactly two writers, both of which *bind* rather than *rebind*:
-  `createProjectInSession` (`src/apiserver/src/projects/projects.service.ts:408`) and the
-  compare-and-swap in `coordinator()` (`:1634`), which only fires when the pointer was null or
-  trashed;
+- DTO: `RebindProjectCoordinatorDto`, `src/apiserver/src/projects/dto.ts:243-254`. One required
+  field, and deliberately with no `null` spelling: emptying a landing is how a project *reaches*
+  `COORDINATOR_UNAVAILABLE`, not how it leaves it.
+- Write: `ProjectsService.rebindCoordinator`, `src/apiserver/src/projects/projects.service.ts:1908`;
+  the one column it sets, at `:2002`.
+- Spec: `src/apiserver/src/projects/project-coordinator-rebind.spec.ts`.
+
+It writes `coordinator_workspace_id` and nothing else — not `coordinator_session_id` (pointing a
+project at a different conversation is the rotation §7.5 froze), not the `project_member`
+COORDINATOR row, and not `coordinator_generation`, which `project_coordinator_rotation_count`
+(migration 0112) advances on a session pointer alone. It has two refusals of its own:
+`NO_SUCH_LANDING` (400, `projects.service.ts:413`) for a target that is unknown, another owner's,
+trashed or disabled — the same four conditions `lastCoordinatorWorkspace` reads, so the read side
+of "can this coordinator open where it belongs" and the write side of "may it belong here" cannot
+come to disagree — and `COORDINATOR_SESSION_LIVE` (409, `:2363`) when the project still points at a
+conversation that does not run in the target, which is a row `project_coordinator_pointer_guard`
+(migration 0126) will not hold. Rebinding to the landing a project already records writes nothing
+and answers `moved: false`.
+
+**Why it is a route of its own, and not a field on `PATCH :id`.** The reasoning that made a
+dedicated endpoint necessary is unchanged, and it is exactly the reason this is a separate door
+rather than one more key in the project patch:
+
+- before it, the column had exactly two writers, both of which *bind* rather than *rebind*: the
+  insert in `create` (`src/apiserver/src/projects/projects.service.ts:541`), which writes it in the
+  same statement as the project row, and the compare-and-swap in `coordinator()` (`:1814`), which
+  only fires when the pointer was null or trashed;
 - `UpdateProjectDto` has no `coordinatorWorkspaceId` — `src/apiserver/src/projects/dto.ts:97-181`;
 - `POST /projects/:id/coordinator` refuses a different workspace with a 409 rather than moving one:
-  `ProjectsService.ELSEWHERE`, thrown at `projects.service.ts:1554`, `:1680` and `:1724`, text at
-  `:1860`. `coordinatorLanding`'s own doc comment states the rule — §7.5 freezes a rotation as
-  "the SESSION is replaced; the agent and the workspace are not" (`:1691-1712`).
+  `ProjectsService.ELSEWHERE`, thrown at `projects.service.ts:1734`, `:1860` and `:2296`, text at
+  `:2462` — "Moving a coordinator is not something this endpoint does as a side effect of asking
+  for one." `coordinatorLanding`'s own doc comment states the rule both of them hold: §7.5 freezes
+  a rotation as "the SESSION is replaced; the agent and the workspace are not" (`:2265-2284`).
 
-**The nearest existing thing is not a substitute.** `PATCH /projects/:id` accepts
+So the one move an owner is entitled to make had no door, and every automatic path was right to
+refuse it: `REBIND_REQUIRED_ACTION` was an instruction with no verb behind it. The exit is a route
+that can only be reached on purpose — moving a coordinator must not be reachable by a request that
+meant to rename something — which is the argument `rebindCoordinator` makes for itself at
+`projects.service.ts:1882-1885`. It is the rule's exit rather than a hole in it: none of the
+refusals above changed, and `coordinator` still declines to move a coordinator as a side effect of
+being asked for one (`project-coordinator-rebind.spec.ts:307`).
+
+**The nearest existing thing is still not a substitute.** `PATCH /projects/:id` accepts
 `coordinatorAgentId` (`src/apiserver/src/projects/dto.ts:141`, resolved at
-`projects.service.ts:988-990`, which also flips `coordinator_identity_source` to `EXPLICIT` at
-`:1405`). That moves **who** coordinates. It does not touch `coordinator_workspace_id`, so it does
-not clear `COORDINATOR_UNAVAILABLE`: `lastCoordinatorWorkspace` still reads the old column
-(`projects.service.ts:1830`).
+`projects.service.ts:1168-1170`, which also flips `coordinator_identity_source` to `EXPLICIT`
+through `recordExplicitIdentity`, `:1549` and `:1578`). That moves **who** coordinates. It does not
+touch `coordinator_workspace_id`, so it does not clear `COORDINATOR_UNAVAILABLE`:
+`lastCoordinatorWorkspace` still reads the old column (`projects.service.ts:2422`). An owner who
+means to move both sends both requests, and gets to see it was two decisions.
 
-Consequence for the redesign: in the `WORKSPACE_FORGOTTEN` case there is **nothing the UI can
-offer**, and in `WORKSPACE_TRASHED` / `WORKSPACE_UNBOUND` the only route out is repairing the named
-workspace. If the card is to offer "move this coordinator", that endpoint has to be designed and
-built; it is out of this contract's scope and is not assumed anywhere above.
+Consequence for the redesign: every `COORDINATOR_UNAVAILABLE` has a way out, and *Retry* is still
+not one of them. `refusalDetail` picks the repair — enable, restore, bind the named workspace — and
+the rebind sits beside it as the route that does not depend on that workspace still being there. In
+the `WORKSPACE_FORGOTTEN` case it is the repair that is missing, not the affordance: there is no
+workspace left to name, so the card offers the rebind alone
+(`src/web/src/components/ProjectCoordinatorCard.tsx:294` for the sentence, `:570` for the button,
+pinned by `src/web/src/components/ProjectCoordinatorCard.test.tsx:389`). Behind the button is
+`CoordinatorRebindDialog` (`src/web/src/pages/ProjectsPage.tsx:563`), which posts through
+`rebindProjectCoordinator` (`:554`); the press is driven end to end in
+`src/web/src/pages/ProjectCoordinatorSection.test.tsx:338`. `WORKSPACE_TRASHED` and
+`WORKSPACE_UNBOUND` keep both offers — repair the workspace this project is bound to, or move the
+project off it.
