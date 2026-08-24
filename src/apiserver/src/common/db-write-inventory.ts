@@ -180,6 +180,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
+    at: 'projects/projects.service.ts#rebindCoordinator',
+    shape: 'TX_RETRIED',
+    locks: 'the target workspace FOR SHARE (rank 15, taken FIRST so the pair is never locked upward), then project FOR NO KEY UPDATE (rank 40), then the one UPDATE of that same row — whose BEFORE guard re-reads the bound session without locking it, and whose deferred companion trigger re-takes both rows this transaction already holds.',
+    identity: 'The project id and the landing, both arguments, both outside the closure.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The pointer and the landing are re-read under the row lock on every attempt, and the write is skipped outright when the project already sits at the landing — so a re-run of a rebind that committed is the no-op branch rather than a second move.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
     at: 'projects/projects.service.ts#remove',
     shape: 'TX_RETRIED',
     locks: 'project FOR UPDATE (rank 40), then the DELETE and its cascades (rank 40/60).',
