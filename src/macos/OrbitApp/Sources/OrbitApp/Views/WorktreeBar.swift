@@ -758,7 +758,7 @@ private struct BackgroundRow: View {
                     ToolBodyView(kind: .command(cmd))
                 }
                 if proc.outputTail.isEmpty {
-                    Text("No output captured yet — the agent hasn't read this process's output.")
+                    Text("No output captured yet — either the process hasn't written any, or the agent hasn't read its .output file.")
                         .font(.orbitMeta).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {

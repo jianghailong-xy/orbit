@@ -137,7 +137,8 @@ function BgShellRow({
             <Pre text={shell.latestOutput} threshold={16} muted />
           ) : (
             <div className="bg-shell-empty">
-              No output captured yet — the workspace hasn't read this process's output.
+              No output captured yet — either the process hasn't written any, or the
+              workspace hasn't read its .output file.
             </div>
           )}
           <div className="bg-shell-meta" title={shell.outputPath}>
