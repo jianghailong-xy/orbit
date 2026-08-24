@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { CoordinatorWakeService } from './coordinator-wake.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAttributionModule } from './project-attribution.module';
@@ -19,6 +20,7 @@ import { ProjectsService } from './projects.service';
   providers: [
     ProjectsService,
     ConvergenceLedgerService,
+    CoordinatorWakeService,
     SessionAttemptService,
     ProjectAcceptanceService,
     TaskCheckpointService,
@@ -28,6 +30,9 @@ import { ProjectsService } from './projects.service';
     ProjectAttributionModule,
     ProjectsService,
     ConvergenceLedgerService,
+    // Exported so a producer of wake facts can live wherever the fact is committed rather than
+    // having to be a Project service: unit T2 defines the ledger, T3/T5 hand facts to it.
+    CoordinatorWakeService,
     // Exported so the RUNNER door guards attempts through the same instance the user door reads
     // them from. `[K3]` §3's refusals only mean anything at the door an agent actually knocks on.
     SessionAttemptService,

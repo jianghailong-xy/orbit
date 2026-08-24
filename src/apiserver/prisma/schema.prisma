@@ -1690,6 +1690,9 @@ model Project {
   handoffsOut ProjectHandoffApproval[] @relation("ProjectHandoffFrom")
   handoffsIn  ProjectHandoffApproval[] @relation("ProjectHandoffTo")
 
+  /// The committed facts that woke this project's coordinator (unit T2, 0173).
+  coordinatorWakes ProjectCoordinatorWake[]
+
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
   // and the referencing one never, so without this every workspace delete has to scan project to
@@ -1871,6 +1874,63 @@ model ProjectAction {
   @@index([projectId, createdAt])
   @@index([projectId, type, status])
   @@map("project_action")
+}
+
+/// One committed fact that woke — or was refused the right to wake — this project's coordinator
+/// (unit T2, migration 0173).
+///
+/// The identity is `idempotency_key` = `cw:v1:<event>:<subjectType>:<subjectId>:<subjectVersion>`,
+/// derived by `coordinator-wake.ts` from the fact alone and BEFORE anything asks whether the wake
+/// is authorized. Its uniqueness is a PARTIAL index declared in the migration, because Prisma
+/// cannot express one:
+///
+///   UNIQUE ("idempotency_key") WHERE "status" <> 'REFUSED'
+///
+/// That predicate is the difference between this table and `project_action`, whose plain unique
+/// key means a refusal spends the key permanently — which is how the coordinator rotation path was
+/// once welded shut. Here a refused row leaves the index and stays in the table: the fact can be
+/// delivered again, and why it was refused is still on the record.
+///
+/// Nothing fires on its own. Rows are written only by `CoordinatorWakeService`, from facts a
+/// producer derived out of rows that were already committed — never from a timer.
+model ProjectCoordinatorWake {
+  /// Supplied by the writer, like `ProjectHandoffApproval.id`: the claim is a raw INSERT with an
+  /// `ON CONFLICT` clause Prisma cannot express, so there is no `create()` for a default to serve.
+  id        String  @id @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// `COORDINATOR_WAKE_EVENTS`, frozen by a CHECK in the migration rather than a Prisma enum — the
+  /// choice `ProjectBlocker.kind` makes, so the closed set has one home and not two.
+  event          String
+  subjectType    String @map("subject_type")
+  /// TEXT, not uuid: a CRITERION names `<projectId>:<criterionKey>` because a criterion is a line
+  /// of the project's acceptance text and has no row until a run judges it.
+  subjectId      String @map("subject_id")
+  /// Which occurrence of the fact this is — the attempt's session id, or a digest of the
+  /// `(taskId, status)` pairs the fact is defined over. Argued per event in `coordinator-wake.ts`.
+  subjectVersion String @map("subject_version")
+  idempotencyKey String @map("idempotency_key")
+
+  /// CLAIMED or REFUSED. A CHECK, for the reason `event` is one.
+  status      String  @default("CLAIMED")
+  /// Non-null exactly when `status` is REFUSED, enforced by a CHECK: a stop with no reason is the
+  /// one shape this table exists to make impossible.
+  refusalCode String? @map("refusal_code")
+  /// Display and diagnosis. Never an input to a decision and never part of the key (cf.
+  /// `ProjectBlocker.occurrences`, BL7).
+  detail      Json    @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  /// Both, and the pair is deliberate: the claim is a raw INSERT that names no timestamp, so the
+  /// column needs the database default 0173 gives it, while `@updatedAt` is what makes a refusal
+  /// stamp the moment the key was given back.
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// Named to match the migration, so the schema and the DDL that built the table agree literally
+  /// rather than approximately.
+  @@index([projectId, createdAt], map: "project_coordinator_wake_project_idx")
+  @@map("project_coordinator_wake")
 }
 
 /// Append-only Coordinator judgment audit. The JSON protocol uses Base62 public ids, while the
