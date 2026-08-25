@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
@@ -26,6 +27,7 @@ import { ProjectsService } from './projects.service';
     CoordinatorJudgmentService,
     CoordinatorConvergenceService,
     SessionAttemptService,
+    AttemptBudgetMeterService,
     ProjectAcceptanceService,
     TaskCheckpointService,
   ],
@@ -48,6 +50,9 @@ import { ProjectsService } from './projects.service';
     // Exported so the RUNNER door guards attempts through the same instance the user door reads
     // them from. `[K3]` §3's refusals only mean anything at the door an agent actually knocks on.
     SessionAttemptService,
+    // Exported for the same reason: unit T5 charges the budget where the spend is COMMITTED, which
+    // is the runner's turn-complete, and that door is in another module.
+    AttemptBudgetMeterService,
     ProjectAcceptanceService,
     TaskCheckpointService,
   ],

@@ -98,6 +98,7 @@ import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/sessi
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -297,6 +298,15 @@ export class RunnerApiController {
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly references: ReferenceExpansionService,
     private readonly listEvents?: ListEventsService,
+    /**
+     * Unit T5: the six-dimension attempt budget, charged where the spend is COMMITTED.
+     *
+     * Resolved by Nest from `ProjectsModule`, which this module imports; optional in the signature
+     * for the ~40 specs that construct this controller directly, exactly as `listEvents` above is.
+     * A spec that does not pass one is a spec about something else, and a budget that is not
+     * charged on a turn is re-derived from the same columns on the next one.
+     */
+    private readonly attemptBudgets?: AttemptBudgetMeterService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2497,6 +2507,9 @@ export class RunnerApiController {
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
       this.realtime.publishSessionUpdated(sessionId);
+      // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
+      // A steer settles only its own row and books no turn, cost or tool call.
+      await this.attemptBudgets?.meterQuietly(sessionId, new Date());
     }
     if (
       'taskReclaimed' in finalized

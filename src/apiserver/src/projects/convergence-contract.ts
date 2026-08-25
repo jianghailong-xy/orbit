@@ -353,6 +353,42 @@ export interface AttemptBudget {
   maxCoordinatorSteers: number | null;
 }
 
+/**
+ * What every project is judged by, because `project.attempt_budget` is NULL on every row that
+ * exists (unit T5 measured; nothing has ever written the column). So these are not placeholders
+ * waiting for a policy — they ARE the policy, and they are written down here with where they came
+ * from, so that raising one is an argument about a number rather than a shrug.
+ *
+ * Calibrated against this deployment's own session population on 2026-08-25 (4,221 sessions),
+ * because a limit derived from nothing is a limit nobody can defend when it fires:
+ *
+ *   dimension     p50      p90      p95      p99       max        default    lands at
+ *   ----------    ----     ----     ----     ----      -------    -------    ---------
+ *   turns         5        98       163      301       1,003      60         ~p80
+ *   wall clock    6 min    137 min  429 min  8.3 days  20 days    60 min     ~p85
+ *   cost          $3.46    $33.13   $70.33   $244.34   $1,847     $20        ~p85
+ *   tool calls    50       178      247      523       56,252     1,200      >p99.9
+ *   context %     20       52       —        89        —          80         ~p98
+ *
+ * Read the three that bind first. `maxTurns` at ~p80 is the one aimed squarely at the incident:
+ * "hundreds of rounds" sits at p99 and above, and four sessions in five never come near 60.
+ * `maxWallClockMs` at one hour is the one holding a runner slot, and the tail it exists for is
+ * visible above — a p99 of 8.3 days is not a long task, it is a session nobody ever ended.
+ * `maxCostMicros` at $20 is the same shape in money.
+ *
+ * `maxToolCalls` deliberately sits ABOVE p99.9 (3,933) rather than near the others: a session's
+ * tool count is a property of the work (a large refactor greps a lot) and not of whether it is
+ * converging, so this dimension is a runaway-loop backstop and not a working limit. Stated rather
+ * than tuned, so nobody later reads its silence as evidence that it is doing something.
+ *
+ * `maxContextPercent` is the one number that is NOT a percentile: 80 leaves the 20% that TH2's
+ * wind-down has to be written in. See `AttemptBudget` above.
+ *
+ * `maxCoordinatorSteers` has no distribution to calibrate against — nothing has ever charged one —
+ * and 3 is the answer to a different question. §4's legal move once an attempt is not working is a
+ * NEW GENERATION with a new hypothesis, so the steer allowance only has to cover "you missed
+ * something small"; making it generous would restore the unbounded verb it exists to bound.
+ */
 export const DEFAULT_ATTEMPT_BUDGET: Readonly<AttemptBudget> = {
   maxTurns: 60,
   maxWallClockMs: 3_600_000,
