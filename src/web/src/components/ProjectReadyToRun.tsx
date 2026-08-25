@@ -1,4 +1,5 @@
 import {
+  ArrowRightOutlined,
   CheckCircleFilled,
   ClockCircleOutlined,
   LoadingOutlined,
@@ -7,7 +8,9 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Popconfirm, Spin, Tag, Typography } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { encodeId } from '../lib/idCodec';
 import {
   projectReadyToRunQuery,
   type ProjectReadyToRunItem,
@@ -68,7 +71,7 @@ export function resumePausedListMutationOptions(
         method: 'PATCH',
         body: {
           paused: false,
-          note: 'Resumed from the project Ready to run queue',
+          note: 'Resumed from the project Run queue',
         },
       }),
     onSuccess: () => {
@@ -118,7 +121,7 @@ export function ProjectReadyToRun({
         level={4}
         style={{ marginBottom: 8 }}
       >
-        Ready to run{' '}
+        Run queue{' '}
         {data ? (
           <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
             {queueSummary(
@@ -248,6 +251,7 @@ function ReadyTaskRow({
 }) {
   const qc = useQueryClient();
   const message = useToast();
+  const navigate = useNavigate();
   const run = useMutation(runReadyTaskMutationOptions(qc, message, projectId, item.taskId));
   // Treat a response from an older server as READY during a rolling deploy.
   const runState = item.runState ?? 'READY';
@@ -354,6 +358,16 @@ function ReadyTaskRow({
             Resume list
           </Button>
         </Popconfirm>
+      ) : (runState === 'RUNNING' || runState === 'QUEUED') && item.sessionId ? (
+        <Button
+          className="project-ready-action"
+          type="link"
+          icon={<ArrowRightOutlined />}
+          aria-label={`Open session for ${item.title}`}
+          onClick={() => navigate(`/sessions/${encodeId(item.sessionId!)}`)}
+        >
+          Open session
+        </Button>
       ) : (
         <Tag
           className="project-ready-action"

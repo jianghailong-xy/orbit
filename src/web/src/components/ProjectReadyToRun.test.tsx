@@ -3,7 +3,9 @@ import type { ReactElement } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeId } from '../lib/idCodec';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import {
   ProjectReadyToRun,
@@ -17,6 +19,8 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 
 const { api } = await import('../api');
 const apiMock = vi.mocked(api);
+const RUNNING_SESSION_ID = '00000000-0000-7000-8000-000000000051';
+const QUEUED_SESSION_ID = '00000000-0000-7000-8000-000000000052';
 
 const ITEM = (
   title: string,
@@ -29,11 +33,13 @@ const ITEM = (
     readyCount: number;
     autoRunReadyCount: number;
   } | null = null,
+  sessionId: string | null = null,
 ) => ({
   taskId: `task-${i}`,
   title,
   status: 'OPEN',
   runState,
+  sessionId,
   pausedList,
   downstreamBlocked,
 });
@@ -59,8 +65,8 @@ const ACTIVE = {
   runningCount: 1,
   pausedCount: 0,
   items: [
-    ITEM('Run in progress', 31, 11, 'RUNNING'),
-    ITEM('Waiting for a runner', 29, 12, 'QUEUED'),
+    ITEM('Run in progress', 31, 11, 'RUNNING', null, RUNNING_SESSION_ID),
+    ITEM('Waiting for a runner', 29, 12, 'QUEUED', null, QUEUED_SESSION_ID),
     ITEM('Ready behind both', 18, 13),
   ],
   impactTruncated: null,
@@ -68,6 +74,12 @@ const ACTIVE = {
 
 let container: HTMLDivElement;
 let root: Root;
+let currentPath = '';
+
+function RouteProbe() {
+  currentPath = useLocation().pathname;
+  return null;
+}
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -80,6 +92,7 @@ beforeEach(() => {
   apiMock.mockReset();
   toast.success.mockReset();
   toast.error.mockReset();
+  currentPath = '';
 });
 
 afterEach(async () => {
@@ -100,7 +113,14 @@ async function mount(node: ReactElement): Promise<QueryClient> {
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+    root.render(
+      <MemoryRouter initialEntries={['/projects/p1']}>
+        <QueryClientProvider client={client}>
+          <RouteProbe />
+          {node}
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
   });
   await tick();
   return client;
@@ -127,7 +147,8 @@ describe('ProjectReadyToRun', () => {
     await mount(<ProjectReadyToRun projectId="p1" />);
 
     const text = container.textContent ?? '';
-    expect(text).toContain('Ready to run');
+    expect(text).toContain('Run queue');
+    expect(text).not.toContain('Ready to run');
     expect(text).toContain('7 ready · sorted by work unblocked');
     expect(rows()).toHaveLength(5);
     for (const item of READY.items) {
@@ -145,7 +166,7 @@ describe('ProjectReadyToRun', () => {
     expect(apiMock).toHaveBeenCalledWith('/projects/p1/panorama/ready?limit=5');
   });
 
-  it('keeps queued and running tasks in the same region without Run buttons', async () => {
+  it('keeps active tasks in the queue and opens their work Sessions', async () => {
     apiMock.mockResolvedValue(ACTIVE);
     await mount(<ProjectReadyToRun projectId="p1" />);
 
@@ -158,14 +179,23 @@ describe('ProjectReadyToRun', () => {
     ]);
     expect(text).toContain('Work in progress');
     expect(text).toContain('Waiting for runner');
-    expect(container.querySelector('[aria-label="Running Run in progress"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Queued Waiting for a runner"]')).not.toBeNull();
+    const runningSession = container.querySelector<HTMLElement>(
+      '[aria-label="Open session for Run in progress"]',
+    );
+    const queuedSession = container.querySelector<HTMLElement>(
+      '[aria-label="Open session for Waiting for a runner"]',
+    );
+    expect(runningSession).not.toBeNull();
+    expect(queuedSession).not.toBeNull();
     expect(container.querySelector('[aria-label="Run Run in progress"]')).toBeNull();
     expect(container.querySelector('[aria-label="Run Waiting for a runner"]')).toBeNull();
     expect(container.querySelector('[aria-label="Run Ready behind both"]')).not.toBeNull();
     expect(text).toContain(
       'Active tasks stay here until their run ends. Ready tasks can start now.',
     );
+
+    await click(runningSession!);
+    expect(currentPath).toBe(`/sessions/${encodeId(RUNNING_SESSION_ID)}`);
   });
 
   it('clicking Run posts one named trigger and holds the row in Starting while it is pending', async () => {
@@ -179,7 +209,14 @@ describe('ProjectReadyToRun', () => {
       readyCount: 6,
       queuedCount: 1,
       pausedCount: 0,
-      items: [{ ...READY.items[0], runState: 'QUEUED' as const }, ...READY.items.slice(1, 5)],
+      items: [
+        {
+          ...READY.items[0],
+          runState: 'QUEUED' as const,
+          sessionId: QUEUED_SESSION_ID,
+        },
+        ...READY.items.slice(1, 5),
+      ],
     };
     apiMock.mockImplementation((path: string) => {
       if (path.includes('/execute')) return pendingRun as Promise<never>;
@@ -214,7 +251,7 @@ describe('ProjectReadyToRun', () => {
     expect(toast.success).toHaveBeenCalledWith('Run started');
     expect(container.textContent).toContain('Backend: blocking-root endpoint');
     expect(
-      container.querySelector('[aria-label="Queued Backend: blocking-root endpoint"]'),
+      container.querySelector('[aria-label="Open session for Backend: blocking-root endpoint"]'),
     ).not.toBeNull();
     expect(
       container.querySelector('[aria-label="Run Backend: blocking-root endpoint"]'),
@@ -329,7 +366,7 @@ describe('ProjectReadyToRun', () => {
       method: 'PATCH',
       body: {
         paused: false,
-        note: 'Resumed from the project Ready to run queue',
+        note: 'Resumed from the project Run queue',
       },
     });
     expect(toast.success).toHaveBeenCalledWith('Task list resumed');
@@ -411,7 +448,7 @@ describe('ProjectReadyToRun', () => {
     await mount(<ProjectReadyToRun projectId="p1" />);
     expect(container.textContent).toContain('Run queue could not be read');
     expect(container.textContent).toContain('Internal server error');
-    expect(container.textContent).toContain('Ready to run');
+    expect(container.textContent).toContain('Run queue');
   });
 });
 
@@ -436,7 +473,7 @@ describe('resumePausedListMutationOptions', () => {
       method: 'PATCH',
       body: {
         paused: false,
-        note: 'Resumed from the project Ready to run queue',
+        note: 'Resumed from the project Run queue',
       },
     });
     expect(message.success).toHaveBeenCalledWith('Task list resumed');

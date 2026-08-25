@@ -403,6 +403,8 @@ export interface ProjectReadyToRunItem {
   title: string;
   status: string;
   runState: ProjectReadyToRunState;
+  /** Active Session for QUEUED/RUNNING rows; null for READY/PAUSED rows. */
+  sessionId: string | null;
   /** The list-level action needed before a PAUSED row can expose Run. */
   pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute transitive impact safely. */

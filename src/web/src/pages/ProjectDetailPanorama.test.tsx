@@ -94,6 +94,7 @@ const READY = {
   items: RANKING.items.map((item) => ({
     ...item,
     runState: 'READY' as const,
+    sessionId: null,
     pausedList: null,
   })),
   impactTruncated: null,
@@ -314,7 +315,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const chain = at('aria-label="Chain progress"');
     const goal = at('Ship the new marketing site');
     const tasks = at('>Tasks<');
-    const ready = at('Ready to run');
+    const ready = at('Run queue');
     const acceptance = at('Acceptance</div>');
 
     // The stable goal frames every changing reading below it. It is one compact card between the
@@ -377,7 +378,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('Website Revamp')).toBe(true);
     expect(shows('Work overview')).toBe(true);
     expect(shows('Dispatch needs attention')).toBe(true);
-    expect(shows('Ready to run')).toBe(true);
+    expect(shows('Run queue')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
   });
@@ -416,7 +417,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
 
     // Nothing painted a shell of itself either.
     expect(shows('Work overview')).toBe(false);
-    expect(shows('Ready to run')).toBe(false);
+    expect(shows('Run queue')).toBe(false);
     expect(shows('What the coordinator has been doing')).toBe(false);
   });
 

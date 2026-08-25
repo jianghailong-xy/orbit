@@ -7,6 +7,8 @@ import { ProjectsService } from './projects.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-000000000002';
+const RUNNING_SESSION_ID = '00000000-0000-7000-8000-000000000051';
+const QUEUED_SESSION_ID = '00000000-0000-7000-8000-000000000052';
 
 function harness(rows: unknown[]) {
   const statements: Prisma.Sql[] = [];
@@ -32,6 +34,7 @@ test('the ready queue keeps zero-impact leaves and carries the exact manual-run 
       status: 'OPEN',
       runState: 'READY',
       activeSince: null,
+      sessionId: null,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -49,6 +52,7 @@ test('the ready queue keeps zero-impact leaves and carries the exact manual-run 
       status: 'OPEN',
       runState: 'READY',
       activeSince: null,
+      sessionId: null,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -107,6 +111,7 @@ test('queued and running work stays ahead of the remaining ready queue', async (
       status: 'OPEN',
       runState: 'RUNNING',
       activeSince: new Date('2026-08-25T00:00:00Z'),
+      sessionId: RUNNING_SESSION_ID,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -124,6 +129,7 @@ test('queued and running work stays ahead of the remaining ready queue', async (
       status: 'OPEN',
       runState: 'QUEUED',
       activeSince: new Date('2026-08-24T23:59:00Z'),
+      sessionId: QUEUED_SESSION_ID,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -141,6 +147,7 @@ test('queued and running work stays ahead of the remaining ready queue', async (
       status: 'OPEN',
       runState: 'READY',
       activeSince: null,
+      sessionId: null,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -155,11 +162,11 @@ test('queued and running work stays ahead of the remaining ready queue', async (
   assert.equal(result.queuedCount, 1);
   assert.equal(result.readyCount, 3);
   assert.deepEqual(
-    result.items.map(({ title, runState }) => [title, runState]),
+    result.items.map(({ title, runState, sessionId }) => [title, runState, sessionId]),
     [
-      ['Already running', 'RUNNING'],
-      ['Waiting for a runner', 'QUEUED'],
-      ['Still ready', 'READY'],
+      ['Already running', 'RUNNING', RUNNING_SESSION_ID],
+      ['Waiting for a runner', 'QUEUED', QUEUED_SESSION_ID],
+      ['Still ready', 'READY', null],
     ],
   );
 
@@ -167,6 +174,7 @@ test('queued and running work stays ahead of the remaining ready queue', async (
   assert.match(text, /SELECT DISTINCT ON \(t\.id\)/);
   assert.match(text, /s\.deleted_at IS NULL/);
   assert.match(text, /s\.starts_task_work = true/);
+  assert.match(text, /s\.id AS "sessionId"/);
   assert.match(text, /WHEN 'RUNNING'::run_status THEN 'RUNNING'/);
   assert.match(text, /FROM candidates candidate/);
   assert.match(text, /candidate\."activeSince" DESC NULLS LAST/);
@@ -186,6 +194,7 @@ test('otherwise-ready tasks in a paused list remain visible with the list resume
       status: 'OPEN',
       runState: 'PAUSED',
       activeSince: null,
+      sessionId: null,
       pausedListId: LIST_ID,
       pausedListTitle: 'FineWeb downloads',
       pausedListReadyCount: 6112,
@@ -204,6 +213,7 @@ test('otherwise-ready tasks in a paused list remain visible with the list resume
       title: 'Download one parquet file',
       status: 'OPEN',
       runState: 'PAUSED',
+      sessionId: null,
       pausedList: {
         id: LIST_ID,
         title: 'FineWeb downloads',
@@ -236,6 +246,7 @@ test('an empty queue preserves its count row and returns no fake task', async ()
       status: null,
       runState: null,
       activeSince: null,
+      sessionId: null,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -269,6 +280,7 @@ test('a truncated impact walk leaves ready rows runnable and reports why ranking
       status: 'OPEN',
       runState: 'READY',
       activeSince: null,
+      sessionId: null,
       pausedListId: null,
       pausedListTitle: null,
       pausedListReadyCount: null,
@@ -309,6 +321,7 @@ test('the HTTP service keeps PostgreSQL JIT disabled only for the large ready qu
           status: null,
           runState: null,
           activeSince: null,
+          sessionId: null,
           pausedListId: null,
           pausedListTitle: null,
           pausedListReadyCount: null,

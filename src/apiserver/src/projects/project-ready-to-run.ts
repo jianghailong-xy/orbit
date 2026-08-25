@@ -21,6 +21,8 @@ export interface ProjectReadyToRunItem {
   status: string;
   /** READY can be started; QUEUED/RUNNING are active; PAUSED first needs its list resumed. */
   runState: ProjectReadyToRunState;
+  /** The active work Session to open for QUEUED/RUNNING rows. */
+  sessionId: string | null;
   /** Present only for PAUSED rows, so the UI can offer a truthful resume-list action. */
   pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute its transitive closure safely. */
@@ -57,6 +59,7 @@ type ReadyRow = ReadyTotals & {
   runState: ProjectReadyToRunState | null;
   /** Internal sort value; deliberately omitted from the public payload. */
   activeSince: Date | null;
+  sessionId: string | null;
   pausedListId: string | null;
   pausedListTitle: string | null;
   pausedListReadyCount: number | null;
@@ -153,7 +156,8 @@ export async function readProjectReadyToRun(
                  WHEN 'RUNNING'::run_status THEN 'RUNNING'
                  ELSE 'QUEUED'
                END::text AS "runState",
-               coalesce(s.started_at, s.created_at) AS "activeSince"
+               coalesce(s.started_at, s.created_at) AS "activeSince",
+               s.id AS "sessionId"
           FROM task t
           JOIN session s ON s.task_id = t.id
          WHERE t.project_id = ${projectId}::uuid
@@ -185,6 +189,7 @@ export async function readProjectReadyToRun(
                ready.status,
                'READY'::text AS "runState",
                NULL::timestamptz AS "activeSince",
+               NULL::uuid AS "sessionId",
                NULL::uuid AS "pausedListId",
                NULL::text AS "pausedListTitle",
                NULL::int AS "pausedListReadyCount",
@@ -196,6 +201,7 @@ export async function readProjectReadyToRun(
                active.status,
                active."runState",
                active."activeSince",
+               active."sessionId",
                NULL::uuid AS "pausedListId",
                NULL::text AS "pausedListTitle",
                NULL::int AS "pausedListReadyCount",
@@ -207,6 +213,7 @@ export async function readProjectReadyToRun(
                paused.status,
                'PAUSED'::text AS "runState",
                NULL::timestamptz AS "activeSince",
+               NULL::uuid AS "sessionId",
                paused."pausedListId",
                paused."pausedListTitle",
                paused."pausedListReadyCount",
@@ -223,6 +230,7 @@ export async function readProjectReadyToRun(
            ranked.status,
            ranked."runState",
            ranked."activeSince",
+           ranked."sessionId",
            ranked."pausedListId",
            ranked."pausedListTitle",
            ranked."pausedListReadyCount",
@@ -241,6 +249,7 @@ export async function readProjectReadyToRun(
                candidate.status,
                candidate."runState",
                candidate."activeSince",
+               candidate."sessionId",
                candidate."pausedListId",
                candidate."pausedListTitle",
                candidate."pausedListReadyCount",
@@ -253,6 +262,7 @@ export async function readProjectReadyToRun(
                   candidate.status,
                   candidate."runState",
                   candidate."activeSince",
+                  candidate."sessionId",
                   candidate."pausedListId",
                   candidate."pausedListTitle",
                   candidate."pausedListReadyCount",
@@ -288,6 +298,7 @@ export async function readProjectReadyToRun(
       title,
       status,
       runState,
+      sessionId,
       downstreamBlocked,
       pausedListId,
       pausedListTitle,
@@ -307,7 +318,7 @@ export async function readProjectReadyToRun(
             autoRunReadyCount: pausedListAutoRunReadyCount,
           }
         : null;
-    items.push({ taskId, title, status, runState, pausedList, downstreamBlocked });
+    items.push({ taskId, title, status, runState, sessionId, pausedList, downstreamBlocked });
   }
 
   const [first] = rows;
