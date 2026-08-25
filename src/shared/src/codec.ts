@@ -127,6 +127,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // hands straight back — `GET /projects/:id/acceptance/...`, `task_get`, a session link.
   'runId',
   'acceptedRunId',
+  'definitionId',
+  'criterionId',
   'evidenceTaskId',
   'evidenceSessionId',
   // Unit L2's provenance columns on `task` (migration 0150): where a piece of work was NOTICED, as

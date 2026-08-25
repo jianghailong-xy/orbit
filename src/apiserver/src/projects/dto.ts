@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -32,6 +33,7 @@ const PROJECT_AUTOMATION_POLICIES = Object.values(ProjectAutomationPolicy);
 export const MAX_PROJECT_INSTRUCTIONS_CHARS = 10_000;
 export const MAX_PROJECT_GOAL_CHARS = 4_000;
 export const MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS = 4_000;
+export const MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS = 100;
 
 /**
  * Bounds on the two budgets.
@@ -77,6 +79,23 @@ function IsSent(): PropertyDecorator {
   return ValidateIf((_object, value) => value !== undefined);
 }
 
+/** One structurally bounded project-level criterion. A criterion is deliberately one physical
+ * line in this compatibility phase: the legacy text projection can round-trip it without turning
+ * a continuation line into a second criterion. Inline Markdown remains valid. */
+export class CreateProjectAcceptanceCriterionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS)
+  @Matches(/^[^\r\n]+$/u, { message: 'criterion text must be one line' })
+  text!: string;
+}
+
+/** Stable ids are accepted only on update. Omit one to add a new criterion; retain one returned by
+ * project_get to edit or reorder that definition without replacing its identity. */
+export class UpdateProjectAcceptanceCriterionDto extends CreateProjectAcceptanceCriterionDto {
+  @IsOptional() @IsPublicId() id?: string;
+}
+
 export class CreateProjectDto {
   @IsString()
   @MinLength(1)
@@ -89,6 +108,14 @@ export class CreateProjectDto {
   @IsString()
   @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string;
+  /** Structured authoring source. Mutually exclusive with the legacy text field; the service
+   * checks that cross-field invariant and stores a compatibility projection for older clients. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => CreateProjectAcceptanceCriterionDto)
+  acceptanceCriteriaItems?: CreateProjectAcceptanceCriterionDto[];
   /** How this project's work is to be done. Recorded only — nothing assembles it into a run
    *  prompt in this phase (see the Project model). */
   @IsOptional() @IsString() @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS) instructions?: string;
@@ -103,6 +130,14 @@ export class UpdateProjectDto {
   @IsString()
   @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string | null;
+  /** Whole-collection structured replacement. `[]` explicitly clears every criterion; omission
+   * leaves the collection untouched. Existing item ids preserve identity and revision history. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateProjectAcceptanceCriterionDto)
+  acceptanceCriteriaItems?: UpdateProjectAcceptanceCriterionDto[];
   @IsOptional()
   @IsString()
   @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS)
@@ -286,6 +321,8 @@ export class OpenAcceptanceRunDto {
 export class AcceptanceCriterionOutcomeDto {
   @IsOptional() @IsInt() @Min(1) ordinal?: number;
   @IsOptional() @IsString() @MinLength(1) criterionKey?: string;
+  /** Stable authored definition id, available on runs opened after schema 0172. */
+  @IsOptional() @IsPublicId() criterionId?: string;
   @IsIn(ACCEPTANCE_VERDICTS) verdict!: 'PASS' | 'FAIL' | 'INCONCLUSIVE';
   @IsOptional() @IsString() @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS) summary?: string | null;
   /** Commands, key output, SHAs, environment — §13.4 clause 3's evidence, as JSON rather than

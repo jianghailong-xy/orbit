@@ -9,6 +9,9 @@ import {
   AcceptanceFacts,
   acceptanceDigest,
   acceptanceResultDigest,
+  criteriaFromDefinitions,
+  criteriaLegacyProjection,
+  criteriaSemanticRevision,
   parseCriteria,
   sha256,
 } from './project-acceptance';
@@ -70,10 +73,10 @@ test('the digest names the project and its own version', () => {
   const other = '00000000-0000-7000-8000-0000000025ff';
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
-  // match a new reading of the same world. It moved to 2 when §13.6 SU6's two columns joined
-  // `taskSet` — a run frozen before that change re-digests differently and its DONE is refused
+  // match a new reading of the same world. It moved to 3 when structured, order-independent
+  // criterion definitions replaced raw formatting bytes — an older run re-digests differently and is refused
   // ACCEPTANCE_EVIDENCE_STALE, which is the recoverable outcome and the honest one.
-  assert.equal(ACCEPTANCE_DIGEST_VERSION, 2);
+  assert.equal(ACCEPTANCE_DIGEST_VERSION, 3);
 });
 
 test('the result digest is about the conclusions, not the world', () => {
@@ -108,6 +111,32 @@ test('criteria decompose one per non-blank line, markers are cosmetic, keys are 
   assert.deepEqual(parseCriteria(null), []);
 });
 
+test('structured criteria preserve identity while semantic revision ignores presentation order', () => {
+  const definitions = [
+    { id: 'a', ordinal: 1, text: 'every suite green', revision: 4 },
+    { id: 'b', ordinal: 2, text: 'merged to main', revision: 1 },
+  ];
+  const stated = criteriaFromDefinitions(definitions);
+  assert.deepEqual(stated.map((criterion) => criterion.definitionId), ['a', 'b']);
+  assert.deepEqual(stated.map((criterion) => criterion.definitionRevision), [4, 1]);
+  assert.equal(criteriaLegacyProjection(stated), '1. every suite green\n2. merged to main');
+
+  assert.equal(
+    criteriaSemanticRevision(definitions),
+    criteriaSemanticRevision([...definitions].reverse()),
+    'a conjunction does not change when its display order changes',
+  );
+  assert.notEqual(
+    criteriaSemanticRevision(definitions),
+    criteriaSemanticRevision([{ ...definitions[0], text: 'every suite green on Linux' }, definitions[1]]),
+  );
+  assert.notEqual(
+    criteriaSemanticRevision(definitions),
+    criteriaSemanticRevision([...definitions, { ...definitions[0], id: 'duplicate', ordinal: 3 }]),
+    'duplicates remain part of the multiset',
+  );
+});
+
 test('the refusal codes are the contract’s two plus this unit’s one, and they are distinct', () => {
   // §13.4 AE2 step 3 freezes the first two by name. The third is separate on purpose: "your
   // evidence does not match the world" and "the world still has something unfinished in it" send
@@ -122,7 +151,10 @@ test('every id the acceptance record serves is classified as a public id', () =>
   // The response interceptor keys on FIELD NAMES, so a new uuid column served under an
   // unclassified name comes back as a raw uuid beside base62 siblings — which is how a client ends
   // up unable to hand back an id it was just given.
-  for (const field of ['runId', 'acceptedRunId', 'evidenceTaskId', 'evidenceSessionId']) {
+  for (const field of [
+    'runId', 'acceptedRunId', 'definitionId', 'criterionId',
+    'evidenceTaskId', 'evidenceSessionId',
+  ]) {
     assert.ok(PUBLIC_ID_FIELDS.has(field), `${field} is not classified as a public id`);
     assert.equal(NEVER_PUBLIC_ID_FIELDS.has(field), false, `${field} is classified twice`);
   }

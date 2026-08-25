@@ -26,10 +26,10 @@ write appears, moves or changes shape without its entry moving with it.
 
 | | count | what it is |
 |---|---:|---|
-| `TRANSACTION_UNITS` | 52 | Owns a transaction. This is where the retry decision lives. |
-| `TRANSACTION_PARTICIPANTS` | 40 | Writes only through a transaction client its caller owns. |
-| `STATEMENT_UNITS` | 102 | Runs outside any transaction, in one of five classes. |
-| `TRIGGER_WRITE_SOURCES` | 63 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
+| `TRANSACTION_UNITS` | 55 | Owns a transaction. This is where the retry decision lives. |
+| `TRANSACTION_PARTICIPANTS` | 31 | Writes only through a transaction client its caller owns. |
+| `STATEMENT_UNITS` | 106 | Runs outside any transaction, in one of five classes. |
+| `TRIGGER_WRITE_SOURCES` | 77 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
 
 The trigger list is the half no scan of the TypeScript could find, and it is the half both
 production deadlocks turned on: in each of them at least one wait edge came from a lock no
@@ -53,7 +53,7 @@ one 40P01 with the two wait edges that close the ring, and the ordered sequence 
 orders, asserted to commit with the stored positions still a permutation belonging to one whole
 request.
 
-**Every transaction boundary is now retried.** All 52 are pure database work — the spec proves the
+**Every transaction boundary is now retried.** All 55 are pure database work — the spec proves the
 "pure" half by scanning every closure for an external call — so all 52 re-run whole through
 `withTransactionRetry`. Two cap themselves at 2 attempts rather than 4: `TaskListsService.remove`
 and `TasksService.deleteAndStopRuns` each carry a 60s per-attempt deadline for a cascade that can

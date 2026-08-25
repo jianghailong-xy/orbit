@@ -8,6 +8,8 @@ const { PrismaClientKnownRequestError } = Prisma;
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000a1';
+const CRITERION_A_ID = '00000000-0000-7000-8000-0000000000b1';
+const CRITERION_B_ID = '00000000-0000-7000-8000-0000000000b2';
 
 // The acceptance service is stubbed to the empty standing: `get` reads a criteria summary beside
 // the task tally, and no test in this file is about what that summary contains.
@@ -43,6 +45,41 @@ test('create files the project against the caller and stores blank prose as null
   assert.equal(created.acceptanceCriteria, null);
   // Never sent at all: left to the column default rather than written as null-by-guess.
   assert.equal(created.instructions, undefined);
+});
+
+test('create accepts explicit criterion boundaries and writes a legacy projection beside them', async () => {
+  let created: any;
+  const service = serviceWith({
+    project: {
+      create: async (args: any) => {
+        created = args.data;
+        return { id: PROJECT_ID, ...args.data, members: [], runtime: { coordinatorGeneration: 0n } };
+      },
+    },
+  });
+
+  await service.create(OWNER_ID, {
+    title: 'Structured',
+    acceptanceCriteriaItems: [
+      { text: '  the image boots  ' },
+      { text: 'the full suite passes' },
+    ],
+  } as never);
+
+  assert.equal(created.acceptanceCriteriaFormat, 'STRUCTURED');
+  assert.equal(created.acceptanceCriteria, '1. the image boots\n2. the full suite passes');
+});
+
+test('create refuses two competing acceptance authoring shapes', async () => {
+  const service = serviceWith({ project: { create: async () => assert.fail('must not insert') } });
+  await assert.rejects(
+    () => service.create(OWNER_ID, {
+      title: 'Ambiguous',
+      acceptanceCriteria: 'legacy',
+      acceptanceCriteriaItems: [{ text: 'structured' }],
+    } as never),
+    /alternative authoring shapes/,
+  );
 });
 
 // The status vocabulary is the work's, not a reader's list's: a project is OPEN, was achieved
@@ -184,6 +221,40 @@ test('the detail read reports progress without loading the project’s tasks', a
   assert.deepEqual(project.acceptance, { total: 0, passed: 0, lastRunAt: null, criteria: [] });
 });
 
+test('the detail read marks an ambiguous one-line legacy backfill for review', async () => {
+  const text = '项目完成时：1. build； 2. boot';
+  const service = serviceWith({
+    project: {
+      findFirst: async () => ({
+        id: PROJECT_ID,
+        title: 'LFS',
+        acceptanceCriteria: text,
+        acceptanceCriteriaFormat: 'LEGACY_TEXT',
+        acceptanceCriterionDefinitions: [{
+          id: CRITERION_A_ID,
+          ordinal: 1,
+          text,
+          revision: 1,
+          contentHash: 'a'.repeat(64),
+        }],
+        _count: { tasks: 0 },
+        members: [],
+        runtime: { coordinatorGeneration: 0n },
+      }),
+    },
+    task: { groupBy: async () => [] },
+  });
+
+  const project: any = await service.get(OWNER_ID, PROJECT_ID);
+
+  assert.deepEqual(project.acceptanceCriteriaItems.map((item: any) => item.text), [text]);
+  assert.deepEqual(project.acceptanceCriteriaMigration, {
+    source: 'LEGACY_TEXT',
+    needsReview: true,
+    reason: 'AMBIGUOUS_SINGLE_LINE_ENUMERATION',
+  });
+});
+
 test('someone else’s project is a 404, not an empty project', async () => {
   const service = serviceWith({
     project: { findFirst: async () => null },
@@ -230,6 +301,118 @@ test('an update writes only the fields it was sent, and null clears one', async 
 
   await service.update(OWNER_ID, PROJECT_ID, { goal: null, title: 'Renamed' } as never);
   assert.deepEqual(writes[1], { title: 'Renamed', goal: null });
+});
+
+test('a structured update preserves ids and revisions across reorder, and increments only an edit', async () => {
+  const definitionWrites: any[] = [];
+  const projectWrites: any[] = [];
+  const finalDefinitions = [
+    { id: CRITERION_B_ID, ordinal: 1, text: 'Image boots', revision: 1, contentHash: 'b'.repeat(64) },
+    { id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', revision: 3, contentHash: 'a'.repeat(64) },
+  ];
+  const prisma: any = {
+    project: {
+      findFirst: async () => ({ id: PROJECT_ID, coordinatorEnabled: false }),
+      findUniqueOrThrow: async () => ({
+        status: 'OPEN', acceptedRunId: null, legacyAcceptedAt: null, acceptanceEpoch: 0n,
+      }),
+      update: async (args: any) => {
+        projectWrites.push(args.data);
+        if (args.include) {
+          return {
+            id: PROJECT_ID,
+            status: 'OPEN',
+            acceptanceCriteria: '1. Image boots\n2. Build with docs',
+            acceptanceCriteriaFormat: 'STRUCTURED',
+            acceptanceCriterionDefinitions: finalDefinitions,
+            members: [],
+            runtime: { coordinatorGeneration: 0n },
+          };
+        }
+        return { id: PROJECT_ID };
+      },
+    },
+    projectAcceptanceCriterionDefinition: {
+      findMany: async () => [
+        { id: CRITERION_A_ID, text: 'Build succeeds', revision: 2 },
+        { id: CRITERION_B_ID, text: 'Image boots', revision: 1 },
+      ],
+      updateMany: async (args: any) => definitionWrites.push(['vacate', args.data]),
+      deleteMany: async (args: any) => definitionWrites.push(['delete', args.where]),
+      update: async (args: any) => definitionWrites.push(['update', args.where.id, args.data]),
+      create: async () => assert.fail('retained ids must not create replacement definitions'),
+    },
+    $queryRaw: async () => [{
+      coordinator_enabled: false,
+      config_revision: 0n,
+      status: 'OPEN',
+      accepted_run_id: null,
+      legacy_accepted_at: null,
+      acceptance_epoch: 0n,
+    }],
+  };
+  prisma.$transaction = async (fn: any) => fn(prisma);
+
+  const updated: any = await serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
+    acceptanceCriteriaItems: [
+      { id: CRITERION_B_ID, text: 'Image boots' },
+      { id: CRITERION_A_ID, text: 'Build with docs' },
+    ],
+  } as never);
+
+  assert.deepEqual(projectWrites[0], {
+    acceptanceCriteria: '1. Image boots\n2. Build with docs',
+    acceptanceCriteriaFormat: 'STRUCTURED',
+  });
+  assert.deepEqual(projectWrites[1], {});
+  assert.deepEqual(definitionWrites[2], ['update', CRITERION_B_ID, {
+    ordinal: 1,
+    text: 'Image boots',
+    contentHash: definitionWrites[2][2].contentHash,
+    revision: 1,
+  }]);
+  assert.deepEqual(definitionWrites[3], ['update', CRITERION_A_ID, {
+    ordinal: 2,
+    text: 'Build with docs',
+    contentHash: definitionWrites[3][2].contentHash,
+    revision: 3,
+  }]);
+  assert.deepEqual(updated.acceptanceCriteriaItems.map((item: any) => ({
+    id: item.id, ordinal: item.ordinal, text: item.text, revision: item.revision,
+  })), finalDefinitions.map(({ contentHash: _contentHash, ...item }) => item));
+});
+
+test('a structured update refuses an id from another project before moving any definition', async () => {
+  let mutated = false;
+  const prisma: any = {
+    project: {
+      findFirst: async () => ({ id: PROJECT_ID, coordinatorEnabled: false }),
+    },
+    projectAcceptanceCriterionDefinition: {
+      findMany: async () => [{ id: CRITERION_A_ID, text: 'Build succeeds', revision: 1 }],
+      updateMany: async () => { mutated = true; },
+      deleteMany: async () => { mutated = true; },
+      update: async () => { mutated = true; },
+      create: async () => { mutated = true; },
+    },
+    $queryRaw: async () => [{
+      coordinator_enabled: false,
+      config_revision: 0n,
+      status: 'OPEN',
+      accepted_run_id: null,
+      legacy_accepted_at: null,
+      acceptance_epoch: 0n,
+    }],
+  };
+  prisma.$transaction = async (fn: any) => fn(prisma);
+
+  await assert.rejects(
+    () => serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
+      acceptanceCriteriaItems: [{ id: CRITERION_B_ID, text: 'Not ours' }],
+    } as never),
+    /does not belong to this project's current definitions/,
+  );
+  assert.equal(mutated, false);
 });
 
 /** A `remove()` stub: `tasks` is what the count under the lock finds. */

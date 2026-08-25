@@ -41,7 +41,10 @@ import { createHash } from 'node:crypto';
  * names itself and is answered by opening a new attempt. The alternative — leaving the shape alone
  * — is a digest that silently agrees about worlds that differ.
  */
-export const ACCEPTANCE_DIGEST_VERSION = 2;
+/** Version 3: project criteria are identified by the unordered semantic definition multiset rather
+ * than by the formatting bytes of the legacy prose field. Historical v2 runs remain readable and
+ * fail closed if somebody tries to reuse them after this model change. */
+export const ACCEPTANCE_DIGEST_VERSION = 3;
 
 /**
  * Why a DONE was refused. Two of the three are frozen by the contract (§13.4 AE2 step 3); the third
@@ -60,7 +63,7 @@ export type AcceptanceRefusalCode =
 /** The four projections of §13.4 AE1, already sorted and stringified. Tuples rather than objects
  *  because a tuple has no key order to disagree about between two writers of this file. */
 export interface AcceptanceFacts {
-  /** sha256 of `project.acceptance_criteria ?? ''` — one edited character changes it. */
+  /** sha256 of the unordered multiset of current criterion content hashes. */
   criteriaRevision: string;
   /**
    * (taskId, status, completionPolicy, terminalReason, supersededByTaskId) — `status` is in it so
@@ -142,6 +145,26 @@ export interface ParsedCriterion {
   text: string;
 }
 
+/** The editable definition shape as read from
+ * `project_acceptance_criterion_definition`. Kept structural so pure acceptance code and tests do
+ * not need Prisma's generated model types. */
+export interface AcceptanceCriterionDefinitionLike {
+  id: string;
+  ordinal: number;
+  text: string;
+  revision: number;
+  contentHash?: string;
+}
+
+/** One criterion frozen into a run. `definitionId` is absent only for runs that predate the
+ * structured authoring model, or for a compatibility fallback while a rolling migration is still
+ * backfilling its definition rows. */
+export interface StatedAcceptanceCriterion extends ParsedCriterion {
+  definitionId: string | null;
+  definitionRevision: number | null;
+  contentHash: string;
+}
+
 /** List markers a person writes criteria with. Stripped so that renumbering a list does not change
  *  a criterion's identity, while its words still do. */
 const LIST_MARKER = /^\s*(?:[-*+•]|\(?\d+[.)、]|\d+\s*[.)、]|[（(]\d+[）)]|第\s*\d+\s*[条项点])\s*/u;
@@ -168,4 +191,58 @@ export function parseCriteria(criteria: string | null | undefined): ParsedCriter
     out.push({ ordinal: out.length + 1, key: sha256(stripped).slice(0, 32), text: stripped });
   }
   return out;
+}
+
+/** Turn current definition rows into the exact checklist a run snapshots. */
+export function criteriaFromDefinitions(
+  definitions: AcceptanceCriterionDefinitionLike[],
+): StatedAcceptanceCriterion[] {
+  return [...definitions]
+    .sort((a, b) => a.ordinal - b.ordinal)
+    .map((definition, index) => {
+      const text = definition.text.trim();
+      const contentHash = sha256(text);
+      return {
+        ordinal: index + 1,
+        key: contentHash.slice(0, 32),
+        text,
+        definitionId: definition.id,
+        definitionRevision: definition.revision,
+        contentHash,
+      };
+    });
+}
+
+/** Compatibility checklist for a project whose 0172 definition rows are not visible yet. */
+export function criteriaFromLegacy(
+  criteria: string | null | undefined,
+): StatedAcceptanceCriterion[] {
+  return parseCriteria(criteria).map((criterion) => {
+    const contentHash = sha256(criterion.text);
+    return {
+      ...criterion,
+      definitionId: null,
+      definitionRevision: null,
+      contentHash,
+    };
+  });
+}
+
+/** The legacy text projection old clients continue to read. The numbered Markdown is a projection,
+ * never a parser contract: structured callers own the item boundaries before this is rendered. */
+export function criteriaLegacyProjection(
+  criteria: Array<{ text: string }>,
+): string | null {
+  if (criteria.length === 0) return null;
+  return criteria.map((criterion, index) => `${index + 1}. ${criterion.text.trim()}`).join('\n');
+}
+
+/** Identity of the semantic criterion MULTISET. Order is excluded because project PASS is the
+ * conjunction of its criteria; moving a row in the UI changes presentation, not the proposition
+ * being judged. Full content hashes keep duplicates countable and make the comma join unambiguous. */
+export function criteriaSemanticRevision(
+  criteria: Array<{ text: string }>,
+): string {
+  const hashes = criteria.map((criterion) => sha256(criterion.text.trim())).sort();
+  return sha256(hashes.join(','));
 }

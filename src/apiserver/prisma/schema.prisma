@@ -1510,7 +1510,19 @@ model Project {
   goal               String?
   /// What would settle that the goal was reached. The same field exists on Task for the same
   /// reason it exists here — a claim of completion is only checkable against a stated condition.
+  ///
+  /// Compatibility projection only since migration 0172. The authored source of truth is
+  /// `acceptanceCriterionDefinitions`; this text remains while older API/CLI clients still send
+  /// and read it. A database trigger keeps the two representations in step, including writes from
+  /// an older binary during a rolling upgrade.
   acceptanceCriteria String? @map("acceptance_criteria")
+  /// Database-maintained sha256 of the unordered multiset of current criterion content hashes.
+  /// This, rather than the compatibility text, is the acceptance fact: reordering a conjunction
+  /// changes presentation without invalidating evidence.
+  acceptanceCriteriaDigest String @default("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") @map("acceptance_criteria_digest") @db.Char(64)
+  /// LEGACY_TEXT while current definitions came through/backfilled from the compatibility field;
+  /// STRUCTURED after a caller explicitly submitted item boundaries and stable ids.
+  acceptanceCriteriaFormat String @default("LEGACY_TEXT") @map("acceptance_criteria_format")
   /// How this project's work is to be done, as opposed to which item is being done. The project
   /// counterpart of `TaskList.instructions`, and — importantly for this phase — NOT wired into
   /// any run prompt: nothing assembles it into a dispatch today. It is recorded so a coordinator
@@ -1659,6 +1671,7 @@ model Project {
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
   acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
+  acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
   acceptanceAudit ProjectAcceptanceAudit[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
@@ -1676,6 +1689,36 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+}
+
+/// One CURRENT, authored project acceptance criterion.
+///
+/// This is deliberately not `ProjectAcceptanceCriterion`: that row is an immutable snapshot inside
+/// one acceptance run. Definitions are editable and carry a stable identity across reordering and
+/// wording revisions; a run copies them rather than pointing at mutable text.
+model ProjectAcceptanceCriterionDefinition {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Presentation order only. Project acceptance is a conjunction, so this is intentionally not
+  /// part of the semantic criteria digest: reordering cannot make evidence stale.
+  ordinal Int
+  /// One atomic condition. Inline Markdown is allowed; item boundaries are structural rather than
+  /// inferred from punctuation or list markers.
+  text String
+  /// Monotonic for this stable id. Editing text increments it; reordering leaves it alone.
+  revision Int @default(1)
+  /// sha256 of the exact normalized text. Used to reconcile legacy text writes without guessing
+  /// identity from list position.
+  contentHash String @map("content_hash") @db.Char(64)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
+  @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
+  @@map("project_acceptance_criterion_definition")
 }
 
 /// One agent's membership of one project's team, and the only place a project's COORDINATOR is
@@ -2057,6 +2100,9 @@ model ProjectAcceptanceRun {
   /// The criteria this run actually judged, frozen at open: the raw text plus its sha256. A run is
   /// evidence about a stated condition, and a condition that can be edited afterwards is not one.
   criteriaSnapshot String  @map("criteria_snapshot")
+  /// The structured snapshot for runs opened by schema 0172 or later. Historical runs keep null
+  /// and remain readable through `criteriaSnapshot` plus their per-criterion rows.
+  criteriaSnapshotV2 Json? @map("criteria_snapshot_v2")
   criteriaRevision String  @map("criteria_revision") @db.Char(64)
 
   /// AE1's `acceptanceDigest` over the four projections, computed under the project row lock when
@@ -2128,6 +2174,10 @@ model ProjectAcceptanceCriterion {
   ordinal       Int
   criterionKey  String @map("criterion_key")
   criterionText String @map("criterion_text")
+  /// Historical identity of the authored definition. No FK: deleting or replacing a current
+  /// definition must never rewrite or prevent deletion of the run snapshot that judged it.
+  definitionId       String? @map("definition_id") @db.Uuid
+  definitionRevision Int?    @map("definition_revision")
 
   verdict ProjectAcceptanceVerdict?
   summary String?
@@ -2144,6 +2194,9 @@ model ProjectAcceptanceCriterion {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@unique([runId, ordinal])
+  // Null for every pre-0172 row; PostgreSQL permits multiple nulls, while a structured run may
+  // snapshot one current definition only once.
+  @@unique([runId, definitionId], map: "project_acceptance_criterion_run_definition_idx")
   @@index([projectId])
   @@map("project_acceptance_criterion")
 }

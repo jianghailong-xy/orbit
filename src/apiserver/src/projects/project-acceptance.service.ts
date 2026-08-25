@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProjectAcceptanceVerdict, ProjectStatus } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ACCEPTANCE_BLOCKED,
@@ -15,11 +15,13 @@ import {
   ACCEPTANCE_MISSING,
   AcceptanceFacts,
   AcceptanceRefusalCode,
-  ParsedCriterion,
+  StatedAcceptanceCriterion,
   acceptanceDigest,
   acceptanceResultDigest,
-  parseCriteria,
-  sha256,
+  criteriaFromDefinitions,
+  criteriaFromLegacy,
+  criteriaLegacyProjection,
+  criteriaSemanticRevision,
 } from './project-acceptance';
 import { verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -36,6 +38,7 @@ export interface OpenAcceptanceRunInput {
 export interface AcceptanceCriterionOutcomeInput {
   ordinal?: number;
   criterionKey?: string;
+  criterionId?: string;
   verdict: ProjectAcceptanceVerdict;
   summary?: string | null;
   evidence?: Record<string, unknown>;
@@ -51,6 +54,7 @@ export const ACCEPTANCE_UNDECIDED = 'UNDECIDED' as const;
 
 /** One stated criterion and what the latest attempt currently says about it. */
 export interface AcceptanceCriterionStanding {
+  id: string;
   key: string;
   text: string;
   ordinal: number;
@@ -132,6 +136,40 @@ export class ProjectAcceptanceService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Read the structured authoring source, with a compatibility fallback for unit-test doubles and
+   * the small rolling-upgrade window in which a project row can be visible before an old writer's
+   * text has been backfilled. Production schema 0172 always has the delegate. */
+  private static async statedCriteria(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    legacy: string | null | undefined,
+  ): Promise<StatedAcceptanceCriterion[]> {
+    const delegate = (tx as unknown as {
+      projectAcceptanceCriterionDefinition?: {
+        findMany(args: unknown): Promise<Array<{
+          id: string;
+          ordinal: number;
+          text: string;
+          revision: number;
+          contentHash: string;
+        }>>;
+      };
+    }).projectAcceptanceCriterionDefinition;
+    if (!delegate) return criteriaFromLegacy(legacy);
+    const definitions = await delegate.findMany({
+      where: { projectId },
+      orderBy: { ordinal: 'asc' },
+      select: {
+        id: true,
+        ordinal: true,
+        text: true,
+        revision: true,
+        contentHash: true,
+      },
+    });
+    return definitions.length > 0 ? criteriaFromDefinitions(definitions) : criteriaFromLegacy(legacy);
+  }
+
   // ------------------------------------------------------------------------------------------
   // Facts and digests
   // ------------------------------------------------------------------------------------------
@@ -149,6 +187,9 @@ export class ProjectAcceptanceService {
       select: { acceptanceCriteria: true },
     });
     if (!project) throw new NotFoundException('project not found');
+    const criteria = await ProjectAcceptanceService.statedCriteria(
+      tx, projectId, project.acceptanceCriteria,
+    );
 
     const tasks = await tx.task.findMany({
       where: { projectId },
@@ -175,7 +216,7 @@ export class ProjectAcceptanceService {
     `);
 
     return {
-      criteriaRevision: sha256(project.acceptanceCriteria ?? ''),
+      criteriaRevision: criteriaSemanticRevision(criteria),
       taskSet: tasks.map((t) => [
         t.id, t.status, t.completionPolicy, t.terminalReason ?? '', t.supersededByTaskId ?? '',
       ] as [string, string, string, string, string]),
@@ -284,7 +325,9 @@ export class ProjectAcceptanceService {
       if (locked.status === ProjectStatus.CANCELLED) {
         throw new ConflictException('this project is cancelled — acceptance would decide nothing');
       }
-      const criteria = parseCriteria(locked.acceptanceCriteria);
+      const criteria = await ProjectAcceptanceService.statedCriteria(
+        tx, projectId, locked.acceptanceCriteria,
+      );
       if (criteria.length === 0) {
         throw new BadRequestException(
           'this project states no acceptance criteria — set them before running acceptance, ' +
@@ -321,7 +364,14 @@ export class ProjectAcceptanceService {
         data: {
           projectId,
           attempt,
-          criteriaSnapshot: locked.acceptanceCriteria ?? '',
+          criteriaSnapshot: criteriaLegacyProjection(criteria) ?? '',
+          criteriaSnapshotV2: criteria.map((criterion) => ({
+            id: criterion.definitionId,
+            revision: criterion.definitionRevision,
+            ordinal: criterion.ordinal,
+            text: criterion.text,
+            contentHash: criterion.contentHash,
+          })) as Prisma.InputJsonValue,
           criteriaRevision: facts.criteriaRevision,
           inputDigest,
           // Which reading of the world this evidence is about. Written explicitly, not defaulted:
@@ -341,6 +391,8 @@ export class ProjectAcceptanceService {
           ordinal: c.ordinal,
           criterionKey: c.key,
           criterionText: c.text,
+          definitionId: c.definitionId,
+          definitionRevision: c.definitionRevision,
         })),
       });
       await ProjectAcceptanceService.writeAudit(
@@ -390,16 +442,29 @@ export class ProjectAcceptanceService {
 
       const byOrdinal = new Map(run.criteria.map((c) => [c.ordinal, c]));
       const byKey = new Map(run.criteria.map((c) => [c.criterionKey, c]));
+      const byDefinitionId = new Map(
+        run.criteria.flatMap((c) => c.definitionId ? [[c.definitionId, c] as const] : []),
+      );
       const answered = new Map<number, AcceptanceCriterionOutcomeInput>();
       for (const outcome of outcomes) {
+        let suppliedDefinitionId: string | undefined;
+        if (outcome.criterionId !== undefined) {
+          try {
+            suppliedDefinitionId = toUuid(outcome.criterionId);
+          } catch {
+            throw new BadRequestException(`invalid criterionId ${outcome.criterionId}`);
+          }
+        }
         const criterion = outcome.ordinal !== undefined
           ? byOrdinal.get(outcome.ordinal)
           : outcome.criterionKey !== undefined
             ? byKey.get(outcome.criterionKey)
-            : undefined;
+            : suppliedDefinitionId !== undefined
+              ? byDefinitionId.get(suppliedDefinitionId)
+              : undefined;
         if (!criterion) {
           throw new BadRequestException(
-            `no criterion ${outcome.ordinal ?? outcome.criterionKey} in this run's snapshot`,
+            `no criterion ${outcome.ordinal ?? outcome.criterionKey ?? outcome.criterionId} in this run's snapshot`,
           );
         }
         if (!Object.values(ProjectAcceptanceVerdict).includes(outcome.verdict)) {
@@ -721,6 +786,7 @@ export class ProjectAcceptanceService {
 
   static runRow(run: {
     id: string; projectId: string; attempt: bigint; acceptanceEpoch: bigint; criteriaSnapshot: string;
+    criteriaSnapshotV2?: unknown | null;
     criteriaRevision: string; inputDigest: string; resultDigest: string | null;
     verdict: ProjectAcceptanceVerdict | null; decidedBy: string;
     coordinatorAgentId: string | null; coordinatorSessionId: string | null;
@@ -729,6 +795,7 @@ export class ProjectAcceptanceService {
     startedAt: Date; completedAt: Date | null;
     criteria?: Array<{
       id: string; ordinal: number; criterionKey: string; criterionText: string;
+      definitionId?: string | null; definitionRevision?: number | null;
       verdict: ProjectAcceptanceVerdict | null; summary: string | null; evidence: unknown;
       evidenceTaskId: string | null; evidenceSessionId: string | null; decidedAt: Date | null;
     }>;
@@ -744,6 +811,7 @@ export class ProjectAcceptanceService {
       verdict: run.verdict,
       decidedBy: run.decidedBy,
       criteriaSnapshot: run.criteriaSnapshot,
+      criteriaSnapshotV2: run.criteriaSnapshotV2 ?? null,
       criteriaRevision: run.criteriaRevision,
       inputDigest: run.inputDigest,
       resultDigest: run.resultDigest,
@@ -758,6 +826,8 @@ export class ProjectAcceptanceService {
         id: c.id,
         ordinal: c.ordinal,
         criterionKey: c.criterionKey,
+        criterionId: c.definitionId ?? null,
+        definitionRevision: c.definitionRevision ?? null,
         criterionText: c.criterionText,
         verdict: c.verdict,
         summary: c.summary,
@@ -833,12 +903,19 @@ export class ProjectAcceptanceService {
 
     const evaluated = await this.evaluateGate(projectId);
 
-    const criteria = parseCriteria(project.acceptanceCriteria);
+    const criteria = await ProjectAcceptanceService.statedCriteria(
+      this.prisma as unknown as Prisma.TransactionClient,
+      projectId,
+      project.acceptanceCriteria,
+    );
     return {
       projectId,
       status: project.status,
-      criteria: criteria.map((c: ParsedCriterion) => ({
-        ordinal: c.ordinal, criterionKey: c.key, criterionText: c.text,
+      criteria: criteria.map((c) => ({
+        ordinal: c.ordinal,
+        criterionId: c.definitionId,
+        criterionKey: c.key,
+        criterionText: c.text,
       })),
       criteriaEmptyReason: criteria.length > 0 ? null : 'NO_ACCEPTANCE_CRITERIA',
       acceptanceDigest: evaluated.digest,
@@ -921,44 +998,88 @@ export class ProjectAcceptanceService {
    * judged yet" instead of having to distinguish absent-because-unjudged from absent-because-the
    * -field-was-not-served.
    *
-   * `criteria` is the free-text field's parse, not a replacement for it: the prose is served
-   * unchanged alongside this, and remains the thing a person edits.
+   * Current definitions are the list being reported. A latest run whose semantic revision differs
+   * is history, not partial progress against today's checklist, so the current rows report
+   * UNDECIDED. A pure reorder keeps the revision and the verdicts are remapped by stable definition
+   * id into the new presentation order. Pre-v3 runs stored a differently shaped revision, so their
+   * immutable criterion rows are re-hashed under today's content rule for DISPLAY only; the DONE
+   * gate still rejects their older digestVersion and therefore never upgrades evidence by inference.
    */
   async criteriaSummary(
     projectId: string,
     acceptanceCriteria: string | null,
   ): Promise<ProjectAcceptanceCriteriaSummary> {
+    const stated = await ProjectAcceptanceService.statedCriteria(
+      this.prisma as unknown as Prisma.TransactionClient,
+      projectId,
+      acceptanceCriteria,
+    );
+    const unjudged = (lastRunAt: Date | null = null): ProjectAcceptanceCriteriaSummary => ({
+      total: stated.length,
+      passed: 0,
+      // A run against an older definition is stale progress, not no history. Keeping its timestamp
+      // distinguishes "never judged" from "judged before the exam changed" while every current
+      // criterion correctly remains UNDECIDED.
+      lastRunAt,
+      criteria: stated.map((criterion) => ({
+        id: criterion.definitionId ?? `legacy:${criterion.ordinal}:${criterion.key}`,
+        key: criterion.key,
+        text: criterion.text,
+        ordinal: criterion.ordinal,
+        verdict: ACCEPTANCE_UNDECIDED,
+        summary: null,
+        decidedAt: null,
+        evidenceTaskId: null,
+      })),
+    });
     const latest = await this.prisma.projectAcceptanceRun.findFirst({
       where: { projectId },
       orderBy: { attempt: 'desc' },
       include: { criteria: { orderBy: { ordinal: 'asc' } } },
     });
-    if (latest === null) {
-      const stated = parseCriteria(acceptanceCriteria);
-      return {
-        total: stated.length,
-        passed: 0,
-        lastRunAt: null,
-        criteria: stated.map((c) => ({
-          key: c.key,
-          text: c.text,
-          ordinal: c.ordinal,
-          verdict: ACCEPTANCE_UNDECIDED,
-          summary: null,
-          decidedAt: null,
-          evidenceTaskId: null,
-        })),
-      };
+    if (latest === null) return unjudged();
+    const latestSemanticRevision = latest.digestVersion === ACCEPTANCE_DIGEST_VERSION
+      ? latest.criteriaRevision
+      : latest.digestVersion < ACCEPTANCE_DIGEST_VERSION
+        ? criteriaSemanticRevision(latest.criteria.map((criterion) => ({
+            text: criterion.criterionText,
+          })))
+        : null;
+    if (latestSemanticRevision !== criteriaSemanticRevision(stated)) {
+      return unjudged(latest.completedAt ?? latest.startedAt);
     }
-    const criteria = latest.criteria.map((c) => ({
-      key: c.criterionKey,
-      text: c.criterionText,
-      ordinal: c.ordinal,
-      verdict: c.verdict ?? ACCEPTANCE_UNDECIDED,
-      summary: c.summary,
-      decidedAt: c.decidedAt,
-      evidenceTaskId: c.evidenceTaskId,
-    }));
+
+    const byDefinition = new Map(
+      latest.criteria.flatMap((criterion) => criterion.definitionId
+        ? [[criterion.definitionId, criterion] as const]
+        : []),
+    );
+    const byKey = new Map<string, typeof latest.criteria>();
+    for (const criterion of latest.criteria) {
+      const rows = byKey.get(criterion.criterionKey) ?? [];
+      rows.push(criterion);
+      byKey.set(criterion.criterionKey, rows);
+    }
+    const usedRunRows = new Set<string>();
+    const criteria = stated.map((definition) => {
+      let judged = definition.definitionId
+        ? byDefinition.get(definition.definitionId)
+        : undefined;
+      if (!judged) {
+        judged = (byKey.get(definition.key) ?? []).find((row) => !usedRunRows.has(row.id));
+      }
+      if (judged) usedRunRows.add(judged.id);
+      return {
+        id: definition.definitionId ?? `legacy:${definition.ordinal}:${definition.key}`,
+        key: definition.key,
+        text: definition.text,
+        ordinal: definition.ordinal,
+        verdict: judged?.verdict ?? ACCEPTANCE_UNDECIDED,
+        summary: judged?.summary ?? null,
+        decidedAt: judged?.decidedAt ?? null,
+        evidenceTaskId: judged?.evidenceTaskId ?? null,
+      };
+    });
     return {
       total: criteria.length,
       passed: criteria.filter((c) => c.verdict === ProjectAcceptanceVerdict.PASS).length,

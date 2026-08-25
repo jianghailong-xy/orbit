@@ -17,12 +17,10 @@ import { ago } from '../lib/runnerEngines';
  * the common case where no attempt has ever run, says exactly that instead of implying a score.
  *
  * THIS IS THE PROJECT PAGE'S ONE HOME FOR THE CRITERIA. The page used to render them twice: once
- * as the authored `acceptanceCriteria` free text under its own heading, and again here with a
- * verdict per row. That was not a coincidence to be tidied up — the server's `parseCriteria` makes
- * one criterion out of every non-blank line of that same field, so the two lists were always the
- * same sentences, and neither said which was authoritative. The reader who stopped at the first
- * one never learnt that acceptance had never run. So the field is gone and this card carries both
- * halves: what was stated, and what the latest attempt concluded about each of them.
+ * as the authored legacy `acceptanceCriteria` text under its own heading, and again here with a
+ * verdict per row. Structured servers now serve the authoritative item rows directly; legacy
+ * servers conservatively derive them one physical line at a time. In both cases this card carries
+ * both halves: what is currently stated, and what the latest matching attempt concluded.
  *
  * THREE THINGS THIS FILE IS CAREFUL ABOUT
  *
@@ -42,6 +40,8 @@ import { ago } from '../lib/runnerEngines';
  *  `UNDECIDED` is a value the server sends rather than an absence: it covers both a criterion the
  *  current run has not reached and every criterion of a project no run has ever judged. */
 export interface AcceptanceCriterionStanding {
+  /** Stable authored definition id on structured servers. Optional for compatibility payloads. */
+  id?: string;
   key: string;
   text: string;
   ordinal: number;
@@ -59,11 +59,17 @@ export interface ProjectAcceptanceSummary {
 
 /** The parts of the project detail document this card reads. `acceptance` is optional because a
  *  server that predates the field serves the rest of the document unchanged, and that is a
- *  different answer from "never run"; `acceptanceCriteria` is the authored free text the criteria
- *  are parsed from, which is what this card falls back to in exactly that case. */
+ *  different answer from "never run"; `acceptanceCriteria` is the compatibility projection this
+ *  card falls back to only when that older server reports no standing. */
 interface ProjectAcceptanceDetail {
   acceptance?: ProjectAcceptanceSummary | null;
   acceptanceCriteria?: string | null;
+  acceptanceCriteriaItems?: Array<{ id: string; ordinal: number; text: string; revision: number }>;
+  acceptanceCriteriaMigration?: {
+    source: 'LEGACY_TEXT' | 'STRUCTURED';
+    needsReview: boolean;
+    reason: 'AMBIGUOUS_SINGLE_LINE_ENUMERATION' | null;
+  };
 }
 
 /**
@@ -246,7 +252,7 @@ export function AcceptanceCriteriaList({ criteria }: { criteria: AcceptanceCrite
   return (
     <ul className="acceptance-criteria">
       {criteria.map((c) => (
-        <li key={c.key} className={`acceptance-row${c.verdict === 'FAIL' ? ' is-fail' : ''}`}>
+        <li key={c.id ?? `${c.key}:${c.ordinal}`} className={`acceptance-row${c.verdict === 'FAIL' ? ' is-fail' : ''}`}>
           <span className="acceptance-row-no">{c.ordinal}</span>
           <span className="acceptance-row-text">
             <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
@@ -404,6 +410,16 @@ export function ProjectAcceptanceCard({
       ) : (
         <>
           <div className="acceptance-standing">{standingLine(acceptance, Date.now())}</div>
+          {detail.data?.acceptanceCriteriaMigration?.needsReview ? (
+            <div className="acceptance-block">
+              <Alert
+                type="warning"
+                showIcon
+                message="Legacy acceptance criteria need review"
+                description="This single-line text contains inline numbering. It was preserved as one criterion rather than guessed into several; resave it as structured items to confirm the intended boundaries."
+              />
+            </div>
+          ) : null}
           <AcceptanceCriteriaList criteria={shown} />
           {criteria.length > shown.length ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other

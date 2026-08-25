@@ -464,6 +464,55 @@ func TestProjectCreateSendsOnlyTheFieldsGiven(t *testing.T) {
 	}
 }
 
+func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{
+		"create", "--title", "LFS", "--acceptance-criteria-items",
+		`[{"text":" Build succeeds "},{"text":"Image boots"}]`, "--json",
+	}, strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatalf("structured project create: %v", err)
+	}
+	items, _ := body["acceptanceCriteriaItems"].([]interface{})
+	if len(items) != 2 || items[0].(map[string]interface{})["text"] != "Build succeeds" ||
+		items[1].(map[string]interface{})["text"] != "Image boots" {
+		t.Fatalf("structured project create body = %#v", body)
+	}
+	if _, legacy := body["acceptanceCriteria"]; legacy {
+		t.Fatalf("structured project create invented legacy criteria: %#v", body)
+	}
+}
+
+func TestProjectCreateRejectsAmbiguousAcceptanceAuthoring(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	for _, args := range [][]string{
+		{"create", "--title", "LFS", "--acceptance-criteria", "Build", "--acceptance-criteria-items", `[{"text":"Build"}]`},
+		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"id":"not-allowed","text":"Build"}]`},
+		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"text":"   "}]`},
+		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"text":"Build\nBoot"}]`},
+	} {
+		var out bytes.Buffer
+		if err := cmdProjectCLI(args, strings.NewReader(""), &out); err == nil {
+			t.Fatalf("project create accepted ambiguous criteria: %#v", args)
+		}
+	}
+	if hit {
+		t.Fatal("an invalid structured project create reached the server")
+	}
+}
+
 // A project with no title has nothing to identify it by, and the server refuses one — so the CLI
 // says which flag is missing rather than spending a round trip to be told.
 func TestProjectCreateRequiresATitle(t *testing.T) {
@@ -608,6 +657,46 @@ func TestProjectUpdateSendsOnlyTheFlagsGiven(t *testing.T) {
 	}
 }
 
+func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{
+		"update", "proj-1", "--acceptance-criteria-items",
+		`[{"id":"criterion-2","text":"Image boots"},{"id":"criterion-1","text":"Build succeeds"}]`,
+		"--json",
+	}, strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatalf("structured project update: %v", err)
+	}
+	items, _ := body["acceptanceCriteriaItems"].([]interface{})
+	if len(items) != 2 || items[0].(map[string]interface{})["id"] != "criterion-2" ||
+		items[1].(map[string]interface{})["id"] != "criterion-1" {
+		t.Fatalf("structured project update body = %#v", body)
+	}
+	if len(body) != 1 {
+		t.Fatalf("structured project update sent unrelated fields: %#v", body)
+	}
+
+	// An empty structured array is the unambiguous structured clear spelling.
+	body = nil
+	if err := cmdProjectCLI([]string{
+		"update", "proj-1", "--acceptance-criteria-items", "[]", "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("structured project clear: %v", err)
+	}
+	cleared, present := body["acceptanceCriteriaItems"].([]interface{})
+	if !present || len(cleared) != 0 {
+		t.Fatalf("structured project clear body = %#v", body)
+	}
+}
+
 // --clear-<field> is the one way to remove prose, and it has to travel as a JSON null: an omitted
 // key means "leave it alone" and an empty string is a value the server would store as null only
 // by coincidence of its own trimming rule.
@@ -665,6 +754,8 @@ func TestProjectUpdateRejectsContradictoryFlags(t *testing.T) {
 		{"update", "proj-1", "--clear-instructions", "--instructions", "Shard by shard"},
 		{"update", "proj-1", "--clear-instructions", "--instructions-file", "-"},
 		{"update", "proj-1", "--goal-file", "-", "--acceptance-criteria-file", "-"},
+		{"update", "proj-1", "--acceptance-criteria", "Every shard", "--acceptance-criteria-items", `[{"text":"Every shard"}]`},
+		{"update", "proj-1", "--clear-acceptance-criteria", "--acceptance-criteria-items", "[]"},
 	} {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("from stdin"), &out)

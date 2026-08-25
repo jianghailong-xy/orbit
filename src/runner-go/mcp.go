@@ -200,6 +200,11 @@ const maxTaskLabels = 16
 // the cap the write would be rejected against, rather than letting a model discover it by 400.
 const maxTaskAcceptanceCriteriaChars = 4000
 
+// Project criteria have the same total compatibility projection cap as the server and a bounded
+// number of structural items, so a malformed plan is rejected before the HTTP round-trip.
+const maxProjectAcceptanceCriteriaChars = 4000
+const maxProjectAcceptanceCriteriaItems = 100
+
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
@@ -391,8 +396,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if title == "" {
 			return toolResult("title is required", true)
 		}
+		_, legacyCriteria := args["acceptanceCriteria"]
+		_, structuredCriteria := args["acceptanceCriteriaItems"]
+		if legacyCriteria && structuredCriteria {
+			return toolResult("acceptanceCriteria and acceptanceCriteriaItems cannot be used together", true)
+		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
+		copyIfPresent(body, args, "goal", "acceptanceCriteria", "acceptanceCriteriaItems", "instructions")
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
@@ -407,12 +417,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("projectId is required", true)
 		}
+		_, legacyCriteria := args["acceptanceCriteria"]
+		_, structuredCriteria := args["acceptanceCriteriaItems"]
+		if legacyCriteria && structuredCriteria {
+			return toolResult("acceptanceCriteria and acceptanceCriteriaItems cannot be used together", true)
+		}
 		body := map[string]interface{}{}
 		// The same present-only copy task_update uses, and it is what gives each prose field all
 		// three outcomes for free: absent stays absent (the project keeps what it states), a string
 		// is forwarded as given, and an explicit null survives as null rather than being mistaken
 		// for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "instructions", "status")
+		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "acceptanceCriteriaItems", "instructions", "status")
 		// The fence, counted separately: it names no field to write, so an update carrying only it
 		// would be a request that changes nothing while claiming to have gone through.
 		fields := len(body)
@@ -1317,6 +1332,31 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		}
 		return schema
 	}
+	projectCriterionTextProp := map[string]interface{}{
+		"type":      "string",
+		"minLength": 1,
+		"maxLength": maxProjectAcceptanceCriteriaChars,
+		"description": "One atomic, independently judgeable project outcome. Keep it on one line " +
+			"during the legacy compatibility window; inline Markdown is allowed.",
+	}
+	projectCriteriaCreateProp := map[string]interface{}{
+		"type":     "array",
+		"maxItems": maxProjectAcceptanceCriteriaItems,
+		"description": "The project's acceptance criteria as explicit items. Use this instead of " +
+			"acceptanceCriteria whenever item boundaries are known; the two fields are mutually exclusive.",
+		"items": obj(map[string]interface{}{"text": projectCriterionTextProp}, "text"),
+	}
+	projectCriteriaUpdateProp := map[string]interface{}{
+		"type":     "array",
+		"maxItems": maxProjectAcceptanceCriteriaItems,
+		"description": "Whole structured replacement. Preserve an item's id from project_get to " +
+			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
+			"Mutually exclusive with the legacy acceptanceCriteria field.",
+		"items": obj(map[string]interface{}{
+			"id":   map[string]interface{}{"type": "string"},
+			"text": projectCriterionTextProp,
+		}, "text"),
+	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
@@ -1423,7 +1463,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
-			"name": "task_attribution",
+			"name":        "task_attribution",
 			"description": "Read one task's attribution boundary — five answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id, status and acceptance epoch; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `acceptance`: the project's stated criteria that CITE this task, each with the verdict it reached, the epoch it was reached in, and whether that is still current — an old PASS stays readable and stops counting once the project is reopened. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"no criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
@@ -1446,7 +1486,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId"),
 		},
 		{
-			"name": "project_crossings",
+			"name":        "project_crossings",
 			"description": "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state (PENDING / APPROVED / DENIED / APPLIED), the crossing key that identifies the MOVE rather than the row, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question is still waiting, was refused, or has already been spent. There is deliberately no tool that ANSWERS one — the approver of a cross-project crossing is the account owner, never the target project's coordinator, because one agent accepting work on another goal's behalf is precisely the failure this boundary exists to prevent. Say what is waiting and on whom; do not answer it.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
@@ -1461,7 +1501,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId"),
 		},
 		{
-			"name": "project_reopen_impact",
+			"name":        "project_reopen_impact",
 			"description": "Read what reopening a settled project would COST: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, still readable and no longer a claim about the world the project is in — so an account owner being asked for one should be asked with those numbers rather than with \"can you reopen this\". Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
@@ -1528,9 +1568,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"description": "Read the evidence a project's DONE would be checked against, and " +
 				"whether it would be allowed right now. A comment saying the tests passed is not " +
 				"evidence this server can check; a run in this record is. Returns: the stated " +
-				"acceptance criteria decomposed one per non-blank line — the checklist an " +
-				"acceptance run has to answer item for item; acceptanceDigest, the digest of the " +
-				"criteria text, every task with its status and completion policy, every " +
+				"structured checklist (legacy text is conservatively backfilled one non-blank " +
+				"physical line per item), which an acceptance run must answer item for item; " +
+				"acceptanceDigest, the digest of the unordered criterion propositions, every " +
+				"task with its status and completion policy, every " +
 				"verification verdict and the newest merge observation per requirement; every " +
 				"attempt with its per-criterion conclusions, evidence and the digest of the facts " +
 				"it judged; what each target branch was last observed to CONTAIN and at which " +
@@ -1569,8 +1610,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		{
 			"name": "project_acceptance_verdict",
 			"description": "Conclude a project acceptance attempt with one verdict per stated " +
-				"criterion. Address each criterion by ordinal (its position in the snapshot) or " +
-				"criterionKey (its content). EVERY criterion must be answered: a missing one is " +
+				"criterion. Address each criterion by criterionId (its stable structured identity), " +
+				"ordinal (its position in the snapshot), or criterionKey (legacy content identity). " +
+				"EVERY criterion must be answered: a missing one is " +
 				"refused, because a project-level PASS is the conjunction of them and one nobody " +
 				"checked is not a pass. The attempt's own verdict is DERIVED and cannot be " +
 				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
@@ -1589,7 +1631,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"criteria": map[string]interface{}{
 					"type": "array",
-					"description": "One entry per stated criterion: {ordinal or criterionKey, " +
+					"description": "One entry per stated criterion: {criterionId, ordinal or criterionKey, " +
 						"verdict: PASS|FAIL|INCONCLUSIVE, summary, evidence, evidenceTaskId, " +
 						"evidenceSessionId}.",
 					"items": map[string]interface{}{"type": "object"},
@@ -1663,10 +1705,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceCriteria": map[string]interface{}{
 					"type": "string",
-					"description": "What would settle that the goal was reached — the observable " +
+					"description": "Legacy free-text authoring shape. What would settle that the goal was reached — the observable " +
 						"result a reader can verify for the whole project, as opposed to a task's " +
-						"own acceptanceCriteria, which settles one piece of it. Max 4,000 characters.",
+						"own acceptanceCriteria, which settles one piece of it. One non-blank physical line " +
+						"becomes one criterion. Prefer acceptanceCriteriaItems when boundaries are known; " +
+						"do not send both. Max 4,000 characters.",
 				},
+				"acceptanceCriteriaItems": projectCriteriaCreateProp,
 				"instructions": map[string]interface{}{
 					"type":        "string",
 					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters.",
@@ -1698,10 +1743,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceCriteria": map[string]interface{}{
 					"type": []string{"string", "null"},
-					"description": "Replace what would settle that the goal was reached (max 4,000 " +
+					"description": "Legacy text replacement for what would settle the goal (max 4,000 " +
 						"characters), or null to leave it with none stated. This settles the whole " +
-						"project, not one task.",
+						"project, not one task. Prefer acceptanceCriteriaItems and do not send both.",
 				},
+				"acceptanceCriteriaItems": projectCriteriaUpdateProp,
 				"instructions": map[string]interface{}{
 					"type":        []string{"string", "null"},
 					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions.",
@@ -1785,7 +1831,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The tasks to create, in dependency order (prerequisites first).",
 				},
 				"dryRun": map[string]interface{}{
-					"type": "boolean",
+					"type":        "boolean",
 					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title, status and acceptance epoch), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
 				},
 			}, "tasks"),

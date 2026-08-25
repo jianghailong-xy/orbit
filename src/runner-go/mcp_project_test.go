@@ -181,7 +181,19 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 			t.Fatalf("project_create %s schema = %#v", field, createProps[field])
 		}
 	}
-	if len(createProps) != 4 {
+	createItems, _ := createProps["acceptanceCriteriaItems"].(map[string]interface{})
+	if createItems["type"] != "array" || createItems["maxItems"] != maxProjectAcceptanceCriteriaItems {
+		t.Fatalf("project_create acceptanceCriteriaItems = %#v", createItems)
+	}
+	createItem, _ := createItems["items"].(map[string]interface{})
+	createItemProps, _ := createItem["properties"].(map[string]interface{})
+	if len(createItemProps) != 1 || createItemProps["text"] == nil {
+		t.Fatalf("project_create criterion item = %#v", createItem)
+	}
+	if required, _ := createItem["required"].([]string); len(required) != 1 || required[0] != "text" {
+		t.Fatalf("project_create criterion required = %#v", createItem["required"])
+	}
+	if len(createProps) != 5 {
 		t.Fatalf("project_create properties = %#v", createProps)
 	}
 	if got := mcpToolRequired(t, tools, "project_create"); len(got) != 1 || got[0] != "title" {
@@ -189,10 +201,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 
 	updateProps := mcpToolProps(tools, "project_update")
-	if len(updateProps) != 7 {
+	if len(updateProps) != 8 {
 		t.Fatalf("project_update properties = %#v", updateProps)
 	}
-	// The seventh is the compare-and-swap fence, and it is a STRING: configRevision is a bigint
+	// The compare-and-swap fence is a STRING: configRevision is a bigint
 	// column served as a decimal string, and a numeric schema would tell a model to round it.
 	revisionProp, _ := updateProps["expectedConfigRevision"].(map[string]interface{})
 	if revisionProp["type"] != "string" {
@@ -206,6 +218,18 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 		if len(types) != 2 || types[0] != "string" || types[1] != "null" {
 			t.Fatalf("project_update %s type = %#v", field, prop["type"])
 		}
+	}
+	updateItems, _ := updateProps["acceptanceCriteriaItems"].(map[string]interface{})
+	if updateItems["type"] != "array" || updateItems["maxItems"] != maxProjectAcceptanceCriteriaItems {
+		t.Fatalf("project_update acceptanceCriteriaItems = %#v", updateItems)
+	}
+	updateItem, _ := updateItems["items"].(map[string]interface{})
+	updateItemProps, _ := updateItem["properties"].(map[string]interface{})
+	if len(updateItemProps) != 2 || updateItemProps["id"] == nil || updateItemProps["text"] == nil {
+		t.Fatalf("project_update criterion item = %#v", updateItem)
+	}
+	if required, _ := updateItem["required"].([]string); len(required) != 1 || required[0] != "text" {
+		t.Fatalf("project_update criterion required = %#v", updateItem["required"])
 	}
 	// status is a closed set, and the three the server's DTO validates against.
 	statusProp, _ := updateProps["status"].(map[string]interface{})
@@ -336,6 +360,87 @@ func TestMCPProjectCreateSendsOnlyWhatWasGiven(t *testing.T) {
 	}
 	if len(body) != 1 || body["title"] != "Crawl" {
 		t.Fatalf("project_create body = %#v", body)
+	}
+}
+
+// Item boundaries and stable ids are data, not prose conventions. Both write tools must carry
+// the nested array unchanged; flattening it back into acceptanceCriteria would recreate the
+// ambiguity this shape exists to remove.
+func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		if r.Method == http.MethodPost {
+			_, _ = w.Write([]byte(projectCreatedJSON))
+			return
+		}
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	createItems := []interface{}{
+		map[string]interface{}{"text": "Build succeeds"},
+		map[string]interface{}{"text": "Image boots"},
+	}
+	if res := mcp.callTool("project_create", map[string]interface{}{
+		"title": "LFS", "acceptanceCriteriaItems": createItems,
+	}); res["isError"] == true {
+		t.Fatalf("structured project_create returned an error: %#v", res["content"])
+	}
+	updateItems := []interface{}{
+		map[string]interface{}{"id": "criterion-2", "text": "Image boots"},
+		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds"},
+	}
+	if res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "acceptanceCriteriaItems": updateItems,
+	}); res["isError"] == true {
+		t.Fatalf("structured project_update returned an error: %#v", res["content"])
+	}
+
+	if len(bodies) != 2 {
+		t.Fatalf("structured project writes = %#v", bodies)
+	}
+	for index, want := range []interface{}{createItems, updateItems} {
+		if got := fmt.Sprintf("%v", bodies[index]["acceptanceCriteriaItems"]); got != fmt.Sprintf("%v", want) {
+			t.Fatalf("structured project body %d items = %#v", index, bodies[index])
+		}
+		if _, legacy := bodies[index]["acceptanceCriteria"]; legacy {
+			t.Fatalf("structured project body %d invented legacy criteria: %#v", index, bodies[index])
+		}
+	}
+}
+
+func TestMCPProjectWritesRejectCompetingAcceptanceShapes(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer srv.Close()
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+
+	for _, call := range []struct {
+		name string
+		args map[string]interface{}
+	}{
+		{"project_create", map[string]interface{}{
+			"title": "LFS", "acceptanceCriteria": "Build", "acceptanceCriteriaItems": []interface{}{},
+		}},
+		{"project_update", map[string]interface{}{
+			"projectId": "proj-1", "acceptanceCriteria": nil, "acceptanceCriteriaItems": []interface{}{},
+		}},
+	} {
+		res := mcp.callTool(call.name, call.args)
+		if res["isError"] != true {
+			t.Fatalf("%s accepted two acceptance shapes: %#v", call.name, res)
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "cannot be used together") {
+			t.Fatalf("%s conflict result = %#v", call.name, res)
+		}
+	}
+	if hit {
+		t.Fatal("competing acceptance authoring shapes reached the server")
 	}
 }
 

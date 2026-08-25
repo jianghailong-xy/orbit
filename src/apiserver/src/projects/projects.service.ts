@@ -33,9 +33,20 @@ import {
   encodeTaskPageCursor,
 } from '../tasks/tasks.service';
 import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
-import { CreateProjectDto, ReopenProjectDto, UpdateProjectDto } from './dto';
+import {
+  CreateProjectDto,
+  MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
+  MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
+  ReopenProjectDto,
+  UpdateProjectDto,
+  type UpdateProjectAcceptanceCriterionDto,
+} from './dto';
 import { admitReopen, reopenImpact, type ReopenImpact } from './project-attribution-surface';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
+import {
+  criteriaLegacyProjection,
+  sha256,
+} from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 import { withSessionState } from '../sessions/session-state';
@@ -209,6 +220,17 @@ const COORDINATION_INCLUDE = {
   runtime: { select: { coordinatorGeneration: true } },
 } satisfies Prisma.ProjectInclude;
 
+const ACCEPTANCE_DEFINITIONS_INCLUDE = {
+  orderBy: { ordinal: 'asc' as const },
+  select: {
+    id: true,
+    ordinal: true,
+    text: true,
+    revision: true,
+    contentHash: true,
+  },
+};
+
 type WithCoordination = {
   members: Array<{ agentId: string }>;
   runtime: { coordinatorGeneration: bigint } | null;
@@ -236,6 +258,46 @@ function withCoordination<T extends WithCoordination>(
     // error: the row is created with the project and backfilled by the migration, so its absence
     // can only mean "nothing has rotated", and a 500 on a read would be the wrong way to say that.
     coordinatorGeneration: runtime?.coordinatorGeneration ?? 0n,
+  };
+}
+
+type WithAcceptanceDefinitions = {
+  acceptanceCriterionDefinitions?: Array<{
+    id: string;
+    ordinal: number;
+    text: string;
+    revision: number;
+    contentHash: string;
+  }>;
+  acceptanceCriteriaFormat?: string;
+  acceptanceCriteria?: string | null;
+};
+
+/** Fold the storage relation into the author-facing array. The legacy text stays beside it during
+ * the compatibility window, while `migration` makes a conservative one-item backfill that looks
+ * like an inline numbered list visible rather than silently claiming it was reviewed. */
+function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project: T) {
+  const { acceptanceCriterionDefinitions, ...rest } = project;
+  const definitions = acceptanceCriterionDefinitions ?? [];
+  const format = project.acceptanceCriteriaFormat ?? 'LEGACY_TEXT';
+  const legacyLooksAmbiguous =
+    format === 'LEGACY_TEXT' &&
+    definitions.length === 1 &&
+    /[;；]\s*(?:\(?\d+[.)、]|[（(]\d+[）)])/u.test(project.acceptanceCriteria ?? '');
+  return {
+    ...rest,
+    acceptanceCriteriaItems: definitions.map((criterion) => ({
+      id: criterion.id,
+      ordinal: criterion.ordinal,
+      text: criterion.text,
+      revision: criterion.revision,
+      contentHash: criterion.contentHash,
+    })),
+    acceptanceCriteriaMigration: {
+      source: format,
+      needsReview: legacyLooksAmbiguous,
+      reason: legacyLooksAmbiguous ? 'AMBIGUOUS_SINGLE_LINE_ENUMERATION' : null,
+    },
   };
 }
 
@@ -492,6 +554,138 @@ export class ProjectsService {
     return value?.trim() ? value : null;
   }
 
+  /** Validate the invariant decorators cannot express across two optional properties. */
+  private static assertOneAcceptanceAuthoringShape(dto: {
+    acceptanceCriteria?: string | null;
+    acceptanceCriteriaItems?: unknown;
+  }): void {
+    if (dto.acceptanceCriteria !== undefined && dto.acceptanceCriteriaItems !== undefined) {
+      throw new BadRequestException(
+        'acceptanceCriteria and acceptanceCriteriaItems are alternative authoring shapes; send one',
+      );
+    }
+    if (dto.acceptanceCriteriaItems === null) {
+      throw new BadRequestException(
+        'acceptanceCriteriaItems must be an array; use [] to clear it or omit it to leave it unchanged',
+      );
+    }
+  }
+
+  /** Normalize structurally bounded item text and keep the compatibility projection inside the
+   * same total size older clients already enforce. This is repeated in the service because runner
+   * tests and internal callers invoke it directly without Nest's validation pipe. */
+  private static normalizeAcceptanceItems(
+    items: Array<{ text: string }>,
+  ): Array<{ text: string }> {
+    if (!Array.isArray(items)) {
+      throw new BadRequestException('acceptanceCriteriaItems must be an array');
+    }
+    if (items.length > MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS) {
+      throw new BadRequestException(
+        `acceptanceCriteriaItems must contain at most ${MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS} items`,
+      );
+    }
+    const normalized = items.map((item, index) => {
+      const text = typeof item?.text === 'string' ? item.text.trim() : '';
+      if (text === '') {
+        throw new BadRequestException(`acceptance criterion ${index + 1} must not be blank`);
+      }
+      if (/[\r\n]/u.test(text)) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} must be one line during the legacy compatibility window`,
+        );
+      }
+      return { text };
+    });
+    const projection = criteriaLegacyProjection(normalized) ?? '';
+    if (projection.length > MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS) {
+      throw new BadRequestException(
+        `structured acceptance criteria must fit the ${MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS}-character compatibility projection`,
+      );
+    }
+    return normalized;
+  }
+
+  /** Apply a whole structured collection while preserving every id the caller retained. Existing
+   * ordinals are first moved out of the way so swapping two rows never transiently violates the
+   * unique `(project, ordinal)` constraint. */
+  private static async replaceAcceptanceDefinitions(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    items: UpdateProjectAcceptanceCriterionDto[],
+  ): Promise<string | null> {
+    const normalized = ProjectsService.normalizeAcceptanceItems(items);
+    const existing = await tx.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId },
+      orderBy: { ordinal: 'asc' },
+      select: { id: true, text: true, revision: true },
+    });
+    const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
+    const used = new Set<string>();
+    const desired = normalized.map((criterion, index) => {
+      const supplied = items[index]?.id;
+      let id: string;
+      if (supplied === undefined) {
+        id = randomUUID();
+      } else {
+        try {
+          id = toUuid(supplied);
+        } catch {
+          throw new BadRequestException(`acceptance criterion ${index + 1} has an invalid id`);
+        }
+        if (!byId.has(id)) {
+          throw new BadRequestException(
+            `acceptance criterion ${index + 1} does not belong to this project's current definitions`,
+          );
+        }
+      }
+      if (used.has(id)) {
+        throw new BadRequestException(`acceptance criterion id ${supplied ?? id} is repeated`);
+      }
+      used.add(id);
+      return { ...criterion, id, ordinal: index + 1 };
+    });
+
+    if (existing.length > 0) {
+      await tx.projectAcceptanceCriterionDefinition.updateMany({
+        where: { projectId },
+        data: { ordinal: { increment: 1_000_000_000 } },
+      });
+    }
+    await tx.projectAcceptanceCriterionDefinition.deleteMany({
+      where: { projectId, ...(used.size > 0 ? { id: { notIn: [...used] } } : {}) },
+    });
+    for (const criterion of desired) {
+      const previous = byId.get(criterion.id);
+      const contentHash = sha256(criterion.text);
+      if (previous) {
+        await tx.projectAcceptanceCriterionDefinition.update({
+          where: { id: criterion.id },
+          data: {
+            ordinal: criterion.ordinal,
+            text: criterion.text,
+            contentHash,
+            revision: previous.text === criterion.text
+              ? previous.revision
+              : previous.revision + 1,
+          },
+        });
+      } else {
+        await tx.projectAcceptanceCriterionDefinition.create({
+          data: {
+            id: criterion.id,
+            projectId,
+            ordinal: criterion.ordinal,
+            text: criterion.text,
+            revision: 1,
+            contentHash,
+          },
+        });
+      }
+    }
+    return criteriaLegacyProjection(desired);
+  }
+
   /**
    * `coordinator` is a SERVER-DERIVED argument, never a field of `CreateProjectDto`: the only
    * caller that passes one is `createInSession`, which resolved it from the session the request
@@ -501,6 +695,10 @@ export class ProjectsService {
    */
   async create(ownerId: string, dto: CreateProjectDto, coordinator?: ProjectCoordinatorSeed) {
     if (!dto.title) throw new BadRequestException('title is required');
+    ProjectsService.assertOneAcceptanceAuthoringShape(dto);
+    const structuredCriteria = dto.acceptanceCriteriaItems === undefined
+      ? undefined
+      : ProjectsService.normalizeAcceptanceItems(dto.acceptanceCriteriaItems);
     try {
       // `await` inside the `try`, not a returned promise: a returned one rejects in the caller,
       // where the catch below cannot see it.
@@ -509,7 +707,12 @@ export class ProjectsService {
           title: dto.title,
           ownerId,
           goal: ProjectsService.blankToNull(dto.goal),
-          acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
+          acceptanceCriteria: structuredCriteria === undefined
+            ? ProjectsService.blankToNull(dto.acceptanceCriteria)
+            : criteriaLegacyProjection(structuredCriteria),
+          ...(structuredCriteria === undefined
+            ? {}
+            : { acceptanceCriteriaFormat: 'STRUCTURED' }),
           instructions: ProjectsService.blankToNull(dto.instructions),
           // The defaults for a NEW project, written here rather than left to the column defaults —
           // and they are different values. The columns default to `false` / MANUAL because that is
@@ -552,9 +755,12 @@ export class ProjectsService {
               }
             : {}),
         },
-        include: COORDINATION_INCLUDE,
+        include: {
+          ...COORDINATION_INCLUDE,
+          acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
+        },
       });
-      return withCoordination(project);
+      return withAcceptanceDefinitions(withCoordination(project));
     } catch (e) {
       // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
       // only when a coordinator was seeded (`id` is a server-generated uuid v7). The rows nested
@@ -704,13 +910,18 @@ export class ProjectsService {
    * `acceptance` is the other half of "is this project done". `tasksByStatus` measures the PROCESS
    * and can read 100% while nothing the project was for has been checked; the acceptance tally is
    * the OUTCOME — how many of the stated criteria the latest attempt concluded PASS about, from
-   * §13.4's per-criterion rows. It sits beside `acceptanceCriteria`, the free text, and replaces
-   * nothing about it: the prose is still what a person edits, and this is what a run concluded.
+   * §13.4's per-criterion rows. It sits beside the current structured definitions and the legacy
+   * text projection: definitions are what a person edits, while this is what a frozen run
+   * concluded.
    */
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      include: { _count: { select: { tasks: true } }, ...COORDINATION_INCLUDE },
+      include: {
+        _count: { select: { tasks: true } },
+        ...COORDINATION_INCLUDE,
+        acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
+      },
     });
     if (!project) throw new NotFoundException('project not found');
     const byStatus = await this.prisma.task.groupBy({
@@ -719,11 +930,11 @@ export class ProjectsService {
       _count: { _all: true },
     });
     const acceptance = await this.acceptance.criteriaSummary(id, project.acceptanceCriteria);
-    return {
+    return withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
       acceptance,
-    };
+    });
   }
 
   /**
@@ -1192,6 +1403,7 @@ export class ProjectsService {
       select: { id: true, coordinatorEnabled: true },
     });
     if (!current) throw new NotFoundException('project not found');
+    ProjectsService.assertOneAcceptanceAuthoringShape(dto);
 
     // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
     // below, which is the one that decides: what a project was when this read ran is not what it
@@ -1211,9 +1423,6 @@ export class ProjectsService {
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
       ...(dto.goal !== undefined ? { goal: ProjectsService.blankToNull(dto.goal) } : {}),
-      ...(dto.acceptanceCriteria !== undefined
-        ? { acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria) }
-        : {}),
       ...(dto.instructions !== undefined
         ? { instructions: ProjectsService.blankToNull(dto.instructions) }
         : {}),
@@ -1279,6 +1488,53 @@ export class ProjectsService {
         // this project off is exactly the case the check has to see.
         ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
 
+        // Criteria are applied BEFORE a simultaneous DONE is gated. The old single-write ordering
+        // checked the previous criteria and then replaced them in the statement that wrote DONE —
+        // a project could therefore be bound to evidence about the exam it had just discarded.
+        // Under this already-held project lock, definitions and their compatibility projection are
+        // changed first; the gate below consequently reads the exact world it is about to settle.
+        if (dto.acceptanceCriteriaItems !== undefined) {
+          const projection = await ProjectsService.replaceAcceptanceDefinitions(
+            tx, id, dto.acceptanceCriteriaItems,
+          );
+          await tx.project.update({
+            where: { id },
+            data: {
+              acceptanceCriteria: projection,
+              acceptanceCriteriaFormat: 'STRUCTURED',
+            },
+          });
+        } else if (dto.acceptanceCriteria !== undefined) {
+          await tx.project.update({
+            where: { id },
+            data: {
+              acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
+              acceptanceCriteriaFormat: 'LEGACY_TEXT',
+            },
+          });
+        }
+
+        // A criteria fact edit can atomically reopen a DONE through the database trigger. Re-read
+        // that committed-within-this-transaction state so the explicit status branches below do
+        // not also retire/audit the same run as a user reopen, and so a simultaneous DONE is gated
+        // from OPEN against the new definitions rather than treated as an idempotent old DONE.
+        const state = dto.acceptanceCriteriaItems !== undefined || dto.acceptanceCriteria !== undefined
+          ? await tx.project.findUniqueOrThrow({
+              where: { id },
+              select: {
+                status: true,
+                acceptedRunId: true,
+                legacyAcceptedAt: true,
+                acceptanceEpoch: true,
+              },
+            })
+          : {
+              status: locked.status as ProjectStatus,
+              acceptedRunId: locked.accepted_run_id,
+              legacyAcceptedAt: locked.legacy_accepted_at,
+              acceptanceEpoch: locked.acceptance_epoch,
+            };
+
         // §13.4 AE2, in the transaction that writes DONE and after the lock that orders it. AE5:
         // this is the one place `project.status = DONE` is decided, so a user in the web app, the
         // CLI, MCP `project_update` and a coordinator inside a turn all meet the same check.
@@ -1286,7 +1542,7 @@ export class ProjectsService {
         // Idempotent by re-reading the LOCKED row rather than by trusting the caller: a project
         // that is already DONE is not re-gated and not re-bound, so pressing the button twice
         // produces one binding and one audit row.
-        if (settling && locked.status !== ProjectStatus.DONE) {
+        if (settling && state.status !== ProjectStatus.DONE) {
           const gate = await this.acceptance.assertDoneAllowed(tx, id);
           data.acceptedRunId = gate.runId;
           await ProjectAcceptanceService.writeAudit(
@@ -1309,12 +1565,12 @@ export class ProjectsService {
         // The acknowledgement is optional on this path and required on `POST :id/reopen`, which is
         // the door a person acts through: an older client and the repair paths keep the reopen they
         // have always had (§8 CM1), and nothing that omits it gains a fence it never asked for.
-        if (dto.status === ProjectStatus.OPEN && locked.status !== ProjectStatus.OPEN) {
+        if (dto.status === ProjectStatus.OPEN && state.status !== ProjectStatus.OPEN) {
           const impact = reopenImpact({
-            status: locked.status as 'DONE' | 'CANCELLED' | 'OPEN',
-            acceptanceEpoch: String(locked.acceptance_epoch),
+            status: state.status as 'DONE' | 'CANCELLED' | 'OPEN',
+            acceptanceEpoch: String(state.acceptanceEpoch),
             liveAcceptanceRuns: 0,
-            legacyAccepted: locked.legacy_accepted_at !== null,
+            legacyAccepted: state.legacyAcceptedAt !== null,
           });
           if (dto.acknowledgedAcceptanceEpoch !== undefined) {
             const admitted = admitReopen(impact, dto.acknowledgedAcceptanceEpoch);
@@ -1344,7 +1600,7 @@ export class ProjectsService {
         // because the digest stops matching — true for a fact change, and NOT true here, since a
         // reopen on its own changes none of the four projections. So this is the one invalidation
         // that has to be written rather than derived.
-        if (dto.status === ProjectStatus.OPEN && locked.status === ProjectStatus.DONE) {
+        if (dto.status === ProjectStatus.OPEN && state.status === ProjectStatus.DONE) {
           const retired = await tx.projectAcceptanceRun.updateMany({
             where: { projectId: id, supersededAt: null },
             data: { supersededAt: new Date(), supersededReason: 'reopened_by_user' },
@@ -1356,20 +1612,28 @@ export class ProjectsService {
           data.legacyAcceptedAt = null;
           await ProjectAcceptanceService.writeAudit(
             tx, id, 'reopened_by_user', 'the owner reopened this project',
-            { previousAcceptedRunId: locked.accepted_run_id, wasLegacy: locked.legacy_accepted_at !== null },
-            locked.accepted_run_id,
+            { previousAcceptedRunId: state.acceptedRunId, wasLegacy: state.legacyAcceptedAt !== null },
+            state.acceptedRunId,
           );
         }
 
         if (agentId !== undefined) {
           await ProjectsService.writeCoordinatorAgent(tx, ownerId, id, agentId);
         }
-        return tx.project.update({ where: { id }, data, include: COORDINATION_INCLUDE });
+        return tx.project.update({
+          where: { id },
+          data,
+          include: {
+            ...COORDINATION_INCLUDE,
+            acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
+          },
+        });
       }, loggedRetry(this.logger, 'projects.update'));
       // `reopened` is absent — not null — on every write that did not reopen anything, so a client
       // branching on it cannot read "this write reopened nothing" as "this write reopened
       // something with no detail".
-      return reopened ? { ...withCoordination(project), reopened } : withCoordination(project);
+      const shaped = withAcceptanceDefinitions(withCoordination(project));
+      return reopened ? { ...shaped, reopened } : shaped;
     } catch (e) {
       // A refused DONE is a thing somebody has to be able to look up afterwards — "I pressed it and
       // nothing happened" is the report, and the refusal itself rolled back with the transaction

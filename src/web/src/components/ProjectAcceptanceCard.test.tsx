@@ -293,6 +293,32 @@ describe('ProjectAcceptanceCard', () => {
     expect(html).not.toContain('Lighthouse ≥ 90 on every page');
   });
 
+  it('surfaces an ambiguous one-line legacy backfill instead of pretending it was split', () => {
+    const qc = client();
+    seed(
+      qc,
+      {
+        total: 1,
+        passed: 0,
+        lastRunAt: null,
+        criteria: [criterion(1, '1. Build; 2. Boot', 'UNDECIDED')],
+      },
+      {
+        acceptanceCriteria: '1. Build; 2. Boot',
+        acceptanceCriteriaMigration: {
+          source: 'LEGACY_TEXT',
+          needsReview: true,
+          reason: 'AMBIGUOUS_SINGLE_LINE_ENUMERATION',
+        },
+      },
+    );
+    const html = paint(qc);
+
+    expect(html).toContain('Legacy acceptance criteria need review');
+    expect(html).toContain('preserved as one criterion rather than guessed into several');
+    expect(rowCount(html)).toBe(1);
+  });
+
   it('says how many criteria it is not showing on a long list', () => {
     const many = Array.from({ length: 30 }, (_, i) =>
       criterion(i + 1, `Criterion number ${i + 1} holds`, i % 3 === 0 ? 'PASS' : 'UNDECIDED'),
