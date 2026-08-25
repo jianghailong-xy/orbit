@@ -36,10 +36,9 @@ export type AttentionSectionKey = 'stalled' | 'wrapping-up' | 'running' | 'compl
 /**
  * The four sections, in the order they are read.
  *
- * Stalled is FIRST and In progress is third, which is the page's whole premise: work that is
- * already running does not need the reader, and work that could run but isn't does. Wrapping up
- * sits between them because closing a finished project is a smaller ask than starting a stalled
- * one, but it is still an ask — unlike anything below it.
+ * In progress is FIRST, so the projects with work currently under way are the first thing the
+ * reader sees. Stalled follows it as the queue that needs attention, then Wrapping up and the
+ * folded history in Completed.
  *
  * `note` is the header's small print, and it says two things in one line: what lands in this
  * section, and what orders it. Both halves are checked against `attentionSectionOf` and
@@ -52,6 +51,11 @@ const SECTIONS: ReadonlyArray<{
   defaultCollapsed?: boolean;
 }> = [
   {
+    key: 'running',
+    title: 'In progress',
+    note: 'Work in flight, or no tasks filed yet · newest activity first',
+  },
+  {
     key: 'stalled',
     title: 'Stalled',
     note: 'Nothing running, work outstanding · most ready first, then newest activity',
@@ -60,11 +64,6 @@ const SECTIONS: ReadonlyArray<{
     key: 'wrapping-up',
     title: 'Wrapping up',
     note: 'Every task settled, project still open · newest activity first',
-  },
-  {
-    key: 'running',
-    title: 'In progress',
-    note: 'Work in flight, or no tasks filed yet · newest activity first',
   },
   {
     key: 'completed',
@@ -150,8 +149,8 @@ function byActivityDesc(a: AttentionProject, b: AttentionProject): number {
  * in place.
  *
  * Stalled leads with `ready` because that is the size of the ask: the project with 6,118 tasks
- * that could start and nothing starting them is the first thing on the page. Ties break on
- * activity rather than on the incoming order, so two projects with the same ready count are still
+ * that could start and nothing starting them leads its section. Ties break on activity rather
+ * than on the incoming order, so two projects with the same ready count are still
  * in an order the reader can predict from the row — a stable-but-arbitrary tie is unverifiable,
  * which is the same defect as an unrendered sort key.
  *

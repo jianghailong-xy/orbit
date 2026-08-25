@@ -184,16 +184,14 @@ describe('projectAttentionSections', () => {
     ...project(over),
   });
 
-  it('returns the four sections in reading order, attention first', () => {
+  it('returns the four sections with in-progress work first', () => {
     const sections = projectAttentionSections([]);
 
-    // In progress sits BELOW Stalled on purpose: work that is already running does not need the
-    // reader, and work that could run but isn't does.
-    expect(sections.map((s) => s.key)).toEqual(['stalled', 'wrapping-up', 'running', 'completed']);
+    expect(sections.map((s) => s.key)).toEqual(['running', 'stalled', 'wrapping-up', 'completed']);
     expect(sections.map((s) => s.title)).toEqual([
+      'In progress',
       'Stalled',
       'Wrapping up',
-      'In progress',
       'Completed',
     ]);
   });

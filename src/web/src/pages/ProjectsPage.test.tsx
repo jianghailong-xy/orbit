@@ -712,16 +712,15 @@ describe('ProjectsPage — sections', () => {
     return renderPage(qc);
   }
 
-  it('cuts the list into four, attention first and running work below it', () => {
+  it('cuts the list into four with in-progress work first', () => {
     const html = renderMixed();
 
-    // The page's premise, in the order the sections appear: what could run but isn't, then what
-    // only needs closing, then what is already being served, then what is finished. A reader
-    // scanning top-down meets the projects that need them before the ones that don't.
+    // Work currently under way leads, followed by the queues that need attention or closing,
+    // then the folded history.
     expect([...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      'running',
       'stalled',
       'wrapping-up',
-      'running',
       'completed',
     ]);
   });
@@ -2620,9 +2619,9 @@ describe('ProjectsPage — badges', () => {
     ]);
 
     expect(rows.filter((r) => r.chip).map((r) => [r.title, r.chip])).toEqual([
+      ['Zombie Run', 'No progress 3d'],
       ['Stalled Quiet', 'Stalled 2d'],
       ['Needs Closing', '7/7 settled · still open'],
-      ['Zombie Run', 'No progress 3d'],
     ]);
   });
 

@@ -271,9 +271,7 @@ describe('projects index — 2026-08-23 production snapshot', () => {
     const stalled = sectionOf(html, 'stalled');
     expect(rankIn(stalled, NAME.ios)).toBe(2);
     expect(stalled.rows[0]).toBe(NAME.fineweb);
-    // And it is genuinely above the fold of the whole page, not merely of its own section:
-    // Stalled is the first section rendered.
-    expect(sectionsOf(html)[0].key).toBe('stalled');
+    expect(sectionsOf(html)[0].key).toBe('running');
   });
 
   // ── 2 ───────────────────────────────────────────────────────────────────────────────────────
@@ -402,12 +400,12 @@ describe('projects index — 2026-08-23 production snapshot', () => {
     // Named, not assumed: a section holding one row cannot contradict its own ordering, so a pass
     // over it says nothing. Wrapping up is that section in this account — see the reconstruction
     // below, which is what actually exercises its header.
-    expect(exercised).toEqual(['stalled', 'running']);
+    expect(exercised).toEqual(['running', 'stalled']);
   });
 
   it('names an ordering in every header, and folds only the finished work', () => {
     const rendered = sectionsOf(html);
-    expect(rendered.map((s) => s.key)).toEqual(['stalled', 'wrapping-up', 'running']);
+    expect(rendered.map((s) => s.key)).toEqual(['running', 'stalled', 'wrapping-up']);
     // Completed is absent because the snapshot's twelve projects are all OPEN — an empty section
     // is dropped rather than drawn as a header counting nothing.
     for (const s of rendered) expect(s.collapsed).toBe(false);
@@ -449,7 +447,7 @@ describe('projects index — the live account, including its finished projects',
   it('folds Completed by default and leaves the attention sections open', () => {
     const html = render([...SNAPSHOT, ...FINISHED]);
     const rendered = sectionsOf(html);
-    expect(rendered.map((s) => s.key)).toEqual(['stalled', 'wrapping-up', 'running', 'completed']);
+    expect(rendered.map((s) => s.key)).toEqual(['running', 'stalled', 'wrapping-up', 'completed']);
     expect(rendered.filter((s) => s.collapsed).map((s) => s.key)).toEqual(['completed']);
     expect(sectionOf(html, 'completed').rows).toEqual(
       [...FINISHED].sort((a, b) => Date.parse(b.lastActivityAt!) - Date.parse(a.lastActivityAt!)).map((p) => p.title),

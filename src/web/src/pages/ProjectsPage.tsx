@@ -203,7 +203,7 @@ export function ProjectsPage() {
     () => (projects.data ?? []).filter((p) => matchesProjectSearch(p, search)),
     [projects.data, search],
   );
-  // Stalled, Wrapping up, In progress, Completed — in that order, off the buckets and
+  // In progress, Stalled, Wrapping up, Completed — in that order, off the buckets and
   // `lastActivityAt` every row carries. The rules and the reason for that order live in
   // lib/projectAttention; the server's unrendered `createdAt desc` no longer orders anything here.
   const sections = useMemo(() => projectAttentionSections(matches), [matches]);
