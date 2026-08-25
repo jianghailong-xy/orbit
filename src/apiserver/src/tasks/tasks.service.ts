@@ -351,22 +351,42 @@ type TaskRunTarget = {
 export function buildTaskExecutionPrompt(task: {
   title: string;
   description?: string | null;
+  acceptanceCriteria?: string | null;
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
 }): string {
   const systemRun = task.isForeman === true || task.verifiesTaskId != null;
   const instructions = systemRun ? undefined : task.list?.instructions?.trim();
+  // What would PROVE this task done, handed to the run that has to argue it is. It used to be
+  // left out, which asked every run to answer "am I finished?" against criteria it had to go and
+  // fetch with `task_get` — so a run that did not fetch them answered against the description
+  // instead, and the description says what to DO and never what would settle it. Not suppressed
+  // for a foreman or a verifier the way the list's instructions are: those describe how the
+  // LIST's work is done and neither of those runs is doing it, whereas a task's own acceptance
+  // criteria are about that task whoever is running it.
+  const acceptance = task.acceptanceCriteria?.trim();
   return (
     `请开始执行任务「${task.title}」。\n\n` +
     (task.description ? `任务描述：\n${task.description}\n\n` : '') +
+    (acceptance ? `验收标准（判定本任务是否完成的依据）：\n${acceptance}\n\n` : '') +
     (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
     `请按以下步骤进行：\n` +
     `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
     `2. 执行任务。\n` +
-    `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
-    `再用 task_update 将该任务状态（status）置为 DONE。\n` +
-    `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
+    (systemRun
+      // A foreman and a verifier finish themselves, and the server lets them: their own run IS the
+      // deliverable, and nothing else in the system completes either one. Told the ordinary step 3
+      // they would be handed two contradictory instructions in one prompt — this one saying not to
+      // write a status, their own brief saying to write DONE — which is worse than either rule.
+      ? `3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，`
+        + `并写明你的结论；再用 task_update 将本任务状态（status）置为 DONE。\n`
+      : `3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，`
+        + `并逐条说明你认为哪条验收标准因此被满足。不要写 status——DONE 是解锁下游任务的授权，`
+        + `由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n`) +
+    `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
+    `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
+    `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
   );
 }
 
@@ -6559,6 +6579,69 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
       if (refusal) throw new ForbiddenException(refusal);
     }
+    // A task's DONE is not the executor's account of itself. It is an AUTHORISATION: the DAG
+    // unlocks the next task on it (`computeDependencyState` reads DONE and only DONE as
+    // satisfaction) and a project's acceptance counts it. Written by the run being judged, it is
+    // the graded party writing its own grade, and the grade takes effect the instant it lands —
+    // nothing reads it back afterwards to ask whether the world it claimed is the world there is.
+    //
+    // Deliberately ASYMMETRIC: this same session may write FAILED through this same path, and
+    // that is the point rather than an oversight. Nobody misreports their own failure to release
+    // downstream work, and FAILED releases nothing — `computeDependencyState` reads it as
+    // BLOCKED_FAILED, which stops the successors and asks for a person. The conservative
+    // self-report is allowed; the optimistic one is not.
+    //
+    // Scoped to the one relation that makes it wrong, exactly like the verification-independence
+    // refusal above: the acting session's own task IS this task. A person editing from no session,
+    // the coordinator, and any other session are all left alone — none of them is the run being
+    // judged. And only a write that MOVES the task to DONE is refused: re-asserting a DONE that is
+    // already there authorises nothing that was not already authorised.
+    //
+    // TWO KINDS ARE EXEMPT, and they are the two whose OWN RUN is the deliverable rather than the
+    // report about one — the same pair `buildTaskExecutionPrompt` already calls a system run:
+    //
+    //  - A foreman task. §13.1 AG6 is explicit that `is_foreman` means "this task's SESSION is the
+    //    work", and nothing else in the system completes one. Refusing it does not move the
+    //    decision to somebody else, it wedges the row for ever.
+    //  - A verification task. `task-aggregation.ts` counts a check only as `status DONE && verdict
+    //    PASS`, so refusing its own DONE makes VERIFICATION_PASSED unreachable for every subject.
+    //    And a check is not the party being graded: it is the SECOND opinion, its finding is the
+    //    `verdict` rather than the status, that verdict already may not be reached by the run that
+    //    produced the work (the independence refusal above), and a DONE with no verdict is already
+    //    refused. Every authority its status carries is fenced somewhere else already.
+    //
+    // Both are read off the STORED row, never off this request: `verifiesTaskId` is on the update
+    // DTO, so judging the exemption on the value this write ASKS for would let any run mint itself
+    // an exemption in the same call it uses it in.
+    if (
+      dto.status === TaskStatus.DONE && before.status !== TaskStatus.DONE && actingSessionId
+      && before.verifiesTaskId == null
+    ) {
+      const actingSession = await this.prisma.session.findFirst({
+        where: { id: actingSessionId, ownerId },
+        select: { taskId: true },
+      });
+      const isOwnRun = actingSession?.taskId === id;
+      // Read only once the session IS this task's run, so an ordinary edit pays nothing for it.
+      // Its own query because `isForeman` is deliberately not in the `get` projection.
+      const foreman = isOwnRun
+        ? (await this.prisma.task.findFirst({ where: { id, ownerId }, select: { isForeman: true } }))
+          ?.isForeman === true
+        : false;
+      if (isOwnRun && !foreman) {
+        throw new ForbiddenException({
+          code: 'SELF_REPORTED_DONE_REFUSED',
+          message:
+            'A task run cannot write its own task DONE — DONE is the authorisation the next task '
+            + 'unlocks on and the project counts, not the executor\'s account of itself. Report '
+            + 'instead: task_comment with the commands you ran, their raw output and exit codes, '
+            + 'and which acceptance criterion each one satisfies; whoever accepts the work writes '
+            + 'DONE. Writing FAILED from this session is allowed and is what you should write if '
+            + 'the work did not finish.',
+          requiredAction: 'REPORT_EVIDENCE_AND_LET_ACCEPTANCE_DECIDE',
+        });
+      }
+    }
     // §13.1 AG6's other end, refused here so the API answers in a sentence rather than letting
     // `task_foreman_manual_policy` answer with a constraint name. `is_foreman` says "this task's
     // SESSION is the work"; a non-MANUAL policy says "the children decide when it is finished". A
@@ -10002,6 +10085,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        // What the run is judged against, read here because the prompt now carries it.
+        acceptanceCriteria: true,
         projectId: true,
         provider: true,
         model: true,
@@ -10372,6 +10457,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private buildExecutePrompt(task: {
     title: string;
     description?: string | null;
+    acceptanceCriteria?: string | null;
     isForeman?: boolean;
     verifiesTaskId?: string | null;
     list?: { instructions?: string | null } | null;
@@ -10472,6 +10558,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        // What the run is judged against, read here because the prompt now carries it.
+        acceptanceCriteria: true,
         projectId: true,
         provider: true,
         model: true,

@@ -12,6 +12,7 @@ const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
  */
 function promptFor(task: {
   description?: string | null;
+  acceptanceCriteria?: string | null;
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
@@ -25,6 +26,7 @@ function promptFor(task: {
         id: TASK_ID,
         title: 'Ship it',
         description: null,
+        acceptanceCriteria: null,
         provider: null,
         model: null,
         status: 'OPEN',
@@ -60,18 +62,24 @@ function promptFor(task: {
   };
 }
 
-// Verbatim from before the instructions layer existed (HEAD~2). Any edit to the template has to
-// break this test — every task run in the deployment is assembled from it, and a silent change
-// would reach hundreds of runs before anyone read one.
+// The template, verbatim. Any edit to it has to break this test — every task run in the
+// deployment is assembled from it, and a silent change would reach hundreds of runs before anyone
+// read one. It last changed when the executor stopped writing its own DONE: steps 3 and 4 are the
+// instruction half of that boundary, and they have to arrive in the same release as the refusal in
+// `update()` (`task-self-done-boundary.spec.ts`) or every run in flight hits a wall it was never
+// told about.
 const PROMPT_WITHOUT_INSTRUCTIONS =
   '请开始执行任务「Ship it」。\n\n' +
   '任务描述：\n下载 000_00008.parquet\n\n' +
   '请按以下步骤进行：\n' +
   '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
   '2. 执行任务。\n' +
-  '3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），' +
-  '再用 task_update 将该任务状态（status）置为 DONE。\n' +
-  '4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。';
+  '3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，' +
+  '并逐条说明你认为哪条验收标准因此被满足。不要写 status——DONE 是解锁下游任务的授权，' +
+  '由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n' +
+  '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
+  '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
+  '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。';
 
 test('a list with no instructions assembles the prompt exactly as it did before the layer existed', async () => {
   const prompt = await promptFor({
@@ -99,9 +107,12 @@ test('instructions are spliced between the task description and the reporting pr
       '请按以下步骤进行：\n' +
       '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
       '2. 执行任务。\n' +
-      '3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），' +
-      '再用 task_update 将该任务状态（status）置为 DONE。\n' +
-      '4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。',
+      '3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，' +
+      '并逐条说明你认为哪条验收标准因此被满足。不要写 status——DONE 是解锁下游任务的授权，' +
+      '由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n' +
+      '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
+      '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
+      '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。',
   );
 });
 
@@ -154,4 +165,102 @@ test('a verification task is not given the list instructions either', async () =
   const text = await prompt();
   assert.ok(!text.includes('作业指导'), text);
   assert.ok(text.includes('核实任务 X 是否真的完成。'), text);
+});
+
+// ── the acceptance criteria, and the reporting protocol they exist for ───────────────────────
+
+test('the acceptance criteria are in the prompt, between the description and the protocol', async () => {
+  // The run is asked to argue that it is finished. Before this it was asked that without being
+  // shown what would settle it — the criteria were in the row, reachable only by a `task_get` the
+  // prompt merely suggested, so a run that skipped it judged itself against the *description*,
+  // which says what to DO and never what would prove it done.
+  const prompt = await promptFor({
+    description: '下载 000_00008.parquet',
+    acceptanceCriteria: '1. 文件存在且 sha256 与 manifest 一致。\n2. `npm test` 退出码为 0。',
+    list: { instructions: null },
+  });
+  const text = await prompt();
+  assert.ok(
+    text.includes(
+      '验收标准（判定本任务是否完成的依据）：\n'
+        + '1. 文件存在且 sha256 与 manifest 一致。\n2. `npm test` 退出码为 0。',
+    ),
+    text,
+  );
+  assert.ok(text.indexOf('任务描述：') < text.indexOf('验收标准'), text);
+  assert.ok(text.indexOf('验收标准') < text.indexOf('请按以下步骤进行：'), text);
+});
+
+test('a task with no acceptance criteria gets no empty heading', async () => {
+  // Same reason whitespace-only instructions add nothing: a heading promising criteria that are
+  // not there is worse than the absence, because a run reads it as "there were none to meet".
+  for (const acceptanceCriteria of [null, '   \n\t  ']) {
+    const prompt = await promptFor({
+      description: '下载 000_00008.parquet',
+      acceptanceCriteria,
+      list: { instructions: null },
+    });
+    assert.equal(await prompt(), PROMPT_WITHOUT_INSTRUCTIONS);
+  }
+});
+
+test('a verifier is given its own acceptance criteria, unlike the list instructions', async () => {
+  // The two are suppressed for different reasons or not at all: the list's instructions say how
+  // the LIST's work is done and a verifier is not doing it, while a verification task's own
+  // criteria are what settles the verification.
+  const prompt = await promptFor({
+    description: '核实任务 X 是否真的完成。',
+    acceptanceCriteria: '贴出 X 主张的命令的重跑输出。',
+    verifiesTaskId: 'subject-task',
+    list: { instructions: '须去重、断点续传。' },
+  });
+  const text = await prompt();
+  assert.ok(!text.includes('作业指导'), text);
+  assert.ok(text.includes('验收标准（判定本任务是否完成的依据）：\n贴出 X 主张的命令的重跑输出。'), text);
+});
+
+test('step 3 asks for evidence and forbids writing status', async () => {
+  // The instruction half of the self-DONE boundary. It has to name the evidence — commands, raw
+  // output, exit codes — because "summarise what you did" is exactly what produced a DONE whose
+  // claim nobody could check.
+  const text = await (await promptFor({ description: 'x', list: null }))();
+  const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+  assert.match(step3, /task_comment/);
+  assert.match(step3, /原始输出/);
+  assert.match(step3, /退出码/);
+  assert.match(step3, /不要写 status/);
+  assert.equal(/置为 DONE/.test(step3), false, step3);
+});
+
+test('step 4 says FAILED, and says it instead of IN_PROGRESS', async () => {
+  // IN_PROGRESS dresses a terminal failure up as a wait: `computeDependencyState` reads FAILED as
+  // BLOCKED_FAILED (a person is needed) and IN_PROGRESS as plain BLOCKED (keep waiting), so the
+  // old wording left every downstream task waiting for a run that was never coming back, with
+  // nothing anywhere raising a hand.
+  const text = await (await promptFor({ description: 'x', list: null }))();
+  const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
+  // The status it tells you to WRITE...
+  assert.match(step4, /task_update 将状态（status）置为 FAILED/);
+  // ...and the one it now tells you not to. IN_PROGRESS still appears in the line, which is why
+  // this asks about the instruction rather than about the word: the old template's imperative
+  // ('再将状态置为 IN_PROGRESS') is what must be gone, and it is now a prohibition instead.
+  assert.match(step4, /不要置为 IN_PROGRESS/);
+  assert.equal(/再将状态置为 IN_PROGRESS/.test(step4), false, step4);
+});
+
+test('a system run is told to write its own DONE, because the server lets it', async () => {
+  // A foreman and a verifier are exempt from the self-DONE refusal — their own run IS the
+  // deliverable and nothing else completes either one (`task-self-done-boundary.spec.ts`). Given
+  // the ordinary step 3 they would carry two contradictory instructions in one prompt: this one
+  // saying not to write a status, their own brief saying to write DONE.
+  for (const task of [{ isForeman: true }, { verifiesTaskId: 'subject-task' }]) {
+    const text = await (await promptFor({ description: 'x', list: null, ...task }))();
+    const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+    assert.match(step3, /task_update 将本任务状态（status）置为 DONE/);
+    assert.equal(/不要写 status/.test(step3), false, step3);
+    // Step 4 does not branch: a system run that FAILED is as terminal as any other, and
+    // IN_PROGRESS would hide it downstream just the same.
+    const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
+    assert.match(step4, /task_update 将状态（status）置为 FAILED/);
+  }
 });
