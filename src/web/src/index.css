@@ -4780,6 +4780,26 @@ html[data-theme='dark'] .session-tag-chip {
   object-fit: contain;
   display: block;
 }
+/* A picture a tool returned is meant to be READ, not merely noticed: at the thumbnail size above,
+   the 1180×768 screenshots this session takes render 220×143 — small enough that the only way to
+   see one is to click it. Give a result's own images a readable width instead, and cap the height
+   so a tall capture (a full page, a phone screenshot) can't own the viewport; the click-to-zoom
+   pager is still there for detail. Images the *user* sent keep the 220px chip size: those hang off
+   a bubble as attachments, and are not what the turn is about. */
+.chat-result .chat-image {
+  max-width: min(100%, 760px);
+  max-height: 520px;
+}
+/* …and let the card end where the picture does. A tool card is full-width, so a 760px image inside
+   one trails half a row of blank card on a wide window — the picture reads as a stamp in a corner
+   rather than as the content. Matched through `>` so only the card's OWN result counts: unscoped,
+   `:has` would also match a sub-workspace card any of whose nested calls returned an image, and
+   shrink that whole transcript to fit it. max-width keeps the usual full-width behaviour as the
+   ceiling, so a result that also carries wide text is no narrower than it is today. */
+.chat-tool-card:has(> .chat-tool-detail > .chat-result > .chat-images) {
+  width: fit-content;
+  max-width: 100%;
+}
 /* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the
    image's corners, and hint clickability with a zoom cursor. */
 .chat-images .ant-image {
