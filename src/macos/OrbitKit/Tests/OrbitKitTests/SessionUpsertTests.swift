@@ -24,6 +24,7 @@ final class SessionUpsertTests: XCTestCase {
          "createdAt":"2026-08-01T09:00:00.000Z","updatedAt":"2026-08-01T10:00:00.000Z",
          "pinnedAt":"2026-08-01T09:30:00.000Z","assignedRunnerId":"r1","branch":"orbit/s1",
          "provider":"claude","model":"opus","permissionMode":"dontAsk","effort":"high",
+         "projectId":"p1","projectTitle":"Initial project",
          "lastAssistantText":"here you go","lastToolUse":"Read","lastUserText":"do it",
          "runningBgCount":2,"error":"boom","endReason":"IDLE",
          "agent":{"id":"a1","name":"builder","provider":"claude","model":"opus","effort":"high"},
@@ -38,6 +39,7 @@ final class SessionUpsertTests: XCTestCase {
          "sessionState":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN",
          "capabilities":{"canSend":true,"canResume":true,"canComplete":true,"canRestore":false},
          "agentId":"a1","agent":{"id":"a1","name":"builder","model":"opus"},
+         "projectId":"p2","projectTitle":"Renamed project",
          "pendingApprovals":3,"lastTurnAt":"2026-08-01T11:00:00.000Z"}
         """)
         let merged = row.applying(event)
@@ -51,7 +53,36 @@ final class SessionUpsertTests: XCTestCase {
         XCTAssertEqual(merged.pendingApprovals, 3)
         XCTAssertEqual(merged.lastTurnAt, "2026-08-01T11:00:00.000Z")
         XCTAssertEqual(merged.agentId, "a1")
+        XCTAssertEqual(merged.projectId, "p2")
+        XCTAssertEqual(merged.projectTitle, "Renamed project")
         XCTAssertEqual(merged.capabilities?.canSend, true)
+    }
+
+    /// Coordinator relation updates need all three wire states: value binds/renames, explicit null
+    /// clears after rotation/delete, and absence from an older server preserves the loaded row.
+    func testTracksProjectRelationValueNullAndAbsence() throws {
+        let row = try loadedRow()
+        let changed = try summary("""
+        {"id":"s1","status":"RUNNING","pendingApprovals":0,
+         "projectId":"p2","projectTitle":"Renamed project"}
+        """)
+        let rebound = row.applyingProjectRelation(changed)
+        XCTAssertEqual(rebound.projectId, "p2")
+        XCTAssertEqual(rebound.projectTitle, "Renamed project")
+
+        let removed = try summary("""
+        {"id":"s1","status":"RUNNING","pendingApprovals":0,
+         "projectId":null,"projectTitle":null}
+        """)
+        let ordinary = rebound.applyingProjectRelation(removed)
+        XCTAssertNil(ordinary.projectId)
+        XCTAssertNil(ordinary.projectTitle)
+
+        let legacy = try summary("""
+        {"id":"s1","status":"RUNNING","pendingApprovals":0}
+        """)
+        XCTAssertEqual(row.applyingProjectRelation(legacy).projectId, "p1")
+        XCTAssertEqual(row.applyingProjectRelation(legacy).projectTitle, "Initial project")
     }
 
     /// The whole point of merging rather than replacing: the slim payload must not blank the row.

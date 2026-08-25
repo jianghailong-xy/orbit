@@ -96,6 +96,10 @@ export interface ProjectCoordinatorSeed {
   workspaceId: string;
 }
 
+/** Internal retry signal: the coordinator pointer changed between the optimistic pre-read (which
+ * tells us which rank-30 Session to lock first) and the rank-40 Project lock that validates it. */
+class CoordinatorBindingChanged extends Error {}
+
 export interface ProjectTaskPageQuery {
   /** Absent = the project's top level. Present = that task's direct children, and only those. */
   parentId?: string;
@@ -230,6 +234,12 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     contentHash: true,
   },
 };
+
+type ProjectMutationPayload = Prisma.ProjectGetPayload<{
+  include: typeof COORDINATION_INCLUDE & {
+    acceptanceCriterionDefinitions: typeof ACCEPTANCE_DEFINITIONS_INCLUDE;
+  };
+}>;
 
 type WithCoordination = {
   members: Array<{ agentId: string }>;
@@ -702,7 +712,7 @@ export class ProjectsService {
     try {
       // `await` inside the `try`, not a returned promise: a returned one rejects in the caller,
       // where the catch below cannot see it.
-      const project = await this.prisma.project.create({
+      const writeProject = (client: PrismaService | Prisma.TransactionClient) => client.project.create({
         data: {
           title: dto.title,
           ownerId,
@@ -760,6 +770,54 @@ export class ProjectsService {
           acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
         },
       });
+      // Promoting an existing conversation changes two facts that must never split: the Project
+      // points at this Session, and this Session's title becomes managed by that Project. Lock/write
+      // the Session first (rank 30), then insert the new Project (rank 40). A unique conflict or any
+      // other insert failure rolls the title change back with it, so a failed project_create cannot
+      // leave the conversation renamed.
+      const project = coordinator
+        ? await withTransactionRetry(this.prisma, async (tx) => {
+            // The Project INSERT below re-checks its owner/workspace foreign keys. Take those
+            // exact key-share locks before the Session row, preserving the global 10 → 15 → 30 →
+            // 40 order instead of discovering a lower-ranked parent after promotion has started.
+            await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+              SELECT "id" FROM "user"
+               WHERE "id" = ${ownerId}::uuid
+               FOR KEY SHARE`);
+            const landing = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+              SELECT "id" FROM "workspace"
+               WHERE "id" = ${coordinator.workspaceId}::uuid
+                 AND "owner_id" = ${ownerId}::uuid
+                 AND "deleted_at" IS NULL
+                 AND "enabled" = TRUE
+               FOR SHARE`);
+            if (landing.length === 0) {
+              throw new ForbiddenException(ProjectsService.NO_SESSION_COORDINATOR);
+            }
+            const renamed = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+              UPDATE "session"
+                 SET "title_before_project_management" =
+                       CASE WHEN "title_managed_by_project"
+                            THEN "title_before_project_management"
+                            ELSE COALESCE("title_before_project_management", "title") END,
+                     "title" = ${coordinatorSessionTitle(dto.title)},
+                     "title_managed_by_project" = TRUE,
+                     "updated_at" = CURRENT_TIMESTAMP
+               WHERE "id" = ${coordinator.sessionId}::uuid
+                 AND "owner_id" = ${ownerId}::uuid
+                 AND "workspace_id" = ${coordinator.workspaceId}::uuid
+                 AND "deleted_at" IS NULL
+              RETURNING "id"`);
+            // `coordinatorFromSession` already checked this row. Re-check inside the transaction
+            // because deletion or relocation between that read and this write must not create a
+            // project pointing at context that is no longer usable.
+            if (renamed.length === 0) {
+              throw new ForbiddenException(ProjectsService.NO_SESSION_COORDINATOR);
+            }
+            return writeProject(tx);
+          }, loggedRetry(this.logger, 'projects.create'))
+        : await writeProject(this.prisma);
+      if (coordinator) this.sessions?.announceProjectSessionChanged?.(coordinator.sessionId);
       return withAcceptanceDefinitions(withCoordination(project));
     } catch (e) {
       // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
@@ -1409,7 +1467,7 @@ export class ProjectsService {
   async update(ownerId: string, id: string, dto: UpdateProjectDto) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      select: { id: true, coordinatorEnabled: true },
+      select: { id: true, coordinatorEnabled: true, coordinatorSessionId: true },
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
@@ -1462,18 +1520,29 @@ export class ProjectsService {
     // that COMMITTED found rather than what an aborted one saw.
     let reopened: { fromEpoch: string; toEpoch: string; retiredRuns: number; wasLegacy: boolean }
       | null = null;
-    try {
+    // A title sync must lock Session (rank 30) before Project (rank 40). The pointer is discovered
+    // optimistically, then verified under the project lock; a concurrent rotation makes us retry
+    // with its winner rather than reverse the lock order or leave the new coordinator stale.
+    let expectedCoordinatorSessionId = current.coordinatorSessionId;
     // Retried whole. The project row is locked and re-read inside the closure, and every field the
-    // update derives — the acceptance recompute, the coordinator rebind — comes from that read, so
-    // a re-run writes against the row the winner left rather than the one an aborted attempt saw.
-      const project = await withTransactionRetry(this.prisma, async (tx) => {
-        // The project row first, and this is the lock a coordinator has to take before committing
-        // anything the fields above authorize. Taking it here is what makes "the user revoked it"
+    // update derives — the acceptance recompute and managed title — comes from that read, so a
+    // re-run writes against the row the winner left rather than an aborted attempt's row.
+    const writeProject = (expectedSessionId: string | null) =>
+      withTransactionRetry(this.prisma, async (tx) => {
+        if (dto.title !== undefined && expectedSessionId) {
+          await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT "id" FROM "session"
+             WHERE "id" = ${expectedSessionId}::uuid
+             FOR UPDATE`);
+        }
+        // This project lock is the lock a coordinator has to take before committing anything the
+        // fields above authorize. Taking it here is what makes "the user revoked it"
         // and "the coordinator acted on what it read" two orderings rather than an interleaving:
         // whichever commits first, the other sees it. It also fixes the order of the two writes
         // below (project before its team row), which is the order every path takes.
         const select = Prisma.sql`
           SELECT "coordinator_enabled", "config_revision", "status"::text AS "status",
+                 "coordinator_session_id" AS "coordinator_session_id",
                  "accepted_run_id" AS "accepted_run_id", "legacy_accepted_at" AS "legacy_accepted_at",
                  "acceptance_epoch" AS "acceptance_epoch"
             FROM "project"
@@ -1482,6 +1551,7 @@ export class ProjectsService {
           coordinator_enabled: boolean;
           config_revision: bigint;
           status: string;
+          coordinator_session_id: string | null;
           accepted_run_id: string | null;
           legacy_accepted_at: Date | null;
           acceptance_epoch: bigint;
@@ -1489,6 +1559,12 @@ export class ProjectsService {
           ? Prisma.sql`${select} FOR UPDATE`
           : Prisma.sql`${select} FOR NO KEY UPDATE`);
         if (!locked) throw new NotFoundException('project not found');
+        if (
+          dto.title !== undefined &&
+          locked.coordinator_session_id !== expectedSessionId
+        ) {
+          throw new CoordinatorBindingChanged();
+        }
         // Under the lock, so the comparison and the write cannot be separated by another writer.
         // Throwing here rolls the transaction back, which is the whole guarantee a stale write
         // needs: refused AND nothing written, including the team row below.
@@ -1629,7 +1705,7 @@ export class ProjectsService {
         if (agentId !== undefined) {
           await ProjectsService.writeCoordinatorAgent(tx, ownerId, id, agentId);
         }
-        return tx.project.update({
+        const project = await tx.project.update({
           where: { id },
           data,
           include: {
@@ -1637,7 +1713,49 @@ export class ProjectsService {
             acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
           },
         });
+        let changedSessionId: string | null = null;
+        if (dto.title !== undefined && locked.coordinator_session_id) {
+          await tx.session.updateMany({
+            where: {
+              id: locked.coordinator_session_id,
+              ownerId,
+              titleManagedByProject: true,
+            },
+            data: { title: coordinatorSessionTitle(dto.title) },
+          });
+          // Even an unmanaged coordinator did visibly change: its projected `projectTitle` did.
+          // Publish after commit so list/detail clients refresh the backlink as well as the title.
+          changedSessionId = locked.coordinator_session_id;
+        }
+        return { project, changedSessionId };
       }, loggedRetry(this.logger, 'projects.update'));
+    try {
+      let projectResult: {
+        project: ProjectMutationPayload;
+        changedSessionId: string | null;
+      } | null = null;
+      for (let bindingAttempt = 1; bindingAttempt <= 4; bindingAttempt += 1) {
+        try {
+          projectResult = await writeProject(expectedCoordinatorSessionId);
+          break;
+        } catch (e) {
+          if (!(e instanceof CoordinatorBindingChanged)) throw e;
+          if (bindingAttempt === 4) {
+            throw new ConflictException(
+              'this project’s coordinator kept changing while its title was updated — try again',
+            );
+          }
+          const refreshed = await this.prisma.project.findFirst({
+            where: { id, ownerId },
+            select: { coordinatorSessionId: true },
+          });
+          if (!refreshed) throw new NotFoundException('project not found');
+          expectedCoordinatorSessionId = refreshed.coordinatorSessionId;
+        }
+      }
+      if (!projectResult) throw new CoordinatorBindingChanged();
+      const { project, changedSessionId } = projectResult;
+      if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
       // `reopened` is absent — not null — on every write that did not reopen anything, so a client
       // branching on it cannot read "this write reopened nothing" as "this write reopened
       // something with no detail".
@@ -1950,15 +2068,20 @@ export class ProjectsService {
    * answers to the same question.
    */
   async remove(ownerId: string, id: string) {
+    let releasedCoordinatorSessionId: string | null = null;
     try {
-    // Retried whole: a delete re-reads what it is deleting under the row lock, and deleting
-    // something already gone is the same answer on any attempt.
+      // Retried whole: a delete re-reads what it is deleting under the row lock, and deleting
+      // something already gone is the same answer on any attempt.
       await withTransactionRetry(this.prisma, async (tx) => {
-        const locked = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT id FROM "project"
+        const locked = await tx.$queryRaw<Array<{
+          id: string;
+          coordinator_session_id: string | null;
+        }>>`
+          SELECT id, "coordinator_session_id" FROM "project"
           WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
           FOR UPDATE`;
         if (locked.length === 0) throw new NotFoundException('project not found');
+        releasedCoordinatorSessionId = locked[0].coordinator_session_id;
         const tasks = await tx.task.count({ where: { projectId: id } });
         if (tasks > 0) throw new ConflictException(this.notEmptyMessage(tasks));
         await tx.project.delete({ where: { id } });
@@ -1970,6 +2093,21 @@ export class ProjectsService {
         throw new ConflictException(this.notEmptyMessage());
       }
       throw e;
+    }
+    if (releasedCoordinatorSessionId) {
+      // The Project is already durably gone. Provenance cleanup is best effort: surfacing its
+      // failure would tell the caller DELETE failed even though retrying can now only return 404.
+      try {
+        await this.sessions?.releaseProjectTitleManagement?.(ownerId, releasedCoordinatorSessionId);
+      } catch (e) {
+        this.logger.error(
+          `project ${id} was deleted but coordinator session ${releasedCoordinatorSessionId} ` +
+            'kept its internal managed-title marker',
+          e instanceof Error ? e.stack : String(e),
+        );
+      }
+      // The relation itself is list-visible even if the internal cleanup failed.
+      this.sessions?.announceProjectSessionChanged?.(releasedCoordinatorSessionId);
     }
     return { ok: true };
   }
@@ -2071,7 +2209,7 @@ export class ProjectsService {
           title: coordinatorSessionTitle(project.title),
           prompt: buildCoordinatorOpening(project.title, project.id),
         },
-        { source: 'user' },
+        { source: 'user', titleManagedByProject: true },
       );
     } catch (e) {
       if (fixed && (e instanceof ForbiddenException || e instanceof BadRequestException)) {
@@ -2111,15 +2249,72 @@ export class ProjectsService {
     // writer; written as a trigger, it holds for the 0110 binary still serving requests during a
     // rolling deploy as well (validation 04, P1-06).
     //
-    // Which leaves this one statement to make: only a REPLACEMENT counts, and the trigger's
-    // condition is the same one this code applied — a first coordinator is generation 0, "the
-    // coordinator this project has always had".
+    // The pointer replacement remains one statement inside the transaction below: only a
+    // REPLACEMENT counts, and the trigger's condition is the same one this code applied — a first
+    // coordinator is generation 0, "the coordinator this project has always had".
     let claimed: { count: number };
     try {
-      claimed = await this.prisma.project.updateMany({
-        where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
-        data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
-      });
+      claimed = await withTransactionRetry(this.prisma, async (tx) => {
+        // Updating the Project pointer re-checks its workspace FK. Hold the landing before any
+        // Session (rank 15 → 30), and at FOR SHARE so a concurrent soft-delete/disable cannot turn
+        // the freshly bound coordinator unavailable between validation and commit.
+        const landing = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "id" FROM "workspace"
+           WHERE "id" = ${runIn}::uuid AND "owner_id" = ${ownerId}::uuid
+             AND "deleted_at" IS NULL AND "enabled" = TRUE
+           FOR SHARE`);
+        if (landing.length === 0) {
+          throw ProjectsService.coordinatorUnavailable(
+            'the coordinator workspace changed while its conversation was being opened',
+          );
+        }
+        // Candidate and previous Session rows first (rank 30), in stable UUID order so two
+        // simultaneous rotations cannot each hold one and wait for the other. The expensive
+        // session creation happened before this transaction; these locks cover only the CAS.
+        const sessionIds = [...new Set(
+          [project.coordinatorSessionId, session.id].filter((value): value is string => !!value),
+        )].sort();
+        await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "id" FROM "session"
+           WHERE "id" IN (${Prisma.join(sessionIds.map((value) => Prisma.sql`${value}::uuid`))})
+           ORDER BY "id"
+           FOR UPDATE`);
+
+        // Then Project (rank 40). Re-read both pointer and title under this lock: the pointer is
+        // the CAS identity, while the title may have changed since the candidate Session was
+        // created. A winning bind therefore starts with the latest committed project name.
+        const [locked] = await tx.$queryRaw<Array<{
+          coordinator_session_id: string | null;
+          title: string;
+        }>>(Prisma.sql`
+          SELECT "coordinator_session_id", "title"
+            FROM "project"
+           WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+        if (!locked || locked.coordinator_session_id !== project.coordinatorSessionId) {
+          return { count: 0 };
+        }
+
+        const swapped = await tx.project.updateMany({
+          where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
+          data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
+        });
+        if (swapped.count === 0) return swapped;
+
+        // A manual rename can race in the tiny create-before-bind window. It clears the managed
+        // bit, so this conditional write honors that choice while still binding the conversation.
+        await tx.session.updateMany({
+          where: { id: session.id, ownerId, titleManagedByProject: true },
+          data: { title: coordinatorSessionTitle(locked.title) },
+        });
+        if (project.coordinatorSessionId && project.coordinatorSessionId !== session.id) {
+          await tx.session.updateMany({
+            where: { id: project.coordinatorSessionId, titleManagedByProject: true },
+            data: { titleManagedByProject: false },
+          });
+        }
+        return swapped;
+      }, loggedRetry(this.logger, 'projects.coordinator'));
     } catch (e) {
       // The swap did not happen — it FAILED, which is not the same as losing the race below and is
       // the case that used to leak. The session this call made is live, in a workspace, and no
@@ -2172,6 +2367,10 @@ export class ProjectsService {
         workspaceId: winner.coordinatorWorkspaceId,
       };
     }
+    if (project.coordinatorSessionId && project.coordinatorSessionId !== session.id) {
+      this.sessions?.announceProjectSessionChanged?.(project.coordinatorSessionId);
+    }
+    this.sessions?.announceProjectSessionChanged?.(session.id);
     return { sessionId: session.id, created: true, workspaceId: runIn };
   }
 
@@ -2700,6 +2899,29 @@ export class ProjectsService {
    * never mention this session again.
    */
   private async discardLoser(ownerId: string, sessionId: string): Promise<void> {
+    if (this.sessions.discardProjectCoordinatorCandidate) {
+      const discarded = await this.sessions.discardProjectCoordinatorCandidate(ownerId, sessionId);
+      if (!discarded) {
+        // An ambiguous commit can make the candidate the real winner even though the CAS caller
+        // observed a failure. The locked relation check is authoritative; never Trash that winner.
+        this.logger.log(
+          `coordinator candidate ${sessionId} was adopted before discard and was preserved`,
+        );
+      }
+      return;
+    }
+    // Compatibility path for hand-built service doubles and a mixed-version SessionsService.
+    // Clear the provisional marker before the soft-delete attempt. If recycling the runtime fails
+    // and `remove` has to leave a live orphan behind, at least no Project can later overwrite its
+    // title. The helper re-checks adoption under the Session lock, so a real winner keeps the bit.
+    try {
+      await this.sessions.releaseProjectTitleManagement?.(ownerId, sessionId);
+    } catch (e) {
+      this.logger.error(
+        `coordinator candidate ${sessionId} could not release its managed-title marker before discard`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
     try {
       await this.sessions.remove(ownerId, sessionId);
     } catch (e) {
@@ -2709,6 +2931,16 @@ export class ProjectsService {
         e instanceof Error ? e.stack : String(e),
       );
       throw e;
+    }
+    // Retry after soft-delete in case the first best-effort cleanup exhausted a transient retry.
+    // This provenance cleanup still cannot make a successfully discarded candidate an API failure.
+    try {
+      await this.sessions.releaseProjectTitleManagement?.(ownerId, sessionId);
+    } catch (e) {
+      this.logger.error(
+        `discarded coordinator candidate ${sessionId} kept its managed-title marker`,
+        e instanceof Error ? e.stack : String(e),
+      );
     }
   }
 

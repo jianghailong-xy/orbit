@@ -40,6 +40,8 @@ public extension Session {
             agent: agent ?? summary.agent.map {
                 SessionAgentRef(id: $0.id, name: $0.name, provider: nil, model: $0.model, effort: nil)
             },
+            projectId: summary.projectId,
+            projectTitle: summary.projectTitle,
             // The one field here whose absence and whose null mean different things — see the
             // DTO. It travels with the status because it qualifies it: the summary that turns a
             // row FAILED is the same one that has to say the failure is being retried, and the
@@ -52,6 +54,13 @@ public extension Session {
     /// the server's `session.updated` (and the next list snapshot) confirm it. See `AppModel.renameSession`.
     func settingTitle(_ title: String) -> Session {
         merging(title: title)
+    }
+
+    /// Apply only the projected Project relation. This is safe even for Completed/Trash rows that
+    /// the ordinary Open-list summary merge deliberately refuses: rotation/delete still needs to
+    /// remove their Coordinator badge immediately.
+    func applyingProjectRelation(_ summary: ControlSessionSummary) -> Session {
+        merging(projectId: summary.projectId, projectTitle: summary.projectTitle)
     }
 
     /// Apply an `approval.requested` / `approval.resolved` pending count — the one field those
@@ -76,10 +85,16 @@ public extension Session {
                          pendingApprovals: Int? = nil,
                          lastTurnAt: String? = nil,
                          agent: SessionAgentRef? = nil,
+                         // Doubly optional: nil preserves an older server's omission; .some(nil)
+                         // clears a relation the new server explicitly removed.
+                         projectId: String?? = nil,
+                         projectTitle: String?? = nil,
                          // Doubly optional so a caller can clear it: `nil` keeps the row's value,
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
                          retryAt: String?? = nil) -> Session {
-        Session(id: id,
+        let mergedProjectId = projectId ?? self.projectId
+        let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
+        return Session(id: id,
                 title: title ?? self.title,
                 status: status ?? self.status,
                 runStatus: runStatus ?? self.runStatus,
@@ -99,6 +114,10 @@ public extension Session {
                 permissionMode: permissionMode,
                 effort: effort,
                 source: source,
+                projectId: mergedProjectId,
+                // A cleared id always clears its label too, even if a malformed/mixed-version
+                // summary omitted projectTitle while explicitly removing the relation.
+                projectTitle: mergedProjectTitle,
                 lastAssistantText: lastAssistantText,
                 lastToolUse: lastToolUse,
                 lastUserText: lastUserText,

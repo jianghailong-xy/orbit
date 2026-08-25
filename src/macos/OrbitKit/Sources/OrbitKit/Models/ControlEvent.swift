@@ -93,6 +93,10 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let capabilities: SessionCapabilities?
     public let agentId: String?
     public let agent: AgentRef?
+    /// Doubly optional because absent means an older server (preserve the loaded row), while an
+    /// explicit null means this Session stopped coordinating a Project (clear the badge/link).
+    public let projectId: String??
+    public let projectTitle: String??
     public let pendingApprovals: Int
     public let lastTurnAt: String?
     /// When the server will re-send the message this run's failure killed — part of the summary
@@ -131,6 +135,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
         agentId = try values.decodeIfPresent(String.self, forKey: .agentId)
         agent = try values.decodeIfPresent(AgentRef.self, forKey: .agent)
+        projectId = values.contains(.projectId)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .projectId))
+            : nil
+        projectTitle = values.contains(.projectTitle)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .projectTitle))
+            : nil
         pendingApprovals = try values.decode(Int.self, forKey: .pendingApprovals)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
         retryAt = values.contains(.retryAt)

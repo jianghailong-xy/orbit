@@ -18,6 +18,9 @@ const PROJECT_ID = '00000000-0000-7000-8000-0000000000e1';
 
 interface SessionRow {
   id: string;
+  title: string;
+  titleManagedByProject: boolean;
+  titleBeforeProjectManagement: string | null;
   ownerId: string;
   assignedRunnerId: string | null;
   deletedAt: Date | null;
@@ -30,6 +33,9 @@ interface SessionRow {
 
 const LIVE: SessionRow = {
   id: SESSION_ID,
+  title: 'Explore the corpus',
+  titleManagedByProject: false,
+  titleBeforeProjectManagement: null,
   ownerId: OWNER_ID,
   assignedRunnerId: RUNNER_ID,
   deletedAt: null,
@@ -90,6 +96,7 @@ function uniqueCoordinator(): Prisma.PrismaClientKnownRequestError {
 }
 
 function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
+  rows = rows.map((row) => ({ ...row }));
   const creates: Record<string, unknown>[] = [];
   const lookups: Record<string, unknown>[] = [];
   const prisma = {
@@ -122,12 +129,43 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
         throw new Error('the coordinator binding must be written in the create, not after it');
       },
     },
+    $queryRaw: async (query: { text?: string; values?: unknown[] }) => {
+      const text = query.text ?? '';
+      if (text.includes('FROM "user"')) return [{ id: OWNER_ID }];
+      if (text.includes('FROM "workspace"')) return [{ id: WORKSPACE_ID }];
+      if (!text.includes('UPDATE "session"')) throw new Error(`unexpected raw query: ${text}`);
+      const [title, id, ownerId, workspaceId] = query.values as string[];
+      const row = rows.find(
+        (candidate) =>
+          candidate.id === id &&
+          candidate.ownerId === ownerId &&
+          candidate.workspaceId === workspaceId &&
+          candidate.deletedAt === null,
+      );
+      if (!row) return [];
+      if (!row.titleManagedByProject && row.titleBeforeProjectManagement === null) {
+        row.titleBeforeProjectManagement = row.title;
+      }
+      row.title = title;
+      row.titleManagedByProject = true;
+      return [{ id: row.id }];
+    },
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => {
+      const before = rows.map((row) => ({ ...row }));
+      try {
+        return await work(prisma);
+      } catch (error) {
+        rows.splice(0, rows.length, ...before);
+        throw error;
+      }
+    },
   } as never;
 
   const service = new ProjectsService(prisma, {} as never);
   return {
     creates,
     lookups,
+    sessions: rows,
     inSession: (dto: CreateProjectDto, sessionId = SESSION_ID, runnerId = RUNNER_ID) =>
       service.createInSession(OWNER_ID, runnerId, sessionId, dto),
     headless: (dto: CreateProjectDto) => service.create(OWNER_ID, dto),
@@ -171,6 +209,9 @@ test('a project created inside a session is coordinated BY that session', async 
   assert.equal(f.creates[0].ownerId, OWNER_ID);
   assert.equal(f.creates[0].title, 'Crawl');
   assert.equal(f.creates[0].goal, 'Index the corpus');
+  assert.equal(f.sessions[0].title, 'Crawl');
+  assert.equal(f.sessions[0].titleManagedByProject, true);
+  assert.equal(f.sessions[0].titleBeforeProjectManagement, 'Explore the corpus');
 });
 
 // The binding as a client actually reads it: the project comes back already naming the session
@@ -350,6 +391,8 @@ test('a second project from the same session is a 409, and writes nothing', asyn
   // somewhere else. A create-then-bind implementation fails this by leaving the project behind.
   assert.equal(f.creates.length, 1, 'exactly one statement was attempted');
   assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
+  assert.equal(f.sessions[0].title, 'Explore the corpus', 'the failed transaction rolls the rename back');
+  assert.equal(f.sessions[0].titleManagedByProject, false);
 });
 
 // Only the unique violation, and only where one can happen. A P2002 is translated because there
@@ -366,6 +409,8 @@ test('any other database failure is not dressed up as a conflict', async () => {
     () => f.inSession({ title: 'Crawl' }),
     (e: unknown) => e === other,
   );
+  assert.equal(f.sessions[0].title, 'Explore the corpus');
+  assert.equal(f.sessions[0].titleManagedByProject, false);
 });
 
 // The headless path seeds no coordinator, so it cannot violate that index — and a P2002 arriving

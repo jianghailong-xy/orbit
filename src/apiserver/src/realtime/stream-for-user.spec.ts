@@ -36,6 +36,7 @@ type Row = {
   } | null;
   lastTurnAt: Date | null;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
+  coordinatorForProject?: { id: string; title: string } | null;
 };
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
@@ -68,6 +69,7 @@ const rowA: Row = {
   },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
   workspace: { id: 'workspaceA', name: 'builder', model: 'opus', effort: 'high' },
+  coordinatorForProject: { id: 'projectA', title: 'Fix the project' },
 };
 
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
@@ -123,6 +125,8 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
     model: 'opus',
     effort: 'high',
   });
+  assert.equal(data.projectId, 'projectA');
+  assert.equal(data.projectTitle, 'Fix the project');
 });
 
 test("another user's stream never sees the event", async () => {
@@ -430,6 +434,27 @@ test('publishSessionUpdated surfaces as session.updated with the current summary
   assert.equal(got.length, 1);
   assert.equal(got[0].type, 'session.updated');
   assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
+});
+
+test('session.updated explicitly clears project relation metadata for an ordinary session', async () => {
+  const ordinary: Row = {
+    ...rowA,
+    id: 'sessB',
+    coordinatorForProject: null,
+  };
+  const svc = svcWith({ sessB: ordinary }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessB');
+  await delay(30);
+  sub.unsubscribe();
+
+  const data = got[0].data as Record<string, unknown>;
+  assert.equal(Object.hasOwn(data, 'projectId'), true);
+  assert.equal(Object.hasOwn(data, 'projectTitle'), true);
+  assert.equal(data.projectId, null);
+  assert.equal(data.projectTitle, null);
 });
 
 /**

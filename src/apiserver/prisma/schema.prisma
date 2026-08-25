@@ -806,6 +806,14 @@ model WorkspacePermissionRule {
 model Session {
   id                   String    @id @default(uuid(7)) @db.Uuid
   title                String
+  /// True while the project this Session coordinates owns its display title. A manual session
+  /// rename clears this in the same UPDATE as the new title, so later project renames cannot take
+  /// that choice back (including the ABA case where both titles happen to be equal).
+  titleManagedByProject Boolean  @default(false) @map("title_managed_by_project")
+  /// The title that was present when an existing Session first became a coordinator. This is kept
+  /// as recovery provenance; dedicated coordinator Sessions have no earlier title and leave it
+  /// null. It is intentionally internal rather than a second title rendered by clients.
+  titleBeforeProjectManagement String? @map("title_before_project_management")
   prompt               String // first-turn seed
   ownerId              String    @map("owner_id") @db.Uuid
   owner                User      @relation("SessionOwner", fields: [ownerId], references: [id])

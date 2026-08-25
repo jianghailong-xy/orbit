@@ -676,6 +676,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         workspaceId: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
+        coordinatorForProject: { select: { id: true, title: true } },
       },
     });
     if (!s) return null;
@@ -708,6 +709,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             effort: s.workspace.effort ?? null,
           }
         : null,
+      projectId: s.coordinatorForProject?.id ?? null,
+      projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

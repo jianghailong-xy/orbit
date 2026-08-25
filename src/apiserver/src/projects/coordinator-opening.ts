@@ -2,7 +2,10 @@ import { uuidToBase62 } from '@orbit/shared';
 
 /** The title a coordination session is filed under. */
 export function coordinatorSessionTitle(projectTitle: string): string {
-  return `Coordinator: ${projectTitle}`.slice(0, 80);
+  // "Coordinator" is a role, rendered as a badge; putting it in the mutable title duplicates
+  // metadata and makes the project and its conversation acquire two different names. Both columns
+  // are TEXT, so keep the identity exact rather than silently truncating one side.
+  return projectTitle;
 }
 
 /**

@@ -15,6 +15,7 @@ final class ControlEventCodableTests: XCTestCase {
          "data":{"id":"s1","taskId":"t1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN",
                  "capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"ENDING","canComplete":true,"canRestore":false},"agentId":"a1",
                  "agent":{"id":"a1","name":"builder","provider":"opencode","model":"openai/gpt-5","effort":"high"},
+                 "projectId":"p1","projectTitle":"Fix the project",
                  "pendingApprovals":2,"lastTurnAt":"2026-07-05T00:00:00.000Z"}}
         """)
         XCTAssertEqual(ev.type, .sessionUpdated)
@@ -38,6 +39,8 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertEqual(s.pendingApprovals, 2)
         XCTAssertEqual(s.agent?.name, "builder")
         XCTAssertEqual(s.agent?.effort, "high")
+        XCTAssertEqual(s.projectId!, "p1")
+        XCTAssertEqual(s.projectTitle!, "Fix the project")
         XCTAssertEqual(s.lastTurnAt, "2026-07-05T00:00:00.000Z")
     }
 
@@ -61,6 +64,29 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertNil(s.effectiveLifecycleState)
         XCTAssertNil(s.title)
         XCTAssertNil(s.agent)
+        if s.projectId != nil {
+            XCTFail("Expected an absent projectId field to preserve the current relation")
+        }
+        if s.projectTitle != nil {
+            XCTFail("Expected an absent projectTitle field to preserve the current relation")
+        }
+    }
+
+    func testProjectRelationDistinguishesExplicitNullFromAbsent() throws {
+        let ev = try decode("""
+        {"type":"session.updated","sessionId":"s1","agentId":null,"ts":"t",
+         "data":{"id":"s1","status":"RUNNING","pendingApprovals":0,
+                 "projectId":null,"projectTitle":null}}
+        """)
+        let summary = try XCTUnwrap(ev.payload(ControlSessionSummary.self))
+        switch summary.projectId {
+        case .some(.none): break
+        default: XCTFail("an explicit projectId null must survive as outer some / inner none")
+        }
+        switch summary.projectTitle {
+        case .some(.none): break
+        default: XCTFail("an explicit projectTitle null must survive as outer some / inner none")
+        }
     }
 
     func testDecodesSessionEndedAndLegacyLifecycleAlias() throws {

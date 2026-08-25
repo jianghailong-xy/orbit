@@ -2561,9 +2561,9 @@ body {
   height: 8px;
   border-radius: 50%;
 }
-/* Second line of a row: the tags, then the reply preview. The tags are a fixed-width lead and
-   the preview takes what's left (and ellipsizes), so a long tag list never pushes the preview
-   into wrapping the 64px row taller. */
+/* Second line of a row: relation metadata/tags, then the reply preview. The leading chips are
+   fixed-width and the preview takes what's left (and ellipsizes), so they never wrap the 64px row
+   taller or steal width from the title above. */
 .session-sub {
   display: flex;
   align-items: center;
@@ -2718,6 +2718,16 @@ html[data-theme='dark'] .session-tag-chip {
   flex: 1;
   min-width: 0;
 }
+.workspace-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.workspace-title-line .workspace-name,
+.workspace-title-line .workspace-name-input {
+  min-width: 0;
+}
 .workspace-name {
   font-size: 18px;
   font-weight: 600;
@@ -2725,6 +2735,22 @@ html[data-theme='dark'] .session-tag-chip {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.coordinator-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: 18px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 /* Inline rename editor that replaces .workspace-name on double-click — matches the title's
    type so the swap is seamless, with a brand underline to signal edit mode. */

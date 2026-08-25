@@ -705,7 +705,11 @@ struct AgentSessionRow: View {
                         Text(session.title ?? "Untitled session").lineLimit(1)
                         SessionTagDots(tags: session.tags ?? [])
                     }
-                    Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                    HStack(spacing: 7) {
+                        SessionCoordinatorBadge(session: session)
+                        Text(line.text).font(.orbitListSubtitle)
+                            .foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                    }
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -749,6 +753,7 @@ struct AgentSessionRow: View {
             // the preview is the echo of a reply rather than the handle you file a session under, so
             // it's the one that yields (the chips are fixed-size, web's `flex: none`).
             HStack(spacing: 7) {
+                SessionCoordinatorBadge(session: session)
                 if let tags = session.tags, !tags.isEmpty {
                     SessionTagChips(tags: tags)
                 }

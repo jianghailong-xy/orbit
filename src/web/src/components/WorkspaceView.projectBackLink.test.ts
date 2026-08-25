@@ -1,5 +1,7 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { projectBackLink } from './WorkspaceView';
+import { CoordinatorBadge, projectBackLink } from './WorkspaceView';
 
 /**
  * The session header's second way back. A coordinator conversation is reached from a project's
@@ -24,7 +26,7 @@ describe('projectBackLink', () => {
 
   it('has nothing to offer an ordinary session', () => {
     expect(projectBackLink({ id: 'sess-1', projectId: null, projectTitle: null })).toBeNull();
-    // A list row carries no project fields at all, and the detail may not have landed yet.
+    // Rolling upgrades may still serve a row without either project field.
     expect(projectBackLink({ id: 'sess-1' })).toBeNull();
     expect(projectBackLink(null)).toBeNull();
   });
@@ -33,5 +35,19 @@ describe('projectBackLink', () => {
     expect(
       projectBackLink({ projectId: '018f3f3e-1a2b-7c3d-8e4f-5a6b7c8d9e0f' })?.title,
     ).toBeNull();
+  });
+});
+
+describe('CoordinatorBadge', () => {
+  it('renders read-only relation metadata for a coordinator session', () => {
+    const html = renderToStaticMarkup(createElement(CoordinatorBadge, { projectId: 'project-1' }));
+    expect(html).toContain('class="coordinator-badge"');
+    expect(html).toContain('Coordinator');
+    expect(html).not.toContain('<button');
+  });
+
+  it('renders nothing for ordinary and rolling-upgrade session rows', () => {
+    expect(renderToStaticMarkup(createElement(CoordinatorBadge, { projectId: null }))).toBe('');
+    expect(renderToStaticMarkup(createElement(CoordinatorBadge))).toBe('');
   });
 });

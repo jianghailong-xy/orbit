@@ -53,6 +53,8 @@ function sessionRow() {
     },
     taskId: null,
     taskTitle: null,
+    projectId: '33333333-3333-4333-8333-333333333333',
+    projectTitle: 'Project Atlas',
   };
 }
 
@@ -60,7 +62,14 @@ test('UI list and detail payloads include the same derived capabilities', async 
   const row = sessionRow();
   const prisma = {
     $queryRaw: async () => [row],
-    session: { findFirst: async () => row },
+    session: {
+      findFirst: async () => ({
+        ...row,
+        coordinatorForProject: { id: row.projectId, title: row.projectTitle },
+        titleManagedByProject: true,
+        titleBeforeProjectManagement: 'Dormant session',
+      }),
+    },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -77,4 +86,10 @@ test('UI list and detail payloads include the same derived capabilities', async 
   };
   assert.deepEqual(listed.capabilities, expected);
   assert.deepEqual(detail.capabilities, expected);
+  assert.deepEqual(
+    [listed.projectId, listed.projectTitle, detail.projectId, detail.projectTitle],
+    [row.projectId, row.projectTitle, row.projectId, row.projectTitle],
+  );
+  assert.equal('titleManagedByProject' in detail, false);
+  assert.equal('titleBeforeProjectManagement' in detail, false);
 });

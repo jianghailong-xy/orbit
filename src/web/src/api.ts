@@ -699,6 +699,9 @@ export interface SessionDetail {
   runStatus?: string;
   status?: string;
   title?: string;
+  /** The Project this Session coordinates. Null for ordinary Sessions. */
+  projectId?: string | null;
+  projectTitle?: string | null;
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;

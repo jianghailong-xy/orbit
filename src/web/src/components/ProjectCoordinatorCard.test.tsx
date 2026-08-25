@@ -30,7 +30,7 @@ const TWELVE_MIN_AGO = '2026-08-24T06:48:00.000Z';
 function session(over: Partial<CoordinatorSession> = {}): CoordinatorSession {
   return {
     id: '6ZARyvpxHyfZorIuHMx1I4',
-    title: 'Coordinator: 实施 Project 公平调度域改造',
+    title: '实施 Project 公平调度域改造',
     runStatus: 'AWAITING_INPUT',
     runState: SessionRunState.AWAITING_INPUT,
     lifecycleState: SessionLifecycleState.OPEN,
@@ -281,7 +281,7 @@ describe('ProjectCoordinatorCard — LIVE', () => {
 
   it('names the conversation and shows its workspace without repeating the coordinator agent', () => {
     const body = text(paint(liveStatus()));
-    expect(body).toContain('Coordinator: 实施 Project 公平调度域改造');
+    expect(body).toContain('实施 Project 公平调度域改造');
     expect(body).toContain('Workspace');
     expect(body).toContain('orbit-main');
     expect(body).not.toContain('Agent');

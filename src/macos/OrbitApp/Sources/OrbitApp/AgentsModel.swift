@@ -158,6 +158,15 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
 
+    /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
+    /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for
+    /// their polling interval after a coordinator rotation or Project deletion.
+    func applyProjectRelation(_ summary: ControlSessionSummary) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == summary.id }) else { return }
+        let merged = agentSessions[index].applyingProjectRelation(summary)
+        if merged != agentSessions[index] { agentSessions[index] = merged }
+    }
+
     /// Remove a session after its exact detail endpoint returned 404. The current Completed / Trash
     /// list may otherwise retain a tappable ghost row until its next successful polling response.
     func discardSession(_ id: String) {

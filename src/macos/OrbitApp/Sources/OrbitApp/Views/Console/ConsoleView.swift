@@ -141,9 +141,12 @@ private struct ConsoleNavTitle: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            Text(SessionHeader.title(for: session, fallbackAgent: console?.agentName))
-                .font(.headline)
-                .lineLimit(1).truncationMode(.tail)
+            HStack(spacing: 6) {
+                Text(SessionHeader.title(for: session, fallbackAgent: console?.agentName))
+                    .font(.headline)
+                    .lineLimit(1).truncationMode(.tail)
+                if let session { SessionCoordinatorBadge(session: session) }
+            }
             Text(subtitle)
                 .font(.caption2).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.tail)
@@ -521,6 +524,9 @@ struct TranscriptView: View {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
             Text(headerStatus)
                 .font(.caption).foregroundStyle(.secondary)
+            if let session = app.session(id: console.sessionID) {
+                SessionCoordinatorBadge(session: session)
+            }
             Spacer()
             if !console.state.pendingApprovals.isEmpty {
                 Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")

@@ -95,6 +95,9 @@ export interface ControlSessionSummary {
   capabilities?: SessionCapabilities;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
+  /** Project relation projected onto a coordinator Session. Optional for rolling-version peers. */
+  projectId?: string | null;
+  projectTitle?: string | null;
   pendingApprovals: number;
   lastTurnAt: string | null;
   /** When the server will re-send the message this run's failure killed, or null if nothing is

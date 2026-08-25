@@ -56,6 +56,8 @@ interface WorkspaceRow {
 
 interface SessionRow {
   id: string;
+  title?: string;
+  titleManagedByProject?: boolean;
   workspaceId: string;
   deletedAt: Date | null;
   status: RunStatus;
@@ -133,7 +135,7 @@ function store(options: StoreOptions = {}) {
         ? {
             id: session.id,
             deletedAt: session.deletedAt,
-            title: 'Coordinator: Ship the coordinator',
+            title: 'Ship the coordinator',
             status: session.status,
             endReason: null,
             startedAt: null,
@@ -166,6 +168,18 @@ function store(options: StoreOptions = {}) {
         if ('coordinatorSessionId' in where && row.coordinatorSessionId !== where.coordinatorSessionId) {
           return { count: 0 };
         }
+        Object.assign(row, data);
+        return { count: 1 };
+      },
+    },
+    session: {
+      updateMany: async ({ where, data }: any) => {
+        const row = findSession(where.id);
+        if (!row) return { count: 0 };
+        if (
+          where.titleManagedByProject !== undefined &&
+          (row.titleManagedByProject ?? false) !== where.titleManagedByProject
+        ) return { count: 0 };
         Object.assign(row, data);
         return { count: 1 };
       },
@@ -205,6 +219,7 @@ function store(options: StoreOptions = {}) {
               {
                 coordinator_workspace_id: row.coordinatorWorkspaceId,
                 coordinator_session_id: row.coordinatorSessionId,
+                title: 'Ship the coordinator',
               },
             ]
           : [];
@@ -218,9 +233,20 @@ function store(options: StoreOptions = {}) {
   };
 
   const sessionsService = {
-    create: async (_owner: string, dto: { workspaceId: string; title: string }) => {
+    create: async (
+      _owner: string,
+      dto: { workspaceId: string; title: string },
+      opts?: { titleManagedByProject?: boolean },
+    ) => {
       created.push({ workspaceId: dto.workspaceId, title: dto.title });
-      sessions.push({ id: OPENED, workspaceId: dto.workspaceId, deletedAt: null, status: RunStatus.PENDING });
+      sessions.push({
+        id: OPENED,
+        title: dto.title,
+        titleManagedByProject: opts?.titleManagedByProject ?? false,
+        workspaceId: dto.workspaceId,
+        deletedAt: null,
+        status: RunStatus.PENDING,
+      });
       return { id: OPENED };
     },
     remove: async () => assert.fail('no scenario here loses the coordinator race'),
@@ -294,7 +320,7 @@ test('a project whose landing was disabled cannot open a coordinator, rebinds, a
   const opened = await service.coordinator(OWNER, PROJECT);
   assert.equal(opened.created, true);
   assert.equal(opened.workspaceId, ELSEWHERE);
-  assert.deepEqual(created, [{ workspaceId: ELSEWHERE, title: 'Coordinator: Ship the coordinator' }]);
+  assert.deepEqual(created, [{ workspaceId: ELSEWHERE, title: 'Ship the coordinator' }]);
   assert.equal(row().coordinatorWorkspaceId, ELSEWHERE);
 
   // The rebind wrote one column; the open wrote the pair. Nothing else touched the row.

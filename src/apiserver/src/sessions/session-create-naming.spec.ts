@@ -231,7 +231,11 @@ test('an unnamed session returns its fallback immediately and only beautifies it
     await waitUntil(() => fixture.updates.length === 1, 'background title update did not finish');
 
     assert.deepEqual(fixture.updates[0], {
-      where: { id: 'session-1', title: '修复登录超时' },
+      where: {
+        id: 'session-1',
+        title: '修复登录超时',
+        titleManagedByProject: false,
+      },
       data: { title: '修复登录超时问题' },
     });
     assert.equal('branch' in (fixture.updates[0] as { data: object }).data, false);
@@ -242,6 +246,26 @@ test('an unnamed session returns its fallback immediately and only beautifies it
     globalThis.fetch = originalFetch;
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
   }
+});
+
+test('a dedicated coordinator is created with a managed title without exposing the internal bit', async () => {
+  const fixture = makeService();
+
+  const session = await fixture.service.create(
+    'owner-1',
+    {
+      prompt: 'Coordinate this project',
+      title: 'Project Atlas',
+      workspaceId: 'workspace-1',
+    },
+    { titleManagedByProject: true },
+  );
+
+  assert.equal(fixture.creates[0].title, 'Project Atlas');
+  assert.equal(fixture.creates[0].titleManagedByProject, true);
+  assert.equal(fixture.creates[0].titleBeforeProjectManagement, null);
+  assert.equal('titleManagedByProject' in session, false);
+  assert.equal('titleBeforeProjectManagement' in session, false);
 });
 
 /** Drive one unnamed create through its background naming pass and hand back the fixture. */

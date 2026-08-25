@@ -446,6 +446,11 @@ export class SessionsService {
        * what it did. Defaults false, which is what an ordinary session_create means.
        */
       startsTaskWork?: boolean;
+      /**
+       * Internal title ownership for a dedicated Project coordinator. The project service supplies
+       * the canonical project title with this bit; public session creation cannot claim it.
+       */
+      titleManagedByProject?: boolean;
     },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
@@ -649,6 +654,8 @@ export class SessionsService {
       data: {
         ...(opts?.id ? { id: opts.id } : {}),
         title,
+        titleManagedByProject: opts?.titleManagedByProject ?? false,
+        titleBeforeProjectManagement: null,
         branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
@@ -723,7 +730,13 @@ export class SessionsService {
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
     // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
     if (!hasExplicitTitle) void this.beautifySessionLater(ownerId, session.id, dto.prompt, title);
-    return withSessionState(session);
+    // Title ownership/provenance is an internal synchronization mechanism, not a public setting.
+    const {
+      titleManagedByProject: _titleManagedByProject,
+      titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      ...publicSession
+    } = session;
+    return withSessionState(publicSession);
   }
 
   /**
@@ -755,7 +768,7 @@ export class SessionsService {
       let changed = false;
       if (title && title !== fallbackTitle) {
         const res = await this.prisma.session.updateMany({
-          where: { id: sessionId, title: fallbackTitle },
+          where: { id: sessionId, title: fallbackTitle, titleManagedByProject: false },
           data: { title },
         });
         changed = res.count > 0;
@@ -1851,6 +1864,8 @@ export class SessionsService {
       runnerLastHeartbeatAt: Date | null;
       taskId: string | null;
       taskTitle: string | null;
+      projectId: string | null;
+      projectTitle: string | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -1910,6 +1925,8 @@ export class SessionsService {
         r.last_heartbeat_at AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle",
+        cp.id     AS "projectId",
+        cp.title  AS "projectTitle",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -1917,6 +1934,9 @@ export class SessionsService {
       LEFT JOIN workspace a  ON a.id = s.workspace_id
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
       LEFT JOIN task t   ON t.id = s.task_id
+      -- A coordinator badge is relation metadata, not a user tag. The pointer is unique, so this
+      -- adds at most one row and lets the list render it without a per-session detail request.
+      LEFT JOIN project cp ON cp.coordinator_session_id = s.id
       -- Which gate is holding a queued session, and against what numbers. "Waiting for a free
       -- slot" was true of every PENDING row and explained none of them: the runner could be
       -- idle while the session's own run was full, and nothing said so. Every count and
@@ -2030,6 +2050,8 @@ export class SessionsService {
           : null,
         taskId: r.taskId,
         taskTitle: r.taskTitle,
+        projectId: r.projectId,
+        projectTitle: r.projectTitle,
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -2094,7 +2116,13 @@ export class SessionsService {
     // a name beside its id, so a client can label the link without a second request. Both keys are
     // always present — null on the ordinary session that coordinates nothing — and `projectId` is
     // rendered base62 by PublicIdInterceptor like every other address in the payload.
-    const { tagLinks, coordinatorForProject, ...rest } = projected;
+    const {
+      tagLinks,
+      coordinatorForProject,
+      titleManagedByProject: _titleManagedByProject,
+      titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      ...rest
+    } = projected;
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
@@ -3931,6 +3959,7 @@ export class SessionsService {
     sessionId: string,
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
+    requireNoProjectBinding = false,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -3939,6 +3968,7 @@ export class SessionsService {
     /** @deprecated Compatibility representation of lifecycleState. */
     filingState: SessionFilingState;
     endReason: SessionEndReason | null;
+    projectBound: boolean;
   }> {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
@@ -3949,6 +3979,27 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      if (requireNoProjectBinding) {
+        // Every Project binding path takes this same Session lock first. A non-locking lookup made
+        // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
+        // while a future adopter cannot pass the deleted_at guard until this transaction commits.
+        const project = await tx.project.findFirst({
+          where: { coordinatorSessionId: sessionId },
+          select: { id: true },
+        });
+        if (project) {
+          return {
+            changed: false,
+            runnerId: session.assignedRunnerId,
+            status: session.status,
+            lifecycleState: deriveSessionLifecycleState(session),
+            filingState: deriveSessionFilingState(session),
+            endReason:
+              session.endReason == null ? null : (session.endReason as SessionEndReason),
+            projectBound: true,
+          };
+        }
+      }
       if (lifecycle === 'completedAt' && session.deletedAt != null) {
         throw new ConflictException(
           'a session in Trash must be moved to Open before it can be completed',
@@ -3984,8 +4035,14 @@ export class SessionsService {
         deletedAt: finalDeletedAt,
       });
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        if (Object.keys(lifecycleData).length > 0) {
-          await tx.session.update({ where: { id: sessionId }, data: lifecycleData });
+        if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
+          await tx.session.update({
+            where: { id: sessionId },
+            data: {
+              ...lifecycleData,
+              ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+            },
+          });
         }
         return {
           changed: false,
@@ -3995,6 +4052,7 @@ export class SessionsService {
           filingState,
           endReason:
             session.endReason == null ? null : (session.endReason as SessionEndReason),
+          projectBound: false,
         };
       }
       if (session.status === RunStatus.PENDING) {
@@ -4002,6 +4060,7 @@ export class SessionsService {
           where: { id: sessionId },
           data: {
             ...lifecycleData,
+            ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
             status: RunStatus.CANCELLED,
             endReason: reason,
             cancelRequestedAt: now,
@@ -4016,7 +4075,12 @@ export class SessionsService {
       } else {
         await tx.session.update({
           where: { id: sessionId },
-          data: { ...lifecycleData, cancelRequestedAt: now, endReason: reason },
+          data: {
+            ...lifecycleData,
+            ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+            cancelRequestedAt: now,
+            endReason: reason,
+          },
         });
         // Drop queued messages so they cannot replay if the session is later revived.
         await tx.conversationTurn.deleteMany({
@@ -4034,6 +4098,7 @@ export class SessionsService {
         lifecycleState,
         filingState,
         endReason: reason,
+        projectBound: false,
       };
     }, loggedRetry(this.logger, 'sessions.transitionEnd'));
   }
@@ -4967,11 +5032,50 @@ export class SessionsService {
     if (title.length > 200) throw new BadRequestException('title is too long (max 200 chars)');
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
-    await this.prisma.session.update({ where: { id }, data: { title } });
+    // One statement is the ownership boundary: a manual rename and opting out of project-driven
+    // synchronization either both land or neither does. Always clear the bit, even when the text
+    // happens to equal the project title — equality is not intent and would introduce an ABA bug.
+    await this.prisma.session.update({
+      where: { id },
+      data: { title, titleManagedByProject: false },
+    });
     // A rename has no STATUS/TURN_END behind it, so without this the owner's OTHER clients (and
     // other tabs) keep the old title until the session's next turn.
     this.realtime.publishSessionUpdated(id);
     return { ok: true, title };
+  }
+
+  /**
+   * Announce a title write committed by the Project service. Kept here so callers do not need a
+   * second realtime dependency merely to publish the same session.updated nudge as `rename`.
+   */
+  announceProjectSessionChanged(id: string): void {
+    this.realtime.publishSessionUpdated(id);
+  }
+
+  /** Stop following a deleted Project without racing a Session that was immediately promoted into
+   * another one. Binding paths lock Session before Project, so taking that same Session lock first
+   * fences every adopter. The Project check is deliberately a SECOND statement: under READ
+   * COMMITTED it receives a fresh snapshot after any adopter we waited for has committed. */
+  async releaseProjectTitleManagement(ownerId: string, id: string): Promise<void> {
+    await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "session"
+         WHERE "id" = ${id}::uuid
+           AND "owner_id" = ${ownerId}::uuid
+           AND "title_managed_by_project" = TRUE
+         FOR UPDATE`);
+      if (locked.length === 0) return;
+      const adopted = await tx.project.findFirst({
+        where: { coordinatorSessionId: id },
+        select: { id: true },
+      });
+      if (adopted) return;
+      await tx.session.updateMany({
+        where: { id, ownerId, titleManagedByProject: true },
+        data: { titleManagedByProject: false },
+      });
+    }, loggedRetry(this.logger, 'sessions.releaseProjectTitleManagement'));
   }
 
   /**
@@ -4992,6 +5096,28 @@ export class SessionsService {
       ended.lifecycleState,
     );
     return { ok: true };
+  }
+
+  /** Soft-delete a provisional coordinator only if no Project adopted it. The relation check,
+   * managed-title release and Trash transition share the Session lock, closing the create→bind
+   * race that an ordinary check followed by `remove` would leave open. */
+  async discardProjectCoordinatorCandidate(ownerId: string, id: string): Promise<boolean> {
+    const ended = await this.transitionEnd(
+      ownerId,
+      id,
+      SessionEndReason.DELETED,
+      'deletedAt',
+      true,
+    );
+    if (ended.projectBound) return false;
+    this.publishEndIntent(id, ended);
+    this.realtime.publishSessionLifecycleChanged(
+      id,
+      ended.status,
+      ended.endReason,
+      ended.lifecycleState,
+    );
+    return true;
   }
 
   /** Bring a Completed or soft-deleted session back to Open. */

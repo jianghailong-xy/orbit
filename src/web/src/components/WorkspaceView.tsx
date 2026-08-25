@@ -704,13 +704,23 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
  *
  * A coordinator conversation is opened from a project's page and executes no task, so the task
  * link beside it never applies and the way back used to be the browser's own button. Reads the
- * session DETAIL's `projectId`/`projectTitle`: the link only exists in that direction — a session
- * row carries no project column — so a list row cannot answer this, and the button appears once
- * the detail lands.
+ * session's `projectId`/`projectTitle`: the link only exists in that direction — the project owns
+ * the pointer — so both list and detail payloads project that relation onto the session row.
  */
 export function projectBackLink(session: any): { path: string; title: string | null } | null {
   if (!session?.projectId) return null;
   return { path: `/projects/${encodeId(session.projectId)}`, title: session.projectTitle ?? null };
+}
+
+/** Relation metadata, deliberately separate from user-created tags. Optional `projectId` keeps
+ * rolling upgrades quiet: an older API simply renders no badge. */
+export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
+  if (!projectId) return null;
+  return (
+    <span className="coordinator-badge" title="This session coordinates a project">
+      Coordinator
+    </span>
+  );
 }
 
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
@@ -1420,8 +1430,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
-  // The project this conversation coordinates, if any — see projectBackLink. Read off
-  // `selectedSession` rather than `selected`, since only the detail payload carries it.
+  // The project this conversation coordinates, if any — see projectBackLink. Read the merged row
+  // so a fresh detail can enrich (or correct) the compact list snapshot during rolling upgrades.
   const projectBack = projectBackLink(selectedSession);
   const selectedLifecycleState = selectedSession
     ? sessionLifecycleStateOf(
@@ -4473,13 +4483,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           )}
                           <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
                         </div>
-                        {/* Tags lead the second line and the reply preview follows them. They sat
+                        {/* Coordinator metadata and tags lead the second line; the reply preview
+                            follows them. Tags sat
                             beside the title as bare colour dots until the naming pass started
                             writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
                             meaning lived only in a tooltip. Here they read at a glance and the
                             title keeps its full width — the preview yields instead, being the
                             echo of a reply rather than the handle you file the session under. */}
                         <div className="session-sub">
+                          <CoordinatorBadge projectId={s.projectId} />
                           {(s.tags ?? []).length > 0 && (
                             <Tooltip
                               title={(s.tags as SessionTagRef[]).map((t) => t.name).join(', ')}
@@ -4658,63 +4670,69 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <span className="workspace-header-task-name">{projectBack.title ?? 'Back to project'}</span>
               </button>
             )}
-            {editingTitle && selected && !composing ? (
-              <>
-                <span ref={titleMirrorRef} className="workspace-name-mirror" aria-hidden="true">
-                  {titleDraft || ' '}
-                </span>
-                <input
-                  className="workspace-name-input"
-                  style={{ width: titleInputW }}
-                  autoFocus
-                  value={titleDraft}
-                  onChange={(e) => setTitleDraft(e.target.value)}
-                  onFocus={(e) => {
-                    // Select all (double-click-to-rename = type replaces), but anchor the
-                    // caret at the START so a long title shows its head, not its tail.
-                    const el = e.currentTarget;
-                    el.setSelectionRange(0, el.value.length, 'backward');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      cancelTitleEdit.current = true;
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  onBlur={() => {
-                    setEditingTitle(false);
-                    if (cancelTitleEdit.current) {
-                      cancelTitleEdit.current = false;
-                      return;
-                    }
-                    const t = titleDraft.trim();
-                    if (t && t !== selected.title) renameMut.mutate({ id: selected.id, title: t });
-                  }}
-                />
-              </>
-            ) : (
-              <div
-                className="workspace-name"
-                {...(selected && !selectedTrashed && !composing
-                  ? {
-                      onDoubleClick: () => {
-                        setTitleDraft(selected.title);
-                        setEditingTitle(true);
-                      },
-                      title: 'Double-click to rename',
-                    }
-                  : {})}
-              >
-                {composing
-                  ? 'New session'
-                  : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
-              </div>
-            )}
+            <div className="workspace-title-line">
+              {editingTitle && selected && !composing ? (
+                <>
+                  <span ref={titleMirrorRef} className="workspace-name-mirror" aria-hidden="true">
+                    {titleDraft || ' '}
+                  </span>
+                  <input
+                    className="workspace-name-input"
+                    style={{ width: titleInputW }}
+                    autoFocus
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onFocus={(e) => {
+                      // Select all (double-click-to-rename = type replaces), but anchor the
+                      // caret at the START so a long title shows its head, not its tail.
+                      const el = e.currentTarget;
+                      el.setSelectionRange(0, el.value.length, 'backward');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelTitleEdit.current = true;
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    onBlur={() => {
+                      setEditingTitle(false);
+                      if (cancelTitleEdit.current) {
+                        cancelTitleEdit.current = false;
+                        return;
+                      }
+                      const t = titleDraft.trim();
+                      // Entering rename mode and committing is an explicit ownership choice even
+                      // when the text is unchanged: the server uses that same-text write to opt a
+                      // project-managed title out of future synchronization (the ABA case).
+                      if (t) renameMut.mutate({ id: selected.id, title: t });
+                    }}
+                  />
+                </>
+              ) : (
+                <div
+                  className="workspace-name"
+                  {...(selected && !selectedTrashed && !composing
+                    ? {
+                        onDoubleClick: () => {
+                          setTitleDraft(selected.title);
+                          setEditingTitle(true);
+                        },
+                        title: 'Double-click to rename',
+                      }
+                    : {})}
+                >
+                  {composing
+                    ? 'New session'
+                    : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
+                </div>
+              )}
+              {!composing && <CoordinatorBadge projectId={selectedSession?.projectId} />}
+            </div>
             <div className="workspace-sub">{headSub}</div>
           </div>
           {selected && !composing && (

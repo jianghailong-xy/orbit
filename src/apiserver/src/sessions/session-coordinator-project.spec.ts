@@ -18,7 +18,7 @@ function sessionRow(coordinatorForProject: { id: string; title: string } | null)
   return {
     id: '11111111-1111-4111-8111-111111111111',
     status: RunStatus.AWAITING_INPUT,
-    title: 'Coordinator: 实施 Project 公平调度域改造',
+    title: '实施 Project 公平调度域改造',
     createdAt: NOW,
     lastTurnAt: NOW,
     startedAt: NOW,

@@ -788,6 +788,8 @@ private struct NavigationDrawer: View {
                     Text(s.title ?? "Untitled session")
                         .lineLimit(1)
                         .foregroundStyle(.primary)
+                        .layoutPriority(1)
+                    if s.projectId != nil { SessionCoordinatorBadge(session: s) }
                     Spacer(minLength: 8)
                     if live { SessionLiveIndicator(session: s) }
                 }

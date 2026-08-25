@@ -220,6 +220,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// The Project this Session coordinates, projected from the Project-owned pointer. Both are
+    /// nil for ordinary Sessions and when talking to an older server.
+    public let projectId: String?
+    public let projectTitle: String?
     /// The list row's second-line preview, built by `SessionLine`: the (server-truncated) last
     /// assistant reply, the tool currently in flight, and the live background-shell count.
     public let lastAssistantText: String?
@@ -328,6 +332,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         permissionMode = try values.decodeIfPresent(String.self, forKey: .permissionMode)
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
+        projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         lastAssistantText = try values.decodeIfPresent(String.self, forKey: .lastAssistantText)
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
@@ -349,7 +355,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 assignedRunnerId: String?, provider: String? = nil,
                 pendingApprovals: Int?, branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
-                effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
+                effort: String? = nil, source: String? = nil,
+                projectId: String? = nil, projectTitle: String? = nil,
+                lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
@@ -375,6 +383,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.permissionMode = permissionMode
         self.effort = effort
         self.source = source
+        self.projectId = projectId
+        self.projectTitle = projectTitle
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText

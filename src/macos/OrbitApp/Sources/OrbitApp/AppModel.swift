@@ -664,6 +664,7 @@ final class AppModel {
     ///     folding the status in alone would announce a failure that undoes itself a minute later.
     ///     Once per session ended, against a per-turn event: the refetch costs nothing here.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
+        patchSessionProjectRelation(summary)
         if let lifecycle = summary.effectiveLifecycleState, lifecycle != .open { return false }
         if summary.effectiveRunStatus.isTerminal { return false }
         guard let index = sessions.firstIndex(where: { $0.id == summary.id }) else { return false }
@@ -673,6 +674,26 @@ final class AppModel {
         list[index] = merged
         applySessionSnapshot(list)
         return true
+    }
+
+    /// Relation metadata has a different membership rule from run/lifecycle state: a Project can
+    /// rotate away from or delete a coordinator while that Session lives in Completed/Trash. Patch
+    /// every loaded copy before the ordinary Open-only summary gate, using the payload's
+    /// absent/null/value distinction so an older server preserves rather than clears the relation.
+    private func patchSessionProjectRelation(_ summary: ControlSessionSummary) {
+        guard summary.projectId != nil || summary.projectTitle != nil else { return }
+        if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
+            let merged = sessions[index].applyingProjectRelation(summary)
+            if merged != sessions[index] {
+                var list = sessions
+                list[index] = merged
+                applySessionSnapshot(list)
+            }
+        }
+        if let cached = sessionDetails.resolve(summary.id) {
+            sessionDetails.store(cached.applyingProjectRelation(summary))
+        }
+        agents?.applyProjectRelation(summary)
     }
 
     /// Same, for `approval.requested` / `approval.resolved` — the event carries the authoritative
@@ -1370,8 +1391,9 @@ final class AppModel {
 
     /// Rename a session's display title — web parity with the console header's inline rename.
     /// No capability gate: the server treats this as pure metadata and allows it in any status
-    /// (dormant, completed, trashed), with no runner reload behind it. A blank or unchanged title is
-    /// the same no-op as web's editor closing on an empty field.
+    /// (dormant, completed, trashed), with no runner reload behind it. Blank is a no-op; committing
+    /// an unchanged title still reaches the server because it is how a Project-managed title opts
+    /// out of future synchronization (the same-text/ABA case).
     ///
     /// The new name is written into the loaded snapshots first so the header and the row change on
     /// the spot; the reload settles the authoritative value either way, which is also what reverts
@@ -1379,8 +1401,8 @@ final class AppModel {
     func renameSession(_ id: String, title rawTitle: String) {
         guard let api else { return }
         let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title != session(id: id)?.title else { return }
-        patchSessionTitle(id, to: title)
+        guard !title.isEmpty else { return }
+        if title != session(id: id)?.title { patchSessionTitle(id, to: title) }
         Task { @MainActor in
             do { try await api.renameSession(id, title: title) }
             catch {
