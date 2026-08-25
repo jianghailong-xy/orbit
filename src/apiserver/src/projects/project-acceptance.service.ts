@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -18,11 +19,16 @@ import {
   StatedAcceptanceCriterion,
   acceptanceDigest,
   acceptanceResultDigest,
-  criteriaFromDefinitions,
   criteriaFromLegacy,
   criteriaLegacyProjection,
   criteriaSemanticRevision,
+  statedCriteriaFrom,
 } from './project-acceptance';
+import {
+  AuthorityPrincipal,
+  authorityPrincipal,
+  refuseHumanOnlyAction,
+} from './coordinator-authority';
 import { verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
@@ -167,7 +173,7 @@ export class ProjectAcceptanceService {
         contentHash: true,
       },
     });
-    return definitions.length > 0 ? criteriaFromDefinitions(definitions) : criteriaFromLegacy(legacy);
+    return statedCriteriaFrom(definitions, legacy);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -404,6 +410,27 @@ export class ProjectAcceptanceService {
   }
 
   /**
+   * Unit T6 §1, read off the acting session's own row.
+   *
+   * Only asked when the write in hand actually reaches a PASS, so an acceptance concluded by a
+   * person — or one that concludes nothing but failures — pays no query for a boundary that does
+   * not apply to it.
+   */
+  private async assertMayConcludePass(
+    ownerId: string,
+    actingSessionId: string | undefined,
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    const acting = await this.prisma.session.findFirst({
+      where: { id: actingSessionId, ownerId },
+      select: { dispatchOrigin: true },
+    });
+    const principal: AuthorityPrincipal = authorityPrincipal(acting?.dispatchOrigin);
+    const refusal = refuseHumanOnlyAction(principal, 'CONCLUDE_VERDICT_PASS');
+    if (refusal) throw new ForbiddenException(refusal);
+  }
+
+  /**
    * Conclude an attempt (§13.4 clause 3–4).
    *
    * Every criterion in the snapshot must be answered — by ordinal or by content key — and the run's
@@ -420,9 +447,19 @@ export class ProjectAcceptanceService {
     projectId: string,
     runId: string,
     outcomes: AcceptanceCriterionOutcomeInput[],
+    actingSessionId?: string,
   ) {
     if (!Array.isArray(outcomes) || outcomes.length === 0) {
       throw new BadRequestException('a verdict must state a conclusion for every criterion');
+    }
+    // Unit T6: `CONCLUDE_VERDICT_PASS` is HUMAN_ONLY, and this is the door where a project's own
+    // acceptance is concluded. A judgment session may open a run and may answer FAIL or
+    // INCONCLUSIVE on every criterion — reporting that the goal is not met is exactly what a
+    // coordinator is for — but a PASS here is what `assertDoneAllowed` binds a project's DONE to,
+    // so it is not a coordinator's to record. Refused before the transaction: nothing written, no
+    // lock taken, and the run stays open for whoever does conclude it.
+    if (outcomes.some((outcome) => outcome?.verdict === 'PASS')) {
+      await this.assertMayConcludePass(ownerId, actingSessionId);
     }
     // Retried whole: the verdict is computed inside the closure from facts read under the project
     // lock, so a re-run recomputes rather than replaying a verdict from a discarded snapshot.

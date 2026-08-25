@@ -129,6 +129,13 @@ import {
 } from '../projects/project-scope-admission';
 import type { ScopeProjectStatus } from '../projects/project-scope-contract';
 import {
+  TASK_BUDGET_WINDOW_MS,
+  authorityPrincipal,
+  refuseHumanOnlyAction,
+  refuseTaskOpening,
+} from '../projects/coordinator-authority';
+import { statedCriteriaFrom } from '../projects/project-acceptance';
+import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
@@ -2422,6 +2429,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if ((dto.projectId ?? null) !== scopedProjectId) {
       dto = { ...dto, projectId: scopedProjectId ?? undefined };
     }
+    // Unit T6: a single create is one item of a plan, judged by the same bound a fifty-item one is.
+    await this.assertTaskOpeningAuthorized(
+      ownerId, creatorSessionId, [{ projectId: scopedProjectId, criterionKey: dto.criterionKey }],
+    );
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
@@ -3183,6 +3194,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? item
         : { ...item, projectId: admitted.projectId ?? undefined });
     }
+    // Unit T6, over the items this call would WRITE: a replay is frozen and is not re-charged to
+    // today's allowance, since the attempt that wrote it already paid for it.
+    //
+    // Above the dry run rather than beside the preflight's findings, so a preview is refused
+    // exactly where the real call would be. A preview that answered "this plan lands here" for a
+    // plan the write refuses is the one thing a preview must not do.
+    await this.assertTaskOpeningAuthorized(
+      ownerId,
+      creatorSessionId,
+      items.filter((_, index) => !frozen.has(index)),
+    );
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
     // findings at once — and nothing written if any of them refuses (AC5).
     // A dry run always preflights. `planNeedsPreflight` is false for the owner's own writes (§4 R1
@@ -3584,11 +3606,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { id: sessionId, ownerId },
       select: {
         coordinatorForProject: { select: { id: true } },
+        // Unit T3's one-shot judgment session, which is coordinated for a project without being
+        // the conversation `project.coordinator_session_id` points at — that pointer is the
+        // conversation a PERSON opened, and a judgment deliberately never takes it. Without this
+        // arm a judgment session derives no scope at all, so R5 refuses every task it files into
+        // the project it was woken for, and unit T6's bounded `OPEN_TASK` would be a bound on
+        // something nothing could do.
+        judgmentForWake: { select: { projectId: true } },
         task: { select: { projectId: true } },
       },
     });
     if (!session) return null;
-    const projectId = session.coordinatorForProject?.id ?? session.task?.projectId ?? null;
+    const projectId = session.coordinatorForProject?.id
+      ?? session.judgmentForWake?.projectId
+      ?? session.task?.projectId
+      ?? null;
     if (!projectId) return null;
     // Scoped by owner as well as by id: a scope is a tenant fact before it is a project fact, and
     // a project row reached without the owner clause would be an authority derived across tenants.
@@ -3740,6 +3772,89 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return admission.projectId;
   }
 
+
+  /**
+   * Unit T6's `OPEN_TASK` bound, over the items this call would actually write.
+   *
+   * Two rules, both in `refuseTaskOpening`: the work has to name a criterion the project states
+   * today, and the project's daily allowance has to cover it. Neither is a rule about WHERE the
+   * work lands — that is unit L3's scope contract, which has already decided the project every
+   * item below is bound to — and neither applies to anybody but a judgment session.
+   *
+   * Ordered after that binding and before the transaction, which is the only place both facts are
+   * available at once: earlier, the project an item lands in is still whatever the caller happened
+   * to name; later, a refusal would be a rolled-back batch that had already taken the owner lock.
+   *
+   * The two reads are per PROJECT rather than per item, so a fifty-item plan into one project pays
+   * for one criteria read and one count. A replayed item is not passed in at all: it was earned by
+   * the attempt that wrote it, and re-charging it to today's budget would make a lost response
+   * cost the allowance twice.
+   */
+  private async assertTaskOpeningAuthorized(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    items: ReadonlyArray<{ projectId?: string | null; criterionKey?: string }>,
+  ): Promise<void> {
+    if (!actingSessionId || items.length === 0) return;
+    const acting = await this.prisma.session.findFirst({
+      where: { id: actingSessionId, ownerId },
+      select: { dispatchOrigin: true },
+    });
+    const principal = authorityPrincipal(acting?.dispatchOrigin);
+    if (principal !== 'JUDGMENT') return;
+    const byProject = new Map<string, Array<{ criterionKey?: string }>>();
+    for (const item of items) {
+      // An item bound to no project is not on this bound: there is no goal for it to serve and no
+      // budget it spends. It does not reach here in practice — a judgment session holds a scope,
+      // so §4 R4 has already refused a create that explicitly asks for no project — and skipping
+      // it is what keeps this gate about authority rather than a second opinion on attribution.
+      if (!item.projectId) continue;
+      const group = byProject.get(item.projectId) ?? [];
+      group.push(item);
+      byProject.set(item.projectId, group);
+    }
+    const since = new Date(Date.now() - TASK_BUDGET_WINDOW_MS);
+    for (const [projectId, group] of [...byProject.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
+      const project = await this.prisma.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: {
+          acceptanceCriteria: true,
+          sessionBudgetPerDay: true,
+          acceptanceCriterionDefinitions: {
+            select: { id: true, ordinal: true, text: true, revision: true, contentHash: true },
+          },
+        },
+      });
+      // Tenancy is `assertOwnedProject`'s and the scope contract's; a project that cannot be read
+      // here is one those have already answered for.
+      if (!project) continue;
+      const statedCriterionKeys = statedCriteriaFrom(
+        project.acceptanceCriterionDefinitions ?? [], project.acceptanceCriteria,
+      ).map((criterion) => criterion.key);
+      // What judgment sessions have already opened here inside the window. Counted through the
+      // creator SESSION's dispatch origin rather than through a column on the task, because that
+      // is the same fact §1 derives the principal from — one spelling of "a judgment opened this",
+      // and no second column for a writer to forget.
+      const openedInWindow = await this.prisma.task.count({
+        where: {
+          ownerId,
+          projectId,
+          createdAt: { gte: since },
+          creatorSession: { dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR },
+        },
+      });
+      for (const item of group) {
+        const refusal = refuseTaskOpening(principal, {
+          declaredCriterionKey: item.criterionKey,
+          statedCriterionKeys,
+          openedInWindow,
+          opening: group.length,
+          budgetPerDay: project.sessionBudgetPerDay,
+        });
+        if (refusal) throw new ForbiddenException(refusal);
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------------------------
   // Unit L4: declared crossings, and the plan preflight.
@@ -6252,9 +6367,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * `actingSessionId` is the run this edit is being made FROM, when there is one — the runner
-   * sends it on every task write an agent makes. It is used for exactly one decision, §13.2's
-   * independence rule below, and is otherwise ignored: a task edit is authorised by the owner,
-   * not by which run happened to make it.
+   * sends it on every task write an agent makes. It answers the two questions on this path that
+   * turn on WHO is writing rather than on what is being written: §13.2's independence rule, and
+   * unit T6's `CONCLUDE_VERDICT_PASS`. Everything else about a task edit is authorised by the
+   * owner, not by which run happened to make it.
    */
   async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
     // Internal write planning must receive its own raw UUID-shaped object. A public GET response is
@@ -6422,6 +6538,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             'the check has to be an independent run',
         );
       }
+    }
+    // Unit T6: `CONCLUDE_VERDICT_PASS` is HUMAN_ONLY, and this is the other door that reaches a
+    // PASS. A verification's PASS is not an opinion filed beside the work — `task-aggregation.ts`
+    // completes the subject on `status DONE && verdict PASS`, so writing one here finishes a task
+    // for every reader downstream. A judgment session is not the independent check that earns
+    // that; it is the thing that decides what to do next. FAIL and INCONCLUSIVE stay open to it,
+    // which is the same asymmetry the self-DONE boundary makes: the conservative conclusion
+    // releases nothing and asks for a person.
+    //
+    // Only a write that MOVES the verdict to PASS, and read off the acting session's own row —
+    // never off this request, which carries no principal a caller could name.
+    if (concludesVerdict && dto.verdict === 'PASS' && actingSessionId) {
+      const acting = await this.prisma.session.findFirst({
+        where: { id: actingSessionId, ownerId },
+        select: { dispatchOrigin: true },
+      });
+      const refusal = refuseHumanOnlyAction(
+        authorityPrincipal(acting?.dispatchOrigin), 'CONCLUDE_VERDICT_PASS',
+      );
+      if (refusal) throw new ForbiddenException(refusal);
     }
     // §13.1 AG6's other end, refused here so the API answers in a sentence rather than letting
     // `task_foreman_manual_policy` answer with a constraint name. `is_foreman` says "this task's

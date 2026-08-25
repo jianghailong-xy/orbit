@@ -228,6 +228,22 @@ export function criteriaFromLegacy(
   });
 }
 
+/**
+ * Which of the two shapes states a project's criteria: the 0172 definition rows when it has any,
+ * and the legacy text otherwise.
+ *
+ * One spelling, because there is now more than one reader — `ProjectAcceptanceService.statedCriteria`
+ * judges a run against these, and unit T6's `refuseTaskOpening` checks a declared `criterionKey`
+ * against them. Two copies of the fallback is how a coordinator ends up refused for naming a
+ * criterion the acceptance run would have recognised.
+ */
+export function statedCriteriaFrom(
+  definitions: AcceptanceCriterionDefinitionLike[],
+  legacy: string | null | undefined,
+): StatedAcceptanceCriterion[] {
+  return definitions.length > 0 ? criteriaFromDefinitions(definitions) : criteriaFromLegacy(legacy);
+}
+
 /** The legacy text projection old clients continue to read. The numbered Markdown is a projection,
  * never a parser contract: structured callers own the item boundaries before this is rendered. */
 export function criteriaLegacyProjection(

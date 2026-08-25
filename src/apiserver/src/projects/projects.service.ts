@@ -49,6 +49,7 @@ import {
 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
+import { authorityPrincipal, refuseHumanOnlyAction } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
@@ -578,6 +579,41 @@ export class ProjectsService {
       throw new BadRequestException(
         'acceptanceCriteriaItems must be an array; use [] to clear it or omit it to leave it unchanged',
       );
+    }
+  }
+
+  /**
+   * Unit T6: the two acts on this DTO that are a person's, refused for a judgment session.
+   *
+   * `EDIT_ACCEPTANCE_CRITERIA` covers both authoring shapes, because they write the same fact —
+   * gating only the structured one would leave the legacy text as an unguarded way to rewrite the
+   * exam. `SETTLE_PROJECT_DONE` is only `status = DONE`: OPEN and CANCELLED are not this boundary,
+   * and a coordinator that noticed a project should be abandoned is not claiming its goal was met.
+   *
+   * Both are checked BEFORE the update's own transaction, so a refusal writes nothing. The session
+   * is read once and only when the request actually asks for one of them, so an ordinary edit —
+   * and every write from the user door, which carries no acting session — pays nothing for it.
+   */
+  private async assertHumanOnlyProjectWrites(
+    ownerId: string,
+    dto: UpdateProjectDto,
+    actingSessionId: string | undefined,
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    const asked: Array<'EDIT_ACCEPTANCE_CRITERIA' | 'SETTLE_PROJECT_DONE'> = [];
+    if (dto.acceptanceCriteria !== undefined || dto.acceptanceCriteriaItems !== undefined) {
+      asked.push('EDIT_ACCEPTANCE_CRITERIA');
+    }
+    if (dto.status === ProjectStatus.DONE) asked.push('SETTLE_PROJECT_DONE');
+    if (asked.length === 0) return;
+    const acting = await this.prisma.session.findFirst({
+      where: { id: actingSessionId, ownerId },
+      select: { dispatchOrigin: true },
+    });
+    const principal = authorityPrincipal(acting?.dispatchOrigin);
+    for (const action of asked) {
+      const refusal = refuseHumanOnlyAction(principal, action);
+      if (refusal) throw new ForbiddenException(refusal);
     }
   }
 
@@ -1464,13 +1500,17 @@ export class ProjectsService {
    *  that says what it was for, and a rename cannot reopen it. Settling `status` changes nothing
    *  about the project's tasks, which keep running or not running exactly as before — this phase
    *  adds no rule that a DONE project finishes its work, or that unfinished work reopens it. */
-  async update(ownerId: string, id: string, dto: UpdateProjectDto) {
+  async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
       select: { id: true, coordinatorEnabled: true, coordinatorSessionId: true },
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
+    // Unit T6: the two HUMAN_ONLY rows this door carries. Here rather than at the controller,
+    // because a boundary enforced at one of the two doors leaves the service as the other one —
+    // and before anything else, so a refusal writes nothing and takes no lock.
+    await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
     // below, which is the one that decides: what a project was when this read ran is not what it

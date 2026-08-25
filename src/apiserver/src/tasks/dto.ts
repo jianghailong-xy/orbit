@@ -102,6 +102,16 @@ export class CreateTaskDto {
   @IsString()
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string;
+  // Unit T6: which of the PROJECT's stated acceptance criteria this new work serves, as one of the
+  // `key` values `project_get` returns.
+  //
+  // Required of a judgment session and of nobody else (`refuseTaskOpening`), which is why it is
+  // optional here: a person filing work has never had to justify it to a gate, and making the
+  // field mandatory at the DTO would refuse every task the product creates today. It is a
+  // DECLARATION rather than a link — nothing is written from it, and the criterion it names is
+  // read back from the project at admission time, so a key that was valid when the criteria said
+  // one thing does not stay valid after a person rewrites them.
+  @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;

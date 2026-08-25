@@ -402,7 +402,7 @@ test('an agent cannot widen its own authority through the runner door', async ()
   for (const field of [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId']) {
     const dto = { [field]: field === 'coordinatorAgentId' ? AGENT_ID : 1 } as never;
     assert.throws(
-      () => controller.updateProject(runner, PROJECT_ID, dto),
+      () => controller.updateProject(runner, PROJECT_ID, undefined, dto),
       (e: any) => e.status === 403 && e.message.includes(field),
       `${field} must not be writable with a runner credential`,
     );
@@ -419,7 +419,7 @@ test('the runner door still carries everything an agent may say about the work',
   };
   const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never);
 
-  await controller.updateProject({ ownerId: OWNER_ID, id: 'runner-1' } as never, PROJECT_ID, {
+  await controller.updateProject({ ownerId: OWNER_ID, id: 'runner-1' } as never, PROJECT_ID, undefined, {
     goal: 'A goal it worked out',
     status: 'DONE',
   } as never);
@@ -526,7 +526,7 @@ test('the runner door refuses those nulls too, before anything can be written', 
       `${field}: the runner door goes through the same pipe`,
     );
     assert.throws(
-      () => controller.updateProject(runner, PROJECT_ID, { [field]: null } as never),
+      () => controller.updateProject(runner, PROJECT_ID, undefined, { [field]: null } as never),
       (e: { status?: number }) => e.status === 403,
       `${field}: and the door itself does not treat null as unsent`,
     );

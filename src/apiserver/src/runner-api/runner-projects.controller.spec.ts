@@ -260,9 +260,9 @@ test('createProject reads the session from x-orbit-session-id', () => {
   );
 });
 
-// Reading a project and revising one are not "where am I" questions: neither has a coordinator
+// Reading a project and deleting one are not "where am I" questions: neither has a coordinator
 // default to seed, so neither may grow a dependence on the caller's session.
-for (const method of ['getProject', 'updateProject', 'removeProject'] as const) {
+for (const method of ['getProject', 'removeProject'] as const) {
   test(`${method} takes no session context`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown }>
@@ -270,6 +270,25 @@ for (const method of ['getProject', 'updateProject', 'removeProject'] as const) 
     for (const arg of Object.values(args ?? {})) {
       assert.notEqual(arg.data, 'x-orbit-session-id');
     }
+  });
+}
+
+// `updateProject` used to be in that list, and unit T6 took it out. The rule it was under is about
+// SEEDING — a route that quietly derives a default from whichever session happened to call it —
+// and that rule still holds here: nothing about the update is defaulted from the session. What the
+// header buys is the opposite, an authorization boundary that has to know WHO is writing, since
+// two fields on this DTO (the acceptance criteria, and `status = DONE`) are a person's rather than
+// a judgment session's. Asserted rather than left implicit because a typo in the header name is
+// silent: the parameter would be `undefined` on every request and the boundary would never bite.
+for (const method of ['updateProject', 'finalizeAcceptanceRun'] as const) {
+  test(`${method} reads the acting session from x-orbit-session-id`, () => {
+    const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
+      | Record<string, { data?: unknown }>
+      | undefined;
+    const headers = Object.values(args ?? {})
+      .map((arg) => arg.data)
+      .filter((data) => typeof data === 'string' && data.includes('-'));
+    assert.deepEqual(headers, ['x-orbit-session-id']);
   });
 }
 
@@ -287,7 +306,7 @@ test('updateProject writes into the runner owner, with the id and body untouched
   const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
   const dto: UpdateProjectDto = { title: 'Crawl the archive', status: ProjectStatus.DONE };
 
-  const result = await controller.updateProject(RUNNER, 'project-1', dto);
+  const result = await controller.updateProject(RUNNER, 'project-1', undefined, dto);
 
   assert.deepEqual({ ownerId: seen.ownerId, projectId: seen.projectId }, {
     ownerId: 'owner-1',
@@ -310,7 +329,7 @@ test('updateProject forwards an explicit null clear rather than dropping it', as
   } as never;
   const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
-  await controller.updateProject(RUNNER, 'project-1', {
+  await controller.updateProject(RUNNER, 'project-1', undefined, {
     goal: null,
     acceptanceCriteria: null,
     instructions: null,
@@ -331,7 +350,7 @@ test("updating another owner's project stays a 404 from the service", async () =
   const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   await assert.rejects(
-    () => controller.updateProject(RUNNER, 'someone-elses-project', { status: ProjectStatus.DONE }),
+    () => controller.updateProject(RUNNER, 'someone-elses-project', undefined, { status: ProjectStatus.DONE }),
     /not found/,
   );
 });

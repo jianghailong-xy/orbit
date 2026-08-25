@@ -507,7 +507,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -538,7 +538,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -1298,6 +1298,20 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"states what would settle itself, not what would settle its parent or its project. Up "+
 			"to %d characters.", maxTaskAcceptanceCriteriaChars),
 	}
+	// Which of the PROJECT's stated acceptance criteria a new task serves. Required of a project's
+	// one-shot judgment session and of nobody else, so the description says who has to send it
+	// rather than marking it required — a person filing work has never had to justify it to a gate.
+	criterionKeyProp := map[string]interface{}{
+		"type":      "string",
+		"maxLength": 64,
+		"description": "Which of the PROJECT's stated acceptance criteria this new task serves — " +
+			"one of the `key` values project_get returns beside each criterion. A project " +
+			"coordinator's one-shot judgment session MUST send it and the server refuses the create " +
+			"without it; every other caller may omit it. It is what bounds a coordinator filing " +
+			"more work on the fact that the criteria are FINITE and a person wrote them: work that " +
+			"serves none of them is work the project was not asked for. Re-read the keys before " +
+			"sending one — editing a criterion's text changes its key.",
+	}
 	// The same field on the edit door, where it also has to be removable. Criteria are usually
 	// written before the work is understood, so what settles a task is whatever it says at the end,
 	// not what it was created with — an agent that discovers the real test has to be able to record
@@ -1368,6 +1382,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"projectId":          projectIDProp,
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
+			"criterionKey":       criterionKeyProp,
 			"dueDate":            str,
 			"provider":           providerProp,
 			"model":              modelProp,
@@ -1725,7 +1740,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"reached (acceptanceCriteria) or how the work is to be done (instructions), and " +
 				"record where the work stands (status). You have the authority to write these " +
 				"fields — say so when the work actually lands rather " +
-				"than leaving a finished project OPEN. Only the fields you pass are sent, so " +
+				"than leaving a finished project OPEN. TWO EXCEPTIONS, and the server enforces " +
+				"them rather than trusting this sentence: a project's one-shot JUDGMENT session " +
+				"(the one a committed fact opens, not the conversation a person is in) cannot " +
+				"write acceptanceCriteria and cannot write status DONE. Those are the exam the " +
+				"project is judged against and the statement that its goal was met; report what " +
+				"should change and let a person write it. Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +
 				"untouched, pass a string to replace it, pass null to clear it. status DONE means " +
 				"the goal was reached and CANCELLED that it will not be; neither is a way to file " +

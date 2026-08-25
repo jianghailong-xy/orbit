@@ -127,9 +127,13 @@ export class RunnerProjectsController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Param('runId', PublicIdPipe) runId: string,
+    // Same header, same reason as the PATCH below: a PASS recorded here is what a project's DONE
+    // is bound to, and unit T6 makes that one a person's. A judgment session may still open a run
+    // and conclude FAIL or INCONCLUSIVE on every criterion.
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: FinalizeAcceptanceRunDto,
   ) {
-    return this.acceptance.finalizeRun(runner.ownerId, id, runId, dto.criteria);
+    return this.acceptance.finalizeRun(runner.ownerId, id, runId, dto.criteria, sessionId);
   }
 
   /**
@@ -207,10 +211,15 @@ export class RunnerProjectsController {
   updateProject(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
+    // The session this edit is being made from, read for one decision: unit T6's two HUMAN_ONLY
+    // rows on this DTO — the acceptance criteria, and `status = DONE`. A header rather than a body
+    // field because it is the caller's identity, not part of the edit, and because a principal an
+    // agent could name is a principal an agent could grant itself.
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateProjectDto,
   ) {
     RunnerProjectsController.refuseGovernance(dto);
-    return this.projects.update(runner.ownerId, id, dto);
+    return this.projects.update(runner.ownerId, id, dto, sessionId);
   }
 
   /**
