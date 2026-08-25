@@ -88,7 +88,14 @@ const RANKING = {
 
 const READY = {
   readyCount: 2,
-  items: RANKING.items,
+  queuedCount: 0,
+  runningCount: 0,
+  pausedCount: 0,
+  items: RANKING.items.map((item) => ({
+    ...item,
+    runState: 'READY' as const,
+    pausedList: null,
+  })),
   impactTruncated: null,
 };
 
@@ -339,7 +346,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     await mount(page());
 
     // The queue says so itself, where the runnable tasks would have been...
-    expect(shows('Ready tasks could not be read')).toBe(true);
+    expect(shows('Run queue could not be read')).toBe(true);
     expect(shows('Internal Server Error')).toBe(true);
 
     // ...and nothing else on the page notices. The page's own title first, then all four of the

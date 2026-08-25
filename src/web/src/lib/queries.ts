@@ -388,11 +388,23 @@ export const projectPanoramaBlockingQuery = (projectId: string, limit = 5) =>
       ),
   });
 
-/** One project task that the manual Run action can start at the time of this read. */
+export type ProjectReadyToRunState = 'READY' | 'QUEUED' | 'RUNNING' | 'PAUSED';
+
+export interface ProjectReadyToRunPausedList {
+  id: string;
+  title: string;
+  readyCount: number;
+  autoRunReadyCount: number;
+}
+
+/** One project task that can start now or has an active work Session. */
 export interface ProjectReadyToRunItem {
   taskId: string;
   title: string;
   status: string;
+  runState: ProjectReadyToRunState;
+  /** The list-level action needed before a PAUSED row can expose Run. */
+  pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute transitive impact safely. */
   downstreamBlocked: number | null;
 }
@@ -400,13 +412,17 @@ export interface ProjectReadyToRunItem {
 export interface ProjectReadyToRun {
   /** All runnable tasks in the project, not just the limited rows returned in `items`. */
   readyCount: number;
+  queuedCount: number;
+  runningCount: number;
+  pausedCount: number;
   items: ProjectReadyToRunItem[];
   impactTruncated: { reason: string; maxTasks: number } | null;
 }
 
 /**
  * The actionable project queue. Polled because a run can start in another tab or through a
- * coordinator, neither of which invalidates this tab's `['project', id]` cache locally.
+ * coordinator, neither of which invalidates this tab's `['project', id]` cache locally. Active
+ * work is sampled faster so QUEUED/RUNNING rows settle promptly when their Session ends.
  */
 export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
   queryOptions({
@@ -415,7 +431,10 @@ export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
       api<ProjectReadyToRun>(
         `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
       ),
-    refetchInterval: 15_000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return (data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000;
+    },
   });
 
 /**

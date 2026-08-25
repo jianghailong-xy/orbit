@@ -95,11 +95,13 @@ export class ProjectsController {
   }
 
   /**
-   * Tasks in this project that the owner can start now, ranked by transitive downstream impact.
+   * Tasks in this project that are running, can start now, or need a paused list resumed first.
    *
    * This is deliberately not a client-side filter over the blocking leaderboard: runnable leaves
    * block zero tasks and therefore do not appear there, while blocked roots must not receive a Run
-   * button. `taskId` is rendered in Base62 by the response interceptor like every other address.
+   * button. Active work stays in the response as QUEUED/RUNNING so a successful Run changes its
+   * row instead of removing it. A PAUSED row passes every other Run gate and carries the owning
+   * list plus its release scope. IDs are rendered in Base62 by the response interceptor.
    */
   @Get(':id/panorama/ready')
   panoramaReady(

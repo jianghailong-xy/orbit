@@ -972,12 +972,14 @@ export class ProjectsService {
   }
 
   /**
-   * The project's manually runnable tasks, with the most consequential one first.
+   * The project's active and manually runnable tasks, plus otherwise-runnable paused candidates.
    *
    * Unlike the blocking leaderboard, this includes runnable leaves with an impact of zero and
-   * excludes every task-level static condition the Run action would currently refuse. Keeping it
-   * separate preserves the full unfinished ranking consumed by the chain-progress strip while
-   * giving the actionable card a payload whose title is literally true.
+   * excludes every task-level static condition the Run action would currently refuse. A task that
+   * has just crossed into QUEUED/RUNNING remains beside that ready queue until its work Session
+   * ends. A held task is only included when resuming its actual list is the sole remaining Run
+   * gate. Keeping this separate preserves the full unfinished ranking consumed by the
+   * chain-progress strip while giving the actionable card a stable execution surface.
    */
   async panoramaReady(
     ownerId: string,
@@ -989,7 +991,14 @@ export class ProjectsService {
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_BLOCKING_LIMIT) {
       throw new BadRequestException(`limit must be an integer from 1 to ${MAX_BLOCKING_LIMIT}`);
     }
-    return readProjectReadyToRun(this.prisma, ownerId, projectId, limit);
+    // This query deliberately carries the exact Run gate, including the verification-epoch SQL.
+    // PostgreSQL's JIT spends ~16s compiling that large expression on the 23k-task production
+    // project while the query itself takes under a second. Keep the setting transaction-local so
+    // it cannot change another endpoint sharing the pool connection.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL jit = off');
+      return readProjectReadyToRun(tx, ownerId, projectId, limit);
+    });
   }
 
   /**

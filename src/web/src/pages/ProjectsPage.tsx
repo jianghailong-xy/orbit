@@ -644,8 +644,8 @@ export function ProjectDetailPage() {
           <ProjectChainProgress projectId={id} />
 
           {/* After the graph and its chain-specific reading, this queue turns that context into
-              action. Full width, on its own, and ordered by how much downstream work each
-              runnable task releases. */}
+              action. Full width, with active work retained above the remaining runnable tasks so
+              a Run press changes the row's state instead of making it disappear. */}
           <ProjectReadyToRun projectId={id} />
 
           {/* The criteria live HERE and nowhere else on this page. There used to be a

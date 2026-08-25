@@ -9268,7 +9268,7 @@ html[data-theme='dark'] .session-tag-chip {
   .project-ready-impact {
     grid-column: 1;
   }
-  .project-ready-run {
+  .project-ready-action {
     grid-column: 2;
     grid-row: 1 / span 2;
   }
