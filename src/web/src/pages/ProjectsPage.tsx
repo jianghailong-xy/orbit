@@ -27,7 +27,11 @@ import {
   ProjectPanoramaHeader,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
-import { ProjectsToolbar, type ProjectFilter } from '../components/ProjectsToolbar';
+import {
+  PROJECTS_PHONE_QUERY,
+  ProjectsToolbar,
+  type ProjectFilter,
+} from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
@@ -212,13 +216,19 @@ export function ProjectsPage() {
   // disagree about how long the same silence has been. Re-read on every render, so a page left
   // open does not keep reporting the age it had when it mounted.
   const now = Date.now();
+  // Read once for the whole list rather than per row: every row asks the same question of the
+  // same viewport. False under `renderToStaticMarkup`, which is the desktop answer — see
+  // useMediaQuery.
+  const phone = useMediaQuery(PROJECTS_PHONE_QUERY);
   const empty = projectsEmptyKind(projects.data?.length ?? 0, matches.length, filter, search);
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Typography.Title level={2} className="page-title">
-        Projects
-      </Typography.Title>
+      {/* The same `h1.page-title` every other list page uses. It used to be a
+          `Typography.Title level={2}`, which renders as `h2.ant-typography` — a higher specificity
+          than `.page-title` from a stylesheet injected after index.css, so the 20px in that rule
+          was never what shipped and the heading was 30px here and 20px everywhere else. */}
+      <h1 className="page-title">Projects</h1>
 
       {/* Above the loading/error branches, not inside the loaded one: the search box and the
           filter are how a slow or failed read is retried differently, and a toolbar that appears
@@ -306,7 +316,13 @@ export function ProjectsPage() {
                           {chip.text}
                         </span>
                       ) : null}
-                      <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
+                      {/* OPEN is what the section a row landed in already says — on a phone,
+                          where the badge costs the title 50px of a line it has none to spare, that
+                          repetition is dropped. DONE and CANCELLED stay: those are the values a
+                          reader would not predict from the header. */}
+                      {phone && p.status === 'OPEN' ? null : (
+                        <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
+                      )}
                     </div>
                     <div className="project-row-goal">{goal}</div>
                   </div>

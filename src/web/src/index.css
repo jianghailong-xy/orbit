@@ -9381,6 +9381,22 @@ html[data-theme='dark'] .session-tag-chip {
   }
 }
 
+/* The row under the page title: search, status filter, create. Was three inline styles on the
+   component, which a media query cannot reach — and this line is exactly the one that has to
+   change on a phone: the filter (229px) and a create button carrying its label (133px) want 378px
+   of a 361px line before the search box is counted at all, and that overflow surfaced as a
+   horizontal scrollbar with the button cut in half. */
+.projects-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* 16px above, because `.page-title` carries no bottom margin of its own. */
+  margin: 16px 0 6px;
+}
+.projects-toolbar-search {
+  flex: 1;
+}
+
 /* Projects list rows. Every row is exactly two lines tall — one title, one goal — because the
    goal is truncated by the box rather than by a character count: how many rendered lines 180
    characters occupy depends on how much of them is CJK (a full-width glyph is twice a Latin one),
@@ -9515,4 +9531,73 @@ html[data-theme='dark'] .session-tag-chip {
    background colour and the badges invisible against it. */
 .project-row-spotlit {
   background: var(--warning-bg);
+}
+
+/* ---- Projects list on a phone ----
+   The row above is `text | 196px meter | 78px dates`, and none of it wraps. On a 393px phone the
+   row is 341px wide, so those two fixed columns and their 16px gaps take 306px — and the title,
+   the one item in the line that can shrink, is computed at 0px. Not truncated: ZERO, not one
+   character drawn, while the badges beside it (which are `flex: none`) overflow the box and paint
+   on top of the meter. What a reader could still see on that row was the goal underneath.
+
+   So the row folds into two bands: the text takes a line of its own, the meter and the dates share
+   the next one. Everything here is a narrow-screen override — the desktop rules above are
+   untouched, and this block is the only place that knows a phone exists.
+
+   640px, not the app's existing 960px: 960 is where three columns stop fitting, this is where
+   306px of fixed columns stops fitting. A portrait tablet at 768px still has a 736px row and reads
+   the original layout fine, so it is deliberately left out. Kept identical to
+   PROJECTS_PHONE_QUERY, which decides the same question for the two things CSS cannot do here. */
+@media (max-width: 640px) {
+  /* NO `overflow-x: hidden` on .app-view--doc, though that is the box the reported horizontal
+     scrollbar came from (it is `overflow: auto`, which is why `body { overflow-x: hidden }` further
+     up never reached it). That container is the whole app's document view — Tasks and every settings
+     page render into it — and clipping overflow there would make any page's too-wide content
+     unreachable rather than merely ugly. The bar was the toolbar's 378px of controls on a 361px
+     line, which the rule below fixes at the source; measured at 393px afterwards, the container's
+     scrollWidth equals its clientWidth. */
+
+  /* Search takes a line; the filter and the create button share the next. */
+  .projects-toolbar {
+    flex-wrap: wrap;
+  }
+  .projects-toolbar-search {
+    flex: 1 0 100%;
+  }
+  .projects-toolbar-filter {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  /* Three equal segments rather than three text-width ones: at this width they are being tapped,
+     and "All" is otherwise a 42px target next to a 90px one. */
+  .projects-toolbar-filter .ant-segmented-item {
+    flex: 1;
+  }
+
+  /* The header's small print explains what the section is ordered by. Worth a line on a desktop,
+     three lines above the rows here. */
+  .project-section-note {
+    display: none;
+  }
+
+  .project-row-link {
+    flex-wrap: wrap;
+    /* Narrower than the gap between two rows: these are two bands of one row, and if the split
+       reads as wide as a row boundary the list stops having rows. */
+    row-gap: 9px;
+  }
+  .project-row-main {
+    flex: 1 0 100%;
+  }
+  /* Belt and braces. The title gives up width before anything else does, so with the full line to
+     itself the badges no longer overflow — but the box that overflowed onto the meter is this one,
+     and it should not be able to do that again. */
+  .project-row-head {
+    overflow: hidden;
+  }
+  .project-row-meter {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 }

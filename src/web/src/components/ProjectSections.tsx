@@ -105,7 +105,12 @@ function Section<T extends SectionProject>({
         >
           {section.projects.length}
         </span>
-        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{section.note}</span>
+        {/* Classed, not just styled: on a phone this sentence is 71 characters folded onto three
+            lines above the rows it explains, and index.css takes it away there. The order the
+            section is in is a desktop aside; the rows are the page. */}
+        <span className="project-section-note" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+          {section.note}
+        </span>
         <Button
           type="text"
           size="small"
