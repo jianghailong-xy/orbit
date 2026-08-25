@@ -281,29 +281,3 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
   if (section === 'running' && running > 0) return { tone: 'warning', text: `No progress ${days}d` };
   return null;
 }
-
-/** At most this many Stalled rows get the tint. Two, because a wash that covers a section is that
- *  section's background: eight tinted rows in production would say "this whole area is amber",
- *  which is a statement about the page, not about any project on it. */
-const STALLED_SPOTLIGHT = 2;
-
-/**
- * Which rows get a wash of `--warning-bg` behind them: the head of Stalled, and nothing else.
- *
- * Stalled is ordered by `ready` descending, so its first rows ARE the largest piles of work that
- * could start and isn't — the two the reader should deal with first. `ready > 0` is required
- * rather than assumed: the tail of that section is the projects blocked entirely on another
- * project's work (again see `attentionSectionOf`), and on a short list one of those can be in the
- * top two. Tinting it would point the reader at the one row there that has nothing to pick up.
- */
-export function spotlitProjectIds<T extends AttentionProject & SectionProject>(
-  sections: readonly ProjectSection<T>[],
-): Set<string> {
-  const stalled = sections.find((s) => s.key === 'stalled')?.projects ?? [];
-  return new Set(
-    stalled
-      .slice(0, STALLED_SPOTLIGHT)
-      .filter((p) => p.buckets.ready > 0)
-      .map((p) => p.id),
-  );
-}

@@ -10046,13 +10046,6 @@ html[data-theme='dark'] .session-tag-chip {
   border: 1px solid var(--brand-border);
   color: var(--brand-strong);
 }
-/* The head of Stalled, and at most two rows of it (see spotlitProjectIds). Deliberately only the
-   background — no border, no weight — because the badge is the signal and this is the hint that
-   there is one worth reading here. Tinting the whole section would make amber the page's
-   background colour and the badges invisible against it. */
-.project-row-spotlit {
-  background: var(--warning-bg);
-}
 
 /* ---- Projects list on a phone ----
    The row above is `text | 196px meter | 78px dates`, and none of it wraps. On a 393px phone the

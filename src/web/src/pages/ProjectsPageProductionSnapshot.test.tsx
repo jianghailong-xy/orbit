@@ -605,13 +605,4 @@ describe('projects index — badges over the 2026-08-23 production snapshot', ()
     expect(row).toContain('<b>1</b>');
   });
 
-  it('tints the two biggest piles in Stalled, not the section', () => {
-    const tinted = [...html.matchAll(/<li [^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/li>/g)]
-      .filter((li) => li[1].split(' ').includes('project-row-spotlit'))
-      .map((li) => decode(/class="project-row-title">([^<]*)</.exec(li[2])?.[1] ?? '').trim());
-
-    // FineWeb's 6,118 ready tasks and 客户端性能's 9: the two largest piles of work that could
-    // start and isn't. The other six stalled rows carry no wash at all.
-    expect(tinted).toEqual([NAME.fineweb, NAME.ios]);
-  });
 });

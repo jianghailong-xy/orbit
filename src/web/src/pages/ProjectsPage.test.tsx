@@ -2523,10 +2523,10 @@ describe('ProjectsPage — badges', () => {
     buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
   });
 
-  /** Every row of the page, read back out of the markup: which section it is in, what its badge
-   *  says, and whether it is tinted. The assertions below are about the rendered row — a rule
-   *  that is right in lib/projectAttention and unwired here has to fail. */
-  function rowsOf(html: string): Array<{ section: string; title: string; chip: string | null; tone: string | null; spotlit: boolean }> {
+  /** Every row of the page, read back out of the markup: which section it is in and what its badge
+   *  says. The assertions below are about the rendered row — a rule that is right in
+   *  lib/projectAttention and unwired here has to fail. */
+  function rowsOf(html: string): Array<{ section: string; title: string; chip: string | null; tone: string | null }> {
     const out = [];
     const marks = [...html.matchAll(/data-section="([^"]+)"/g)];
     for (const [i, m] of marks.entries()) {
@@ -2538,7 +2538,6 @@ describe('ProjectsPage — badges', () => {
           title: /class="project-row-title">([^<]*)</.exec(li[2])?.[1] ?? '',
           chip: chip?.[2] ?? null,
           tone: chip?.[1] ?? null,
-          spotlit: li[1].split(' ').includes('project-row-spotlit'),
         });
       }
     }
@@ -2629,26 +2628,11 @@ describe('ProjectsPage — badges', () => {
     ]);
   });
 
-  it('tints the head of Stalled and nothing below it', () => {
-    // At most two rows, and only in Stalled — see spotlitProjectIds. Eight tinted rows would make
-    // amber the section's background rather than a mark on the rows worth starting.
-    const rows = render([
-      listRow(P1, 'Biggest Pile', { buckets: { ready: 6118, blocked: 17324 } }),
-      listRow(P2, 'Second Pile', { buckets: { ready: 9, blocked: 1 } }),
-      listRow(P3, 'Third Pile', { buckets: { ready: 4 } }),
-      listRow(P4, 'Blocked Elsewhere', { buckets: { blocked: 30 } }),
-      listRow(P5, 'Running', { buckets: { running: 1, ready: 99 } }),
-    ]);
-
-    expect(rows.filter((r) => r.spotlit).map((r) => r.title)).toEqual(['Biggest Pile', 'Second Pile']);
-  });
-
   it('spells its colours as theme tokens, never as a hex', () => {
-    // Both tones and the tint are named in index.css off --warning-*/--brand-*, so they follow the
-    // palette into dark mode. A hex on this row would be a light-mode-only badge — and the row
-    // itself carries no colour at all, only the class that picks one.
+    // Both badge tones are named in index.css off --warning-*/--brand-*, so they follow the
+    // palette into dark mode. A hex on either badge would be light-mode-only styling.
     const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
-    const rules = /\.project-row-chip[\s\S]*?\.project-row-spotlit\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
+    const rules = /\.project-row-chip\s*\{[^}]*\}[\s\S]*?\.project-row-chip-brand\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
 
     expect(rules).toContain('var(--warning-bg)');
     expect(rules).toContain('var(--warning-border)');

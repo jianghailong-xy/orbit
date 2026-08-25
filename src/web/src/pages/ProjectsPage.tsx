@@ -37,11 +37,7 @@ import { markdownToPlainText } from '../lib/markdownText';
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
 // page that says "3h ago" should not be two functions that agree by coincidence.
 import { ago } from '../lib/runnerEngines';
-import {
-  attentionChipOf,
-  projectAttentionSections,
-  spotlitProjectIds,
-} from '../lib/projectAttention';
+import { attentionChipOf, projectAttentionSections } from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
   providersQuery,
@@ -207,10 +203,6 @@ export function ProjectsPage() {
   // `lastActivityAt` every row carries. The rules and the reason for that order live in
   // lib/projectAttention; the server's unrendered `createdAt desc` no longer orders anything here.
   const sections = useMemo(() => projectAttentionSections(matches), [matches]);
-  // The two biggest piles of startable work nobody is starting — the head of Stalled — get a wash
-  // of amber behind them. Two and no more: see spotlitProjectIds for why a tint that covers a
-  // whole section stops being a signal.
-  const spotlit = useMemo(() => spotlitProjectIds(sections), [sections]);
   // ONE instant for the whole render, read here rather than per row: the badges are ages, and two
   // rows reading the clock a millisecond apart could land either side of a day boundary and
   // disagree about how long the same silence has been. Re-read on every render, so a page left
@@ -297,7 +289,7 @@ export function ProjectsPage() {
             const chip = attentionChipOf(p, now);
             return (
               <List.Item
-                className={`project-row${spotlit.has(p.id) ? ' project-row-spotlit' : ''}`}
+                className="project-row"
                 style={{ padding: '11px 10px' }}
               >
                 {/* One link spanning the whole row — meta and count alike — so the entire row is a

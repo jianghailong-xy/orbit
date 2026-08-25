@@ -5,7 +5,6 @@ import {
   attentionSectionOf,
   orderWithinSection,
   projectAttentionSections,
-  spotlitProjectIds,
   type AttentionProject,
   type AttentionSectionKey,
 } from './projectAttention';
@@ -370,50 +369,5 @@ describe('attentionChipOf', () => {
       'stalled:warning',
       'wrapping-up:brand',
     ]);
-  });
-});
-
-describe('spotlitProjectIds', () => {
-  const row = (id: string, ready: number) => ({
-    id: `0195c0de-0000-7000-8000-0000000000${id}`,
-    title: `Project ${id}`,
-    _count: { tasks: 1 },
-    ...project({ buckets: { ready, blocked: 1 } }),
-  });
-
-  const idsOf = (...rows: ReturnType<typeof row>[]) =>
-    [...spotlitProjectIds(projectAttentionSections(rows))].map(
-      (id) => rows.find((r) => r.id === id)!.title,
-    );
-
-  it('tints the two biggest piles of startable work and no more', () => {
-    // Eight stalled rows is what production actually holds. Washing all eight in amber would make
-    // amber this section's background colour, and the badges unreadable against it.
-    const rows = Array.from({ length: 8 }, (_, i) => row(`0${i + 1}`, (8 - i) * 10));
-
-    expect(idsOf(...rows)).toEqual(['Project 01', 'Project 02']);
-  });
-
-  it('follows the order the section is in, not the order the rows arrived in', () => {
-    expect(idsOf(row('01', 3), row('02', 90), row('03', 40))).toEqual(['Project 02', 'Project 03']);
-  });
-
-  it('skips a stalled project with nothing ready to pick up', () => {
-    // The externally-blocked case: it belongs in Stalled and can reach the top two on a short
-    // list, but there is no pile here to point at — tinting it would send the reader to the one
-    // row in the section with nothing to start.
-    const blockedOnly = { ...row('02', 0) };
-
-    expect(idsOf(row('01', 9), blockedOnly)).toEqual(['Project 01']);
-  });
-
-  it('tints nothing outside Stalled', () => {
-    const sections = projectAttentionSections([
-      { id: '0195c0de-0000-7000-8000-000000000011', title: 'Running', _count: { tasks: 1 }, ...project({ buckets: { running: 1, ready: 99 } }) },
-      { id: '0195c0de-0000-7000-8000-000000000012', title: 'Wrapping', _count: { tasks: 1 }, ...project({ buckets: { done: 12 } }) },
-      { id: '0195c0de-0000-7000-8000-000000000013', title: 'Done', _count: { tasks: 1 }, ...project({ status: 'DONE', buckets: { done: 4 } }) },
-    ]);
-
-    expect(spotlitProjectIds(sections).size).toBe(0);
   });
 });
