@@ -205,10 +205,11 @@ export class RunnerTasksController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     // The run this edit is being made from. Sent by the runner on every agent-side task write,
-    // and read for one decision only: a verification cannot be concluded from the session that
-    // ran the task it verifies (§13.2). A header rather than a body field because it is the
-    // caller's identity, not part of the edit — nothing an agent writes should be able to claim
-    // it came from a different run.
+    // and read for the two decisions that turn on WHO is writing: a verification cannot be
+    // concluded from the session that ran the task it verifies (§13.2), and a run cannot write
+    // its own task DONE (`task-self-done-boundary.spec.ts`). A header rather than a body field
+    // because it is the caller's identity, not part of the edit — nothing an agent writes should
+    // be able to claim it came from a different run.
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateTaskDto,
   ) {

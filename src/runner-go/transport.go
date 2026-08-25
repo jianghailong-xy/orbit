@@ -1123,10 +1123,10 @@ func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}
 	return out, err
 }
 
-// updateTask carries the acting session, which the server reads for exactly one decision: a
-// verification cannot be concluded from the session that ran the task it verifies (§13.2). Without
-// the header the server cannot tell an independent check from the developer's own run grading
-// itself, and the rule silently never fires.
+// updateTask carries the acting session, which the server reads for the two decisions that turn on
+// WHO is writing: a verification cannot be concluded from the session that ran the task it verifies
+// (§13.2), and a run cannot write its own task DONE. Without the header the server cannot tell an
+// independent writer from the run grading itself, and both rules silently never fire.
 func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
