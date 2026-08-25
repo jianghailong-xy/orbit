@@ -125,6 +125,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; a refused declaration is already a 403/409 with its own code.',
   },
   {
+    at: 'projects/projects.service.ts#panoramaReady',
+    shape: 'TX_RETRIED',
+    locks: 'No row locks. The transaction exists only to keep `SET LOCAL jit = off` on the same connection and transaction as the read-only ready-to-run query.',
+    identity: 'The owner id, project id and validated limit, all arguments fixed before the closure.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Both statements are read-only with respect to application data. Every attempt reapplies the transaction-local JIT setting and recomputes the ready set from the fresh READ COMMITTED snapshot; an aborted attempt leaves no row or session setting behind.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary if a transient database conflict outlives the attempts.',
+  },
+  {
     at: 'projects/project-acceptance.service.ts#openRun',
     shape: 'TX_RETRIED',
     locks: 'project FOR NO KEY UPDATE (rank 40), then project_runtime / project_acceptance_run / _criterion child rows (rank 60).',

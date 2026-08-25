@@ -995,10 +995,10 @@ export class ProjectsService {
     // PostgreSQL's JIT spends ~16s compiling that large expression on the 23k-task production
     // project while the query itself takes under a second. Keep the setting transaction-local so
     // it cannot change another endpoint sharing the pool connection.
-    return this.prisma.$transaction(async (tx) => {
+    return withTransactionRetry(this.prisma, async (tx) => {
       await tx.$executeRawUnsafe('SET LOCAL jit = off');
       return readProjectReadyToRun(tx, ownerId, projectId, limit);
-    });
+    }, loggedRetry(this.logger, 'projects.panoramaReady'));
   }
 
   /**
