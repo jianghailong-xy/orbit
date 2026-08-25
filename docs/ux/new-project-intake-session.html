@@ -1,0 +1,534 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>New project — intake session</title>
+<style>
+:root{
+  --brand:#3370ff; --brand-bg:#eaf1ff;
+  --t1:#1f2329; --t2:#646a73; --t3:#8f959e;
+  --bd:#dee0e3; --bd2:#eceef1; --hover:#f2f3f5;
+  --ok:#2ea121; --err:#f54a45; --warn:#ff8800;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Segoe UI",Roboto,sans-serif;
+  color:var(--t1);background:#eef0f3;-webkit-font-smoothing:antialiased}
+.screen{display:none;width:1180px;height:768px;background:#fff;position:relative;overflow:hidden;padding-bottom:48px}
+.screen.on{display:flex}
+/* ---------- sidebar (same shell as the other ux mockups) ---------- */
+.sb{width:228px;flex:none;border-right:1px solid var(--bd2);padding:12px 0;display:flex;flex-direction:column}
+.sb-brand{display:flex;align-items:center;gap:8px;padding:2px 16px 14px;font-weight:600;font-size:15px}
+.sb-dot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--brand);position:relative}
+.sb-dot::after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:var(--brand);top:-3.5px;right:-3px}
+.nav{padding:0 8px}
+.nav-i{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:6px;font-size:13.5px;color:var(--t1)}
+.nav-i .ico{width:16px;text-align:center;color:var(--t3);font-size:13px}
+.nav-i.act{background:var(--brand-bg);color:var(--brand)}
+.nav-i.act .ico{color:var(--brand)}
+.sb-div{height:1px;background:var(--bd2);margin:10px 16px}
+.grp-head{display:flex;align-items:center;gap:8px;height:32px;padding:0 18px;font-size:12px;color:var(--t2);font-weight:500}
+.grp-head .cnt{margin-left:auto;color:var(--t3);font-size:11.5px}
+.grp-head .odot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.grp-head .odot.off{background:#c5c9cf}
+.ws{display:flex;align-items:center;gap:9px;height:32px;margin:0 8px;padding:0 10px 0 24px;border-radius:6px;font-size:13.5px;color:var(--t1)}
+.ws .sq{width:15px;height:15px;border-radius:4px;background:#dfe3e8;flex:none;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600}
+.ws.act{background:var(--hover)}
+.ws .tail{margin-left:auto;font-size:11px;color:var(--t3)}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid #cfe0ff;border-top-color:var(--brand);flex:none}
+/* ---------- main ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.pg{padding:30px 38px 0;min-width:0;overflow:hidden}
+.pg h1{font-size:25px;font-weight:700;letter-spacing:-.01em}
+.crumb{font-size:12.5px;color:var(--t3);margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.idchip{font-family:var(--mono);font-size:11.5px;color:var(--t2);background:var(--hover);padding:2px 7px;border-radius:4px}
+.tag{font-size:11px;padding:1.5px 7px;border-radius:4px;font-weight:500;border:1px solid var(--bd)}
+.tag.ok{color:var(--ok);background:#eaf6e8;border-color:#cfe8cb}
+.tag.plan{color:var(--brand);background:var(--brand-bg);border-color:#c9dcff}
+.tag.warn{color:#a15c00;background:#fff5e6;border-color:#ffe0b3}
+/* projects list */
+.ptool{display:flex;gap:12px;align-items:center;margin:16px 0 24px}
+.psearch{flex:1;max-width:470px;height:36px;border:1px solid var(--bd);border-radius:7px;display:flex;
+  align-items:center;gap:8px;padding:0 11px;color:var(--t3);font-size:13.5px}
+.seg{display:flex;background:var(--hover);border-radius:7px;padding:2px}
+.seg span{padding:5px 14px;font-size:13px;border-radius:5px;color:var(--t1)}
+.seg span.on{background:#fff;color:var(--brand);box-shadow:0 1px 2px rgba(0,0,0,.07)}
+.sec-h{display:flex;align-items:center;gap:9px;margin:0 0 9px}
+.sec-h b{font-size:14px}
+.pill{background:var(--hover);color:var(--t2);font-size:12px;padding:1px 9px;border-radius:10px;font-weight:600}
+.sec-n{font-size:12.5px;color:var(--t3)}
+.sec-c{margin-left:auto;font-size:12.5px;color:var(--t2)}
+.prow{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--bd2);
+  border-radius:8px;margin-bottom:7px;font-size:13.5px}
+.prow.hot{background:#fffaf0;border-color:#ffe2b8}
+.prow .pt{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow .pg2{color:var(--t3);font-size:12.5px;margin-left:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meter{margin-left:auto;display:flex;gap:4px;flex:none;width:196px;justify-content:flex-end}
+.meter i{font-style:normal;font-size:11.5px;padding:1px 7px;border-radius:4px;background:var(--hover);color:var(--t2)}
+.meter i.rdy{background:#fff1dc;color:#a15c00}
+.meter i.run{background:var(--brand-bg);color:var(--brand)}
+.more-rows{font-size:12px;color:var(--t3);padding:3px 14px 6px}
+.when{width:78px;flex:none;text-align:right;font-size:12px;color:var(--t3)}
+/* ---------- modal ---------- */
+.dim{position:absolute;inset:0 0 48px 0;background:rgba(15,18,22,.40)}
+.modal{position:absolute;left:calc(50% + 114px);top:96px;transform:translateX(-50%);width:614px;background:#fff;
+  border-radius:12px;box-shadow:0 20px 52px rgba(0,0,0,.24);padding:22px 24px 16px}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:3px}
+.modal .msub{font-size:12.5px;color:var(--t2);margin-bottom:16px;line-height:1.6}
+.ta{border:1px solid var(--brand);border-radius:9px;box-shadow:0 0 0 3px rgba(51,112,255,.10);
+  padding:12px 13px;min-height:96px;font-size:14px;line-height:1.7}
+.ta.plain{border-color:var(--bd);box-shadow:none;color:var(--t3)}
+.ta .caret{display:inline-block;width:1.5px;height:16px;background:var(--brand);vertical-align:-3px;margin-left:1px}
+.hint{font-size:11.5px;color:var(--t3);margin-top:7px;display:flex;gap:14px}
+.hint kbd{font-family:var(--mono);background:var(--hover);border:1px solid var(--bd2);border-radius:3px;padding:0 4px}
+.lbl{font-size:12.5px;color:var(--t2);margin-bottom:6px;font-weight:500}
+.pick{height:38px;border:1px solid var(--bd);border-radius:7px;display:flex;align-items:center;gap:9px;
+  padding:0 11px;font-size:13.5px}
+.pick .sq{width:16px;height:16px;border-radius:4px;background:#dfe3e8;flex:none}
+.pick .rn{color:var(--t3);font-size:12.5px}
+.pick .car{margin-left:auto;color:var(--t3);font-size:11px}
+.pick.bad{border-color:#f7c9c7;background:#fef6f6}
+.note{font-size:11.5px;color:var(--t3);margin-top:6px;line-height:1.6}
+.mfoot{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--bd2)}
+.mfoot .left{font-size:11.5px;color:var(--t3);line-height:1.5;max-width:268px}
+.btn{height:34px;padding:0 17px;border-radius:7px;font-size:13.5px;display:inline-flex;align-items:center;
+  gap:7px;border:1px solid var(--bd);background:#fff;color:var(--t1);font-weight:500;white-space:nowrap}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.dis{background:var(--hover);border-color:var(--bd2);color:var(--t3)}
+.btn.sm{height:29px;padding:0 12px;font-size:12.5px}
+.btns{display:flex;gap:9px;margin-left:auto}
+/* ---------- session ---------- */
+.scol{width:236px;flex:none;border-right:1px solid var(--bd2);display:flex;flex-direction:column;padding:10px 0}
+.scol-h{display:flex;align-items:center;gap:8px;padding:0 14px 10px;font-size:13px;font-weight:600}
+.scol-h .odot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.scol-h .more{margin-left:auto;font-size:11.5px;color:var(--t3);font-weight:400}
+.snew{display:flex;align-items:center;gap:8px;margin:0 8px 4px;padding:0 10px;height:32px;border-radius:6px;
+  color:var(--t2);font-size:13px}
+.srow{display:flex;align-items:center;gap:8px;margin:0 8px;padding:7px 10px;border-radius:6px;font-size:13px}
+.srow.act{background:var(--brand-bg)}
+.srow .st{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow.act .st{color:var(--brand);font-weight:500}
+.srow .sm{margin-left:auto;font-size:11px;color:var(--t3);flex:none}
+.tx{flex:1;display:flex;flex-direction:column;min-width:0}
+.tx-h{height:46px;flex:none;border-bottom:1px solid var(--bd2);display:flex;align-items:center;gap:9px;padding:0 20px;font-size:13.5px;font-weight:600}
+.tx-h .sub{font-weight:400;color:var(--t3);font-size:12px}
+.tx-b{flex:1;overflow:hidden;padding:16px 20px 0;display:flex;flex-direction:column;gap:13px}
+.filing{border:1px solid var(--bd2);background:var(--hover);border-radius:7px;padding:7px 11px;font-size:12.5px;color:var(--t2)}
+.filing b{color:var(--t1);font-weight:600}
+.brief{border:1px dashed var(--bd);border-radius:7px;padding:8px 11px;font-size:12px;color:var(--t3);display:flex;gap:8px;align-items:center}
+.brief b{color:var(--t2);font-weight:500}
+.mu{align-self:flex-end;max-width:74%;background:var(--brand);color:#fff;border-radius:12px 12px 3px 12px;
+  padding:10px 14px;font-size:13.5px;line-height:1.65}
+.ma{max-width:88%;font-size:13.5px;line-height:1.75}
+.ma .who{font-size:11.5px;color:var(--t3);margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.ma .who .av{width:16px;height:16px;border-radius:4px;background:#2b2f36;color:#fff;font-size:9px;
+  display:flex;align-items:center;justify-content:center;font-weight:600}
+.tool{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--bd2);border-radius:6px;
+  padding:5px 10px;font-size:11.5px;font-family:var(--mono);color:var(--t2);margin-right:6px;margin-bottom:6px}
+.tool .ck{color:var(--ok);font-size:10px}
+.q{border-left:2px solid var(--brand-bg);padding:2px 0 2px 12px;margin:9px 0 0}
+.q .qi{margin-bottom:9px}
+.q .qi:last-child{margin-bottom:0}
+.q b{font-weight:600}
+.q span{color:var(--t2);font-size:12.5px;display:block;margin-top:2px;line-height:1.6}
+.compose{flex:none;margin:14px 20px 16px;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;
+  font-size:13.5px;color:var(--t3);display:flex;align-items:center;gap:8px}
+.compose .send{margin-left:auto;width:26px;height:26px;border-radius:6px;background:var(--hover);color:var(--t3);
+  display:flex;align-items:center;justify-content:center;font-size:12px}
+/* plan card + dag */
+.plan{border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.plan-h{padding:11px 14px;border-bottom:1px solid var(--bd2);display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600}
+.plan-h .cnt{margin-left:auto;font-size:11.5px;color:var(--t3);font-weight:400}
+.plan-b{padding:13px 14px;display:flex;gap:16px}
+.plan-f{padding:10px 14px;border-top:1px solid var(--bd2);display:flex;align-items:center;gap:9px;background:#fbfcfd}
+.plan-f .fn{font-size:11.5px;color:var(--t3);line-height:1.5}
+.dagwrap{flex:none}
+.tl{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.tl-i{display:flex;gap:8px;align-items:baseline;font-size:12.5px;line-height:1.5}
+.tl-i .n{font-family:var(--mono);font-size:11px;color:var(--t3);flex:none;width:20px}
+.tl-i .dep{color:var(--t3);font-size:11px;font-family:var(--mono)}
+.fields{border:1px solid var(--bd2);border-radius:8px;padding:11px 13px;background:#fbfcfd}
+.fields .fr{font-size:12.5px;line-height:1.65;margin-bottom:7px;display:flex;gap:9px}
+.fields .fr:last-child{margin-bottom:0}
+.fields .fk{flex:none;width:76px;color:var(--t3);font-size:11.5px;padding-top:1px}
+/* ---------- project page ---------- */
+.cmd{display:flex;gap:16px;margin-top:4px}
+.cmd-l{flex:1;min-width:0}
+.cc{width:352px;flex:none;border:1px solid var(--bd);border-radius:10px;padding:15px 16px;background:#fff;
+  display:flex;flex-direction:column}
+.cc.live{border-color:#bcd3ff;background:#f8fbff}
+.cc-h{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--t3);letter-spacing:.03em;font-weight:500}
+.cc-h .dot{width:7px;height:7px;border-radius:50%;background:#c5c9cf}
+.cc-h .dot.on{background:var(--ok)}
+.cc-t{font-size:14.5px;font-weight:600;margin:9px 0 4px}
+.cc-p{font-size:12.5px;color:var(--t2);line-height:1.65}
+.cc-p b{color:var(--t1);font-weight:600}
+.cc-box{background:var(--fill,#f4f5f7);border-radius:8px;padding:11px 12px;margin-top:12px;font-size:12.5px;
+  color:var(--t2);line-height:1.6}
+.cc-box.warnbox{background:#fff7ea;color:#7a5200}
+.cc-meta{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.cc-meta .chip{background:#fff;border:1px solid var(--bd);border-radius:5px;padding:1px 8px;font-size:12px}
+.cc-a{margin-top:auto;padding-top:13px;display:flex;gap:8px}
+.cc-a .btn{flex:1;justify-content:center}
+.rtr{margin-top:18px}
+.rtr-h{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
+.rtr-h b{font-size:14.5px}
+.rtr-h span{font-size:12px;color:var(--t3)}
+.rrow{display:flex;align-items:center;gap:11px;padding:9px 12px;border:1px solid var(--bd2);border-radius:8px;
+  margin-bottom:6px;font-size:13px}
+.rrow .imp{font-size:11.5px;color:var(--t3);margin-left:auto;flex:none}
+.empty{border:1px dashed var(--bd);border-radius:8px;padding:22px;text-align:center;font-size:12.5px;color:var(--t3)}
+.dead{color:var(--err)}
+/* caption */
+.cap{position:absolute;left:0;bottom:0;width:100%;background:#1f2329;color:#c9ced5;font-size:12.5px;
+  padding:11px 20px;line-height:1.6;display:flex;gap:10px;align-items:baseline}
+.cap b{color:#fff;font-weight:600;flex:none}
+.cap.bad{background:#3a1f1e}
+.cap em{color:#ffd9a0;font-style:normal}
+</style></head><body>
+
+<!-- ══════════════════ 0 · TODAY ══════════════════ -->
+<section class="screen" id="s0">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i act"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <main class="main"><div class="pg">
+    <div class="crumb">Projects ›<span class="idchip">2mK4pQ</span><span class="tag">OPEN</span></div>
+    <h1>iOS 会话同步提速</h1>
+    <div class="cmd" style="margin-top:20px">
+      <div class="cmd-l">
+        <div class="fields">
+          <div class="fr"><span class="fk">Goal</span><span>重会话同步太慢了,想办法弄快点。</span></div>
+          <div class="fr"><span class="fk">Acceptance</span><span class="dead">Not set — 表单没问,也没人会回来补。</span></div>
+          <div class="fr"><span class="fk">Instructions</span><span class="dead">Not set.</span></div>
+        </div>
+        <div class="rtr">
+          <div class="rtr-h"><b>Ready to run</b><span>0 tasks · sorted by work unblocked</span></div>
+          <div class="empty">还没有任何任务。<br><span class="dead">而任务正是 coordinator 该产出的东西。</span></div>
+        </div>
+      </div>
+      <div class="cc">
+        <div class="cc-h"><span class="dot"></span>COORDINATOR<span style="margin-left:auto;font-weight:400">Not started</span></div>
+        <div class="cc-t">Nothing has ever coordinated this project</div>
+        <div class="cc-p">Tasks in this project <b>never start on their own</b>. This conversation is where you and it decide what runs next.</div>
+        <div class="cc-box">no workspace to open the coordinator in — none of this project's tasks has an assignee to borrow one from. Assign a task, or pass workspaceId.</div>
+        <div class="cc-a"><button class="btn dis">Start coordinator</button></div>
+        <div class="note" style="margin-top:8px">按钮 disabled;这一态下 “Change workspace” 链接不渲染。</div>
+      </div>
+    </div>
+    <div style="margin-top:30px">
+      <div class="sec-h"><b>In progress</b><span class="pill">11</span>
+        <span class="sec-n">Work in flight, or no tasks filed yet · newest activity first</span></div>
+      <div class="more-rows">⋯ 上面 10 个都在跑</div>
+      <div class="prow"><span class="pt">iOS 会话同步提速</span><span class="pg2">— 重会话同步太慢了,想办法弄快点。</span>
+        <span class="meter"><i>0 ready</i><i>0 blocked</i><i>0 done</i></span><span class="when">now</span></div>
+      <div class="note" style="margin-top:7px">零任务的项目落在这一节的队尾 —— header 得靠 “or no tasks filed yet” 那半句才不算说谎。</div>
+    </div>
+  </div></main>
+  <div class="cap bad"><b>⓪ 今天</b><span>两字段表单交出来的项目:验收标准和作业指导为空、零任务、<em>coordinator 按钮是灰的</em>。想开 coordinator 得先建带 assignee 的任务 —— 而建任务连依赖正是 coordinator 的活。人被要求先干完 agent 的活,才被允许把 agent 请出来。而列表页上它落进 <em>In progress</em> 的队尾 —— 一个没有任何工作在飞的项目,被摆进了「work in flight」那一节。</span></div>
+</section>
+
+<!-- ══════════════════ 1 · COMPOSER ══════════════════ -->
+<section class="screen" id="s1">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i act"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <main class="main"><div class="pg">
+    <h1>Projects</h1>
+    <div class="ptool">
+      <div class="psearch"><span>⌕</span>Search projects and goals</div>
+      <div class="seg"><span class="on">All</span><span>In progress</span><span>Completed</span></div>
+      <button class="btn pri" style="margin-left:auto">＋ New project</button>
+    </div>
+    <div class="sec-h"><b>Stalled</b><span class="pill">10</span>
+      <span class="sec-n">Nothing running, work outstanding · most ready first, then newest activity</span>
+      <span class="sec-c">Collapse ⌃</span></div>
+    <div class="prow hot"><span class="pt">apiserver 锁序整改</span><span class="pg2">— 把 project↔task 的加锁顺序统一</span>
+      <span class="meter"><i class="rdy">9 ready</i><i>3 blocked</i><i>12 done</i></span><span class="when">2d</span></div>
+    <div class="prow hot"><span class="pt">Prisma 7 收尾</span><span class="pg2">— adapter 迁移后剩下的裸 SQL</span>
+      <span class="meter"><i class="rdy">6 ready</i><i>1 blocked</i><i>20 done</i></span><span class="when">3d</span></div>
+    <div class="prow"><span class="pt">iOS BYOK 模型列表</span><span class="pg2">— modelsFromRuntime 补齐</span>
+      <span class="meter"><i class="rdy">2 ready</i><i>4 blocked</i><i>7 done</i></span><span class="when">5d</span></div>
+  </div></main>
+  <div class="dim"></div>
+  <div class="modal">
+    <h2>New project</h2>
+    <p class="msub">说清楚你想把什么事做成。目标、验收标准和任务拆解在接下来的对话里定 —— 那正是它该替你做的事。</p>
+    <div class="ta">把 iOS 端的会话同步弄快。现在打开一个上万事件的老会话要等十几秒才追上服务端,后台切回来还经常掉线<span class="caret"></span></div>
+    <div class="hint"><span><kbd>⏎</kbd> 开始规划</span><span><kbd>⇧⏎</kbd> 换行</span><span>⌘V 可以贴图和日志</span></div>
+    <div style="margin-top:18px">
+      <div class="lbl">在哪进行</div>
+      <div class="pick"><span class="sq"></span>orbit-ios<span class="rn">· mac-01 · Claude Code</span><span class="car">▾</span></div>
+      <div class="note">协调会话开在这个工作区里。<b style="color:var(--t2)">开始后不能再搬</b> —— 现在选,好过第一次点开 coordinator 时才发现无处可开。</div>
+    </div>
+    <div class="mfoot">
+      <div class="left">只想先记一笔?<br>那就不开会话,建一条空项目记录。</div>
+      <div class="btns"><button class="btn">只记一笔</button><button class="btn pri">开始规划 →</button></div>
+    </div>
+  </div>
+  <div class="cap"><b>① 入口</b><span>不是四段式向导 —— 那只是把一张表单切成四页。<em>一个输入框 + 一个「在哪」</em>。“在哪” 不是新摩擦,是把今天事后才收、而且根本收不到的那次选择提前到明面上。“只记一笔” 保留今天的行为:它是降级路径,不是默认路径。</span></div>
+</section>
+
+<!-- ══════════════════ 2 · INTAKE ══════════════════ -->
+<section class="screen" id="s2">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws act"><span class="sq">i</span>orbit-ios<span class="tail">1</span></div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <aside class="scol">
+    <div class="scol-h"><span class="odot"></span>orbit-ios<span class="more">Open ▾</span></div>
+    <div class="snew">＋ New session</div>
+    <div class="srow act"><span class="spin"></span><span class="st">协调:iOS 会话同步提速</span><span class="sm">now</span></div>
+    <div class="srow"><span class="st">修 SSE 重连退避</span><span class="sm">2h</span></div>
+    <div class="srow"><span class="st">TestFlight 0.1.135</span><span class="sm">1d</span></div>
+  </aside>
+  <div class="tx">
+    <div class="tx-h">协调:iOS 会话同步提速<span class="tag plan">Planning</span><span class="sub">· mac-01 / orbit-ios · Claude Code</span></div>
+    <div class="tx-b">
+      <div class="filing">Filing into <b>iOS 会话同步提速</b> <span class="idchip">2mK4pQ</span> — 这场对话就是这个项目的 coordinator,以后点开项目回到的还是这里。</div>
+      <div class="brief"><b>▸ Orbit 附带的开场说明</b><span>项目 intake:先读再问,谈拢后写 goal / 验收标准 / 作业指导,再提任务图。</span></div>
+      <div class="mu">把 iOS 端的会话同步弄快。现在打开一个上万事件的老会话要等十几秒才追上服务端,后台切回来还经常掉线</div>
+      <div class="ma">
+        <div class="who"><span class="av">C</span>Claude Code</div>
+        <span class="tool"><span class="ck">✓</span>project_get 2mK4pQ</span>
+        <span class="tool"><span class="ck">✓</span>Grep "SSE|EventSource" ios/</span>
+        <span class="tool"><span class="ck">✓</span>Read SessionStream.swift · SyncCoordinator.swift</span>
+        <div style="margin-top:4px">读过了。同步走的是 <span style="font-family:var(--mono);font-size:12px">URLSession.shared</span> 的一条 SSE,历史事件和增量事件走同一条流,没有分页 —— 一万条事件是一万次解码后才渲染第一屏。掉线那部分在 <span style="font-family:var(--mono);font-size:12px">SessionStream.swift:214</span>,前后台切换没有退避重连。</div>
+        <div style="margin-top:9px">动手前有三件事会改变方案,得先问你:</div>
+        <div class="q">
+          <div class="qi"><b>1 · 「慢」以哪个为准?</b><span>首屏追平服务端,还是新事件的端到端延迟?前者要分页和合并,后者要动连接层 —— 两条完全不同的改法,验收标准也不一样。</span></div>
+          <div class="qi"><b>2 · 只动 iOS,还是允许改服务端的 SSE 分片协议?</b><span>服务端分片能一次治本,但会牵出 web 和 macOS 两个客户端,项目就从 1 周变成 3 周。</span></div>
+          <div class="qi"><b>3 · 有可复现的重会话样本吗?</b><span>没有的话第一件任务得先造一个两万事件的夹具,否则后面每条改动都没法证明有效。</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="compose"><span>回复,或让它先按最省事的假设往下走…</span><span class="send">↑</span></div>
+  </div>
+  <div class="cap"><b>② 访谈</b><span>它先<em>读了仓库</em>才开口 —— 代码里查得到的事不问。然后只问三个<em>真会改变方案</em>的问题(判据、边界、前提)。这三问表单一个也收不到:它们的答案取决于仓库当前长什么样。这一屏就是「supervise a project, not a prompt」兑现的地方。</span></div>
+</section>
+
+<!-- ══════════════════ 3 · PLAN ══════════════════ -->
+<section class="screen" id="s3">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws act"><span class="sq">i</span>orbit-ios<span class="tail">1</span></div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <aside class="scol">
+    <div class="scol-h"><span class="odot"></span>orbit-ios<span class="more">Open ▾</span></div>
+    <div class="snew">＋ New session</div>
+    <div class="srow act"><span class="spin"></span><span class="st">协调:iOS 会话同步提速</span><span class="sm">now</span></div>
+    <div class="srow"><span class="st">修 SSE 重连退避</span><span class="sm">2h</span></div>
+    <div class="srow"><span class="st">TestFlight 0.1.135</span><span class="sm">1d</span></div>
+  </aside>
+  <div class="tx">
+    <div class="tx-h">协调:iOS 会话同步提速<span class="tag plan">Planning</span><span class="sub">· mac-01 / orbit-ios · Claude Code</span></div>
+    <div class="tx-b">
+      <div class="mu">端到端延迟为准。只动 iOS,服务端协议这轮不碰。夹具没有,得造。</div>
+      <div class="ma">
+        <div class="who"><span class="av">C</span>Claude Code</div>
+        <span class="tool"><span class="ck">✓</span>project_update · goal, acceptanceCriteria, instructions</span>
+        <div class="fields" style="margin-top:2px">
+          <div class="fr"><span class="fk">Goal</span><span>iOS 上打开上万事件的会话不再需要十几秒才追上服务端,前后台切换不掉线。</span></div>
+          <div class="fr"><span class="fk">Acceptance</span><span>两万事件的会话:冷启动首屏 &lt; 1.5s;新事件端到端 p95 &lt; 300ms;连续 30 分钟前后台切换零掉线。三条都在同一个夹具上量。</span></div>
+          <div class="fr"><span class="fk">Instructions</span><span>先量后改,每条改动配可复现的测量脚本。只动 iOS 端,服务端 SSE 协议本轮不改。</span></div>
+        </div>
+        <div style="margin-top:11px">拆成 6 件,顺序由依赖决定而不是写在描述里:</div>
+        <div class="plan" style="margin-top:9px">
+          <div class="plan-h">Proposed plan<span class="cnt">6 tasks · 6 edges · 一次原子写入</span></div>
+          <div class="plan-b">
+            <div class="dagwrap">
+              <svg width="168" height="146" viewBox="0 0 168 146">
+                <defs><marker id="a" markerWidth="7" markerHeight="7" refX="5.4" refY="2.5" orient="auto">
+                  <path d="M0,0 L6,2.5 L0,5 z" fill="#c5c9cf"/></marker></defs>
+                <g stroke="#c5c9cf" stroke-width="1.3" fill="none" marker-end="url(#a)">
+                  <path d="M84,24 C84,34 36,32 36,40"/>
+                  <path d="M84,24 C84,34 132,32 132,40"/>
+                  <path d="M36,62 L36,78"/>
+                  <path d="M36,100 L36,116"/>
+                  <path d="M132,62 L132,106 Q132,112 125,112 L59,112 Q52,112 52,116"/>
+                  <path d="M68,128 L98,128"/>
+                </g>
+                <g font-family="-apple-system,PingFang SC" font-size="10.5" text-anchor="middle">
+                  <rect x="52" y="4" width="64" height="20" rx="5" fill="#eaf1ff" stroke="#c9dcff"/><text x="84" y="18" fill="#3370ff">T1 夹具</text>
+                  <rect x="4" y="42" width="64" height="20" rx="5" fill="#f2f3f5" stroke="#dee0e3"/><text x="36" y="56" fill="#646a73">T2 连接池</text>
+                  <rect x="100" y="42" width="64" height="20" rx="5" fill="#f2f3f5" stroke="#dee0e3"/><text x="132" y="56" fill="#646a73">T3 分页合并</text>
+                  <rect x="4" y="80" width="64" height="20" rx="5" fill="#f2f3f5" stroke="#dee0e3"/><text x="36" y="94" fill="#646a73">T4 退避重连</text>
+                  <rect x="4" y="118" width="64" height="20" rx="5" fill="#f2f3f5" stroke="#dee0e3"/><text x="36" y="132" fill="#646a73">T5 真机回归</text>
+                  <rect x="100" y="118" width="64" height="20" rx="5" fill="#f2f3f5" stroke="#dee0e3"/><text x="132" y="132" fill="#646a73">T6 验收</text>
+                </g>
+              </svg>
+            </div>
+            <div class="tl">
+              <div class="tl-i"><span class="n">T1</span><span>造两万事件的会话夹具,并量出当前基线 <span class="dep">— 无前置</span></span></div>
+              <div class="tl-i"><span class="n">T2</span><span>SSE 从 <span style="font-family:var(--mono);font-size:11px">URLSession.shared</span> 挪到专用连接池 <span class="dep">← T1</span></span></div>
+              <div class="tl-i"><span class="n">T3</span><span>历史事件分页 + 增量事件合并渲染 <span class="dep">← T1</span></span></div>
+              <div class="tl-i"><span class="n">T4</span><span>前后台切换的指数退避重连 <span class="dep">← T2</span></span></div>
+              <div class="tl-i"><span class="n">T5</span><span>真机回归:三项指标各跑三轮 <span class="dep">← T3, T4</span></span></div>
+              <div class="tl-i"><span class="n">T6</span><span>对照验收标准逐条判定 <span class="dep">← T5 · verification</span></span></div>
+            </div>
+          </div>
+          <div class="plan-f">
+            <span class="fn">T2 和 T3 之间没有边 —— 它们可以同时跑在两台机器上。<br>依赖是真的边,不是写在描述里的「请先做完 X」。</span>
+            <span class="btns"><button class="btn sm">改一下</button><button class="btn pri sm">建这 6 个任务</button></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="compose"><span>回复…</span><span class="send">↑</span></div>
+  </div>
+  <div class="cap"><b>③ 落盘</b><span>谈拢的东西<em>当场写进 project 的字段</em>,不是留在聊天记录里。任务图经你点头后由 <span style="font-family:var(--mono)">task_create_batch</span> 一次原子写入 —— 任务和依赖边同一笔,不会出现建到一半的半张图。到这里,计划已经离开对话、住进任务图,这场会话就算断了也不影响它。</span></div>
+</section>
+
+<!-- ══════════════════ 4 · RESULT ══════════════════ -->
+<section class="screen" id="s4">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i act"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios<span class="tail">1</span></div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <main class="main"><div class="pg">
+    <div class="crumb">Projects ›<span class="idchip">2mK4pQ</span><span class="tag">OPEN</span><span class="tag ok">6 tasks</span></div>
+    <h1>iOS 会话同步提速</h1>
+    <div class="cmd" style="margin-top:18px">
+      <div class="cmd-l">
+        <div class="fields">
+          <div class="fr"><span class="fk">Goal</span><span>iOS 上打开上万事件的会话不再需要十几秒才追上服务端,前后台切换不掉线。</span></div>
+          <div class="fr"><span class="fk">Acceptance</span><span>两万事件会话:首屏 &lt; 1.5s;增量 p95 &lt; 300ms;30 分钟切换零掉线。</span></div>
+          <div class="fr"><span class="fk">Instructions</span><span>先量后改,每条改动配可复现的测量脚本。本轮不动服务端协议。</span></div>
+        </div>
+        <div class="rtr">
+          <div class="rtr-h"><b>Ready to run</b><span>1 task · sorted by work unblocked</span></div>
+          <div class="rrow"><span class="tag plan">T1</span><span>造两万事件的会话夹具,并量出当前基线</span>
+            <span class="imp">解锁 5 项</span><button class="btn sm pri">Run</button></div>
+          <div class="rrow" style="opacity:.55"><span class="tag">T2</span><span>SSE 挪到专用连接池</span><span class="imp">blocked ← T1</span></div>
+          <div class="rrow" style="opacity:.55"><span class="tag">T3</span><span>历史事件分页 + 增量合并渲染</span><span class="imp">blocked ← T1</span></div>
+        </div>
+      </div>
+      <div class="cc live">
+        <div class="cc-h"><span class="dot on"></span>COORDINATOR<span style="margin-left:auto;font-weight:400;color:var(--ok)">Live</span></div>
+        <div class="cc-t">协调:iOS 会话同步提速</div>
+        <div class="cc-p">1st coordinator of this project · 刚刚活跃<br>6 open tasks are coordinated from this conversation.</div>
+        <div class="cc-box"><div class="cc-meta">在 <span class="chip">▣ orbit-ios</span> <span class="chip">mac-01</span></div>
+          <div style="margin-top:7px">计划就是在这场对话里定的 —— 点开它回到的是原来那场,不是一个不知前情的陌生人。</div></div>
+        <div class="cc-a"><button class="btn pri">Open conversation</button><button class="btn">⋯</button></div>
+      </div>
+    </div>
+    <div style="margin-top:26px">
+      <div class="sec-h"><b>Stalled</b><span class="pill">11</span>
+        <span class="sec-n">Nothing running, work outstanding · most ready first, then newest activity</span></div>
+      <div class="more-rows">⋯ 上面是 9 ready 和 6 ready 那两个</div>
+      <div class="prow hot"><span class="pt">iOS 会话同步提速</span><span class="pg2">— iOS 上打开上万事件的会话不再需要十几秒…</span>
+        <span class="meter"><i class="rdy">1 ready</i><i>5 blocked</i><i>0 done</i></span><span class="when">now</span></div>
+      <div class="note" style="margin-top:7px">这次它也进 Stalled —— 但这回这个词是<b style="color:var(--t2)">真的、且可动作的</b>:有一条点名的 ready 任务,和一个能问的 coordinator。</div>
+    </div>
+  </div></main>
+  <div class="cap"><b>④ 结果</b><span>和 ⓪ 同一个位置、同一个项目。三个字段有内容、6 个任务带依赖、<em>coordinator 是 Live 而不是灰的</em>、Ready to run 有一条能立刻按。它照样落在 Stalled,但这一次<em>那个词是真的</em>:9 个字说得出停在哪、谁能问、下一步按哪个键。⓪ 的 Stalled 是「没什么可做也没人可问」,这里的是「有一件事等你点头」。</span></div>
+</section>
+
+<!-- ══════════════════ 5 · DEGRADED ══════════════════ -->
+<section class="screen" id="s5">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i act"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot off"></span><span class="cnt">3</span></div>
+    <div class="ws" style="opacity:.5"><span class="sq">o</span>orbit</div>
+    <div class="ws" style="opacity:.5"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws" style="opacity:.5"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot off"></span><span class="cnt">1</span></div>
+    <div class="ws" style="opacity:.5"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <main class="main"><div class="pg">
+    <h1>Projects</h1>
+    <div class="ptool">
+      <div class="psearch"><span>⌕</span>Search projects and goals</div>
+      <div class="seg"><span class="on">All</span><span>In progress</span><span>Completed</span></div>
+      <button class="btn pri" style="margin-left:auto">＋ New project</button>
+    </div>
+    <div class="sec-h"><b>Stalled</b><span class="pill">10</span>
+      <span class="sec-n">Nothing running, work outstanding · most ready first, then newest activity</span></div>
+    <div class="prow hot"><span class="pt">apiserver 锁序整改</span><span class="pg2">— 把 project↔task 的加锁顺序统一</span>
+      <span class="meter"><i class="rdy">9 ready</i><i>3 blocked</i><i>12 done</i></span><span class="when">2d</span></div>
+  </div></main>
+  <div class="dim"></div>
+  <div class="modal">
+    <h2>New project</h2>
+    <p class="msub">说清楚你想把什么事做成。</p>
+    <div class="ta plain">把 iOS 端的会话同步弄快。现在打开一个上万事件的老会话要等十几秒…</div>
+    <div style="margin-top:18px">
+      <div class="lbl">在哪进行</div>
+      <div class="pick bad"><span class="sq" style="background:#f7c9c7"></span><span style="color:var(--t2)">没有在线的机器</span><span class="rn">mac-01 与 linux-build-02 都离线</span></div>
+      <div class="note">开不了协调会话 —— 会话得跑在一台连着的机器上。<b style="color:var(--t2)">这一笔照样记得下来</b>,机器回来以后在项目页上开 coordinator,写下的这段话会作为它的第一句。</div>
+    </div>
+    <div class="mfoot">
+      <div class="left">这是降级路径,并且它说明了自己为什么降级。</div>
+      <div class="btns"><button class="btn">去连一台机器</button><button class="btn pri">只记一笔</button></div>
+    </div>
+  </div>
+  <div class="cap"><b>⑤ 降级</b><span>会话不是随时开得起来的:没有 runner 在线就开不了。此时<em>主按钮自己变成「只记一笔」</em>并说清原因,而不是让人点下去吃一个报错。用户输入的那段话不丢 —— 存成 goal,等机器回来当 coordinator 的第一句。降级路径必须存在,而且必须承认自己是降级路径。</span></div>
+</section>
+
+<script>
+var h=location.hash.slice(1);
+var all=document.querySelectorAll('.screen');
+if(h&&document.getElementById(h)){document.getElementById(h).classList.add('on');}
+else{all.forEach(function(s){s.classList.add('on');});document.body.style.display='flex';document.body.style.flexDirection='column';document.body.style.gap='24px';document.body.style.padding='24px';}
+</script>
+</body></html>

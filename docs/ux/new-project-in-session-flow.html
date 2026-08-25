@@ -1,0 +1,504 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>New project — merged into New session</title>
+<style>
+:root{
+  --brand:#3370ff; --brand-bg:#eaf1ff;
+  --t1:#1f2329; --t2:#646a73; --t3:#8f959e;
+  --bd:#dee0e3; --bd2:#eceef1; --hover:#f2f3f5;
+  --ok:#2ea121; --err:#f54a45; --warn:#ff8800;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Segoe UI",Roboto,sans-serif;
+  color:var(--t1);background:#eef0f3;-webkit-font-smoothing:antialiased}
+.screen{display:none;width:1180px;height:768px;background:#fff;position:relative;overflow:hidden;padding-bottom:48px}
+.screen.on{display:flex}
+/* ---------- sidebar (same shell as the other ux mockups) ---------- */
+.sb{width:228px;flex:none;border-right:1px solid var(--bd2);padding:12px 0;display:flex;flex-direction:column}
+.sb-brand{display:flex;align-items:center;gap:8px;padding:2px 16px 14px;font-weight:600;font-size:15px}
+.sb-dot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--brand);position:relative}
+.sb-dot::after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:var(--brand);top:-3.5px;right:-3px}
+.nav{padding:0 8px}
+.nav-i{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:6px;font-size:13.5px;color:var(--t1)}
+.nav-i .ico{width:16px;text-align:center;color:var(--t3);font-size:13px}
+.nav-i.act{background:var(--brand-bg);color:var(--brand)}
+.nav-i.act .ico{color:var(--brand)}
+.sb-div{height:1px;background:var(--bd2);margin:10px 16px}
+.grp-head{display:flex;align-items:center;gap:8px;height:32px;padding:0 18px;font-size:12px;color:var(--t2);font-weight:500}
+.grp-head .cnt{margin-left:auto;color:var(--t3);font-size:11.5px}
+.grp-head .odot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.grp-head .odot.off{background:#c5c9cf}
+.ws{display:flex;align-items:center;gap:9px;height:32px;margin:0 8px;padding:0 10px 0 24px;border-radius:6px;font-size:13.5px;color:var(--t1)}
+.ws .sq{width:15px;height:15px;border-radius:4px;background:#dfe3e8;flex:none;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600}
+.ws.act{background:var(--hover)}
+.ws .tail{margin-left:auto;font-size:11px;color:var(--t3)}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid #cfe0ff;border-top-color:var(--brand);flex:none}
+/* ---------- main ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.pg{padding:30px 38px 0;min-width:0;overflow:hidden}
+.pg h1{font-size:25px;font-weight:700;letter-spacing:-.01em}
+.crumb{font-size:12.5px;color:var(--t3);margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.idchip{font-family:var(--mono);font-size:11.5px;color:var(--t2);background:var(--hover);padding:2px 7px;border-radius:4px}
+.tag{font-size:11px;padding:1.5px 7px;border-radius:4px;font-weight:500;border:1px solid var(--bd)}
+.tag.ok{color:var(--ok);background:#eaf6e8;border-color:#cfe8cb}
+.tag.plan{color:var(--brand);background:var(--brand-bg);border-color:#c9dcff}
+.tag.warn{color:#a15c00;background:#fff5e6;border-color:#ffe0b3}
+/* projects list */
+.ptool{display:flex;gap:12px;align-items:center;margin:16px 0 24px}
+.psearch{flex:1;max-width:470px;height:36px;border:1px solid var(--bd);border-radius:7px;display:flex;
+  align-items:center;gap:8px;padding:0 11px;color:var(--t3);font-size:13.5px}
+.seg{display:flex;background:var(--hover);border-radius:7px;padding:2px}
+.seg span{padding:5px 14px;font-size:13px;border-radius:5px;color:var(--t1)}
+.seg span.on{background:#fff;color:var(--brand);box-shadow:0 1px 2px rgba(0,0,0,.07)}
+.sec-h{display:flex;align-items:center;gap:9px;margin:0 0 9px}
+.sec-h b{font-size:14px}
+.pill{background:var(--hover);color:var(--t2);font-size:12px;padding:1px 9px;border-radius:10px;font-weight:600}
+.sec-n{font-size:12.5px;color:var(--t3)}
+.sec-c{margin-left:auto;font-size:12.5px;color:var(--t2)}
+.prow{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--bd2);
+  border-radius:8px;margin-bottom:7px;font-size:13.5px}
+.prow.hot{background:#fffaf0;border-color:#ffe2b8}
+.prow .pt{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow .pg2{color:var(--t3);font-size:12.5px;margin-left:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meter{margin-left:auto;display:flex;gap:4px;flex:none;width:196px;justify-content:flex-end}
+.meter i{font-style:normal;font-size:11.5px;padding:1px 7px;border-radius:4px;background:var(--hover);color:var(--t2)}
+.meter i.rdy{background:#fff1dc;color:#a15c00}
+.meter i.run{background:var(--brand-bg);color:var(--brand)}
+.more-rows{font-size:12px;color:var(--t3);padding:3px 14px 6px}
+.when{width:78px;flex:none;text-align:right;font-size:12px;color:var(--t3)}
+/* ---------- modal ---------- */
+.dim{position:absolute;inset:0 0 48px 0;background:rgba(15,18,22,.40)}
+.modal{position:absolute;left:calc(50% + 114px);top:96px;transform:translateX(-50%);width:614px;background:#fff;
+  border-radius:12px;box-shadow:0 20px 52px rgba(0,0,0,.24);padding:22px 24px 16px}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:3px}
+.modal .msub{font-size:12.5px;color:var(--t2);margin-bottom:16px;line-height:1.6}
+.ta{border:1px solid var(--brand);border-radius:9px;box-shadow:0 0 0 3px rgba(51,112,255,.10);
+  padding:12px 13px;min-height:96px;font-size:14px;line-height:1.7}
+.ta.plain{border-color:var(--bd);box-shadow:none;color:var(--t3)}
+.ta .caret{display:inline-block;width:1.5px;height:16px;background:var(--brand);vertical-align:-3px;margin-left:1px}
+.hint{font-size:11.5px;color:var(--t3);margin-top:7px;display:flex;gap:14px}
+.hint kbd{font-family:var(--mono);background:var(--hover);border:1px solid var(--bd2);border-radius:3px;padding:0 4px}
+.lbl{font-size:12.5px;color:var(--t2);margin-bottom:6px;font-weight:500}
+.pick{height:38px;border:1px solid var(--bd);border-radius:7px;display:flex;align-items:center;gap:9px;
+  padding:0 11px;font-size:13.5px}
+.pick .sq{width:16px;height:16px;border-radius:4px;background:#dfe3e8;flex:none}
+.pick .rn{color:var(--t3);font-size:12.5px}
+.pick .car{margin-left:auto;color:var(--t3);font-size:11px}
+.pick.bad{border-color:#f7c9c7;background:#fef6f6}
+.note{font-size:11.5px;color:var(--t3);margin-top:6px;line-height:1.6}
+.mfoot{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--bd2)}
+.mfoot .left{font-size:11.5px;color:var(--t3);line-height:1.5;max-width:268px}
+.btn{height:34px;padding:0 17px;border-radius:7px;font-size:13.5px;display:inline-flex;align-items:center;
+  gap:7px;border:1px solid var(--bd);background:#fff;color:var(--t1);font-weight:500;white-space:nowrap}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.dis{background:var(--hover);border-color:var(--bd2);color:var(--t3)}
+.btn.sm{height:29px;padding:0 12px;font-size:12.5px}
+.btns{display:flex;gap:9px;margin-left:auto}
+/* ---------- session ---------- */
+.scol{width:236px;flex:none;border-right:1px solid var(--bd2);display:flex;flex-direction:column;padding:10px 0}
+.scol-h{display:flex;align-items:center;gap:8px;padding:0 14px 10px;font-size:13px;font-weight:600}
+.scol-h .odot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.scol-h .more{margin-left:auto;font-size:11.5px;color:var(--t3);font-weight:400}
+.snew{display:flex;align-items:center;gap:8px;margin:0 8px 4px;padding:0 10px;height:32px;border-radius:6px;
+  color:var(--t2);font-size:13px}
+.srow{display:flex;align-items:center;gap:8px;margin:0 8px;padding:7px 10px;border-radius:6px;font-size:13px}
+.srow.act{background:var(--brand-bg)}
+.srow .st{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow.act .st{color:var(--brand);font-weight:500}
+.srow .sm{margin-left:auto;font-size:11px;color:var(--t3);flex:none}
+.tx{flex:1;display:flex;flex-direction:column;min-width:0}
+.tx-h{height:46px;flex:none;border-bottom:1px solid var(--bd2);display:flex;align-items:center;gap:9px;padding:0 20px;font-size:13.5px;font-weight:600}
+.tx-h .sub{font-weight:400;color:var(--t3);font-size:12px}
+.tx-b{flex:1;overflow:hidden;padding:16px 20px 0;display:flex;flex-direction:column;gap:13px}
+.filing{border:1px solid var(--bd2);background:var(--hover);border-radius:7px;padding:7px 11px;font-size:12.5px;color:var(--t2)}
+.filing b{color:var(--t1);font-weight:600}
+.brief{border:1px dashed var(--bd);border-radius:7px;padding:8px 11px;font-size:12px;color:var(--t3);display:flex;gap:8px;align-items:center}
+.brief b{color:var(--t2);font-weight:500}
+.mu{align-self:flex-end;max-width:74%;background:var(--brand);color:#fff;border-radius:12px 12px 3px 12px;
+  padding:10px 14px;font-size:13.5px;line-height:1.65}
+.ma{max-width:88%;font-size:13.5px;line-height:1.75}
+.ma .who{font-size:11.5px;color:var(--t3);margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.ma .who .av{width:16px;height:16px;border-radius:4px;background:#2b2f36;color:#fff;font-size:9px;
+  display:flex;align-items:center;justify-content:center;font-weight:600}
+.tool{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--bd2);border-radius:6px;
+  padding:5px 10px;font-size:11.5px;font-family:var(--mono);color:var(--t2);margin-right:6px;margin-bottom:6px}
+.tool .ck{color:var(--ok);font-size:10px}
+.q{border-left:2px solid var(--brand-bg);padding:2px 0 2px 12px;margin:9px 0 0}
+.q .qi{margin-bottom:9px}
+.q .qi:last-child{margin-bottom:0}
+.q b{font-weight:600}
+.q span{color:var(--t2);font-size:12.5px;display:block;margin-top:2px;line-height:1.6}
+.compose{flex:none;margin:14px 20px 16px;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;
+  font-size:13.5px;color:var(--t3);display:flex;align-items:center;gap:8px}
+.compose .send{margin-left:auto;width:26px;height:26px;border-radius:6px;background:var(--hover);color:var(--t3);
+  display:flex;align-items:center;justify-content:center;font-size:12px}
+/* plan card + dag */
+.plan{border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.plan-h{padding:11px 14px;border-bottom:1px solid var(--bd2);display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600}
+.plan-h .cnt{margin-left:auto;font-size:11.5px;color:var(--t3);font-weight:400}
+.plan-b{padding:13px 14px;display:flex;gap:16px}
+.plan-f{padding:10px 14px;border-top:1px solid var(--bd2);display:flex;align-items:center;gap:9px;background:#fbfcfd}
+.plan-f .fn{font-size:11.5px;color:var(--t3);line-height:1.5}
+.dagwrap{flex:none}
+.tl{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.tl-i{display:flex;gap:8px;align-items:baseline;font-size:12.5px;line-height:1.5}
+.tl-i .n{font-family:var(--mono);font-size:11px;color:var(--t3);flex:none;width:20px}
+.tl-i .dep{color:var(--t3);font-size:11px;font-family:var(--mono)}
+.fields{border:1px solid var(--bd2);border-radius:8px;padding:11px 13px;background:#fbfcfd}
+.fields .fr{font-size:12.5px;line-height:1.65;margin-bottom:7px;display:flex;gap:9px}
+.fields .fr:last-child{margin-bottom:0}
+.fields .fk{flex:none;width:76px;color:var(--t3);font-size:11.5px;padding-top:1px}
+/* ---------- project page ---------- */
+.cmd{display:flex;gap:16px;margin-top:4px}
+.cmd-l{flex:1;min-width:0}
+.cc{width:352px;flex:none;border:1px solid var(--bd);border-radius:10px;padding:15px 16px;background:#fff;
+  display:flex;flex-direction:column}
+.cc.live{border-color:#bcd3ff;background:#f8fbff}
+.cc-h{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--t3);letter-spacing:.03em;font-weight:500}
+.cc-h .dot{width:7px;height:7px;border-radius:50%;background:#c5c9cf}
+.cc-h .dot.on{background:var(--ok)}
+.cc-t{font-size:14.5px;font-weight:600;margin:9px 0 4px}
+.cc-p{font-size:12.5px;color:var(--t2);line-height:1.65}
+.cc-p b{color:var(--t1);font-weight:600}
+.cc-box{background:var(--fill,#f4f5f7);border-radius:8px;padding:11px 12px;margin-top:12px;font-size:12.5px;
+  color:var(--t2);line-height:1.6}
+.cc-box.warnbox{background:#fff7ea;color:#7a5200}
+.cc-meta{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.cc-meta .chip{background:#fff;border:1px solid var(--bd);border-radius:5px;padding:1px 8px;font-size:12px}
+.cc-a{margin-top:auto;padding-top:13px;display:flex;gap:8px}
+.cc-a .btn{flex:1;justify-content:center}
+.rtr{margin-top:18px}
+.rtr-h{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
+.rtr-h b{font-size:14.5px}
+.rtr-h span{font-size:12px;color:var(--t3)}
+.rrow{display:flex;align-items:center;gap:11px;padding:9px 12px;border:1px solid var(--bd2);border-radius:8px;
+  margin-bottom:6px;font-size:13px}
+.rrow .imp{font-size:11.5px;color:var(--t3);margin-left:auto;flex:none}
+.empty{border:1px dashed var(--bd);border-radius:8px;padding:22px;text-align:center;font-size:12.5px;color:var(--t3)}
+.dead{color:var(--err)}
+/* caption */
+.cap{position:absolute;left:0;bottom:0;width:100%;background:#1f2329;color:#c9ced5;font-size:12.5px;
+  padding:11px 20px;line-height:1.6;display:flex;gap:10px;align-items:baseline}
+.cap b{color:#fff;font-weight:600;flex:none}
+.cap.bad{background:#3a1f1e}
+.cap em{color:#ffd9a0;font-style:normal}
+
+/* ── added for the merged-into-New-Session flow ── */
+.callout{position:absolute;background:#1f2329;color:#fff;font-size:12.5px;line-height:1.6;
+  border-radius:8px;padding:9px 13px;max-width:296px;box-shadow:0 10px 26px rgba(0,0,0,.24)}
+.callout b{color:#8fb4ff;font-weight:600}
+.callout::after{content:"";position:absolute;width:9px;height:9px;background:#1f2329;transform:rotate(45deg)}
+.callout.up::after{top:-4px;right:38px}
+.conn{position:absolute;width:0;border-left:1.5px dashed var(--brand);opacity:.55}
+.ring{outline:2px dashed var(--brand);outline-offset:3px;border-radius:7px}
+/* compose hero (NewSessionProviderHero) */
+.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding-bottom:28px}
+.np-title{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.np-sub{font-size:13.5px;color:var(--t2);margin-bottom:22px}
+.np-mark{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#d97757,#c2410c);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:600;
+  box-shadow:0 8px 22px rgba(194,65,12,.30);margin-bottom:12px}
+.np-name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
+.np-name .chev{color:var(--t3);font-size:10px}
+.np-summary{font-size:12px;color:var(--t3);margin-top:7px}
+/* composer with pills */
+.cbox{flex:none;margin:0 20px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff}
+.cbox.focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(51,112,255,.10)}
+.cinput{padding:11px 13px 3px;font-size:13.5px;line-height:1.7;min-height:34px}
+.cinput.ph{color:var(--t3)}
+.pills{display:flex;align-items:center;gap:5px;padding:7px 9px 8px;flex-wrap:wrap}
+.pill2{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:6px;
+  background:var(--hover);color:var(--t2);font-size:11.5px;white-space:nowrap}
+.pill2 .sq{width:12px;height:12px;border-radius:3px;background:#cfd4da;flex:none}
+.pill2 .chev{color:var(--t3);font-size:9px}
+.pill2.on{background:var(--brand-bg);color:var(--brand)}
+.pspacer{flex:1}
+.sendb{width:28px;height:28px;border-radius:7px;background:var(--brand);color:#fff;display:flex;
+  align-items:center;justify-content:center;font-size:13px;flex:none}
+.sendb.off{background:var(--hover);color:var(--t3)}
+.intent{margin:0 20px 8px;border:1px solid #c9dcff;background:#f5f9ff;border-radius:8px;
+  padding:8px 12px;font-size:12.5px;color:var(--t2);display:flex;align-items:center;gap:8px}
+.intent b{color:var(--t1);font-weight:600}
+.intent .x{margin-left:auto;color:var(--t3);font-size:12px}
+/* questions approval card (ApprovalPanel.tsx) */
+.appr{border:1px solid #ffd9a0;border-radius:10px;overflow:hidden;background:#fffdf8;max-width:600px}
+.qbadge{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#a15c00;color:#fff;font-size:10px;font-weight:700;margin-right:7px;vertical-align:-2px}
+.appr-h{padding:9px 13px;font-size:12.5px;font-weight:600;color:#a15c00;background:#fff5e6;
+  border-bottom:1px solid #ffe6c2}
+.appr-b{padding:13px}
+.chat-q-header{font-size:11px;color:var(--t3);letter-spacing:.04em;font-weight:600;margin-bottom:5px}
+.chat-q-text{font-size:13.5px;line-height:1.65;margin-bottom:11px}
+.chat-q-opt{display:block;width:100%;text-align:left;border:1px solid var(--bd);border-radius:8px;
+  padding:9px 12px;background:#fff;margin-bottom:8px}
+.chat-q-opt.is-picked{border-color:var(--brand);box-shadow:0 0 0 3px rgba(51,112,255,.10)}
+.chat-q-opt-label{display:block;font-size:13px;font-weight:600}
+.chat-q-opt-desc{display:block;font-size:11.5px;color:var(--t2);margin-top:3px;line-height:1.55}
+.chat-q-custom{border:1px solid var(--bd2);border-radius:7px;padding:7px 11px;font-size:12.5px;color:var(--t3)}
+.appr-a{padding:10px 13px;border-top:1px solid #ffe6c2;display:flex;gap:8px;background:#fffaf2}
+.appr-btn{height:30px;padding:0 14px;border-radius:6px;font-size:12.5px;font-weight:500;border:1px solid var(--bd);background:#fff}
+.appr-btn.go{background:var(--brand);border-color:var(--brand);color:#fff}
+/* split screen */
+.split{flex:1;display:flex;gap:0;min-width:0}
+.half{flex:1;min-width:0;padding:30px 30px 0}
+.half+.half{border-left:1px solid var(--bd2)}
+.half h3{font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:7px}
+.half .hs{font-size:12px;color:var(--t3);line-height:1.6;margin-bottom:16px}
+.mini{border:1px solid var(--bd);border-radius:10px;padding:16px;background:#fff}
+.mini.warnb{border-color:#ffe0b3;background:#fffaf2}
+</style></head><body>
+
+<!-- ══════════════════ 1 · ONE ENTRY ══════════════════ -->
+<section class="screen" id="s1">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i act"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <main class="main"><div class="pg">
+    <h1>Projects</h1>
+    <div class="ptool">
+      <div class="psearch"><span>⌕</span>Search projects and goals</div>
+      <div class="seg"><span class="on">All</span><span>In progress</span><span>Completed</span></div>
+      <button class="btn pri ring" style="margin-left:auto">＋ New project</button>
+    </div>
+    <div class="sec-h"><b>Stalled</b><span class="pill">10</span>
+      <span class="sec-n">Nothing running, work outstanding · most ready first, then newest activity</span>
+      <span class="sec-c">Collapse ⌃</span></div>
+    <div class="prow hot"><span class="pt">apiserver 锁序整改</span><span class="pg2">— 把 project↔task 的加锁顺序统一</span>
+      <span class="meter"><i class="rdy">9 ready</i><i>3 blocked</i><i>12 done</i></span><span class="when">2d</span></div>
+    <div class="prow hot"><span class="pt">Prisma 7 收尾</span><span class="pg2">— adapter 迁移后剩下的裸 SQL</span>
+      <span class="meter"><i class="rdy">6 ready</i><i>1 blocked</i><i>20 done</i></span><span class="when">3d</span></div>
+    <div class="prow"><span class="pt">iOS BYOK 模型列表</span><span class="pg2">— modelsFromRuntime 补齐</span>
+      <span class="meter"><i class="rdy">2 ready</i><i>4 blocked</i><i>7 done</i></span><span class="when">5d</span></div>
+    <div class="prow"><span class="pt">macOS 菜单栏重做</span><span class="pg2">— 通知中心与会话计数</span>
+      <span class="meter"><i class="rdy">1 ready</i><i>2 blocked</i><i>9 done</i></span><span class="when">6d</span></div>
+  </div></main>
+  <div class="conn" style="right:78px;top:112px;height:286px"></div>
+  <div class="callout" style="right:38px;top:398px;max-width:330px">
+    按钮留着 —— 它是「项目」这个概念在产品里唯一的广告位。<br>
+    但它<b>不再开自己的弹窗</b>:直接落到你已经熟的 New session,<br>
+    workspace 那一栏在那儿本来就有。
+  </div>
+  <div class="cap"><b>① 入口</b><span>融合不是把 New Project 的控件搬进 New Session,而是<em>删掉一个界面</em>。入口不动 —— 去掉它,「项目」就再没有地方被人发现;动的是它通向哪里。<span style="font-family:var(--mono)">firstOpenableWorkspace()</span>(App.tsx:47,DefaultLanding 用的就是它)解析出落哪个 workspace,不需要新逻辑。</span></div>
+</section>
+
+<!-- ══════════════════ 2 · SAME COMPOSER ══════════════════ -->
+<section class="screen" id="s2">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws act"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <aside class="scol">
+    <div class="scol-h"><span class="odot"></span>orbit-ios<span class="more">Open ▾</span></div>
+    <div class="snew" style="background:var(--brand-bg);color:var(--brand);font-weight:500">＋ New session</div>
+    <div class="srow"><span class="st">修 SSE 重连退避</span><span class="sm">2h</span></div>
+    <div class="srow"><span class="st">TestFlight 0.1.135</span><span class="sm">1d</span></div>
+  </aside>
+  <div class="tx">
+    <div class="tx-h">New session<span class="sub">· mac-01 / orbit-ios</span></div>
+    <div class="hero">
+      <div class="np-title">Start a new project</div>
+      <div class="np-sub">Describe what you want done — 目标、验收标准和任务拆解在对话里定。</div>
+      <div class="np-mark">✳</div>
+      <div class="np-name">Claude Code<span class="chev">▾</span></div>
+      <div class="np-summary">Anthropic · opus-5 · high effort</div>
+    </div>
+    <div class="intent"><b>◧ 这次会开出一个新项目</b><span>—— 说清楚要做成什么,它会先读仓库再跟你敲定计划</span><span class="x">✕</span></div>
+    <div class="cbox focus">
+      <div class="cinput">把 iOS 端的会话同步弄快。现在打开一个上万事件的老会话要等十几秒才追上服务端,后台切回来还经常掉线<span style="display:inline-block;width:1.5px;height:15px;background:var(--brand);vertical-align:-3px"></span></div>
+      <div class="pills">
+        <span class="pill2"><span class="sq"></span>orbit-ios<span class="chev">▾</span></span>
+        <span class="pill2">Guarded<span class="chev">▾</span></span>
+        <span class="pspacer"></span>
+        <span class="pill2">Claude Code<span class="chev">▾</span></span>
+        <span class="pill2">opus-5<span class="chev">▾</span></span>
+        <span class="pill2">high<span class="chev">▾</span></span>
+        <span class="sendb">↑</span>
+      </div>
+    </div>
+  </div>
+  <div class="cap"><b>② 同一个 composer</b><span>没有第二套界面 —— hero、那排 pill、workspace 选择器<em>全是现成的</em>(WorkspaceView.tsx:5559 起)。上一稿我在 modal 里新造的「在哪进行」是重复造轮子。新增的只有那条蓝色意图条和一句 hero 文案;删掉的是整个 <span style="font-family:var(--mono)">NewProjectModal</span>。</span></div>
+</section>
+
+<!-- ══════════════════ 3 · PROPOSED MID-SESSION ══════════════════ -->
+<section class="screen" id="s3">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws act"><span class="sq">i</span>orbit-ios<span class="tail">1</span></div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <aside class="scol">
+    <div class="scol-h"><span class="odot"></span>orbit-ios<span class="more">Open ▾</span></div>
+    <div class="snew">＋ New session</div>
+    <div class="srow act"><span class="spin"></span><span class="st">会话同步慢</span><span class="sm">now</span></div>
+    <div class="srow"><span class="st">TestFlight 0.1.135</span><span class="sm">1d</span></div>
+  </aside>
+  <div class="tx">
+    <div class="tx-h">会话同步慢<span class="sub">· mac-01 / orbit-ios · Claude Code</span></div>
+    <div class="tx-b">
+      <div class="mu">iOS 上打开老会话要等十几秒才追上服务端,后台切回来还老掉线,看看怎么回事</div>
+      <div class="ma">
+        <div class="who"><span class="av">C</span>Claude Code</div>
+        <span class="tool"><span class="ck">✓</span>Grep "SSE|EventSource" ios/</span>
+        <span class="tool"><span class="ck">✓</span>Read SessionStream.swift · SyncCoordinator.swift</span>
+        <div style="margin-top:4px">找到了,是三件事叠在一起:同步走 <span style="font-family:var(--mono);font-size:12px">URLSession.shared</span> 的一条 SSE(被别的请求饿死)、历史和增量事件走同一条流且不分页、以及 <span style="font-family:var(--mono);font-size:12px">SessionStream.swift:214</span> 前后台切换没有退避重连。</div>
+      </div>
+      <div class="appr">
+        <div class="appr-h"><span class="qbadge">?</span>Claude has a question for you</div>
+        <div class="appr-b">
+          <div class="chat-q-header">立项?</div>
+          <div class="chat-q-text">这三处我可以现在就改,但它们彼此有先后,还得先造一个两万事件的夹具才能证明有效 —— 不太像一次会话能收尾的活。</div>
+          <button class="chat-q-opt is-picked">
+            <span class="chat-q-opt-label">立个项,把计划写进任务图</span>
+            <span class="chat-q-opt-desc">这场对话就地成为它的 coordinator。之后我把目标、验收标准和带依赖的任务都写下来 —— 这次对话断了、我上下文用完了,计划都还在。</span>
+          </button>
+          <button class="chat-q-opt">
+            <span class="chat-q-opt-label">不用,直接改</span>
+            <span class="chat-q-opt-desc">三处改动我现在动手,这次会话里做完。</span>
+          </button>
+          <div class="chat-q-custom">Or type your own answer…</div>
+        </div>
+        <div class="appr-a"><button class="appr-btn go">Submit</button><button class="appr-btn">聊聊这个</button></div>
+      </div>
+    </div>
+    <div class="compose"><span>回复…</span><span class="send">↑</span></div>
+  </div>
+  <div class="cap"><b>③ 主干:信息够了才问</b><span>这场会话不是从 Projects 页来的 —— 用户根本没想立项,只是报了个 bug。<em>它读完代码才知道这活有多大</em>,然后才提议。这就是把「这是项目还是会话」这个判断,从信息最少的时刻挪到信息最多的时刻。卡片是现成的 questions approval(ApprovalPanel.tsx:456),不是新组件。</span></div>
+</section>
+
+<!-- ══════════════════ 4 · PROMOTED IN PLACE ══════════════════ -->
+<section class="screen" id="s4">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws act"><span class="sq">i</span>orbit-ios<span class="tail">1</span></div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+  </aside>
+  <aside class="scol">
+    <div class="scol-h"><span class="odot"></span>orbit-ios<span class="more">Open ▾</span></div>
+    <div class="snew">＋ New session</div>
+    <div class="srow act ring"><span class="spin"></span><span class="st">会话同步慢</span>
+      <span class="pill2 on" style="height:17px;padding:0 6px;font-size:10px;margin-left:auto">◧ 协调</span></div>
+    <div class="srow"><span class="st">TestFlight 0.1.135</span><span class="sm">1d</span></div>
+  </aside>
+  <div class="tx">
+    <div class="tx-h">
+      <span class="pill2 ring" style="height:26px;color:var(--brand);background:var(--brand-bg)">← iOS 会话同步提速</span>
+      <span style="font-weight:600">会话同步慢</span><span class="sub">· mac-01 / orbit-ios · Claude Code</span></div>
+    <div class="tx-b">
+      <div class="mu">立个项,把计划写进任务图</div>
+      <div class="ma">
+        <div class="who"><span class="av">C</span>Claude Code</div>
+        <span class="tool"><span class="ck">✓</span>project_create → 2mK4pQ</span>
+        <div style="margin-top:4px">立好了 —— <b>这场对话现在就是它的协调会话</b>,上面多了一个回项目的入口。接下来我把敲定的东西写下来:</div>
+        <div class="fields" style="margin-top:10px">
+          <div class="fr"><span class="fk">Goal</span><span>iOS 上打开上万事件的会话不再需要十几秒才追上服务端,前后台切换不掉线。</span></div>
+          <div class="fr"><span class="fk">Acceptance</span><span>两万事件的会话:冷启动首屏 &lt; 1.5s;新事件端到端 p95 &lt; 300ms;连续 30 分钟前后台切换零掉线。</span></div>
+        </div>
+        <div style="margin-top:10px">再把那三处拆成带依赖的任务 —— 夹具在最前面,连接池和分页可以并行,真机回归收尾。要我现在写进去吗?</div>
+      </div>
+    </div>
+    <div class="compose"><span>回复…</span><span class="send">↑</span></div>
+  </div>
+  <div class="callout" style="left:498px;top:452px;max-width:352px">
+    升格的全部 UI 变化,就是上面那<b>两个虚线框</b>:<br>
+    ① 头部长出返回键 —— <b>已有</b>(WorkspaceView.tsx:4620)<br>
+    ② 侧栏那行的协调标记 —— <b>要补</b>,今天 session 列表行不带 project 列<br>
+    <span style="color:#8f959e">会话本身没动:没跳转、没换页、没新开一场。</span>
+  </div>
+  <div class="cap"><b>④ 原地升格</b><span>一次 <span style="font-family:var(--mono)">project_create</span>,<em>不跳转、不换界面、不新开会话</em>。数据库把绑定和建项放在同一条 INSERT 里(projects.service.ts:593),所以不存在「项目建好了但没绑上」的中间态。返回键是现成的;侧栏标记是这个方案唯一要补的前端缺口。</span></div>
+</section>
+
+<!-- ══════════════════ 5 · THE TWO EDGES ══════════════════ -->
+<section class="screen" id="s5">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i act"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot off"></span><span class="cnt">3</span></div>
+    <div class="ws" style="opacity:.5"><span class="sq">o</span>orbit</div>
+    <div class="ws" style="opacity:.5"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws" style="opacity:.5"><span class="sq">d</span>orbit-docs</div>
+  </aside>
+  <div class="split">
+    <div class="half">
+      <h3><span class="tag warn">边界 1</span>一台机器都没在线</h3>
+      <p class="hs">会话必须跑在一台连着的机器上。<span style="font-family:var(--mono);font-size:11.5px">firstOpenableWorkspace()</span> 返回空,落不了 compose。</p>
+      <div class="mini warnb">
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">先连一台机器</div>
+        <div style="font-size:12.5px;color:var(--t2);line-height:1.65">mac-01 和 linux-build-02 都离线。Orbit 的 agent 跑在你自己的机器上 —— 没有在线的机器,就没有能开会话的地方。</div>
+        <div class="fields" style="margin-top:12px">
+          <div class="fr"><span class="fk">你写的</span><span>把 iOS 端的会话同步弄快。现在打开一个上万事件的老会话要等十几秒…</span></div>
+        </div>
+        <div class="note" style="margin-top:8px">这段话留着 —— 机器回来后它就是会话的第一句。</div>
+        <div class="btns" style="margin-left:0;margin-top:14px"><button class="btn pri">去连一台机器</button><button class="btn">先记成一条项目</button></div>
+      </div>
+      <p class="note" style="margin-top:11px">这条回退链<b style="color:var(--t2)">今天就有</b>:无 runner → 注册引导,单 runner → 那台机器的页面(App.tsx:41 的注释写着)。不用新写。</p>
+    </div>
+    <div class="half">
+      <h3><span class="tag warn">边界 2</span>这场对话已经在协调别的项目</h3>
+      <p class="hs"><span style="font-family:var(--mono);font-size:11.5px">coordinator_session_id</span> 是 <span style="font-family:var(--mono);font-size:11.5px">@unique</span> —— 一场会话最多协调一个项目。再立一个会撞 P2002。</p>
+      <div class="mini">
+        <div class="ma" style="max-width:none">
+          <div class="who"><span class="av">C</span>Claude Code</div>
+          <span class="tool" style="border-color:#f7c9c7;color:var(--err)">✕ project_create → 409</span>
+          <div style="margin-top:4px">这场对话已经在协调 <b>Prisma 7 收尾</b> 了,一场只能协调一个项目。这件事跟那个不是一回事,我另开一场会话来立它 —— 你要现在开吗?</div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:11px">服务端已经把 P2002 翻译成 409 <span style="font-family:var(--mono);font-size:11.5px">ALREADY_COORDINATING</span>(projects.service.ts:568 的 catch),而且被拒的 INSERT 什么都没写下 —— 没有半个项目要收拾。要补的只是把这句机器话说成人话。</p>
+    </div>
+  </div>
+  <div class="cap"><b>⑤ 两处边界</b><span>方案的两个真实代价,都不是新问题:一个靠<em>已有的回退链</em>兜住,一个靠<em>已有的 409</em> 兜住。要补的分别是「留住用户写的那段话」和「把 409 说成人话」—— 加上 ④ 里那个侧栏标记,这个方案的全部新增前端工作就这三件。</span></div>
+</section>
+
+<script>
+var h=location.hash.slice(1);
+var all=document.querySelectorAll('.screen');
+if(h&&document.getElementById(h)){document.getElementById(h).classList.add('on');}
+else{all.forEach(function(s){s.classList.add('on');});document.body.style.display='flex';document.body.style.flexDirection='column';document.body.style.gap='24px';document.body.style.padding='24px';}
+</script>
+</body></html>
