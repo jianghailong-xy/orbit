@@ -146,8 +146,13 @@ export class CoordinatorWakeService {
    * A compare-and-set on `CLAIMED` rather than a blind update: a claim can only be released once,
    * and re-refusing a row that is already refused would rewrite the code it was refused with — the
    * one fact this row is kept for.
+   *
+   * Public because unit T3 releases too, and for the same reason this method exists: a wake that
+   * won its key and then could not open a session must give the key back, or one bad minute in a
+   * workspace welds that fact shut forever. One owner of the rule rather than two spellings of it
+   * — the CAS on `CLAIMED` is also what makes T3's release and a refusal here mutually exclusive.
    */
-  private async release(wakeId: string, refusalCode: string): Promise<void> {
+  async release(wakeId: string, refusalCode: string): Promise<void> {
     await this.prisma.projectCoordinatorWake.updateMany({
       where: { id: wakeId, status: 'CLAIMED' },
       data: { status: 'REFUSED', refusalCode },

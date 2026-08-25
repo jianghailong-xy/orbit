@@ -1121,6 +1121,9 @@ model Session {
   consoleForLists       TaskList[]             @relation("TaskListConsole")
   // At most one, enforced by the unique index behind Project.coordinatorSessionId.
   coordinatorForProject Project?               @relation("ProjectCoordinator")
+  /// The wake this session was opened to judge, if it is a judgment session (unit T3, 0174). At
+  /// most one — distinct from `coordinatorForProject`, which is the conversation a PERSON opens.
+  judgmentForWake       ProjectCoordinatorWake? @relation("CoordinatorJudgmentSession")
   attachments           Attachment[]
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
@@ -1912,7 +1915,9 @@ model ProjectCoordinatorWake {
   subjectVersion String @map("subject_version")
   idempotencyKey String @map("idempotency_key")
 
-  /// CLAIMED or REFUSED. A CHECK, for the reason `event` is one.
+  /// CLAIMED, SESSION_OPENED or REFUSED. A CHECK, for the reason `event` is one. SESSION_OPENED is
+  /// inside 0173's partial unique index — that is what stops one fact opening a second judgment
+  /// session (unit T3, migration 0174).
   status      String  @default("CLAIMED")
   /// Non-null exactly when `status` is REFUSED, enforced by a CHECK: a stop with no reason is the
   /// one shape this table exists to make impossible.
@@ -1920,6 +1925,12 @@ model ProjectCoordinatorWake {
   /// Display and diagnosis. Never an input to a decision and never part of the key (cf.
   /// `ProjectBlocker.occurrences`, BL7).
   detail      Json    @default("{}")
+
+  /// The one judgment session this wake opened (unit T3, migration 0174). Unique, so two wakes
+  /// cannot name one session; nullable and `SetNull`, so deleting a session is never refused by
+  /// this ledger — what the row still says afterwards is that it opened one.
+  sessionId String?  @unique(map: "project_coordinator_wake_session_id_key") @map("session_id") @db.Uuid
+  session   Session? @relation("CoordinatorJudgmentSession", fields: [sessionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
   /// Both, and the pair is deliberate: the claim is a raw INSERT that names no timestamp, so the

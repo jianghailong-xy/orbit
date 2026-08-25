@@ -1173,6 +1173,13 @@ export class SessionsService {
         lastAssistantText: true,
         lastTurnAt: true,
         createdAt: true,
+        // Who opened this conversation, as opposed to who owns it. USER is a person (every door a
+        // client can press lands here), PROJECT_COORDINATOR is a project's one-shot judgment
+        // session opened by a committed fact (`CoordinatorJudgmentService`), LEGACY_SWEEP is the
+        // pre-0122 default. An orchestrating caller listing a project's sessions cannot otherwise
+        // tell the coordinator conversation a person is in from a judgment that woke beside it —
+        // they share an owner, a workspace and often a title stem.
+        dispatchOrigin: true,
       },
       orderBy: [{ lastTurnAt: 'desc' }, { createdAt: 'desc' }],
       take: 100,
