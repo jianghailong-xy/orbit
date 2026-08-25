@@ -3,6 +3,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
+import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
@@ -23,6 +24,7 @@ import { ProjectsService } from './projects.service';
     ConvergenceLedgerService,
     CoordinatorWakeService,
     CoordinatorJudgmentService,
+    CoordinatorConvergenceService,
     SessionAttemptService,
     ProjectAcceptanceService,
     TaskCheckpointService,
@@ -38,6 +40,11 @@ import { ProjectsService } from './projects.service';
     // The composition of the two — claim the fact, open its one judgment session. A producer wants
     // THIS one; `CoordinatorWakeService` alone can win a key and leave nothing spending it.
     CoordinatorJudgmentService,
+    // Exported for the same reason and to the same callers: a producer hands the fact to
+    // `CoordinatorWakeService.claim`, and `CoordinatorConvergenceService.authorizeWake` is the
+    // authorizer it hands along with it — composed LAST, after the cheaper refusals, because a
+    // judgment recorded here charges the project's convergence budget.
+    CoordinatorConvergenceService,
     // Exported so the RUNNER door guards attempts through the same instance the user door reads
     // them from. `[K3]` §3's refusals only mean anything at the door an agent actually knocks on.
     SessionAttemptService,

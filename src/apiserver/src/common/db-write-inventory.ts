@@ -103,6 +103,17 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'projects/coordinator-convergence.service.ts#judge',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), then project_blocker and project_convergence_decision (rank 60). Monotone, and nothing above the project is reached for: the measurement reads `task`, `task_verification_finding`, `project_acceptance_*` and `project_blocker` without locking any of them, because the only writer it has to be serialised against is another judgment of the same project — which is holding the same project row.',
+    identity: 'The FACT, above the closure: `wakeConvergenceKey(projectId, scopeHash, wake.idempotencyKey)`, where the wake key is T2\'s identity of the committed fact. A re-run re-derives the same key from the same fact, reads the committed judgment and writes nothing — which is what stops a redelivery from charging the convergence budget twice, and what stops it from raising a second blocker.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything the judgment is a function of is read inside the closure under the project row lock: the resolved thresholds, the last committed decision (counters, previous vector, previous outcome) and the four evidence projections. `planWakeConvergence` is pure and reads no clock, so a re-run against the same committed world plans the same decision; a re-run against a world that moved plans the newer one, which is the answer that should be committed.',
+    effects: 'None inside. The blocker INSERT and the ledger INSERT are both database writes, and neither is visible outside the transaction until it commits.',
+    answer: 'Typed 503 from the global boundary. A wake that could not be judged is not a wake that was allowed: T2 releases the key on a throw, so the fact stays deliverable and the next pass judges it.',
+  },
+  {
     at: 'projects/convergence-ledger.service.ts#reviseScope',
     shape: 'TX_RETRIED',
     locks: 'task FOR UPDATE (rank 50) through `lockAndRead`, and nothing above it — a scope revision writes the revision row and the task, never the project.',
@@ -779,6 +790,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'common/lock-order.ts#lockCreatorSessions', under: 'every rank-30 caller (I2)' },
   { at: 'common/lock-order.ts#lockTaskLists', under: 'every rank-20 caller (I2)' },
   { at: 'common/session-inbox-fence.ts#retireSessionInboxGeneration', under: 'runner-api takeover/activate/release leases' },
+  { at: 'projects/coordinator-convergence.service.ts#lockProject', under: "coordinatorConvergence.judge — the rank-40 lock that unit is ordered by, taken before it reads the state it decides from" },
+  { at: 'projects/coordinator-convergence.service.ts#raiseBlocker', under: "coordinatorConvergence.judge — one INSERT ... ON CONFLICT DO NOTHING against `project_blocker_open_dedupe_idx`, inside the transaction that also commits the decision saying why it was raised. The two are one fact and must not be separable: a blocker with no decision behind it is the condition detector this unit replaced." },
   { at: 'projects/convergence-ledger.service.ts#ensureBaseline', under: "convergenceLedger.reviseScope, sessionAttempt.open, verificationFinding.submit — and every caller of `record`, which opens the ledger itself when the task has none" },
   { at: 'projects/convergence-ledger.service.ts#lockAndRead', under: 'convergenceLedger.reviseScope, verificationFinding.submit, and `record` — it takes the rank-50 task lock those units are ordered by, and reads the state they decide from' },
   { at: 'projects/convergence-ledger.service.ts#record', under: 'sessionAttempt.open, projectReconcile.applyDecisionAction, and every caller that judges a task' },

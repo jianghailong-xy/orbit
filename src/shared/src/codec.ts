@@ -221,6 +221,20 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // leaving a client to re-derive "the LATEST accepted one" by filtering. It is the same id under
   // a name that says which one it is, so it follows the same rule.
   'baselineCheckpointId',
+  // Unit T4 (0173): the committed fact a coordinator judgment was made on
+  // (`project_convergence_decision.wake_id` → `project_coordinator_wake`), and the blocker that
+  // judgment raised (`.blocker_id` → `project_blocker`). Both are addresses: the ledger is audit
+  // material somebody reads to ask "which fact stopped this project, and where is the row about
+  // it", and the answer has to be an id they can hand back. Neither is a fence — nothing echoes
+  // one back to be compared byte-for-byte, and neither is interpolated into a comparison whose
+  // meaning a translation would change.
+  //
+  // `raisedBlockerId` rather than `blockerId`: this codec keys on the field NAME across every
+  // payload, and `blockerId` is already the spelling `GET /tasks/:id/attribution` sends as a raw
+  // uuid. Whether THAT should be base62 is its own question; classifying it here would answer it
+  // by accident.
+  'wakeId',
+  'raisedBlockerId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

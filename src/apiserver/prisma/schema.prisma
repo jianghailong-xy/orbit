@@ -1696,6 +1696,9 @@ model Project {
   /// The committed facts that woke this project's coordinator (unit T2, 0173).
   coordinatorWakes ProjectCoordinatorWake[]
 
+  /// The progress ledger those wakes are charged against (unit T4, 0174).
+  convergenceDecisions ProjectConvergenceDecision[]
+
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
   // and the referencing one never, so without this every workspace delete has to scan project to
@@ -1938,10 +1941,104 @@ model ProjectCoordinatorWake {
   /// stamp the moment the key was given back.
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
+  /// The judgment T4 made on this fact, if it got that far. At most one.
+  convergenceDecisions ProjectConvergenceDecision[]
+
   /// Named to match the migration, so the schema and the DDL that built the table agree literally
   /// rather than approximately.
   @@index([projectId, createdAt], map: "project_coordinator_wake_project_idx")
   @@map("project_coordinator_wake")
+}
+
+/// One coordinator wake, judged: what the progress vector was before it and at it, what that cost
+/// the budget, and whether the coordinator may go on waking (unit T4, migration 0174).
+///
+/// This table is where the counters LIVE. `convergence-ledger.ts` names the reason in as many
+/// words — 「重启把计数清零，于是预算永远用不完」 — so a stop-loss whose numbers sit in process
+/// memory is not a stop-loss: every deploy, crash and takeover gives it a fresh budget. Everything
+/// `planWakeConvergence` reads is a committed row here.
+///
+/// `idempotencyKey` is `pcv:v1:<projectId>:<scopeHash>:<wakeKey>`, where the wake key is T2's
+/// identity of the committed FACT. A fact redelivered ten times is charged once and reads its own
+/// judgment back the other nine — the difference between counting facts and counting deliveries.
+/// Unlike `ProjectCoordinatorWake`, whose key is released by a refusal, this one is a PLAIN unique
+/// index: a judgment that could be re-made would be a budget that could be re-spent.
+///
+/// Nothing here fires on its own, and `outcome = STOP` schedules nothing. It stops the coordinator
+/// by refusing the NEXT wake, and it raises its `project_blocker` on the TRANSITION into a stop and
+/// never while one holds — which is precisely what `COORDINATOR_NO_PROGRESS` did not do when it was
+/// a condition detector, and how a project with every acceptance criterion passing sat at OPEN.
+model ProjectConvergenceDecision {
+  /// Supplied by the writer: the row is a raw INSERT alongside a `MAX + 1` seq allocation, so there
+  /// is no `create()` for a default to serve.
+  id        String  @id @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The fact this judgment was made on. Always present: a judgment with no fact behind it is the
+  /// timer this unit exists to remove.
+  wakeId String                 @map("wake_id") @db.Uuid
+  wake   ProjectCoordinatorWake @relation(fields: [wakeId], references: [id], onDelete: Cascade)
+
+  /// Monotone within a project, allocated `MAX + 1` under the project row lock — a replay ORDER
+  /// that does not depend on `createdAt`, which two writers can tie on.
+  seq BigInt
+
+  idempotencyKey String @map("idempotency_key")
+  inputHash      String @map("input_hash") @db.Char(64)
+  /// Everything the decision was a function of. A replay that recomputes a different `inputHash`
+  /// from this is a ledger something other than the planner has written to.
+  input          Json
+
+  event     String
+  scopeHash String @map("scope_hash") @db.Char(64)
+
+  /// The pair, which is the point: the vector as the previous wake measured it, and the vector at
+  /// this one. Null on a project's first decision and after a scope change — a measurement against
+  /// a different target says nothing about this one (§4 PV3).
+  previousProgressVector Json?    @map("previous_progress_vector")
+  progressVector         Json     @map("progress_vector")
+  progressVectorDigest   String   @map("progress_vector_digest") @db.Char(64)
+  /// §4 PV2, as decided by `strictlyImproves` and by nothing else in this system.
+  progressed             Boolean
+  /// PV6. UNMEASURED is an empty snapshot, whose all-zero vector reads as "every defect closed" to
+  /// a comparison that only sees numbers.
+  evidenceFreshness      String   @map("evidence_freshness")
+  evidenceAsOf           DateTime? @map("evidence_as_of")
+
+  /// §8 TH4's counters, after this judgment charged them.
+  counters   Json
+  /// The RESOLVED thresholds that applied — which may be the documented defaults, because
+  /// `project.convergenceThresholds` is null on almost every project.
+  thresholds Json
+
+  /// Which §8 line was crossed and the two numbers that crossed it, or all three null. A CHECK in
+  /// 0174 keeps them one fact rather than three columns that can disagree.
+  nonConvergenceReason String? @map("non_convergence_reason")
+  observed             Int?
+  crossedLimit         Int?    @map("crossed_limit")
+
+  /// PROCEED or STOP, and a CHECK ties STOP to a reason being present.
+  outcome String
+
+  /// The blocker this decision raised, when it is the one that raised it. `SetNull` rather than
+  /// Cascade: deleting the blocker must leave the decision saying it raised one that is now gone.
+  ///
+  /// Named `raisedBlockerId` and not `blockerId` deliberately. `PublicIdInterceptor` keys on the
+  /// FIELD NAME, not on the model, so a second column called `blockerId` would silently change how
+  /// `GET /tasks/:id/attribution` renders its own `blockerId` — a field that has always gone out as
+  /// a raw uuid. Whether that surface should be base62 is a real question and not this unit's; a
+  /// distinct name keeps it a question rather than a side effect.
+  raisedBlockerId String?         @map("blocker_id") @db.Uuid
+  raisedBlocker   ProjectBlocker? @relation(fields: [raisedBlockerId], references: [id], onDelete: SetNull)
+
+  observedAt DateTime @map("observed_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([idempotencyKey], map: "project_convergence_decision_key_idx")
+  @@unique([projectId, seq], map: "project_convergence_decision_seq_idx")
+  @@index([wakeId], map: "project_convergence_decision_wake_idx")
+  @@map("project_convergence_decision")
 }
 
 /// Append-only Coordinator judgment audit. The JSON protocol uses Base62 public ids, while the
@@ -2063,6 +2160,9 @@ model ProjectBlocker {
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// The T4 decision that raised this row, if a stop-loss did (0174).
+  raisedByConvergenceDecisions ProjectConvergenceDecision[]
 
   @@unique([projectId, dedupeKey, lifecycleGeneration], map: "project_blocker_episode_idx")
   @@index([projectId, resolvedAt])
