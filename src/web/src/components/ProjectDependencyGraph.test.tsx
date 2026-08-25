@@ -47,8 +47,8 @@ const chain = (length: number, done: number): ProjectDependencyGraphResponse => 
   limits: { maxTasks: 50_000, maxMarks: 500 },
 });
 
-const overviewOf = (graph: ProjectDependencyGraphResponse) =>
-  projectGraphOverview(layoutProjectDependencyGraph(graph));
+const overviewOf = (graph: ProjectDependencyGraphResponse, direction: 'LR' | 'TB' = 'LR') =>
+  projectGraphOverview(layoutProjectDependencyGraph(graph, direction));
 
 /** The project page's own strip, at a typical content width. */
 const STRIP = { width: 1100, height: 420 };
@@ -145,6 +145,30 @@ describe('planProjectGraphViewport', () => {
     const unmeasured = { width: 0, height: 0 };
     expect(planProjectGraphViewport(overviewOf(chain(6, 2)), unmeasured, 0.12)).toBeNull();
     expect(planProjectGraphViewport(overviewOf(chain(0, 0)), STRIP, 0.12)).toBeNull();
+  });
+
+  it('uses a phone modal as a tall canvas instead of shrinking a horizontal ribbon into it', () => {
+    const phoneCanvas = { width: 369, height: 680 };
+    const horizontal = planProjectGraphViewport(overviewOf(chain(6, 2), 'LR'), phoneCanvas, 0.2)!;
+    const vertical = planProjectGraphViewport(overviewOf(chain(6, 2), 'TB'), phoneCanvas, 0.2)!;
+
+    // Six horizontal ranks cannot fit a phone at a legible zoom, so that reading has to open on
+    // one task. The same dependencies fit down its long axis with their titles intact.
+    expect(horizontal.fitted).toBe(false);
+    expect(vertical.fitted).toBe(true);
+    expect(vertical.viewport.zoom).toBeGreaterThanOrEqual(0.7);
+  });
+});
+
+describe('phone graph direction', () => {
+  it('lays dependency ranks top-to-bottom and moves their handles with them', () => {
+    const layout = layoutProjectDependencyGraph(chain(4, 1), 'TB');
+    const elements = buildProjectFlowElements(layout);
+
+    expect(layout.direction).toBe('TB');
+    expect(new Set(layout.placements.map((placement) => placement.y)).size).toBe(4);
+    expect(new Set(layout.placements.map((placement) => placement.x)).size).toBe(1);
+    expect(elements.nodes.every((node) => node.data.vertical === true)).toBe(true);
   });
 });
 

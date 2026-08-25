@@ -43,6 +43,7 @@ import {
   type TaskDependencyGraphResponse,
   type TaskDependencyVisualState,
 } from '../lib/taskDependencyGraph';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
 
 const NODE_WIDTH = 204;
@@ -759,6 +760,9 @@ export function TaskDependencyGraph({
   removingTaskId?: string | null;
 }) {
   const [fullScreen, setFullScreen] = useState(false);
+  // The inline graph already turns vertically when its panel is narrow. Keep that space-efficient
+  // reading in the phone modal too instead of forcing the desktop left-to-right layout back on.
+  const phoneGraph = useMediaQuery('(max-width: 640px)');
   const [expansionState, setExpansionState] = useState<{
     focusTaskId: string;
     counts: ReadonlyMap<string, number>;
@@ -837,7 +841,7 @@ export function TaskDependencyGraph({
         open={fullScreen}
         onCancel={() => setFullScreen(false)}
         footer={null}
-        width="calc(100vw - 48px)"
+        width={phoneGraph ? '100vw' : 'calc(100vw - 48px)'}
         title={`Dependency graph · ${title}`}
         destroyOnClose
       >
@@ -846,7 +850,7 @@ export function TaskDependencyGraph({
             <DependencyFlow
               graph={graph}
               fullScreen
-              vertical={false}
+              vertical={phoneGraph}
               expandedByBranch={expandedByBranch}
               onExpand={handleExpand}
               expandingBranchKey={expandingBranchKey}

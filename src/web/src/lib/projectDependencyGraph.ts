@@ -199,6 +199,8 @@ export interface ProjectGraphPlacement {
 }
 
 export interface ProjectDependencyLayout {
+  /** The direction dependencies advance across this particular canvas. */
+  direction: 'LR' | 'TB';
   groups: ProjectGraphGroup[];
   placements: ProjectGraphPlacement[];
   /** Every dependency edge whose two ends are both drawn — which, after grouping, is all of them. */
@@ -259,11 +261,13 @@ function dagreLayout(
  * what "the box is the unit" means. It is still DRAWN between its real endpoints, so the picture
  * never claims a dependency the data does not have.
  *
- * Pure and DOM-free so it can be asserted on directly; the React Flow rendering that consumes it
- * lives in `components/ProjectDependencyGraph.tsx`.
+ * `direction` is left-to-right on the desktop and top-to-bottom on a portrait phone. Pure and
+ * DOM-free so both readings can be asserted on directly; the React Flow rendering that consumes
+ * it lives in `components/ProjectDependencyGraph.tsx`.
  */
 export function layoutProjectDependencyGraph(
   graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'>,
+  direction: 'LR' | 'TB' = 'LR',
 ): ProjectDependencyLayout {
   const byId = new Map(graph.marks.map((node) => [node.id, node]));
   // A parent is only a box when at least one of its children is on this canvas. A task whose
@@ -351,7 +355,7 @@ export function layoutProjectDependencyGraph(
     if (source === target) continue;
     unitEdges.set(`${source}->${target}`, { source, target });
   }
-  const unitPositions = dagreLayout(units, [...unitEdges.values()], 'LR');
+  const unitPositions = dagreLayout(units, [...unitEdges.values()], direction);
 
   const groups: ProjectGraphGroup[] = [...members.entries()].map(([groupId, group]) => {
     const at = unitPositions.get(groupId)!;
@@ -369,7 +373,7 @@ export function layoutProjectDependencyGraph(
     ),
   ];
 
-  return { groups, placements, edges };
+  return { direction, groups, placements, edges };
 }
 
 /**
@@ -387,9 +391,9 @@ export interface ProjectGraphOverview {
   /** The rectangle every drawn thing sits inside, in canvas coordinates. */
   bounds: { x: number; y: number; width: number; height: number };
   /**
-   * Where the work has got to: the leftmost unit that is not finished — the first task a reader
-   * scanning the plan left to right still has ahead of them. Null only for an empty canvas; a
-   * plan that is entirely done points at its last unit, which is where its story ends.
+   * Where the work has got to: the first unit in the layout direction that is not finished. Null
+   * only for an empty canvas; a plan that is entirely done points at its last unit, which is where
+   * its story ends.
    */
   frontier: { x: number; y: number } | null;
   /** Units on the canvas: standalone tasks and boxes, not the subtasks inside them. */
@@ -414,7 +418,9 @@ export function projectGraphOverview(layout: ProjectDependencyLayout): ProjectGr
         width: markWidth(placement.task),
         height: markHeight(placement.task),
       })),
-  ].sort((a, b) => a.x - b.x || a.y - b.y);
+  ].sort((a, b) =>
+    layout.direction === 'TB' ? a.y - b.y || a.x - b.x : a.x - b.x || a.y - b.y,
+  );
 
   if (units.length === 0) {
     return { bounds: { x: 0, y: 0, width: 0, height: 0 }, frontier: null, unitCount: 0 };

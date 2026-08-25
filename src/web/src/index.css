@@ -6898,7 +6898,9 @@ html[data-theme='dark'] .session-tag-chip {
   height: clamp(300px, 46vh, 420px);
 }
 .tdg-full-canvas {
-  height: calc(100vh - 150px);
+  /* Use the same small viewport unit as the app shell. On iOS, 100vh includes the browser chrome
+     and makes the bottom of the graph look available even though Safari is sitting over it. */
+  height: calc(var(--app-vh) - 150px);
   min-height: 420px;
 }
 .tdg-canvas .react-flow,
@@ -7501,7 +7503,7 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   text-align: center;
 }
-.tdg-modal .ant-modal {
+.ant-modal.tdg-modal {
   max-width: none;
   top: 24px;
   padding-bottom: 0;
@@ -7514,6 +7516,59 @@ html[data-theme='dark'] .session-tag-chip {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
+}
+
+/* A portrait phone is the graph's opposite aspect ratio. Give the modal back the 96px that used
+   to disappear into two outer and two inner 24px gutters, then let its top-to-bottom layout use
+   the long axis. The container is the viewport; only a compact safe-area inset remains around the
+   canvas. This applies to both project and single-task dependency graphs. */
+@media (max-width: 640px) {
+  .ant-modal.tdg-modal {
+    top: 0;
+    width: 100% !important;
+    height: var(--app-vh);
+    max-width: none;
+    margin: 0;
+  }
+  .tdg-modal .ant-modal-container {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    padding:
+      max(12px, env(safe-area-inset-top, 0px))
+      max(12px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
+    border-radius: 0;
+  }
+  .tdg-modal .ant-modal-header {
+    flex: none;
+    margin-bottom: 10px;
+  }
+  .tdg-modal .ant-modal-title {
+    padding-inline-end: 40px;
+  }
+  .tdg-modal .ant-modal-close {
+    top: max(12px, env(safe-area-inset-top, 0px));
+    inset-inline-end: max(12px, env(safe-area-inset-right, 0px));
+  }
+  .tdg-modal .ant-modal-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    padding-top: 0;
+  }
+  .tdg-full-canvas {
+    flex: 1;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+  }
+  .tdg-modal .react-flow__minimap {
+    width: 120px;
+    height: 90px;
+  }
 }
 
 .tdg-list {

@@ -81,6 +81,7 @@ import {
 } from '../lib/projectDependencyGraph';
 import type { ProjectGraphOverview } from '../lib/projectDependencyGraph';
 import { projectDependencyGraphQuery } from '../lib/queries';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import {
   getTaskDependencyVisualState,
   type TaskDependencyVisualState,
@@ -104,6 +105,7 @@ interface TaskNodeData extends Record<string, unknown> {
   task: ProjectTaskMark;
   hasIncoming: boolean;
   hasOutgoing: boolean;
+  vertical: boolean;
   /** Prerequisites of this task that have not released it yet. Zero means it can start now. */
   waitingOn: number;
 }
@@ -113,12 +115,14 @@ interface GroupNodeData extends Record<string, unknown> {
   memberCount: number;
   hasIncoming: boolean;
   hasOutgoing: boolean;
+  vertical: boolean;
 }
 
 interface FoldNodeData extends Record<string, unknown> {
   mark: ProjectRunMark | ProjectMotifMark | ProjectSettledMark;
   hasIncoming: boolean;
   hasOutgoing: boolean;
+  vertical: boolean;
   expanded: boolean;
   onToggle: (markId: string, firstMemberId: string | null) => void;
 }
@@ -163,7 +167,13 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
         : status;
   return (
     <div className={`pdg-task is-${tone}`}>
-      {data.hasIncoming && <Handle type="target" position={Position.Left} isConnectable={false} />}
+      {data.hasIncoming && (
+        <Handle
+          type="target"
+          position={data.vertical ? Position.Top : Position.Left}
+          isConnectable={false}
+        />
+      )}
       <Link
         className="pdg-task-main nodrag nopan"
         to={`/tasks/${data.task.id}`}
@@ -176,7 +186,13 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
         <span className="pdg-task-title">{data.task.title}</span>
         <span className="pdg-task-meta">{meta}</span>
       </Link>
-      {data.hasOutgoing && <Handle type="source" position={Position.Right} isConnectable={false} />}
+      {data.hasOutgoing && (
+        <Handle
+          type="source"
+          position={data.vertical ? Position.Bottom : Position.Right}
+          isConnectable={false}
+        />
+      )}
     </div>
   );
 }
@@ -292,7 +308,13 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
     <div
       className={`pdg-fold state-${state}${data.expanded ? ' is-open' : ''}${mark.kind === 'SETTLED' ? ' is-settled' : ''}`}
     >
-      {data.hasIncoming && <Handle type="target" position={Position.Left} isConnectable={false} />}
+      {data.hasIncoming && (
+        <Handle
+          type="target"
+          position={data.vertical ? Position.Top : Position.Left}
+          isConnectable={false}
+        />
+      )}
       {mark.kind !== 'MOTIF' ? (
         <button
           type="button"
@@ -326,7 +348,13 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
           </button>
         </Popover>
       )}
-      {data.hasOutgoing && <Handle type="source" position={Position.Right} isConnectable={false} />}
+      {data.hasOutgoing && (
+        <Handle
+          type="source"
+          position={data.vertical ? Position.Bottom : Position.Right}
+          isConnectable={false}
+        />
+      )}
     </div>
   );
 }
@@ -337,7 +365,13 @@ function GroupNode({ data }: NodeProps<GroupFlowNode>) {
   const state = getTaskDependencyVisualState(live);
   return (
     <div className={`pdg-group state-${state}`}>
-      {data.hasIncoming && <Handle type="target" position={Position.Left} isConnectable={false} />}
+      {data.hasIncoming && (
+        <Handle
+          type="target"
+          position={data.vertical ? Position.Top : Position.Left}
+          isConnectable={false}
+        />
+      )}
       <Link
         className="pdg-group-header nodrag nopan"
         to={`/tasks/${data.task.id}`}
@@ -346,7 +380,13 @@ function GroupNode({ data }: NodeProps<GroupFlowNode>) {
         <span className="pdg-group-title">{data.task.title}</span>
         <TaskStatusPill status={live.status} running={live.running} queued={live.queued} />
       </Link>
-      {data.hasOutgoing && <Handle type="source" position={Position.Right} isConnectable={false} />}
+      {data.hasOutgoing && (
+        <Handle
+          type="source"
+          position={data.vertical ? Position.Bottom : Position.Right}
+          isConnectable={false}
+        />
+      )}
     </div>
   );
 }
@@ -379,6 +419,7 @@ export function buildProjectFlowElements(
     expandedRunIds: new Set(),
     onToggleRun: () => undefined,
   },
+  vertical = layout.direction === 'TB',
 ): { nodes: ProjectFlowNode[]; edges: Edge[]; tally: { ready: number; done: number } } {
   const incoming = new Set(layout.edges.map((edge) => edge.targetMarkId));
   const outgoing = new Set(layout.edges.map((edge) => edge.sourceMarkId));
@@ -411,6 +452,7 @@ export function buildProjectFlowElements(
       memberCount: group.members.length,
       hasIncoming: incoming.has(group.task.id),
       hasOutgoing: outgoing.has(group.task.id),
+      vertical,
     },
   }));
   const markNodes: ProjectFlowNode[] = layout.placements.map((placement) => {
@@ -434,7 +476,13 @@ export function buildProjectFlowElements(
       return {
         ...common,
         type: 'projectDependencyTask',
-        data: { task: mark, hasIncoming, hasOutgoing, waitingOn: waitingOn.get(mark.id) ?? 0 },
+        data: {
+          task: mark,
+          hasIncoming,
+          hasOutgoing,
+          waitingOn: waitingOn.get(mark.id) ?? 0,
+          vertical,
+        },
       } satisfies TaskFlowNode;
     }
     return {
@@ -444,6 +492,7 @@ export function buildProjectFlowElements(
         mark,
         hasIncoming,
         hasOutgoing,
+        vertical,
         expanded: fold.expandedRunIds.has(mark.id),
         onToggle: fold.onToggleRun,
       },
@@ -671,6 +720,7 @@ function ProjectCanvas({
   elements,
   overview,
   fullScreen,
+  vertical,
   summary,
   focusMarkId,
   onHover,
@@ -678,6 +728,7 @@ function ProjectCanvas({
   elements: ReturnType<typeof buildProjectFlowElements>;
   overview: ProjectGraphOverview;
   fullScreen: boolean;
+  vertical: boolean;
   summary: string | null;
   /** A mark to keep under the reader after the canvas re-lays itself out around it. */
   focusMarkId: string | null;
@@ -686,18 +737,24 @@ function ProjectCanvas({
   const { setCenter, setViewport, getZoom } = useReactFlow();
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
+  const zoom = useStore((state) => state.transform[2]);
   const padding = fullScreen ? 0.2 : 0.12;
   const plan = useMemo(
     () => planProjectGraphViewport(overview, { width, height }, padding),
     [height, overview, padding, width],
   );
-  const panel = plan && !plan.fitted && summary ? `${summary} · zoom out for the whole plan` : summary;
+  // Once the fit control has actually zoomed out, stop instructing the reader to do it. The old
+  // static hint stayed behind over the whole-plan overview (as in the phone screenshot).
+  const panel =
+    plan && !plan.fitted && summary && zoom >= MIN_FIT_ZOOM
+      ? `${summary} · zoom out for the whole plan`
+      : summary;
   // Applied once, when the canvas first knows its own size, and never again. Re-running it would
   // haul a reader who had panned somewhere back to the frontier for resizing their window — or,
   // worse, for opening a fold, which makes the graph wider and would therefore re-decide the whole
   // viewport underneath the very thing they clicked.
   const appliedRef = useRef<string | null>(null);
-  const planKey = fullScreen ? 'full' : 'inline';
+  const planKey = `${fullScreen ? 'full' : 'inline'}:${vertical ? 'TB' : 'LR'}`;
   useLayoutEffect(() => {
     if (!plan || appliedRef.current === planKey) return;
     appliedRef.current = planKey;
@@ -783,6 +840,7 @@ function ProjectFlow(props: {
   elements: ReturnType<typeof buildProjectFlowElements>;
   overview: ProjectGraphOverview;
   fullScreen: boolean;
+  vertical: boolean;
   summary: string | null;
   focusMarkId: string | null;
   onHover: (markId: string | null) => void;
@@ -796,6 +854,9 @@ function ProjectFlow(props: {
 
 export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
   const [fullScreen, setFullScreen] = useState(false);
+  // A portrait phone has far more height than width. Advancing dependencies down the canvas there
+  // turns the old tiny horizontal ribbon into a readable plan that uses the modal's long axis.
+  const vertical = useMediaQuery('(max-width: 640px)');
   // Which folded runs the reader has opened. Kept here rather than in the marks so that a refetch
   // — a status changing somewhere — does not close what someone was reading.
   const [expandedRunIds, setExpandedRunIds] = useState<ReadonlySet<string>>(new Set());
@@ -823,7 +884,7 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
     // otherwise be handed straight to the settled fold and disappear again as they watched.
     const settled = foldSettledMarks(graph.data, expandedRunIds);
     const opened = expandRunMarks(settled, expandedRunIds);
-    const layout = layoutProjectDependencyGraph(opened);
+    const layout = layoutProjectDependencyGraph(opened, vertical ? 'TB' : 'LR');
     const elements = buildProjectFlowElements(layout, { expandedRunIds, onToggleRun });
     const foldedTasks = opened.marks.reduce(
       (sum, mark) => sum + (mark.kind === 'TASK' ? 0 : markTaskCount(mark)),
@@ -845,7 +906,7 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
         .filter((part): part is string => part !== null)
         .join(' · '),
     };
-  }, [expandedRunIds, graph.data, onToggleRun]);
+  }, [expandedRunIds, graph.data, onToggleRun, vertical]);
 
   // Hover is a decoration over the same layout, so it must not re-run the layout.
   const elements = useMemo(
@@ -902,7 +963,7 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
     <>
       <div
         ref={stripRef}
-        className="tdg-canvas pdg-canvas"
+        className={`tdg-canvas pdg-canvas${vertical ? ' is-vertical' : ''}`}
         style={stripHeight ? { height: stripHeight } : undefined}
         data-testid="project-dependency-graph"
       >
@@ -925,6 +986,7 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
             summary={view.summary}
             focusMarkId={focusMarkId}
             fullScreen={false}
+            vertical={vertical}
             onHover={setHoverMarkId}
           />
         )}
@@ -934,7 +996,7 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
         open={fullScreen}
         onCancel={() => setFullScreen(false)}
         footer={null}
-        width="calc(100vw - 48px)"
+        width={vertical ? '100vw' : 'calc(100vw - 48px)'}
         title="Task graph"
         destroyOnClose
       >
@@ -945,6 +1007,7 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
             summary={view.summary}
             focusMarkId={focusMarkId}
             fullScreen
+            vertical={vertical}
             onHover={setHoverMarkId}
           />
         </div>
