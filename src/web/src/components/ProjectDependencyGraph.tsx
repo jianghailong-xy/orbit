@@ -63,6 +63,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   expandRunMarks,
+  foldSettledMarks,
   layoutProjectDependencyGraph,
   markHeight,
   markLiveState,
@@ -75,6 +76,7 @@ import {
   type ProjectGraphMark,
   type ProjectMotifMark,
   type ProjectRunMark,
+  type ProjectSettledMark,
   type ProjectTaskMark,
 } from '../lib/projectDependencyGraph';
 import type { ProjectGraphOverview } from '../lib/projectDependencyGraph';
@@ -102,6 +104,8 @@ interface TaskNodeData extends Record<string, unknown> {
   task: ProjectTaskMark;
   hasIncoming: boolean;
   hasOutgoing: boolean;
+  /** Prerequisites of this task that have not released it yet. Zero means it can start now. */
+  waitingOn: number;
 }
 
 interface GroupNodeData extends Record<string, unknown> {
@@ -112,11 +116,11 @@ interface GroupNodeData extends Record<string, unknown> {
 }
 
 interface FoldNodeData extends Record<string, unknown> {
-  mark: ProjectRunMark | ProjectMotifMark;
+  mark: ProjectRunMark | ProjectMotifMark | ProjectSettledMark;
   hasIncoming: boolean;
   hasOutgoing: boolean;
   expanded: boolean;
-  onToggle: (markId: string) => void;
+  onToggle: (markId: string, firstMemberId: string | null) => void;
 }
 
 type TaskFlowNode = Node<TaskNodeData, 'projectDependencyTask'>;
@@ -127,24 +131,50 @@ export type ProjectFlowNode = TaskFlowNode | GroupFlowNode | FoldFlowNode;
 /** React Flow disables pointer events on non-interactive node wrappers; these contain links. */
 const INTERACTIVE_NODE_STYLE = { pointerEvents: 'all' } as const;
 
+/**
+ * One task, drawn.
+ *
+ * Deliberately NOT the task-rooted graph's `.tdg-node`, which this used to borrow. That node is
+ * drawn a handful at a time around one task a reader already chose, so it can afford a pill, a
+ * shadow and a single line of title. A project draws a plan: the same chrome repeated forty times
+ * is forty shadows and forty repetitions of the word "Open", which is one bit of information read
+ * forty times. So status moves into the card itself — a rail down its edge and one line of small
+ * text — and the room that buys goes to a title long enough to identify the task without hovering.
+ *
+ * The one thing said loudly is the thing worth acting on: a task whose prerequisites have all
+ * released it. Finished work recedes to the weight of background, because it is background — the
+ * reading it supports is "how far has this got", which the shape of the plan already gives.
+ *
+ * Colour is never the only channel (`lib/statusPalette.test.ts` measures why): every tone carries
+ * its own word in the meta line, and the two that colour cannot separate under deuteranopia —
+ * ready and blocked — are the two that say the most different things there.
+ */
 function TaskNode({ data }: NodeProps<TaskFlowNode>) {
   const state = getTaskDependencyVisualState(data.task);
+  const status = taskStatusLabel(data.task.status, data.task.running, data.task.queued);
+  // 'pending' is the palette's word for a plain open task; whether it can START is not a status,
+  // it is a fact about its prerequisites, which is what this canvas is drawn to report.
+  const tone = state === 'pending' ? (data.waitingOn > 0 ? 'blocked' : 'ready') : state;
+  const meta =
+    tone === 'ready'
+      ? 'Ready to run'
+      : tone === 'blocked'
+        ? `Waiting on ${data.waitingOn}`
+        : status;
   return (
-    <div className={`tdg-node state-${state}`}>
+    <div className={`pdg-task is-${tone}`}>
       {data.hasIncoming && <Handle type="target" position={Position.Left} isConnectable={false} />}
       <Link
-        className="tdg-node-main nodrag nopan"
+        className="pdg-task-main nodrag nopan"
         to={`/tasks/${data.task.id}`}
-        aria-label={`${data.task.title}, ${taskStatusLabel(data.task.status, data.task.running, data.task.queued)}`}
+        aria-label={
+          tone === 'ready' || tone === 'blocked'
+            ? `${data.task.title}, ${status}, ${meta}`
+            : `${data.task.title}, ${status}`
+        }
       >
-        <span className="tdg-node-title-row">
-          <span className="tdg-node-title">{data.task.title}</span>
-        </span>
-        <TaskStatusPill
-          status={data.task.status}
-          running={data.task.running}
-          queued={data.task.queued}
-        />
+        <span className="pdg-task-title">{data.task.title}</span>
+        <span className="pdg-task-meta">{meta}</span>
       </Link>
       {data.hasOutgoing && <Handle type="source" position={Position.Right} isConnectable={false} />}
     </div>
@@ -242,30 +272,47 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
       </span>
     </>
   );
+  // A settled block has one thing to report and it is the count: every task in it is done, so a
+  // legend spelling out the split would spell out one number twice.
+  const settledBody = (
+    <>
+      <span className="pdg-fold-title-row">
+        <span className="pdg-fold-title">{count.toLocaleString()} done</span>
+      </span>
+      <StatusBar counts={mark.statusCounts} total={count} />
+      <span className="pdg-fold-legend">Finished · click to open</span>
+    </>
+  );
   const label =
-    mark.kind === 'RUN'
-      ? `${mark.title}, ${count} tasks folded${data.expanded ? ', open' : ''}`
-      : `${mark.title}, ${mark.instanceCount} instances, ${count} tasks folded`;
+    mark.kind === 'MOTIF'
+      ? `${mark.title}, ${mark.instanceCount} instances, ${count} tasks folded`
+      : `${mark.title}, ${count} tasks folded${data.expanded ? ', open' : ''}`;
 
   return (
-    <div className={`pdg-fold state-${state}${data.expanded ? ' is-open' : ''}`}>
+    <div
+      className={`pdg-fold state-${state}${data.expanded ? ' is-open' : ''}${mark.kind === 'SETTLED' ? ' is-settled' : ''}`}
+    >
       {data.hasIncoming && <Handle type="target" position={Position.Left} isConnectable={false} />}
-      {mark.kind === 'RUN' ? (
+      {mark.kind !== 'MOTIF' ? (
         <button
           type="button"
           className="pdg-fold-main nodrag nopan"
-          onClick={() => data.onToggle(mark.id)}
-          disabled={!mark.expandable}
+          onClick={() => data.onToggle(mark.id, mark.members[0]?.taskId ?? null)}
+          disabled={mark.kind === 'RUN' && !mark.expandable}
           aria-label={label}
           title={
-            mark.expandable
+            mark.kind === 'SETTLED'
               ? data.expanded
-                ? 'Fold these steps back up'
-                : 'Show these steps'
-              : 'Too long to open here — the task list below has all of it'
+                ? 'Fold this finished work back up'
+                : 'Show the finished tasks'
+              : mark.expandable
+                ? data.expanded
+                  ? 'Fold these steps back up'
+                  : 'Show these steps'
+                : 'Too long to open here — the task list below has all of it'
           }
         >
-          {body}
+          {mark.kind === 'SETTLED' ? settledBody : body}
         </button>
       ) : (
         <Popover
@@ -325,11 +372,14 @@ export const NODE_TYPES = {
  */
 export function buildProjectFlowElements(
   layout: ReturnType<typeof layoutProjectDependencyGraph>,
-  fold: { expandedRunIds: ReadonlySet<string>; onToggleRun: (markId: string) => void } = {
+  fold: {
+    expandedRunIds: ReadonlySet<string>;
+    onToggleRun: (markId: string, firstMemberId: string | null) => void;
+  } = {
     expandedRunIds: new Set(),
     onToggleRun: () => undefined,
   },
-): { nodes: ProjectFlowNode[]; edges: Edge[] } {
+): { nodes: ProjectFlowNode[]; edges: Edge[]; tally: { ready: number; done: number } } {
   const incoming = new Set(layout.edges.map((edge) => edge.targetMarkId));
   const outgoing = new Set(layout.edges.map((edge) => edge.sourceMarkId));
   const stateById = new Map<string, TaskDependencyVisualState>();
@@ -338,6 +388,14 @@ export function buildProjectFlowElements(
   }
   for (const placement of layout.placements) {
     stateById.set(placement.task.id, getTaskDependencyVisualState(markLiveState(placement.task)));
+  }
+
+  // How many of a mark's prerequisites have not released it. A mark absent from this map is one
+  // nothing is holding up — which, for an open task, is the only thing on this canvas worth an eye.
+  const waitingOn = new Map<string, number>();
+  for (const edge of layout.edges) {
+    if (stateById.get(edge.sourceMarkId) === 'complete') continue;
+    waitingOn.set(edge.targetMarkId, (waitingOn.get(edge.targetMarkId) ?? 0) + 1);
   }
 
   const groupNodes: GroupFlowNode[] = layout.groups.map((group) => ({
@@ -376,7 +434,7 @@ export function buildProjectFlowElements(
       return {
         ...common,
         type: 'projectDependencyTask',
-        data: { task: mark, hasIncoming, hasOutgoing },
+        data: { task: mark, hasIncoming, hasOutgoing, waitingOn: waitingOn.get(mark.id) ?? 0 },
       } satisfies TaskFlowNode;
     }
     return {
@@ -396,22 +454,125 @@ export function buildProjectFlowElements(
     // An edge's state is its PREREQUISITE's, never its dependent's: what the line reports is
     // whether the thing at its tail has released the thing at its head.
     const state = stateById.get(edge.sourceMarkId) ?? 'pending';
+    const ink = PROJECT_EDGE_INK[state];
     return {
       id: `${edge.sourceMarkId}->${edge.targetMarkId}`,
       source: edge.sourceMarkId,
       target: edge.targetMarkId,
       type: 'smoothstep',
       style: {
-        stroke: EDGE_COLORS[state],
-        strokeWidth: 1.5,
-        opacity: state === 'complete' ? 0.55 : 0.9,
+        stroke: ink?.stroke ?? EDGE_COLORS[state],
+        strokeWidth: ink?.width ?? 1.5,
+        opacity: ink?.opacity ?? 0.9,
         ...(state === 'failed' ? { strokeDasharray: FAILED_EDGE_DASH } : {}),
       },
-      markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: EDGE_COLORS[state] },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 12,
+        height: 12,
+        color: ink?.stroke ?? EDGE_COLORS[state],
+      },
     };
   });
 
-  return { nodes: [...groupNodes, ...markNodes], edges };
+  const tally = { ready: 0, done: 0 };
+  for (const placement of layout.placements) {
+    const mark = placement.task;
+    const state = stateById.get(mark.id);
+    if (state === 'complete') tally.done += markTaskCount(mark);
+    else if (mark.kind === 'TASK' && state === 'pending' && !waitingOn.has(mark.id)) {
+      tally.ready += 1;
+    }
+  }
+
+  return { nodes: [...groupNodes, ...markNodes], edges, tally };
+}
+
+/**
+ * Weight, on top of the shared palette's hue.
+ *
+ * `EDGE_COLORS` stays the one place that decides what a released prerequisite LOOKS like, so the
+ * two graphs cannot drift into disagreeing about it. What a project needs on top is a different
+ * emphasis: most of a half-finished plan's edges are satisfied, and drawn at full weight they are
+ * the loudest thing on the canvas while being the one relation that no longer constrains anything.
+ * So satisfied fades to a hairline and the edges still holding work up are drawn at the weight of
+ * text. Nothing here changes a hue — a reader who learned the colours on the task graph still
+ * reads them here.
+ */
+const PROJECT_EDGE_INK: Partial<
+  Record<TaskDependencyVisualState, { stroke?: string; opacity: number; width: number }>
+> = {
+  complete: { opacity: 0.32, width: 1.25 },
+  pending: { stroke: 'var(--text-3)', opacity: 0.95, width: 1.5 },
+};
+
+/**
+ * A hover, answered: the paths that run THROUGH the mark under the pointer, and nothing else.
+ *
+ * Every other reading of "related" is either useless (its immediate neighbours, which the reader
+ * can already see) or the whole graph. Upstream is what has to happen first, downstream is what
+ * this releases; together they are the answer to the only question a line on this canvas raises,
+ * which is "and then what". Tracing that by eye across six ranks of orthogonal edges is the
+ * single most tiring thing this view asks of a reader.
+ *
+ * Returns the same elements when nothing is hovered, so the canvas re-renders only on a change.
+ */
+export function highlightThrough<T extends { nodes: ProjectFlowNode[]; edges: Edge[] }>(
+  elements: T,
+  markId: string | null,
+): T {
+  if (!markId || !elements.nodes.some((node) => node.id === markId)) return elements;
+  const inbound = new Map<string, Edge[]>();
+  const outbound = new Map<string, Edge[]>();
+  const index = (at: Map<string, Edge[]>, key: string, edge: Edge) => {
+    const list = at.get(key);
+    if (list) list.push(edge);
+    else at.set(key, [edge]);
+  };
+  for (const edge of elements.edges) {
+    index(inbound, edge.target, edge);
+    index(outbound, edge.source, edge);
+  }
+  const lit = new Set<string>([markId]);
+  const litEdges = new Set<string>();
+  for (const [next, step] of [
+    [inbound, (edge: Edge) => edge.source] as const,
+    [outbound, (edge: Edge) => edge.target] as const,
+  ]) {
+    let frontier = [markId];
+    while (frontier.length > 0) {
+      const onward: string[] = [];
+      for (const id of frontier) {
+        for (const edge of next.get(id) ?? []) {
+          litEdges.add(edge.id);
+          const other = step(edge);
+          if (lit.has(other)) continue;
+          lit.add(other);
+          onward.push(other);
+        }
+      }
+      frontier = onward;
+    }
+  }
+
+  return {
+    ...elements,
+    nodes: elements.nodes.map((node) => {
+      // A member of a faded box is already faded by its box; fading it again makes it vanish.
+      if (lit.has(node.id) || (node.parentId && !lit.has(node.parentId))) return node;
+      return { ...node, className: `${node.className ?? ''} is-faded`.trim() };
+    }),
+    edges: elements.edges.map((edge) =>
+      litEdges.has(edge.id)
+        ? {
+            ...edge,
+            zIndex: 1,
+            style: { ...edge.style, stroke: 'var(--brand)', strokeWidth: 1.8, opacity: 1 },
+            markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: 'var(--brand)' },
+          }
+        : { ...edge, style: { ...edge.style, opacity: 0.12 } },
+    ),
+  };
 }
 
 /**
@@ -423,10 +584,17 @@ export function buildProjectFlowElements(
  */
 const MIN_ZOOM = 0.05;
 
-/** A fitted graph is opened on only if it lands at least this far in; below it, tasks are dashes. */
-const MIN_FIT_ZOOM = 0.3;
+/**
+ * The floor under a fitted opening — legibility, not completeness.
+ *
+ * This used to be 0.3, which let the view answer "does the whole plan fit" with yes at a zoom
+ * where a 12.5px title renders at four pixels. Fitting is only worth having while the thing
+ * fitted can still be read: below this the view opens on the frontier instead and the whole shape
+ * stays one fit-view button away, which is the reading that was always meant to be one press off.
+ */
+const MIN_FIT_ZOOM = 0.7;
 
-/** What a 204px card needs for its title to survive; the task graph uses the same number. */
+/** What a 168px card needs for its title to survive. */
 const READABLE_ZOOM = 0.75;
 
 /** Below this many units the mini map is a picture of what is already on screen. */
@@ -473,6 +641,26 @@ export function planProjectGraphViewport(
 }
 
 /**
+ * How tall the page's strip should be: as tall as the drawing needs, and no taller.
+ *
+ * A plan is wide and shallow, so a fitted one is bound by the width available — which left the old
+ * fixed 300-420px strip mostly empty underneath a graph that was already too small to read, the
+ * worst of both readings. The floor keeps a one-row plan from becoming a letterbox; the ceiling
+ * keeps a tall one from pushing the task list off the page, which is what full screen is for.
+ *
+ * Exported for tests: it is a rule about a number, and a rule about a number is worth asserting on
+ * rather than eyeballing at one window size.
+ */
+export function planStripHeight(
+  bounds: { width: number; height: number },
+  canvasWidth: number,
+): number | undefined {
+  if (canvasWidth <= 0 || bounds.width <= 0) return undefined;
+  const zoom = Math.min(1, (canvasWidth * 0.88) / bounds.width);
+  return Math.round(Math.min(520, Math.max(240, bounds.height * zoom + 48)));
+}
+
+/**
  * The canvas: the same elements, drawn either in the page's strip or in the full-screen modal.
  *
  * One component for both so the two never drift into disagreeing about what the graph looks like;
@@ -485,6 +673,7 @@ function ProjectCanvas({
   fullScreen,
   summary,
   focusMarkId,
+  onHover,
 }: {
   elements: ReturnType<typeof buildProjectFlowElements>;
   overview: ProjectGraphOverview;
@@ -492,6 +681,7 @@ function ProjectCanvas({
   summary: string | null;
   /** A mark to keep under the reader after the canvas re-lays itself out around it. */
   focusMarkId: string | null;
+  onHover: (markId: string | null) => void;
 }) {
   const { setCenter, setViewport, getZoom } = useReactFlow();
   const width = useStore((state) => state.width);
@@ -501,7 +691,7 @@ function ProjectCanvas({
     () => planProjectGraphViewport(overview, { width, height }, padding),
     [height, overview, padding, width],
   );
-  const panel = plan && !plan.fitted ? summary ?? `${overview.unitCount} marks · opened where the work is · zoom out for the whole plan` : summary;
+  const panel = plan && !plan.fitted && summary ? `${summary} · zoom out for the whole plan` : summary;
   // Applied once, when the canvas first knows its own size, and never again. Re-running it would
   // haul a reader who had panned somewhere back to the frontier for resizing their window — or,
   // worse, for opening a fold, which makes the graph wider and would therefore re-decide the whole
@@ -542,6 +732,8 @@ function ProjectCanvas({
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      onNodeMouseEnter={(_, node) => onHover(node.id)}
+      onNodeMouseLeave={() => onHover(null)}
       proOptions={{ hideAttribution: true }}
       // No `fitView`: React Flow's own fit runs after this component's viewport plan and would
       // overrule it, which is how a 118-task chain ends up fitted to a dashed line again. The
@@ -555,7 +747,10 @@ function ProjectCanvas({
         'controls.fitView.ariaLabel': 'Fit whole project in view',
       }}
     >
-      <Background gap={18} size={1} />
+      {/* No dot grid. React Flow's is an editor's texture — it says "this plane has coordinates
+          and things snap to them". Nothing here is draggable (`nodesDraggable={false}`), so on a
+          canvas this size it is several thousand high-frequency marks encoding nothing, over the
+          one drawing they sit behind. */}
       {panel && (
         // Said where the reader is looking. Two different things are worth saying and they are
         // both about scale: that these marks stand for more tasks than they look like, and that
@@ -590,6 +785,7 @@ function ProjectFlow(props: {
   fullScreen: boolean;
   summary: string | null;
   focusMarkId: string | null;
+  onHover: (markId: string | null) => void;
 }) {
   return (
     <ReactFlowProvider>
@@ -605,42 +801,76 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
   const [expandedRunIds, setExpandedRunIds] = useState<ReadonlySet<string>>(new Set());
   // Which mark the last toggle was about, so the canvas can keep it where the reader left it.
   const [focusMarkId, setFocusMarkId] = useState<string | null>(null);
+  // The mark under the pointer, if any. Kept out here so both canvases answer a hover the same way.
+  const [hoverMarkId, setHoverMarkId] = useState<string | null>(null);
   const graph = useQuery(projectDependencyGraphQuery(projectId));
-  const onToggleRun = useCallback(
-    (markId: string) => {
-      const run = graph.data?.marks.find((mark) => mark.id === markId);
-      setExpandedRunIds((previous) => {
-        const next = new Set(previous);
-        const opening = !next.delete(markId);
-        if (opening) next.add(markId);
-        // Opening: the run's first task now stands where the fold did. Closing: the fold itself.
-        setFocusMarkId(
-          opening && run?.kind === 'RUN' && run.members.length > 0 ? run.members[0].taskId : markId,
-        );
-        return next;
-      });
-    },
-    [graph.data],
-  );
+  // The node hands its own first member over, because a settled fold is made on this side and is
+  // therefore not in `graph.data` to be looked up.
+  const onToggleRun = useCallback((markId: string, firstMemberId: string | null) => {
+    setExpandedRunIds((previous) => {
+      const next = new Set(previous);
+      const opening = !next.delete(markId);
+      if (opening) next.add(markId);
+      // Opening: the fold's first task now stands where the fold did. Closing: the fold itself.
+      setFocusMarkId(opening && firstMemberId ? firstMemberId : markId);
+      return next;
+    });
+  }, []);
 
   const view = useMemo(() => {
     if (!graph.data) return null;
-    const opened = expandRunMarks(graph.data, expandedRunIds);
+    // Settle BEFORE opening runs: a run a reader just opened whose every step is done would
+    // otherwise be handed straight to the settled fold and disappear again as they watched.
+    const settled = foldSettledMarks(graph.data, expandedRunIds);
+    const opened = expandRunMarks(settled, expandedRunIds);
     const layout = layoutProjectDependencyGraph(opened);
+    const elements = buildProjectFlowElements(layout, { expandedRunIds, onToggleRun });
     const foldedTasks = opened.marks.reduce(
       (sum, mark) => sum + (mark.kind === 'TASK' ? 0 : markTaskCount(mark)),
       0,
     );
     return {
-      elements: buildProjectFlowElements(layout, { expandedRunIds, onToggleRun }),
+      elements,
       overview: projectGraphOverview(layout),
-      // Only said when it is true and useful: a picture of 8 marks standing for 23,442 tasks has
-      // to say so, or its own emptiness reads as an empty project.
-      summary: foldedTasks
-        ? `${graph.data.taskCount.toLocaleString()} tasks · ${opened.marks.length} marks · dashed marks are folded`
-        : null,
+      // The reading the picture is for, in words, for a reader who has not traced it yet: how big
+      // this plan is, how much of it is behind them, and how much of it they could start today.
+      // Also the one thing a folded canvas has to say or its own emptiness reads as an empty
+      // project — that these marks stand for more tasks than they look like.
+      summary: [
+        `${graph.data.taskCount.toLocaleString()} tasks`,
+        elements.tally.ready > 0 ? `${elements.tally.ready.toLocaleString()} ready to run` : null,
+        elements.tally.done > 0 ? `${elements.tally.done.toLocaleString()} done` : null,
+        foldedTasks > 0 ? 'dashed marks are folded' : null,
+      ]
+        .filter((part): part is string => part !== null)
+        .join(' · '),
     };
   }, [expandedRunIds, graph.data, onToggleRun]);
+
+  // Hover is a decoration over the same layout, so it must not re-run the layout.
+  const elements = useMemo(
+    () => (view ? highlightThrough(view.elements, hoverMarkId) : null),
+    [hoverMarkId, view],
+  );
+
+  // The strip is as tall as the drawing needs and no taller. A plan is wide and shallow, so a
+  // fitted one is bound by width — a fixed 420px strip then leaves most of itself empty under a
+  // graph that is already too small to read, which is the worst of both.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [stripWidth, setStripWidth] = useState(0);
+  useLayoutEffect(() => {
+    const node = stripRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setStripWidth(node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [view]);
+  const stripHeight = useMemo(
+    () => (view ? planStripHeight(view.overview.bounds, stripWidth) : undefined),
+    [stripWidth, view],
+  );
 
   if (graph.isLoading) {
     return (
@@ -664,13 +894,18 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
       />
     );
   }
-  if (!view || view.elements.nodes.length === 0) {
+  if (!view || !elements || elements.nodes.length === 0) {
     return <Empty description="No tasks to draw yet" />;
   }
 
   return (
     <>
-      <div className="tdg-canvas" data-testid="project-dependency-graph">
+      <div
+        ref={stripRef}
+        className="tdg-canvas pdg-canvas"
+        style={stripHeight ? { height: stripHeight } : undefined}
+        data-testid="project-dependency-graph"
+      >
         <Tooltip title="Open full-screen graph">
           <button
             type="button"
@@ -685,14 +920,14 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
             would both measure and both fit, for a picture the reader cannot see. */}
         {!fullScreen && (
           <ProjectFlow
-            elements={view.elements}
+            elements={elements}
             overview={view.overview}
             summary={view.summary}
             focusMarkId={focusMarkId}
             fullScreen={false}
+            onHover={setHoverMarkId}
           />
         )}
-        <div className="tdg-direction">Prerequisite → dependent · boxes are parent tasks</div>
       </div>
       <Modal
         className="tdg-modal"
@@ -705,11 +940,12 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
       >
         <div className="tdg-full-canvas">
           <ProjectFlow
-            elements={view.elements}
+            elements={elements}
             overview={view.overview}
             summary={view.summary}
             focusMarkId={focusMarkId}
             fullScreen
+            onHover={setHoverMarkId}
           />
         </div>
       </Modal>

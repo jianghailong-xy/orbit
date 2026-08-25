@@ -7167,12 +7167,20 @@ html[data-theme='dark'] .session-tag-chip {
    vocabulary is deliberately shared, so "dashed means there is more behind this" is learned once. */
 .pdg-fold {
   position: relative;
-  width: 252px;
-  height: 96px;
+  width: 196px;
+  height: 80px;
   border: 1px dashed var(--brand-border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--brand-tint) 30%, var(--bg-raised));
-  box-shadow: 0 2px 7px rgba(31, 35, 41, 0.05);
+}
+/* Finished work, folded by this side rather than the server's. Green rather than the fold's usual
+   brand tint, and quiet: it is the one fold whose contents nobody is waiting on. */
+.pdg-fold.is-settled {
+  border-color: var(--success-border);
+  background: color-mix(in srgb, var(--success-bg) 40%, var(--bg-raised));
+}
+.pdg-fold.is-settled .pdg-fold-title {
+  color: var(--text-2);
 }
 .pdg-fold.state-failed {
   border-color: var(--error-border);
@@ -7347,6 +7355,142 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--text-4);
   pointer-events: none;
 }
+/* One task on the project graph.
+   Deliberately not `.tdg-node` — see TaskNode in ProjectDependencyGraph.tsx for why a canvas that
+   draws a whole plan cannot afford the chrome a canvas that draws a handful of nodes can. */
+.pdg-task {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  width: 168px;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+/* The status rail. A second channel that is not hue — under deuteranopia the ready/done pair is
+   near the discrimination floor, and the meta line's word is the third. */
+.pdg-task::before {
+  content: '';
+  flex: none;
+  width: 3px;
+  background: var(--dot-idle);
+}
+.pdg-task-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+.pdg-task-main:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.pdg-task-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  /* Task titles here carry identifiers — `dispatch_authorization`, branch names — and a word
+     longer than the card is the whole line if it is not allowed to break. */
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.32;
+}
+.pdg-task-meta {
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+}
+.pdg-task:hover,
+.pdg-task:focus-within {
+  border-color: var(--brand-border);
+}
+/* Settled work is background: it is the answer to "how far has this got", which the shape of the
+   plan already gives, and it is never the answer to "what should I do". */
+.pdg-task.is-complete {
+  border-color: var(--border-subtle);
+  background: var(--bg-subtle);
+}
+.pdg-task.is-complete::before {
+  background: var(--success-border);
+}
+.pdg-task.is-complete .pdg-task-title {
+  color: var(--text-3);
+  font-weight: 500;
+}
+/* The one thing on this canvas worth acting on today. */
+.pdg-task.is-ready {
+  border-color: var(--brand-border);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+.pdg-task.is-ready::before {
+  background: var(--brand);
+}
+.pdg-task.is-ready .pdg-task-meta {
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+.pdg-task.is-active::before {
+  background: var(--brand);
+}
+.pdg-task.is-active .pdg-task-meta {
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+.pdg-task.is-queued::before {
+  background: var(--brand-border);
+}
+.pdg-task.is-failed {
+  border-color: var(--error-border);
+}
+.pdg-task.is-failed::before {
+  background: var(--error-solid);
+}
+.pdg-task.is-failed .pdg-task-meta {
+  color: var(--error);
+  font-weight: 600;
+}
+.pdg-task .react-flow__handle {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--bg-raised);
+  background: var(--text-4);
+  pointer-events: none;
+}
+
+/* The section heading and its one-time-learn legend, at a size a reader can actually read — it
+   used to be 10.5px pinned into the corner of the canvas forever. */
+.pdg-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.pdg-legend {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* Everything not on a path through the mark under the pointer. */
+.pdg-canvas .react-flow__node.is-faded,
+.tdg-full-canvas .react-flow__node.is-faded {
+  opacity: 0.34;
+  transition: opacity 0.12s;
+}
+
 .tdg-error {
   display: flex;
   height: 100%;
@@ -7461,6 +7605,9 @@ html[data-theme='dark'] .session-tag-chip {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .pdg-task,
+  .pdg-canvas .react-flow__node.is-faded,
+  .tdg-full-canvas .react-flow__node.is-faded,
   .tdg-node,
   .tdg-node-remove {
     transition: none;

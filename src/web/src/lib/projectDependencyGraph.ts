@@ -48,13 +48,40 @@ export interface ProjectMotifMark {
 }
 
 /**
+ * A block of finished work, folded into one mark by THIS side rather than the server's.
+ *
+ * The server folds by shape — a straight run, a repeated motif — because that is what it can see
+ * without knowing which project a reader has open. What it cannot fold is the thing that makes
+ * most real plans wide: their settled prefix. A plan half-finished spends half its ranks on work
+ * nobody is going to act on, and those ranks are what push the whole drawing below the zoom its
+ * titles survive (see `MIN_FIT_ZOOM`). So a connected block of done tasks is drawn as one mark,
+ * openable, and the ranks it was costing go back to the work that is still ahead.
+ *
+ * Only whole connected blocks, and only of two or more: a lone finished task folded into a box
+ * saying "1 done" is bigger than the task it replaced.
+ */
+export interface ProjectSettledMark {
+  kind: 'SETTLED';
+  id: string;
+  title: string;
+  taskCount: number;
+  statusCounts: MarkStatusCounts;
+  parentTaskId: string | null;
+  members: Array<{ taskId: string; title: string; status: string }>;
+}
+
+/**
  * A mark: the unit this canvas draws.
  *
  * Not a task, because a project of 23,442 tasks has no drawing made of 23,442 anything. The
  * server folds first (`apiserver/src/projects/project-graph-fold.ts`) and what arrives is what
  * survives folding — every task behind exactly one mark, however many tasks there are.
  */
-export type ProjectGraphMark = ProjectTaskMark | ProjectRunMark | ProjectMotifMark;
+export type ProjectGraphMark =
+  | ProjectTaskMark
+  | ProjectRunMark
+  | ProjectMotifMark
+  | ProjectSettledMark;
 
 /** Kept as the old name so the rest of the canvas keeps reading "a node on this graph". */
 export type ProjectDependencyGraphNode = ProjectGraphMark;
@@ -124,12 +151,20 @@ export function markLiveState(
   return { status: markStatus(mark) };
 }
 
-/** Matches `.tdg-node` in index.css — the project graph reuses the task graph's node chrome. */
-export const PROJECT_GRAPH_NODE_WIDTH = 204;
-export const PROJECT_GRAPH_NODE_HEIGHT = 76;
-/** Matches `.pdg-fold`: wider for a normalized title, taller for the bar and the counts. */
-export const PROJECT_GRAPH_FOLD_WIDTH = 252;
-export const PROJECT_GRAPH_FOLD_HEIGHT = 96;
+/**
+ * Matches `.pdg-task` in index.css.
+ *
+ * Every pixel here is spent six or eight times over — a rank costs a node's width PLUS the gap
+ * after it, and the number of ranks is what decides whether the whole plan fits at a zoom its
+ * titles survive. The old 204x76 came from the task-rooted graph, which draws a handful of nodes
+ * around one; a project draws a plan, and 168x64 with a two-line title says as much per node in
+ * four fifths of the width.
+ */
+export const PROJECT_GRAPH_NODE_WIDTH = 168;
+export const PROJECT_GRAPH_NODE_HEIGHT = 64;
+/** Matches `.pdg-fold`: a little wider than a task, for the bar and what it counts. */
+export const PROJECT_GRAPH_FOLD_WIDTH = 196;
+export const PROJECT_GRAPH_FOLD_HEIGHT = 80;
 
 export const markWidth = (mark: ProjectGraphMark) =>
   mark.kind === 'TASK' ? PROJECT_GRAPH_NODE_WIDTH : PROJECT_GRAPH_FOLD_WIDTH;
@@ -195,7 +230,9 @@ function dagreLayout(
   rankdir: 'LR' | 'TB',
 ): Map<string, { x: number; y: number }> {
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir, nodesep: 26, ranksep: rankdir === 'LR' ? 72 : 40, marginx: 16, marginy: 16 });
+  // The gap after a node is part of what a rank costs, so it is part of what decides the zoom the
+  // whole plan fits at. 44 is what the orthogonal edge router needs to make its jog and no more.
+  g.setGraph({ rankdir, nodesep: 18, ranksep: rankdir === 'LR' ? 44 : 32, marginx: 16, marginy: 16 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const node of nodes) g.setNode(node.id, { width: node.width, height: node.height });
   for (const edge of edges) g.setEdge(edge.source, edge.target);
@@ -397,6 +434,151 @@ export function projectGraphOverview(layout: ProjectDependencyLayout): ProjectGr
     frontier: { x: frontier.x, y: frontier.y },
     unitCount: units.length,
   };
+}
+
+/** Below this, a fold is bigger than what it replaced. */
+const SETTLED_MIN_MEMBERS = 2;
+
+/**
+ * Fold each connected block of finished tasks into one mark — the client's own fold.
+ *
+ * The rule is deliberately the narrowest one that reduces ranks: a block is a set of DONE tasks
+ * joined to each other by dependency edges, all under the same parent, none of them a parent box
+ * of their own. Two done tasks with an open task between them are two blocks, not one, because
+ * folding them together would claim an ordering the plan does not have.
+ *
+ * `expandedIds` holds the folds a reader has opened; opening one is simply not folding it, so
+ * there is no second function to undo this and nothing to keep in sync with what it produced.
+ *
+ * Runs and motifs pass through untouched. This runs BEFORE `expandRunMarks` so that opening a run
+ * whose steps are all done does not hand those steps straight back to this and fold them again.
+ */
+export function foldSettledMarks(
+  graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'>,
+  expandedIds: ReadonlySet<string>,
+): Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> {
+  const byId = new Map(graph.marks.map((mark) => [mark.id, mark]));
+  const parents = new Set<string>();
+  for (const mark of graph.marks) {
+    if (mark.parentTaskId && byId.has(mark.parentTaskId)) parents.add(mark.parentTaskId);
+  }
+  const settleable = new Map<string, ProjectTaskMark>();
+  for (const mark of graph.marks) {
+    if (mark.kind !== 'TASK') continue;
+    if (mark.status !== 'DONE' || mark.running || mark.queued) continue;
+    if (parents.has(mark.id)) continue;
+    settleable.set(mark.id, mark);
+  }
+  if (settleable.size < SETTLED_MIN_MEMBERS) return graph;
+
+  // Union-find over the edges that join two settleable marks under the same parent.
+  const root = new Map<string, string>([...settleable.keys()].map((id) => [id, id]));
+  const find = (id: string): string => {
+    let at = id;
+    while (root.get(at) !== at) at = root.get(at)!;
+    let walk = id;
+    while (root.get(walk) !== at) {
+      const next = root.get(walk)!;
+      root.set(walk, at);
+      walk = next;
+    }
+    return at;
+  };
+  for (const edge of graph.edges) {
+    const source = settleable.get(edge.sourceMarkId);
+    const target = settleable.get(edge.targetMarkId);
+    if (!source || !target || source.parentTaskId !== target.parentTaskId) continue;
+    const a = find(source.id);
+    const b = find(target.id);
+    if (a !== b) root.set(a, b);
+  }
+
+  const blocks = new Map<string, ProjectTaskMark[]>();
+  for (const mark of settleable.values()) {
+    const key = find(mark.id);
+    const block = blocks.get(key);
+    if (block) block.push(mark);
+    else blocks.set(key, [mark]);
+  }
+
+  // Named after the smallest member id so the same block keeps the same id across refetches, and
+  // so a fold a reader opened does not close itself when a status somewhere else changes.
+  const foldIdOf = new Map<string, string>();
+  const folds = new Map<string, ProjectSettledMark>();
+  for (const block of blocks.values()) {
+    if (block.length < SETTLED_MIN_MEMBERS) continue;
+    const members = [...block].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const id = `settled:${members[0].id}`;
+    if (expandedIds.has(id)) continue;
+    for (const member of members) foldIdOf.set(member.id, id);
+    folds.set(id, {
+      kind: 'SETTLED',
+      id,
+      title: `${members.length} done`,
+      taskCount: members.length,
+      statusCounts: { DONE: members.length },
+      parentTaskId: members[0].parentTaskId,
+      members: members.map((member) => ({
+        taskId: member.taskId,
+        title: member.title,
+        status: member.status,
+      })),
+    });
+  }
+  if (folds.size === 0) return graph;
+
+  const unitOf = (id: string) => foldIdOf.get(id) ?? id;
+  const marks: ProjectGraphMark[] = [];
+  const emitted = new Set<string>();
+  for (const mark of graph.marks) {
+    const foldId = foldIdOf.get(mark.id);
+    if (!foldId) {
+      marks.push(mark);
+      continue;
+    }
+    if (emitted.has(foldId)) continue;
+    emitted.add(foldId);
+    marks.push(folds.get(foldId)!);
+  }
+  const edges = new Map<string, ProjectGraphMarkEdge>();
+  for (const edge of graph.edges) {
+    const sourceMarkId = unitOf(edge.sourceMarkId);
+    const targetMarkId = unitOf(edge.targetMarkId);
+    // Inside a block the ordering is the block's own business, and as a unit edge it is a
+    // self-loop, which dagre cannot rank.
+    if (sourceMarkId === targetMarkId) continue;
+    edges.set(`${sourceMarkId}->${targetMarkId}`, { sourceMarkId, targetMarkId });
+  }
+
+  // Contracting a connected block of a DAG can still close a cycle, when a plan holds a task
+  // marked done ahead of a prerequisite that is not. Rather than draw an arrow that points
+  // backwards, leave a plan like that unfolded and say what it is by drawing it in full.
+  return hasCycle(marks, [...edges.values()]) ? graph : { marks, edges: [...edges.values()] };
+}
+
+/** Kahn, only for the yes/no. */
+function hasCycle(marks: ProjectGraphMark[], edges: ProjectGraphMarkEdge[]): boolean {
+  const indegree = new Map(marks.map((mark) => [mark.id, 0]));
+  const out = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!indegree.has(edge.sourceMarkId) || !indegree.has(edge.targetMarkId)) continue;
+    indegree.set(edge.targetMarkId, indegree.get(edge.targetMarkId)! + 1);
+    const list = out.get(edge.sourceMarkId);
+    if (list) list.push(edge.targetMarkId);
+    else out.set(edge.sourceMarkId, [edge.targetMarkId]);
+  }
+  const ready = [...indegree.entries()].filter(([, count]) => count === 0).map(([id]) => id);
+  let settled = 0;
+  while (ready.length > 0) {
+    const id = ready.pop()!;
+    settled += 1;
+    for (const next of out.get(id) ?? []) {
+      const left = indegree.get(next)! - 1;
+      indegree.set(next, left);
+      if (left === 0) ready.push(next);
+    }
+  }
+  return settled !== marks.length;
 }
 
 /**

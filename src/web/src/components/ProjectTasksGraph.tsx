@@ -37,7 +37,14 @@ const LazyProjectDependencyGraph = lazy(async () => {
 export function ProjectTasksGraph({ projectId }: { projectId: string }) {
   return (
     <div style={{ marginBottom: 24 }}>
-      <Typography.Title level={4}>Task graph</Typography.Title>
+      {/* The legend belongs here, at a size a reader can read. It used to be a 10.5px chip pinned
+          into the bottom corner of the canvas, permanently, for a fact that is learned once. */}
+      <div className="pdg-section-head">
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          Task graph
+        </Typography.Title>
+        <span className="pdg-legend">Prerequisite → dependent · boxes are parent tasks</span>
+      </div>
 
       <Suspense
         fallback={

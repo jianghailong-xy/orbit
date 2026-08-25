@@ -5,13 +5,16 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import {
   buildProjectFlowElements,
+  highlightThrough,
   NODE_TYPES,
   planProjectGraphViewport,
+  planStripHeight,
   type ProjectFlowNode,
 } from './ProjectDependencyGraph';
 import { EDGE_COLORS } from './TaskDependencyGraph';
 import {
   expandRunMarks,
+  foldSettledMarks,
   layoutProjectDependencyGraph,
   markStatus,
   projectGraphOverview,
@@ -124,6 +127,18 @@ describe('planProjectGraphViewport', () => {
     const frontierOnScreen = plan.viewport.x + overview.frontier!.x * plan.viewport.zoom;
     expect(frontierOnScreen).toBeGreaterThan(0);
     expect(frontierOnScreen).toBeLessThan(STRIP.width);
+  });
+
+  it('will not call a plan fitted at a zoom its titles do not survive', () => {
+    // Ten ranks in a 1,100px strip fit — at about half size, which is where a 12.5px title lands
+    // near six pixels. Fitting is only worth having while the thing fitted can still be read, so
+    // this opens on the frontier at a readable zoom instead and leaves the whole shape one press
+    // of fit-view away. Under the old 0.3 floor this was answered "yes, fitted".
+    const overview = overviewOf(chain(10, 0));
+    const plan = planProjectGraphViewport(overview, STRIP, 0.12)!;
+
+    expect(plan.fitted).toBe(false);
+    expect(plan.viewport.zoom).toBe(0.75);
   });
 
   it('makes no plan against a canvas that has not been measured yet', () => {
@@ -305,7 +320,23 @@ describe('a task with a session on it', () => {
 
     expect(html).toContain('Open');
     expect(html).not.toContain('Running');
-    expect(edge.style?.stroke).toBe(EDGE_COLORS.pending);
+    // Not the shared palette's `pending` value: a prerequisite that has NOT released its dependent
+    // is the one relation on a plan still constraining anything, so it is drawn at the weight of
+    // text rather than as the hairline a five-node canvas can afford. Still a neutral — the two
+    // graphs never disagree about a hue, only about how loud a satisfied edge should be.
+    expect(edge.style?.stroke).toBe('var(--text-3)');
+    expect(edge.style?.opacity).toBeGreaterThan(0.9);
+  });
+
+  it('fades the line a finished prerequisite leaves behind', () => {
+    const { edge } = drawFirst({ status: 'DONE' });
+
+    // The hue stays the shared palette's, so the two graphs agree about what released looks like.
+    expect(edge.style?.stroke).toBe(EDGE_COLORS.complete);
+    // But it is a satisfied constraint: it no longer holds anything up, and on a plan where most
+    // edges are satisfied, drawing them all at full weight makes the settled past the loudest
+    // thing on the canvas.
+    expect(Number(edge.style?.opacity)).toBeLessThan(0.4);
   });
 
   it('keeps the flags on the tasks a folded run gives way to', () => {
@@ -337,5 +368,228 @@ describe('a task with a session on it', () => {
     const queued = opened.marks.find((mark) => mark.id === 'm2');
 
     expect(queued?.kind === 'TASK' && queued.queued).toBe(true);
+  });
+});
+
+describe('planStripHeight', () => {
+  it('is as tall as the drawing needs once it has been fitted to the width available', () => {
+    // A wide, shallow plan: one row of 64px nodes fitted to about half size. The strip that used
+    // to be 420px tall for this is now the floor, because there is nothing to put in the rest.
+    expect(planStripHeight({ width: 2000, height: 96 }, 1100)).toBe(240);
+    // A plan with real depth gets the room it needs: 400 units at the 0.88 it fits at, plus the
+    // margin the fit itself leaves.
+    expect(planStripHeight({ width: 1100, height: 400 }, 1100)).toBe(400);
+  });
+
+  it('stops short of pushing the task list off the page', () => {
+    expect(planStripHeight({ width: 800, height: 2000 }, 1100)).toBe(520);
+  });
+
+  it('has no answer before the strip has been measured', () => {
+    expect(planStripHeight({ width: 2000, height: 96 }, 0)).toBeUndefined();
+    expect(planStripHeight({ width: 0, height: 0 }, 1100)).toBeUndefined();
+  });
+});
+
+/**
+ * The client's own fold: a connected block of finished tasks drawn as one mark.
+ *
+ * The server folds by shape and cannot see which project is open; what it therefore never folds is
+ * the thing that makes most real plans too wide to read — their settled prefix. These are the
+ * rules that decide what counts as one block, and the reason each rule is that narrow.
+ */
+describe('foldSettledMarks', () => {
+  const settled = (graph: ProjectDependencyGraphResponse, open: string[] = []) =>
+    foldSettledMarks(graph, new Set(open));
+
+  it('folds a connected block of finished tasks into one mark, and hands the ranks back', () => {
+    const before = projectGraphOverview(layoutProjectDependencyGraph(chain(9, 5)));
+    const after = projectGraphOverview(layoutProjectDependencyGraph(settled(chain(9, 5))));
+
+    // Five done steps joined to each other become one mark: nine ranks become five.
+    expect(after.unitCount).toBe(5);
+    expect(after.bounds.width).toBeLessThan(before.bounds.width);
+    // Which is the entire point, and it is a threshold rather than a nicety: the same plan goes
+    // from too wide to fit at a legible zoom, to fitting at very nearly full size.
+    expect(planProjectGraphViewport(before, STRIP, 0.12)!.fitted).toBe(false);
+    const fitted = planProjectGraphViewport(after, STRIP, 0.12)!;
+    expect(fitted.fitted).toBe(true);
+    expect(fitted.viewport.zoom).toBeGreaterThan(0.9);
+  });
+
+  it('leaves a lone finished task as itself', () => {
+    // A box saying "1 done" is bigger than the task it replaced, and says less.
+    const graph = chain(4, 1);
+    expect(settled(graph)).toBe(graph);
+  });
+
+  it('is two blocks when unfinished work sits between them', () => {
+    const graph: ProjectDependencyGraphResponse = {
+      ...chain(5, 0),
+      marks: ['DONE', 'DONE', 'OPEN', 'DONE', 'DONE'].map((status, i) => ({
+        kind: 'TASK' as const,
+        id: `t${i}`,
+        taskId: `t${i}`,
+        title: `Step ${i + 1}`,
+        status,
+        parentTaskId: null,
+      })),
+    };
+
+    const kinds = settled(graph).marks.map((mark) => mark.kind);
+    // Not one fold of four: folding across the open step would claim an ordering the plan does
+    // not have, and would draw work as finished that is waiting on work that is not.
+    expect(kinds).toEqual(['SETTLED', 'TASK', 'SETTLED']);
+  });
+
+  it('does not fold a block the reader has opened', () => {
+    const graph = chain(6, 3);
+    const id = settled(graph).marks.find((mark) => mark.kind === 'SETTLED')!.id;
+
+    expect(settled(graph, [id]).marks.every((mark) => mark.kind === 'TASK')).toBe(true);
+    // Opening one is simply not folding it — there is no second function to undo this, and so
+    // nothing that can fall out of step with what it produced.
+    expect(settled(graph, [id])).toEqual(graph);
+  });
+
+  it('keeps a block\'s id when a status somewhere else changes', () => {
+    const before = settled(chain(6, 3)).marks.find((mark) => mark.kind === 'SETTLED')!.id;
+    const after = settled(chain(6, 4)).marks.find((mark) => mark.kind === 'SETTLED')!.id;
+
+    // Named after its smallest member, so a fourth step finishing and joining the block does not
+    // close the fold under a reader who had it open.
+    expect(after).toBe(before);
+  });
+
+  it('leaves a plan alone rather than draw an arrow that points backwards', () => {
+    // A task marked done ahead of a prerequisite that is not. Contracting {d1, d2} would close a
+    // cycle with x, and dagre would break it by reversing an edge — a picture that reports a
+    // dependency the plan does not have.
+    const graph: ProjectDependencyGraphResponse = {
+      ...chain(3, 0),
+      marks: [
+        { kind: 'TASK', id: 'd1', taskId: 'd1', title: 'First', status: 'DONE', parentTaskId: null },
+        { kind: 'TASK', id: 'x', taskId: 'x', title: 'Middle', status: 'OPEN', parentTaskId: null },
+        { kind: 'TASK', id: 'd2', taskId: 'd2', title: 'Last', status: 'DONE', parentTaskId: null },
+      ],
+      edges: [
+        { sourceMarkId: 'd1', targetMarkId: 'x' },
+        { sourceMarkId: 'x', targetMarkId: 'd2' },
+        { sourceMarkId: 'd1', targetMarkId: 'd2' },
+      ],
+    };
+
+    expect(settled(graph)).toBe(graph);
+  });
+
+  it('says what it stands for, and that it opens', () => {
+    const elements = buildProjectFlowElements(layoutProjectDependencyGraph(settled(chain(6, 3))));
+    const fold = elements.nodes.find((node) => node.id.startsWith('settled:'))!;
+
+    const html = drawNode(fold);
+    expect(html).toContain('3 done');
+    expect(html).toContain('click to open');
+    expect(html).not.toContain('disabled');
+  });
+});
+
+/**
+ * What a node says about whether it can be started, which is the question a plan is opened with.
+ *
+ * Status alone cannot answer it: every task in the middle of a plan says Open, and Open is true of
+ * both the one somebody could pick up now and the one that is waiting on four other things.
+ */
+describe('readiness', () => {
+  const twoPrerequisites = (first: string, second: string): ProjectDependencyGraphResponse => ({
+    ...chain(3, 0),
+    marks: [
+      { kind: 'TASK', id: 'a', taskId: 'a', title: 'A', status: first, parentTaskId: null },
+      { kind: 'TASK', id: 'b', taskId: 'b', title: 'B', status: second, parentTaskId: null },
+      { kind: 'TASK', id: 'c', taskId: 'c', title: 'C', status: 'OPEN', parentTaskId: null },
+    ],
+    edges: [
+      { sourceMarkId: 'a', targetMarkId: 'c' },
+      { sourceMarkId: 'b', targetMarkId: 'c' },
+    ],
+  });
+  const drawC = (graph: ProjectDependencyGraphResponse) => {
+    const elements = buildProjectFlowElements(layoutProjectDependencyGraph(graph));
+    return {
+      html: drawNode(elements.nodes.find((node) => node.id === 'c')!),
+      tally: elements.tally,
+    };
+  };
+
+  it('says a task whose prerequisites have all released it is ready to run', () => {
+    const { html, tally } = drawC(twoPrerequisites('DONE', 'DONE'));
+
+    expect(html).toContain('Ready to run');
+    // And the reading is available in words too, for the panel over the canvas: a and b are done,
+    // c is the one thing anybody could start.
+    expect(tally).toEqual({ ready: 1, done: 2 });
+  });
+
+  it('says how many prerequisites a blocked task is still waiting on', () => {
+    const { html, tally } = drawC(twoPrerequisites('OPEN', 'OPEN'));
+
+    expect(html).toContain('Waiting on 2');
+    expect(html).not.toContain('Ready to run');
+    // a and b have nothing in front of them, so they are what a reader can start.
+    expect(tally).toEqual({ ready: 2, done: 0 });
+  });
+
+  it('keeps the status in the label a screen reader gets, and adds the readiness to it', () => {
+    const { html } = drawC(twoPrerequisites('DONE', 'OPEN'));
+
+    expect(html).toContain('aria-label="C, Open, Waiting on 1"');
+  });
+});
+
+/**
+ * Hovering a mark: the paths that run through it, and nothing else.
+ *
+ * Tracing one dependency across six ranks of orthogonal edges by eye is the most tiring thing this
+ * view asks of a reader, and the only one an interaction can remove outright.
+ */
+describe('highlightThrough', () => {
+  const elementsOf = (graph: ProjectDependencyGraphResponse) =>
+    buildProjectFlowElements(layoutProjectDependencyGraph(graph));
+  const branched: ProjectDependencyGraphResponse = {
+    ...chain(4, 0),
+    marks: ['a', 'b', 'c', 'x'].map((id) => ({
+      kind: 'TASK' as const,
+      id,
+      taskId: id,
+      title: id.toUpperCase(),
+      status: 'OPEN',
+      parentTaskId: null,
+    })),
+    edges: [
+      { sourceMarkId: 'a', targetMarkId: 'b' },
+      { sourceMarkId: 'b', targetMarkId: 'c' },
+      { sourceMarkId: 'x', targetMarkId: 'c' },
+    ],
+  };
+
+  it('keeps what has to happen first and what this releases, and fades the rest', () => {
+    const lit = highlightThrough(elementsOf(branched), 'b');
+    const faded = (id: string) =>
+      (lit.nodes.find((node) => node.id === id)!.className ?? '').includes('is-faded');
+
+    // a is upstream of b, c is downstream of it: both are the answer to "and then what".
+    expect(faded('a')).toBe(false);
+    expect(faded('b')).toBe(false);
+    expect(faded('c')).toBe(false);
+    // x also feeds c, but no path through b reaches it — it is a different story on the same page.
+    expect(faded('x')).toBe(true);
+    expect(lit.edges.find((edge) => edge.id === 'x->c')!.style?.opacity).toBeLessThan(0.2);
+    expect(lit.edges.find((edge) => edge.id === 'a->b')!.style?.stroke).toBe('var(--brand)');
+  });
+
+  it('is the same elements when nothing is hovered, so the canvas does not redraw', () => {
+    const elements = elementsOf(branched);
+
+    expect(highlightThrough(elements, null)).toBe(elements);
+    expect(highlightThrough(elements, 'gone')).toBe(elements);
   });
 });
