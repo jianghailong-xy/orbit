@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { ReactFlowProvider } from '@xyflow/react';
+import { Position, ReactFlowProvider } from '@xyflow/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -169,6 +169,10 @@ describe('phone graph direction', () => {
     expect(new Set(layout.placements.map((placement) => placement.y)).size).toBe(4);
     expect(new Set(layout.placements.map((placement) => placement.x)).size).toBe(1);
     expect(elements.nodes.every((node) => node.data.vertical === true)).toBe(true);
+    for (const node of elements.nodes) {
+      expect(node.sourcePosition).toBe(node.data.hasOutgoing ? Position.Bottom : undefined);
+      expect(node.targetPosition).toBe(node.data.hasIncoming ? Position.Top : undefined);
+    }
   });
 });
 
@@ -615,5 +619,78 @@ describe('highlightThrough', () => {
 
     expect(highlightThrough(elements, null)).toBe(elements);
     expect(highlightThrough(elements, 'gone')).toBe(elements);
+  });
+
+  it('keeps controlled group, task and fold nodes measured across hover updates', () => {
+    const groupedAndFolded: ProjectDependencyGraphResponse = {
+      marks: [
+        {
+          kind: 'TASK',
+          id: 'parent',
+          taskId: 'parent',
+          title: 'Toolchain',
+          status: 'OPEN',
+          parentTaskId: null,
+        },
+        {
+          kind: 'TASK',
+          id: 'child-a',
+          taskId: 'child-a',
+          title: 'binutils',
+          status: 'OPEN',
+          parentTaskId: 'parent',
+        },
+        {
+          kind: 'TASK',
+          id: 'child-b',
+          taskId: 'child-b',
+          title: 'gcc',
+          status: 'OPEN',
+          parentTaskId: 'parent',
+        },
+        {
+          kind: 'RUN',
+          id: 'run:elsewhere',
+          title: '3 other steps',
+          taskCount: 3,
+          statusCounts: { DONE: 0, IN_PROGRESS: 0, FAILED: 0, CANCELLED: 0, OPEN: 3 },
+          parentTaskId: null,
+          members: [
+            { taskId: 'm1', title: 'Other step 1', status: 'OPEN' },
+            { taskId: 'm2', title: 'Other step 2', status: 'OPEN' },
+            { taskId: 'm3', title: 'Other step 3', status: 'OPEN' },
+          ],
+          expandable: true,
+        },
+        {
+          kind: 'TASK',
+          id: 'task:elsewhere',
+          taskId: 'task:elsewhere',
+          title: 'Independent task',
+          status: 'OPEN',
+          parentTaskId: null,
+        },
+      ],
+      edges: [{ sourceMarkId: 'child-a', targetMarkId: 'child-b' }],
+      taskCount: 7,
+      folded: true,
+      truncated: false,
+      limits: { maxTasks: 50_000, maxMarks: 500 },
+    };
+    const idle = elementsOf(groupedAndFolded);
+    const hovered = highlightThrough(idle, 'child-a');
+
+    // The unrelated group, task and fold are the exact objects hover clones to fade. If their
+    // measurements disappear, React Flow briefly hides them and the pointer can bounce between
+    // parent and child nodes, producing the visible enter/leave flicker.
+    expect(hovered.nodes.find((node) => node.id === 'parent')?.className).toContain('is-faded');
+    expect(hovered.nodes.find((node) => node.id === 'run:elsewhere')?.className).toContain('is-faded');
+    expect(hovered.nodes.find((node) => node.id === 'task:elsewhere')?.className).toContain('is-faded');
+    for (const node of [...idle.nodes, ...hovered.nodes]) {
+      expect(node.measured).toEqual({
+        width: Number(node.style?.width),
+        height: Number(node.style?.height),
+      });
+    }
   });
 });

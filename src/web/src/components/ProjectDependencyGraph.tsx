@@ -439,39 +439,58 @@ export function buildProjectFlowElements(
     waitingOn.set(edge.targetMarkId, (waitingOn.get(edge.targetMarkId) ?? 0) + 1);
   }
 
-  const groupNodes: GroupFlowNode[] = layout.groups.map((group) => ({
-    id: group.task.id,
-    type: 'projectDependencyGroup',
-    position: { x: group.x, y: group.y },
-    style: { ...INTERACTIVE_NODE_STYLE, width: group.width, height: group.height },
-    draggable: false,
-    selectable: false,
-    connectable: false,
-    data: {
-      task: group.task,
-      memberCount: group.members.length,
-      hasIncoming: incoming.has(group.task.id),
-      hasOutgoing: outgoing.has(group.task.id),
-      vertical,
-    },
-  }));
+  const groupNodes: GroupFlowNode[] = layout.groups.map((group) => {
+    const dimensions = { width: group.width, height: group.height };
+    const hasIncoming = incoming.has(group.task.id);
+    const hasOutgoing = outgoing.has(group.task.id);
+    return {
+      id: group.task.id,
+      type: 'projectDependencyGroup',
+      position: { x: group.x, y: group.y },
+      // Hover presentation rebuilds faded controlled-node objects. Keep their deterministic layout
+      // dimensions on the user node so React Flow does not hide and re-measure the whole group.
+      measured: dimensions,
+      style: { ...INTERACTIVE_NODE_STYLE, ...dimensions },
+      // Undefined means that handle is absent. Besides direction changes, React Flow can therefore
+      // detect a refresh that adds or removes an edge and discard the corresponding stale bounds.
+      sourcePosition: hasOutgoing ? (vertical ? Position.Bottom : Position.Right) : undefined,
+      targetPosition: hasIncoming ? (vertical ? Position.Top : Position.Left) : undefined,
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      data: {
+        task: group.task,
+        memberCount: group.members.length,
+        hasIncoming,
+        hasOutgoing,
+        vertical,
+      },
+    };
+  });
   const markNodes: ProjectFlowNode[] = layout.placements.map((placement) => {
     const mark = placement.task;
+    const dimensions = { width: markWidth(mark), height: markHeight(mark) };
+    const hasIncoming = incoming.has(mark.id);
+    const hasOutgoing = outgoing.has(mark.id);
     const common = {
       id: mark.id,
       position: { x: placement.x, y: placement.y },
+      // These dimensions are fixed by the corresponding task/fold CSS. Supplying them explicitly
+      // keeps a hover-only object replacement from restarting React Flow's measurement lifecycle.
+      measured: dimensions,
       style: {
         ...INTERACTIVE_NODE_STYLE,
-        width: markWidth(mark),
-        height: markHeight(mark),
+        ...dimensions,
       },
+      // This mirrors the custom Handle positions in node data. React Flow watches these fields and
+      // refreshes handle bounds when direction changes or a dependency adds/removes a handle.
+      sourcePosition: hasOutgoing ? (vertical ? Position.Bottom : Position.Right) : undefined,
+      targetPosition: hasIncoming ? (vertical ? Position.Top : Position.Left) : undefined,
       draggable: false,
       selectable: false,
       connectable: false,
       ...(placement.groupId ? { parentId: placement.groupId, extent: 'parent' as const } : {}),
     };
-    const hasIncoming = incoming.has(mark.id);
-    const hasOutgoing = outgoing.has(mark.id);
     if (mark.kind === 'TASK') {
       return {
         ...common,
