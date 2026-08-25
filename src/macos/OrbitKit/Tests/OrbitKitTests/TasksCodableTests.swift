@@ -148,8 +148,35 @@ final class TasksCodableTests: XCTestCase {
         let page = try JSONDecoder().decode(TaskPage.self, from: Data(json.utf8))
         XCTAssertEqual(page.items.first?.id, "t1")
         XCTAssertEqual(page.nextCursor, "opaque.cursor")
-        XCTAssertEqual(page.counts.runnable, 3)
-        XCTAssertEqual(page.counts.cancelled, 2)
+        XCTAssertEqual(page.total, 1)
+        XCTAssertEqual(page.counts?.runnable, 3)
+        XCTAssertEqual(page.counts?.cancelled, 2)
+    }
+
+    func testTaskPageDecodesReducedAggregateModes() throws {
+        let totalOnly = try JSONDecoder().decode(
+            TaskPage.self,
+            from: Data(#"{"items":[],"nextCursor":null,"total":42}"#.utf8))
+        XCTAssertEqual(totalOnly.total, 42)
+        XCTAssertNil(totalOnly.counts)
+
+        let rowsOnly = try JSONDecoder().decode(
+            TaskPage.self,
+            from: Data(#"{"items":[{"id":"t1","title":"T","status":"OPEN"}],"nextCursor":"c"}"#.utf8))
+        XCTAssertEqual(rowsOnly.items.map(\.id), ["t1"])
+        XCTAssertEqual(rowsOnly.nextCursor, "c")
+        XCTAssertNil(rowsOnly.total)
+        XCTAssertNil(rowsOnly.counts)
+    }
+
+    func testIncrementalRowDecodesAuthoritativeRunnablePredicate() throws {
+        let row = try JSONDecoder().decode(
+            TaskItem.self,
+            from: Data(#"{"id":"t1","title":"Held","status":"OPEN","runnable":false,"assignee":{"id":"a1","runner":{"id":"r1"}}}"#.utf8))
+
+        XCTAssertEqual(row.runnable, false)
+        XCTAssertFalse(TaskListLogic.canStart(row),
+                       "the server predicate includes dispatch gates the compact DTO cannot derive")
     }
 
     func testTaskListSummaryAndDetailDecode() throws {

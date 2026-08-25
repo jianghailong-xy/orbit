@@ -130,6 +130,7 @@ function fixture(options: FixtureOptions = {}) {
   };
   const service = new TasksService(prisma as never, {} as never, {
     publishTaskChanged: () => undefined,
+    publishForUser: () => undefined,
   } as never);
   return { service, writes, inserts };
 }

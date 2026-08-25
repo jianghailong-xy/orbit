@@ -26,6 +26,7 @@ import {
   TaskStatus,
   USAGE_LIMIT_ERROR_MARKERS,
   uuidToBase62,
+  type ControlTaskChanged,
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
@@ -41,6 +42,7 @@ import {
   withTransactionRetry,
   type TransactionRetryOptions,
 } from '../common/transaction-retry';
+import { SingleFlight } from '../common/single-flight';
 import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
@@ -972,6 +974,9 @@ export function diskBelowFloor(
 const TASK_ID_QUERY_CHUNK = 5_000;
 export const DEFAULT_TASK_PAGE_SIZE = 100;
 export const MAX_TASK_PAGE_SIZE = 200;
+/** Keep a task.changed payload comfortably below PostgreSQL NOTIFY's 7k envelope after metadata.
+ * Wider changes fail closed to a full resync instead of truncating the affected row set. */
+export const TASK_CHANGED_MAX_ROWS = 100;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH = 8;
 const MAX_DEPENDENCY_GRAPH_MAX_DEPTH = 32;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_NODES = 100;
@@ -1201,6 +1206,10 @@ function dependencyGraphBoolean(value: string | boolean | undefined, name: strin
 export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TasksService.name);
   private reconcileTimer?: ReturnType<typeof setInterval>;
+  private readonly listPageSingleFlight = new SingleFlight();
+  private readonly listPageOwnerTails = new Map<string, Promise<void>>();
+  private readonly taskCountsSingleFlight = new SingleFlight();
+  private readonly detailSingleFlight = new SingleFlight();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -1225,6 +1234,130 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   private readonly handoffs: ProjectHandoffService;
+
+  /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
+   * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
+  private knownTaskRows(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): ControlTaskChanged | null {
+    const ids = [...new Set(taskIds.filter((id): id is string => !!id))];
+    if (ids.length === 0) return null;
+    if (ids.length > TASK_CHANGED_MAX_ROWS) return { taskIds: [], resync: true };
+    return { taskIds: ids, resync: false };
+  }
+
+  private publishKnownTaskRows(
+    ownerId: string,
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): void {
+    const change = this.knownTaskRows(taskIds);
+    if (change) this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, change);
+  }
+
+  /** An invalidation whose complete fetchable row set is unknown, deleted, or too wide. */
+  private publishTaskResync(ownerId: string): void {
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
+      taskIds: [],
+      resync: true,
+    });
+  }
+
+  /**
+   * Publish every list row whose derived dependency fields can change with `dependencyFactIds`.
+   *
+   * A prerequisite is not just the named task: §13.6 follows its supersession chain, and §13.3
+   * judges a verification from the whole sibling epoch around its subject. The query expands
+   * changed facts to that verification family and finds direct dependent rows. If any predecessor
+   * reaches the family through supersession, its reverse closure can branch without a useful wire
+   * bound, so the sentinel asks for a resync instead of walking/materializing the owner's graph.
+   * The affected result itself stops one past the wire budget (with no ORDER BY that would force a
+   * full sort); overflow or a failed audit read likewise requests a full resync.
+   */
+  private async publishAffectedTaskRows(
+    ownerId: string,
+    directlyChangedIds: ReadonlyArray<string | null | undefined>,
+    dependencyFactIds: ReadonlyArray<string | null | undefined> = [],
+  ): Promise<void> {
+    const direct = [...new Set(directlyChangedIds.filter((id): id is string => !!id))];
+    if (direct.length > TASK_CHANGED_MAX_ROWS) {
+      this.publishTaskResync(ownerId);
+      return;
+    }
+    const facts = [...new Set(dependencyFactIds.filter((id): id is string => !!id))];
+    if (facts.length > TASK_CHANGED_MAX_ROWS) {
+      this.publishTaskResync(ownerId);
+      return;
+    }
+    if (facts.length === 0) {
+      this.publishKnownTaskRows(ownerId, direct);
+      return;
+    }
+    try {
+      const affected = await this.prisma.$queryRaw<
+        Array<{ id: string | null; requiresResync: boolean }>
+      >`
+        WITH
+        changed(id) AS (
+          SELECT unnest(${facts}::uuid[])
+        ),
+        subjects(id) AS (
+          -- Every changed row may itself be a subject; a changed check also names its subject.
+          SELECT id FROM changed
+          UNION
+          SELECT t.verifies_task_id
+            FROM task t JOIN changed c ON c.id = t.id
+           WHERE t.owner_id = ${ownerId}::uuid AND t.verifies_task_id IS NOT NULL
+        ),
+        family_probe(id) AS (
+          -- Referenced twice below, so cap this CTE itself: PostgreSQL may materialize it. UNION
+          -- ALL avoids a dedup sort; the second arm excludes changed, making the ids unique.
+          SELECT candidate.id
+            FROM (
+              SELECT id FROM changed
+              UNION ALL
+              SELECT t.id
+                FROM task t
+               WHERE t.owner_id = ${ownerId}::uuid
+                 AND t.id NOT IN (SELECT id FROM changed)
+                 AND (t.id IN (SELECT id FROM subjects)
+                   OR t.verifies_task_id IN (SELECT id FROM subjects))
+            ) candidate
+           LIMIT ${TASK_CHANGED_MAX_ROWS + 1}
+        )
+        SELECT NULL::uuid AS id,
+               ((SELECT count(*) FROM family_probe) > ${TASK_CHANGED_MAX_ROWS}) OR EXISTS (
+                 SELECT 1 FROM task predecessor
+                  WHERE predecessor.owner_id = ${ownerId}::uuid
+                    AND predecessor.superseded_by_task_id IN (SELECT id FROM family_probe)
+               ) AS "requiresResync"
+        UNION ALL
+        SELECT dep.task_id AS id, false AS "requiresResync"
+          FROM task_dependency dep
+          JOIN family_probe source ON source.id = dep.depends_on_task_id
+          JOIN task dependent ON dependent.id = dep.task_id
+         WHERE dependent.owner_id = ${ownerId}::uuid
+        LIMIT ${TASK_CHANGED_MAX_ROWS + 2}`;
+      const dependentIds = affected
+        .map((row) => row.id)
+        .filter((id): id is string => !!id);
+      const all = [...new Set([...direct, ...dependentIds])];
+      if (
+        affected.some((row) => row.requiresResync)
+        || dependentIds.length > TASK_CHANGED_MAX_ROWS
+        || all.length > TASK_CHANGED_MAX_ROWS
+      ) {
+        this.publishTaskResync(ownerId);
+      } else {
+        this.publishKnownTaskRows(ownerId, all);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `task.changed affected-row expansion failed; requesting resync: `
+          + `${error instanceof Error ? error.message : error}`,
+      );
+      this.publishTaskResync(ownerId);
+    }
+  }
 
   onModuleInit(): void {
     // Periodic backstop for auto-run edges triggerDependents can't catch (see
@@ -1476,9 +1609,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     if (!plan.aggregations.length) return [];
     const moved = await applyTaskAggregations(this.prisma, ownerId, plan.aggregations, new Date());
-    for (const taskId of moved) {
-      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
-    }
+    // Aggregation writes each moved parent status. That status is also a prerequisite fact for
+    // downstream rows, including rows that name an earlier attempt in its supersession chain.
+    await this.publishAffectedTaskRows(ownerId, moved, moved);
     return moved;
   }
 
@@ -2507,12 +2640,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // And the project's own pre-check has the same shape of gap — see translateProjectFk.
       throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     }
-    // Push the new task to the owner's control-plane stream (GET /api/events) so their task
-    // list refreshes live instead of on the next poll — the fix for "MCP-created tasks only
-    // show up after a manual refresh". Scoped via the creating session (the MCP path always
-    // sends one); a task created without an owned session just falls back to the poll. Mirrors
-    // SessionsService.create's publishSessionCreated.
-    if (sessionId) this.realtime.publishTaskChanged(sessionId, task.id);
     // AG3 in the direction that is easy to forget: a task ARRIVING is as much a change to its
     // parent's children as one completing. Without this, filing a subtask under a parent that
     // ALL_CHILDREN_DONE had already completed leaves the parent DONE over work that has not
@@ -2532,6 +2659,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`aggregation after create of ${task.id} failed: ${e?.message ?? e}`),
       );
     }
+    // Publish after the aggregate recomputation so an incremental fetch sees the final rows. The
+    // new row is fetchable; filing it under a parent changes that parent's aggregate-only runnable
+    // gate, and a supersession also rewrites the predecessor plus every dependency whose chain now
+    // reaches the successor. Verification-family dependents are expanded by the same bounded read.
+    await this.publishAffectedTaskRows(
+      ownerId,
+      [task.id, task.parentTaskId, dto.supersedesTaskId],
+      [dto.supersedesTaskId, task.verifiesTaskId],
+    );
     return task;
   }
 
@@ -3337,8 +3473,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // here on an attempt that has another one coming.
       throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
     });
-    // One control-plane nudge per task, exactly as create does (see its comment).
-    if (sessionId) for (const task of created) this.realtime.publishTaskChanged(sessionId, task.id);
     // Same as create: rows arriving under a parent, or pointed at one, are a change to what that
     // parent's status is allowed to claim. Seeded from the links rather than from the new rows —
     // the parents and subjects are what get recomputed, and half of them are in this batch.
@@ -3355,6 +3489,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`aggregation after batch create failed: ${e?.message ?? e}`),
       );
     }
+    const predecessors = items
+      .map((item) => item.supersedesTaskId)
+      .filter((id): id is string => !!id);
+    await this.publishAffectedTaskRows(
+      ownerId,
+      [
+        ...created.map((task) => task.id),
+        ...created.map((task) => task.parentTaskId),
+        ...predecessors,
+      ],
+      [...created.map((task) => task.verifiesTaskId), ...predecessors],
+    );
     return created;
   }
 
@@ -4529,11 +4675,83 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The exact lightweight row used by task lists, for an incremental `task.changed` refresh.
+   *
+   * `GET /tasks/:id` deliberately hydrates comments, every run and both dependency directions;
+   * using that detail payload as a list invalidation would replace one whole-list reload with a
+   * different unbounded read. This endpoint instead reuses `TASK_LIST_SELECT`, derives the live
+   * list overlays, and asks the Ready tab's authoritative predicate for this one id. Every overlay
+   * read is restricted to this id, and the owned row is established first so an unknown/cross-
+   * tenant id has the same 404 semantics as the detail endpoint without reading any relations.
+   */
+  async listRow(ownerId: string, id: string) {
+    if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
+    const task = await this.prisma.task.findFirst({
+      where: { id, ownerId },
+      select: TASK_LIST_SELECT,
+    });
+    if (!task) throw new NotFoundException('task not found');
+
+    const [withRun, states, runnable] = await Promise.all([
+      this.withRunning(ownerId, [task], true),
+      this.dependencyStatesFor(ownerId, [id]),
+      this.runnableTask(ownerId, id),
+    ]);
+    const dependencyState = states.get(id) ?? 'NONE';
+    return {
+      ...withRun[0],
+      dependencyState,
+      blocked: !canRun(dependencyState),
+      runnable,
+    };
+  }
+
+  /**
    * Cursor-paged task list for interactive clients. Filters run in PostgreSQL so the
    * browser never has to download an owner's entire task history just to search or open
    * one status tab. GET /tasks remains as a compatibility endpoint for existing runners.
    */
-  async listPage(ownerId: string, query: ListTasksPageQuery = {}) {
+  listPage(ownerId: string, query: ListTasksPageQuery = {}) {
+    // Build the key from the public query fields in a fixed order. URL parameter order therefore
+    // cannot split equivalent requests, while explicitly different values (including label order)
+    // remain isolated. The promise disappears on settlement; this never serves stale page data.
+    const key = JSON.stringify([
+      ownerId,
+      query.cursor,
+      query.limit,
+      query.status,
+      query.listId,
+      query.projectId,
+      query.assigneeId,
+      query.labels,
+      query.q,
+      query.counts,
+    ]);
+    return this.listPageSingleFlight.run(key, () =>
+      this.serializeListPage(ownerId, () => this.loadListPage(ownerId, query)),
+    );
+  }
+
+  /**
+   * Keep page query groups for one owner from competing for the whole Prisma pool. Different owners
+   * retain independent tails, and every tail resolves even when its query failed so the next query
+   * can proceed. The identity check removes only the final tail in a chain.
+   */
+  private serializeListPage<T>(ownerId: string, start: () => Promise<T>): Promise<T> {
+    const previous = this.listPageOwnerTails.get(ownerId);
+    const run = previous ? previous.then(start) : start();
+    let tail!: Promise<void>;
+    const clear = () => {
+      if (this.listPageOwnerTails.get(ownerId) === tail) {
+        this.listPageOwnerTails.delete(ownerId);
+      }
+    };
+    tail = run.then(clear, clear);
+    this.listPageOwnerTails.set(ownerId, tail);
+    return run;
+  }
+
+  private async loadListPage(ownerId: string, query: ListTasksPageQuery) {
     const limit = query.limit === undefined ? DEFAULT_TASK_PAGE_SIZE : Number(query.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TASK_PAGE_SIZE) {
       throw new BadRequestException(`limit must be an integer from 1 to ${MAX_TASK_PAGE_SIZE}`);
@@ -4632,7 +4850,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // On the Ready tab the filtered total IS the runnable count, which the counts block
       // already has; a title search narrows the filtered total but deliberately not the tab
       // badge, so that case still needs its own count.
-      !wantTotal || (runnableOnly && !search)
+      // The full counts block already carries the Ready total. In `counts=total` mode it does not,
+      // so Ready still needs its one authoritative count instead of falling back to page length.
+      !wantTotal || (runnableOnly && !search && wantCounts)
         ? undefined
         : runnableOnly
           ? this.runnableTaskCount(scopedWhere, search)
@@ -4653,8 +4873,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const nextCursor =
       hasMore && items.length ? encodeTaskPageCursor(items[items.length - 1]) : null;
     if (!wantTotal) return { items, nextCursor };
-    // On Ready without a search the runnable count is the filtered total — but only the full
-    // block carries it, so `counts=total` there falls back to what the page itself showed.
+    // On Ready without a search the runnable count is the filtered total: the full block carries
+    // it, while `counts=total` computed `ownFilteredTotal` explicitly above.
     const total = ownFilteredTotal ?? counts?.runnable ?? items.length;
     if (!wantCounts) return { items, nextCursor, total };
     return { items, nextCursor, total, counts };
@@ -4704,7 +4924,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * every tab — asking for them again with each tab's first page was recomputing a constant.
    * Given their own request they are fetched once per scope and read from cache thereafter.
    */
-  async taskCounts(ownerId: string, query: LabelSummaryQuery & { labels?: string | string[] } = {}) {
+  taskCounts(ownerId: string, query: LabelSummaryQuery & { labels?: string | string[] } = {}) {
+    const key = JSON.stringify([
+      ownerId,
+      query.listId,
+      query.assigneeId,
+      query.labels,
+    ]);
+    return this.taskCountsSingleFlight.run(key, () =>
+      // Counts and page rows are two views of the same owner's task library. Serialize them on the
+      // same owner tail so opening two clients cannot make both query groups occupy the DB pool.
+      this.serializeListPage(ownerId, () => this.loadTaskCounts(ownerId, query)),
+    );
+  }
+
+  private async loadTaskCounts(
+    ownerId: string,
+    query: LabelSummaryQuery & { labels?: string | string[] },
+  ) {
     const scope: Prisma.TaskWhereInput = { ownerId };
     if (query.listId === 'none') scope.listId = null;
     else if (query.listId) {
@@ -4904,6 +5141,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const [row] = await this.prisma.$queryRaw<{ count: number }[]>`
       SELECT count(*)::int AS count FROM task t WHERE ${Prisma.join(clauses, ' AND ')}`;
     return row?.count ?? 0;
+  }
+
+  /** The Ready-tab predicate for one owned row, used by the incremental list-row endpoint. */
+  private async runnableTask(ownerId: string, id: string): Promise<boolean> {
+    const [row] = await this.prisma.$queryRaw<{ runnable: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM task t
+        WHERE t.owner_id = ${ownerId}::uuid
+          AND t.id = ${id}::uuid
+          AND ${RUNNABLE_TASK_SQL}
+      ) AS runnable`;
+    return row?.runnable ?? false;
   }
 
   /**
@@ -5786,7 +6035,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async get(ownerId: string, id: string) {
+  get(ownerId: string, id: string) {
+    // Old native clients refresh the selected detail alongside the list index. A burst for the
+    // same selected task should hydrate its unbounded relations once, not once per event.
+    return this.detailSingleFlight.run(`${ownerId}:${id}`, () => this.loadDetail(ownerId, id));
+  }
+
+  private async loadDetail(ownerId: string, id: string) {
     if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
     const task = await this.prisma.task.findFirst({
       where: { id, ownerId },
@@ -5995,7 +6250,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * not by which run happened to make it.
    */
   async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
-    const before = await this.get(ownerId, id);
+    // Internal write planning must receive its own raw UUID-shaped object. A public GET response is
+    // mutated in place by PublicIdInterceptor, so joining that response's single-flight promise
+    // could turn ids into their display spelling before this write uses them as database keys.
+    const before = await this.loadDetail(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -6643,15 +6901,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (fenced) throw new ConflictException(fenced);
       throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     });
-    // A dependency replacement may target a web-created task, which has no creator session to
-    // carry the refresh. Publish it on the owner's stream so Workspace/MCP and CLI replacements
-    // refresh an already-open DAG immediately. Scalar-only updates keep their existing
-    // session-scoped event (and its workspace context).
-    if (dependsOnTaskIds !== undefined) {
-      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
-    } else if (before.creatorSessionId) {
-      this.realtime.publishTaskChanged(before.creatorSessionId, id);
-    }
     // This is the dependency trigger point: "A 完成" is anchored on Task.status === DONE
     // (both the user PATCH and the workspace's task_update MCP flow through here). On the
     // transition into DONE, release & auto-run any now-ready dependents. Best-effort: a
@@ -6722,6 +6971,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
       );
     }
+    // Last, after auto-dispatch and aggregate recomputation, so the fetched overlays reflect the
+    // final session/dependency state. Re-parenting changes the old/new parents' aggregate-only
+    // runnable gate even when neither parent's stored status moves. Status, verdict, project and
+    // supersession facts can also change every dependent in the task's verification family or
+    // reverse supersession chain, which the bounded expansion names (or resyncs on overflow).
+    const changesDependencyFacts =
+      dto.status !== undefined
+      || dto.verdict !== undefined
+      || dto.verifiesTaskId !== undefined
+      || dto.projectId !== undefined
+      || dto.supersededByTaskId !== undefined
+      || dto.terminalReason !== undefined;
+    await this.publishAffectedTaskRows(
+      ownerId,
+      [id, before.parentTaskId, dto.parentTaskId],
+      changesDependencyFacts
+        ? [id, before.verifiesTaskId, verifiesTaskId]
+        : [],
+    );
     return updated;
   }
 
@@ -6821,6 +7089,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       select: { id: true },
     });
+    // The row is durable before dispatch begins. If opening its first Session fails, no
+    // session.created event will exist to reveal it, so announce the fetchable row now.
+    this.publishKnownTaskRows(ownerId, [verification.id]);
     // The one run this check exists for. A retry of the filing above makes a DIFFERENT task, so
     // "the first run of this task, at the moment it was filed" names exactly one request for as
     // long as the row exists.
@@ -7441,6 +7712,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           },
           select: { id: true },
         });
+        // Same failure window as verification filing: the Task committed before execute(), and a
+        // failed dispatch has no session event that could otherwise reveal the new list row.
+        this.publishKnownTaskRows(list.ownerId, [task.id]);
         // As with a filed verification: this task was created in order to be run, once.
         await this.execute(
           list.ownerId,
@@ -7811,14 +8085,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       return { removed: removals.length, added: additions.length };
     }, this.transientWriteRetry('tasks.applyDag'));
-    // The DAG view and every task list refresh off the owner's stream; a restructure may touch
-    // tasks with no creator session to publish through.
-    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, listId);
     // Releasing a task is only half of it: the sweep would collect the newly-runnable ones within
     // the minute anyway, and running it now makes the approval feel like it did something.
     await this.reconcileReadyTasks().catch((e) =>
       this.logger.warn(`reconcile after DAG change failed: ${e instanceof Error ? e.message : e}`),
     );
+    // The edge writes change only their dependent rows. Publish after reconciliation so a row
+    // auto-started by the newly-ready graph is hydrated with its final running/queued overlay.
+    // `listId` used to masquerade as taskId here; it is not a task and named none of these rows.
+    await this.publishAffectedTaskRows(ownerId, ops.map((op) => op.taskId));
     return { ...applied, preview };
   }
 
@@ -7858,8 +8133,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // so nudge the owner's control stream directly. The graph query lives under ['task'] and
     // refreshes together with the detail/list views. Publish before response hydration so a rare
     // post-commit read failure cannot leave other clients stale or make a retry-only conflict.
-    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
-    return this.get(ownerId, taskId);
+    await this.publishAffectedTaskRows(ownerId, [taskId]);
+    // This is post-write hydration and must not join a detail read that started before the edge
+    // committed; the public GET single-flight is intentionally only a read-request optimization.
+    return this.loadDetail(ownerId, taskId);
   }
 
   /** Remove a prerequisite edge (no-op if it doesn't exist). */
@@ -7873,16 +8150,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Same shape as the add: the DELETE advances the same revision row and writes no `task`.
       await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
     }, this.transientWriteRetry('tasks.removeDependency'));
-    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
-    return this.get(ownerId, taskId);
+    await this.publishAffectedTaskRows(ownerId, [taskId]);
+    return this.loadDetail(ownerId, taskId);
   }
 
   async remove(ownerId: string, id: string) {
-    await this.get(ownerId, id);
+    await this.loadDetail(ownerId, id);
     const { survivingLinks } = await this.deleteAndStopRuns(ownerId, [id]);
-    // Cascades may remove prerequisite edges from other open DAGs, so invalidate the owner's
-    // task snapshots even though the deleted focus task itself can no longer be fetched.
-    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
+    // Cascades may remove prerequisite edges from other open DAGs, so the deleted id is not an
+    // incremental answer: it cannot be fetched, and it does not name all surviving rows affected
+    // by the cascades. Say explicitly that the owner's task snapshots must be reconciled.
+    this.publishTaskResync(ownerId);
     // A task LEAVING is the third change to a parent's children, beside arriving and completing,
     // and it is the one that can complete a parent rather than reopen it: delete the last
     // outstanding subtask and ALL_CHILDREN_DONE is satisfied by what remains.
@@ -8062,7 +8340,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
-    const task = await this.get(ownerId, id);
+    await this.loadDetail(ownerId, id);
     if (!dto.body) throw new BadRequestException('body is required');
     // Every mentioned id has to resolve, and one that does not is REFUSED rather than dropped.
     //
@@ -8101,9 +8379,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         mentionDeliveryVersion: TASK_COMMENT_MENTION_DELIVERY_VERSION,
       },
     });
-    // A new comment changes the list's comment count and the open detail view, so give it the
-    // same live-refresh nudge as create()/update() — routed via the task's creator session.
-    if (task.creatorSessionId) this.realtime.publishTaskChanged(task.creatorSessionId, id);
+    // A new comment changes only this task's list-row count and detail. Owner scope also covers
+    // web-created tasks, which have no creator session to route a legacy nudge through.
+    this.publishKnownTaskRows(ownerId, [id]);
     // §13.8: delivery is a LEDGER, not a loop.
     //
     // 0131's trigger filed one `task_comment_mention_delivery` row per mentioned agent in the SAME
@@ -8701,7 +8979,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // this an open panel only refreshes while a session is busy, and a delivery that went
           // BLOCKED or DELIVERED in between would sit there stale — a status nobody sees change is
           // barely better than the log line it replaced.
-          this.realtime.publishForUser(row.ownerId, RunEventType.TASK_CHANGED, row.taskId);
+          this.publishKnownTaskRows(row.ownerId, [row.taskId]);
         }
       } catch (error) {
         await this.parkMentionDelivery(row, holder, error);
@@ -8781,7 +9059,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `,
     );
     if (!parked) return;
-    this.realtime.publishForUser(delivery.ownerId, RunEventType.TASK_CHANGED, delivery.taskId);
+    this.publishKnownTaskRows(delivery.ownerId, [delivery.taskId]);
     this.logger.warn(
       `mention delivery ${delivery.id} ${parked.status === 'DEAD' ? 'gave up' : 'parked'} ` +
         `(${code}) after ${parked.attempts} attempt(s): ${reason}`,
@@ -9901,7 +10179,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Only when it actually cleared: a lost CAS means somebody else's schedule is now on the row,
     // and telling their clients the task changed because we failed to change it is noise.
     if (res.count > 0) {
-      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+      this.publishKnownTaskRows(ownerId, [taskId]);
     }
   }
 
@@ -9935,7 +10213,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       data: { status: TaskStatus.IN_PROGRESS },
     });
     if (res.count > 0) {
-      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+      // FAILED -> IN_PROGRESS is also a prerequisite fact. Name every directly affected row; a
+      // supersession-chain fan-out is deliberately answered by the helper's resync sentinel.
+      await this.publishAffectedTaskRows(ownerId, [taskId], [taskId]);
     }
   }
 
@@ -10431,7 +10711,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (uniqueIds.length === 0) return { deleted: 0 };
     const { deleted, survivingLinks } = await this.deleteAndStopRuns(ownerId, uniqueIds);
     if (deleted > 0) {
-      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, uniqueIds[0]);
+      // A representative deleted id is neither fetchable nor complete (verification tasks and
+      // dependency edges can cascade). Future incremental clients need an explicit reconciliation
+      // signal rather than the first input id masquerading as the affected set.
+      this.publishTaskResync(ownerId);
       // Same as remove, in bulk: a parent whose last outstanding subtask was in this selection is
       // completed by what is left of it, and nothing else recomputes it.
       if (survivingLinks.length) {
@@ -10461,17 +10744,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         data: { assigneeId: assigneeId ?? null },
       });
     }, this.transientWriteRetry('tasks.batchAssign'));
+    if (res.count > 0) {
+      // updateMany deliberately ignores unknown/cross-tenant ids. Only when every requested id
+      // matched is the input itself a complete changed-row set; otherwise reconcile without
+      // disclosing which supplied ids belonged to this owner.
+      if (res.count === ids.length) this.publishKnownTaskRows(ownerId, ids);
+      else this.publishTaskResync(ownerId);
+    }
     return { updated: res.count };
   }
 
   async removeComment(ownerId: string, id: string, commentId: string) {
-    await this.get(ownerId, id);
+    await this.loadDetail(ownerId, id);
     const comment = await this.prisma.taskComment.findFirst({
       where: { id: commentId, taskId: id },
       select: { id: true },
     });
     if (!comment) throw new NotFoundException('comment not found');
     await this.prisma.taskComment.delete({ where: { id: commentId } });
+    this.publishKnownTaskRows(ownerId, [id]);
     return { ok: true };
   }
 }

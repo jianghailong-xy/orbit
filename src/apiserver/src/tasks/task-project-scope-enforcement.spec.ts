@@ -155,7 +155,10 @@ function fixture(options: FixtureOptions = {}) {
     },
     taskDependency: { createMany: async () => ({ count: 0 }) },
   };
-  const realtime = { publishTaskChanged: () => undefined } as never;
+  const realtime = {
+    publishTaskChanged: () => undefined,
+    publishForUser: () => undefined,
+  } as never;
   const service = new TasksService(prisma as never, {} as never, realtime);
   return { service, writes, transactions, projectFindMany, sessionFindFirst };
 }

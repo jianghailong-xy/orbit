@@ -35,6 +35,7 @@ function makeController(current: LockedSnapshot) {
   const taskCountIds: string[] = [];
   const taskUpdateIds: string[] = [];
   const publishedStatuses: RunStatus[] = [];
+  const publishedTaskChanges: string[] = [];
   let retireCalls = 0;
   const tx = {
     $queryRaw: async () => {
@@ -79,6 +80,8 @@ function makeController(current: LockedSnapshot) {
     publish: (_id: string, event: { payload: { status: RunStatus } }) => {
       publishedStatuses.push(event.payload.status);
     },
+    publishTaskChanged: (_sessionId: string, taskId: string) =>
+      void publishedTaskChanges.push(taskId),
   } as never;
   return {
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
@@ -87,6 +90,7 @@ function makeController(current: LockedSnapshot) {
     taskCountIds,
     taskUpdateIds,
     publishedStatuses,
+    publishedTaskChanges,
     retireCalls: () => retireCalls,
   };
 }
@@ -152,6 +156,7 @@ test('finalize honors task_cancelled and reclaims the task from the locked snaps
   assert.equal(h.retireCalls(), 1);
   assert.deepEqual(h.taskCountIds, ['current-task']);
   assert.deepEqual(h.taskUpdateIds, ['current-task']);
+  assert.deepEqual(h.publishedTaskChanges, ['current-task']);
   assert.deepEqual(h.publishedStatuses, [RunStatus.CANCELLED]);
 });
 

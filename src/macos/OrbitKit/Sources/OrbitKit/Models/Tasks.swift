@@ -34,6 +34,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let queued: Bool?
     public let blocked: Bool?
     public let dependencyState: String?
+    /// Authoritative server Ready predicate on incremental list-row reads. Full Ready pages are
+    /// already filtered server-side and older/detail payloads omit it, so presentation logic keeps
+    /// its compatibility fallback when nil.
+    public let runnable: Bool?
 
     // Nested relations.
     public let assignee: TaskAssignee?
@@ -53,7 +57,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case id, title, description, status, assigneeId, listId, dueDate, provider, model
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
-        case running, queued, blocked, dependencyState
+        case running, queued, blocked, dependencyState, runnable
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }
@@ -181,12 +185,26 @@ public struct TaskPageCounts: Codable, Equatable, Sendable {
     public let runnable: Int
 }
 
+/// How much aggregate metadata `GET /tasks/page` should compute. `.full` omits the query parameter
+/// and keeps the legacy response; `.total` skips the scope-wide status/runnable block, and `.none`
+/// returns rows + cursor only (the mode used for later pages and cheap reconciliation).
+///
+/// This enum is deliberately passed non-optionally with a `.full` default. If its parameter were
+/// optional, Swift would interpret a call written `counts: .none` as `Optional.none` and silently
+/// omit the query item instead of selecting the wire's `counts=none` mode.
+public enum TaskPageCountsMode: String, Codable, Equatable, Sendable {
+    case full
+    case none
+    case total
+}
+
 /// Cursor page returned by `GET /tasks/page`. The cursor is opaque and must be passed back as-is.
+/// `total` is absent for `counts=none`; `counts` is absent for both reduced aggregate modes.
 public struct TaskPage: Codable, Equatable, Sendable {
     public let items: [TaskItem]
     public let nextCursor: String?
-    public let total: Int
-    public let counts: TaskPageCounts
+    public let total: Int?
+    public let counts: TaskPageCounts?
 }
 
 // MARK: - requests

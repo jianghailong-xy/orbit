@@ -12,7 +12,7 @@ final class ControlEventCodableTests: XCTestCase {
     func testDecodesSessionUpdatedWithFullSummary() throws {
         let ev = try decode("""
         {"type":"session.updated","sessionId":"s1","agentId":"a1","ts":"2026-07-05T00:00:00.000Z",
-         "data":{"id":"s1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN",
+         "data":{"id":"s1","taskId":"t1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN",
                  "capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"ENDING","canComplete":true,"canRestore":false},"agentId":"a1",
                  "agent":{"id":"a1","name":"builder","provider":"opencode","model":"openai/gpt-5","effort":"high"},
                  "pendingApprovals":2,"lastTurnAt":"2026-07-05T00:00:00.000Z"}}
@@ -22,6 +22,7 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertEqual(ev.agentId, "a1")
         let s = try XCTUnwrap(ev.payload(ControlSessionSummary.self))
         XCTAssertEqual(s.id, "s1")
+        XCTAssertEqual(s.taskId, "t1")
         XCTAssertEqual(s.title, "Fix bug")
         XCTAssertEqual(s.status, .pending)
         XCTAssertEqual(s.runStatus, .running)
@@ -50,6 +51,7 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertNil(ev.agentId)
         let s = try XCTUnwrap(ev.payload(ControlSessionSummary.self))
         XCTAssertEqual(s.status, .pending)
+        XCTAssertNil(s.taskId, "ordinary/legacy session summaries remain compatible")
         XCTAssertNil(s.runStatus)
         XCTAssertEqual(s.effectiveRunStatus, .pending)
         XCTAssertNil(s.sessionState)
@@ -148,11 +150,53 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertEqual(agent.type, .agentChanged)
         // The changed agent is in `data`; the envelope's agentId stays the calling session's.
         XCTAssertEqual(agent.agentId, "a1")
+        let legacyAgentChange = try XCTUnwrap(agent.payload(ControlAgentChanged.self))
+        XCTAssertEqual(legacyAgentChange.agentId, "new")
+        XCTAssertNil(legacyAgentChange.affectsTaskRows,
+                     "an older server is decoded conservatively during rolling upgrades")
 
         let task = try decode("""
         {"type":"task.changed","sessionId":"s1","agentId":null,"ts":"t","data":{"taskId":"t1"}}
         """)
         XCTAssertEqual(task.type, .taskChanged)
+        let taskChange = try XCTUnwrap(task.payload(ControlTaskChanged.self))
+        XCTAssertEqual(taskChange.taskId, "t1")
+        XCTAssertNil(taskChange.taskIds)
+        XCTAssertNil(taskChange.resync)
+        XCTAssertEqual(taskChange.effectiveTaskIds, ["t1"])
+        XCTAssertFalse(taskChange.canRefreshIncrementally,
+                       "legacy taskId-only servers do not have the lightweight row endpoint")
+    }
+
+    func testAgentChangedCanExcludeProviderDefaultOnlyNudgesFromTaskRefresh() throws {
+        let ev = try decode("""
+        {"type":"agent.changed","sessionId":"s1","agentId":"a1","ts":"t",
+         "data":{"agentId":"a1","affectsTaskRows":false}}
+        """)
+
+        let change = try XCTUnwrap(ev.payload(ControlAgentChanged.self))
+        XCTAssertEqual(change.agentId, "a1")
+        XCTAssertEqual(change.affectsTaskRows, false)
+    }
+
+    func testTaskChangedPayloadSupportsBulkIdsAndResync() throws {
+        let bulk = try decode("""
+        {"type":"task.changed","sessionId":"","agentId":null,"ts":"t",
+         "data":{"taskId":"t1","taskIds":["t1","t2","", "t2"],"resync":true}}
+        """)
+
+        let change = try XCTUnwrap(bulk.payload(ControlTaskChanged.self))
+        XCTAssertEqual(change.taskId, "t1")
+        XCTAssertEqual(change.taskIds, ["t1", "t2", "", "t2"])
+        XCTAssertEqual(change.resync, true)
+        XCTAssertEqual(change.effectiveTaskIds, ["t1", "t2"],
+                       "singular/bulk ids are normalized and deduplicated before scheduling")
+        XCTAssertFalse(change.canRefreshIncrementally, "an explicit resync always wins")
+
+        let bounded = ControlTaskChanged(taskIds: ["t1", "t2"], resync: false)
+        XCTAssertTrue(bounded.canRefreshIncrementally)
+        XCTAssertFalse(ControlTaskChanged(taskId: "t1", resync: false).canRefreshIncrementally,
+                       "an explicit bounded array is the incremental protocol marker")
     }
 
     func testDecodesUserScopedLibraryEventsWithAnEmptySessionId() throws {

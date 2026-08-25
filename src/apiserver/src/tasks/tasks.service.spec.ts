@@ -79,12 +79,14 @@ function taskServiceFixture(
     {} as never,
     { publishForUser: (...args: unknown[]) => published.push(args) } as never,
   );
-  (service as any).get = async () => ({
+  const ownedTask = async () => ({
     id: TASK_A,
     title: 'Task A',
     status: 'OPEN',
     creatorSessionId: null,
   });
+  (service as any).get = ownedTask;
+  (service as any).loadDetail = ownedTask;
 
   return {
     service,
@@ -132,7 +134,9 @@ test('update atomically replaces and deduplicates an existing task dependency se
     { taskId: TASK_A, dependsOnTaskId: TASK_B },
     { taskId: TASK_A, dependsOnTaskId: TASK_C },
   ]);
-  assert.deepEqual(fixture.published, [['owner', 'task_changed', TASK_A]]);
+  assert.deepEqual(fixture.published, [[
+    'owner', 'task_changed', { taskIds: [TASK_A], resync: false },
+  ]]);
 });
 
 test('an empty dependency replacement clears all prerequisites', async () => {
@@ -143,7 +147,9 @@ test('an empty dependency replacement clears all prerequisites', async () => {
   assert.deepEqual(fixture.calls, ['transaction', 'lock', 'update', 'delete']);
   assert.deepEqual(fixture.createdEdges(), []);
   assert.equal(fixture.dependencyReads(), 0);
-  assert.deepEqual(fixture.published, [['owner', 'task_changed', TASK_A]]);
+  assert.deepEqual(fixture.published, [[
+    'owner', 'task_changed', { taskIds: [TASK_A], resync: false },
+  ]]);
 });
 
 test('omitting dependsOnTaskIds leaves dependency rows untouched', async () => {
@@ -153,7 +159,9 @@ test('omitting dependsOnTaskIds leaves dependency rows untouched', async () => {
 
   assert.deepEqual(fixture.calls, ['update']);
   assert.equal(fixture.dependencyReads(), 0);
-  assert.deepEqual(fixture.published, []);
+  assert.deepEqual(fixture.published, [[
+    'owner', 'task_changed', { taskIds: [TASK_A], resync: false },
+  ]]);
 });
 
 test('dependency replacement rejects self-dependencies and cycles before writing', async () => {
@@ -189,10 +197,14 @@ test('single-edge add and remove use the same owner-scoped graph lock', async ()
   const add = taskServiceFixture();
   await add.service.addDependency('owner', TASK_A, TASK_B);
   assert.deepEqual(add.calls, ['transaction', 'lock', 'create']);
-  assert.deepEqual(add.published, [['owner', 'task_changed', TASK_A]]);
+  assert.deepEqual(add.published, [[
+    'owner', 'task_changed', { taskIds: [TASK_A], resync: false },
+  ]]);
 
   const remove = taskServiceFixture([{ taskId: TASK_A, dependsOnTaskId: TASK_B }]);
   await remove.service.removeDependency('owner', TASK_A, TASK_B);
   assert.deepEqual(remove.calls, ['transaction', 'lock', 'delete']);
-  assert.deepEqual(remove.published, [['owner', 'task_changed', TASK_A]]);
+  assert.deepEqual(remove.published, [[
+    'owner', 'task_changed', { taskIds: [TASK_A], resync: false },
+  ]]);
 });

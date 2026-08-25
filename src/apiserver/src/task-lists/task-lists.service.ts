@@ -8,6 +8,7 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 import { lockOwnerTaskGraph } from '../common/lock-order';
+import { SingleFlight } from '../common/single-flight';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -38,6 +39,8 @@ export interface RevisionAuthor {
 @Injectable()
 export class TaskListsService {
   private readonly logger = new Logger(TaskListsService.name);
+  private readonly listSingleFlight = new SingleFlight();
+  private readonly getSingleFlight = new SingleFlight();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -49,6 +52,15 @@ export class TaskListsService {
     private readonly sessions: SessionsService,
   ) {}
 
+  /** A pause/restore/delete can rewrite an unbounded number of task rows. A list id is not a
+   * task-row invalidation, so incremental clients must reconcile these changes explicitly. */
+  private publishTaskResync(ownerId: string): void {
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
+      taskIds: [],
+      resync: true,
+    });
+  }
+
   async create(ownerId: string, dto: CreateTaskListDto) {
     if (!dto.title) throw new BadRequestException('title is required');
     const list = await this.prisma.taskList.create({
@@ -58,7 +70,13 @@ export class TaskListsService {
     return list;
   }
 
-  async list(ownerId: string) {
+  list(ownerId: string) {
+    // The shipped native refresh path asks for this index on every task event. Only concurrent
+    // reads for the same owner are shared, and settlement removes the promise immediately.
+    return this.listSingleFlight.run(ownerId, () => this.loadList(ownerId));
+  }
+
+  private async loadList(ownerId: string) {
     const lists = await this.prisma.taskList.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
@@ -135,7 +153,13 @@ export class TaskListsService {
     return list;
   }
 
-  async get(ownerId: string, id: string) {
+  get(ownerId: string, id: string) {
+    // Old native clients reload the selected named list (including all embedded task rows) on each
+    // task event. Collapse only concurrent reads of that same owner/list; never retain the result.
+    return this.getSingleFlight.run(`${ownerId}:${id}`, () => this.loadGet(ownerId, id));
+  }
+
+  private async loadGet(ownerId: string, id: string) {
     const list = await this.prisma.taskList.findFirst({
       where: { id, ownerId },
       include: {
@@ -300,6 +324,9 @@ export class TaskListsService {
         : null,
     );
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
+    // Pausing/resuming projects dispatchHold onto every task in the list. That is an unbounded
+    // runnable-row change; the other policy fields do not rewrite task rows.
+    if (dto.paused !== undefined) this.publishTaskResync(ownerId);
     return list;
   }
 
@@ -675,6 +702,9 @@ export class TaskListsService {
       { note: note ?? `Restored v${version}`, author },
     );
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
+    // A restore always includes `paused`, and writePolicy therefore projects dispatchHold over
+    // the whole list even if the restored value happens to equal the current one.
+    this.publishTaskResync(ownerId);
     return list;
   }
 
@@ -738,6 +768,9 @@ export class TaskListsService {
         maxAttempts: 2,
       }),
     );
+    // Every surviving task was detached and disarmed. The set can exceed the event wire budget,
+    // and after the SET NULL cascade it cannot be recovered by list id without a pre-delete scan.
+    this.publishTaskResync(ownerId);
     // In-flight runs, torn down only after the tasks can no longer be re-dispatched — the other
     // order re-runs whatever the sweep catches in between. Best-effort, as in
     // TasksService.batchStop: a runner that will not answer must not fail the delete.

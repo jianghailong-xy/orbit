@@ -15,6 +15,7 @@ const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 type Row = {
   id: string;
+  taskId: string | null;
   ownerId: string;
   workspaceId: string | null;
   title: string | null;
@@ -50,6 +51,7 @@ function fakePrisma(rows: Record<string, Row>, pendingApprovals = 0): PrismaServ
 
 const rowA: Row = {
   id: 'sessA',
+  taskId: 'taskA',
   ownerId: 'userA',
   workspaceId: 'workspaceA',
   title: 'Fix bug',
@@ -97,6 +99,7 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   assert.equal(ev.agentId, 'workspaceA');
   const data = ev.data as Record<string, unknown>;
   assert.equal(data.id, 'sessA');
+  assert.equal(data.taskId, 'taskA');
   assert.equal(data.title, 'Fix bug');
   assert.equal(data.status, 'RUNNING');
   assert.equal(data.runStatus, 'RUNNING');
@@ -191,6 +194,7 @@ test('publishSessionCreated surfaces as session.created with the full summary', 
   assert.equal(got.length, 1);
   assert.equal(got[0].type, 'session.created');
   assert.equal((got[0].data as Record<string, unknown>).id, 'sessA');
+  assert.equal((got[0].data as Record<string, unknown>).taskId, 'taskA');
   assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
 });
 
@@ -293,19 +297,23 @@ test('publishTaskChanged surfaces as task.changed with the taskId, scoped to the
   assert.equal(mine.length, 1);
   assert.equal(mine[0].type, 'task.changed');
   assert.equal(mine[0].sessionId, 'sessA');
-  assert.deepEqual(mine[0].data, { taskId: 'task123' });
+  assert.deepEqual(mine[0].data, {
+    taskId: 'task123',
+    taskIds: [],
+    resync: true,
+  });
   // Routed by the creating session's owner — another user never sees it.
   assert.equal(theirs.length, 0);
 });
 
-test('publishWorkspaceChanged surfaces as workspace.changed with the changed workspaceId', async () => {
+test('publishWorkspaceChanged surfaces task-affecting workspace updates explicitly', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const mine: ControlEvent[] = [];
   const theirs: ControlEvent[] = [];
   const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
   const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
 
-  svc.publishWorkspaceChanged('sessA', 'workspaceNew');
+  svc.publishWorkspaceChanged('sessA', 'workspaceNew', true);
   await delay(30);
   subA.unsubscribe();
   subB.unsubscribe();
@@ -314,9 +322,27 @@ test('publishWorkspaceChanged surfaces as workspace.changed with the changed wor
   assert.equal(mine[0].type, 'agent.changed');
   assert.equal(mine[0].sessionId, 'sessA');
   // `data.agentId` is the CREATED workspace; the envelope's stays the calling session's workspace.
-  assert.deepEqual(mine[0].data, { agentId: 'workspaceNew' });
+  assert.deepEqual(mine[0].data, {
+    agentId: 'workspaceNew',
+    affectsTaskRows: true,
+  });
   assert.equal(mine[0].agentId, 'workspaceA');
   assert.equal(theirs.length, 0);
+});
+
+test('publishWorkspaceChanged preserves a false task-row effect flag', async () => {
+  const svc = svcWith({ sessA: rowA }, 0);
+  const mine: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((event) => mine.push(event));
+
+  svc.publishWorkspaceChanged('sessA', 'workspaceNew', false);
+  await delay(30);
+  sub.unsubscribe();
+
+  assert.deepEqual(mine[0].data, {
+    agentId: 'workspaceNew',
+    affectsTaskRows: false,
+  });
 });
 
 test('publishForUser reaches only that owner, with no session scope', async () => {
@@ -344,8 +370,34 @@ test('publishForUser reaches only that owner, with no session scope', async () =
   assert.equal(mine[0].sessionId, '');
   assert.equal(mine[0].agentId, null);
   assert.deepEqual(mine[0].data, { id: 'tag1' });
-  assert.deepEqual(mine[2].data, { taskId: 'task1' });
+  assert.deepEqual(mine[2].data, {
+    taskId: 'task1',
+    taskIds: [],
+    resync: true,
+  });
   assert.equal(theirs.length, 0);
+});
+
+test('task.changed carries a bounded row set or an explicit full-resync signal', async () => {
+  const svc = svcWith({}, 0);
+  const events: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((event) => events.push(event));
+
+  svc.publishForUser('userA', RunEventType.TASK_CHANGED, {
+    taskIds: ['taskA', 'taskB', 'taskA'],
+    resync: false,
+  });
+  svc.publishForUser('userA', RunEventType.TASK_CHANGED, {
+    taskIds: [],
+    resync: true,
+  });
+  await delay(30);
+  sub.unsubscribe();
+
+  assert.deepEqual(events.map((event) => event.data), [
+    { taskId: 'taskA', taskIds: ['taskA', 'taskB'], resync: false },
+    { taskIds: [], resync: true },
+  ]);
 });
 
 test('publishForAllUsers reaches every stream (shared provider catalog)', async () => {
@@ -418,7 +470,7 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
     SessionLifecycleState.COMPLETED,
   );
   svc.publishTaskChanged('sessA', 'task123');
-  svc.publishWorkspaceChanged('sessA', 'workspaceNew');
+  svc.publishWorkspaceChanged('sessA', 'workspaceNew', false);
   svc.publishSessionUpdated('sessA');
   svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });

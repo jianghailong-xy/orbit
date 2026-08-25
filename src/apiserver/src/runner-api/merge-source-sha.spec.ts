@@ -18,7 +18,11 @@ function controller(prisma: unknown) {
   return new RunnerApiController(
     prisma as never,
     { notifySessionQueued: () => undefined } as never,
-    { notifyInbox: () => undefined, publish: () => undefined } as never,
+    {
+      notifyInbox: () => undefined,
+      publish: () => undefined,
+      publishSessionUpdated: () => undefined,
+    } as never,
     {} as never,
     {} as never,
     {} as never,

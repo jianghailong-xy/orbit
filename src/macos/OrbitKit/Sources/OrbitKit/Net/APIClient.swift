@@ -302,17 +302,34 @@ public final class APIClient: @unchecked Sendable {
     // MARK: tasks
     public func tasks() async throws -> [TaskItem] { try await get("tasks") }
     public func taskPage(cursor: String? = nil, limit: Int = 200, status: String? = nil,
-                         listId: String? = nil, query: String? = nil) async throws -> TaskPage {
+                         listId: String? = nil, query: String? = nil,
+                         counts: TaskPageCountsMode = .full) async throws -> TaskPage {
         var q = [URLQueryItem(name: "limit", value: String(limit))]
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let status { q.append(URLQueryItem(name: "status", value: status)) }
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
-        return try await get("tasks/page", query: q)
+        if counts != .full { q.append(URLQueryItem(name: "counts", value: counts.rawValue)) }
+        return try await getCancellable("tasks/page", query: q)
+    }
+    /// Scope-wide tab/progress totals are independent from page filter/search. Keeping them on
+    /// their own cancellable request lets rapid query changes reuse one in-flight scope read.
+    public func taskCounts(listId: String? = nil) async throws -> TaskPageCounts {
+        var q: [URLQueryItem] = []
+        if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        return try await getCancellable("tasks/counts", query: q)
     }
     public func task(_ id: String) async throws -> TaskItem { try await get("tasks/\(id)") }
+    /// One list-row-shaped task for a `task.changed` event. Unlike `task(_:)`, this deliberately
+    /// omits comments/session history and returns only the row plus its live/dependency overlays.
+    public func taskRow(_ id: String) async throws -> TaskItem { try await get("tasks/\(id)/row") }
     public func taskLists() async throws -> [TaskListSummary] { try await get("task-lists") }
     public func taskList(_ id: String) async throws -> TaskListDetail { try await get("task-lists/\(id)") }
+    /// One task-list header without its embedded task collection. `TaskListSummary` is tolerant of
+    /// the aggregate-only fields being absent, which is the shape `?tasks=none` returns.
+    public func taskListHeader(_ id: String) async throws -> TaskListSummary {
+        try await get("task-lists/\(id)", query: [URLQueryItem(name: "tasks", value: "none")])
+    }
     public func createTask(_ req: CreateTaskRequest) async throws -> TaskItem { try await post("tasks", body: req) }
     public func updateTask(_ id: String, _ req: UpdateTaskRequest) async throws -> TaskItem { try await patch("tasks/\(id)", body: req) }
     public func deleteTask(_ id: String) async throws { try await deleteRaw("tasks/\(id)") }
@@ -517,6 +534,17 @@ public final class APIClient: @unchecked Sendable {
         return try decoder.decode(T.self, from: data)
     }
 
+    /// Page/search requests are owned by SwiftUI `.task(id:)`; when the query key changes, their
+    /// obsolete HTTP work must leave the server queue too. Other API methods retain the established
+    /// callback transport (notably shared token refreshes, whose work outlives one waiting caller).
+    private func getCancellable<T: Decodable>(_ path: String,
+                                               query: [URLQueryItem] = []) async throws -> T {
+        let request = try makeRequest(path, method: "GET", query: query,
+                                      body: Optional<Empty>.none)
+        let data = try await send(request, cancellationAware: true)
+        return try decoder.decode(T.self, from: data)
+    }
+
     private func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let data = try await send(makeRequest(path, method: "POST", body: body))
         return try decoder.decode(T.self, from: data)
@@ -568,11 +596,11 @@ public final class APIClient: @unchecked Sendable {
         return req
     }
 
-    private func send(_ original: URLRequest) async throws -> Data {
+    private func send(_ original: URLRequest, cancellationAware: Bool = false) async throws -> Data {
         var req = original
         var didRefresh = false
         while true {
-            let (data, status) = try await rawSend(req)
+            let (data, status) = try await rawSend(req, cancellationAware: cancellationAware)
             switch status {
             case 200..<300:
                 return data
@@ -596,9 +624,16 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Execute a request and hand back the raw body + HTTP status; status interpretation (including
-    /// the 401 refresh-retry) lives in `send`.
-    private func rawSend(_ req: URLRequest) async throws -> (Data, Int) {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(Data, Int), Error>) in
+    /// the 401 refresh-retry) lives in `send`. Page/search calls opt into URLSession's async
+    /// cancellation propagation; established non-page calls keep their callback semantics.
+    private func rawSend(_ req: URLRequest, cancellationAware: Bool) async throws -> (Data, Int) {
+        if cancellationAware {
+            let (data, response) = try await session.data(for: req)
+            guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+            return (data, http.statusCode)
+        }
+        return try await withCheckedThrowingContinuation {
+            (cont: CheckedContinuation<(Data, Int), Error>) in
             let task = session.dataTask(with: req) { data, response, error in
                 if let error { cont.resume(throwing: error); return }
                 guard let http = response as? HTTPURLResponse, let data else {

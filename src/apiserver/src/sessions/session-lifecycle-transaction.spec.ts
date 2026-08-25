@@ -47,6 +47,10 @@ test('complete atomically persists live end intent and completedAt before side e
     },
   } as never;
   const realtime = {
+    publishSessionUpdated: () => {
+      assert.equal(committed, true);
+      effects.push('updated');
+    },
     requestCancel: () => {
       assert.equal(committed, true);
       effects.push('cancel');
@@ -75,7 +79,7 @@ test('complete atomically persists live end intent and completedAt before side e
   assert.ok(updateData?.cancelRequestedAt instanceof Date);
   assert.equal(updateData?.endReason, SessionEndReason.COMPLETED);
   assert.equal(publishedLifecycleState, SessionLifecycleState.COMPLETED);
-  assert.deepEqual(effects, ['cancel', 'inbox', 'ended']);
+  assert.deepEqual(effects, ['updated', 'cancel', 'inbox', 'ended']);
 });
 
 test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
@@ -84,6 +88,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   let retired = 0;
   let publishedStatus: RunStatus | undefined;
   let publishedLifecycleState: SessionLifecycleState | undefined;
+  let summaryUpdates = 0;
   const session = {
     id: SESSION_ID,
     status: RunStatus.PENDING,
@@ -118,6 +123,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const realtime = {
+    publishSessionUpdated: () => summaryUpdates++,
     requestCancel: () => undefined,
     notifyInbox: () => undefined,
     publishSessionLifecycleChanged: (
@@ -140,6 +146,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   assert.equal(retired, 1);
   assert.equal(publishedStatus, RunStatus.CANCELLED);
   assert.equal(publishedLifecycleState, SessionLifecycleState.TRASH);
+  assert.equal(summaryUpdates, 1, 'the PENDING task overlay is cleared post-commit');
 });
 
 test('completing a dormant terminal session publishes its actual end reason', async () => {
@@ -168,6 +175,7 @@ test('completing a dormant terminal session publishes its actual end reason', as
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
+    publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: (
       _id: string,
       _status: RunStatus,
@@ -210,6 +218,7 @@ test('complete rejects Trash under the Session row lock without side effects', a
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
+    publishSessionUpdated: () => effects++,
     requestCancel: () => effects++,
     notifyInbox: () => effects++,
     publishSessionLifecycleChanged: () => effects++,
@@ -265,6 +274,7 @@ test('when remove wins the lifecycle lock, a racing complete cannot overwrite Tr
     },
   } as never;
   const realtime = {
+    publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: (
       _id: string,
       _status: RunStatus,
@@ -316,6 +326,7 @@ test('complete emits no side effects when the atomic end transaction fails', asy
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const realtime = {
+    publishSessionUpdated: () => effects++,
     requestCancel: () => effects++,
     notifyInbox: () => effects++,
     publishSessionLifecycleChanged: () => effects++,
@@ -348,6 +359,7 @@ test('repeated remove keeps the original Trash retention timestamp', async () =>
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
+    publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: () => undefined,
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);

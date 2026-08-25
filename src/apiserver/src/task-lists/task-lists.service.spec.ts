@@ -111,7 +111,11 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
   };
   const service = new TaskListsService(
     prismaDouble as never,
-    { publishForUser: () => undefined } as never,
+    {
+      publishForUser: (_ownerId: string, type: string, payload: unknown) => {
+        calls.push(`publish:${type}:${JSON.stringify(payload)}`);
+      },
+    } as never,
     {
       cancel: async (_ownerId: string, id: string) => {
         calls.push(`cancel:${id}`);
@@ -129,8 +133,10 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
     'lock:user',
     'disarm',
     'deleteList',
+    'publish:task_changed:{"taskIds":[],"resync":true}',
     'cancel:session-a',
     'cancel:session-b',
+    `publish:task_list_changed:"${LIST_ID}"`,
   ]);
   assert.deepEqual(sessionWhere, {
     ownerId: OWNER_ID,

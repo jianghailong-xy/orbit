@@ -15,6 +15,7 @@ function makeService(
 ) {
   const creates: Array<Record<string, unknown>> = [];
   const providerQueries: unknown[] = [];
+  const workspaceChanges: Array<[string, string, boolean]> = [];
   const prisma = {
     workspace: {
       findFirst: async () => ({
@@ -52,9 +53,18 @@ function makeService(
     publishSessionUpdated: () => undefined,
     // A user-started session moves the project's provider default, so create() wakes every
     // client's workspace list too. Stubbed here only so the call lands somewhere.
-    publishWorkspaceChanged: () => undefined,
+    publishWorkspaceChanged: (
+      sessionId: string,
+      workspaceId: string,
+      affectsTaskRows: boolean,
+    ) => void workspaceChanges.push([sessionId, workspaceId, affectsTaskRows]),
   } as never;
-  return { service: new SessionsService(prisma, queue, realtime), creates, providerQueries };
+  return {
+    service: new SessionsService(prisma, queue, realtime),
+    creates,
+    providerQueries,
+    workspaceChanges,
+  };
 }
 
 test('omitting provider starts the session where the project last started', async () => {
@@ -69,6 +79,8 @@ test('omitting provider starts the session where the project last started', asyn
   assert.equal(fixture.creates[0].providerBuiltin, true);
   // A built-in slug needs no ModelProvider lookup — the seeded path must not add one.
   assert.deepEqual(fixture.providerQueries, []);
+  // Provider-default metadata moved, but an ordinary conversation did not mutate any Task row.
+  assert.deepEqual(fixture.workspaceChanges, [['session-1', 'workspace-1', false]]);
 });
 
 test('a project that has never run anything starts on claude', async () => {

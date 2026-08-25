@@ -72,10 +72,10 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
 
   /** A service over the real client, with the two effects that must be counted recorded. */
   function serviceUnderTest() {
-    const published: string[] = [];
+    const published: unknown[][] = [];
     const logged: string[] = [];
     const service = new TasksService(prisma as never, {} as never, {
-      publishTaskChanged: (_sessionId: string, taskId: string) => void published.push(taskId),
+      publishForUser: (...args: unknown[]) => void published.push(args),
     } as never);
     (service as unknown as { logger: unknown }).logger = {
       warn: (line: string) => void logged.push(line),
@@ -212,7 +212,11 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
     assert.equal(edges.rowCount, 1, 'the prerequisite edge committed with the task');
 
     // 4. The effect that cannot be rolled back happened after the attempt that committed, once.
-    assert.deepEqual(published, [task.id], 'exactly one realtime publish, for the surviving task');
+    assert.deepEqual(published, [[
+      ids.ownerId,
+      'task_changed',
+      { taskIds: [task.id], resync: false },
+    ]], 'exactly one realtime publish, for the surviving task');
   });
 
   await t.test('one batch: the whole batch, and nothing from the attempt that was thrown away', async () => {
@@ -303,8 +307,12 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
 
     assert.deepEqual(
       published,
-      created.map((row) => row.id),
-      'one publish per task, after the attempt that committed',
+      [[
+        ids.ownerId,
+        'task_changed',
+        { taskIds: created.map((row) => row.id), resync: false },
+      ]],
+      'one complete affected-row publish after the attempt that committed',
     );
   });
 });

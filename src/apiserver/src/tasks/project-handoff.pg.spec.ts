@@ -81,7 +81,7 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
   const tasks = new TasksService(
     prisma as never,
     {} as never,
-    { publishTaskChanged: () => undefined } as never,
+    { publishTaskChanged: () => undefined, publishForUser: () => undefined } as never,
     handoffs,
   );
   const AGENT = (ownerId: string) => ({ type: CreatorType.AGENT, id: ownerId });

@@ -26,7 +26,7 @@ test('queue claims v5-tagged terminal handoffs only for a capable runner', async
   const prisma = {
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  const queue = new QueueService(prisma as never);
+  const queue = new QueueService(prisma as never, { publishSessionUpdated() {} } as never);
 
   assert.equal(await queue.claimSessionForRunner({ id: RUNNER_ID }, 0, false), null);
   assert.equal(await queue.claimSessionForRunner({ id: RUNNER_ID }, 0, true), null);

@@ -312,26 +312,39 @@ struct TasksListView: View {
     }
 
     private func listRefreshLoop(_ tasks: TasksModel) async {
-        // Debounce server-backed filter/search changes. Named lists use the same harmless delay,
-        // but their local filter/search does not change queryKey and therefore never restarts this.
+        // Debounce server-backed filter/search changes for every scope, including named lists;
+        // their contents now use the same bounded page endpoint as All and No-list.
         do { try await Task.sleep(nanoseconds: 250_000_000) }
         catch { return }
-        await tasks.load()
+        let loaded = await tasks.load()
+        var lastSnapshot = loaded ? Date() : .distantPast
         while !Task.isCancelled {
             let delay: UInt64 = tasks.hasBusyTasks ? 5_000_000_000 : 15_000_000_000
             do { try await Task.sleep(nanoseconds: delay) }
             catch { return }
-            await tasks.load()
+            // The owner stream now applies task.changed by id. Polling the same page underneath a
+            // healthy stream both duplicates that work and, on a large Ready scope, repeats its
+            // aggregate query forever. Keep a slow one-minute reconciliation for count drift and
+            // rolling-version gaps; reconnect also performs an immediate snapshot.
+            if model.controlPlaneLive, Date().timeIntervalSince(lastSnapshot) < 60 { continue }
+            let now = Date()
+            let refreshCounts = tasks.countsRefreshedAt.map {
+                now.timeIntervalSince($0) >= 60
+            } ?? false
+            if await tasks.load(refreshCounts: refreshCounts) { lastSnapshot = now }
         }
     }
 
     private func navigationRefreshLoop(_ tasks: TasksModel) async {
         await tasks.loadNavigation()
+        var lastSnapshot = Date()
         while !Task.isCancelled {
             let busy = tasks.lists.contains { ($0.runningTasks ?? 0) > 0 }
             do { try await Task.sleep(nanoseconds: busy ? 5_000_000_000 : 15_000_000_000) }
             catch { return }
+            if model.controlPlaneLive, Date().timeIntervalSince(lastSnapshot) < 60 { continue }
             await tasks.loadNavigation()
+            lastSnapshot = Date()
         }
     }
 }

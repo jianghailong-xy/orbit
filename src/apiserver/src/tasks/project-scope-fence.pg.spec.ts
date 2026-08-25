@@ -83,6 +83,7 @@ test('unit L3: a rotation cannot be written past', { skip, concurrency: 1, timeo
   function serviceUnderTest(): TasksService {
     return new TasksService(prisma as never, {} as never, {
       publishTaskChanged: () => undefined,
+      publishForUser: () => undefined,
     } as never);
   }
 

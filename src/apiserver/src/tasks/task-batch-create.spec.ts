@@ -59,6 +59,7 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
   } as never;
   const service = new TasksService(prisma, {} as never, {
     publishTaskChanged: () => {},
+    publishForUser: () => {},
   } as never);
   return { service, created, edges, locks };
 }

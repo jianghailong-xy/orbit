@@ -264,7 +264,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'An attempt the server discarded claimed nothing, so a re-run competes from the real state. The advisory lock is transaction-scoped, so it is released with the aborted attempt.',
-    effects: 'None. The claimed session is handed to the runner only once this returns.',
+    effects: 'None inside. After the claim commits, session.updated is published before buildSession hydration so clients observe PENDING → RUNNING even if hydration fails.',
     answer: 'Typed 503; the runner polls again.',
   },
   {

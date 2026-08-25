@@ -56,8 +56,13 @@ const published: Array<{ ownerId: string; taskId: string }> = [];
 function tasksService(db: PrismaClient): TasksService {
   const realtime = {
     publishTaskChanged: () => {},
-    publishForUser: (ownerId: string, _type: unknown, taskId: string) =>
-      published.push({ ownerId, taskId }),
+    publishForUser: (
+      ownerId: string,
+      _type: unknown,
+      change: { taskIds?: string[] },
+    ) => {
+      for (const taskId of change.taskIds ?? []) published.push({ ownerId, taskId });
+    },
   };
   // Nothing here dispatches: every fixture task is unassigned, which is what makes `execute` and
   // `fileVerification` unreachable. A stub that throws would say so loudly if that ever changed.

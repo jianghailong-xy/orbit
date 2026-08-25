@@ -27,7 +27,10 @@ function serviceWith(prisma: unknown, sessions: unknown = {}, realtime: unknown 
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(client),
     ...(prisma as Record<string, unknown>),
   };
-  return new TasksService(client as never, sessions as never, realtime as never);
+  return new TasksService(client as never, sessions as never, {
+    publishForUser: () => undefined,
+    ...(realtime as Record<string, unknown>),
+  } as never);
 }
 
 /** Renders the tagged template PostgreSQL would get, like task-labels.spec's recorder. */
@@ -390,7 +393,9 @@ test('a run that is actually accepted consumes the schedule exactly once', async
   // good, so it cannot be started by the clock a second time.
   assert.equal(f.writes[0].where.id, TASK_ID);
   assert.equal(f.writes[0].where.ownerId, OWNER_ID);
-  assert.deepEqual(f.published[0].slice(1), ['task_changed', TASK_ID]);
+  assert.deepEqual(f.published[0].slice(1), [
+    'task_changed', { taskIds: [TASK_ID], resync: false },
+  ]);
 });
 
 test('the consumption is a compare-and-set on the instant the dispatch read', async () => {

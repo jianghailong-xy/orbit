@@ -716,7 +716,9 @@ export class SessionsService {
     // Gated on the same rows the derivation reads, so a task run or a workspace-spawned child — which
     // deliberately cannot move the default — doesn't wake every client for nothing.
     if (session.workspaceId && !session.taskId && !session.parentSessionId) {
-      this.realtime.publishWorkspaceChanged(session.id, session.workspaceId);
+      // The workspace's provider-default display changed, but no Task row did. Keeping this
+      // explicit prevents an ordinary New Session from triggering a full task-list refresh.
+      this.realtime.publishWorkspaceChanged(session.id, session.workspaceId, false);
     }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
     // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
@@ -3915,8 +3917,7 @@ export class SessionsService {
   ): Promise<boolean> {
     const ended = await this.transitionEnd(ownerId, sessionId, reason);
     if (!ended.changed) return false;
-    if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
-    this.realtime.notifyInbox(sessionId);
+    this.publishEndIntent(sessionId, ended);
     return true;
   }
 
@@ -4043,6 +4044,10 @@ export class SessionsService {
     ended: { changed: boolean; runnerId: string | null },
   ): void {
     if (!ended.changed) return;
+    // PENDING sessions settle synchronously to CANCELLED and will never receive runner STATUS.
+    // The full summary carries taskId, letting task lists clear queued immediately. Live-session
+    // end intents also publish safely here; their later finalize event remains authoritative.
+    this.realtime.publishSessionUpdated(sessionId);
     if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
     this.realtime.notifyInbox(sessionId);
   }

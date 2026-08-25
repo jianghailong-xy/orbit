@@ -33,6 +33,7 @@ function makeService(initial: Partial<Revision> = {}) {
     ...initial,
   };
   const revisions: Revision[] = [];
+  const published: unknown[][] = [];
   // Every task.updateMany the policy write issues — the projection of `paused` onto the tasks it
   // governs, which has to happen in the same transaction as the flag it mirrors.
   const projected: Array<{ where: unknown; data: unknown }> = [];
@@ -95,15 +96,17 @@ function makeService(initial: Partial<Revision> = {}) {
     user: { findMany: async () => [] },
     workspace: { findMany: async () => [] },
   } as never;
-  const service = new TaskListsService(prisma, { publishForUser() {} } as never, {} as never);
+  const service = new TaskListsService(prisma, {
+    publishForUser: (...args: unknown[]) => void published.push(args),
+  } as never, {} as never);
   // get() is authorization plus a heavy detail read; these tests are about the revision
   // bookkeeping around it.
   (service as unknown as { get: unknown }).get = async () => ({ ...list });
-  return { service, revisions, list, projected };
+  return { service, revisions, list, projected, published };
 }
 
 test('pausing a list writes the hold onto its tasks, and resuming lifts it', async () => {
-  const { service, projected } = makeService();
+  const { service, projected, published } = makeService();
 
   await service.update(OWNER, LIST_ID, { paused: true });
   // The dispatch path reads only the task, so this write *is* the pause. A flag stored on the
@@ -112,21 +115,29 @@ test('pausing a list writes the hold onto its tasks, and resuming lifts it', asy
 
   await service.update(OWNER, LIST_ID, { paused: false });
   assert.deepEqual(projected[1], { where: { listId: LIST_ID }, data: { dispatchHold: false } });
+  assert.deepEqual(
+    published.filter((event) => event[1] === 'task_changed'),
+    [
+      [OWNER, 'task_changed', { taskIds: [], resync: true }],
+      [OWNER, 'task_changed', { taskIds: [], resync: true }],
+    ],
+  );
 });
 
 test('an edit that is not a pause leaves the list-s tasks untouched', async () => {
-  const { service, projected } = makeService();
+  const { service, projected, published } = makeService();
 
   await service.update(OWNER, LIST_ID, { title: 'Renamed', maxConcurrent: 3 });
 
   // Projecting unconditionally would rewrite every row of a 55k-task list on a rename.
   assert.deepEqual(projected, []);
+  assert.equal(published.some((event) => event[1] === 'task_changed'), false);
 });
 
 test('restoring a revision that was paused re-applies the hold to the tasks', async () => {
   // Starts paused, then resumed — so v1 (the state seeded before the first tracked edit) is the
   // paused one, and restoring it must put the tasks back under the hold.
-  const { service, projected } = makeService({ paused: true });
+  const { service, projected, published } = makeService({ paused: true });
   await service.update(OWNER, LIST_ID, { paused: false });
 
   // Restore goes through the same writePolicy, which is the point of it being the choke point:
@@ -137,6 +148,11 @@ test('restoring a revision that was paused re-applies the hold to the tasks', as
     where: { listId: LIST_ID },
     data: { dispatchHold: true },
   });
+  assert.equal(
+    published.filter((event) => event[1] === 'task_changed').length,
+    2,
+    'the resume and the restore each invalidate the unbounded runnable-row set',
+  );
 });
 
 test('a policy change records the resulting state as a revision', async () => {

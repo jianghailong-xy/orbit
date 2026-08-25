@@ -19,6 +19,7 @@ interface Subject {
   cancelledVerifications?: number;
   /** Verifications filed and still running — no verdict yet, but not abandoned either. */
   inFlightVerifications?: number;
+  executeFails?: boolean;
   /**
    * The subject's sessions. Defaults to the shape a normal completion actually has at the moment
    * DONE is written: the agent's own session is still RUNNING — success is not recorded until
@@ -39,6 +40,7 @@ interface Subject {
 function makeService(subject: Subject = {}) {
   const created: any[] = [];
   const executed: string[] = [];
+  const published: unknown[][] = [];
   const task = {
     id: TASK_ID,
     title: 'Download the WARCs',
@@ -102,13 +104,14 @@ function makeService(subject: Subject = {}) {
     },
   } as never;
   const service = new TasksService(prisma, {} as never, {
-    publishForUser() {},
+    publishForUser: (...args: unknown[]) => void published.push(args),
     publishTaskChanged() {},
   } as never);
   const tokens: string[] = [];
   (service as unknown as { execute: unknown }).execute = async (
     _o: string, id: string, _auto: unknown, token: string,
   ) => {
+    if (subject.executeFails) throw new Error('dispatch failed');
     executed.push(id);
     tokens.push(token);
   };
@@ -116,6 +119,7 @@ function makeService(subject: Subject = {}) {
     created,
     executed,
     tokens,
+    published,
     fileFor: () =>
       (
         service as unknown as { fileVerification(o: string, t: string): Promise<void> }
@@ -132,11 +136,29 @@ test('a task reporting DONE in an opted-in list gets a verification run', async 
   assert.equal(f.created[0].verifiesTaskId, TASK_ID);
   assert.equal(f.created[0].listId, 'list-1');
   assert.deepEqual(f.executed, ['verify-1']);
+  assert.deepEqual(f.published, [[
+    'owner-1',
+    'task_changed',
+    { taskIds: ['verify-1'], resync: false },
+  ]]);
   // The one run this check exists for, named `<kind>:<task>:<epoch>` like every other automatic
   // request. Task-scoped, so two checks filed for two subjects are two requests rather than one
   // answered with the other's Session; and stamped with the moment the row was filed at, so a
   // redelivery is the same request and a later moment on the same row would not be.
   assert.deepEqual(f.tokens, ['first-run:verify-1:0']);
+});
+
+test('a filed verification is announced even when its first dispatch fails', async () => {
+  const f = makeService({ executeFails: true });
+
+  await assert.rejects(() => f.fileFor(), /dispatch failed/);
+
+  assert.equal(f.created.length, 1);
+  assert.deepEqual(f.published, [[
+    'owner-1',
+    'task_changed',
+    { taskIds: ['verify-1'], resync: false },
+  ]]);
 });
 
 test('the brief leads with the evidence question, not the content one', async () => {

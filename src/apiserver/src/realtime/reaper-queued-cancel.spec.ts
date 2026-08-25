@@ -16,6 +16,7 @@ const TASK_ID = '33333333-3333-4333-8333-333333333333';
 function sweepWithCancelledSession(status: RunStatus, taskId: string | null) {
   let finalized: Record<string, unknown> | undefined;
   let expected: unknown;
+  const taskChanges: string[] = [];
   const tx = {
     session: {
       updateMany: async ({
@@ -65,11 +66,16 @@ function sweepWithCancelledSession(status: RunStatus, taskId: string | null) {
     runEvent: { findFirst: async () => null },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
-  const realtime = { requestCancel: () => undefined, publish: () => undefined } as never;
+  const realtime = {
+    requestCancel: () => undefined,
+    publish: () => undefined,
+    publishTaskChanged: (_sessionId: string, changedTaskId: string) =>
+      void taskChanges.push(changedTaskId),
+  } as never;
   const service = new ReaperService(prisma, realtime);
   return (service as unknown as { sweep(): Promise<void> })
     .sweep()
-    .then(() => ({ finalized, expected }));
+    .then(() => ({ finalized, expected, taskChanges }));
 }
 
 test('finalizes a cancel that was never honored on a queued session', async () => {
@@ -82,9 +88,10 @@ test('finalizes a cancel that was never honored on a queued session', async () =
 // The session never reached a runner, so there is no failed work to report and no runner
 // that failed to honor anything — writing an error would blame a machine never handed it.
 test('a queued cancel settles clean, with no error recorded', async () => {
-  const { finalized } = await sweepWithCancelledSession(RunStatus.PENDING, TASK_ID);
+  const { finalized, taskChanges } = await sweepWithCancelledSession(RunStatus.PENDING, TASK_ID);
   assert.equal(finalized?.status, RunStatus.CANCELLED);
   assert.equal(finalized?.error, undefined);
+  assert.deepEqual(taskChanges, [TASK_ID]);
 });
 
 // Widening the scan must not change what happens to the states that were already swept.

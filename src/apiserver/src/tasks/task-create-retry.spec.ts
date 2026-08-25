@@ -98,7 +98,7 @@ function fixture(opts: FixtureOptions = {}) {
   const committedEdges: Array<Record<string, unknown>> = [];
   /** Every row a create ATTEMPTED, committed or not — what proves the key is stable. */
   const attempted: Array<Record<string, unknown>> = [];
-  const published: string[] = [];
+  const published: unknown[][] = [];
   const logged: string[] = [];
   let attempts = 0;
   let rows = 0;
@@ -173,7 +173,7 @@ function fixture(opts: FixtureOptions = {}) {
   };
 
   const service = new TasksService(prisma as never, {} as never, {
-    publishTaskChanged: (_sessionId: string, taskId: string) => void published.push(taskId),
+    publishForUser: (...args: unknown[]) => void published.push(args),
   } as never);
   // The retry line is the only thing these paths say about a conflict, and what it may contain is
   // part of the contract — so it is captured rather than printed.
@@ -215,7 +215,11 @@ test('a create thrown away twice re-runs whole and lands exactly one task', asyn
   assert.equal((task as { id: string }).id, f.committed[0].id);
   // The one effect that cannot be rolled back. Outside the loop, so it describes the attempt that
   // committed rather than every attempt that was thrown away.
-  assert.deepEqual(f.published, [f.committed[0].id], 'the realtime publish happens once');
+  assert.deepEqual(f.published, [[
+    OWNER,
+    'task_changed',
+    { taskIds: [f.committed[0].id], resync: false },
+  ]], 'the realtime publish happens once');
   // Stable identity: the key is computed once, before the loop, so a retry re-inserts the same
   // row rather than a second one. Were it derived per attempt, a redelivered turn would stop
   // collapsing onto the original task.
@@ -233,7 +237,11 @@ test('a create with no session and no links is retried too', async () => {
 
   assert.equal(f.attempts(), 2, 'the plain create is a transaction, and it is retried');
   assert.equal(f.committed.length, 1);
-  assert.deepEqual(f.published, [], 'no creator session, so nothing to publish through');
+  assert.deepEqual(f.published, [[
+    OWNER,
+    'task_changed',
+    { taskIds: [f.committed[0].id], resync: false },
+  ]], 'owner-scoped publication does not require a creator session');
 });
 
 test('a batch thrown away twice re-runs whole and lands exactly one batch', async () => {
@@ -257,8 +265,12 @@ test('a batch thrown away twice re-runs whole and lands exactly one batch', asyn
   assert.equal(f.committedEdges[0].taskId, f.committed[1].id);
   assert.deepEqual(
     f.published,
-    f.committed.map((row) => row.id),
-    'one publish per task, after the attempt that committed',
+    [[
+      OWNER,
+      'task_changed',
+      { taskIds: f.committed.map((row) => row.id), resync: false },
+    ]],
+    'one complete affected-row publish after the attempt that committed',
   );
   const keys = f.attempted.map((data) => data.idempotencyKey);
   assert.equal(new Set(keys).size, 2, 'two items, two keys, the same two on every attempt');

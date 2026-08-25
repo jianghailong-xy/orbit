@@ -2475,13 +2475,36 @@ export class RunnerApiController {
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
       }
+      let taskReclaimed = false;
       if (failTask) {
         // Surface the abandoned task for a human.
-        await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
+        taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, steer: false, requeued: false, status: nextStatus, failSession, retryAt: current.retryAt };
+      return {
+        applied: true,
+        steer: false,
+        requeued: false,
+        status: nextStatus,
+        failSession,
+        retryAt: current.retryAt,
+        taskReclaimed,
+        taskId: current.taskId,
+      };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    // TURN_END events are flushed before /turn-complete, so their control summary can still see
+    // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
+    // summaries carry taskId and clear the running overlay without waiting for reconciliation.
+    if (finalized.applied && !finalized.steer) {
+      this.realtime.publishSessionUpdated(sessionId);
+    }
+    if (
+      'taskReclaimed' in finalized
+      && finalized.taskReclaimed
+      && finalized.taskId
+    ) {
+      this.realtime.publishTaskChanged(sessionId, finalized.taskId);
+    }
     if (finalized.steer) {
       // Nothing about the session changed, so nothing about it is announced. The queue view
       // did change — a steer left it — and the clients read that from the durable list.
@@ -3032,8 +3055,9 @@ export class RunnerApiController {
       // still running. A genuine FAILED run lands the task at FAILED (needs a human);
       // a CANCELLED (user end) goes back to OPEN (retryable). SUCCEEDED is left alone —
       // the workspace owns DONE.
+      let taskReclaimed = false;
       if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
-        await reclaimStalledTask(
+        taskReclaimed = await reclaimStalledTask(
           tx,
           current.taskId,
           effectiveStatus === RunStatus.FAILED ? TaskStatus.FAILED : TaskStatus.OPEN,
@@ -3043,9 +3067,24 @@ export class RunnerApiController {
           await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
         }
       }
-      return { finalized: true, effectiveStatus, keepCheckout, retryAt };
+      return {
+        finalized: true,
+        effectiveStatus,
+        keepCheckout,
+        retryAt,
+        taskReclaimed,
+        taskId: current.taskId,
+      };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
+
+    if (
+      'taskReclaimed' in outcome
+      && outcome.taskReclaimed
+      && outcome.taskId
+    ) {
+      this.realtime.publishTaskChanged(sessionId, outcome.taskId);
+    }
 
     this.realtime.publish(sessionId, {
       seq: Number.MAX_SAFE_INTEGER,

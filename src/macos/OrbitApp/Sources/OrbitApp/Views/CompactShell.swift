@@ -236,7 +236,7 @@ private struct CompactSections: View {
                 TasksListView()
                     .drawerToggle(open: openDrawer)
                     .refreshable {
-                        await model.tasks?.refresh(selectedTaskID: model.selectedTaskID)
+                        await model.tasks?.refresh()
                     }
             } detail: {
                 TaskDetailView()

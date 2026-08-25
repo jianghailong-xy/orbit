@@ -16,7 +16,8 @@ public enum ControlEventType: String, Codable, Sendable {
     case approvalResolved = "approval.resolved"
     case backgroundTask = "background.task"
     /// A task / agent the owner can see changed — usually an agent's MCP task_*/agent_* call.
-    /// Only a nudge to reload that list.
+    /// Task payloads on current servers name bounded rows or explicitly request resync; legacy
+    /// payloads remain coarse reload nudges. Agent changes are still list nudges.
     case taskChanged = "task.changed"
     case agentChanged = "agent.changed"
     /// Owner-level libraries. These are USER-scoped: `sessionId` is empty (see ControlEvent).
@@ -76,6 +77,10 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         public let effort: String?
     }
     public let id: String
+    /// Work item whose live run this session represents. New servers include it so task list
+    /// running/queued overlays can refresh by id; nil also covers ordinary conversations and
+    /// rolling-version servers that omit the field.
+    public let taskId: String?
     public let title: String?
     public let status: RunStatus
     /// Explicit low-level runner state; `status` is retained for older control planes.
@@ -115,6 +120,7 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
         id = try values.decode(String.self, forKey: .id)
+        taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         title = try values.decodeIfPresent(String.self, forKey: .title)
         status = try values.decode(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
@@ -185,4 +191,56 @@ public struct ControlBackgroundTask: Codable, Equatable, Sendable {
     public let name: String
     public let status: String
     public let exitCode: Int?
+}
+
+/// `data` for `agent.changed`.
+///
+/// A workspace metadata refresh does not always invalidate task rows. In particular, starting an
+/// ordinary session changes that workspace's provider default, but it changes neither the Ready
+/// predicate nor any task-list field. Older servers omit the flag, so callers must conservatively
+/// treat `nil` as `true` during a rolling upgrade.
+public struct ControlAgentChanged: Codable, Equatable, Sendable {
+    public let agentId: String
+    public let affectsTaskRows: Bool?
+
+    public init(agentId: String, affectsTaskRows: Bool? = nil) {
+        self.agentId = agentId
+        self.affectsTaskRows = affectsTaskRows
+    }
+}
+
+/// `data` for `task.changed`.
+///
+/// Older servers name one changed row with `taskId`. Newer bulk-aware publishers can name every
+/// affected row with `taskIds`, or set `resync` when the mutation cannot be represented as a
+/// bounded set of ids. Keeping all three fields optional lets a rolling-upgrade client decode both
+/// shapes; callers should use `effectiveTaskIds` to fold the singular id into the array and remove
+/// duplicates before scheduling targeted row reads.
+public struct ControlTaskChanged: Codable, Equatable, Sendable {
+    public let taskId: String?
+    public let taskIds: [String]?
+    public let resync: Bool?
+
+    public init(taskId: String? = nil, taskIds: [String]? = nil, resync: Bool? = nil) {
+        self.taskId = taskId
+        self.taskIds = taskIds
+        self.resync = resync
+    }
+
+    /// Every non-empty id carried by either wire generation, in first-seen order.
+    public var effectiveTaskIds: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for id in (taskId.map { [$0] } ?? []) + (taskIds ?? []) where !id.isEmpty {
+            if seen.insert(id).inserted { result.append(id) }
+        }
+        return result
+    }
+
+    /// True only for the bulk-aware wire generation and a bounded, non-empty change. A payload
+    /// containing `taskId` alone is from a server that predates the lightweight row endpoint, so
+    /// clients must retain the coarse snapshot fallback for that shape during rolling upgrades.
+    public var canRefreshIncrementally: Bool {
+        taskIds != nil && resync != true && !effectiveTaskIds.isEmpty
+    }
 }

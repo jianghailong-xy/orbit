@@ -100,7 +100,8 @@ export class RunnerAgentsController {
     // Push it to the owner's control-plane stream so their workspace list shows it live instead of
     // only after a manual reload — the workspace-side mirror of TasksService's publishTaskChanged.
     // Scoped via the calling session, which assertOrchestrator returned as this owner's.
-    this.realtime.publishWorkspaceChanged(scope, workspace.id);
+    // A brand-new workspace cannot yet be referenced by an existing Task row.
+    this.realtime.publishWorkspaceChanged(scope, workspace.id, false);
     return this.toOrchestrationView(workspace);
   }
 
@@ -118,7 +119,8 @@ export class RunnerAgentsController {
       id,
       this.sanitize(body) as UpdateWorkspaceDto,
     );
-    this.realtime.publishWorkspaceChanged(scope, id);
+    // Name/model/runner changes are rendered through Task.assignee, so existing rows may move.
+    this.realtime.publishWorkspaceChanged(scope, id, true);
     return this.toOrchestrationView(workspace);
   }
 

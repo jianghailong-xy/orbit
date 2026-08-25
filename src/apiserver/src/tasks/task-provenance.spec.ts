@@ -88,7 +88,10 @@ function fixture(session: SessionRow | null) {
       },
     },
   } as never;
-  const realtime = { publishTaskChanged: () => undefined } as never;
+  const realtime = {
+    publishTaskChanged: () => undefined,
+    publishForUser: () => undefined,
+  } as never;
   const service = new TasksService(prisma, {} as never, realtime);
   return { service, writes };
 }

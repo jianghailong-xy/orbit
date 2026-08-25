@@ -56,6 +56,7 @@ final class AppModel {
         didSet {
             if selectedSection != .settings { settingsShowingRunners = false }
             if selectedSection != .tasks { taskListsDirectoryPresented = false }
+            tasks?.setSectionActive(selectedSection == .tasks)
         }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first agent-list
@@ -66,7 +67,7 @@ final class AppModel {
             // The detail store is a single slot. Clear it synchronously on every selection change
             // so an A response cannot paint under B, and a deleted task cannot leave compact iOS
             // navigation stuck on a spinner with a non-nil selection.
-            if selectedTaskID != oldValue { tasks?.clearDetail() }
+            if selectedTaskID != oldValue { tasks?.setSelectedDetailID(selectedTaskID) }
         }
     }
     var selectedRunnerID: String?
@@ -199,12 +200,18 @@ final class AppModel {
     /// server without the endpoint). See `runControlPlane` / `startPolling`.
     private var controlTask: Task<Void, Never>?
     private(set) var controlPlaneLive = false
-    private var controlRefreshScheduled = false
+    private var controlRefreshPending = false
+    private var controlRefreshTask: Task<Void, Never>?
+    private var controlRefreshGeneration = 0
     /// Dedup exact refreshes when a control nudge and the fallback poll land together.
     private var sessionDetailRefreshes: Set<String> = []
-    /// Same coalescing, for the owner-level lists a control event can dirty (see apply / LibraryTarget).
-    private var libraryRefreshScheduled = false
-    private var pendingLibraryRefresh: Set<LibraryTarget> = []
+    /// Owner-library refreshes share one drain. Task events enqueue their exact ids; reconnects and
+    /// coarse invalidations enqueue a full target. Keeping the drain alive across the awaited read
+    /// is the single-flight boundary: events received meanwhile become one trailing pass instead
+    /// of starting another expensive list query in parallel.
+    private var libraryRefreshQueue = CoalescedRefreshQueue<LibraryTarget, String>()
+    private var libraryRefreshTask: Task<Void, Never>?
+    private var libraryRefreshGeneration = 0
 
     private static let instanceKey = "orbit.instance"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
@@ -243,11 +250,26 @@ final class AppModel {
     #endif
 
     private func configure(_ url: URL) {
+        controlRefreshGeneration &+= 1
+        controlRefreshTask?.cancel()
+        controlRefreshTask = nil
+        controlRefreshPending = false
+        libraryRefreshGeneration &+= 1
+        libraryRefreshTask?.cancel()
+        libraryRefreshTask = nil
+        libraryRefreshQueue = CoalescedRefreshQueue()
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
         api = APIClient(baseURL: url, tokenStore: tokenStore)
-        tasks = TasksModel(baseURL: url, tokenStore: tokenStore)
+        let tasksModel = TasksModel(baseURL: url, tokenStore: tokenStore)
+        tasksModel.onSelectedDetailMissing = { [weak self] id in
+            guard self?.selectedTaskID == id else { return }
+            self?.selectedTaskID = nil
+        }
+        tasksModel.setSectionActive(selectedSection == .tasks)
+        tasksModel.setSelectedDetailID(selectedTaskID)
+        tasks = tasksModel
         agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
@@ -363,6 +385,14 @@ final class AppModel {
         pollTask = nil
         controlTask?.cancel()
         controlTask = nil
+        controlRefreshGeneration &+= 1
+        controlRefreshTask?.cancel()
+        controlRefreshTask = nil
+        controlRefreshPending = false
+        libraryRefreshGeneration &+= 1
+        libraryRefreshTask?.cancel()
+        libraryRefreshTask = nil
+        libraryRefreshQueue = CoalescedRefreshQueue()
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // Best-effort server-side revoke of the refresh token before we drop it locally. Capture the
@@ -554,17 +584,51 @@ final class AppModel {
     /// event. The 4s tick in `startPolling` remains the floor for those slim-payload gaps.
     private func apply(_ ev: ControlEvent) {
         switch ev.type {
-        // Task/task-list nudges belong to the task models alone — they change no session row.
-        case .taskChanged, .taskListChanged:
+        // A task event carries the changed row ids. Fold those exact rows into the loaded page;
+        // only an explicit coarse invalidation (or an older/malformed payload) needs a snapshot.
+        case .taskChanged:
+            guard let changed = ev.payload(ControlTaskChanged.self),
+                  // A legacy server sends only taskId and has no /tasks/:id/row route. Treat that
+                  // wire shape as a coarse nudge so a new app remains correct against an older
+                  // self-hosted deployment instead of reading the route's 404 as task deletion.
+                  changed.canRefreshIncrementally else {
+                scheduleLibraryRefresh(.tasks)
+                return
+            }
+            let ids = Set(changed.effectiveTaskIds)
+            guard !ids.isEmpty else {
+                scheduleLibraryRefresh(.tasks)
+                return
+            }
+            scheduleTaskRefresh(ids)
+        // List create/rename/delete is deliberately coarse and rare. It can invalidate the
+        // selected scope as well as navigation, so reconcile those surfaces together once.
+        case .taskListChanged:
             scheduleLibraryRefresh(.tasks)
-        // An agent rename changes what session rows render, so the list follows here too (as web
-        // does). Providers ride along: AgentsModel.load() fetches the provider catalog with the list.
-        case .agentChanged, .providerChanged:
+        // Workspace runner/enabled changes alter the server's Ready predicate for every assigned
+        // task. Agent edits are low-frequency and do not carry that affected set, so reconcile the
+        // task page once as well as the agent/session surfaces. A provider-default-only nudge from
+        // ordinary session creation explicitly opts out; older servers omit the flag and retain
+        // the conservative refresh behavior.
+        case .agentChanged:
+            scheduleLibraryRefresh(.agents)
+            if ev.payload(ControlAgentChanged.self)?.affectsTaskRows != false {
+                scheduleLibraryRefresh(.tasks)
+                scheduleControlRefresh()
+            }
+        // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
+        // change task-row membership or live overlays.
+        case .providerChanged:
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
         case .sessionCreated, .sessionUpdated:
-            if let summary = ev.payload(ControlSessionSummary.self),
-               mergeSessionSummary(summary) { return }
+            if let summary = ev.payload(ControlSessionSummary.self) {
+                // Session state is the authority for a task row's running/queued overlays. The
+                // summary names that task on current servers, so starting, claiming and settling a
+                // run update one lightweight row instead of waiting for the minute reconciliation.
+                if let taskID = summary.taskId { scheduleTaskRefresh([taskID]) }
+                if mergeSessionSummary(summary) { return }
+            }
             scheduleControlRefresh()
         case .approvalRequested, .approvalResolved:
             if let approval = ev.payload(ControlApproval.self),
@@ -624,24 +688,57 @@ final class AppModel {
     }
 
     /// The owner-level lists a control event can dirty, each backed by its own model.
-    enum LibraryTarget { case agents, tasks }
+    enum LibraryTarget: Hashable, Sendable { case agents, tasks }
 
-    /// Coalesce library reloads the same way `scheduleControlRefresh` coalesces list refreshes —
-    /// an agent filing five tasks in a row should cost one reload, not five.
+    /// Request a full target snapshot. This is reserved for reconnect (the control stream has no
+    /// replay), coarse/legacy events and task-list structure changes; ordinary task events use the
+    /// id path below.
     private func scheduleLibraryRefresh(_ target: LibraryTarget) {
-        pendingLibraryRefresh.insert(target)
-        guard !libraryRefreshScheduled else { return }
-        libraryRefreshScheduled = true
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 200_000_000)
+        guard libraryRefreshQueue.enqueueFull(target) else { return }
+        startLibraryRefreshDrain()
+    }
+
+    /// Queue exact changed task rows. A Set collapses repeated task events within a turn and while
+    /// the previous network read is in flight.
+    private func scheduleTaskRefresh(_ ids: Set<String>) {
+        var shouldStart = false
+        for id in ids {
+            shouldStart = libraryRefreshQueue.enqueueChanged(id, for: .tasks) || shouldStart
+        }
+        if shouldStart { startLibraryRefreshDrain() }
+    }
+
+    /// Strict single-flight with trailing-edge drain. `take()` clears only the work already seen;
+    /// an event that arrives during either awaited load remains pending for the next pass.
+    private func startLibraryRefreshDrain() {
+        guard libraryRefreshTask == nil else { return }
+        libraryRefreshGeneration &+= 1
+        let generation = libraryRefreshGeneration
+        libraryRefreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            self.libraryRefreshScheduled = false
-            let targets = self.pendingLibraryRefresh
-            self.pendingLibraryRefresh.removeAll()
-            if targets.contains(.agents) { await self.agents?.load() }
-            if targets.contains(.tasks) {
-                await self.tasks?.refresh(selectedTaskID: self.selectedTaskID)
+            while !Task.isCancelled, self.libraryRefreshGeneration == generation {
+                do { try await Task.sleep(nanoseconds: 200_000_000) }
+                catch { break }
+                guard self.libraryRefreshGeneration == generation else { break }
+
+                let pass = self.libraryRefreshQueue.take()
+                if pass.fullTargets.contains(.agents) {
+                    await self.agents?.load()
+                    guard self.libraryRefreshGeneration == generation else { break }
+                }
+                if pass.fullTargets.contains(.tasks) {
+                    await self.tasks?.refresh()
+                } else {
+                    let ids = pass.changedIDs(for: .tasks)
+                    if !ids.isEmpty {
+                        await self.tasks?.refreshChangedTasks(ids)
+                    }
+                }
+                guard self.libraryRefreshGeneration == generation else { break }
+
+                if !self.libraryRefreshQueue.finishPass() { break }
             }
+            if self.libraryRefreshGeneration == generation { self.libraryRefreshTask = nil }
         }
     }
 
@@ -651,17 +748,26 @@ final class AppModel {
     /// rather than the old 200ms — with several sessions running, that alone was up to five
     /// full refreshes a second.
     private func scheduleControlRefresh() {
-        guard !controlRefreshScheduled else { return }
-        controlRefreshScheduled = true
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 500_000_000)
+        controlRefreshPending = true
+        guard controlRefreshTask == nil else { return }
+        controlRefreshGeneration &+= 1
+        let generation = controlRefreshGeneration
+        controlRefreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            self.controlRefreshScheduled = false
-            await self.loadSessions()
-            // A missing Open row is ambiguous: it may be the same stable Completed detail, or a
-            // cross-client Complete / Trash / purge transition. Resolve the focused cached row
-            // exactly after the control-driven snapshot rather than trusting absence as state.
-            await self.refreshFocusedSessionDetailIfNeeded()
+            while !Task.isCancelled, self.controlRefreshGeneration == generation {
+                do { try await Task.sleep(nanoseconds: 500_000_000) }
+                catch { break }
+                guard self.controlRefreshGeneration == generation else { break }
+                self.controlRefreshPending = false
+                await self.loadSessions()
+                guard self.controlRefreshGeneration == generation else { break }
+                // A missing Open row is ambiguous: it may be the same stable Completed detail, or
+                // a cross-client Complete / Trash / purge transition. Resolve the focused cached
+                // row exactly after the control-driven snapshot rather than trusting absence.
+                await self.refreshFocusedSessionDetailIfNeeded()
+                if !self.controlRefreshPending { break }
+            }
+            if self.controlRefreshGeneration == generation { self.controlRefreshTask = nil }
         }
     }
 

@@ -51,6 +51,7 @@ function fixture(opts: { inFlightTurn: string | null; existingByKey?: (key: stri
   };
   const service = new TasksService(prisma as never, {} as never, {
     publishTaskChanged: () => {},
+    publishForUser: () => {},
   } as never);
   return { service, creates, findUniqueKeys, locks };
 }

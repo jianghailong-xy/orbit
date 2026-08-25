@@ -30,7 +30,7 @@ async function capturedClaimCapability(
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   } as never;
-  const queue = new QueueService(prisma);
+  const queue = new QueueService(prisma, { publishSessionUpdated() {} } as never);
   await queue.claimSessionForRunner({
     id: '11111111-1111-4111-8111-111111111111',
     supportedProviders,

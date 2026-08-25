@@ -94,7 +94,7 @@ function harness(
     user: { findUnique: async () => null },
   } as unknown as PrismaService;
   return {
-    queue: new QueueService(prisma),
+    queue: new QueueService(prisma, { publishSessionUpdated() {} } as never),
     eventLookups,
     sessionWrites,
   };

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TasksService } from './tasks.service';
-import { fakeReceiptStore } from './task-run-receipt-fake';
+import { withReceiptStore } from './task-run-receipt-fake';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -13,9 +13,7 @@ const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 function retryFixture(status: string, updated = 1) {
   const statusWrites: any[] = [];
   const published: any[][] = [];
-  const prisma = {
-    // Every run door opens its receipt (0137) before anything else.
-    ...fakeReceiptStore(),
+  const prisma = withReceiptStore({
     task: {
       findFirst: async () => ({
         id: TASK_ID,
@@ -36,12 +34,13 @@ function retryFixture(status: string, updated = 1) {
       },
     },
     taskDependency: { findMany: async () => [] },
+    $queryRaw: async () => [{ id: null, requiresResync: false }],
     // A paused run's delivery is read by its own turn key before it is written (H2F).
     conversationTurn: { findUnique: async () => null },
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findFirst: async () => null },
-  } as never;
+  }) as never;
   const sessions = { create: async () => ({ id: 'session-1' }) } as never;
   const realtime = { publishForUser: (...args: any[]) => published.push(args) } as never;
   return { service: new TasksService(prisma, sessions, realtime), statusWrites, published };
@@ -63,7 +62,9 @@ test('retrying a FAILED task moves it back to IN_PROGRESS', async () => {
   assert.equal(f.statusWrites[0].where.id, TASK_ID);
   assert.equal(f.statusWrites[0].where.ownerId, 'owner-1');
   assert.equal(f.published.length, 1);
-  assert.deepEqual(f.published[0].slice(1), ['task_changed', TASK_ID]);
+  assert.deepEqual(f.published[0].slice(1), [
+    'task_changed', { taskIds: [TASK_ID], resync: false },
+  ]);
 });
 
 test('running a task that is not FAILED leaves its status alone', async () => {
@@ -88,9 +89,7 @@ test('a status write the task raced past publishes nothing', async () => {
 
 test('batch-running a FAILED task clears it the same way', async () => {
   const statusWrites: any[] = [];
-  const prisma = {
-    // Every run door opens its receipt (0137) before anything else.
-    ...fakeReceiptStore(),
+  const prisma = withReceiptStore({
     task: {
       findMany: async () => [
         {
@@ -126,10 +125,11 @@ test('batch-running a FAILED task clears it the same way', async () => {
       },
     },
     taskDependency: { findMany: async () => [] },
+    $queryRaw: async () => [{ id: null, requiresResync: false }],
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findMany: async () => [] },
-  } as never;
+  }) as never;
   const realtime = { publishForUser: () => {} } as never;
   const service = new TasksService(prisma, {} as never, realtime);
   (service as unknown as Record<string, unknown>).planWorkspaceRun =

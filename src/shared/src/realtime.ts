@@ -37,8 +37,9 @@ export enum ControlEventType {
   /** A background shell the agent launched finished (completed/failed/killed). */
   BACKGROUND_TASK = 'background.task',
   /** A task (work item) the owner can see was created or updated — usually via an agent's MCP
-   *  task_create/task_update. `data` is a `ControlTaskChanged`; it's only a nudge to refetch the
-   *  task list/board. `sessionId` names the task's creator session (its scope on this stream). */
+   *  task_create/task_update. `data` is a `ControlTaskChanged`: bounded changes name the exact rows
+   *  a client may refetch, while destructive/ambiguous changes explicitly request a full resync.
+   *  `sessionId` names the task's creator session (its scope on this stream). */
   TASK_CHANGED = 'task.changed',
   /** An agent the owner can see was created or updated — via an orchestrator's MCP
    *  agent_create/agent_update. `data` is a `ControlAgentChanged`; like `task.changed` it's only a
@@ -74,6 +75,9 @@ export interface ControlEvent {
  *  with the `GET /sessions` list response so the client can upsert it verbatim. */
 export interface ControlSessionSummary {
   id: string;
+  /** Work item whose run this session represents. Optional for rolling-version compatibility;
+   *  null means an ordinary conversation rather than a task run. */
+  taskId?: string | null;
   title: string | null;
   /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */
   status: RunStatus;
@@ -150,17 +154,26 @@ export interface ControlBackgroundTask {
   exitCode?: number;
 }
 
-/** `data` for `task.changed`. The client just refetches its task queries; the id is carried for
- *  future fine-grained cache updates and logging. */
+/** `data` for `task.changed`.
+ *
+ * `taskIds` is the complete set of rows changed by a bounded operation. `resync` wins when true:
+ * deletion and other changes whose effects cannot be represented by fetchable rows use it so an
+ * incremental client never mistakes a representative id for the whole invalidation. `taskId` is
+ * retained as a compatibility alias for the first id while older native clients are deployed. */
 export interface ControlTaskChanged {
-  taskId: string;
+  taskId?: string;
+  taskIds: string[];
+  resync: boolean;
 }
 
-/** `data` for `agent.changed`. As with `task.changed`, the client just refetches its agent list;
- *  the id is carried for future fine-grained cache updates and logging. NOTE: this is the CHANGED
- *  agent, not the envelope's `agentId` (which is the calling session's agent). */
+/** `data` for `agent.changed`. As with `task.changed`, the client refetches its agent list. Some
+ * workspace updates also change task-row assignee/provider presentation; `false` lets a client
+ * skip that second refresh. Optional for rolling compatibility: missing means the legacy,
+ * conservative `true`. NOTE: this is the CHANGED agent, not the envelope's `agentId` (which is the
+ * calling session's agent). */
 export interface ControlAgentChanged {
   agentId: string;
+  affectsTaskRows?: boolean;
 }
 
 /** `data` for the user-scoped library events (`task.list.changed` / `tag.changed` /

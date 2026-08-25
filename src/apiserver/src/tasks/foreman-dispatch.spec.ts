@@ -41,6 +41,7 @@ function makeService(
   const created: any[] = [];
   const executed: string[] = [];
   const events: ListEventWrite[] = [];
+  const published: unknown[][] = [];
   let sql = '';
   let historySql = '';
   const prisma = {
@@ -77,7 +78,9 @@ function makeService(
       },
     },
   } as never;
-  const service = new TasksService(prisma, {} as never, {} as never);
+  const service = new TasksService(prisma, {} as never, {
+    publishForUser: (...args: unknown[]) => void published.push(args),
+  } as never);
   const tokens: string[] = [];
   (service as unknown as { execute: unknown }).execute = async (
     _o: string, id: string, _auto: unknown, token: string,
@@ -91,6 +94,7 @@ function makeService(
     executed,
     tokens,
     events,
+    published,
     sweep: () =>
       (
         service as unknown as { dispatchStalledListForemen(): Promise<void> }
@@ -110,6 +114,11 @@ test('a stalled list gets a foreman task, filed and dispatched', async () => {
   assert.equal(f.created[0].listId, LIST.id);
   assert.equal(f.created[0].assigneeId, LIST.workspaceId);
   assert.deepEqual(f.executed, [TASK_IDS[0]]);
+  assert.deepEqual(f.published, [[
+    LIST.ownerId,
+    'task_changed',
+    { taskIds: [TASK_IDS[0]], resync: false },
+  ]]);
   // Named `<kind>:<task>:<epoch>` like every other automatic request (§7.7 D5-b4): task-scoped, so
   // two foremen filed for two stalled lists are two requests rather than one answered with the
   // other's Session, and stamped with the moment the row was filed at.
@@ -159,6 +168,11 @@ test('a failed dispatch does not stop the remaining lists', async () => {
 
   assert.equal(f.created.length, 2);
   assert.deepEqual(f.executed, [TASK_IDS[1]]);
+  assert.deepEqual(
+    f.published.map((event) => (event[2] as { taskIds: string[] }).taskIds),
+    [[TASK_IDS[0]], [TASK_IDS[1]]],
+    'both durable rows are announced even though the first dispatch failed',
+  );
 });
 
 test('the note that stall leaves on the list names the foreman by its public id', async () => {

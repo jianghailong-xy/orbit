@@ -98,6 +98,7 @@ function harness(options: HarnessOptions = {}) {
   const realtime = {
     publish: () => undefined,
     notifyInbox: () => undefined,
+    publishSessionUpdated: () => undefined,
   } as never;
   return {
     controller: new RunnerApiController(

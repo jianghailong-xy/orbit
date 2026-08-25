@@ -150,6 +150,11 @@ public enum TaskListLogic {
     /// Web/server Ready semantics. `assigneeHasRunner` is supplied by the detail view because its
     /// compact assignee relation omits runner fields; list rows can use the embedded runner.
     public static func canStart(_ task: TaskItem, assigneeHasRunner: Bool? = nil) -> Bool {
+        // Incremental row reads carry the complete database predicate (paused/held lists,
+        // workspace enablement, aggregate parents and retired attempts included). Those gates are
+        // intentionally not all mirrored in the tolerant cross-version DTO, so the server value
+        // wins when present. Detail callers pass an explicit runner fact and use the local gates.
+        if assigneeHasRunner == nil, let runnable = task.runnable { return runnable }
         let hasRunner = assigneeHasRunner ?? (task.assignee?.runner?.id != nil)
         return task.status != .done && hasRunner && !isBusy(task) && !isBlocked(task)
     }

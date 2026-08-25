@@ -8,6 +8,7 @@ import {
   ControlEvent,
   ControlEventType,
   ControlSessionSummary,
+  ControlTaskChanged,
   deriveSessionFilingState,
   deriveSessionLifecycleState,
   deriveSessionRunState,
@@ -43,6 +44,34 @@ const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
+
+/** Normalize both the legacy `{id}` / `{taskId}` nudges and the incremental task-change payload.
+ * Empty or malformed payloads fail closed to `resync`: a future incremental client must never turn
+ * an event it cannot understand into "nothing changed". */
+function taskChangedData(
+  payload: Record<string, unknown>,
+): ControlTaskChanged & Record<string, unknown> {
+  // Only the array is an audited completeness claim. The old `{id}` / `{taskId}` payload named a
+  // representative row while every client did a whole-list refetch; treating that representative
+  // as a complete incremental invalidation silently leaves dependency/aggregate rows stale.
+  const explicitlyBounded = Array.isArray(payload.taskIds);
+  const taskIds = [
+    ...new Set(
+      (explicitlyBounded ? payload.taskIds as unknown[] : []).filter(
+        (id): id is string => typeof id === 'string' && id.length > 0,
+      ),
+    ),
+  ];
+  const legacyTaskId = [payload.taskId, payload.id].find(
+    (id): id is string => typeof id === 'string' && id.length > 0,
+  );
+  const taskId = taskIds[0] ?? legacyTaskId;
+  return {
+    ...(taskId ? { taskId } : {}),
+    taskIds,
+    resync: payload.resync === true || !explicitlyBounded || taskIds.length === 0,
+  };
+}
 
 /** Reconstruct lifecycle fields for the legacy session.ended wire event. */
 function endedSessionStates(
@@ -354,19 +383,25 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       seq: 0,
       type: RunEventType.TASK_CHANGED,
       ts: new Date().toISOString(),
-      payload: { taskId },
+      // This compatibility helper predates complete affected-row sets. Its scalar id remains an
+      // alias for old clients, but new incremental clients must reconcile rather than trust it.
+      payload: taskChangedData({ taskId }),
     });
   }
 
   /** A workspace the owner can see was created or updated via MCP. Published on the calling
    *  (orchestrator) session — the only session context that path has — so it rides the same hub
    *  and resolves to that owner; streamForUser maps it to ControlEventType.AGENT_CHANGED. */
-  publishWorkspaceChanged(sessionId: string, workspaceId: string): void {
+  publishWorkspaceChanged(
+    sessionId: string,
+    workspaceId: string,
+    affectsTaskRows: boolean,
+  ): void {
     this.publish(sessionId, {
       seq: 0,
       type: RunEventType.AGENT_CHANGED,
       ts: new Date().toISOString(),
-      payload: { workspaceId },
+      payload: { workspaceId, affectsTaskRows },
     });
   }
 
@@ -403,12 +438,27 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * `toControlEvent` recognizes the prefix and routes by owner without a DB lookup. Same NOTIFY
    * bridge, same coalescing on the client — only the scoping differs.
    */
-  publishForUser(ownerId: string, type: RunEventType, id: string): void {
+  publishForUser(
+    ownerId: string,
+    type: RunEventType.TASK_CHANGED,
+    change: string | ControlTaskChanged,
+  ): void;
+  publishForUser(ownerId: string, type: RunEventType, id: string): void;
+  publishForUser(
+    ownerId: string,
+    type: RunEventType,
+    idOrChange: string | ControlTaskChanged,
+  ): void {
+    const payload = type === RunEventType.TASK_CHANGED
+      ? taskChangedData(
+          typeof idOrChange === 'string' ? { id: idOrChange } : { ...idOrChange },
+        )
+      : { id: String(idOrChange) };
     this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
       seq: 0,
       type,
       ts: new Date().toISOString(),
-      payload: { id },
+      payload,
     });
   }
 
@@ -468,13 +518,17 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       }
       const owner = sessionId.slice(RealtimeService.USER_SCOPE.length);
       if (owner !== userId && owner !== RealtimeService.USER_SCOPE_ALL) return null;
-      const id = String(ev.payload.id ?? '');
       const data =
         type === ControlEventType.TASK_CHANGED
-          ? { taskId: id }
+          ? taskChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED
-            ? { agentId: id }
-            : { id };
+            ? {
+                agentId: String(ev.payload.id ?? ''),
+                ...(typeof ev.payload.affectsTaskRows === 'boolean'
+                  ? { affectsTaskRows: ev.payload.affectsTaskRows }
+                  : {}),
+              }
+            : { id: String(ev.payload.id ?? '') };
       return {
         type,
         sessionId: '',
@@ -543,14 +597,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         data = backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
         break;
       case ControlEventType.TASK_CHANGED:
-        // A pure nudge to refetch the owner's task list — no DB augmentation needed; the id
-        // travels straight through from publishTaskChanged.
-        data = { taskId: String(ev.payload.taskId ?? '') };
+        // No DB augmentation: bounded writers already name every changed row, while ambiguous
+        // writers set `resync`. The normalizer also keeps old `{taskId}` events compatible.
+        data = taskChangedData(ev.payload);
         break;
       case ControlEventType.AGENT_CHANGED:
         // Same: a nudge to refetch the owner's workspace list. The id here is the CHANGED workspace —
         // the envelope's `agentId` stays the calling session's workspace.
-        data = { agentId: String(ev.payload.workspaceId ?? '') };
+        data = {
+          agentId: String(ev.payload.workspaceId ?? ''),
+          ...(typeof ev.payload.affectsTaskRows === 'boolean'
+            ? { affectsTaskRows: ev.payload.affectsTaskRows }
+            : {}),
+        };
         break;
       case ControlEventType.APPROVAL_REQUESTED:
       case ControlEventType.APPROVAL_RESOLVED:
@@ -596,6 +655,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       where: { id: sessionId },
       select: {
         id: true,
+        taskId: true,
         title: true,
         status: true,
         engineTurnActive: true,
@@ -630,6 +690,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const pendingApprovals = isSessionGenerating(s) ? await this.countPendingApprovals(sessionId) : 0;
     return {
       id: s.id,
+      taskId: s.taskId ?? null,
       title: s.title ?? null,
       status: s.status as RunStatus,
       runStatus: s.status as RunStatus,

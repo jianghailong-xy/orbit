@@ -288,7 +288,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     // Retried whole. The reaper re-reads the session under its row lock and decides from that read,
     // so a re-run either finds the same stalled run or finds that somebody finished it first.
-    const ok = await withTransactionRetry(this.prisma, async (tx) => {
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       const res = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -308,24 +308,28 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           cancelRequestedAt: new Date(),
         },
       });
-      if (res.count === 0) return false;
+      if (res.count === 0) return { ok: false, taskReclaimed: false };
       await retireSessionInboxGeneration(tx, sessionId);
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
-      if (taskId && status !== RunStatus.SUCCEEDED) {
-        await reclaimStalledTask(tx, taskId, resetTaskTo);
-      }
+      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
+        ? await reclaimStalledTask(tx, taskId, resetTaskTo)
+        : false;
       // For a genuine failure, record it on the task timeline (independent of whether
       // the task was IN_PROGRESS, so a run that never reached IN_PROGRESS is covered).
       if (taskId && failed && resetTaskTo === TaskStatus.FAILED) {
         await postRunFailureComment(tx, taskId, opts.failureDetail ?? reason);
       }
-      return true;
+      return { ok: true, taskReclaimed };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
-    if (!ok) return;
+    if (!outcome.ok) return;
+    // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
+    // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
+    // compatibility helper deliberately emits an explicit resync for that rare abnormal path.
+    if (outcome.taskReclaimed && taskId) this.realtime.publishTaskChanged(sessionId, taskId);
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     this.realtime.publish(sessionId, {
       seq: Number.MAX_SAFE_INTEGER,

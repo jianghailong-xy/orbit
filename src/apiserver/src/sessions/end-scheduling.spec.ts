@@ -21,6 +21,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   let cancelRequests = 0;
   let inboxWakes = 0;
   let retired = 0;
+  const sessionUpdates: string[] = [];
   const tx = {
     $queryRaw: async () => [{ id }],
     $executeRaw: async () => {
@@ -47,6 +48,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const realtime = {
+    publishSessionUpdated: (sessionId: string) => sessionUpdates.push(sessionId),
     requestCancel: () => cancelRequests++,
     notifyInbox: () => inboxWakes++,
   } as never;
@@ -59,4 +61,5 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   assert.equal(retired, 1);
   assert.equal(cancelRequests, 1);
   assert.equal(inboxWakes, 1);
+  assert.deepEqual(sessionUpdates, [id]);
 });

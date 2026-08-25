@@ -56,6 +56,7 @@ function harness(kind: 'steer' | 'message') {
   const realtime = {
     notifyInbox: (id: string) => inboxWakes.push(id),
     publish: () => undefined,
+    publishSessionUpdated: () => undefined,
     publishQueuedTurnsChanged: (id: string) => queueChanges.push(id),
   } as never;
   const controller = new RunnerApiController(

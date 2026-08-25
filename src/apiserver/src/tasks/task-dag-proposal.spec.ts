@@ -66,15 +66,16 @@ function serviceWith(world: World) {
         taskDependency: dependencyClient(() => world.edgesAtApply ?? edges),
       }),
   };
+  const published: unknown[][] = [];
   const service = new TasksService(
     prisma as never,
     {} as never,
-    { publishForUser: () => undefined } as never,
+    { publishForUser: (...args: unknown[]) => published.push(args) } as never,
   );
   // reconcileReadyTasks runs after a successful apply and is not what these tests are about.
   (service as unknown as { reconcileReadyTasks: () => Promise<void> }).reconcileReadyTasks =
     async () => {};
-  return { service, written };
+  return { service, written, published };
 }
 
 test('removing a task\'s last prerequisite frees it but does not start it', async () => {
@@ -189,6 +190,18 @@ test('applying writes the removals and the additions', async () => {
     written.map((w) => `${w.kind} ${w.taskId === A ? 'A' : w.taskId}->${w.dependsOnTaskId === B ? 'B' : 'C'}`),
     ['delete A->B', 'create A->C'],
   );
+});
+
+test('applying names the changed task rows instead of putting the list id in taskId', async () => {
+  const { service, published } = serviceWith({ edges: [{ taskId: A, dependsOnTaskId: B }] });
+
+  await service.applyDag(OWNER, LIST, [rm(A, B), add(A, C)]);
+
+  assert.deepEqual(published, [[
+    OWNER,
+    'task_changed',
+    { taskIds: [A], resync: false },
+  ]]);
 });
 
 test('an addition already present is not written again', async () => {

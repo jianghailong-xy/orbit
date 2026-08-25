@@ -98,7 +98,7 @@ test('batch delete deduplicates ids and deletes only rows owned by the caller', 
   assert.equal(rows.has(TASK_A), false);
   assert.equal(rows.has(TASK_B), false);
   assert.equal(rows.get(OTHER_TASK), OTHER_OWNER_ID);
-  assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
+  assert.deepEqual(published, [[OWNER_ID, 'task_changed', { taskIds: [], resync: true }]]);
 });
 
 test('empty batch delete is a no-op', async () => {
@@ -169,7 +169,7 @@ test('single delete hard-deletes an owned task', async () => {
 
   assert.deepEqual(await service.remove(OWNER_ID, TASK_A), { ok: true });
   assert.deepEqual(deleteWhere, { ownerId: OWNER_ID, id: { in: [TASK_A] } });
-  assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
+  assert.deepEqual(published, [[OWNER_ID, 'task_changed', { taskIds: [], resync: true }]]);
 });
 
 // A run reaches its terminal state by finishing its task. Delete the task under a live run and
@@ -321,7 +321,7 @@ test('a run that cannot be ended does not fail the delete', async () => {
 
   // The task is deleted either way, and an end nobody honors is force-finalized by the reaper.
   assert.deepEqual(await service.remove(OWNER_ID, TASK_A), { ok: true });
-  assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
+  assert.deepEqual(published, [[OWNER_ID, 'task_changed', { taskIds: [], resync: true }]]);
 });
 
 test('batch delete ends the runs of every task it removes', async () => {

@@ -160,6 +160,13 @@ export class TasksController {
     return this.attribution.read(user.userId, id);
   }
 
+  /** Lightweight list-row hydration for incremental `task.changed` events. Kept separate from
+   * `GET :id`, whose comments/runs/dependency detail is intentionally much heavier. */
+  @Get(':id/row')
+  listRow(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.tasks.listRow(user.userId, id);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tasks.get(user.userId, id);

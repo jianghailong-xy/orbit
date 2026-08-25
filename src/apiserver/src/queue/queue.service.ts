@@ -20,6 +20,7 @@ import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-sup
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { RealtimeService } from '../realtime/realtime.service';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -33,7 +34,10 @@ export class QueueService {
 
   private readonly signal = new EventEmitter();
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeService,
+  ) {
     this.signal.setMaxListeners(0);
   }
 
@@ -192,6 +196,10 @@ export class QueueService {
       `);
       }, loggedRetry(this.logger, 'queue.trySessionClaim'));
       if (rows.length === 0) return null;
+      // The PENDING -> RUNNING commit changes the task row's queued/running overlays. Announce it
+      // before hydration: buildSession can fail after the claim committed, and in that case there
+      // is still a durable state change every connected client must reconcile.
+      this.realtime.publishSessionUpdated(rows[0].id);
       return this.buildSession(rows[0].id);
     } catch (err: any) {
       // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the

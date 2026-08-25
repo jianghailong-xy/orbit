@@ -52,7 +52,7 @@ function makeController() {
     listOwner?: string;
     create?: Record<string, unknown>;
     update?: Record<string, unknown>;
-    published?: [string, string];
+    published?: [string, string, boolean];
     authorizations: Array<[unknown, string | undefined, string | undefined]>;
   } = { authorizations: [] };
   const rawWorkspace = {
@@ -105,8 +105,12 @@ function makeController() {
     },
   } as never;
   const realtime = {
-    publishWorkspaceChanged: (sessionId: string, workspaceId: string) => {
-      seen.published = [sessionId, workspaceId];
+    publishWorkspaceChanged: (
+      sessionId: string,
+      workspaceId: string,
+      affectsTaskRows: boolean,
+    ) => {
+      seen.published = [sessionId, workspaceId, affectsTaskRows];
     },
   } as never;
   return { controller: new RunnerAgentsController(workspaces, orchestration, realtime), seen };
@@ -151,6 +155,7 @@ test('create forwards the workspace config fields an orchestrator may set', asyn
   assert.equal(result.name, 'child');
   assertSensitiveWorkspaceFieldsRedacted(result);
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
+  assert.deepEqual(seen.published, ['s1', 'a1', false]);
 });
 
 test('update forwards them too', async () => {
@@ -166,7 +171,7 @@ test('update forwards them too', async () => {
   // No runner rebind unless the caller asked for one.
   assert.equal(seen.update?.runnerId, undefined);
   // The workspace list refresh is scoped to the CALLING session, and names the updated workspace.
-  assert.deepEqual(seen.published, ['s1', 'a1']);
+  assert.deepEqual(seen.published, ['s1', 'a1', true]);
   assertSensitiveWorkspaceFieldsRedacted(result);
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });

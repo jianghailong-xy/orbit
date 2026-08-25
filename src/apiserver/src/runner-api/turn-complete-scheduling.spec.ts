@@ -25,6 +25,8 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
   let inboxWakes = 0;
   let queueWakes = 0;
   let retireCalls = 0;
+  const taskChanges: string[] = [];
+  const sessionUpdates: string[] = [];
   const tx = {
     $queryRaw: async () => [{ id: sessionId, leaseOwnerMatches: true }],
     $executeRaw: async () => {
@@ -63,6 +65,10 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
   const realtime = {
     notifyInbox: () => inboxWakes++,
     publish: () => undefined,
+    publishSessionUpdated: (changedSessionId: string) =>
+      void sessionUpdates.push(changedSessionId),
+    publishTaskChanged: (_sessionId: string, changedTaskId: string) =>
+      void taskChanges.push(changedTaskId),
   } as never;
   const queue = { notifySessionQueued: () => queueWakes++ } as never;
   return {
@@ -74,6 +80,8 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
     inboxWakes: () => inboxWakes,
     queueWakes: () => queueWakes,
     retireCalls: () => retireCalls,
+    taskChanges,
+    sessionUpdates,
   };
 }
 
@@ -89,6 +97,7 @@ test('turn completion releases the slot when no executable follow-up is pending'
   assert.deepEqual(h.statusWrites, [RunStatus.AWAITING_INPUT]);
   assert.equal(h.inboxWakes(), 1);
   assert.equal(h.queueWakes(), 1);
+  assert.deepEqual(h.sessionUpdates, [h.sessionId]);
 });
 
 test('turn completion retains RUNNING while a follow-up can reuse the held slot', async () => {
@@ -103,6 +112,7 @@ test('turn completion retains RUNNING while a follow-up can reuse the held slot'
   assert.deepEqual(h.statusWrites, [RunStatus.RUNNING]);
   assert.equal(h.inboxWakes(), 1);
   assert.equal(h.queueWakes(), 0);
+  assert.deepEqual(h.sessionUpdates, [h.sessionId]);
 });
 
 test('a failed chat turn finalizes the session FAILED instead of parking it as idle', async () => {
@@ -123,6 +133,7 @@ test('a failed chat turn finalizes the session FAILED instead of parking it as i
   assert.ok(h.sessionWrites[0].cancelRequestedAt instanceof Date);
   assert.equal(h.retireCalls(), 1);
   assert.equal(h.inboxWakes(), 0);
+  assert.deepEqual(h.sessionUpdates, [h.sessionId]);
 });
 
 test('a failed task turn retires its inbox generation in the terminal transaction', async () => {
@@ -138,4 +149,6 @@ test('a failed task turn retires its inbox generation in the terminal transactio
   assert.deepEqual(h.statusWrites, [RunStatus.FAILED]);
   assert.equal(h.retireCalls(), 1);
   assert.equal(h.inboxWakes(), 0);
+  assert.deepEqual(h.sessionUpdates, [h.sessionId]);
+  assert.deepEqual(h.taskChanges, ['33333333-3333-4333-8333-333333333333']);
 });

@@ -23,21 +23,24 @@ export const TASK_OCCUPYING: RunStatus[] = [
  *
  * Call inside the SAME transaction that finalized the session, AFTER the session's
  * status has been flipped to terminal — so the just-ended session is no longer
- * counted as occupying.
+ * counted as occupying. Returns whether the Task status actually moved, so the caller can publish
+ * a post-commit dependent-row invalidation without announcing a no-op or publishing in a retrying
+ * transaction.
  */
 export async function reclaimStalledTask(
   tx: Prisma.TransactionClient,
   taskId: string,
   resetTo: TaskStatus = TaskStatus.OPEN,
-): Promise<void> {
+): Promise<boolean> {
   const occupied = await tx.session.count({
     where: { taskId, status: { in: TASK_OCCUPYING } },
   });
-  if (occupied > 0) return;
-  await tx.task.updateMany({
+  if (occupied > 0) return false;
+  const changed = await tx.task.updateMany({
     where: { id: taskId, status: 'IN_PROGRESS' },
     data: { status: resetTo },
   });
+  return changed.count > 0;
 }
 
 /**

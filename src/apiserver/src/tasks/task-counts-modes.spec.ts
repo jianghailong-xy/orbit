@@ -63,6 +63,17 @@ test('counts=total keeps the filtered total and skips the scope aggregates', asy
   assert.equal(calls.raw, 0, 'no runnable predicate');
 });
 
+test('counts=total on Ready returns the authoritative runnable total, not page length', async () => {
+  const { service, calls } = harness();
+
+  const page = await service.listPage(OWNER_ID, { status: 'RUNNABLE', counts: 'total' });
+
+  assert.equal(page.items.length, 0);
+  assert.equal(page.total, 3);
+  // One query ranks the Ready page; the second counts every matching row in the scope.
+  assert.equal(calls.raw, 2);
+});
+
 test('counts=none drops both, as paging needs neither', async () => {
   const { service, calls } = harness();
 
