@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { DownOutlined } from '@ant-design/icons';
+import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Skeleton, Tag, Typography } from 'antd';
 import Markdown from 'react-markdown';
@@ -7,6 +8,7 @@ import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { ago } from '../lib/runnerEngines';
+import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
  * The OUTCOME half of "is this project done", drawn from `GET /projects/:id` → `acceptance`.
@@ -109,18 +111,17 @@ const VERDICT: Record<
     fill: 'var(--warning-solid)',
   },
   UNDECIDED: {
-    label: '—',
-    accessible: 'Not judged yet',
-    color: 'var(--text-3)',
+    label: 'Unjudged',
+    accessible: 'Unjudged — not judged yet',
+    color: 'var(--text-2)',
     background: 'var(--fill-muted)',
     border: 'var(--border)',
     fill: 'var(--border)',
   },
 };
 
-/** One verdict, as a word. The em dash of an undecided criterion is the one label that is not a
- *  word, so it carries the sentence in `aria-label` and `title` instead — a screen reader that
- *  read it out as "dash" would be told nothing. */
+/** One verdict, as a word. `Unjudged` is deliberately explicit on a phone, where the old em dash
+ *  looked like a disabled remove control. Its accessible name remains the fuller sentence. */
 export function VerdictBadge({ verdict }: { verdict: AcceptanceCriterionStanding['verdict'] }) {
   const v = VERDICT[verdict];
   return (
@@ -148,6 +149,15 @@ export function VerdictBadge({ verdict }: { verdict: AcceptanceCriterionStanding
  *  than all of them because the section sits between the goal and the task list: a 53-criterion
  *  project would otherwise push the rest of the page off the screen. */
 export const CRITERIA_PREVIEW = 12;
+
+/** A project detail page on a phone should establish the section and then let the task content
+ *  continue. Four rows are enough to show the shape without a seven- or fifty-three-item list
+ *  taking over the first visit; the disclosure below names exactly what remains. */
+export const MOBILE_CRITERIA_PREVIEW = 4;
+
+/** Kept identical to the acceptance media block in index.css. This is narrower than the app's
+ *  960px master/detail breakpoint: a tablet has enough reading width for the desktop list. */
+export const ACCEPTANCE_PHONE_QUERY = '(max-width: 560px)';
 
 /** Above this many criteria the meter stops being one segment per criterion — 53 hairlines are a
  *  texture, not a reading — and becomes one proportional run per verdict. */
@@ -244,26 +254,151 @@ export function standingLine(acceptance: ProjectAcceptanceSummary, now: number):
  *  would otherwise produce are flattened, because a row is one row whatever the author typed. */
 const Flat = ({ children }: { children?: ReactNode }) => <>{children}</>;
 const INLINE_ONLY = { p: Flat, h1: Flat, h2: Flat, h3: Flat, h4: Flat, h5: Flat, h6: Flat };
+const PreviewImage = ({ alt }: ComponentProps<'img'>) => <>{alt ?? ''}</>;
+// A collapsed phone preview is readable text, not the interactive document. In particular, a
+// link clipped below line three must not remain in the keyboard order; the formatted Markdown is
+// mounted separately and `hidden` until the reader asks for it.
+const PREVIEW_ONLY = { ...INLINE_ONLY, a: Flat, img: PreviewImage };
+
+export const MOBILE_CRITERION_PREVIEW_LINES = 3;
+
+/** Real rendered overflow, not character count: CJK, code and links all wrap differently. */
+export function criterionNeedsDisclosure(element: HTMLElement): boolean {
+  const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight);
+  if (!Number.isFinite(lineHeight) || lineHeight <= 0) return false;
+  return element.scrollHeight > lineHeight * MOBILE_CRITERION_PREVIEW_LINES + 1;
+}
+
+/** One phone row. The disclosure exists only when the rendered text actually exceeds three
+ *  lines. Its collapsed copy contains no interactive descendants, while the real Markdown stays
+ *  natively hidden, so a clipped link cannot still receive keyboard focus. */
+function MobileCriterionRow({ criterion }: { criterion: AcceptanceCriterionStanding }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState<boolean | null>(null);
+  const measuredText = useRef<HTMLSpanElement>(null);
+  const fullId = useId();
+
+  useLayoutEffect(() => {
+    if (expanded || measuredText.current === null) return;
+    const element = measuredText.current;
+    const measure = (): void => {
+      const next = criterionNeedsDisclosure(element);
+      setOverflows((current) => (current === next ? current : next));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [criterion.text, expanded, overflows]);
+
+  const classes = [
+    'acceptance-row',
+    'acceptance-row-mobile',
+    criterion.verdict === 'FAIL' ? 'is-fail' : '',
+    expanded ? 'is-expanded' : '',
+  ].filter(Boolean).join(' ');
+
+  // Once a short row has been measured, render its real Markdown directly: links that fit in the
+  // preview should work without making the reader open a disclosure that reveals nothing.
+  if (overflows === false) {
+    return (
+      <li className={classes}>
+        <span className="acceptance-row-no">{criterion.ordinal}</span>
+        <span ref={measuredText} className="acceptance-row-text acceptance-row-full">
+          <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
+            {criterion.text}
+          </Markdown>
+        </span>
+        <span className="acceptance-row-verdict acceptance-row-verdict-static">
+          <VerdictBadge verdict={criterion.verdict} />
+        </span>
+      </li>
+    );
+  }
+
+  return (
+    <li className={classes}>
+      <span className="acceptance-row-no">{criterion.ordinal}</span>
+      <span
+        ref={expanded ? undefined : measuredText}
+        className="acceptance-row-text acceptance-row-preview"
+        hidden={expanded}
+      >
+        <Markdown remarkPlugins={[remarkGfm]} components={PREVIEW_ONLY}>
+          {criterion.text}
+        </Markdown>
+      </span>
+      <span className="acceptance-row-verdict">
+        {overflows === true ? (
+          <button
+            type="button"
+            className="acceptance-row-toggle"
+            aria-expanded={expanded}
+            aria-controls={fullId}
+            aria-label={`${expanded ? 'Hide' : 'Show'} formatted criterion ${criterion.ordinal}, ${VERDICT[criterion.verdict].accessible}`}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <VerdictBadge verdict={criterion.verdict} />
+            <DownOutlined className="acceptance-row-toggle-icon" aria-hidden />
+          </button>
+        ) : (
+          <span className="acceptance-row-verdict-static">
+            <VerdictBadge verdict={criterion.verdict} />
+          </span>
+        )}
+      </span>
+      <span
+        ref={expanded ? measuredText : undefined}
+        id={fullId}
+        className="acceptance-row-text acceptance-row-full"
+        hidden={!expanded}
+      >
+        <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
+          {criterion.text}
+        </Markdown>
+      </span>
+    </li>
+  );
+}
 
 /** Every stated criterion with what the latest attempt says about it, in the order they were
  *  stated. Rendered on a never-run project too: the criteria are stated facts, they are simply
  *  unjudged, and listing them is how a reader sees what a run would have to conclude. */
-export function AcceptanceCriteriaList({ criteria }: { criteria: AcceptanceCriterionStanding[] }) {
+export function AcceptanceCriteriaList({
+  criteria,
+  id,
+  compact = false,
+}: {
+  criteria: AcceptanceCriterionStanding[];
+  id?: string;
+  compact?: boolean;
+}) {
   return (
-    <ul className="acceptance-criteria">
-      {criteria.map((c) => (
-        <li key={c.id ?? `${c.key}:${c.ordinal}`} className={`acceptance-row${c.verdict === 'FAIL' ? ' is-fail' : ''}`}>
-          <span className="acceptance-row-no">{c.ordinal}</span>
-          <span className="acceptance-row-text">
-            <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
-              {c.text}
-            </Markdown>
-          </span>
-          <span className="acceptance-row-verdict">
-            <VerdictBadge verdict={c.verdict} />
-          </span>
-        </li>
-      ))}
+    <ul id={id} className="acceptance-criteria">
+      {criteria.map((c) => {
+        const identity = c.id ?? `${c.key}:${c.ordinal}`;
+        return compact ? (
+          // Authored text changing under the same stable criterion id must reset its measured
+          // preview and disclosure state, hence text is part of this phone-only instance key.
+          <MobileCriterionRow key={`${identity}:${c.text}`} criterion={c} />
+        ) : (
+          <li
+            key={identity}
+            className={`acceptance-row${c.verdict === 'FAIL' ? ' is-fail' : ''}`}
+          >
+            <span className="acceptance-row-no">{c.ordinal}</span>
+            <span className="acceptance-row-text">
+              <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
+                {c.text}
+              </Markdown>
+            </span>
+            <span className="acceptance-row-verdict">
+              <VerdictBadge verdict={c.verdict} />
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -273,8 +408,13 @@ export function AcceptanceCriteriaList({ criteria }: { criteria: AcceptanceCrite
 function OutcomeNote() {
   return (
     <div className="acceptance-note">
-      Task completion is a process measure; acceptance is the outcome measure — a project can
-      finish every task and still meet none of the criteria it was stated for.
+      <span className="acceptance-note-wide">
+        Task completion is a process measure; acceptance is the outcome measure — a project can
+        finish every task and still meet none of the criteria it was stated for.
+      </span>
+      <span className="acceptance-note-compact">
+        Tasks track process · Acceptance tracks outcomes.
+      </span>
     </div>
   );
 }
@@ -317,8 +457,33 @@ function Standing({
 export function criteriaPreview(
   criteria: AcceptanceCriterionStanding[],
   expanded: boolean,
+  limit = CRITERIA_PREVIEW,
 ): AcceptanceCriterionStanding[] {
-  return expanded ? criteria : criteria.slice(0, CRITERIA_PREVIEW);
+  return expanded ? criteria : criteria.slice(0, limit);
+}
+
+/** The never-run sentence has two visual readings of the same facts. On a wide screen it remains
+ *  one explanatory line; on a phone the headline and compact detail become a scannable inset.
+ *  CSS exposes only one copy at a time, so assistive technology does not hear it twice. */
+function AcceptanceStanding({ acceptance }: { acceptance: ProjectAcceptanceSummary }) {
+  if (acceptance.lastRunAt === null && acceptance.total > 0) {
+    const count = plural(acceptance.total, 'criterion', 'criteria');
+    return (
+      <div className="acceptance-standing is-never">
+        <span className="acceptance-standing-wide">
+          {standingLine(acceptance, Date.now())}
+        </span>
+        <span className="acceptance-standing-compact">
+          <strong className="acceptance-standing-title">Never run</strong>
+          <span>{`${count} stated · Standing unknown, not zero`}</span>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="acceptance-standing">{standingLine(acceptance, Date.now())}</div>
+  );
 }
 
 /**
@@ -338,6 +503,8 @@ export function ProjectAcceptanceCard({
   projectId: string;
   action?: ReactNode;
 }) {
+  const phone = useMediaQuery(ACCEPTANCE_PHONE_QUERY);
+  const criteriaListId = useId();
   const detail = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api<ProjectAcceptanceDetail>(`/projects/${encodeURIComponent(projectId)}`),
@@ -353,12 +520,15 @@ export function ProjectAcceptanceCard({
   // A ratio is shown only once an attempt exists to have earned it. Before that there is nothing
   // to put here that is not a score: "0 / 0" and "0 / 53" both read as a result.
   const ran = acceptance !== null && acceptance.lastRunAt !== null;
-  const shown = criteriaPreview(criteria, expanded);
+  const previewLimit = phone ? MOBILE_CRITERIA_PREVIEW : CRITERIA_PREVIEW;
+  const shown = criteriaPreview(criteria, expanded, previewLimit);
+  const hasCriteriaDisclosure = criteria.length > previewLimit;
+  const hasMeter = acceptance !== null && acceptance.total > 0 && criteria.length > 0;
   const authored = detail.data?.acceptanceCriteria?.trim();
 
   return (
     <Card
-      className="acceptance-card"
+      className={`acceptance-card${hasMeter ? ' has-meter' : ''}`}
       title="Acceptance"
       styles={{ body: { padding: 0 } }}
       extra={
@@ -409,7 +579,7 @@ export function ProjectAcceptanceCard({
         </>
       ) : (
         <>
-          <div className="acceptance-standing">{standingLine(acceptance, Date.now())}</div>
+          <AcceptanceStanding acceptance={acceptance} />
           {detail.data?.acceptanceCriteriaMigration?.needsReview ? (
             <div className="acceptance-block">
               <Alert
@@ -420,16 +590,36 @@ export function ProjectAcceptanceCard({
               />
             </div>
           ) : null}
-          <AcceptanceCriteriaList criteria={shown} />
-          {criteria.length > shown.length ? (
+          <AcceptanceCriteriaList id={criteriaListId} criteria={shown} compact={phone} />
+          {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
-            // forty-one would read as a complete list of twelve.
-            <div className="acceptance-block">
-              <Button size="small" onClick={() => setExpanded(true)}>
-                {`Show all ${acceptance.total} criteria`}
+            // forty-one would read as a complete list of twelve. The control remains after it is
+            // pressed so keyboard focus has somewhere stable to stay, and the list can fold back.
+            <div className="acceptance-block acceptance-more">
+              <Button
+                size="small"
+                block={phone}
+                className="acceptance-more-button"
+                aria-expanded={expanded}
+                aria-controls={criteriaListId}
+                onClick={() => setExpanded((current) => !current)}
+              >
+                {expanded
+                  ? `Show first ${previewLimit} criteria`
+                  : phone
+                    ? `View all ${acceptance.total} criteria`
+                    : `Show all ${acceptance.total} criteria`}
+                {phone ? (
+                  <DownOutlined
+                    className={`acceptance-more-icon${expanded ? ' is-expanded' : ''}`}
+                    aria-hidden
+                  />
+                ) : null}
               </Button>
-              <Typography.Text type="secondary" style={{ marginInlineStart: 10, fontSize: 12 }}>
-                {`${criteria.length - shown.length} more not shown`}
+              <Typography.Text type="secondary" className="acceptance-more-meta">
+                {expanded
+                  ? `Showing all ${criteria.length} criteria`
+                  : `${criteria.length - shown.length} more not shown`}
               </Typography.Text>
             </div>
           ) : null}

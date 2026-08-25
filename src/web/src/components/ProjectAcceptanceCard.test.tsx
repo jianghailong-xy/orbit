@@ -1,10 +1,17 @@
+// @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ACCEPTANCE_PHONE_QUERY,
   CRITERIA_PREVIEW,
   METER_SEGMENT_LIMIT,
+  MOBILE_CRITERION_PREVIEW_LINES,
+  MOBILE_CRITERIA_PREVIEW,
   ProjectAcceptanceCard,
+  criterionNeedsDisclosure,
   criteriaPreview,
   meterReading,
   meterSegments,
@@ -17,6 +24,82 @@ import {
 // hang-free failure rather than a real request. A static render never dispatches one anyway —
 // react-query subscribes in an effect — which is why every state below is seeded into the cache.
 vi.mock('../api', () => ({ api: vi.fn(() => new Promise(() => {})) }));
+
+/** Static renders take the desktop branch. Mounted phone tests override this per test; answering
+ * false for every other query also keeps antd's own breakpoint subscriptions deterministic. */
+function stubViewport(phone: boolean): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: phone && query === ACCEPTANCE_PHONE_QUERY,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }));
+}
+
+interface ObservedResize {
+  callback: ResizeObserverCallback;
+  targets: Set<Element>;
+  observer: ResizeObserver;
+}
+
+let observedResizes: ObservedResize[] = [];
+
+/** jsdom has neither layout nor ResizeObserver. Tests put explicit dimensions on the preview and
+ * then send the same notification a real width change would send. */
+function stubResizeObserver(): void {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      private readonly observed: ObservedResize;
+
+      constructor(callback: ResizeObserverCallback) {
+        this.observed = {
+          callback,
+          targets: new Set(),
+          observer: this as unknown as ResizeObserver,
+        };
+        observedResizes.push(this.observed);
+      }
+
+      observe(target: Element): void {
+        this.observed.targets.add(target);
+      }
+
+      unobserve(target: Element): void {
+        this.observed.targets.delete(target);
+      }
+
+      disconnect(): void {
+        this.observed.targets.clear();
+      }
+    },
+  );
+}
+
+async function notifyResizeObservers(): Promise<void> {
+  await act(async () => {
+    for (const observed of observedResizes) {
+      const entries = [...observed.targets].map((target) => ({ target }) as ResizeObserverEntry);
+      if (entries.length > 0) observed.callback(entries, observed.observer);
+    }
+  });
+}
+
+beforeEach(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  observedResizes = [];
+  stubViewport(false);
+  stubResizeObserver();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const PROJECT = '0195c0de-0000-7000-8000-000000000001';
 
@@ -36,6 +119,30 @@ function paint(qc: QueryClient) {
   );
 }
 
+/** Mounts the stateful card so its phone-only controls can be pressed. */
+async function mount(qc: QueryClient): Promise<{
+  container: HTMLDivElement;
+  cleanup: () => Promise<void>;
+}> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={qc}>
+        <ProjectAcceptanceCard projectId={PROJECT} />
+      </QueryClientProvider>,
+    );
+  });
+  return {
+    container,
+    cleanup: async () => {
+      await act(async () => root.unmount());
+      container.remove();
+    },
+  };
+}
+
 function criterion(
   ordinal: number,
   text: string,
@@ -51,6 +158,17 @@ const FIVE = [
   criterion(3, 'The merge button refuses a diverged branch', 'FAIL'),
   criterion(4, 'Acceptance runs are recorded per criterion', 'UNDECIDED'),
   criterion(5, 'The context gauge reports a real window', 'INCONCLUSIVE'),
+];
+
+const SEVEN = [
+  criterion(
+    1,
+    'The [full acceptance criterion](/docs/acceptance) stays readable even when its explanation needs several lines on a phone',
+    'UNDECIDED',
+  ),
+  ...Array.from({ length: 6 }, (_, i) =>
+    criterion(i + 2, `Mobile acceptance criterion ${i + 2}`, 'UNDECIDED'),
+  ),
 ];
 
 /** Long enough ago that `ago` reports whole days, so the sentence is the same on every run of
@@ -95,7 +213,45 @@ function rowCount(html: string): number {
   return (html.match(/class="acceptance-row(?: |")/g) ?? []).length;
 }
 
-describe('ProjectAcceptanceCard', () => {
+async function click(element: HTMLElement): Promise<void> {
+  await act(async () => element.click());
+}
+
+/** Supplies the layout facts jsdom deliberately does not calculate. Only the first, long fixture
+ * is allowed to overflow; every ordinary row remains under the three-line threshold. */
+function stubCriterionLayout(initiallyOverflows: boolean): {
+  setLongCriterionOverflow: (next: boolean) => void;
+} {
+  let longCriterionOverflows = initiallyOverflows;
+  const getComputedStyle = window.getComputedStyle.bind(window);
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudoElement) => {
+    const style = getComputedStyle(element, pseudoElement);
+    if (
+      element instanceof HTMLElement
+      && (element.classList.contains('acceptance-row-preview')
+        || element.classList.contains('acceptance-row-full'))
+    ) {
+      Object.defineProperty(style, 'lineHeight', { configurable: true, value: '20px' });
+    }
+    return style;
+  });
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function () {
+    const criterionText = this.textContent ?? '';
+    if (criterionText.includes('full acceptance criterion')) {
+      return longCriterionOverflows ? 80 : 40;
+    }
+    return 40;
+  });
+  return {
+    setLongCriterionOverflow: (next: boolean) => {
+      longCriterionOverflows = next;
+    },
+  };
+}
+
+// The first antd render initializes its jsdom style registry and can cross Vitest's 5s default on
+// a loaded CI worker; the assertions themselves remain synchronous and bounded.
+describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
   it('heads the card with passed over total', () => {
     const qc = client();
     seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
@@ -115,8 +271,11 @@ describe('ProjectAcceptanceCard', () => {
     expect(withoutColour(rowFor(html, FIVE[0].text))).toContain('PASS');
     expect(withoutColour(rowFor(html, FIVE[2].text))).toContain('FAIL');
     expect(withoutColour(rowFor(html, FIVE[4].text))).toContain('INCONCLUSIVE');
-    // The one badge whose label is not a word carries the sentence instead of a bare dash.
-    expect(withoutColour(rowFor(html, FIVE[3].text))).toContain('Not judged yet');
+    // Undecided is a readable visual state. Its accessible name begins with the same visible
+    // label (label-in-name for speech input), then adds the fuller explanation.
+    const undecided = withoutColour(rowFor(html, FIVE[3].text));
+    expect(undecided).toContain('>Unjudged<');
+    expect(undecided).toContain('aria-label="Unjudged — not judged yet"');
   });
 
   it('says a passed criterion and a failed one apart in words, not only in colour', () => {
@@ -375,6 +534,176 @@ describe('ProjectAcceptanceCard', () => {
   });
 });
 
+describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
+  it('shows four of seven criteria first, names the hidden count, and can reveal the rest', async () => {
+    stubViewport(true);
+    const qc = client();
+    seed(qc, { total: 7, passed: 0, lastRunAt: null, criteria: SEVEN });
+    const mounted = await mount(qc);
+
+    try {
+      expect(mounted.container.querySelectorAll('.acceptance-row')).toHaveLength(
+        MOBILE_CRITERIA_PREVIEW,
+      );
+      expect(mounted.container.textContent).toContain('Mobile acceptance criterion 4');
+      expect(mounted.container.textContent).not.toContain('Mobile acceptance criterion 5');
+      expect(mounted.container.textContent).toContain('3 more not shown');
+
+      const viewAll = [...mounted.container.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'View all 7 criteria',
+      );
+      expect(viewAll, 'the control that names the complete list').toBeTruthy();
+      expect(viewAll!.getAttribute('aria-expanded')).toBe('false');
+      viewAll!.focus();
+      await click(viewAll!);
+
+      expect(mounted.container.querySelectorAll('.acceptance-row')).toHaveLength(7);
+      expect(mounted.container.textContent).toContain('Mobile acceptance criterion 7');
+      expect(viewAll!.textContent).toContain('Show first 4 criteria');
+      expect(viewAll!.getAttribute('aria-expanded')).toBe('true');
+      expect(mounted.container.textContent).toContain('Showing all 7 criteria');
+      expect(document.activeElement).toBe(viewAll);
+
+      await click(viewAll!);
+      expect(mounted.container.querySelectorAll('.acceptance-row')).toHaveLength(4);
+      expect(viewAll!.textContent).toContain('View all 7 criteria');
+      expect(viewAll!.getAttribute('aria-expanded')).toBe('false');
+      expect(mounted.container.textContent).toContain('3 more not shown');
+      expect(document.activeElement).toBe(viewAll);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it('renders a short criterion as full Markdown without a disclosure that reveals nothing', async () => {
+    stubViewport(true);
+    stubCriterionLayout(false);
+    const qc = client();
+    seed(qc, {
+      total: 1,
+      passed: 0,
+      lastRunAt: null,
+      criteria: [criterion(1, 'A [short criterion](/docs/short) fits', 'UNDECIDED')],
+    });
+    const mounted = await mount(qc);
+
+    try {
+      const row = mounted.container.querySelector<HTMLElement>('.acceptance-row-mobile');
+      expect(row).toBeTruthy();
+      expect(row!.querySelector('.acceptance-row-toggle')).toBeNull();
+      expect(row!.querySelector('.acceptance-row-preview')).toBeNull();
+      const full = row!.querySelector<HTMLElement>('.acceptance-row-full');
+      expect(full?.hidden).toBe(false);
+      expect(full?.querySelector('a')?.getAttribute('href')).toBe('/docs/short');
+      expect(row!.querySelector('.acceptance-row-verdict-static')).toBeTruthy();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it('reveals and re-hides the formatted Markdown only when a criterion really overflows', async () => {
+    stubViewport(true);
+    stubCriterionLayout(true);
+    const qc = client();
+    seed(qc, { total: 1, passed: 0, lastRunAt: null, criteria: [SEVEN[0]] });
+    const mounted = await mount(qc);
+
+    try {
+      const row = mounted.container.querySelector<HTMLElement>('.acceptance-row-mobile');
+      const preview = row?.querySelector<HTMLElement>('.acceptance-row-preview');
+      const full = row?.querySelector<HTMLElement>('.acceptance-row-full');
+      const toggle = row?.querySelector<HTMLButtonElement>('.acceptance-row-toggle');
+
+      expect(preview?.hidden).toBe(false);
+      expect(preview?.textContent).toContain('full acceptance criterion');
+      expect(preview?.querySelector('a')).toBeNull();
+      expect(full?.hidden).toBe(true);
+      expect(full?.querySelector('a')?.getAttribute('href')).toBe('/docs/acceptance');
+      expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle?.getAttribute('aria-controls')).toBe(full?.id);
+      expect(toggle?.getAttribute('aria-label')).toContain('Show formatted criterion 1');
+
+      toggle!.focus();
+      await click(toggle!);
+      expect(preview?.hidden).toBe(true);
+      expect(full?.hidden).toBe(false);
+      expect(full?.querySelector<HTMLAnchorElement>('a')?.tabIndex).toBe(0);
+      expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+      expect(toggle?.getAttribute('aria-label')).toContain('Hide formatted criterion 1');
+      expect(row?.classList.contains('is-expanded')).toBe(true);
+      expect(document.activeElement).toBe(toggle);
+
+      await click(toggle!);
+      expect(preview?.hidden).toBe(false);
+      expect(preview?.querySelector('a')).toBeNull();
+      expect(full?.hidden).toBe(true);
+      expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+      expect(row?.classList.contains('is-expanded')).toBe(false);
+      expect(document.activeElement).toBe(toggle);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it('re-measures overflow when ResizeObserver reports a width change', async () => {
+    stubViewport(true);
+    const layout = stubCriterionLayout(true);
+    const qc = client();
+    seed(qc, { total: 1, passed: 0, lastRunAt: null, criteria: [SEVEN[0]] });
+    const mounted = await mount(qc);
+
+    try {
+      expect(mounted.container.querySelector('.acceptance-row-toggle')).toBeTruthy();
+
+      layout.setLongCriterionOverflow(false);
+      await notifyResizeObservers();
+      expect(mounted.container.querySelector('.acceptance-row-toggle')).toBeNull();
+      expect(mounted.container.querySelector<HTMLElement>('.acceptance-row-full')?.hidden).toBe(
+        false,
+      );
+
+      layout.setLongCriterionOverflow(true);
+      await notifyResizeObservers();
+      expect(mounted.container.querySelector('.acceptance-row-toggle')).toBeTruthy();
+      expect(mounted.container.querySelector<HTMLElement>('.acceptance-row-preview')?.hidden).toBe(
+        false,
+      );
+      expect(mounted.container.querySelector<HTMLElement>('.acceptance-row-full')?.hidden).toBe(
+        true,
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it('keeps all seven criteria and full row text on a desktop', () => {
+    const qc = client();
+    seed(qc, { total: 7, passed: 0, lastRunAt: null, criteria: SEVEN });
+    const html = paint(qc);
+
+    expect(rowCount(html)).toBe(7);
+    expect(html).not.toContain('View all 7 criteria');
+    expect(html).not.toContain('more not shown');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('acceptance-row-mobile');
+    expect(html.match(/href="\/docs\/acceptance"/g)).toHaveLength(1);
+  });
+});
+
+describe('mobile criterion overflow', () => {
+  it('asks for disclosure only beyond the three-line rendered preview', () => {
+    const layout = stubCriterionLayout(false);
+    const preview = document.createElement('span');
+    preview.className = 'acceptance-row-preview';
+    preview.textContent = 'full acceptance criterion';
+
+    expect(MOBILE_CRITERION_PREVIEW_LINES).toBe(3);
+    expect(criterionNeedsDisclosure(preview)).toBe(false);
+    layout.setLongCriterionOverflow(true);
+    expect(criterionNeedsDisclosure(preview)).toBe(true);
+  });
+});
+
 describe('the meter', () => {
   it('is one segment per criterion, in stated order', () => {
     // Segment three is criterion three: the meter indexes the list under it rather than
@@ -468,5 +797,12 @@ describe('criteriaPreview', () => {
   it('leaves a short list alone in both readings', () => {
     expect(criteriaPreview(FIVE, false)).toEqual(FIVE);
     expect(criteriaPreview(FIVE, true)).toEqual(FIVE);
+  });
+
+  it('accepts the smaller phone preview without changing the desktop default', () => {
+    expect(criteriaPreview(many, false, MOBILE_CRITERIA_PREVIEW)).toEqual(
+      many.slice(0, MOBILE_CRITERIA_PREVIEW),
+    );
+    expect(criteriaPreview(many, false)).toHaveLength(CRITERIA_PREVIEW);
   });
 });

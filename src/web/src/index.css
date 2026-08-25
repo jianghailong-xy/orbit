@@ -9533,6 +9533,9 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 13px;
   line-height: 1.6;
 }
+.acceptance-standing-compact {
+  display: none;
+}
 .acceptance-block {
   padding: 12px 24px;
 }
@@ -9583,6 +9586,10 @@ html[data-theme='dark'] .session-tag-chip {
   justify-content: flex-end;
   width: 118px;
 }
+.acceptance-more-meta.ant-typography {
+  margin-inline-start: 10px;
+  font-size: 12px;
+}
 .acceptance-note {
   padding: 10px 24px 12px;
   border-top: 1px solid var(--border-subtle);
@@ -9590,16 +9597,253 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   line-height: 1.6;
 }
-/* On a phone the rail costs a third of the line. The verdict goes under its criterion instead,
-   still left-of-nothing so the eye finds it in the same place on every row. */
+.acceptance-note-compact {
+  display: none;
+}
+/* On a phone Acceptance becomes a compact, inspectable summary rather than a long table. Four
+   complete rows establish the shape of the criteria and the list disclosure names everything
+   that is not initially on screen. Keep this breakpoint identical to ACCEPTANCE_PHONE_QUERY in
+   ProjectAcceptanceCard.tsx. */
 @media (max-width: 560px) {
-  .acceptance-row {
-    flex-wrap: wrap;
+  .acceptance-card.ant-card {
+    overflow: hidden;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(31, 35, 41, 0.06);
   }
-  .acceptance-row-verdict {
+  :root[data-theme='dark'] .acceptance-card.ant-card {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.24);
+  }
+  /* The meter belongs to the whole reading, so on a phone it spans the head instead of sitting
+     under only the right-aligned number. The Card head is the positioned containing block. */
+  .acceptance-card.has-meter .ant-card-head {
+    position: relative;
+    min-height: 92px;
+    padding-bottom: 26px;
+  }
+  .acceptance-card .ant-card-head {
+    padding-inline: 16px;
+  }
+  .acceptance-card .ant-card-head-wrapper {
+    min-height: 56px;
+  }
+  .acceptance-card .ant-card-head-title {
+    font-size: 18px;
+  }
+  .acceptance-head-extra {
+    gap: 8px;
+  }
+  .acceptance-score {
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--fill-muted);
+    font-size: 12.5px;
+  }
+  .acceptance-score.is-ran {
+    background: var(--success-bg);
+  }
+  .acceptance-meter {
+    position: absolute;
+    inset-inline: 16px;
+    bottom: 13px;
+    width: auto;
+    margin-top: 0;
+    gap: 6px;
+  }
+  .acceptance-meter > i {
+    height: 6px;
+    border-radius: 3px;
+  }
+  .acceptance-standing {
+    margin: 12px 16px 8px;
+    padding: 13px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-subtle);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .acceptance-standing-wide {
+    display: none;
+  }
+  .acceptance-standing-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .acceptance-standing-title {
+    color: var(--text-1);
+    font-size: 15.5px;
+    font-weight: 650;
+  }
+  .acceptance-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: start;
+    column-gap: 12px;
+    row-gap: 4px;
+    padding: 12px 16px;
+  }
+  .acceptance-row:first-child {
+    border-top: 0;
+  }
+  .acceptance-row-no {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 50%;
+    background: var(--bg-subtle);
+    color: var(--text-1);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .acceptance-row-text {
+    grid-column: 2;
+    padding-top: 1px;
+    font-size: 14.5px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+  .acceptance-row-text[hidden] {
+    display: none;
+  }
+  /* The right rail is reserved before overflow is measured, so adding a chevron cannot narrow
+     the preview and create a measurement loop. The preview itself contains no live links. */
+  .acceptance-row-mobile .acceptance-row-text {
+    padding-inline-end: 116px;
+  }
+  .acceptance-row-preview {
+    display: block;
+    max-block-size: 4.65em;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 88%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 88%, transparent 100%);
+  }
+  .acceptance-row-mobile.is-expanded .acceptance-row-full {
+    padding-block-start: 45px;
+    padding-inline-end: 0;
+  }
+  .acceptance-row-mobile .acceptance-row-verdict {
+    position: absolute;
+    inset-block-start: 8px;
+    inset-inline-end: 8px;
+    justify-content: flex-end;
+    width: 120px;
+    margin: 0;
+  }
+  .acceptance-row-verdict-static {
+    display: flex;
+    justify-content: flex-end;
+    padding: 11px 8px;
+  }
+  .acceptance-row-toggle {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .acceptance-row-toggle:hover {
+    background: var(--bg-hover);
+  }
+  .acceptance-row-toggle:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 1px;
+  }
+  .acceptance-row-toggle .ant-tag {
+    pointer-events: none;
+  }
+  .acceptance-row-toggle-icon {
+    margin-inline-start: 7px;
+    font-size: 11px;
+    transition: transform 160ms ease;
+  }
+  .acceptance-row-mobile.is-expanded .acceptance-row-toggle-icon {
+    transform: rotate(180deg);
+  }
+  .acceptance-more {
+    padding: 10px 16px 8px;
+    text-align: center;
+  }
+  .acceptance-more-button.ant-btn {
+    min-height: 44px;
+    border-color: var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-subtle);
+    color: var(--text-1);
+    font-weight: 600;
+  }
+  .acceptance-more-button.ant-btn:hover {
+    border-color: var(--border);
+    background: var(--bg-hover);
+    color: var(--text-1);
+  }
+  .acceptance-more-icon {
+    margin-inline-start: 8px;
+    font-size: 11px;
+    transition: transform 160ms ease;
+  }
+  .acceptance-more-icon.is-expanded {
+    transform: rotate(180deg);
+  }
+  .acceptance-more-meta.ant-typography {
+    display: block;
+    margin: 6px 0 0;
+    font-size: 11.5px;
+  }
+  .acceptance-note {
+    padding: 9px 16px 11px;
+    text-align: center;
+  }
+  .acceptance-note-wide {
+    display: none;
+  }
+  .acceptance-note-compact {
+    display: inline;
+  }
+}
+
+@media (max-width: 560px) and (prefers-reduced-motion: reduce) {
+  .acceptance-row-toggle-icon,
+  .acceptance-more-icon {
+    transition: none;
+  }
+}
+
+/* On the narrowest phones the verdict gets its own line so INCONCLUSIVE never crowds the text. */
+@media (max-width: 380px) {
+  .acceptance-row-mobile .acceptance-row-text {
+    padding-inline-end: 0;
+  }
+  .acceptance-row-mobile .acceptance-row-verdict {
+    position: static;
+    grid-column: 2;
+    grid-row: 2;
     justify-content: flex-start;
     width: auto;
-    margin-inline-start: 32px;
+  }
+  .acceptance-row-mobile .acceptance-row-verdict-static,
+  .acceptance-row-mobile .acceptance-row-toggle {
+    justify-content: flex-start;
+    width: auto;
+    margin-inline-start: -8px;
+  }
+  .acceptance-row-mobile.is-expanded .acceptance-row-verdict {
+    grid-row: 1;
+  }
+  .acceptance-row-mobile.is-expanded .acceptance-row-full {
+    grid-row: 2;
+    padding-block-start: 0;
   }
 }
 
