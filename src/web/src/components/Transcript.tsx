@@ -666,10 +666,19 @@ function groupToolRuns(nodes: Node[]): NodeListItem[] {
 // sub-workspace — are never folded into a run summary: the card *is* the point, so it stays a
 // top-level row. Excluded by name rather than by what has arrived, so the row doesn't hop out of
 // the group later, when the result lands (session_create) or the first child event does (Task).
+//
+// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
+// screenshot tool answer alike with an image block, and only the result says so. It is excluded
+// anyway, because the group is the one fold ToolView can't open through — the card unfolds itself
+// on an image (see defaultOpen) and a closed group hides it whole, so a screenshot inside a run
+// reaches the reader as nothing at all. The hop this costs happens once and never reverses: an
+// image block that has arrived stays arrived, unlike the running/failed states the folded row
+// deliberately reports instead of opening on.
 function isGroupableTool(node: Node): node is ToolNode {
   return (
     node.kind === 'tool' &&
     node.children.length === 0 &&
+    !hasResultImage(node.result?.content) &&
     !node.id.startsWith('shell-') &&
     node.name !== 'AskUserQuestion' &&
     node.name !== 'ExitPlanMode' &&

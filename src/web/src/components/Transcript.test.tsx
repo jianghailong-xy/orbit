@@ -1286,7 +1286,7 @@ describe('tool run folding', () => {
     const id = `t${++seq}`;
     return [{ seq, type: 'tool_use', payload: { id, name, input } }];
   };
-  const callWith = (name: string, input: Record<string, unknown>, content: string): RunEvent[] => {
+  const callWith = (name: string, input: Record<string, unknown>, content: unknown): RunEvent[] => {
     const [use] = call(name, input);
     return [use, { seq: ++seq, type: 'tool_result', payload: { toolUseId: (use.payload as any).id, content } }];
   };
@@ -1337,6 +1337,39 @@ describe('tool run folding', () => {
 
     expect(html).toContain('Create tasks');
     expect(html).not.toContain('chat-tool-group');
+  });
+
+  // A screenshot is the one card the reader is meant to *look* at, and ToolView unfolds it for
+  // exactly that reason — but it can't unfold the group around it, so a picture folded into
+  // "Read × 3" reaches the reader as a counter.
+  it('keeps a screenshot out of the fold, picture and all', () => {
+    const data = 'iVBORw0KGgo=';
+    const shot = [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }];
+    const html = render([
+      callWith('Read', { file_path: '/tmp/s0.png' }, shot),
+      callWith('Read', { file_path: '/tmp/s1.png' }, shot),
+      callWith('Read', { file_path: '/tmp/s2.png' }, shot),
+    ]);
+
+    expect(html).not.toContain('chat-tool-group');
+    expect(html.split(`data:image/png;base64,${data}`).length - 1).toBe(3);
+  });
+
+  // Lifting the picture out is not licence to stop folding around it: the plain calls either side
+  // are still a run, and still the noise the summary row exists to swallow.
+  it('still folds the plain calls a screenshot sits among', () => {
+    const data = 'iVBORw0KGgo=';
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+      callWith('Bash', { command: 'whoami' }, 'root'),
+      callWith('Read', { file_path: '/tmp/s0.png' }, [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+      ]),
+    ]);
+
+    expect(html).toContain('Bash × 3');
+    expect(html).toContain(`data:image/png;base64,${data}`);
   });
 
   it('still folds a run of plain calls', () => {
