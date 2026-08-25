@@ -156,7 +156,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
@@ -1051,6 +1051,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [replyTo, setReplyTo] = useState<{ id: string; question: string } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
+  // The seq the stream was at when the current stretch of generation began, so the transcript can
+  // render the drafts where they started rather than always last. A ref, not state: it only ever
+  // moves alongside a draft update, so the render that shows the new text already reads the new
+  // anchor — and keeping it out of state means a chunk doesn't re-render anything extra.
+  const streamAnchorRef = useRef<number | null>(null);
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
@@ -2091,6 +2096,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     seeding,
     streaming: !!streamingText || !!streamingThink,
   });
+  // Null when nothing is being generated, so the transcript can skip splitting itself in two
+  // (and keep grouping runs of tool calls across the seam) whenever there are no drafts to place.
+  const streamingDrafts = useMemo(
+    () => (streamingText || streamingThink ? { text: streamingText, think: streamingThink } : null),
+    [streamingText, streamingThink],
+  );
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
   // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
@@ -2115,6 +2126,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Live/ephemeral drafts belong to the previous selection — clear them at once.
     setStreamingText('');
     setStreamingThink('');
+    streamAnchorRef.current = null;
     setApprovals([]);
     setReplyTo(null);
     setQueued([]);
@@ -2319,19 +2331,30 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           setIdle(true);
           setStreamingText('');
           setStreamingThink('');
+          streamAnchorRef.current = null;
           return;
         }
         // Streaming increment: append to the in-progress assistant bubble. Don't
         // dedup or store it — it's pure animation; the trailing `assistant` event
         // carries the authoritative full text and finalizes the bubble.
+        //
+        // The first chunk of a stretch also fixes where that bubble sits: at the cursor as it
+        // stands now, so an event that arrives later (a mid-turn message the runner echoes back)
+        // renders below it rather than above.
         if (ev.type === 'text_delta') {
           const chunk = ev.payload?.text;
-          if (typeof chunk === 'string') setStreamingText((p) => p + chunk);
+          if (typeof chunk === 'string') {
+            if (streamAnchorRef.current === null) streamAnchorRef.current = lastSeq;
+            setStreamingText((p) => p + chunk);
+          }
           return;
         }
         if (ev.type === 'thinking_delta') {
           const chunk = ev.payload?.text;
-          if (typeof chunk === 'string') setStreamingThink((p) => p + chunk);
+          if (typeof chunk === 'string') {
+            if (streamAnchorRef.current === null) streamAnchorRef.current = lastSeq;
+            setStreamingThink((p) => p + chunk);
+          }
           return;
         }
         // Approval nudges (live-only, seq 0) — handle BEFORE the seq dedup, which is
@@ -2365,14 +2388,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // bubble can't outlive its turn. (Don't clear on every system event: claude's
         // stderr also arrives as `system` and would wipe an in-progress bubble.)
         // A steer is the one `user` event that is NOT a boundary — see supersedesLiveDrafts.
+        // Whatever cleared the drafts also ended the stretch they were anchored to: the next
+        // chunk starts a new one and re-anchors at the cursor it finds. The `thinking` case
+        // keeps a draft (the text may still be streaming) so it re-anchors HERE instead — that
+        // block is now a durable node, and anything still being generated follows it.
         if (supersedesLiveDrafts(ev)) {
           setStreamingText('');
           setStreamingThink('');
+          streamAnchorRef.current = null;
         } else if (ev.type === 'thinking') {
           setStreamingThink('');
+          streamAnchorRef.current = ev.seq;
         } else if (ev.type === 'system' && ev.payload?.subtype === 'resumed') {
           setStreamingText('');
           setStreamingThink('');
+          streamAnchorRef.current = null;
         }
         // Track turn boundaries live so the composer re-enables the instant a turn
         // ends, rather than waiting for the 4s session poll.
@@ -4887,7 +4917,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <AuthErrorCtx.Provider value={authErrorHelp}>
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
-                        <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                        <StreamingDraftsCtx.Provider value={streamingDrafts}>
+                          <Transcript
+                            events={events}
+                            live={live}
+                            turnImages={turnImages}
+                            artifactSessionId={selectedId}
+                            streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
+                          />
+                        </StreamingDraftsCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>
@@ -4914,8 +4952,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
-              {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
-              {streamingText && <StreamingMessage text={streamingText} />}
+              {/* The live drafts used to render here, after everything. They render inside the
+                  transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a, i) => (
                 // Only the first (oldest) pending card owns the ⌘/Ctrl+Enter shortcut; once
                 // it's decided the next card becomes first, so the key walks the queue in order.

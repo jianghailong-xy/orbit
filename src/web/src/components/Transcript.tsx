@@ -583,23 +583,56 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   return roots;
 }
 
+/**
+ * The half-written reply: `text_delta` / `thinking_delta` chunks, which are broadcast but never
+ * persisted, so they have no event of their own to be ordered by.
+ *
+ * Carried on a context rather than as a prop because `Transcript` is memo'd and a chunk arrives
+ * every few ms: a prop would rebuild the whole transcript on each one. A context re-renders only
+ * `StreamingDrafts` itself, leaving the memo intact.
+ */
+export const StreamingDraftsCtx = createContext<{ text: string; think: string } | null>(null);
+
+function StreamingDrafts() {
+  const drafts = useContext(StreamingDraftsCtx);
+  if (!drafts) return null;
+  return (
+    <>
+      {drafts.think && <div className="chat-think-stream chat-streaming">💭 {drafts.think}</div>}
+      {drafts.text && <StreamingMessage text={drafts.text} />}
+    </>
+  );
+}
+
 // `live` indicates the session is still streaming, so a tool_use without a
 // result yet renders a spinner rather than a (misleading) terminal marker.
 //
-// memo'd on (events, live): streaming text/thinking deltas and the 4s/15s status
-// polls all live in sibling state on WorkspaceView and don't touch `events`, so the
-// whole transcript subtree is skipped on those re-renders — it only rebuilds when
-// an actual event is appended.
+// memo'd on (events, live, streamingAfterSeq): streaming text/thinking deltas and the 4s/15s
+// status polls all live in sibling state on WorkspaceView and don't touch `events`, so the
+// whole transcript subtree is skipped on those re-renders — it only rebuilds when an actual
+// event is appended (or when a stretch of generation starts/ends, which moves the drafts).
 export const Transcript = memo(function Transcript({
   events,
   live,
   turnImages,
   artifactSessionId,
+  streamingAfterSeq,
 }: {
   events: RunEvent[];
   live?: boolean;
   turnImages?: Record<string, TurnImage[]>;
   artifactSessionId?: string;
+  /**
+   * Where the live drafts belong: the seq the stream was at when this stretch of generation
+   * began. The drafts render straight after the last event at or before it, so anything that
+   * arrives DURING the generation — a message typed mid-turn, which the runner echoes with a
+   * higher seq — lands below the half-written reply instead of above it, where a growing bubble
+   * and a viewport pinned to the tail would push it out of sight the moment it was sent.
+   *
+   * Null (nothing streaming, or a seed that failed and left no cursor) keeps the drafts at the
+   * end, exactly where they used to render.
+   */
+  streamingAfterSeq?: number | null;
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
   const artifactResolve = useMemo(
@@ -607,9 +640,25 @@ export const Transcript = memo(function Transcript({
       artifactSessionId ? (artifactPath: string) => fetchSessionArtifactObjectUrl(artifactSessionId, artifactPath) : null,
     [artifactSessionId],
   );
+  // Split only while something is actually streaming: the two halves are grouped separately
+  // (see groupToolRuns), so an idle transcript must stay one list or a run of tool calls
+  // spanning the seam would stop folding.
+  const [before, after] = useMemo(() => {
+    if (streamingAfterSeq == null) return [nodes, [] as Node[]];
+    let at = -1;
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      if (Number.isFinite(nodes[i].seq) && nodes[i].seq <= streamingAfterSeq) {
+        at = i + 1;
+        break;
+      }
+    }
+    return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
+  }, [nodes, streamingAfterSeq]);
   const body = (
     <ImagePreviewProvider>
-      <NodeList nodes={nodes} live={live} />
+      <NodeList nodes={before} live={live} />
+      <StreamingDrafts />
+      {after.length > 0 && <NodeList nodes={after} live={live} />}
     </ImagePreviewProvider>
   );
   return artifactResolve ? (
