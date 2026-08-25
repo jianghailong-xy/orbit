@@ -2,7 +2,7 @@ import { uuidToBase62 } from '@orbit/shared';
 
 /** The title a coordination session is filed under. */
 export function coordinatorSessionTitle(projectTitle: string): string {
-  return `协调：${projectTitle}`.slice(0, 80);
+  return `Coordinator: ${projectTitle}`.slice(0, 80);
 }
 
 /**

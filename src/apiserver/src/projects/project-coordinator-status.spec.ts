@@ -17,7 +17,7 @@ const BORROWED_ID = '00000000-0000-7000-8000-0000000000c3';
 function sessionRow(overrides: Record<string, unknown> = {}) {
   return {
     id: SESSION_ID,
-    title: 'Coordinate: Ship the coordinator',
+    title: 'Coordinator: Ship the coordinator',
     status: RunStatus.AWAITING_INPUT,
     endReason: null,
     startedAt: new Date('2026-08-24T06:00:00.000Z'),
@@ -178,7 +178,7 @@ test('LIVE: the conversation is alive, so nothing refuses and nothing would be c
   const session = status.coordination.session;
   assert.ok(session);
   assert.equal(session.id, SESSION_ID);
-  assert.equal(session.title, 'Coordinate: Ship the coordinator');
+  assert.equal(session.title, 'Coordinator: Ship the coordinator');
   assert.equal(session.runStatus, RunStatus.RUNNING);
   assert.equal(session.runState, 'RUNNING');
   assert.equal(session.lifecycleState, 'OPEN');

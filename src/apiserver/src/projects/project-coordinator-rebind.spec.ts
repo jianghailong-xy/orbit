@@ -133,7 +133,7 @@ function store(options: StoreOptions = {}) {
         ? {
             id: session.id,
             deletedAt: session.deletedAt,
-            title: 'Coordinate: Ship the coordinator',
+            title: 'Coordinator: Ship the coordinator',
             status: session.status,
             endReason: null,
             startedAt: null,
@@ -294,7 +294,7 @@ test('a project whose landing was disabled cannot open a coordinator, rebinds, a
   const opened = await service.coordinator(OWNER, PROJECT);
   assert.equal(opened.created, true);
   assert.equal(opened.workspaceId, ELSEWHERE);
-  assert.deepEqual(created, [{ workspaceId: ELSEWHERE, title: created[0]?.title ?? '' }]);
+  assert.deepEqual(created, [{ workspaceId: ELSEWHERE, title: 'Coordinator: Ship the coordinator' }]);
   assert.equal(row().coordinatorWorkspaceId, ELSEWHERE);
 
   // The rebind wrote one column; the open wrote the pair. Nothing else touched the row.
