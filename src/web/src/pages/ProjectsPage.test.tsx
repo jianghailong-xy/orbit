@@ -24,11 +24,8 @@ import {
   scheduledStart,
   RUN_AT_IMPOSSIBLE,
   canCreateProjectTask,
-  canCreateProject,
-  invalidateAfterProjectCreate,
   matchesProjectSearch,
   noMatchDescription,
-  newProjectBody,
   projectsEmptyKind,
   projectsPath,
   projectsQueryKey,
@@ -224,7 +221,7 @@ describe('ProjectsPage', () => {
   it('reads exactly GET /projects, GET /projects/<id>, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if a ninth
+    // Fails if any call grows extra args or a query string, if a path changes, or if an eighth
     // api(...) call is added anywhere in the file (see API_CALL for what it can parse).
     const apiCalls = [...source.matchAll(API_CALL)].map(
       // A call wrapped across lines keeps its trailing comma; the URL is what this asserts on.
@@ -237,10 +234,6 @@ describe('ProjectsPage', () => {
       // line still fixes is that the page reads the projects collection exactly once and passes
       // it nothing but the filter.
       "projectsPath(filter)",
-      // The write that creates a project: the collection itself, POST, and a body built in one
-      // place so no caller can send an untrimmed title or a goal of spaces. Held as literally as
-      // the task create below, for the same reason — the body IS the contract.
-      "'/projects', { method: 'POST', body: newProjectBody(draft) }",
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather
@@ -283,9 +276,8 @@ describe('ProjectsPage', () => {
     // `/projects/` on the wire the moment the param went missing.
     expect(source).not.toMatch(/routeId\(params\.id\)\s*\?\?/);
     expect(source).toContain('enabled: Boolean(id)');
-    // The New task form's three option sources are read through the shared query factories, not
-    // re-spelled here — which is what keeps the list above a complete account of this file's
-    // requests, and what keeps its keys identical to the ones the task panel's pickers use.
+    // Workspace and runner reads — used by both the list's New project destination and the New
+    // task form — plus the provider options are shared query factories, not re-spelled here.
     expect(source).toContain(
       [
         'import {',
@@ -852,8 +844,8 @@ describe('ProjectsPage — toolbar', () => {
   it('keys the cache by the filter, under the prefix every write invalidates', () => {
     expect(projectsQueryKey('ALL')).toEqual(['projects', 'ALL']);
     expect(projectsQueryKey('OPEN')).toEqual(['projects', 'OPEN']);
-    // Same first element for all three: `['projects']` is what invalidateAfterProjectCreate and
-    // invalidateAfterProjectTaskCreate invalidate, and a prefix only matches if it is one.
+    // Same first element for all three: `['projects']` is what task creation invalidates, and a
+    // prefix only matches if it is one.
     expect(projectsQueryKey('DONE')[0]).toBe('projects');
   });
 
@@ -941,48 +933,6 @@ describe('ProjectsPage — which empty state', () => {
     expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
   });
 });
-
-describe('ProjectsPage — creating a project', () => {
-  it('opens the create only on a title that names something', () => {
-    expect(canCreateProject({ title: '' })).toBe(false);
-    expect(canCreateProject({ title: '   ' })).toBe(false);
-    expect(canCreateProject({ title: 'Ledger Migration' })).toBe(true);
-    // The goal is optional — a project can be named before it is explained.
-    expect(canCreateProject({ title: 'Ledger Migration', goal: '' })).toBe(true);
-  });
-
-  it('trims the title and leaves an unfilled goal out of the body entirely', () => {
-    expect(newProjectBody({ title: '  Ledger Migration  ' })).toEqual({ title: 'Ledger Migration' });
-    expect(newProjectBody({ title: 'Ledger Migration', goal: '  ' })).toEqual({
-      title: 'Ledger Migration',
-    });
-    expect(newProjectBody({ title: 'Ledger Migration', goal: '  Move the ledger  ' })).toEqual({
-      title: 'Ledger Migration',
-      goal: 'Move the ledger',
-    });
-  });
-
-  it('refreshes every filter’s list, not only the one that is showing', () => {
-    const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], []);
-    qc.setQueryData(['projects', 'OPEN'], []);
-    qc.setQueryData(['projects', 'DONE'], []);
-    qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
-
-    invalidateAfterProjectCreate(qc);
-
-    const invalidated = (key: unknown[]) =>
-      qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
-    // A project created while Completed is selected must not be missing from All when it is
-    // switched back to — which is what one invalidation on the shared prefix buys.
-    expect(invalidated(['projects', 'ALL'])).toBe(true);
-    expect(invalidated(['projects', 'OPEN'])).toBe(true);
-    expect(invalidated(['projects', 'DONE'])).toBe(true);
-    // Scoped, though: a new project with no tasks moves no task view.
-    expect(invalidated(['tasks', 'counts', null, []])).toBe(false);
-  });
-});
-
 
 describe('ProjectDetailPage', () => {
   it('renders the title, human status, total tasks and the full long-form fields without duplicate tallies', () => {

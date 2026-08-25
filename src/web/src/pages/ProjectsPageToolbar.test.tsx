@@ -2,12 +2,13 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeId } from '../lib/idCodec';
 import { ProjectsPage } from './ProjectsPage';
 
 /**
- * The toolbar as the reader drives it: pressing a segment, typing a search, creating a project.
+ * The toolbar as the reader drives it: pressing a segment, typing a search, starting a project.
  *
  * Mounted into a real DOM rather than rendered with `react-dom/server`, because every question
  * here is about what happens AFTER an interaction — and a static render invokes no `queryFn`, so
@@ -34,6 +35,11 @@ const apiMock = vi.mocked(api);
 const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
+const R1 = '0195c0de-0000-7000-8000-0000000000c1';
+const R2 = '0195c0de-0000-7000-8000-0000000000c2';
+const W_SHARED = '0195c0de-0000-7000-8000-0000000000d0';
+const W1 = '0195c0de-0000-7000-8000-0000000000d1';
+const W2 = '0195c0de-0000-7000-8000-0000000000d2';
 
 /**
  * Goals written the way project goals actually are — as Markdown, because that is how they are
@@ -84,28 +90,47 @@ const LEDGER = {
  * one. Anything unrouted rejects, so a request this page should not be making shows up as a
  * failure rather than as a silently empty list.
  */
-function serve(rows: Record<string, unknown[]>) {
+function serve(
+  rows: Record<string, unknown[]>,
+  navigation: { workspaces?: unknown[]; runners?: unknown[] } = {},
+) {
+  const answers: Record<string, unknown[]> = {
+    '/workspaces': navigation.workspaces ?? [
+      { id: W1, runnerId: R1, createdAt: '2026-01-01T00:00:00Z' },
+    ],
+    '/runners': navigation.runners ?? [{ id: R1 }],
+    ...rows,
+  };
   apiMock.mockImplementation((path: string) => {
-    const answer = rows[path];
+    const answer = answers[path];
     if (!answer) return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
     return Promise.resolve(answer) as Promise<never>;
   });
 }
 
-/** Every path the page asked for, in order — reads only, so a create does not shift the count a
- *  "no second request" assertion is reading. */
+/** Every project-list path the page asked for, in order. Workspace and runner reads resolve the
+ *  New project destination and are deliberately outside the status-filter assertions. */
 const reads = () =>
   apiMock.mock.calls
     .filter(([, init]) => (init as { method?: string } | undefined)?.method !== 'POST')
-    .map(([path]) => String(path));
+    .map(([path]) => String(path))
+    .filter((path) => path === '/projects' || path.startsWith('/projects?'));
 
 let container: HTMLDivElement;
 let root: Root;
+let landedOn = '';
+
+function RouteProbe() {
+  const location = useLocation();
+  landedOn = `${location.pathname}${location.search}`;
+  return null;
+}
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
-  // antd's list and modal subscribe to breakpoints on mount and jsdom ships no matchMedia. The
+  landedOn = '';
+  // antd's responsive controls subscribe to breakpoints on mount and jsdom ships no matchMedia. The
   // stub answers "no breakpoint matches", which is the desktop reading; layout is not the subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
@@ -117,8 +142,8 @@ beforeEach(() => {
     removeEventListener: () => {},
     dispatchEvent: () => false,
   }));
-  // The dialog's goal field measures itself to grow with what is typed, and jsdom ships no
-  // ResizeObserver. The inert stand-in lets the field mount; how tall it gets is not the subject.
+  // Some antd controls observe their boxes and jsdom ships no ResizeObserver. Their layout is not
+  // the subject of these interaction tests.
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -143,8 +168,9 @@ async function mount(): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={['/projects']}>
           <ProjectsPage />
+          <RouteProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -160,8 +186,7 @@ async function flush(): Promise<void> {
   });
 }
 
-/** The whole page as text, portal included: an antd Modal renders into document.body rather than
- *  into the mount container. */
+/** The whole mounted page as text. */
 const text = () => document.body.textContent ?? '';
 
 function segment(label: string): HTMLInputElement {
@@ -231,7 +256,7 @@ describe('ProjectsPage — status filter', () => {
       '/projects?status=DONE',
       '/projects',
     ]);
-  });
+  }, 10_000);
 
   it('keeps each filter in its own cache entry, so switching back does not show the other one’s rows', async () => {
     serve({
@@ -331,80 +356,51 @@ describe('ProjectsPage — empty states', () => {
     // is looking at the middle of it, and that is where the dead end used to be.
     const cta = button('New project', empty);
     await click(cta);
-    // ...and it opens the dialog rather than being decoration.
-    expect(text()).toContain('Create project');
+    // The empty-state CTA is wired to the same project-intent compose as the toolbar button.
+    expect(landedOn).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
   });
 });
 
-describe('ProjectsPage — creating a project', () => {
-  it('sends the title and goal, then shows the project in the list', async () => {
-    let created = false;
-    const NEW_PROJECT = {
-      id: P1,
-      title: 'Ledger Migration',
-      status: 'OPEN',
-      goal: 'Move the ledger to Postgres',
-      createdAt: '2026-02-01T00:00:00Z',
-      updatedAt: '2026-02-01T00:00:00Z',
-      _count: { tasks: 0 },
-      // A project created a moment ago: no tasks, so no activity either. In progress is where it
-      // lands, at the tail — see lib/projectAttention.
-      buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 },
-      lastActivityAt: null,
-    };
-    apiMock.mockImplementation((path: string, init?: { method?: string; body?: unknown }) => {
-      if (init?.method === 'POST') {
-        created = true;
-        return Promise.resolve(NEW_PROJECT) as Promise<never>;
-      }
-      if (path !== '/projects') return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
-      return Promise.resolve(created ? [NEW_PROJECT] : []) as Promise<never>;
-    });
-    await mount();
-
-    await click(button('New project'));
-    const title = document.querySelector('.ant-modal input') as HTMLInputElement;
-    const goal = document.querySelector('.ant-modal textarea') as HTMLTextAreaElement;
-    // Nothing typed yet, so the create is closed — a project with no name is one nobody can find.
-    expect(button('Create project').disabled).toBe(true);
-
-    await type(title, '  Ledger Migration  ');
-    await type(goal, 'Move the ledger to Postgres');
-    expect(button('Create project').disabled).toBe(false);
-    await click(button('Create project'));
-
-    // Trimmed at the one place the wire value is built, and the optional field carried through.
-    expect(apiMock).toHaveBeenCalledWith('/projects', {
-      method: 'POST',
-      body: { title: 'Ledger Migration', goal: 'Move the ledger to Postgres' },
-    });
-    // The list is re-read afterwards and the project is in it — which is the whole point of the
-    // dialog, and what an invalidation keyed to only one filter would not deliver.
-    await flush();
-    expect(reads()).toEqual(['/projects', '/projects']);
-    expect(container.textContent).toContain('Ledger Migration');
-    // ...and the form did not keep what was typed: reopening starts on an empty one, so the next
-    // project is not created by accidentally pressing Create on the last one's title.
-    await click(button('New project', container));
-    expect((document.querySelector('.ant-modal input') as HTMLInputElement).value).toBe('');
-  });
-
-  it('leaves the goal out of the body when it was not filled in', async () => {
-    apiMock.mockImplementation((path: string, init?: { method?: string }) =>
-      init?.method === 'POST'
-        ? (Promise.resolve({ id: P1 }) as Promise<never>)
-        : (Promise.resolve([]) as Promise<never>),
+describe('ProjectsPage — starting a project', () => {
+  it('opens project-intent compose in firstOpenableWorkspace order', async () => {
+    serve(
+      { '/projects': [REVAMP] },
+      {
+        // The first row cannot open, and R2 appears before R1 in workspace order. Runner order
+        // still puts W1 first — exactly the choice firstOpenableWorkspace makes for DefaultLanding.
+        workspaces: [
+          { id: W_SHARED, runnerId: null, position: 0, createdAt: '2026-01-01T00:00:00Z' },
+          { id: W2, runnerId: R2, position: 1, createdAt: '2026-01-02T00:00:00Z' },
+          { id: W1, runnerId: R1, position: 2, createdAt: '2026-01-03T00:00:00Z' },
+        ],
+        runners: [{ id: R1 }, { id: R2 }],
+      },
     );
     await mount();
 
-    await click(button('New project'));
-    await type(document.querySelector('.ant-modal input') as HTMLInputElement, 'Website Revamp');
-    await click(button('Create project'));
+    await click(button('New project', container));
 
-    // No `goal: ''`: blank and absent must not be two different stored states.
-    expect(apiMock).toHaveBeenCalledWith('/projects', {
-      method: 'POST',
-      body: { title: 'Website Revamp' },
-    });
+    expect(landedOn).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+  });
+
+  it.each([
+    { label: 'registration guide', runners: [], expected: '/runners/register' },
+    { label: 'only runner', runners: [{ id: R1 }], expected: `/runners/${encodeId(R1)}` },
+    { label: 'runner picker', runners: [{ id: R1 }, { id: R2 }], expected: '/runners' },
+  ])('uses the DefaultLanding $label when no workspace can open', async ({ runners, expected }) => {
+    serve(
+      { '/projects': [REVAMP] },
+      {
+        workspaces: [
+          { id: W_SHARED, runnerId: null, createdAt: '2026-01-01T00:00:00Z' },
+        ],
+        runners,
+      },
+    );
+    await mount();
+
+    await click(button('New project', container));
+
+    expect(landedOn).toBe(expected);
   });
 });

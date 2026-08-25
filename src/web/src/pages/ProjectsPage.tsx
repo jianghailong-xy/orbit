@@ -34,6 +34,7 @@ import {
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
+import { firstOpenableWorkspace } from '../lib/workspaceOrder';
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
 // page that says "3h ago" should not be two functions that agree by coincidence.
 import { ago } from '../lib/runnerEngines';
@@ -190,7 +191,9 @@ export function noMatchDescription(filter: ProjectFilter, search: string): strin
 export function ProjectsPage() {
   const [filter, setFilter] = useState<ProjectFilter>('ALL');
   const [search, setSearch] = useState('');
-  const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
+  const workspaces = useQuery(workspacesQuery());
+  const runners = useQuery(runnersQuery());
   const projects = useQuery({
     queryKey: projectsQueryKey(filter),
     queryFn: () => api<Project[]>(projectsPath(filter)),
@@ -213,6 +216,29 @@ export function ProjectsPage() {
   // useMediaQuery.
   const phone = useMediaQuery(PROJECTS_PHONE_QUERY);
   const empty = projectsEmptyKind(projects.data?.length ?? 0, matches.length, filter, search);
+  const onNewProject = () => {
+    // BootGate normally leaves both lists warm. If a direct render reaches this page before they
+    // settle, hand the decision back to DefaultLanding, which waits and follows this same chain.
+    if (!workspaces.isFetched || !runners.isFetched) {
+      navigate('/');
+      return;
+    }
+
+    const runnerList = runners.data ?? [];
+    const first = workspaces.isSuccess
+      ? firstOpenableWorkspace(workspaces.data, runnerList)
+      : undefined;
+    if (first) {
+      navigate(`/workspaces/${encodeId(first.id)}/new?intent=project`);
+      return;
+    }
+
+    // Keep the no-workspace route identical to DefaultLanding: registration for a new account,
+    // the machine page when there is only one choice, otherwise the runner picker.
+    if (runnerList.length === 0) navigate('/runners/register');
+    else if (runnerList.length === 1) navigate(`/runners/${encodeId(runnerList[0].id)}`);
+    else navigate('/runners');
+  };
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -230,9 +256,8 @@ export function ProjectsPage() {
         onSearchChange={setSearch}
         filter={filter}
         onFilterChange={setFilter}
-        onNewProject={() => setCreating(true)}
+        onNewProject={onNewProject}
       />
-      <NewProjectModal open={creating} onClose={() => setCreating(false)} />
 
       {projects.isLoading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
@@ -255,7 +280,7 @@ export function ProjectsPage() {
         // offer the one thing a reader can do about it. A description with no control under it is
         // where a new owner's first visit used to end.
         <Empty description="No projects yet" style={{ marginTop: 48 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={onNewProject}>
             New project
           </Button>
         </Empty>
@@ -374,137 +399,6 @@ function ProjectRowMeter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
         ))}
       </div>
     </div>
-  );
-}
-
-/**
- * What the New project form holds while it is being filled in.
- *
- * Two fields, and deliberately not four. A project's acceptance criteria and instructions are long
- * prose read as prompts, edited on the project's own page beside what they are about; asking for
- * them at the moment somebody is naming a project would turn "start something" into a form.
- */
-export interface NewProjectDraft {
-  title: string;
-  goal?: string;
-}
-
-/** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
-export const EMPTY_NEW_PROJECT_DRAFT: NewProjectDraft = { title: '' };
-
-/** Whether the dialog's Create button may fire. A title of nothing but spaces names a project
- *  nobody can find again — and is what the server's own `@MinLength(1)` refuses, which the trim in
- *  `newProjectBody` is what makes reachable. Exported and total, because the button itself lives
- *  behind a portal that a static render produces no markup for. */
-export function canCreateProject(draft: NewProjectDraft): boolean {
-  return draft.title.trim().length > 0;
-}
-
-/** The body `POST /projects` is given. A goal of nothing but spaces is sent as no goal at all
- *  rather than as an empty string: blank and absent must not be two different stored states (the
- *  same rule UpdateProjectDto states for clearing one). */
-export function newProjectBody(draft: NewProjectDraft): Record<string, string> {
-  const body: Record<string, string> = { title: draft.title.trim() };
-  const goal = draft.goal?.trim();
-  if (goal) body.goal = goal;
-  return body;
-}
-
-export function createProject(draft: NewProjectDraft): Promise<Project> {
-  return api<Project>('/projects', { method: 'POST', body: newProjectBody(draft) });
-}
-
-/** What a newly created project changes. `['projects']` is the PREFIX of every filter's entry, so
- *  this refreshes the list under whichever filter is showing and the ones that are not — a project
- *  created while Completed is selected must not be missing from All when it is switched back to. */
-export function invalidateAfterProjectCreate(qc: QueryClient): void {
-  void qc.invalidateQueries({ queryKey: ['projects'] });
-}
-
-/** The New project form's fields, in one state. Exported for the reason NewProjectTaskForm is: an
- *  antd Modal renders through a portal, which a static render produces no markup at all for, so
- *  the body has to be mountable on its own to be assertable at all. */
-export function NewProjectForm({
-  draft,
-  onChange,
-  error,
-  pending,
-}: {
-  draft: NewProjectDraft;
-  onChange: (draft: NewProjectDraft) => void;
-  error?: Error | null;
-  pending?: boolean;
-}) {
-  return (
-    <>
-      <FormRow label="Title">
-        <Input
-          autoFocus
-          value={draft.title}
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, title: e.target.value })}
-          placeholder="What this project is called"
-        />
-      </FormRow>
-      <FormRow label="Goal">
-        <Input.TextArea
-          rows={3}
-          value={draft.goal ?? ''}
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, goal: e.target.value })}
-          placeholder="Optional. What this project is trying to achieve."
-        />
-      </FormRow>
-
-      {/* The server's own message, inline and verbatim — see NewProjectTaskForm's note on why
-          there is no second Retry control beside it. */}
-      {error ? (
-        <Alert
-          type="error"
-          showIcon
-          message="Project could not be created"
-          description={error.message}
-        />
-      ) : null}
-    </>
-  );
-}
-
-/** The New project dialog: a name, optionally what it is for, and nothing else. */
-export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [draft, setDraft] = useState<NewProjectDraft>(EMPTY_NEW_PROJECT_DRAFT);
-  const create = useMutation({
-    mutationFn: (values: NewProjectDraft) => createProject(values),
-    onSuccess: () => {
-      setDraft(EMPTY_NEW_PROJECT_DRAFT);
-      onClose();
-      invalidateAfterProjectCreate(qc);
-    },
-  });
-
-  return (
-    <Modal
-      title="New project"
-      open={open}
-      // Cancel keeps what was typed and drops a failed attempt's error — the same bargain the New
-      // task dialog strikes, for the same reason.
-      onCancel={() => {
-        create.reset();
-        onClose();
-      }}
-      onOk={() => create.mutate(draft)}
-      okText="Create project"
-      confirmLoading={create.isPending}
-      okButtonProps={{ disabled: !canCreateProject(draft) }}
-    >
-      <NewProjectForm
-        draft={draft}
-        onChange={setDraft}
-        error={create.error}
-        pending={create.isPending}
-      />
-    </Modal>
   );
 }
 
