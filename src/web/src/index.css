@@ -9429,6 +9429,61 @@ html[data-theme='dark'] .session-tag-chip {
   }
 }
 
+/* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's
+   List.Meta can visually paint an unbroken identifier outside its computed flex width: its inner
+   content uses width:0 but has no emergency wrap point. That overflow belongs to the document
+   scroller, so one source-symbol list such as `NewProjectDraft|EMPTY_NEW_PROJECT_DRAFT|...` can
+   make the whole project page desktop-wide on a phone. The owned wrapper supplies a real
+   shrink-to-fit boundary and the two text spans add wrap opportunities without truncating the
+   title or changing the criteria excerpt. */
+.project-task-row-layout {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+.project-task-row-copy,
+.project-task-row-meta,
+.project-task-row-meta .ant-list-item-meta-content {
+  min-width: 0;
+}
+.project-task-row-copy {
+  flex: 1;
+}
+.project-task-row-title,
+.project-task-row-description {
+  overflow-wrap: anywhere;
+}
+.project-task-row-count,
+.project-task-row-disclosure {
+  flex: none;
+}
+.project-task-row-count {
+  white-space: nowrap;
+}
+.project-task-children {
+  min-width: 0;
+  margin-block-start: 8px;
+  margin-inline-start: 32px;
+}
+/* Preserve the reading order but stop fixed metadata from squeezing the identity down to a few
+   characters: the full title/excerpt gets the first band, then count + disclosure share the next. */
+@media (max-width: 640px) {
+  .project-task-row-layout {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    column-gap: 12px;
+    row-gap: 8px;
+  }
+  .project-task-row-copy {
+    flex: 1 0 100%;
+  }
+  .project-task-children {
+    margin-inline-start: 16px;
+  }
+}
+
 /* The acceptance section: the stated criteria and the latest attempt's verdict on each, as one
    full-width card between the goal and the task list. It used to be the narrow half of a 1.32 : 1
    pair with the blocking ranking, which had the widths backwards — the ranking is horizontal bars

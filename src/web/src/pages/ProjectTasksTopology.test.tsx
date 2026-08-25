@@ -10,6 +10,7 @@
  * during an effect-free render, so every fixture is seeded into the cache under the exact key the
  * component reads, and `api` is stubbed as a backstop against an accidental live call.
  */
+import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -385,5 +386,53 @@ describe('ProjectTasks — the parent/child level underneath', () => {
     expect(level).toContain('waits 2');
     expect(level).toContain('blocks 4');
     expect(level).toMatch(/data-glyph="/);
+  });
+});
+
+describe('ProjectTasks — narrow rows', () => {
+  it('lets source-like task copy wrap instead of widening the document scroller', () => {
+    // The production failure was a grep alternation in acceptanceCriteria: there is no whitespace
+    // for an ordinary line-break algorithm to use, so the 180-character excerpt became the row's
+    // min-content width and made the project page horizontally scrollable on an iPhone.
+    const symbolRun =
+      'NewProjectModal|NewProjectForm|NewProjectDraft|EMPTY_NEW_PROJECT_DRAFT|canCreateProject';
+    const title = `Remove_${symbolRun}_${symbolRun}`;
+    const criteria = `${symbolRun}|${symbolRun}|${symbolRun}`;
+    const { out } = withPage([task({ title, acceptanceCriteria: criteria, childCount: 2 })]);
+
+    // Copy remains complete by policy: the title is never truncated, while criteria still use the
+    // existing 180-character excerpt. Layout is fixed by owned hooks rather than by deleting text.
+    expect(out).toContain(title);
+    expect(out).toContain(`${criteria.slice(0, 180)}…`);
+    expect(out).toContain('class="project-task-row-layout"');
+    expect(out).toContain('class="project-task-row-copy"');
+    expect(out).toContain('class="project-task-row-title"');
+    expect(out).toContain('class="project-task-row-description"');
+    expect(out).toContain('class="project-task-row-count"');
+    expect(out).toContain('project-task-row-disclosure');
+
+    // jsdom has no layout engine, so assert the CSS contract directly, following the other
+    // responsive tests in this package. A real-browser smoke check covers scrollWidth separately.
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const layout = css.match(/\.project-task-row-layout\s*\{([^}]*)\}/)?.[1] ?? '';
+    const shrinkBoundary =
+      css.match(
+        /\.project-task-row-copy,\s*\.project-task-row-meta,\s*\.project-task-row-meta \.ant-list-item-meta-content\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const wrapping =
+      css.match(
+        /\.project-task-row-title,\s*\.project-task-row-description\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const phoneRules =
+      css.match(
+        /@media \(max-width: 640px\) \{([\s\S]*?)\n\}\n\n\/\* The acceptance section/,
+      )?.[1] ?? '';
+
+    expect(layout).toContain('min-width: 0');
+    expect(layout).toContain('width: 100%');
+    expect(shrinkBoundary).toContain('min-width: 0');
+    expect(wrapping).toContain('overflow-wrap: anywhere');
+    expect(phoneRules).toMatch(/\.project-task-row-layout\s*\{[^}]*flex-wrap: wrap/);
+    expect(phoneRules).toMatch(/\.project-task-row-copy\s*\{[^}]*flex: 1 0 100%/);
   });
 });

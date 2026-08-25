@@ -1264,44 +1264,54 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
   const starts = scheduledStart(task.runAt);
 
   return (
-    <List.Item style={{ display: 'block' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <List.Item.Meta
-          // Title in full: a task's title is its identity, and a half-read one names a
-          // different task. The long-form field underneath is what gets cut instead.
-          title={
-            <span>
-              <TaskStatusMark status={task.status} /> {task.title}{' '}
-              <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
-              {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
-                  real project have nothing on either side, and a list where every row carries two
-                  zeroes is a list where the rows that do carry a number stop standing out. */}
-              {task.unmetCount > 0 ? <Tag color="gold">waits {task.unmetCount}</Tag> : null}
-              {task.blocksCount > 0 ? <Tag color="blue">blocks {task.blocksCount}</Tag> : null}
-              {/* The one thing a tree could never say. `waits 3` names a count; WHICH three is
-                  what a reader has to know to go unblock them, and on a hand-drawn graph it is
-                  exactly where the escape lines get drawn. Only for two or more: at one, the
-                  prerequisite is a click away and a second request per row is not worth it. */}
-              {task.unmetCount >= 2 ? <ProjectTaskPrerequisites task={task} /> : null}
-              {/* Only on a task that actually has one — an unscheduled task is the normal case,
-                  and a "not scheduled" chip on every row would drown the few that are. Said as
-                  "Starts", never "Due": this is the trigger the server acts on, and the row
-                  deliberately shows no `dueDate` at all, so the word has only one meaning here.
-                  The <time> is what carries the precise instant for anything not reading the
-                  screen — `dateTime` in canonical UTC for machines, the same in `title` for a
-                  reader who needs the exact moment behind a to-the-minute local rendering. */}
-              {starts ? (
-                <Tag>
-                  <time dateTime={starts.iso} title={starts.iso}>
-                    Starts {starts.local}
-                  </time>
-                </Tag>
-              ) : null}
-            </span>
-          }
-          description={excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}
-        />
-        <div>
+    <List.Item className="project-task-row" style={{ display: 'block' }}>
+      <div className="project-task-row-layout">
+        {/* Own this flex item rather than asking AntD's Meta to negotiate directly with the two
+            fixed controls beside it. The wrapper supplies the missing min-width:0 boundary; on a
+            phone it also gives the task copy a full line before the count and disclosure. */}
+        <div className="project-task-row-copy">
+          <List.Item.Meta
+            className="project-task-row-meta"
+            // Title in full: a task's title is its identity, and a half-read one names a
+            // different task. The long-form field underneath is what gets cut instead.
+            title={
+              <span className="project-task-row-title">
+                <TaskStatusMark status={task.status} /> {task.title}{' '}
+                <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
+                {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
+                    real project have nothing on either side, and a list where every row carries two
+                    zeroes is a list where the rows that do carry a number stop standing out. */}
+                {task.unmetCount > 0 ? <Tag color="gold">waits {task.unmetCount}</Tag> : null}
+                {task.blocksCount > 0 ? <Tag color="blue">blocks {task.blocksCount}</Tag> : null}
+                {/* The one thing a tree could never say. `waits 3` names a count; WHICH three is
+                    what a reader has to know to go unblock them, and on a hand-drawn graph it is
+                    exactly where the escape lines get drawn. Only for two or more: at one, the
+                    prerequisite is a click away and a second request per row is not worth it. */}
+                {task.unmetCount >= 2 ? <ProjectTaskPrerequisites task={task} /> : null}
+                {/* Only on a task that actually has one — an unscheduled task is the normal case,
+                    and a "not scheduled" chip on every row would drown the few that are. Said as
+                    "Starts", never "Due": this is the trigger the server acts on, and the row
+                    deliberately shows no `dueDate` at all, so the word has only one meaning here.
+                    The <time> is what carries the precise instant for anything not reading the
+                    screen — `dateTime` in canonical UTC for machines, the same in `title` for a
+                    reader who needs the exact moment behind a to-the-minute local rendering. */}
+                {starts ? (
+                  <Tag>
+                    <time dateTime={starts.iso} title={starts.iso}>
+                      Starts {starts.local}
+                    </time>
+                  </Tag>
+                ) : null}
+              </span>
+            }
+            description={
+              <span className="project-task-row-description">
+                {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}
+              </span>
+            }
+          />
+        </div>
+        <div className="project-task-row-count">
           {task.childCount} subtask{task.childCount === 1 ? '' : 's'}
         </div>
         {/* Only where there is a level to open: on a leaf, a control would promise one that does
@@ -1309,6 +1319,7 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
             it tells a reader who cannot see the indent which way this row currently sits. */}
         {task.childCount > 0 ? (
           <Button
+            className="project-task-row-disclosure"
             size="small"
             aria-expanded={expanded}
             // The visible text alone is the same three words on every expandable row, so a reader
@@ -1326,7 +1337,7 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
       </div>
 
       {expanded ? (
-        <div style={{ marginLeft: 32, marginTop: 8 }}>
+        <div className="project-task-children">
           <ProjectTaskLevel projectId={projectId} parentTaskId={task.id} />
         </div>
       ) : null}

@@ -1412,8 +1412,12 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     // so this reads the one place both are decided. Rendering the level from anywhere else would
     // make the child page eager, which the cache assertion above would then be blind to.
     expect(source).toMatch(
-      /\{expanded \? \(\s*<div style=\{\{ marginLeft: 32, marginTop: 8 \}\}>\s*<ProjectTaskLevel projectId=\{projectId\} parentTaskId=\{task\.id\} \/>/,
+      /\{expanded \? \(\s*<div className="project-task-children">\s*<ProjectTaskLevel projectId=\{projectId\} parentTaskId=\{task\.id\} \/>/,
     );
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const childrenRule = css.match(/\.project-task-children\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(childrenRule).toContain('margin-inline-start: 32px');
+    expect(childrenRule).toContain('margin-block-start: 8px');
   });
 
   it('requests exactly this parent’s direct children, at the task’s public id', () => {
