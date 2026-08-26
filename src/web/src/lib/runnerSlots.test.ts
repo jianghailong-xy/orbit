@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  QUEUED_NOTICE_DELAY_MS,
+  STARTING_NOTICE_DELAY_MS,
   activeSlotCount,
   pendingSlotDescription,
   queuedLabel,
@@ -10,6 +12,11 @@ import {
 
 const sessions = (status: string, count: number) =>
   Array.from({ length: count }, () => ({ status }));
+
+it('keeps transient queue and startup notices quiet for ten seconds', () => {
+  expect(QUEUED_NOTICE_DELAY_MS).toBe(10_000);
+  expect(STARTING_NOTICE_DELAY_MS).toBe(10_000);
+});
 
 describe('runner slot accounting', () => {
   it('does not count awaiting-input sessions, whether they are warm or cold', () => {

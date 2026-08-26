@@ -42,7 +42,7 @@ export const QUEUED_LABEL = 'Queued';
 // The ordinary runner-pickup queue is normally a transport-sized wait. Giving it the same grace
 // period as startup prevents a status card from flashing before the accepted user message lands.
 // Explicit gates (offline/capacity/git) bypass this delay; they are actionable explanations.
-export const QUEUED_NOTICE_DELAY_MS = 3_000;
+export const QUEUED_NOTICE_DELAY_MS = 10_000;
 
 /** Copy for a session that holds a slot but whose runtime is still coming up (sessionIsStarting).
  *  Distinct from both neighbours on purpose: unlike Queued nothing is contended and the user
@@ -51,9 +51,9 @@ export const STARTING_LABEL = 'Starting';
 export const STARTING_TITLE = 'Starting the workspace';
 export const STARTING_DESCRIPTION =
   'The runner has this session and is bringing its workspace up — checkout, engine, tools. Your message runs as soon as that finishes.';
-// Keep the first three seconds quiet, then explain the wait only once the startup is long enough
+// Keep the first ten seconds quiet, then explain the wait only once the startup is long enough
 // for this large transcript notice to be useful rather than an immediate flash after Send.
-export const STARTING_NOTICE_DELAY_MS = 3_000;
+export const STARTING_NOTICE_DELAY_MS = 10_000;
 
 /** Which gate the server found holding a queued session, with the numbers it judged on. */
 export interface QueuedGate {
