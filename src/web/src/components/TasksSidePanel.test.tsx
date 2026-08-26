@@ -6,6 +6,7 @@ import {
   WorkspaceRow,
   WorkspaceStateMark,
   workspaceCountsPollInterval,
+  workspaceRunnerIsOffline,
   workspacesNavPath,
 } from './TasksSidePanel';
 
@@ -88,6 +89,13 @@ describe('TasksSidePanel workspace navigation', () => {
     expect(workspaceCountsPollInterval([{ active: 0, running: 0 }])).toBe(15_000);
     expect(source).not.toContain('controlLive ? false');
   });
+
+  it('only calls a Runner offline after an explicit resolved false', () => {
+    expect(workspaceRunnerIsOffline('runner-1', false)).toBe(true);
+    expect(workspaceRunnerIsOffline('runner-1', true)).toBe(false);
+    expect(workspaceRunnerIsOffline('runner-1', undefined)).toBe(false);
+    expect(workspaceRunnerIsOffline(null, false)).toBe(false);
+  });
 });
 
 describe('TasksSidePanel workspace rows', () => {
@@ -97,7 +105,7 @@ describe('TasksSidePanel workspace rows', () => {
         workspace={workspace}
         runnerLabel="wikova"
         active={false}
-        online
+        offline={false}
         running={false}
         needsYou={0}
         onOpen={() => undefined}
@@ -111,37 +119,58 @@ describe('TasksSidePanel workspace rows', () => {
 
   it('uses the Session-list LoadingOutlined spinner only for genuine running work', () => {
     const running = renderToStaticMarkup(
-      <WorkspaceStateMark online running needsYou={0} />,
+      <WorkspaceStateMark offline={false} running needsYou={0} />,
     );
     expect(running).toContain('anticon-loading');
     expect(running).toContain('anticon-spin');
     expect(running).toContain('color:var(--brand)');
     expect(running).toContain('font-size:16px');
+    expect(running).toContain('aria-label="Session running"');
 
     const idle = renderToStaticMarkup(
-      <WorkspaceStateMark online running={false} needsYou={0} />,
+      <WorkspaceStateMark offline={false} running={false} needsYou={0} />,
     );
-    expect(idle).toContain('tp-adot online');
-    expect(idle).not.toContain('anticon-loading');
+    expect(idle).toBe('');
+  });
+
+  it('shows an explicit offline state ahead of a stale running signal', () => {
+    const expanded = renderToStaticMarkup(
+      <WorkspaceStateMark offline running needsYou={0} runnerLabel="wikova" />,
+    );
+    const compact = renderToStaticMarkup(
+      <WorkspaceStateMark compact offline running needsYou={0} runnerLabel="wikova" />,
+    );
+    expect(expanded).toContain('tp-workspace-offline');
+    expect(expanded).toContain('anticon-disconnect');
+    expect(expanded).toContain('Offline');
+    expect(expanded).toContain('wikova is offline');
+    expect(expanded).not.toContain('anticon-loading');
+    expect(compact).toContain('tp-rail-offline');
+    expect(compact).toContain('anticon-disconnect');
+    expect(compact).not.toContain('anticon-loading');
   });
 
   it('uses one priority order in expanded rows and the collapsed rail', () => {
     const expanded = renderToStaticMarkup(
-      <WorkspaceStateMark online running needsYou={2} />,
+      <WorkspaceStateMark offline running needsYou={2} />,
     );
     const compact = renderToStaticMarkup(
-      <WorkspaceStateMark compact online running needsYou={2} />,
+      <WorkspaceStateMark compact offline running needsYou={2} />,
     );
     expect(expanded).toContain('tp-count needs-you');
     expect(compact).toContain('tp-rail-badge needs-you');
+    expect(expanded).toContain('aria-label="2 sessions need your reply"');
+    expect(compact).toContain('aria-label="2 sessions need your reply"');
     expect(expanded).not.toContain('anticon-loading');
     expect(compact).not.toContain('anticon-loading');
+    expect(expanded).not.toContain('anticon-disconnect');
+    expect(compact).not.toContain('anticon-disconnect');
 
     const compactRunning = renderToStaticMarkup(
-      <WorkspaceStateMark compact online running needsYou={0} />,
+      <WorkspaceStateMark compact offline={false} running needsYou={0} />,
     );
     expect(compactRunning).toContain('tp-rail-running');
     expect(compactRunning).toContain('anticon-spin');
-    expect(compactRunning).not.toContain('tp-rail-adot');
+    expect(compactRunning).not.toContain('tp-rail-offline');
   });
 });

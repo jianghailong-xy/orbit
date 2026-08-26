@@ -4,6 +4,7 @@ import {
   CaretDownOutlined,
   CheckOutlined,
   DesktopOutlined,
+  DisconnectOutlined,
   FolderOutlined,
   InboxOutlined,
   LoadingOutlined,
@@ -131,6 +132,16 @@ export function workspaceCountsPollInterval(
   counts: readonly { active: number; running?: number }[],
 ): number {
   return counts.some((count) => count.active > 0 || (count.running ?? 0) > 0) ? 5_000 : 15_000;
+}
+
+/** Show Offline only from an authoritative Runner snapshot. `undefined` means the runner query is
+ * still loading (or an older payload omitted the flag), while a null id is a config-only Workspace;
+ * neither should flash a false disconnection warning. */
+export function workspaceRunnerIsOffline(
+  runnerId: string | null,
+  runnerOnline: boolean | undefined,
+): boolean {
+  return runnerId !== null && runnerOnline === false;
 }
 
 interface TaskList {
@@ -275,7 +286,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     queryFn: () => api<Runner[]>('/runners'),
     refetchInterval: 15_000,
   });
-  const onlineRunnerIds = new Set((runners.data ?? []).filter((r) => r.online).map((r) => r.id));
+  const runnerOnlineById = useMemo(
+    () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
+    [runners.data],
+  );
   // Runner id → display name (displayName || name), matching how the rest of the app labels a
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
@@ -350,7 +364,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     [sessionCounts.data],
   );
   // Unlike `active` (which also includes queued sessions), `running` mirrors the blue working
-  // spinner in the Session list. A queued-only workspace must keep its ordinary online dot.
+  // spinner in the Session list. A queued-only, online workspace keeps the normal empty slot.
   const workspaceRunning = useMemo(
     () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.running ?? 0])),
     [sessionCounts.data],
@@ -473,12 +487,11 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           </div>
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
-            (workspaces are entities with identity + online state + ⌘1‒9, so unlike the
+            (workspaces have identity + exceptional/activity state + ⌘1‒9, so unlike the
             text-titled task lists they read fine as icons). Same order, same shortcuts. */}
         {orderedWorkspaces.length > 0 && <div className="tp-rail-divider" />}
         {orderedWorkspaces.map((a, i) => {
           const runnerId = workspaceRunnerId(a);
-          const online = onlineRunnerIds.has(runnerId ?? '');
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
             a.runner?.displayName ??
@@ -494,9 +507,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
               <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
               <WorkspaceStateMark
                 compact
-                online={online}
+                offline={workspaceRunnerIsOffline(
+                  runnerId,
+                  runnerId ? runnerOnlineById.get(runnerId) : undefined,
+                )}
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                runnerLabel={runnerLabel}
               />
             </div>
           );
@@ -537,7 +554,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 workspace={a}
                 runnerLabel={runnerLabel}
                 active={a.id === activeWorkspaceId}
-                online={onlineRunnerIds.has(runnerId ?? '')}
+                offline={workspaceRunnerIsOffline(
+                  runnerId,
+                  runnerId ? runnerOnlineById.get(runnerId) : undefined,
+                )}
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                 onOpen={openWorkspace}
@@ -667,28 +687,49 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
 /** One status slot shared by the expanded row and collapsed rail.
  *
- * Attention wins over work in progress; genuine work wins over machine availability. The working
- * glyph intentionally has the same component, spin prop, colour and size as `StatusIcon` in the
- * Session list, so "running" never changes visual language between the two navigation levels.
+ * Attention wins first. A disconnected Runner then outranks the spinner so stale work never looks
+ * healthy; genuine work is the only normal state worth drawing, while online + idle stays quiet.
+ * Both running and disconnected glyphs reuse their Session-list components.
  */
 export function WorkspaceStateMark({
-  online,
+  offline,
   running,
   needsYou,
+  runnerLabel,
   compact = false,
 }: {
-  online: boolean;
+  offline: boolean;
   running: boolean;
   needsYou: number;
+  runnerLabel?: string;
   compact?: boolean;
 }) {
   if (needsYou > 0) {
+    const title = `${needsYou} ${needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
     return (
       <span
         className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
-        title={`${needsYou} session(s) need your reply`}
+        title={title}
+        aria-label={title}
       >
         {needsYou}
+      </span>
+    );
+  }
+  if (offline) {
+    const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
+    return compact ? (
+      <Tooltip title={title}>
+        <DisconnectOutlined
+          className="tp-rail-offline"
+          aria-label={title}
+          style={{ color: 'var(--text-3)', fontSize: 16 }}
+        />
+      </Tooltip>
+    ) : (
+      <span className="tp-workspace-offline" title={title} aria-label={title}>
+        <DisconnectOutlined aria-hidden="true" />
+        <span>Offline</span>
       </span>
     );
   }
@@ -698,17 +739,13 @@ export function WorkspaceStateMark({
         <LoadingOutlined
           className={compact ? 'tp-rail-running' : 'tp-workspace-running'}
           spin
+          aria-label="Session running"
           style={{ color: 'var(--brand)', fontSize: 16 }}
         />
       </Tooltip>
     );
   }
-  return (
-    <span
-      className={`${compact ? 'tp-rail-adot' : 'tp-adot'} ${online ? 'online' : ''}`}
-      title={online ? 'Online' : 'Offline'}
-    />
-  );
+  return null;
 }
 
 // A compact, permanently visible workspace row. Runner is descriptive metadata on the same line,
@@ -717,7 +754,7 @@ export function WorkspaceRow({
   workspace,
   runnerLabel,
   active,
-  online,
+  offline,
   running,
   needsYou,
   onOpen,
@@ -725,7 +762,7 @@ export function WorkspaceRow({
   workspace: Workspace;
   runnerLabel: string;
   active: boolean;
-  online: boolean;
+  offline: boolean;
   running: boolean;
   needsYou: number;
   onOpen: (a: Workspace) => void;
@@ -744,7 +781,12 @@ export function WorkspaceRow({
           {runnerLabel}
         </span>
       </span>
-      <WorkspaceStateMark online={online} running={running} needsYou={needsYou} />
+      <WorkspaceStateMark
+        offline={offline}
+        running={running}
+        needsYou={needsYou}
+        runnerLabel={runnerLabel}
+      />
     </div>
   );
 }
