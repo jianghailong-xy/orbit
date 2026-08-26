@@ -74,6 +74,7 @@ import {
   type HandoffAuthority,
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
+import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -1278,11 +1279,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * carrying a null that only explodes when a crossing is declared.
      */
     handoffs?: ProjectHandoffService,
+    /**
+     * Unit T7's post-commit fact producer. Optional only for the many unit fixtures which construct
+     * TasksService directly; TasksModule always injects the shared production instance.
+     */
+    settledProjects?: ProjectTasksSettledProducer,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
+    this.settledProjects = settledProjects;
   }
 
   private readonly handoffs: ProjectHandoffService;
+  private readonly settledProjects?: ProjectTasksSettledProducer;
+
+  /**
+   * Re-read project task sets only after the write and aggregate propagation have committed.
+   *
+   * Best effort is intentional at this boundary: the task write is already committed, so a
+   * judgment-delivery fault cannot honestly turn its response into a rolled-back failure. T2's
+   * key makes a retry/re-delivery harmless, while the warning keeps a delivery fault observable.
+   */
+  private async deliverSettledProjectFacts(
+    projectIds: ReadonlyArray<string | null | undefined>,
+    cause: string,
+  ): Promise<void> {
+    if (!this.settledProjects) return;
+    await this.settledProjects.afterCommit(projectIds).catch((e) =>
+      this.logger.warn(
+        `PROJECT_TASKS_SETTLED delivery after ${cause} failed: ${e?.message ?? e}`,
+      ),
+    );
+  }
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -7279,6 +7306,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           dto.supersededByTaskId ?? undefined,
         ].filter((taskId): taskId is string => !!taskId),
       ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
+
+      // The scalar write and every aggregate parent it can settle are now committed. Derive from
+      // the complete OLD and NEW project task sets rather than from `dto.status`: a move can settle
+      // the project it leaves, and an aggregate completion need not be the row this PATCH named.
+      await this.deliverSettledProjectFacts(
+        [before.projectId, updated.projectId],
+        `task update ${id}`,
+      );
     }
     if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
       const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
@@ -8479,7 +8514,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.loadDetail(ownerId, id);
-    const { survivingLinks } = await this.deleteAndStopRuns(ownerId, [id]);
+    const { survivingLinks, projectIds } = await this.deleteAndStopRuns(ownerId, [id]);
     // Cascades may remove prerequisite edges from other open DAGs, so the deleted id is not an
     // incremental answer: it cannot be fetched, and it does not name all surviving rows affected
     // by the cascades. Say explicitly that the owner's task snapshots must be reconciled.
@@ -8495,6 +8530,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`aggregation after delete of ${id} failed: ${e?.message ?? e}`),
       );
     }
+    // Deleting the last unsettled row can make what remains settled; an empty project still derives
+    // no fact because `projectTasksSettledFact` rejects vacuous completion.
+    await this.deliverSettledProjectFacts(projectIds, `task delete ${id}`);
     return { ok: true };
   }
 
@@ -8522,7 +8560,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async deleteAndStopRuns(
     ownerId: string,
     ids: string[],
-  ): Promise<{ deleted: number; survivingLinks: string[] }> {
+  ): Promise<{ deleted: number; survivingLinks: string[]; projectIds: string[] }> {
     // Retried whole. Everything it decides is read inside the closure and under the owner mutex —
     // the surviving links, the occupying runs, the rows the DELETE names — so a re-run deletes
     // against the state the winning transaction left. The run teardown below is deliberately
@@ -8537,7 +8575,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // `lock_not_available`, which `classifyTransactionError` deliberately does not call transient —
     // it is a decision, not a fault. Retrying it would spend the attempts re-earning the same
     // correct refusal; untranslated it reaches the caller as a 500 with a SQLSTATE in it.
-    const { deleted, runs, links } = await this.runTaskWorkTranslatingFences(
+    const { deleted, runs, links, projectIds } = await this.runTaskWorkTranslatingFences(
       () => withTransactionRetry(
         this.prisma,
       async (tx) => {
@@ -8593,9 +8631,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // still true and no longer changeable: a parent whose last outstanding subtask this delete
         // removes has to be recomputed, and after the DELETE there is nothing left to ask.
         const locked = await tx.$queryRaw<
-          Array<{ parentTaskId: string | null; verifiesTaskId: string | null }>
+          Array<{
+            projectId: string | null;
+            parentTaskId: string | null;
+            verifiesTaskId: string | null;
+          }>
         >`
-          SELECT id, "parent_task_id" AS "parentTaskId", "verifies_task_id" AS "verifiesTaskId"
+          SELECT id, "project_id" AS "projectId", "parent_task_id" AS "parentTaskId",
+                 "verifies_task_id" AS "verifiesTaskId"
           FROM "task"
           WHERE id = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
           ORDER BY id
@@ -8618,7 +8661,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true },
         });
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
-        return { deleted: res.count, runs: occupying.map((s) => s.id), links: locked };
+        return {
+          deleted: res.count,
+          runs: occupying.map((s) => s.id),
+          links: locked,
+          projectIds: [
+            ...new Set(locked.map((task) => task.projectId).filter((id): id is string => !!id)),
+          ],
+        };
       },
         this.transientWriteRetry('tasks.delete', {
           // The delete used to be one implicit statement under no client deadline. Inside an
@@ -8659,7 +8709,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           .filter((id): id is string => !!id && !doomed.has(id)),
       ),
     ];
-    return { deleted, survivingLinks };
+    return { deleted, survivingLinks, projectIds };
   }
 
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
@@ -11037,7 +11087,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async batchDelete(ownerId: string, taskIds: string[]) {
     const uniqueIds = [...new Set(taskIds)];
     if (uniqueIds.length === 0) return { deleted: 0 };
-    const { deleted, survivingLinks } = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    const { deleted, survivingLinks, projectIds } = await this.deleteAndStopRuns(ownerId, uniqueIds);
     if (deleted > 0) {
       // A representative deleted id is neither fetchable nor complete (verification tasks and
       // dependency edges can cascade). Future incremental clients need an explicit reconciliation
@@ -11050,6 +11100,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           this.logger.warn(`aggregation after batch delete failed: ${e?.message ?? e}`),
         );
       }
+      await this.deliverSettledProjectFacts(projectIds, 'batch task delete');
     }
     return { deleted };
   }

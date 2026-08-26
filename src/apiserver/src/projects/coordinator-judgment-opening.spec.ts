@@ -120,6 +120,34 @@ test('every wake event has a sentence of its own', () => {
   assert.match(describeWakeFact(unknown), /SOMETHING_NEW/);
 });
 
+test('PROJECT_TASKS_SETTLED carries the merge-evidence-run order and the no-evidence exit', () => {
+  const settled = projectTasksSettledFact(PROJECT, [
+    { taskId: TASK, status: 'DONE' },
+  ])!;
+  const opening = buildJudgmentOpening(settled, '验收闭环');
+
+  for (const tool of [
+    'project_acceptance',
+    'project_merge_evidence',
+    'project_acceptance_run',
+    'project_acceptance_verdict',
+  ]) {
+    assert.match(opening, new RegExp(tool), `settlement judgment must be handed ${tool}`);
+  }
+  const merge = opening.lastIndexOf('合并到 main');
+  const evidence = opening.lastIndexOf('project_merge_evidence');
+  const run = opening.lastIndexOf('project_acceptance_run');
+  const verdict = opening.lastIndexOf('project_acceptance_verdict');
+  assert.ok(merge < evidence && evidence < run && run < verdict, 'the stale-safe order drifted');
+
+  assert.match(opening, /mergeEvidence 为空/);
+  assert.match(opening, /task_create.*criterionKey/);
+  assert.match(opening, /task_comment 中升级给人/);
+  assert.match(opening, /不得开 acceptance run，更不得写 PASS/);
+  assert.match(opening, /status=DONE 都由人写/);
+  assert.match(opening, /ACCEPTANCE_EVIDENCE_STALE/);
+});
+
 test('a judgment session is filed under a different title from the conversation', () => {
   assert.equal(judgmentSessionTitle('协调重做'), '判断：协调重做');
   assert.ok(judgmentSessionTitle('x'.repeat(200)).length <= 80);
@@ -141,7 +169,11 @@ test('the conversation a person opens still opens the way 60dece5e restored it',
 /** The red line, as a grep over this unit's own files rather than over the tree. */
 test('nothing this unit adds is reachable from a timer', () => {
   const here = path.resolve(__dirname, '..', '..', 'src', 'projects');
-  for (const file of ['coordinator-judgment-opening.ts', 'coordinator-judgment.service.ts']) {
+  for (const file of [
+    'coordinator-judgment-opening.ts',
+    'coordinator-judgment.service.ts',
+    'project-tasks-settled.producer.ts',
+  ]) {
     const source = readFileSync(path.join(here, file), 'utf8');
     for (const timer of ['setInterval', 'setTimeout', '@Interval', '@Cron', 'SchedulerRegistry']) {
       assert.ok(

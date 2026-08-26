@@ -5,7 +5,7 @@ import { ForbiddenException, RequestMethod } from '@nestjs/common';
 import { ProjectStatus } from '@orbit/shared';
 import { METHOD_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { PublicIdPipe } from '../common/public-id';
-import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
+import { CreateProjectDto, OpenAcceptanceRunDto, UpdateProjectDto } from '../projects/dto';
 import { RunnerProjectsController } from './runner-projects.controller';
 
 /** The acceptance service this controller also takes. A double rather than a real one: every
@@ -280,7 +280,7 @@ for (const method of ['getProject', 'removeProject'] as const) {
 // two fields on this DTO (the acceptance criteria, and `status = DONE`) are a person's rather than
 // a judgment session's. Asserted rather than left implicit because a typo in the header name is
 // silent: the parameter would be `undefined` on every request and the boundary would never bite.
-for (const method of ['updateProject', 'finalizeAcceptanceRun'] as const) {
+for (const method of ['updateProject', 'openAcceptanceRun', 'finalizeAcceptanceRun'] as const) {
   test(`${method} reads the acting session from x-orbit-session-id`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown }>
@@ -291,6 +291,36 @@ for (const method of ['updateProject', 'finalizeAcceptanceRun'] as const) {
     assert.deepEqual(headers, ['x-orbit-session-id']);
   });
 }
+
+test('openAcceptanceRun attributes the run to the calling judgment session, not the body', async () => {
+  const seen: {
+    ownerId?: string;
+    projectId?: string;
+    input?: OpenAcceptanceRunDto & { decidedBy: string };
+  } = {};
+  const acceptance = {
+    openRun: async (
+      ownerId: string,
+      projectId: string,
+      input: OpenAcceptanceRunDto & { decidedBy: string },
+    ) => {
+      Object.assign(seen, { ownerId, projectId, input });
+      return { id: 'run-1' };
+    },
+  } as never;
+  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
+  const body = {
+    decidedBy: 'USER',
+    coordinatorSessionId: '00000000-0000-7000-8000-0000000000ff',
+  } as OpenAcceptanceRunDto;
+
+  await controller.openAcceptanceRun(RUNNER, 'project-1', SESSION_ID, body);
+
+  assert.equal(seen.ownerId, 'owner-1');
+  assert.equal(seen.projectId, 'project-1');
+  assert.equal(seen.input?.decidedBy, 'COORDINATOR_AGENT');
+  assert.equal(seen.input?.coordinatorSessionId, SESSION_ID);
+});
 
 test('updateProject writes into the runner owner, with the id and body untouched', async () => {
   const seen: { ownerId?: string; projectId?: string; dto?: UpdateProjectDto } = {};

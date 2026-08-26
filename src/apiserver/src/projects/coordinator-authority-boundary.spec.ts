@@ -360,6 +360,7 @@ function createFixture(options: {
     },
   };
   const service = new TasksService(prisma as never, {} as never, {
+    publishForUser() {},
     publishTaskChanged() {},
   } as never);
   return {

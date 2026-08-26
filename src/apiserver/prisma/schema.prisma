@@ -1883,7 +1883,7 @@ model ProjectAction {
 }
 
 /// One committed fact that woke — or was refused the right to wake — this project's coordinator
-/// (unit T2, migration 0173).
+/// (unit T2, migration 0174).
 ///
 /// The identity is `idempotency_key` = `cw:v1:<event>:<subjectType>:<subjectId>:<subjectVersion>`,
 /// derived by `coordinator-wake.ts` from the fact alone and BEFORE anything asks whether the wake
@@ -1919,8 +1919,8 @@ model ProjectCoordinatorWake {
   idempotencyKey String @map("idempotency_key")
 
   /// CLAIMED, SESSION_OPENED or REFUSED. A CHECK, for the reason `event` is one. SESSION_OPENED is
-  /// inside 0173's partial unique index — that is what stops one fact opening a second judgment
-  /// session (unit T3, migration 0174).
+  /// inside 0174's partial unique index — that is what stops one fact opening a second judgment
+  /// session (unit T3 adds the status in migration 0175).
   status      String  @default("CLAIMED")
   /// Non-null exactly when `status` is REFUSED, enforced by a CHECK: a stop with no reason is the
   /// one shape this table exists to make impossible.
@@ -1929,7 +1929,7 @@ model ProjectCoordinatorWake {
   /// `ProjectBlocker.occurrences`, BL7).
   detail      Json    @default("{}")
 
-  /// The one judgment session this wake opened (unit T3, migration 0174). Unique, so two wakes
+  /// The one judgment session this wake opened (unit T3, migration 0175). Unique, so two wakes
   /// cannot name one session; nullable and `SetNull`, so deleting a session is never refused by
   /// this ledger — what the row still says afterwards is that it opened one.
   sessionId String?  @unique(map: "project_coordinator_wake_session_id_key") @map("session_id") @db.Uuid
@@ -1937,7 +1937,7 @@ model ProjectCoordinatorWake {
 
   createdAt DateTime @default(now()) @map("created_at")
   /// Both, and the pair is deliberate: the claim is a raw INSERT that names no timestamp, so the
-  /// column needs the database default 0173 gives it, while `@updatedAt` is what makes a refusal
+  /// column needs the database default 0174 gives it, while `@updatedAt` is what makes a refusal
   /// stamp the moment the key was given back.
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 

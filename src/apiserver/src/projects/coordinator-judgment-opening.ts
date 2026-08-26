@@ -15,20 +15,19 @@ import { WakeFact } from './coordinator-wake';
  * 60dece5e removed from the OLD opening (it described a §9.2 policy matrix no code enforced any
  * more) and worth not making a second time.
  *
- * FACTS, NOT INSTRUCTIONS
- * =======================
- * This says three things and deliberately no fourth:
+ * FACTS FIRST; ONE CLOSED PROTOCOL FOR PROJECT SETTLEMENT
+ * ======================================================
+ * Every opening says three things before it can prescribe anything:
  *
  *   1. what happened — the fact, rendered from `WakeFact` and from nothing else;
  *   2. where the full state is — the two reads, named with this project's id already in them;
  *   3. what is in reach — the tools, and the ones that are not.
  *
- * It does not say what to conclude, what to do about it, or in what order. That is not restraint
- * for its own sake: the state this judgment is about is in the database, not in this prompt, and a
- * prompt that prescribes an action has decided the thing before the reader has read anything. The
- * whole reason the session is opened fresh per fact — rather than steered into a standing one — is
- * that the judgment should be a function of what is committed. Baking an instruction in makes it a
- * function of what this file guessed.
+ * The generic events do not say what to conclude or do: the state this judgment is about is in the
+ * database, not in this prompt. `PROJECT_TASKS_SETTLED` is the deliberate exception added by T7.
+ * That event has a closed acceptance protocol whose ORDER is itself an invariant: code lands on
+ * main, merge evidence is recorded, and only then may an acceptance run freeze the facts. This
+ * does not pre-decide a verdict; it prevents a verdict from being formed against the wrong digest.
  *
  * The one thing said about the session itself — that it is for this fact and lasts one turn — is a
  * property of the mechanism, not an instruction. It is here because a reader that assumed it could
@@ -77,6 +76,35 @@ export function describeWakeFact(fact: WakeFact): string {
 }
 
 /**
+ * T7's settlement-only action protocol.
+ *
+ * It is conditional rather than part of every judgment opening: an attempt-budget wake has no
+ * reason to open an acceptance run, while a project-settled wake exists specifically because the
+ * old system stopped after the last task and left `runs: []` forever.
+ */
+export function settledAcceptanceProtocol(projectId: string): string {
+  return (
+    '\n\n这条 PROJECT_TASKS_SETTLED 事实要闭合项目验收；按下面的顺序行动，顺序是硬约束，不是建议：\n'
+    + `1. 先用 project_acceptance（projectId 传 ${projectId}）读取验收标准、runs、mergeEvidence 和 doneGate。\n`
+    + '2. 先确认实现已经真正落到 main，并且 main 上的行为满足验收对象。任务标成 DONE 只说明某个工作分支做完了，'
+    + '不证明 main 已包含它。只要代码还没落 main，或者 mergeEvidence 为空，就开一条“合并并录入主干证据”的任务'
+    + '（task_create 必须带对应 criterionKey），无法安全开任务时就在相关 task_comment 中升级给人；然后结束本轮。'
+    + '这种情况下不得开 acceptance run，更不得写 PASS。\n'
+    + '3. 合并任务的执行顺序必须是：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据 → 将任务置于终态。'
+    + 'project_merge_evidence 会改变事实集 digest，所以它必须发生在开 run 之前；反过来会让刚写出的 verdict 立即变成 '
+    + 'ACCEPTANCE_EVIDENCE_STALE。\n'
+    + '4. 只有确认 main 已落地且 mergeEvidence 已存在并对应当前 main，才用 project_acceptance_run 开一个新 run；'
+    + '随后按该 run 冻结的清单逐条检查，并用 project_acceptance_verdict 一次提交每一条标准的结论和可复查证据，'
+    + '不能漏项。\n'
+    + '5. 服务端的人机边界仍然有效：这次判断可以完整提交全为 FAIL/INCONCLUSIVE 的 verdict；只要任何一条应为 '
+    + 'PASS，就不得用假的 INCONCLUSIVE 绕过，也不能自己写 PASS。把每条候选 PASS 的证据写入相关 task_comment 并升级给人，'
+    + '由人提交 PASS。无论 verdict 如何，project_update 的 status=DONE 都由人写。\n\n'
+    + '验收顺序再确认一次：合并到 main → project_merge_evidence → project_acceptance_run → '
+    + 'project_acceptance_verdict；缺主干或缺 mergeEvidence 时停在开任务/升级。'
+  );
+}
+
+/**
  * The message a judgment session opens on.
  *
  * `title` and the fact are the ONLY project state in here. Everything else about the project —
@@ -94,15 +122,18 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + `去哪读全量状态：project_get（projectId 传 ${projectId}）给出这个项目的目标、验收标准、作业指导和状态；`
     + `task_list（projectId 传 ${projectId}）给出它下面每个任务的状态、验收标准和依赖；`
     + 'task_get 给出某个任务的完整描述和历史评论。\n\n'
-    + '手上有哪些工具：读——project_get、task_list、task_get、session_list、session_get；'
-    + '写——task_create、task_update、task_comment、task_start、project_update。\n\n'
+    + '手上有哪些工具：读——project_get、task_list、task_get、session_list、session_get、project_acceptance；'
+    + '写——task_create、task_update、task_comment、task_start、project_update、project_merge_evidence、'
+    + 'project_acceptance_run、project_acceptance_verdict。\n\n'
     + '写的时候有三条边界，服务端会照着拒（不是建议）：'
     + '① 开新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
     + '并受这个项目每天能开多少个任务的预算限制；'
     + '② 验收标准你改不了，PASS 你也写不了——判定「做完了」的那把尺子和那个结论都归人；'
     + '③ 项目的 status=DONE 不由你写。'
     + '这三条挡住的都是「把没做完记成做完了」；把发现和还差什么写进 task_comment，人会读到。\n\n'
-    + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。\n\n'
+    + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'
+    + (fact.event === 'PROJECT_TASKS_SETTLED' ? settledAcceptanceProtocol(projectId) : '')
+    + '\n\n'
     + '同一个项目还有一条人点开的协调会话，长期开着、由人驱动。它和这次判断读库里同一份事实，不共享上下文；'
     + '这次判断不会动它，它也不会动这次判断。'
   );

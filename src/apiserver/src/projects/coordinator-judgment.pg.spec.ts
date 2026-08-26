@@ -182,7 +182,7 @@ test('one wake opens exactly one judgment session, and five deliveries of the fa
       assert.equal(outcomes[0].outcome, 'OPENED');
       for (const later of outcomes.slice(1)) {
         assert.equal(later.outcome, 'ALREADY_AWAKE',
-          'SESSION_OPENED is inside 0173’s partial index, so the fact still holds its key');
+          'SESSION_OPENED is inside 0174’s partial index, so the fact still holds its key');
       }
 
       const sessions = await judgmentSessions(stack.db, target);
@@ -205,7 +205,7 @@ test('one wake opens exactly one judgment session, and five deliveries of the fa
 /**
  * Acceptance criterion 1, second half: the same fact delivered CONCURRENTLY still opens one.
  *
- * Four stacks, four pools, one fact. What decides the winner is 0173's partial unique index on
+ * Four stacks, four pools, one fact. What decides the winner is 0174's partial unique index on
  * `idempotency_key` — three of the four INSERTs lose it and never reach the session-opening step at
  * all. Nothing here reads "is one already running" and then acts on the answer, which is the read
  * that is never safe: under this exact interleaving all four would read "none".

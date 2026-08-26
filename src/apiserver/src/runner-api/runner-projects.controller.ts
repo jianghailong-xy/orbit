@@ -114,12 +114,21 @@ export class RunnerProjectsController {
   openAcceptanceRun(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
+    // Attribution is transport context, not a caller-authored body field. The runner puts this
+    // header on every MCP call made from the one-shot judgment session.
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: OpenAcceptanceRunDto,
   ) {
     // Who concluded is a fact about which door the request came through, not a field the caller
     // fills in: this one is a machine credential, so the run is the coordinator agent's. The user
     // door takes the claim explicitly, and an agent cannot make it about a person.
-    return this.acceptance.openRun(runner.ownerId, id, { ...dto, decidedBy: 'COORDINATOR_AGENT' });
+    return this.acceptance.openRun(runner.ownerId, id, {
+      ...dto,
+      decidedBy: 'COORDINATOR_AGENT',
+      // Override (and, headless, discard) the body claim. A run cannot choose which conversation
+      // history it belongs to; the same rule already governs project creation at this door.
+      coordinatorSessionId: sessionId?.trim() || undefined,
+    });
   }
 
   @Post('projects/:id/acceptance/runs/:runId/verdict')

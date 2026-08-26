@@ -49,12 +49,12 @@ import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.servi
  * project's own instructions forbid. Three database facts make it impossible instead, and none of
  * them is a read:
  *
- *   1. 0173's partial unique index on `idempotency_key` picks ONE winner per fact, so only one
+ *   1. 0174's partial unique index on `idempotency_key` picks ONE winner per fact, so only one
  *      delivery ever reaches `open` at all;
  *   2. the compare-and-set below (`WHERE id = ? AND status = 'CLAIMED'`) takes the row lock and
  *      lets exactly one writer move that wake to `SESSION_OPENED`, so even a caller that reached
  *      `open` twice with one wake binds once;
- *   3. `SESSION_OPENED` is INSIDE 0173's index (its predicate is `<> 'REFUSED'`), so the fact goes
+ *   3. `SESSION_OPENED` is INSIDE 0174's index (its predicate is `<> 'REFUSED'`), so the fact goes
  *      on holding its key afterwards and can never claim a second session.
  *
  * §3 — A WAKE THAT CANNOT OPEN GIVES THE KEY BACK

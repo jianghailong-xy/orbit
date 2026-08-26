@@ -1,8 +1,8 @@
 -- One wake opens at most one judgment session, and the database is what says so.
 --
--- WHAT UNIT T3 ADDS TO 0173
+-- WHAT UNIT T3 ADDS TO 0174
 -- =========================
--- 0173 made a fact wake a coordinator once. This makes that one wake open one SESSION — a fresh
+-- 0174 made a fact wake a coordinator once. This makes that one wake open one SESSION — a fresh
 -- conversation that reads the project out of the database, acts, and ends. It is not the
 -- conversation a person opens with `POST /projects/:id/coordinator`; that one is long-lived, is
 -- pointed at by `project.coordinator_session_id`, and is untouched by everything here. The two
@@ -11,7 +11,7 @@
 --
 -- 'SESSION_OPENED' IS INSIDE THE KEY'S INDEX, WHICH IS THE POINT
 -- =============================================================
--- 0173's unique index is `UNIQUE ("idempotency_key") WHERE "status" <> 'REFUSED'`, and its comment
+-- 0174's unique index is `UNIQUE ("idempotency_key") WHERE "status" <> 'REFUSED'`, and its comment
 -- named this migration as the reason the predicate is written negatively: a status added later
 -- must go on HOLDING the key rather than releasing it. 'SESSION_OPENED' does, so the fact that
 -- opened a judgment session cannot open a second one — not because anything checked, but because
@@ -43,7 +43,7 @@
 
 ALTER TABLE "project_coordinator_wake" ADD COLUMN IF NOT EXISTS "session_id" UUID;
 
--- Widened, not replaced: 'CLAIMED' and 'REFUSED' mean exactly what 0173 said they mean.
+-- Widened, not replaced: 'CLAIMED' and 'REFUSED' mean exactly what 0174 said they mean.
 ALTER TABLE "project_coordinator_wake"
   DROP CONSTRAINT IF EXISTS "project_coordinator_wake_status_chk";
 ALTER TABLE "project_coordinator_wake"

@@ -37,7 +37,7 @@ import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
  * can never be claimed again", and the coordinator rotation path was welded shut by exactly this.
  *
  * So the unique index here is PARTIAL: `UNIQUE (idempotency_key) WHERE status <> 'REFUSED'`
- * (migration 0173). A refused row leaves the index and stays in the table, so the fact can be
+ * (migration 0174). A refused row leaves the index and stays in the table, so the fact can be
  * delivered again and the refusal is still readable afterwards — "it silently did nothing" is not
  * a state this table can be in. The predicate is written negatively on purpose: any status added
  * later is inside the index by default, so a future `SETTLED` holds the key rather than releasing
@@ -121,7 +121,7 @@ export class CoordinatorWakeService {
    *
    * `RETURNING "id"` on an `ON CONFLICT DO NOTHING` is what makes "did I win" a fact this statement
    * reports rather than a second query's guess: a loser gets no row back at all. The `WHERE` in the
-   * conflict target names the partial index (migration 0173) — without it PostgreSQL cannot infer
+   * conflict target names the partial index (migration 0174) — without it PostgreSQL cannot infer
    * which index the conflict is about and refuses the statement.
    */
   private async insertClaim(fact: WakeFact, idempotencyKey: string): Promise<string | null> {
