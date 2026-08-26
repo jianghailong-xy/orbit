@@ -6736,6 +6736,175 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Record that the current HUMAN_SIGNOFF request needs a NEW structured evidence revision.
+   *
+   * This is deliberately not a conservative status edit. The terminal INCONCLUSIVE request is
+   * the attributable audit (request/digest/person/server time/reason); Task.status is not present
+   * in the transaction at all. Submitting new evidence later creates the next OPEN request.
+   */
+  async requestMoreEvidence(
+    ownerId: string,
+    id: string,
+    input: { requestId: string; evidenceDigest: string; note: string },
+  ) {
+    if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
+    if (!UUID_RE.test(input.requestId)) {
+      throw new BadRequestException('HUMAN_SIGNOFF requestId is invalid');
+    }
+    const evidenceDigest = input.evidenceDigest.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(evidenceDigest)) {
+      throw new BadRequestException(
+        'HUMAN_SIGNOFF evidenceDigest must be 64 lowercase hex characters',
+      );
+    }
+    const note = input.note.trim();
+    if (!note) {
+      throw new BadRequestException({
+        code: 'HUMAN_EVIDENCE_REQUEST_REASON_REQUIRED',
+        criterion: 'HUMAN_SIGNOFF',
+        requiredAction: 'EXPLAIN_WHAT_EVIDENCE_IS_MISSING',
+        message: 'Explain what evidence is missing before requesting another revision.',
+      });
+    }
+
+    // One timestamp for every retry of this press. A replay reads the committed first decision;
+    // it never rewrites who/when/reason with the transport retry's later values.
+    const decidedAt = new Date();
+    const committed = await withTransactionRetry(this.prisma, async (tx) => {
+      // Rank 50, shared with evidence submission and signoff. Once this row is held, no new
+      // evidence request can supersede the one being decided between the currentness read and the
+      // update below.
+      const tasks = await tx.$queryRaw<Array<{
+        id: string;
+        status: TaskStatus;
+        completionCriterion: TaskCompletionCriterionValue;
+        terminalReason: string | null;
+        supersededByTaskId: string | null;
+      }>>`
+        SELECT "id", "status",
+               "completion_criterion"::text AS "completionCriterion",
+               "terminal_reason" AS "terminalReason",
+               "superseded_by_task_id" AS "supersededByTaskId"
+          FROM "task"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR UPDATE`;
+      const task = tasks[0];
+      if (!task) throw new NotFoundException('task not found');
+      if (task.completionCriterion !== 'HUMAN_SIGNOFF') {
+        throw new BadRequestException({
+          code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
+          criterion: task.completionCriterion,
+          requiredAction: taskCompletionRequiredAction(task.completionCriterion).requiredAction,
+          message:
+            `Evidence revision requests apply only to HUMAN_SIGNOFF tasks; this task now ` +
+            `declares ${task.completionCriterion}.`,
+        });
+      }
+      if (
+        task.status === TaskStatus.DONE ||
+        task.status === TaskStatus.CANCELLED ||
+        task.terminalReason ||
+        task.supersededByTaskId
+      ) {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_TASK_NOT_REVIEWABLE',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'REFRESH_THE_TASK_AND_CURRENT_REQUEST',
+          message: 'This task is already completed, cancelled or superseded; refresh its review.',
+        });
+      }
+
+      // Rank 60. Explicitly locked even though the task mutex serializes ordinary producers: the
+      // row is the decision identity and the database trigger also judges its old lifecycle.
+      await tx.$queryRaw`
+        SELECT "id" FROM "task_judgment_request"
+         WHERE "id" = ${input.requestId}::uuid
+         FOR UPDATE`;
+      const request = await tx.taskJudgmentRequest.findUnique({
+        where: { id: input.requestId },
+      });
+      if (
+        !request ||
+        request.taskId !== id ||
+        request.kind !== 'HUMAN_SIGNOFF' ||
+        request.recipientType !== 'ACCOUNT_OWNER' ||
+        request.recipientId !== ownerId ||
+        request.evidenceDigest !== evidenceDigest
+      ) {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_REQUEST_MISMATCH',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'DECIDE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          message:
+            'The decision must name the current HUMAN_SIGNOFF request and exact evidence digest.',
+        });
+      }
+
+      // Same decision on the same fact is a transport replay. Return the first audit unchanged.
+      if (
+        request.status === 'DECIDED' &&
+        request.decision === 'INCONCLUSIVE' &&
+        request.decidedByType === 'USER' &&
+        request.decidedById === ownerId &&
+        request.decisionNote === note
+      ) {
+        return { taskId: id, taskStatus: task.status, request, replayed: true };
+      }
+
+      const current = await tx.taskJudgmentRequest.findFirst({
+        where: { taskId: id, status: 'OPEN' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      if (request.status === 'SUPERSEDED') {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'DECIDE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          currentRequestId: current?.id ?? request.supersededById,
+          currentEvidenceDigest: current?.evidenceDigest ?? null,
+          message: 'This evidence version was superseded; refresh and review the current revision.',
+        });
+      }
+      if (request.status !== 'OPEN') {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_REQUEST_NOT_OPEN',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'READ_THE_CURRENT_JUDGMENT_REQUEST',
+          message: 'This HUMAN_SIGNOFF request was already decided.',
+        });
+      }
+      if (!current || current.id !== request.id) {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_REQUEST_NOT_CURRENT',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'DECIDE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          currentRequestId: current?.id ?? null,
+          currentEvidenceDigest: current?.evidenceDigest ?? null,
+          message: 'A newer HUMAN_SIGNOFF request is current; refresh before deciding.',
+        });
+      }
+
+      const decided = await tx.taskJudgmentRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'DECIDED',
+          decidedAt,
+          decidedByType: 'USER',
+          decidedById: ownerId,
+          decision: 'INCONCLUSIVE',
+          decisionNote: note,
+        },
+      });
+      return { taskId: id, taskStatus: task.status, request: decided, replayed: false };
+    }, this.transientWriteRetry('tasks.requestMoreEvidence'));
+
+    // The request/signal/blocker projection changed even though the Task row intentionally did
+    // not. A task.changed invalidates task and project readers without inventing a status write.
+    await this.publishAffectedTaskRows(ownerId, [id]);
+    return committed;
+  }
+
+  /**
    * `actingSessionId` is the run this edit is being made FROM, when there is one — the runner
    * sends it on every task write an agent makes. It answers the two questions on this path that
    * turn on WHO is writing rather than on what is being written: §13.2's independence rule, and

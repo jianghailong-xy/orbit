@@ -142,6 +142,7 @@ run_target() {
       build/tasks/task-executable-acceptance.pg.spec.js \
       build/tasks/task-judgment-verification.pg.spec.js \
       build/tasks/task-human-signoff.pg.spec.js \
+      build/tasks/task-judgment-review.pg.spec.js \
       build/push/judgment-delivery.pg.spec.js \
       build/tasks/verification-epoch.pg.spec.js) ;;
     completion-input)

@@ -61,6 +61,7 @@ import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
+import { JudgmentRequestSummary } from '../components/JudgmentRequestSummary';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -597,6 +598,8 @@ export function ProjectDetailPage() {
               coordinator. A long brief stays complete here; its full Markdown remains the one
               source rather than being hidden behind a disclosure or repeated below the graph. */}
           <ProjectGoalCard goal={p.goal} />
+
+          <JudgmentRequestSummary projectId={id} heading="待我判定" />
 
           {/* The graph is the picture summarized by the overview above. Every project gets one,
               at any size: the section draws whatever the graph endpoint serves and says so when
