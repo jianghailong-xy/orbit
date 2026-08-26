@@ -24,7 +24,10 @@ function deferred<T>() {
 function serviceWith(prisma: unknown, criteriaSummary: () => Promise<any> = async () => ({
   total: 0, passed: 0, lastRunAt: null, criteria: [],
 })): ProjectsService {
-  const acceptance = { criteriaSummary };
+  const acceptance = {
+    criteriaSummary,
+    ensureCurrentEvidenceVersion: async () => undefined,
+  };
   return new ProjectsService(prisma as never, acceptance as never);
 }
 

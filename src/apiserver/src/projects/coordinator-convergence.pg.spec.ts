@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, ProjectAcceptanceVerdict, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -18,6 +18,7 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import { attemptEndedUnsettledFact } from './coordinator-wake';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { parseCriteria } from './project-acceptance';
+import { ProjectAcceptanceService } from './project-acceptance.service';
 
 /**
  * Unit T4 against a real PostgreSQL, because every claim it makes is the DATABASE's.
@@ -142,42 +143,25 @@ async function blockers(f: Fixture) {
   });
 }
 
-/** Close one acceptance criterion, the way a concluded acceptance run does. */
+/** Close one acceptance criterion by appending a new human conclusion over the same evidence set. */
 async function closeCriterion(f: Fixture, ordinal: number): Promise<void> {
   const criteria = parseCriteria(CRITERIA);
-  const runId = randomUUID();
-  await f.db.projectAcceptanceRun.create({
-    data: {
-      id: runId,
-      projectId: f.projectId,
-      attempt: BigInt(ordinal),
-      criteriaSnapshot: CRITERIA,
-      criteriaRevision: sha256(CRITERIA),
-      inputDigest: sha256(`input:${ordinal}`),
-      decidedBy: 'USER',
-    },
+  const acceptance = new ProjectAcceptanceService(f.db as unknown as PrismaService);
+  const version = await acceptance.openRun(f.ownerId, f.projectId, {
+    decidedBy: 'USER',
   });
-  // Only the newest run is live; the older ones are superseded, exactly as a second run leaves them.
-  await f.db.projectAcceptanceRun.updateMany({
-    where: { projectId: f.projectId, id: { not: runId }, supersededAt: null },
-    data: { supersededAt: new Date(), supersededReason: 'replaced by a newer run' },
-  });
-  await f.db.projectAcceptanceCriterion.createMany({
-    data: criteria.map((criterion) => ({
-      id: randomUUID(),
-      runId,
-      projectId: f.projectId,
+  await acceptance.finalizeRun(
+    f.ownerId,
+    f.projectId,
+    version.id,
+    criteria.map((criterion) => ({
       ordinal: criterion.ordinal,
-      criterionKey: criterion.key,
-      criterionText: criterion.text,
-      verdict: criterion.ordinal <= ordinal ? ('PASS' as const) : null,
-      decidedAt: criterion.ordinal <= ordinal ? new Date() : null,
+      verdict: criterion.ordinal <= ordinal
+        ? ProjectAcceptanceVerdict.PASS
+        : ProjectAcceptanceVerdict.INCONCLUSIVE,
+      summary: `criterion ${criterion.ordinal} at progress step ${ordinal}`,
     })),
-  });
-}
-
-function sha256(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
+  );
 }
 
 async function cleanup(f: Fixture): Promise<void> {

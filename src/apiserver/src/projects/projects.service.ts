@@ -1751,6 +1751,9 @@ export class ProjectsService {
             },
           });
         }
+        if (dto.acceptanceCriteriaItems !== undefined || dto.acceptanceCriteria !== undefined) {
+          await this.acceptance.ensureCurrentEvidenceVersion(tx, id);
+        }
 
         // A criteria fact edit can atomically reopen a DONE through the database trigger. Re-read
         // that committed-within-this-transaction state so the explicit status branches below do

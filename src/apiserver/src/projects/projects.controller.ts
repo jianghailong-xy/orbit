@@ -239,7 +239,7 @@ export class ProjectsController {
    * This project's acceptance standing (contract §13.4 / AC12), in one read.
    *
    * The stated criteria as the parser decomposes them, the digest of the facts a DONE would be
-   * checked against, every attempt with its per-criterion conclusions and evidence, the newest
+   * checked against, every evidence version with its derived criteria and conclusion events, the newest
    * merge observation per requirement, the append-only audit — and `doneGate`, which is the same
    * decision the write path makes, evaluated as a read so a client can say what is missing before
    * anybody presses a button. Ids are Base62.
@@ -260,11 +260,8 @@ export class ProjectsController {
   }
 
   /**
-   * Open an acceptance attempt: freeze the criteria, claim the epoch (§13.4 AE11), and create the
-   * empty per-criterion checklist the conclusion has to fill.
-   *
-   * Opening one supersedes any earlier live attempt — two usable runs would let a caller choose the
-   * conclusion they prefer.
+   * Evaluate the current acceptance evidence version. The project lock plus a partial unique index
+   * makes this idempotent: concurrent evaluators of the same facts receive the same row.
    */
   @Post(':id/acceptance/runs')
   openAcceptanceRun(
@@ -276,9 +273,9 @@ export class ProjectsController {
   }
 
   /**
-   * Conclude an attempt: one verdict per stated criterion, with its evidence.
+   * Append conclusion events against an evidence version: one verdict per stated criterion.
    *
-   * The run's own verdict is derived from the criteria — all PASS is PASS, any FAIL is FAIL, the
+   * The current verdict is derived from the event projection — all PASS is PASS, any FAIL is FAIL, the
    * rest is INCONCLUSIVE — and cannot be supplied, which is the difference between this and writing
    * "all green" in a comment.
    */
@@ -368,8 +365,8 @@ export class ProjectsController {
    * `contentHash` enters the database.
    *
    * Same content as the newest observation ⇒ only the observation time moves. Different content ⇒ a
-   * new row one generation up, and if this project was DONE against the old content it is reopened
-   * in the same transaction (AE9-c).
+   * new row one generation up and an automatically advanced evidence version. Current acceptance
+   * is re-evaluated from conclusion events; no caller reopens an attempt.
    */
   @Post(':id/acceptance/merge-evidence')
   recordMergeEvidence(

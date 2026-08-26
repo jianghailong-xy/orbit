@@ -103,11 +103,11 @@ export class RunnerProjectsController {
   }
 
   /**
-   * Open an acceptance attempt, and conclude one.
+   * Evaluate an acceptance evidence version, and append conclusions to it.
    *
    * These ARE the agent's door in the sense §13.4 clause 2 means: acceptance is executed by the
    * coordinator agent inside a turn. What the agent cannot do is grant itself the outcome — the
-   * run's verdict is derived from the per-criterion conclusions, and the DONE that may follow is
+   * current verdict is derived from append-only per-criterion conclusions, and the DONE that may follow is
    * gated on the same facts through the same service.
    */
   @Post('projects/:id/acceptance/runs')
@@ -142,7 +142,9 @@ export class RunnerProjectsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: FinalizeAcceptanceRunDto,
   ) {
-    return this.acceptance.finalizeRun(runner.ownerId, id, runId, dto.criteria, sessionId);
+    return this.acceptance.finalizeRun(
+      runner.ownerId, id, runId, dto.criteria, sessionId, runner.id,
+    );
   }
 
   /**

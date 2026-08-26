@@ -375,11 +375,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("projectId is required", true)
 		}
-		// No decidedBy: the credential is a machine's, so the server records the coordinator
-		// agent. A parameter for it would be this process claiming an identity.
+		// The server derives the evidence-version identity from the durable facts.
 		raw, err := s.t.openProjectAcceptanceRun(id, map[string]interface{}{})
 		if err != nil {
-			return toolResult("open project acceptance run failed: "+err.Error(), true)
+			return toolResult("evaluate project acceptance evidence version failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -395,7 +394,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		raw, err := s.t.finalizeProjectAcceptanceRun(id, runID, map[string]interface{}{"criteria": criteria})
 		if err != nil {
-			return toolResult("conclude project acceptance run failed: "+err.Error(), true)
+			return toolResult("append project acceptance conclusions failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1703,16 +1702,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"evidence this server can check; a run in this record is. Returns: the stated " +
 				"structured checklist (legacy text is conservatively backfilled one non-blank " +
 				"physical line per item), which an acceptance run must answer item for item; " +
-				"acceptanceDigest, the digest of the unordered criterion propositions, every " +
-				"task with its status and completion policy, every " +
-				"verification verdict and the newest merge observation per requirement; every " +
-				"attempt with its per-criterion conclusions, evidence and the digest of the facts " +
-				"it judged; what each target branch was last observed to CONTAIN and at which " +
+				"acceptanceDigest, the identity of the unordered criterion propositions and newest " +
+				"merge observation per requirement; every evidence version with the current " +
+				"per-criterion projection and its append-only conclusion events; what each target " +
+				"branch was last observed to CONTAIN and at which " +
 				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
 				"and refused, and every reopen with the fact that caused it; and doneGate — " +
 				"allowed, or the code and sentence the write would be refused with " +
-				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_EVIDENCE_STALE when " +
-				"one exists but the facts have moved since, ACCEPTANCE_BLOCKED when a blocker or " +
+				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker or " +
 				"an unresolved verification failure is still open).",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
@@ -1723,14 +1720,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "project_acceptance_run",
-			"description": "Open a project acceptance attempt. The acceptance criteria are frozen " +
-				"with their digest and one empty row per stated criterion is created — the " +
-				"checklist project_acceptance_verdict then has to fill, item for item. Open it " +
-				"when you are about to CHECK the project, not when you are about to report on it: " +
-				"the digest of the facts is taken now, and a task, a verdict, the criteria or the " +
-				"branch content changing afterwards makes this attempt stale rather than wrong. " +
-				"Opening an attempt supersedes any earlier live one, so there is never a choice of " +
-				"which conclusion to believe. A project that states no acceptance criteria is " +
+			"description": "Evaluate a project's current acceptance evidence version. The operation " +
+				"is idempotent: concurrent evaluators of the same criteria and merge evidence receive " +
+				"the same immutable version row and checklist. Evidence changes advance the version " +
+				"automatically; prior conclusion events carry forward until a newer-version event " +
+				"refutes them. A project that states no acceptance criteria is " +
 				"refused, because an acceptance with nothing to check would pass by having nothing " +
 				"to fail.",
 			"inputSchema": obj(map[string]interface{}{
@@ -1742,25 +1736,26 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "project_acceptance_verdict",
-			"description": "Conclude a project acceptance attempt with one verdict per stated " +
+			"description": "Append evidence-backed conclusion events for a project acceptance version, one per stated " +
 				"criterion. Address each criterion by criterionId (its stable structured identity), " +
 				"ordinal (its position in the snapshot), or criterionKey (legacy content identity). " +
 				"EVERY criterion must be answered: a missing one is " +
 				"refused, because a project-level PASS is the conjunction of them and one nobody " +
-				"checked is not a pass. The attempt's own verdict is DERIVED and cannot be " +
+				"checked is not a pass. The current verdict is DERIVED and cannot be " +
 				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
 				"which is the whole difference between this and writing 'all green' in a task " +
 				"comment. Put real evidence in each entry's `evidence`: the command, its exit " +
 				"code, the key output, the SHA, the environment. Only a PASS recorded here lets " +
-				"the project be set DONE, and only while the facts it judged are still current.",
+				"the project be set DONE. Every event records who concluded, when, and the evidence " +
+				"version it was based on; only a person may record PASS.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
-					"description": "The project whose attempt is being concluded.",
+					"description": "The project whose evidence version is being concluded against.",
 				},
 				"runId": map[string]interface{}{
 					"type":        "string",
-					"description": "The attempt to conclude, as returned by project_acceptance_run.",
+					"description": "The evidence version to conclude against, as returned by project_acceptance_run.",
 				},
 				"criteria": map[string]interface{}{
 					"type": "array",
@@ -1780,8 +1775,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"negative while the content is plainly there. Same content as the last " +
 				"observation and only the observation time moves; different content writes a new " +
 				"row one refGeneration up, which is what makes 'the branch changed and changed " +
-				"back' visible to a database that cannot lock a git ref — and if the project was " +
-				"DONE against the old content, that same write reopens it.",
+				"back' visible to a database that cannot lock a git ref. Different content advances " +
+				"the evidence version automatically and re-evaluates the current acceptance standing " +
+				"without a manual reopen.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",

@@ -138,14 +138,15 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence-run order and the no-evid
   const evidence = opening.lastIndexOf('project_merge_evidence');
   const run = opening.lastIndexOf('project_acceptance_run');
   const verdict = opening.lastIndexOf('project_acceptance_verdict');
-  assert.ok(merge < evidence && evidence < run && run < verdict, 'the stale-safe order drifted');
+  assert.ok(merge < evidence && evidence < run && run < verdict, 'the evidence order drifted');
 
   assert.match(opening, /mergeEvidence 为空/);
   assert.match(opening, /task_create.*criterionKey/);
   assert.match(opening, /task_comment 中升级给人/);
   assert.match(opening, /不得开 acceptance run，更不得写 PASS/);
   assert.match(opening, /status=DONE 都由人写/);
-  assert.match(opening, /ACCEPTANCE_EVIDENCE_STALE/);
+  assert.match(opening, /不会被标成 stale/);
+  assert.match(opening, /幂等/);
 });
 
 test('a judgment session is filed under a different title from the conversation', () => {

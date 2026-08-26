@@ -194,7 +194,7 @@ async function settleEveryProjectTask(stack: Stack, target: Fixture): Promise<vo
   assert.fail('verification tasks did not settle within ten derivation rounds');
 }
 
-test('last terminal task wakes once, then the judgment opens and fills one acceptance run',
+test('last terminal task wakes once, then the judgment reuses and concludes one evidence version',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -222,8 +222,9 @@ test('last terminal task wakes once, then the judgment opens and fills one accep
         1,
       );
 
-      // The judgment protocol's stale-safe order: evidence first, then freeze it in the run.
-      await stack.acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
+      // Merge evidence advances the version first; judgment evaluates that exact version
+      // idempotently instead of opening and owning a second attempt.
+      const merged = await stack.acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
         requirementId: 'main',
         targetBranch: 'main',
         contentHash: 'a'.repeat(64),
@@ -234,7 +235,8 @@ test('last terminal task wakes once, then the judgment opens and fills one accep
         decidedBy: 'COORDINATOR_AGENT',
         coordinatorSessionId: sessions[0].id,
       });
-      assert.equal(run.coordinatorSessionId, sessions[0].id);
+      assert.equal(run.id, merged.acceptanceRunId);
+      assert.equal(run.coordinatorSessionId, null, 'an evidence version is not owned by an evaluator');
       assert.equal(run.criteria.length, 2, 'one frozen checklist row per stated criterion');
 
       const concluded = await stack.acceptance.finalizeRun(

@@ -29,20 +29,15 @@ export const ACCEPTANCE_DIGEST_VERSION = 4;
 /** The routing rule shared by DONE refusals and settled-project write refusals. */
 export const ACCEPTANCE_FINDING_ROUTING =
   'A new finding belongs to this project only if it changes an acceptance criterion: return that ' +
-  'criterion to non-PASS and re-run acceptance. If it changes no criterion, create a separate project.';
+  'criterion to non-PASS with a new conclusion event. If it changes no criterion, create a separate project.';
 
-/**
- * Why a DONE was refused. Two of the three are frozen by the contract (§13.4 AE2 step 3); the third
- * is this unit's, and it is separate on purpose — "your evidence does not match the world" and
- * "the world still has something unfinished in it" send the caller to two different places.
- */
+/** Why a DONE was refused: either the derived conclusion is missing/non-PASS, or a known blocker
+ * still prevents settlement. Evidence changes are evaluated and never form a third stale state. */
 export const ACCEPTANCE_MISSING = 'ACCEPTANCE_MISSING';
-export const ACCEPTANCE_EVIDENCE_STALE = 'ACCEPTANCE_EVIDENCE_STALE';
 export const ACCEPTANCE_BLOCKED = 'ACCEPTANCE_BLOCKED';
 
 export type AcceptanceRefusalCode =
   | typeof ACCEPTANCE_MISSING
-  | typeof ACCEPTANCE_EVIDENCE_STALE
   | typeof ACCEPTANCE_BLOCKED;
 
 /** The acceptance projections, already sorted and stringified. Tuples rather than objects because

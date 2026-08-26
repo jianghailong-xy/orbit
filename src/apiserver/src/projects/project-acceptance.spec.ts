@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { NEVER_PUBLIC_ID_FIELDS, PUBLIC_ID_FIELDS } from '@orbit/shared';
 import {
   ACCEPTANCE_BLOCKED,
-  ACCEPTANCE_EVIDENCE_STALE,
   ACCEPTANCE_MISSING,
   ACCEPTANCE_DIGEST_VERSION,
   AcceptanceFacts,
@@ -75,7 +74,8 @@ test('the digest names the project and its own version', () => {
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
   // match a new reading of the same world. It moved to 4 when task state left the completion
-  // definition — an older run is refused ACCEPTANCE_EVIDENCE_STALE and must be re-run.
+  // definition. Schema 0179 treats this digest as an evidence-version identity, not a freshness
+  // gate: conclusions are evaluated across versions rather than rejected as stale.
   assert.equal(ACCEPTANCE_DIGEST_VERSION, 4);
 });
 
@@ -171,13 +171,10 @@ test('structured criteria preserve identity while semantic revision ignores pres
   );
 });
 
-test('the refusal codes are the contract’s two plus this unit’s one, and they are distinct', () => {
-  // §13.4 AE2 step 3 freezes the first two by name. The third is separate on purpose: "your
-  // evidence does not match the world" and "the world still has something unfinished in it" send
-  // the caller to two different places.
+test('acceptance refusals distinguish missing conclusions from known blockers', () => {
   assert.deepEqual(
-    [...new Set([ACCEPTANCE_MISSING, ACCEPTANCE_EVIDENCE_STALE, ACCEPTANCE_BLOCKED])].sort(),
-    ['ACCEPTANCE_BLOCKED', 'ACCEPTANCE_EVIDENCE_STALE', 'ACCEPTANCE_MISSING'],
+    [...new Set([ACCEPTANCE_MISSING, ACCEPTANCE_BLOCKED])].sort(),
+    ['ACCEPTANCE_BLOCKED', 'ACCEPTANCE_MISSING'],
   );
 });
 
@@ -187,7 +184,7 @@ test('every id the acceptance record serves is classified as a public id', () =>
   // up unable to hand back an id it was just given.
   for (const field of [
     'runId', 'acceptedRunId', 'definitionId', 'criterionId',
-    'evidenceTaskId', 'evidenceSessionId',
+    'evidenceTaskId', 'evidenceSessionId', 'evidenceRunId', 'decidedById', 'actingSessionId',
   ]) {
     assert.ok(PUBLIC_ID_FIELDS.has(field), `${field} is not classified as a public id`);
     assert.equal(NEVER_PUBLIC_ID_FIELDS.has(field), false, `${field} is classified twice`);
