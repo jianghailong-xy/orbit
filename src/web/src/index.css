@@ -793,6 +793,18 @@ body {
 .tp-item.active .tp-count {
   color: var(--brand);
 }
+/* Workspace shortcuts are useful on the keyboard-driven desktop sidebar. The mobile drawer keeps
+   the same rows but has no persistent hardware-key context, so it leaves the trailing slot to
+   status alone. */
+.tp-workspace-shortcut {
+  display: none;
+  flex: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+}
 /* "Needs you": one or more of an agent's active sessions are blocked on an approval the user
    must act on. An amber pill on the agent's sidebar row speaks the "waiting on you" language,
    visible from any page. */
@@ -1080,6 +1092,9 @@ body {
   }
   .app-shell .app-nav:not(.collapsed) .tp-workspace-running {
     display: none;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-shortcut {
+    display: inline;
   }
   .app-shell .app-nav.collapsed .tp-rail-running {
     background: transparent;

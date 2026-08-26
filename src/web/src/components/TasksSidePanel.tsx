@@ -59,6 +59,15 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
+const IS_MAC_PLATFORM =
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+
+/** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
+export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
+  if (!Number.isInteger(index) || index < 0 || index >= 9) return null;
+  return isMac ? `⌘${index + 1}` : `Ctrl ${index + 1}`;
+}
 
 export interface Runner {
   id: string;
@@ -470,6 +479,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         {orderedWorkspaces.length > 0 && <div className="tp-rail-divider" />}
         {orderedWorkspaces.map((a, i) => {
           const runnerId = workspaceRunnerId(a);
+          const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
             a.runner?.displayName ??
@@ -480,7 +490,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
               key={a.id}
               className={`tp-rail-item ${a.id === activeWorkspaceId ? 'active' : ''}`}
               onClick={() => openWorkspace(a)}
-              title={`${a.name} · ${runnerLabel}${i < 9 ? `  ⌘${i + 1}` : ''}`}
+              title={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`}
             >
               <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
               <WorkspaceStateMark
@@ -515,7 +525,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         <div className="tp-divider" />
 
         <div className="tp-group">
-          {orderedWorkspaces.map((a) => {
+          {orderedWorkspaces.map((a, index) => {
             const runnerId = workspaceRunnerId(a);
             const runnerLabel =
               (runnerId ? runnerLabels.get(runnerId) : null) ??
@@ -534,6 +544,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 )}
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                shortcutLabel={workspaceShortcutLabel(index)}
                 onOpen={openWorkspace}
               />
             );
@@ -729,6 +740,7 @@ export function WorkspaceRow({
   offline,
   running,
   needsYou,
+  shortcutLabel,
   onOpen,
 }: {
   workspace: Workspace;
@@ -737,11 +749,12 @@ export function WorkspaceRow({
   offline: boolean;
   running: boolean;
   needsYou: number;
+  shortcutLabel?: string | null;
   onOpen: (a: Workspace) => void;
 }) {
   const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
   // Attention and disconnection remain higher priority than background activity. CSS reveals this
-  // quiet mark only when the expanded desktop sidebar and the real Session list are both visible.
+  // quiet mark on the expanded desktop sidebar; the mobile drawer keeps its trailing spinner.
   const showRunningDot = running && !offline && needsYou === 0;
   return (
     <div
@@ -780,6 +793,14 @@ export function WorkspaceRow({
           {runnerLabel}
         </span>
       </span>
+      {needsYou === 0 && shortcutLabel && (
+        <kbd
+          className="tp-count tp-workspace-shortcut"
+          title={`Open workspace with ${shortcutLabel}`}
+        >
+          {shortcutLabel}
+        </kbd>
+      )}
       <WorkspaceStateMark
         offline={offline}
         running={running}

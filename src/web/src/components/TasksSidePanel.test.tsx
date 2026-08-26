@@ -7,6 +7,7 @@ import {
   WorkspaceStateMark,
   workspaceCountsPollInterval,
   workspaceRunnerIsOffline,
+  workspaceShortcutLabel,
 } from './TasksSidePanel';
 
 // TasksSidePanel itself reaches for localStorage, several polled queries and an SSE hook on
@@ -94,6 +95,16 @@ describe('TasksSidePanel workspace navigation', () => {
       /orderedWorkspaces\.length > 0 &&\s*\(unlistedCount > 0 \|\| activeLists\.length > 0/,
     );
   });
+
+  it('labels exactly the first nine Workspace shortcuts for each desktop platform', () => {
+    expect(workspaceShortcutLabel(0, true)).toBe('⌘1');
+    expect(workspaceShortcutLabel(8, true)).toBe('⌘9');
+    expect(workspaceShortcutLabel(0, false)).toBe('Ctrl 1');
+    expect(workspaceShortcutLabel(8, false)).toBe('Ctrl 9');
+    expect(workspaceShortcutLabel(9, true)).toBeNull();
+    expect(workspaceShortcutLabel(-1, true)).toBeNull();
+    expect(workspaceShortcutLabel(0.5, true)).toBeNull();
+  });
 });
 
 describe('TasksSidePanel workspace rows', () => {
@@ -141,7 +152,58 @@ describe('TasksSidePanel workspace rows', () => {
     expect(source).toContain('<span className="tp-rail-avatar">');
   });
 
-  it('keeps the trailing spinner when the Session list is not simultaneously visible', () => {
+  it('restores the visible desktop shortcut without displacing higher-priority attention', () => {
+    const idle = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline={false}
+        running={false}
+        needsYou={0}
+        shortcutLabel="⌘1"
+        onOpen={() => undefined}
+      />,
+    );
+    const running = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline={false}
+        running
+        needsYou={0}
+        shortcutLabel="⌘1"
+        onOpen={() => undefined}
+      />,
+    );
+    const needsYou = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline={false}
+        running
+        needsYou={2}
+        shortcutLabel="⌘1"
+        onOpen={() => undefined}
+      />,
+    );
+    expect(idle).toContain('<kbd class="tp-count tp-workspace-shortcut"');
+    expect(idle).toContain('>⌘1</kbd>');
+    expect(running).toContain('>⌘1</kbd>');
+    expect(running).toContain('tp-workspace-icon-running');
+    expect(needsYou).not.toContain('tp-workspace-shortcut');
+    expect(needsYou).toContain('tp-count needs-you');
+    expect(styles).toMatch(/\.tp-workspace-shortcut\s*\{[\s\S]*?display:\s*none;/);
+    expect(styles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.app-shell \.app-nav:not\(\.collapsed\) \.tp-workspace-shortcut\s*\{[\s\S]*?display:\s*inline;/,
+    );
+    expect(source).toContain('{orderedWorkspaces.map((a, index) => {');
+    expect(source).toContain('shortcutLabel={workspaceShortcutLabel(index)}');
+  });
+
+  it('keeps the trailing spinner markup as the mobile fallback', () => {
     const running = renderToStaticMarkup(
       <WorkspaceStateMark offline={false} running needsYou={0} />,
     );
