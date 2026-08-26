@@ -1696,7 +1696,7 @@ model Project {
   /// The committed facts that woke this project's coordinator (unit T2, 0173).
   coordinatorWakes ProjectCoordinatorWake[]
 
-  /// The progress ledger those wakes are charged against (unit T4, 0174).
+  /// The progress ledger those wakes are charged against (unit T4, 0176).
   convergenceDecisions ProjectConvergenceDecision[]
 
   @@index([ownerId])
@@ -1951,7 +1951,7 @@ model ProjectCoordinatorWake {
 }
 
 /// One coordinator wake, judged: what the progress vector was before it and at it, what that cost
-/// the budget, and whether the coordinator may go on waking (unit T4, migration 0174).
+/// the budget, and whether the coordinator may go on waking (unit T4, migration 0176).
 ///
 /// This table is where the counters LIVE. `convergence-ledger.ts` names the reason in as many
 /// words — 「重启把计数清零，于是预算永远用不完」 — so a stop-loss whose numbers sit in process
@@ -2013,7 +2013,7 @@ model ProjectConvergenceDecision {
   thresholds Json
 
   /// Which §8 line was crossed and the two numbers that crossed it, or all three null. A CHECK in
-  /// 0174 keeps them one fact rather than three columns that can disagree.
+  /// 0176 keeps them one fact rather than three columns that can disagree.
   nonConvergenceReason String? @map("non_convergence_reason")
   observed             Int?
   crossedLimit         Int?    @map("crossed_limit")
@@ -2161,7 +2161,7 @@ model ProjectBlocker {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  /// The T4 decision that raised this row, if a stop-loss did (0174).
+  /// The T4 decision that raised this row, if a stop-loss did (0176).
   raisedByConvergenceDecisions ProjectConvergenceDecision[]
 
   @@unique([projectId, dedupeKey, lifecycleGeneration], map: "project_blocker_episode_idx")

@@ -69,6 +69,7 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
   const realtime = {
     notifyInbox: () => undefined,
     publish: () => undefined,
+    publishSessionUpdated: () => undefined,
     publishQueuedTurnsChanged: () => undefined,
   } as never;
   const budgets = {

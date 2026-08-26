@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import {
   CoordinatorJudgmentService,
   type JudgmentOutcome,
@@ -42,6 +43,7 @@ export class ProjectTasksSettledProducer {
   constructor(
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
+    private readonly convergence: CoordinatorConvergenceService,
   ) {}
 
   async afterCommit(
@@ -64,7 +66,7 @@ export class ProjectTasksSettledProducer {
         continue;
       }
 
-      const outcome = await this.judgments.wake(fact, async () => {
+      const outcome = await this.judgments.wake(fact, async (claimedFact, claim) => {
         // T2's order is claim first, authorize second. Do not hoist this read above `wake`: doing
         // so would make permission participate in who wins the idempotency key.
         const project = await this.prisma.project.findUnique({
@@ -74,9 +76,12 @@ export class ProjectTasksSettledProducer {
         if (!project) {
           return { allowed: false as const, refusalCode: SETTLED_WAKE_PROJECT_GONE };
         }
-        return project.coordinatorEnabled
-          ? { allowed: true as const }
-          : { allowed: false as const, refusalCode: SETTLED_WAKE_COORDINATOR_DISABLED };
+        if (!project.coordinatorEnabled) {
+          return { allowed: false as const, refusalCode: SETTLED_WAKE_COORDINATOR_DISABLED };
+        }
+        // T4 is deliberately last: this decision spends a convergence pass, so no cheaper refusal
+        // may run after it and charge a judgment whose session will never open.
+        return this.convergence.authorizeWake(claimedFact, claim);
       });
       deliveries.push({ projectId, outcome: outcome.outcome });
     }

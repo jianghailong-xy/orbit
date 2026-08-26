@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
 import { SessionsModule } from '../sessions/sessions.module';
+import { AttemptEndedUnsettledProducer } from './attempt-ended-unsettled.producer';
+import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -13,7 +15,19 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
  */
 @Module({
   imports: [SessionsModule],
-  providers: [CoordinatorWakeService, CoordinatorJudgmentService, ProjectTasksSettledProducer],
-  exports: [CoordinatorWakeService, CoordinatorJudgmentService, ProjectTasksSettledProducer],
+  providers: [
+    CoordinatorWakeService,
+    CoordinatorConvergenceService,
+    CoordinatorJudgmentService,
+    AttemptEndedUnsettledProducer,
+    ProjectTasksSettledProducer,
+  ],
+  exports: [
+    CoordinatorWakeService,
+    CoordinatorConvergenceService,
+    CoordinatorJudgmentService,
+    AttemptEndedUnsettledProducer,
+    ProjectTasksSettledProducer,
+  ],
 })
 export class CoordinatorJudgmentModule {}

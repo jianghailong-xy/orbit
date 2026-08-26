@@ -7,7 +7,7 @@
  * path so a mocked comparison cannot stand in for the database effect it claims.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable database accepted by the
- * coordinator PG safety guard, with all migrations (including 0174) applied.
+ * coordinator PG safety guard, with all migrations (including 0177) applied.
  */
 
 import assert from 'node:assert/strict';

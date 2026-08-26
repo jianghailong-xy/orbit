@@ -27,13 +27,16 @@ function producerFixture(
     },
   };
   const judgments = {
-    wake: async (fact: (typeof facts)[number], authorize: () => Promise<{
+    wake: async (fact: (typeof facts)[number], authorize: (
+      fact: (typeof facts)[number],
+      claim: { wakeId: string; idempotencyKey: string },
+    ) => Promise<{
       allowed: boolean;
       refusalCode?: string;
     }>) => {
       order.push('wake-claimed');
       facts.push(fact);
-      const decision = await authorize();
+      const decision = await authorize(fact, { wakeId: randomUUID(), idempotencyKey: 'key' });
       order.push('authorized');
       return decision.allowed
         ? { outcome: 'OPENED', wakeId: randomUUID(), idempotencyKey: 'key', sessionId: randomUUID() }
@@ -43,8 +46,18 @@ function producerFixture(
           };
     },
   };
+  const convergence = {
+    authorizeWake: async () => {
+      order.push('convergence');
+      return { allowed: true as const };
+    },
+  };
   return {
-    producer: new ProjectTasksSettledProducer(prisma as never, judgments as never),
+    producer: new ProjectTasksSettledProducer(
+      prisma as never,
+      judgments as never,
+      convergence as never,
+    ),
     facts,
     order,
   };
@@ -71,7 +84,7 @@ test('committed terminal rows deliver one project fact and authorize only after 
   assert.equal(fixture.facts[0].projectId, PROJECT);
   assert.deepEqual(
     fixture.order,
-    ['tasks-read', 'wake-claimed', 'authorization-read', 'authorized'],
+    ['tasks-read', 'wake-claimed', 'authorization-read', 'convergence', 'authorized'],
     'T2 requires claim before authorization',
   );
 });

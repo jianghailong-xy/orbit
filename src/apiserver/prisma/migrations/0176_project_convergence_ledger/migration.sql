@@ -36,14 +36,12 @@
 -- (`COORDINATOR_NO_PROGRESS` has been in that table's kind CHECK since 0125). A replica still running
 -- the previous build neither reads nor writes this table.
 --
--- NUMBERED 0174 AND NOT 0173, ON PURPOSE
--- ======================================
--- The `project_coordinator_wake` table this one has a foreign key to arrives with unit T2, whose
--- migration is numbered 0172 on its own branch and 0173 on the branch that rebased it past main's
--- own 0172. Prisma applies migrations in NAME order, so a ledger numbered 0173 would sort ahead of
--- `0173_project_coordinator_wake` and reach for a parent table that does not exist yet on a fresh
--- database. 0174 is after both spellings, whichever of them lands. A gap in the numbering is
--- cheaper than a deploy that depends on which of two branches merged first.
+-- NUMBERED 0176 AFTER THE INTEGRATED WAKE/JUDGMENT PAIR
+-- ====================================================
+-- The `project_coordinator_wake` table this one has a foreign key to is 0174 in the integrated
+-- chain, followed by the judgment-session extension at 0175. Prisma applies migrations in NAME
+-- order, so this ledger must sort after its parent table on a fresh database. Keeping the merged
+-- T1–T7 sequence explicit is cheaper than a deploy that depends on branch merge order.
 
 CREATE TABLE IF NOT EXISTS "project_convergence_decision" (
   "id"          UUID PRIMARY KEY,

@@ -25,6 +25,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
+import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -79,7 +80,11 @@ async function connect(): Promise<Stack> {
     new CoordinatorWakeService(prisma),
     sessions,
   );
-  const producer = new ProjectTasksSettledProducer(prisma, judgments);
+  const producer = new ProjectTasksSettledProducer(
+    prisma,
+    judgments,
+    new CoordinatorConvergenceService(prisma),
+  );
   return {
     db,
     producer,

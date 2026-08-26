@@ -99,6 +99,7 @@ import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../a
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
+import { AttemptEndedUnsettledProducer } from '../projects/attempt-ended-unsettled.producer';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -342,6 +343,12 @@ export class RunnerApiController {
      * charged on a turn is re-derived from the same columns on the next one.
      */
     private readonly attemptBudgets?: AttemptBudgetMeterService,
+    /**
+     * T8: after the runner transaction has made a Session terminal, derive the committed
+     * ATTEMPT_ENDED_UNSETTLED fact and open its one-shot judgment. Optional only for direct unit
+     * fixtures; RunnerApiModule imports the production provider through ProjectsModule.
+     */
+    private readonly attemptEndedUnsettled?: AttemptEndedUnsettledProducer,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2711,6 +2718,9 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
+      // T8: a failure may have ended the Session and left its Task FAILED. Re-read both committed
+      // rows; the producer itself rejects parked/retrying/settled attempts and de-duplicates facts.
+      await this.attemptEndedUnsettled?.afterCommitQuietly(sessionId);
     }
     if (
       'taskReclaimed' in finalized
