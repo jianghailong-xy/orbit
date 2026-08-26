@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CoordinatorBadge, projectBackLink } from './WorkspaceView';
+import { CoordinatorBadge, projectBackLink, SessionTagChips } from './WorkspaceView';
+import type { SessionTagRef } from '../lib/sessionGrouping';
 
 /**
  * The session header's second way back. A coordinator conversation is reached from a project's
@@ -49,5 +51,59 @@ describe('CoordinatorBadge', () => {
   it('renders nothing for ordinary and rolling-upgrade session rows', () => {
     expect(renderToStaticMarkup(createElement(CoordinatorBadge, { projectId: null }))).toBe('');
     expect(renderToStaticMarkup(createElement(CoordinatorBadge))).toBe('');
+  });
+});
+
+describe('SessionTagChips', () => {
+  const tags: SessionTagRef[] = [
+    { id: '1', name: '功能扩展', color: '#2ea121', isSystem: false, position: 0 },
+    { id: '2', name: '项目架构', color: '#fa8c16', isSystem: false, position: 1 },
+    { id: '3', name: '性能优化', color: '#3370ff', isSystem: false, position: 2 },
+    { id: '4', name: '回归测试', color: '#cf3b35', isSystem: false, position: 3 },
+  ];
+
+  it('renders one named tag, the remaining count, and the compact total', () => {
+    const html = renderToStaticMarkup(createElement(SessionTagChips, { tags, tooltipOpen: false }));
+
+    expect(html.match(/class="session-tag-chip"/g)).toHaveLength(1);
+    expect(html).toContain('class="session-tag-chip-label">功能扩展</span>');
+    expect(html).toContain('session-tag-more--remaining">+3</span>');
+    expect(html).toContain('session-tag-more--total">+4</span>');
+    expect(html).toContain('class="session-tag-chips" aria-hidden="true"');
+    expect(html).toContain('class="sr-only">Tags: 功能扩展, 项目架构, 性能优化, 回归测试</span>');
+    expect(html).not.toContain('aria-label="Tags:');
+  });
+
+  it('does not invent a remaining count for a single tag or markup for no tags', () => {
+    const one = renderToStaticMarkup(
+      createElement(SessionTagChips, { tags: tags.slice(0, 1), tooltipOpen: false }),
+    );
+
+    expect(one).not.toContain('session-tag-more--remaining');
+    expect(one).toContain('session-tag-more--total">+1</span>');
+    expect(renderToStaticMarkup(createElement(SessionTagChips, { tags: [] }))).toBe('');
+  });
+
+  it('caps tags by the resizable list container while keeping names ellipsized and counts fixed', () => {
+    // jsdom has no layout engine, so assert the responsive CSS contract directly.
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const list = css.match(/\.session-col-list\s*\{([^}]*)\}/)?.[1] ?? '';
+    const group = css.match(/\.session-tag-chips\s*\{([^}]*)\}/)?.[1] ?? '';
+    const label = css.match(/\.session-tag-chip-label\s*\{([^}]*)\}/)?.[1] ?? '';
+    const count = css.match(/\.session-tag-more\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(list).toContain('container: session-list / inline-size');
+    expect(group).toContain('flex: 0 1 auto');
+    expect(group).toContain('min-width: 0');
+    expect(group).toContain('max-width: min(30%, 112px)');
+    expect(label).toContain('overflow: hidden');
+    expect(label).toContain('text-overflow: ellipsis');
+    expect(label).toContain('white-space: nowrap');
+    expect(count).toContain('flex: none');
+    expect(css).toMatch(/@container session-list \(max-width: 279px\)/);
+    expect(css).toMatch(/@container session-list \(max-width: 179px\)/);
+    expect(css).toMatch(
+      /\.session-sub:has\(\.coordinator-badge\):has\(\.session-tag-chips\) \.session-preview\s*\{[^}]*display: none/,
+    );
   });
 });

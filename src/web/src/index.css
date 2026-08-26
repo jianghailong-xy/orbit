@@ -2520,6 +2520,10 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* The desktop session column is user-resizable, so row density follows this content box rather
+     than the viewport. 280/220px here correspond roughly to the 320/260px outer column widths
+     after its desktop gutters. Browsers without container queries keep the safe one-tag default. */
+  container: session-list / inline-size;
   /* overflow-y:auto alone makes the browser compute overflow-x to `auto` too, so the
      few sub-pixels the rows spill once the vertical scrollbar narrows the client width
      surface a stray horizontal scrollbar along the bottom. Pin it hidden — a vertical
@@ -2561,9 +2565,9 @@ body {
   height: 8px;
   border-radius: 50%;
 }
-/* Second line of a row: relation metadata/tags, then the reply preview. The leading chips are
-   fixed-width and the preview takes what's left (and ellipsizes), so they never wrap the 64px row
-   taller or steal width from the title above. */
+/* Second line of a row: fixed relation metadata, capped tags, then the reply preview. The preview
+   takes what's left (and ellipsizes), so none of them wrap the 64px row taller or steal width from
+   the title above. */
 .session-sub {
   display: flex;
   align-items: center;
@@ -2571,29 +2575,42 @@ body {
   min-width: 0;
   margin-top: 4px;
 }
-/* Per-row tags (up to 3, then "+N"). Named, not just coloured: the naming pass writes semantic
-   tags, and a colour swatch can't say "登录". Colour still separates them at a glance, so the
-   name sits on a tint of the tag's own colour — a stronger tint in dark mode, where a 13% wash
-   over a near-black row is invisible. The name itself takes a legible shade of that colour rather
-   than the raw hex (`--chip-label`, computed in lib/tagColor): #FFCC00 as text on its own wash
-   measures ~1.4:1, so a yellow tag's name was a smudge. */
+/* Per-row tags: one named chip plus a fixed "+N" summary. Coordinator is also fixed metadata on
+   this line, so the whole tag group has both a proportional and an absolute cap; otherwise two or
+   three ordinary names can consume the reply preview completely in a resized column. The colour
+   remains a scan aid only; the adjacent sr-only text carries every name independently of colour. */
 .session-tag-chips {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(30%, 112px);
   display: flex;
   align-items: center;
   gap: 5px;
 }
+.session-tag-named {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
 .session-tag-chip {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 72px;
   height: 18px;
   padding: 0 7px;
   border-radius: 9px;
   font-size: 11.5px;
   line-height: 1;
-  white-space: nowrap;
   color: var(--chip-label, var(--chip));
   background: color-mix(in srgb, var(--chip) 13%, transparent);
+}
+.session-tag-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 html[data-theme='dark'] .session-tag-chip {
   color: var(--chip-label-dark, var(--chip));
@@ -2603,6 +2620,34 @@ html[data-theme='dark'] .session-tag-chip {
   flex: none;
   font-size: 11px;
   color: var(--text-4);
+}
+.session-tag-more--total {
+  display: none;
+}
+/* At the default 320px outer column the list content is about 280px wide. Below that, a named
+   tag no longer leaves a useful reply preview beside the 80px Coordinator badge, so show the
+   exact total instead. */
+@container session-list (max-width: 279px) {
+  .session-tag-chips {
+    flex: none;
+    max-width: none;
+  }
+  .session-tag-named,
+  .session-tag-more--remaining {
+    display: none;
+  }
+  .session-tag-more--total {
+    display: inline;
+  }
+}
+/* Near the 200px minimum outer width (about 160–180px inside its gutters), a coordinator row's
+   reply preview is only one or two characters wide. Keep the exact tag total instead and drop that
+   no-longer-useful tertiary copy. Ordinary rows, which do not spend 80px on the Coordinator badge,
+   keep both their total and their preview. */
+@container session-list (max-width: 179px) {
+  .session-sub:has(.coordinator-badge):has(.session-tag-chips) .session-preview {
+    display: none;
+  }
 }
 /* View + tag menu. Names the current view rather than showing a bare icon, so the list is
    never silently scoped; tinted once it's off its defaults so a narrowed list is explained. */

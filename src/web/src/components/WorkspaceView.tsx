@@ -723,6 +723,53 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   );
 }
 
+/** Compact tag summary for a session-list row. The first tag is the one users can scan; the
+ * fixed count survives when that name has to ellipsize, and a container query swaps to the total
+ * count when the resizable session column becomes too narrow to show a useful name. */
+export function SessionTagChips({
+  tags,
+  tooltipOpen,
+}: {
+  tags?: SessionTagRef[] | null;
+  tooltipOpen?: boolean;
+}) {
+  if (!tags?.length) return null;
+
+  const first = tags[0];
+  const label = tagChipLabels(first.color);
+  const names = tags.map((tag) => tag.name).join(', ');
+
+  return (
+    <>
+      <Tooltip title={names} placement="top" open={tooltipOpen}>
+        <span className="session-tag-chips" aria-hidden="true">
+          <span className="session-tag-named">
+            <span
+              className="session-tag-chip"
+              style={
+                {
+                  '--chip': first.color,
+                  '--chip-label': label.light,
+                  '--chip-label-dark': label.dark,
+                } as React.CSSProperties
+              }
+            >
+              <span className="session-tag-chip-label">{first.name}</span>
+            </span>
+          </span>
+          {tags.length > 1 && (
+            <span className="session-tag-more session-tag-more--remaining">+{tags.length - 1}</span>
+          )}
+          <span className="session-tag-more session-tag-more--total">+{tags.length}</span>
+        </span>
+      </Tooltip>
+      {/* Generic spans cannot reliably take an accessible name from aria-label. Keep the real
+          names as text outside the visual summary so compact layouts may hide the named chip. */}
+      <span className="sr-only">Tags: {names}</span>
+    </>
+  );
+}
+
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
 export function statusLabel(session: any): string {
@@ -4492,40 +4539,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             echo of a reply rather than the handle you file the session under. */}
                         <div className="session-sub">
                           <CoordinatorBadge projectId={s.projectId} />
-                          {(s.tags ?? []).length > 0 && (
-                            <Tooltip
-                              title={(s.tags as SessionTagRef[]).map((t) => t.name).join(', ')}
-                              placement="top"
-                              open={hoverTipOpen}
-                            >
-                              <span className="session-tag-chips">
-                                {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => {
-                                  // The name takes a legible shade of the tag's colour (see
-                                  // lib/tagColor). Both themes go on the element so the stylesheet
-                                  // still picks between them.
-                                  const label = tagChipLabels(t.color);
-                                  return (
-                                    <span
-                                      key={t.id}
-                                      className="session-tag-chip"
-                                      style={
-                                        {
-                                          '--chip': t.color,
-                                          '--chip-label': label.light,
-                                          '--chip-label-dark': label.dark,
-                                        } as React.CSSProperties
-                                      }
-                                    >
-                                      {t.name}
-                                    </span>
-                                  );
-                                })}
-                                {s.tags.length > 3 && (
-                                  <span className="session-tag-more">+{s.tags.length - 3}</span>
-                                )}
-                              </span>
-                            </Tooltip>
-                          )}
+                          <SessionTagChips
+                            tags={s.tags as SessionTagRef[] | null | undefined}
+                            tooltipOpen={hoverTipOpen}
+                          />
                           <div
                             className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                           >
