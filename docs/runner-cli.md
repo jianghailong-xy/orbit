@@ -40,7 +40,11 @@ orbit session create --prompt "Review the change" --agent-name reviewer --json
 orbit session get <session-id> --json
 orbit session send <session-id> --message "Please add a regression test" --json
 orbit session complete <session-id> --json
+orbit session delete <session-id> --json
 ```
+
+Session deletion moves the session to Trash and retains its data so a human can restore it. It does not expose
+the permanent purge operation to agents.
 
 `--agent-name` selects the Orbit agent (project directory and runner configuration) that should execute the
 session. Check `orbit capabilities --json` instead of assuming a session operation is authorized.

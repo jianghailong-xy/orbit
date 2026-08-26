@@ -850,6 +850,20 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "session_delete":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.deleteSession(s.sessionID, s.orchestrationToken, id)
+		if err != nil {
+			return toolResult("delete session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "agent_list":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -2150,6 +2164,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			map[string]interface{}{
 				"name":        "session_complete",
 				"description": "Complete a session. Ends it if live and moves it from Open to Completed; it can still be moved back to Open later.",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+			},
+			map[string]interface{}{
+				"name":        "session_delete",
+				"description": "Move a session to Trash. Ends it first if it is live, but retains its transcript and other data so a human can restore it later. This is not a permanent purge.",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
 			},
 			map[string]interface{}{

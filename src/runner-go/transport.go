@@ -1462,6 +1462,15 @@ func (t *Transport) completeSession(callerSessionID, orchestrationToken, id stri
 	return out, err
 }
 
+func (t *Transport) deleteSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration(http.MethodDelete, "/runner/sessions/"+url.PathEscape(id), nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
 // ── Service tokens for headless processes (`orbit token`) ──────────────────
 // Runner-token authenticated on purpose: a service token can never mint another, so a leaked
 // bridge credential cannot renew itself or widen its own scope.

@@ -24,6 +24,7 @@ Usage:
   orbit session merge-receipts SESSION_ID [--limit N] [--json]
   orbit session end SESSION_ID [--json]
   orbit session complete SESSION_ID [--json]
+  orbit session delete SESSION_ID [--json]
 
 Session orchestration is available inside a live Orbit session whose agent has
 enableOrchestration enabled. Outside any session — a launchd/cron process with no
@@ -151,6 +152,14 @@ Usage:
 Usage:
   orbit session complete SESSION_ID [--json]
 `,
+	"delete": `orbit session delete — move a session to Trash
+
+Usage:
+  orbit session delete SESSION_ID [--json]
+
+This ends a live session but retains its transcript and other data so a human can restore
+it later. It does not permanently purge the session.
+`,
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
@@ -163,6 +172,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
+	{Tool: "session_delete", Argv: []string{"orbit", "session", "delete"}, Usage: "orbit session delete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 }
 
 // mergeReceiptCLICapabilities are advertised UNGATED, beside the project reads and for the same
@@ -257,6 +267,8 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliSessionEnd(args[1:], out, ctx)
 	case "complete":
 		return cliSessionComplete(args[1:], out, ctx)
+	case "delete":
+		return cliSessionDelete(args[1:], out, ctx)
 	default:
 		panic("unreachable session command")
 	}
@@ -854,6 +866,22 @@ func cliSessionComplete(args []string, out io.Writer, ctx cliOrchestrationContex
 	raw, err := t.completeSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("complete session: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, jsonOut)
+}
+
+func cliSessionDelete(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, jsonOut, err := parseSessionTargetArgs("orbit session delete", args)
+	if err != nil {
+		return err
+	}
+	t, err := cliSessionTransport(ctx)
+	if err != nil {
+		return err
+	}
+	raw, err := t.deleteSession(ctx.sessionID, ctx.token, id)
+	if err != nil {
+		return fmt.Errorf("delete session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, jsonOut)
 }

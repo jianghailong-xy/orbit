@@ -331,6 +331,7 @@ test('a service token can never act through the session-bound orchestration path
     ['merge', () => controller.mergeSession(RUNNER, grant, 'caller', 'proof', TARGET_SESSION_ID, {})],
     ['end', () => controller.endSession(RUNNER, grant, 'caller', 'proof', TARGET_SESSION_ID)],
     ['complete', () => controller.completeSession(RUNNER, grant, 'caller', 'proof', TARGET_SESSION_ID)],
+    ['delete', () => controller.deleteSession(RUNNER, grant, 'caller', 'proof', TARGET_SESSION_ID)],
     ['archive', () => controller.archiveSessionCompatibility(RUNNER, grant, 'caller', 'proof', TARGET_SESSION_ID)],
   ];
   for (const [name, invoke] of routes) {
@@ -347,6 +348,7 @@ test('a service token can never act through the session-bound orchestration path
     () => controller.interruptSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID),
     () => controller.endSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID),
     () => controller.completeSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID),
+    () => controller.deleteSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID),
     () => controller.mergeSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID, {}),
     () => controller.searchSessions(RUNNER, grant, undefined, undefined, 'q', '5'),
   ]) {

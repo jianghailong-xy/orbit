@@ -39,7 +39,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 				t.Errorf("%s headless description = %q, want %q", id, capability.Description, want)
 			}
 		}
-		for _, id := range []string{"session_create", "session_search", "session_interrupt", "session_merge", "session_end", "session_complete"} {
+		for _, id := range []string{"session_create", "session_search", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete"} {
 			if capability := sessionCLICapabilityByID(headless.Capabilities, id); capability != nil {
 				t.Fatalf("%s must not be advertised to a headless caller (allow=%q)", id, allow)
 			}
@@ -68,6 +68,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"session_merge":     true,
 		"session_end":       true,
 		"session_complete":  true,
+		"session_delete":    true,
 	}
 	requiredArguments := map[string][]string{
 		"create":    {"--prompt", "--prompt-file -", "--agent-id", "--agent-name", "--title", "--model", "--provider", "--permission-mode", "--wait", "--json"},
@@ -79,8 +80,9 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"merge":     {"[session-id]", "--target-branch", "--json"},
 		"end":       {"[session-id]", "--json"},
 		"complete":  {"[session-id]", "--json"},
+		"delete":    {"[session-id]", "--json"},
 	}
-	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete"} {
+	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete", "delete"} {
 		id := "session_" + action
 		capability := sessionCLICapabilityByID(on.Capabilities, id)
 		if capability == nil {
@@ -118,13 +120,16 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 	}
 }
 
-func TestSessionCLIHelpDocumentsComplete(t *testing.T) {
+func TestSessionCLIHelpDocumentsLifecycleActions(t *testing.T) {
 	var out bytes.Buffer
 	if err := cmdSessionCLI([]string{"--help"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "orbit session complete SESSION_ID [--json]") {
 		t.Fatalf("session help does not document complete: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "orbit session delete SESSION_ID [--json]") {
+		t.Fatalf("session help does not document delete: %q", out.String())
 	}
 
 	out.Reset()
@@ -133,6 +138,16 @@ func TestSessionCLIHelpDocumentsComplete(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "move a session to Completed") {
 		t.Fatalf("complete help does not explain Completed semantics: %q", out.String())
+	}
+
+	out.Reset()
+	if err := cmdSessionCLI([]string{"delete", "--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, phrase := range []string{"move a session to Trash", "does not permanently purge"} {
+		if !strings.Contains(out.String(), phrase) {
+			t.Fatalf("delete help does not explain %q: %q", phrase, out.String())
+		}
 	}
 }
 
@@ -228,6 +243,12 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			args:       []string{"complete", "child-session", "--json"},
 			method:     http.MethodPost,
 			requestURI: "/api/runner/sessions/child-session/complete-session",
+		},
+		{
+			name:       "delete",
+			args:       []string{"delete", "child-session", "--json"},
+			method:     http.MethodDelete,
+			requestURI: "/api/runner/sessions/child-session",
 		},
 	}
 
@@ -586,7 +607,7 @@ func TestSessionCLIServiceTokenAuthorizesCreateAndGatesTheRest(t *testing.T) {
 		}
 	}
 	// A verb no token may hold says so, instead of pointing at a scope that does not exist.
-	for _, action := range []string{"end", "interrupt", "merge", "complete", "search"} {
+	for _, action := range []string{"end", "interrupt", "merge", "complete", "delete", "search"} {
 		args := []string{action, "spawned", "--json"}
 		if action == "search" {
 			args = []string{action, "--query", "x", "--json"}
@@ -626,7 +647,7 @@ func TestSessionCLICapabilitiesFollowServiceTokenScopes(t *testing.T) {
 			t.Errorf("%s missing for a token that carries its scope", id)
 		}
 	}
-	for _, id := range []string{"session_list", "session_send", "session_end", "session_search"} {
+	for _, id := range []string{"session_list", "session_send", "session_end", "session_delete", "session_search"} {
 		if sessionCLICapabilityByID(doc.Capabilities, id) != nil {
 			t.Errorf("%s advertised for a token that does not carry its scope", id)
 		}
@@ -688,6 +709,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 		{"merge", "child", "--json"},
 		{"end", "child", "--json"},
 		{"complete", "child", "--json"},
+		{"delete", "child", "--json"},
 	}
 	// An agent in a session whose agent has orchestration off gets nothing — the headless
 	// subset below is for processes with no session context, not for a non-enabled agent.
@@ -718,10 +740,10 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 	}
 
 	// A target operation never falls back to the caller's own session. Requiring an
-	// explicit id avoids accidentally interrupting, merging, ending, or completing the caller.
+	// explicit id avoids accidentally interrupting, merging, ending, completing, or deleting the caller.
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
-	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete"} {
+	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete", "delete"} {
 		args := []string{action, "--json"}
 		if action == "send" {
 			args = append(args, "--message", "hello")
@@ -770,7 +792,7 @@ func TestSessionCLIPathIDsCannotEscapeSessionRoute(t *testing.T) {
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
 
-	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete"} {
+	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete", "delete"} {
 		for _, id := range []string{"../tasks", "..%2Ftasks", "a/b", `a\b`, "a?query"} {
 			args := []string{action, id, "--json"}
 			if action == "send" {

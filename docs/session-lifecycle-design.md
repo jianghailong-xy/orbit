@@ -118,10 +118,12 @@ Canonical 客户端接口:
 - `POST /sessions/:id/restore`(Move to Open);
 - `DELETE /sessions/:id`(Move to Trash)。
 
-Runner 有两个刻意不同的接口:
+Runner 有三个刻意不同的接口:
 
 - `POST /runner/sessions/:id/complete-session`:编排器执行用户语义的 Complete,把目标
   Session 移入 Completed;
+- `DELETE /runner/sessions/:id`:编排器执行 Move to Trash,保留数据以便用户恢复;永久
+  purge 不向 agent 开放;
 - `POST /runner/sessions/:id/finalize`:runner 数据面上报当前进程的终态和统计数据。
   旧 `/complete` 仅作为 runner 滚动升级兼容路由,不表示生命周期迁移。
 

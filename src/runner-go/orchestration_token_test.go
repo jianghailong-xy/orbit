@@ -120,6 +120,15 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 			},
 		},
 		{
+			name:   "session delete",
+			method: http.MethodDelete,
+			path:   "/api/runner/sessions/child-session",
+			call: func(transport *Transport) error {
+				_, err := transport.deleteSession("caller-session", "session-token", "child-session")
+				return err
+			},
+		},
+		{
 			name:   "agent list",
 			method: http.MethodGet,
 			path:   "/api/runner/agents",

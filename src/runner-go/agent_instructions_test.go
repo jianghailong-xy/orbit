@@ -117,7 +117,7 @@ func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) 
 		t.Fatalf("non-orchestrator gained session CLI rules: %q", base)
 	}
 	enabled := strings.Join(orbitCLIAllowedTools(exe, true), "\n")
-	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete"} {
+	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete", "delete"} {
 		if !strings.Contains(enabled, "Bash("+exe+" session "+action+" *)") {
 			t.Errorf("orchestrator missing session %s rule in %q", action, enabled)
 		}

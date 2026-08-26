@@ -60,16 +60,18 @@ function makeController(refuse?: { guard: 'end' | 'steer'; code: string }) {
   };
 }
 
-test('end and complete consult the attempt guard, naming the CALLING session as the actor', async () => {
+test('end, complete and delete consult the attempt guard, naming the CALLING session as the actor', async () => {
   const d = makeController();
   await d.controller.endSession(RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET);
   await d.controller.completeSession(RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET);
+  await d.controller.deleteSession(RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET);
 
   assert.deepEqual(d.guardCalls, [
     { guard: 'end', sessionId: TARGET, actor: { kind: 'AGENT_SESSION', sessionId: COORDINATOR } },
     { guard: 'end', sessionId: TARGET, actor: { kind: 'AGENT_SESSION', sessionId: COORDINATOR } },
+    { guard: 'end', sessionId: TARGET, actor: { kind: 'AGENT_SESSION', sessionId: COORDINATOR } },
   ]);
-  assert.deepEqual(d.serviceCalls, ['end', 'complete']);
+  assert.deepEqual(d.serviceCalls, ['end', 'complete', 'remove']);
 });
 
 test('the deprecated archive route is the same door and is guarded too', async () => {
@@ -82,14 +84,22 @@ test('the deprecated archive route is the same door and is guarded too', async (
   assert.deepEqual(d.serviceCalls, ['complete']);
 });
 
-test('a refused end never reaches the session service (AU2)', async () => {
-  const d = makeController({ guard: 'end', code: 'ATTEMPT_OUTCOME_IS_THE_WORKERS' });
-  await assert.rejects(
-    () => d.controller.completeSession(RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET),
-    (error: Error) => error.message.includes('ATTEMPT_OUTCOME_IS_THE_WORKERS'),
-  );
-  // The point of guarding HERE: nothing was settled, so there is no result to restore.
-  assert.deepEqual(d.serviceCalls, []);
+test('a refused end or delete never reaches the session service (AU2)', async () => {
+  for (const [name, invoke] of [
+    ['complete', (d: ReturnType<typeof makeController>) =>
+      d.controller.completeSession(RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET)],
+    ['delete', (d: ReturnType<typeof makeController>) =>
+      d.controller.deleteSession(RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET)],
+  ] as const) {
+    const d = makeController({ guard: 'end', code: 'ATTEMPT_OUTCOME_IS_THE_WORKERS' });
+    await assert.rejects(
+      () => invoke(d),
+      (error: Error) => error.message.includes('ATTEMPT_OUTCOME_IS_THE_WORKERS'),
+      name,
+    );
+    // The point of guarding HERE: nothing was settled, so there is no result to restore.
+    assert.deepEqual(d.serviceCalls, [], name);
+  }
 });
 
 test('a send is charged as a steer, and a refusal stops it before the turn is filed (AU3)', async () => {

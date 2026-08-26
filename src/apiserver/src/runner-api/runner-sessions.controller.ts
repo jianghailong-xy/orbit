@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Headers,
@@ -247,7 +248,7 @@ export class RunnerSessionsController {
     });
   }
 
-  // The four lifecycle verbs below have NO headless path by design. They are the most damaging
+  // The lifecycle verbs below have NO headless path by design. They are the most damaging
   // thing a machine-local credential could reach and a bridge never needs them, so they are not
   // in the service-token vocabulary at all: every one of them still requires a live calling
   // session whose workspace has orchestration enabled.
@@ -367,6 +368,26 @@ export class RunnerSessionsController {
     await this.attempts.assertMayEndSession(
       runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
     return this.sessions.complete(runner.ownerId, id);
+  }
+
+  // Soft-delete only: this moves the session to Trash and retains its transcript and other data.
+  // Permanent purge remains a human-only action on the user-authenticated SessionsController.
+  @Delete('sessions/:id')
+  async deleteSession(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    this.assertNoServiceToken(grant);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.attempts.assertMayEndSession(
+      runner.ownerId,
+      id,
+      RunnerSessionsController.actor(callingSessionId),
+    );
+    return this.sessions.remove(runner.ownerId, id);
   }
 
   /** @deprecated Compatibility route for older runner binaries. */

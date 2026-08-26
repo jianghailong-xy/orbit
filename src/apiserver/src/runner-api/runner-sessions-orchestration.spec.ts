@@ -1,6 +1,8 @@
+import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException, RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerSessionsController } from './runner-sessions.controller';
 
@@ -86,7 +88,19 @@ const ROUTES: RouteCase[] = [
       c.completeSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'complete',
   },
+  {
+    name: 'delete',
+    invoke: (c, caller, credential) =>
+      c.deleteSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID),
+    serviceMethod: 'remove',
+  },
 ];
+
+test('session delete is exposed as DELETE runner/sessions/:id', () => {
+  const handler = RunnerSessionsController.prototype.deleteSession;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'sessions/:id');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.DELETE);
+});
 
 function makeController(orchestrationEnabled: boolean) {
   const serviceCalls: string[] = [];
