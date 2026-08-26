@@ -726,19 +726,11 @@ export function projectBackLink(session: any): { path: string; title: string | n
 
 /** Relation metadata, deliberately separate from user-created tags. Optional `projectId` keeps
  * rolling upgrades quiet: an older API simply renders no badge. */
-export function CoordinatorBadge({
-  projectId,
-  label = '协调',
-  accessibleName = '项目协调会话',
-}: {
-  projectId?: string | null;
-  label?: string;
-  accessibleName?: string;
-}) {
+export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   if (!projectId) return null;
   return (
-    <span className="coordinator-badge" aria-label={accessibleName} title={accessibleName}>
-      {label}
+    <span className="coordinator-badge" title="This session coordinates a project">
+      Coordinator
     </span>
   );
 }
@@ -4995,11 +4987,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {!composing && (
-                <CoordinatorBadge
-                  projectId={selectedSession?.projectId}
-                  label="Coordinator"
-                  accessibleName="This session coordinates a project"
-                />
+                <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
             </div>
             <div className="workspace-sub">{headSub}</div>
