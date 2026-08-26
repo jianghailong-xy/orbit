@@ -44,6 +44,11 @@ function LocationProbe() {
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal('localStorage', {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  });
   apiMock.mockReset();
   apiMock.mockImplementation((path: string) => {
     if (path === '/users/me') {
