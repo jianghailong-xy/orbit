@@ -150,17 +150,23 @@ const LIST_MARKER = /^\s*(?:[-*+•]|\(?\d+[.)、]|\d+\s*[.)、]|[（(]\d+[）)]
  * gate expects is a run that can be complete and incomplete at the same time. The rule is the
  * simplest one that survives the way people actually write these: one non-blank line is one
  * criterion, list markers are cosmetic, and a criteria field with no line breaks is one criterion
- * rather than none.
+ * rather than none. One compatibility exception is structural rather than semantic: an unmarked
+ * line ending in a colon immediately before a marked list introduces that list and is not one of
+ * its assertions. This is deliberately narrower than guessing from arbitrary prose punctuation.
  *
  * `key` is content-addressed, so reordering the list keeps each criterion recognisable across runs
  * while editing its words correctly makes it a different criterion.
  */
 export function parseCriteria(criteria: string | null | undefined): ParsedCriterion[] {
   const text = (criteria ?? '').replace(/\r\n?/g, '\n');
-  const out: ParsedCriterion[] = [];
-  for (const raw of text.split('\n')) {
+  const lines = text.split('\n').flatMap((raw) => {
     const stripped = raw.replace(LIST_MARKER, '').trim();
-    if (stripped === '') continue;
+    return stripped === '' ? [] : [{ raw, stripped, marked: LIST_MARKER.test(raw) }];
+  });
+  const out: ParsedCriterion[] = [];
+  for (const [index, { stripped, marked }] of lines.entries()) {
+    const introducesMarkedList = !marked && /[:：]$/u.test(stripped) && lines[index + 1]?.marked;
+    if (introducesMarkedList) continue;
     out.push({ ordinal: out.length + 1, key: sha256(stripped).slice(0, 32), text: stripped });
   }
   return out;

@@ -97,9 +97,10 @@ Usage:
   orbit project get PROJECT_ID [--json]
 
 Returns the project a coordinator works from: its title, goal, structured
-acceptanceCriteriaItems (stable id, order, text and revision), the legacy acceptanceCriteria
-projection and migration review state, instructions, status, coordinator binding, and task
-distribution (_count plus tasksByStatus).
+acceptanceCriteriaItems (stable id, order, assertion text, required verificationMethod,
+derived currentStatus and revision), the legacy acceptanceCriteria projection and migration
+review state, instructions, project status, coordinator binding, and task distribution
+(_count plus tasksByStatus).
 
 Returns the shape of the project, not its tasks — use ` + "`orbit task list`" + ` for those.
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
@@ -216,7 +217,7 @@ Options:
   --goal-file -                    read the goal from stdin
   --acceptance-criteria TEXT       what would settle that the goal was reached (max 4,000)
   --acceptance-criteria-file -     read the acceptance criteria from stdin
-  --acceptance-criteria-items JSON explicit [{"text":"..."}] item boundaries (preferred)
+  --acceptance-criteria-items JSON explicit [{"text":"...","verificationMethod":"..."}] (preferred)
   --acceptance-criteria-items-file -
                                    read the structured item array from stdin
   --instructions TEXT              how this project's work is to be done (max 10,000 characters)
@@ -237,7 +238,8 @@ Only one --*-file flag per invocation: they all read the same stdin, and the sec
 would silently come back empty.
 
 The legacy text and structured item flags are mutually exclusive. Use the item form whenever
-there is more than one independently judged condition; ids are assigned by the server.
+there is an acceptance condition: every item requires the concrete procedure/evidence that judges
+it, and ids are assigned by the server.
 `,
 	"update": `orbit project update — revise a project's context, or settle where it stands
 
@@ -251,7 +253,7 @@ Options:
   --clear-goal                     leave the project with no stated goal
   --acceptance-criteria TEXT       replace what would settle the goal was reached (max 4,000)
   --acceptance-criteria-file -     read the replacement acceptance criteria from stdin
-  --acceptance-criteria-items JSON replace with [{"id":"...","text":"..."}] (preferred)
+  --acceptance-criteria-items JSON replace with [{"id":"...","text":"...","verificationMethod":"..."}] (preferred)
   --acceptance-criteria-items-file -
                                    read the structured replacement array from stdin
   --clear-acceptance-criteria      leave the project with no stated acceptance criteria
@@ -267,7 +269,8 @@ Each prose field is a whole-field replacement: text replaces it, --clear-<field>
 and naming both for one field is refused rather than resolved by a preference order.
 
 Structured acceptance is also a whole-collection replacement. Preserve ids returned by
-project_get when editing or reordering; omit id to add an item; [] clears the collection.
+project_get when editing or reordering; omit id to add an item; [] clears the collection. Every
+item requires verificationMethod: the procedure/evidence that decides whether its assertion holds.
 
 --status DONE says the goal was reached and CANCELLED says it will not be; neither is a way
 to file the project out of sight. At least one flag is required — an update naming no field
@@ -275,7 +278,7 @@ is refused here rather than sent as a request that would change nothing, and the
 does not count as one: it names nothing to write.
 
 --expected-config-revision is a compare-and-swap. Pass the configRevision you read from
-'orbit project status' and the write commits only if the project is still at it; otherwise
+'orbit project get' and the write commits only if the project is still at it; otherwise
 it is refused with STALE_CONFIG_REVISION and nothing is written. Use it when you read the
 project first and are acting on what you read — the account owner may have changed its
 coordination settings since, and being told beats overwriting a decision you did not see.
@@ -304,8 +307,8 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Open a project acceptance attempt: the acceptance criteria are frozen with their digest and one empty row per stated criterion is created — the checklist project_acceptance_verdict then has to fill. Open it when you are about to CHECK the project, not when you are about to report on it: the digest of the facts is taken now, and a task, verdict, criteria or branch-content change afterwards makes this attempt stale rather than wrong. Opening an attempt supersedes any earlier live one, so there is never a choice of which conclusion to believe. A project stating no acceptance criteria is refused, because an acceptance with nothing to check would pass by having nothing to fail.", Mutates: true},
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the attempt to conclude)", "--criteria <json> | --criteria-file - (one entry per stated criterion: {criterionId|ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Conclude a project acceptance attempt with one verdict per stated criterion. Address each criterion by stable criterionId, snapshot ordinal or legacy criterionKey; every criterion must be answered, because a project-level PASS is the conjunction of them and one nobody checked is not a pass. The attempt's own verdict is DERIVED and cannot be supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — which is the whole difference between this and writing 'all green' in a task comment. Put real evidence in `evidence`: the command, its exit code, the key output, the SHA, the environment. Only a PASS recorded here lets the project be set DONE, and only while the facts it judged are still the current ones.", Mutates: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up, which is what makes 'the branch changed and changed back' visible to a database that cannot lock a git ref — and if the project was DONE against the old content, the same write reopens it.", Mutates: true},
-	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (preferred structured criteria)", "--acceptance-criteria <text> | --acceptance-criteria-file - (legacy text; mutually exclusive with items)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for independently judged project outcomes; legacy --acceptance-criteria remains compatible and treats one non-blank physical line as one item. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
-	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement)", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (legacy alternative)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement: preserve ids from project_get to retain identity, omit id to add, and use [] to clear. The legacy text field remains compatible but is mutually exclusive. --status DONE records that the goal was reached and is gated against the criteria written in this same request, never the previous exam. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (preferred; every item requires text + verificationMethod)", "--acceptance-criteria <text> | --acceptance-criteria-file - (legacy text; mutually exclusive with items)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for independently judged project outcomes; each item requires assertion text and the concrete verificationMethod that decides it. Legacy --acceptance-criteria remains readable and writable during migration; it treats one non-blank physical line as one item except an unmarked colon-ended introduction before a marked list. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
+	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required)", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (legacy alternative)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement: every item requires text plus verificationMethod; preserve ids from project_get to retain identity, omit id to add, and use [] to clear. currentStatus is derived and cannot be supplied. The legacy text field remains compatible but is mutually exclusive. --status DONE records that the goal was reached and is gated against the criteria written in this same request, never the previous exam. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
@@ -635,7 +638,7 @@ func isSHA256Hex(value string) bool {
 // Checked here so a typo is a message naming what the value should be rather than a 400 the caller
 // has to decode — and kept a STRING rather than parsed, because `configRevision` is a bigint column
 // served as a decimal string: turning it into a number here would silently round the exact value
-// `orbit project status` printed.
+// `orbit project get` printed.
 func isDecimalRevision(value string) bool {
 	if value == "" || len(value) > 20 {
 		return false
@@ -694,6 +697,13 @@ func parseProjectAcceptanceItems(text string, allowIDs bool) ([]map[string]inter
 	if err := json.Unmarshal([]byte(text), &raw); err != nil {
 		return nil, fmt.Errorf("acceptance criteria items must be a JSON array of objects: %w", err)
 	}
+	return normalizeProjectAcceptanceItems(raw, allowIDs)
+}
+
+// normalizeProjectAcceptanceItems is shared by CLI JSON and MCP arguments. JSON Schema is useful
+// guidance to a model but the MCP transport does not enforce it, so required methods are checked
+// here as well as by the server DTO and database constraint.
+func normalizeProjectAcceptanceItems(raw []map[string]interface{}, allowIDs bool) ([]map[string]interface{}, error) {
 	if len(raw) > 100 {
 		return nil, fmt.Errorf("acceptance criteria items may contain at most 100 entries")
 	}
@@ -702,7 +712,7 @@ func parseProjectAcceptanceItems(text string, allowIDs bool) ([]map[string]inter
 	seenIDs := map[string]struct{}{}
 	for index, item := range raw {
 		for key := range item {
-			if key != "text" && (key != "id" || !allowIDs) {
+			if key != "text" && key != "verificationMethod" && (key != "id" || !allowIDs) {
 				return nil, fmt.Errorf("acceptance criterion %d has unknown field %q", index+1, key)
 			}
 		}
@@ -714,7 +724,15 @@ func parseProjectAcceptanceItems(text string, allowIDs bool) ([]map[string]inter
 		if strings.ContainsAny(value, "\r\n") {
 			return nil, fmt.Errorf("acceptance criterion %d text must be one line", index+1)
 		}
-		normalized := map[string]interface{}{"text": value}
+		method, methodOK := item["verificationMethod"].(string)
+		method = strings.TrimSpace(method)
+		if !methodOK || method == "" {
+			return nil, fmt.Errorf("acceptance criterion %d needs non-blank verificationMethod", index+1)
+		}
+		if utf8.RuneCountInString(method) > maxProjectAcceptanceVerificationMethodChars {
+			return nil, fmt.Errorf("acceptance criterion %d verificationMethod may contain at most %d characters", index+1, maxProjectAcceptanceVerificationMethodChars)
+		}
+		normalized := map[string]interface{}{"text": value, "verificationMethod": method}
 		projection = append(projection, fmt.Sprintf("%d. %s", index+1, value))
 		if id, present := item["id"]; present {
 			idText, valid := id.(string)
@@ -734,6 +752,22 @@ func parseProjectAcceptanceItems(text string, allowIDs bool) ([]map[string]inter
 		return nil, fmt.Errorf("structured acceptance criteria must fit the %d-character compatibility projection", maxProjectAcceptanceCriteriaChars)
 	}
 	return items, nil
+}
+
+func normalizeMCPProjectAcceptanceItems(value interface{}, allowIDs bool) ([]map[string]interface{}, error) {
+	entries, ok := value.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("acceptance criteria items must be an array of objects")
+	}
+	raw := make([]map[string]interface{}, 0, len(entries))
+	for index, entry := range entries {
+		item, ok := entry.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("acceptance criterion %d must be an object", index+1)
+		}
+		raw = append(raw, item)
+	}
+	return normalizeProjectAcceptanceItems(raw, allowIDs)
 }
 
 func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
@@ -936,7 +970,7 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if flagWasSet(fs, "expected-config-revision") {
 		if !isDecimalRevision(*expectedConfigRevision) {
-			return fmt.Errorf("--expected-config-revision must be the decimal configRevision from `orbit project status`")
+			return fmt.Errorf("--expected-config-revision must be the decimal configRevision from `orbit project get`")
 		}
 		body["expectedConfigRevision"] = *expectedConfigRevision
 	}

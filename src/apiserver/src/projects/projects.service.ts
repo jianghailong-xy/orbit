@@ -38,6 +38,7 @@ import {
   CreateProjectDto,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
+  MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
   ReopenProjectDto,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
@@ -255,6 +256,7 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     id: true,
     ordinal: true,
     text: true,
+    verificationMethod: true,
     revision: true,
     contentHash: true,
   },
@@ -301,11 +303,15 @@ type WithAcceptanceDefinitions = {
     id: string;
     ordinal: number;
     text: string;
+    verificationMethod: string;
     revision: number;
     contentHash: string;
   }>;
   acceptanceCriteriaFormat?: string;
   acceptanceCriteria?: string | null;
+  acceptance?: {
+    criteria?: Array<{ id: string; verdict: string }>;
+  } | null;
 };
 
 /** Fold the storage relation into the author-facing array. The legacy text stays beside it during
@@ -319,12 +325,18 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
     format === 'LEGACY_TEXT' &&
     definitions.length === 1 &&
     /[;；]\s*(?:\(?\d+[.)、]|[（(]\d+[）)])/u.test(project.acceptanceCriteria ?? '');
+  const currentStatus = new Map(
+    (project.acceptance?.criteria ?? []).map((criterion) => [criterion.id, criterion.verdict]),
+  );
   return {
     ...rest,
     acceptanceCriteriaItems: definitions.map((criterion) => ({
       id: criterion.id,
       ordinal: criterion.ordinal,
       text: criterion.text,
+      verificationMethod: criterion.verificationMethod,
+      // A view over the latest applicable acceptance run, never another authored/stored field.
+      currentStatus: currentStatus.get(criterion.id) ?? 'UNDECIDED',
       revision: criterion.revision,
       contentHash: criterion.contentHash,
     })),
@@ -646,8 +658,8 @@ export class ProjectsService {
    * same total size older clients already enforce. This is repeated in the service because runner
    * tests and internal callers invoke it directly without Nest's validation pipe. */
   private static normalizeAcceptanceItems(
-    items: Array<{ text: string }>,
-  ): Array<{ text: string }> {
+    items: Array<{ text: string; verificationMethod: string }>,
+  ): Array<{ text: string; verificationMethod: string }> {
     if (!Array.isArray(items)) {
       throw new BadRequestException('acceptanceCriteriaItems must be an array');
     }
@@ -658,6 +670,9 @@ export class ProjectsService {
     }
     const normalized = items.map((item, index) => {
       const text = typeof item?.text === 'string' ? item.text.trim() : '';
+      const verificationMethod = typeof item?.verificationMethod === 'string'
+        ? item.verificationMethod.trim()
+        : '';
       if (text === '') {
         throw new BadRequestException(`acceptance criterion ${index + 1} must not be blank`);
       }
@@ -666,7 +681,17 @@ export class ProjectsService {
           `acceptance criterion ${index + 1} must be one line during the legacy compatibility window`,
         );
       }
-      return { text };
+      if (verificationMethod === '') {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} requires a verificationMethod`,
+        );
+      }
+      if (verificationMethod.length > MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} verificationMethod must contain at most ${MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS} characters`,
+        );
+      }
+      return { text, verificationMethod };
     });
     const projection = criteriaLegacyProjection(normalized) ?? '';
     if (projection.length > MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS) {
@@ -681,7 +706,7 @@ export class ProjectsService {
    * ordinals are first moved out of the way so swapping two rows never transiently violates the
    * unique `(project, ordinal)` constraint. */
   private static async replaceAcceptanceDefinitions(
-    tx: Prisma.TransactionClient,
+    tx: Prisma.TransactionClient | PrismaService,
     projectId: string,
     items: UpdateProjectAcceptanceCriterionDto[],
   ): Promise<string | null> {
@@ -689,7 +714,7 @@ export class ProjectsService {
     const existing = await tx.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId },
       orderBy: { ordinal: 'asc' },
-      select: { id: true, text: true, revision: true },
+      select: { id: true, text: true, verificationMethod: true, revision: true },
     });
     const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
     const used = new Set<string>();
@@ -735,10 +760,13 @@ export class ProjectsService {
           data: {
             ordinal: criterion.ordinal,
             text: criterion.text,
+            verificationMethod: criterion.verificationMethod,
             contentHash,
-            revision: previous.text === criterion.text
-              ? previous.revision
-              : previous.revision + 1,
+            revision:
+              previous.text === criterion.text &&
+              previous.verificationMethod === criterion.verificationMethod
+                ? previous.revision
+                : previous.revision + 1,
           },
         });
       } else {
@@ -748,6 +776,7 @@ export class ProjectsService {
             projectId,
             ordinal: criterion.ordinal,
             text: criterion.text,
+            verificationMethod: criterion.verificationMethod,
             revision: 1,
             contentHash,
           },
@@ -773,64 +802,88 @@ export class ProjectsService {
     try {
       // `await` inside the `try`, not a returned promise: a returned one rejects in the caller,
       // where the catch below cannot see it.
-      const writeProject = (client: PrismaService | Prisma.TransactionClient) => client.project.create({
-        data: {
-          title: dto.title,
-          ownerId,
-          goal: ProjectsService.blankToNull(dto.goal),
-          acceptanceCriteria: structuredCriteria === undefined
-            ? ProjectsService.blankToNull(dto.acceptanceCriteria)
-            : criteriaLegacyProjection(structuredCriteria),
-          ...(structuredCriteria === undefined
-            ? {}
-            : { acceptanceCriteriaFormat: 'STRUCTURED' }),
-          instructions: ProjectsService.blankToNull(dto.instructions),
-          // The defaults for a NEW project, written here rather than left to the column defaults —
-          // and they are different values. The columns default to `false` / MANUAL because that is
-          // what every project that existed before this feature has to keep; a project created
-          // now is one somebody is recording in order to have it coordinated, so it starts
-          // coordinated, at the guarded level. Doing it the other way round (new-project values as
-          // the column defaults, old rows rewritten by the migration) turns every project created
-          // between the migration and this code into an automatic one, and rewrites exactly the
-          // rows nobody asked about.
-          coordinatorEnabled: true,
-          automationPolicy: ProjectAutomationPolicy.GUARDED_AUTO,
-          // The control loop's row, created with the project so that "has a runtime row" is never
-          // a question a later reader has to answer with a fallback.
-          //
-          // `coordinatorIdentityLandingId` is the landing the membership below was derived FROM,
-          // written in the same insert as the membership itself. Nobody has CHOSEN a coordinator
-          // here — the agent seated is the one whose session recorded the project — so the source
-          // stays DERIVED (the column default) and this project's identity remains correctable if
-          // its landing later moves (migration 0113, validation 04R). Recording the baseline is
-          // what lets migration 0114 tell that later move apart from an owner's explicit choice.
-          runtime: {
-            create: coordinator ? { coordinatorIdentityLandingId: coordinator.workspaceId } : {},
+      const writeProject = async (client: PrismaService | Prisma.TransactionClient) => {
+        const created = await client.project.create({
+          data: {
+            title: dto.title,
+            ownerId,
+            goal: ProjectsService.blankToNull(dto.goal),
+            acceptanceCriteria:
+              structuredCriteria === undefined
+                ? ProjectsService.blankToNull(dto.acceptanceCriteria)
+                : criteriaLegacyProjection(structuredCriteria),
+            ...(structuredCriteria === undefined
+              ? {}
+              : { acceptanceCriteriaFormat: 'STRUCTURED' }),
+            instructions: ProjectsService.blankToNull(dto.instructions),
+            // The defaults for a NEW project, written here rather than left to the column defaults —
+            // and they are different values. The columns default to `false` / MANUAL because that is
+            // what every project that existed before this feature has to keep; a project created
+            // now is one somebody is recording in order to have it coordinated, so it starts
+            // coordinated, at the guarded level. Doing it the other way round (new-project values as
+            // the column defaults, old rows rewritten by the migration) turns every project created
+            // between the migration and this code into an automatic one, and rewrites exactly the
+            // rows nobody asked about.
+            coordinatorEnabled: true,
+            automationPolicy: ProjectAutomationPolicy.GUARDED_AUTO,
+            // The control loop's row, created with the project so that "has a runtime row" is never
+            // a question a later reader has to answer with a fallback.
+            //
+            // `coordinatorIdentityLandingId` is the landing the membership below was derived FROM,
+            // written in the same insert as the membership itself. Nobody has CHOSEN a coordinator
+            // here — the agent seated is the one whose session recorded the project — so the source
+            // stays DERIVED (the column default) and this project's identity remains correctable if
+            // its landing later moves (migration 0113, validation 04R). Recording the baseline is
+            // what lets migration 0114 tell that later move apart from an owner's explicit choice.
+            runtime: {
+              create: coordinator
+                ? { coordinatorIdentityLandingId: coordinator.workspaceId }
+                : {},
+            },
+            // Both columns in the SAME insert as the project itself, which is the whole of
+            // "bound atomically": one statement, so there is no instant in which the project exists
+            // pointing at no conversation, and no failure in which the row lands and the binding
+            // does not. A second write would have both.
+            ...(coordinator
+              ? {
+                  coordinatorSessionId: coordinator.sessionId,
+                  coordinatorWorkspaceId: coordinator.workspaceId,
+                  // And the identity behind that conversation, in the same insert. The agent running
+                  // the session that recorded this project is the agent coordinating it — the same
+                  // fact the two columns above state about the CONVERSATION, stated about WHO. It is
+                  // what survives every later rotation of that conversation, so a project planned in
+                  // a session does not lose its coordinator the first time the session is replaced.
+                  members: {
+                    create: { agentId: coordinator.workspaceId, role: ProjectRole.COORDINATOR },
+                  },
+                }
+              : {}),
           },
-          // Both columns in the SAME insert as the project itself, which is the whole of
-          // "bound atomically": one statement, so there is no instant in which the project exists
-          // pointing at no conversation, and no failure in which the row lands and the binding
-          // does not. A second write would have both.
-          ...(coordinator
-            ? {
-                coordinatorSessionId: coordinator.sessionId,
-                coordinatorWorkspaceId: coordinator.workspaceId,
-                // And the identity behind that conversation, in the same insert. The agent running
-                // the session that recorded this project is the agent coordinating it — the same
-                // fact the two columns above state about the CONVERSATION, stated about WHO. It is
-                // what survives every later rotation of that conversation, so a project planned in
-                // a session does not lose its coordinator the first time the session is replaced.
-                members: {
-                  create: { agentId: coordinator.workspaceId, role: ProjectRole.COORDINATOR },
-                },
-              }
-            : {}),
-        },
-        include: {
-          ...COORDINATION_INCLUDE,
-          acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
-        },
-      });
+          include: {
+            ...COORDINATION_INCLUDE,
+            acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
+          },
+        });
+        if (structuredCriteria === undefined) return created;
+
+        // The INSERT compatibility trigger first makes rows from the legacy projection so an old
+        // binary remains able to create a project. Replace those rows, with the required methods,
+        // before this transaction becomes visible; the final projection write also refreshes the
+        // existing definition digest. No partially migrated structured project can commit.
+        const projection = await ProjectsService.replaceAcceptanceDefinitions(
+          client,
+          created.id,
+          dto.acceptanceCriteriaItems ?? [],
+        );
+        return client.project.update({
+          where: { id: created.id },
+          data: { acceptanceCriteria: projection, acceptanceCriteriaFormat: 'STRUCTURED' },
+          include: {
+            ...COORDINATION_INCLUDE,
+            acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
+          },
+        });
+      };
       // Promoting an existing conversation changes two facts that must never split: the Project
       // points at this Session, and this Session's title becomes managed by that Project. Lock/write
       // the Session first (rank 30), then insert the new Project (rank 40). A unique conflict or any
@@ -877,7 +930,13 @@ export class ProjectsService {
             }
             return writeProject(tx);
           }, loggedRetry(this.logger, 'projects.create'))
-        : await writeProject(this.prisma);
+        : structuredCriteria !== undefined
+          ? await withTransactionRetry(
+              this.prisma,
+              (tx) => writeProject(tx),
+              loggedRetry(this.logger, 'projects.create'),
+            )
+          : await writeProject(this.prisma);
       if (coordinator) this.sessions?.announceProjectSessionChanged?.(coordinator.sessionId);
       return withAcceptanceDefinitions(withCoordination(project));
     } catch (e) {

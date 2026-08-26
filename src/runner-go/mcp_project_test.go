@@ -187,10 +187,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	createItem, _ := createItems["items"].(map[string]interface{})
 	createItemProps, _ := createItem["properties"].(map[string]interface{})
-	if len(createItemProps) != 1 || createItemProps["text"] == nil {
+	if len(createItemProps) != 2 || createItemProps["text"] == nil || createItemProps["verificationMethod"] == nil {
 		t.Fatalf("project_create criterion item = %#v", createItem)
 	}
-	if required, _ := createItem["required"].([]string); len(required) != 1 || required[0] != "text" {
+	if required, _ := createItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod" {
 		t.Fatalf("project_create criterion required = %#v", createItem["required"])
 	}
 	if len(createProps) != 5 {
@@ -225,10 +225,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	updateItem, _ := updateItems["items"].(map[string]interface{})
 	updateItemProps, _ := updateItem["properties"].(map[string]interface{})
-	if len(updateItemProps) != 2 || updateItemProps["id"] == nil || updateItemProps["text"] == nil {
+	if len(updateItemProps) != 3 || updateItemProps["id"] == nil || updateItemProps["text"] == nil || updateItemProps["verificationMethod"] == nil {
 		t.Fatalf("project_update criterion item = %#v", updateItem)
 	}
-	if required, _ := updateItem["required"].([]string); len(required) != 1 || required[0] != "text" {
+	if required, _ := updateItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod" {
 		t.Fatalf("project_update criterion required = %#v", updateItem["required"])
 	}
 	// status is a closed set, and the three the server's DTO validates against.
@@ -382,8 +382,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 	createItems := []interface{}{
-		map[string]interface{}{"text": "Build succeeds"},
-		map[string]interface{}{"text": "Image boots"},
+		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test"},
+		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image"},
 	}
 	if res := mcp.callTool("project_create", map[string]interface{}{
 		"title": "LFS", "acceptanceCriteriaItems": createItems,
@@ -391,8 +391,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 		t.Fatalf("structured project_create returned an error: %#v", res["content"])
 	}
 	updateItems := []interface{}{
-		map[string]interface{}{"id": "criterion-2", "text": "Image boots"},
-		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds"},
+		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image"},
+		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test"},
 	}
 	if res := mcp.callTool("project_update", map[string]interface{}{
 		"projectId": "proj-1", "acceptanceCriteriaItems": updateItems,
@@ -441,6 +441,41 @@ func TestMCPProjectWritesRejectCompetingAcceptanceShapes(t *testing.T) {
 	}
 	if hit {
 		t.Fatal("competing acceptance authoring shapes reached the server")
+	}
+}
+
+func TestMCPProjectWritesRequireVerificationMethodBeforeHTTP(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer srv.Close()
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+
+	for _, call := range []struct {
+		name string
+		args map[string]interface{}
+	}{
+		{"project_create", map[string]interface{}{
+			"title":                   "LFS",
+			"acceptanceCriteriaItems": []interface{}{map[string]interface{}{"text": "Build succeeds"}},
+		}},
+		{"project_update", map[string]interface{}{
+			"projectId": "proj-1",
+			"acceptanceCriteriaItems": []interface{}{map[string]interface{}{
+				"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "   ",
+			}},
+		}},
+	} {
+		res := mcp.callTool(call.name, call.args)
+		if res["isError"] != true {
+			t.Fatalf("%s accepted a missing method: %#v", call.name, res)
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "verificationMethod") {
+			t.Fatalf("%s missing-method result = %#v", call.name, res)
+		}
+	}
+	if hit {
+		t.Fatal("a structured project item with no method reached the server")
 	}
 }
 

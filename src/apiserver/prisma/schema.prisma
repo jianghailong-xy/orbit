@@ -1807,7 +1807,11 @@ model ProjectAcceptanceCriterionDefinition {
   /// One atomic condition. Inline Markdown is allowed; item boundaries are structural rather than
   /// inferred from punctuation or list markers.
   text String
-  /// Monotonic for this stable id. Editing text increments it; reordering leaves it alone.
+  /// The required procedure/evidence by which a reader decides whether `text` holds. Legacy prose
+  /// rows receive an explicit manual-review method during migration rather than an invented test.
+  verificationMethod String @map("verification_method")
+  /// Monotonic for this stable id. Editing the assertion or its method increments it; reordering
+  /// leaves it alone.
   revision Int @default(1)
   /// sha256 of the exact normalized text. Used to reconcile legacy text writes without guessing
   /// identity from list position.

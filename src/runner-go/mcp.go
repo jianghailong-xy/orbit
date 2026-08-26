@@ -204,6 +204,7 @@ const maxTaskAcceptanceCriteriaChars = 4000
 // number of structural items, so a malformed plan is rejected before the HTTP round-trip.
 const maxProjectAcceptanceCriteriaChars = 4000
 const maxProjectAcceptanceCriteriaItems = 100
+const maxProjectAcceptanceVerificationMethodChars = 4000
 
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
@@ -433,7 +434,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("acceptanceCriteria and acceptanceCriteriaItems cannot be used together", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "goal", "acceptanceCriteria", "acceptanceCriteriaItems", "instructions")
+		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
+		if structuredCriteria {
+			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], false)
+			if err != nil {
+				return toolResult(err.Error(), true)
+			}
+			body["acceptanceCriteriaItems"] = items
+		}
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
@@ -458,7 +466,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// three outcomes for free: absent stays absent (the project keeps what it states), a string
 		// is forwarded as given, and an explicit null survives as null rather than being mistaken
 		// for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "acceptanceCriteriaItems", "instructions", "status")
+		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "instructions", "status")
+		if structuredCriteria {
+			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
+			if err != nil {
+				return toolResult(err.Error(), true)
+			}
+			body["acceptanceCriteriaItems"] = items
+		}
 		// The fence, counted separately: it names no field to write, so an update carrying only it
 		// would be a request that changes nothing while claiming to have gone through.
 		fields := len(body)
@@ -1405,23 +1420,38 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"description": "One atomic, independently judgeable project outcome. Keep it on one line " +
 			"during the legacy compatibility window; inline Markdown is allowed.",
 	}
+	projectCriterionMethodProp := map[string]interface{}{
+		"type":      "string",
+		"minLength": 1,
+		"maxLength": maxProjectAcceptanceVerificationMethodChars,
+		"description": "Required. The concrete procedure and evidence that decides whether this " +
+			"assertion holds (for example a command plus expected exit code, a named spec, or a " +
+			"human review against identified direct evidence). A code comment is not a method.",
+	}
 	projectCriteriaCreateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "The project's acceptance criteria as explicit items. Use this instead of " +
-			"acceptanceCriteria whenever item boundaries are known; the two fields are mutually exclusive.",
-		"items": obj(map[string]interface{}{"text": projectCriterionTextProp}, "text"),
+		"description": "The project's acceptance criteria as explicit assertion + judgment-method " +
+			"items. Use this instead of acceptanceCriteria; every item requires text and " +
+			"verificationMethod, and the two top-level fields are mutually exclusive.",
+		"items": obj(map[string]interface{}{
+			"text":               projectCriterionTextProp,
+			"verificationMethod": projectCriterionMethodProp,
+		}, "text", "verificationMethod"),
 	}
 	projectCriteriaUpdateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "Whole structured replacement. Preserve an item's id from project_get to " +
+		"description": "Whole structured replacement; text and verificationMethod are required. " +
+			"Preserve an item's id from project_get to " +
 			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
-			"Mutually exclusive with the legacy acceptanceCriteria field.",
+			"currentStatus is derived and is not an input. Mutually exclusive with the legacy " +
+			"acceptanceCriteria field.",
 		"items": obj(map[string]interface{}{
-			"id":   map[string]interface{}{"type": "string"},
-			"text": projectCriterionTextProp,
-		}, "text"),
+			"id":                 map[string]interface{}{"type": "string"},
+			"text":               projectCriterionTextProp,
+			"verificationMethod": projectCriterionMethodProp,
+		}, "text", "verificationMethod"),
 	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
@@ -1822,7 +1852,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Legacy free-text authoring shape. What would settle that the goal was reached — the observable " +
 						"result a reader can verify for the whole project, as opposed to a task's " +
 						"own acceptanceCriteria, which settles one piece of it. One non-blank physical line " +
-						"becomes one criterion. Prefer acceptanceCriteriaItems when boundaries are known; " +
+						"becomes one criterion, except an unmarked colon-ended introduction before a marked " +
+						"list. Prefer acceptanceCriteriaItems, whose methods are required; " +
 						"do not send both. Max 4,000 characters.",
 				},
 				"acceptanceCriteriaItems": projectCriteriaCreateProp,
