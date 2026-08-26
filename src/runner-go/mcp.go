@@ -1708,7 +1708,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"work: state what it is trying to achieve (goal), what would settle that the goal " +
 				"was reached (acceptanceCriteria), and how the work is to be done (instructions). " +
 				"You have the authority to write these fields — record what you were asked for " +
-				"rather than waiting for somebody to type it in. The " +
+				"rather than waiting for somebody to type it in. Do not wait to be asked, either: " +
+				"when what you are looking at spans more than one session — it will not finish in " +
+				"this conversation, it will exhaust your context, or it runs over days — or breaks " +
+				"into steps that depend on one another, or wants several agents on different parts " +
+				"of it, then PROPOSE recording it as a project before you start working. Say why, " +
+				"because the reason is the whole point: a project moves the plan out of this " +
+				"conversation and into the task graph, so when this session ends or your context " +
+				"runs out the plan is still there and whoever picks it up next does not have to " +
+				"re-derive it. Propose, then wait for a yes — this call is the answer to that " +
+				"question, not a way around asking it. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
 				"it is for. Created from inside a session, the project is bound to THIS session " +

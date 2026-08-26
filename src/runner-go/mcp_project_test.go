@@ -785,3 +785,28 @@ func TestMCPProjectUpdateRefusesAFenceWithNoFields(t *testing.T) {
 		t.Fatalf("a fence-only update isError = %#v", res["isError"])
 	}
 }
+
+// A model that only records a project when it is told to will never record one: the person asking
+// for a bug fix does not know yet that the fix is three days of dependent work. So the description
+// carries the judgement itself — which shapes of work are worth proposing a project for, why it is
+// worth it, and that proposing is a question rather than a licence to go ahead and create one.
+//
+// Asserted by keyword rather than by the paragraph: this copy will be reworded, and a test that
+// pins the whole of it turns every rewording into a failure that says nothing.
+func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
+	description := mcpToolDescription(toolDescriptors(false, false), "project_create")
+	for _, want := range []struct{ phrase, why string }{
+		{"Do not wait to be asked", "the proposal has to be the model's own move, not a reaction"},
+		{"spans more than one session", "first trigger: the work outlives this conversation"},
+		{"depend on one another", "second trigger: the work has an order to it"},
+		{"several agents", "third trigger: the work wants to be split"},
+		{"PROPOSE", "it proposes rather than silently creating"},
+		{"wait for a yes", "and it waits — this call is the answer, not the asking"},
+		{"task graph", "the reason to say out loud: the plan leaves the conversation"},
+		{"context", "and survives the context that would otherwise take it down"},
+	} {
+		if !strings.Contains(description, want.phrase) {
+			t.Fatalf("project_create description does not mention %q (%s): %q", want.phrase, want.why, description)
+		}
+	}
+}
