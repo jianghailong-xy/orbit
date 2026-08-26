@@ -10312,7 +10312,7 @@ html[data-theme='dark'] .session-tag-chip {
     min-width: 0;
   }
   /* Three equal segments rather than three text-width ones: at this width they are being tapped,
-     and "All" is otherwise a 42px target next to a 90px one. */
+     and "Open" is otherwise a much smaller target than "Completed" or "Cancelled". */
   .projects-toolbar-filter .ant-segmented-item {
     flex: 1;
   }

@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -31,34 +31,51 @@ const { ProjectsPage } = await import('./ProjectsPage');
 
 const OPEN_ID = '0195c0de-0000-7000-8000-0000000000c1';
 const DONE_ID = '0195c0de-0000-7000-8000-0000000000c2';
+const CANCELLED_ID = '0195c0de-0000-7000-8000-0000000000c3';
 
-const PROJECTS = [
-  {
-    id: OPEN_ID,
-    title: 'Row folding',
-    status: 'OPEN',
-    goal: 'Give the title the line',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-02T00:00:00Z',
-    _count: { tasks: 3 },
-    buckets: { running: 1, ready: 2, blocked: 0, done: 0, cancelled: 0 },
-    lastActivityAt: new Date().toISOString(),
-  },
-  {
-    id: DONE_ID,
-    title: 'Shipped work',
-    status: 'DONE',
-    goal: null,
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-02T00:00:00Z',
-    _count: { tasks: 1 },
-    buckets: { running: 0, ready: 0, blocked: 0, done: 1, cancelled: 0 },
-    lastActivityAt: '2026-01-02T00:00:00Z',
-  },
-];
+const OPEN_PROJECT = {
+  id: OPEN_ID,
+  title: 'Row folding',
+  status: 'OPEN',
+  goal: 'Give the title the line',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-02T00:00:00Z',
+  _count: { tasks: 3 },
+  buckets: { running: 1, ready: 2, blocked: 0, done: 0, cancelled: 0 },
+  lastActivityAt: new Date().toISOString(),
+};
+const DONE_PROJECT = {
+  id: DONE_ID,
+  title: 'Shipped work',
+  status: 'DONE',
+  goal: null,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-02T00:00:00Z',
+  _count: { tasks: 1 },
+  buckets: { running: 0, ready: 0, blocked: 0, done: 1, cancelled: 0 },
+  lastActivityAt: '2026-01-02T00:00:00Z',
+};
+const CANCELLED_PROJECT = {
+  id: CANCELLED_ID,
+  title: 'Discarded work',
+  status: 'CANCELLED',
+  goal: null,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-03T00:00:00Z',
+  _count: { tasks: 1 },
+  buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 1 },
+  lastActivityAt: '2026-01-03T00:00:00Z',
+};
 
 let container: HTMLDivElement;
 let root: Root;
+let landedOn = '';
+
+function RouteProbe() {
+  const location = useLocation();
+  landedOn = `${location.pathname}${location.search}`;
+  return null;
+}
 
 /** `matches` for the projects breakpoint only — everything else answers false, which is what
  *  antd's own breakpoint subscriptions want and is the desktop reading they already assume. */
@@ -78,7 +95,19 @@ function stubViewport(phone: boolean): void {
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
-  apiMock.mockResolvedValue(PROJECTS as never);
+  landedOn = '';
+  const answers: Record<string, unknown[]> = {
+    '/projects?status=OPEN': [OPEN_PROJECT],
+    '/projects?status=DONE': [DONE_PROJECT],
+    '/projects?status=CANCELLED': [CANCELLED_PROJECT],
+    '/workspaces': [],
+    '/runners': [],
+  };
+  apiMock.mockImplementation((path: string) => {
+    const answer = answers[path];
+    if (!answer) return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
+    return Promise.resolve(answer) as Promise<never>;
+  });
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -103,8 +132,9 @@ async function mount(): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={['/projects']}>
           <ProjectsPage />
+          <RouteProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -113,6 +143,27 @@ async function mount(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+async function flush(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+function segment(label: string): HTMLInputElement {
+  const item = [...container.querySelectorAll('.ant-segmented-item')].find((el) =>
+    el.textContent?.trim().startsWith(label),
+  );
+  expect(item, `segment ${label}`).toBeTruthy();
+  return item!.querySelector('input')! as HTMLInputElement;
+}
+
+async function click(element: HTMLElement): Promise<void> {
+  await act(async () => {
+    element.click();
+  });
+  await flush();
 }
 
 /** The tags inside project ROWS. Scoped to the row head so a status word appearing in a section
@@ -136,6 +187,8 @@ describe('projects list on a phone', () => {
     expect(rowTags()).toEqual([]);
     // The row itself is intact — only the badge went.
     expect(container.querySelector('.project-row-title')?.textContent).toBe('Row folding');
+    expect(landedOn).toBe('/projects');
+    expect(apiMock).toHaveBeenCalledWith('/projects?status=OPEN');
   });
 
   it('keeps the OPEN tag on a desktop, where the row has room for it', async () => {
@@ -145,18 +198,34 @@ describe('projects list on a phone', () => {
     expect(rowTags()).toEqual(['OPEN']);
   });
 
-  it('keeps a DONE tag on a phone — that one is not predictable from the header', async () => {
+  it('shows completed history flat without repeating its lifecycle in a header or row tag', async () => {
     stubViewport(true);
     await mount();
+    await click(segment('Completed'));
 
-    // Completed folds shut on first render, so the finished project is a pill until asked for.
-    const expand = [...container.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').trim().startsWith('Expand'),
-    );
-    expect(expand, 'Completed section expander').toBeTruthy();
-    await act(async () => expand!.click());
+    const terminal = container.querySelector('section[data-section="completed"]')!;
+    expect(terminal).toBeTruthy();
+    expect(terminal.querySelector('h3')).toBeNull();
+    expect(terminal.querySelector('button')).toBeNull();
+    expect(terminal.querySelector('.project-row-title')?.textContent).toBe('Shipped work');
+    expect(rowTags()).toEqual([]);
+    expect(landedOn).toBe('/projects?status=DONE');
+    expect(apiMock).toHaveBeenCalledWith('/projects?status=DONE');
+  });
 
-    expect(rowTags()).toEqual(['DONE']);
+  it('gives cancelled history the same flat, non-repeating phone treatment', async () => {
+    stubViewport(true);
+    await mount();
+    await click(segment('Cancelled'));
+
+    const terminal = container.querySelector('section[data-section="cancelled"]')!;
+    expect(terminal).toBeTruthy();
+    expect(terminal.querySelector('h3')).toBeNull();
+    expect(terminal.querySelector('button')).toBeNull();
+    expect(terminal.querySelector('.project-row-title')?.textContent).toBe('Discarded work');
+    expect(rowTags()).toEqual([]);
+    expect(landedOn).toBe('/projects?status=CANCELLED');
+    expect(apiMock).toHaveBeenCalledWith('/projects?status=CANCELLED');
   });
 
   it('shrinks the create button to its icon without losing its name', async () => {

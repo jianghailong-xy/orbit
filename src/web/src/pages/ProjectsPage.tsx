@@ -3,7 +3,7 @@ import type { TaskStatus } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -128,12 +128,31 @@ function excerpt(text: string | null | undefined, empty: string): string {
  * WHICH projects to ask for — the status filter goes on the wire, never over the loaded array.
  *
  * `?status=` has been the endpoint's own narrowing since it was written; filtering client-side
- * would mean fetching every project in order to hide most of them, and would make the list of what
- * is in progress depend on how much of the list had been loaded. 'ALL' sends no parameter at all,
- * which is how the endpoint spells "no narrowing" (see ProjectsController.parseStatus).
+ * would mean fetching every project in order to hide most of them. Every view is one real status,
+ * so completed history and cancelled work never reappear under the Open attention inbox.
  */
 export function projectsPath(filter: ProjectFilter): string {
-  return filter === 'ALL' ? '/projects' : `/projects?status=${filter}`;
+  return `/projects?status=${filter}`;
+}
+
+/** The URL owns the lifecycle view so a refresh, shared link, or trip through project detail does
+ *  not silently reset terminal history to Open. Unknown values fail closed to the default view. */
+export function projectFilterFromStatusParam(value: string | null): ProjectFilter {
+  return value === 'DONE' || value === 'CANCELLED' ? value : 'OPEN';
+}
+
+/** Browser route for a lifecycle view. Open is the clean default; terminal views spell their
+ *  status so they can be restored after navigation. */
+export function projectsRoutePath(filter: ProjectFilter): string {
+  return filter === 'OPEN' ? '/projects' : `/projects?status=${filter}`;
+}
+
+/** Only list routes this page itself can have written are accepted from navigation state. */
+export function projectsReturnPath(state: unknown): string {
+  const candidate = (state as { projectsReturnTo?: unknown } | null)?.projectsReturnTo;
+  return candidate === projectsRoutePath('DONE') || candidate === projectsRoutePath('CANCELLED')
+    ? candidate
+    : projectsRoutePath('OPEN');
 }
 
 /** The cache entry `projectsPath(filter)` fills. The filter is PART OF THE KEY because it is part
@@ -168,11 +187,10 @@ export function matchesProjectSearch(
 /**
  * Which empty this is — or null, when the list has rows to show.
  *
- * The two are different situations and must not share a sentence. "No projects yet" is a statement
- * about the account, and it is only TRUE when nothing is being narrowed: said over a search that
- * matched nothing, it tells a reader with eighteen projects that they have none, and the way out
- * (clear the search) is the one thing it does not suggest. So the create CTA belongs to the first
- * and the way back belongs to the second.
+ * The two are different situations and must not share an action. An empty default Open inbox still
+ * offers creation. A search miss needs its query cleared, while an empty terminal-history view
+ * needs a way back to current work. Since every request is status-scoped, none of these states may
+ * claim that the account has no projects at all.
  */
 export function projectsEmptyKind(
   loadedCount: number,
@@ -181,25 +199,40 @@ export function projectsEmptyKind(
   search: string,
 ): 'none' | 'no-match' | null {
   if (matchCount > 0) return null;
-  return loadedCount === 0 && filter === 'ALL' && search.trim() === '' ? 'none' : 'no-match';
+  return loadedCount === 0 && filter === 'OPEN' && search.trim() === '' ? 'none' : 'no-match';
 }
 
 /** What the no-match empty says: whichever narrowing is responsible, named back to the reader. The
  *  search wins when both are on, because it is the one that was just typed. */
 export function noMatchDescription(filter: ProjectFilter, search: string): string {
   const term = search.trim();
-  if (term) return `No projects match “${term}”`;
-  return filter === 'OPEN' ? 'No open projects' : 'No completed projects';
+  const scope = filter === 'OPEN' ? 'open' : filter === 'DONE' ? 'completed' : 'cancelled';
+  if (term) return `No ${scope} projects match “${term}”`;
+  if (filter === 'OPEN') return 'No open projects';
+  return filter === 'DONE' ? 'No completed projects' : 'No cancelled projects';
 }
 
 /** The age display and the server facts advance together while the index stays open. */
 export const PROJECTS_REFRESH_MS = 60_000;
 
-/** Index of the signed-in user's projects: search and status filter above, then lanes ordered by
- *  who needs to act — exceptions first, healthy work and expected waits after them, and closed
- *  history folded at the bottom. */
+/** Index of the signed-in user's projects. Open work is routed into next-action lanes; Completed
+ *  and Cancelled are separate, flat history views ordered by latest activity. */
 export function ProjectsPage() {
-  const [filter, setFilter] = useState<ProjectFilter>('ALL');
+  // The selected lifecycle is navigation state, not ephemeral component state: terminal history
+  // must survive refresh and a visit to one of its project details. Open stays the clean URL.
+  const [statusParams, setStatusParams] = useSearchParams();
+  const filter = projectFilterFromStatusParam(statusParams.get('status'));
+  const setFilter = (nextFilter: ProjectFilter) => {
+    setStatusParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (nextFilter === 'OPEN') next.delete('status');
+        else next.set('status', nextFilter);
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
   const workspaces = useQuery(workspacesQuery());
@@ -227,6 +260,22 @@ export function ProjectsPage() {
   // every render: crossing the one-day quiet threshold changes not just a chip but WHERE the row
   // belongs, and memoising only on the payload would leave those two surfaces disagreeing.
   const sections = projectAttentionSections(matches, now);
+  // Open is an attention router and keeps its five next-action lanes. Terminal filters already
+  // name their lifecycle state in the toolbar, so they reuse the completed comparator but render
+  // as one flat history list — no second "Completed" heading or fold beneath the selected tab.
+  const displayedSections = filter === 'OPEN'
+    ? sections.filter((section) => section.key !== 'completed')
+    : sections
+        .filter((section) => section.key === 'completed')
+        .map((section) => ({
+          ...section,
+          // Distinct keys prevent one terminal view from inheriting any local section state from
+          // the other. The title is invisible chrome but remains the section's accessible name.
+          key: filter === 'DONE' ? 'completed' : 'cancelled',
+          title: filter === 'DONE' ? 'Completed projects' : 'Cancelled projects',
+          defaultCollapsed: false,
+          hideHeader: true,
+        }));
   // Read once for the whole list rather than per row: every row asks the same question of the
   // same viewport. False under `renderToStaticMarkup`, which is the desktop answer — see
   // useMediaQuery.
@@ -292,10 +341,9 @@ export function ProjectsPage() {
           }
         />
       ) : empty === 'none' ? (
-        // The account has nothing at all — so the page's job is not to report that, it is to
-        // offer the one thing a reader can do about it. A description with no control under it is
-        // where a new owner's first visit used to end.
-        <Empty description="No projects yet" style={{ marginTop: 48 }}>
+        // An OPEN-scoped read cannot distinguish a new account from one whose whole history is
+        // closed. Say only what this response proves, and keep the useful next action beside it.
+        <Empty description="No open projects" style={{ marginTop: 48 }}>
           <Button type="primary" icon={<PlusOutlined />} onClick={onNewProject}>
             New project
           </Button>
@@ -308,15 +356,15 @@ export function ProjectsPage() {
           <Button
             onClick={() => {
               setSearch('');
-              setFilter('ALL');
+              if (!search.trim()) setFilter('OPEN');
             }}
           >
-            {search.trim() ? 'Clear search' : 'Show all projects'}
+            {search.trim() ? 'Clear search' : 'Show open projects'}
           </Button>
         </Empty>
       ) : (
         <ProjectSections
-          sections={sections}
+          sections={displayedSections}
           renderProject={(p) => {
             // The same field the detail page renders as Markdown, degraded to the line it reads
             // as — a row that shows `## 现状缺口` or `**一个依赖字段都没有**` is showing source,
@@ -339,6 +387,7 @@ export function ProjectsPage() {
                     every other link in the app is built with (see encodeId). */}
                 <Link
                   to={`/projects/${encodeURIComponent(encodeId(p.id))}`}
+                  state={{ projectsReturnTo: projectsRoutePath(filter) }}
                   className="project-row-link"
                 >
                   <div className="project-row-main">
@@ -349,13 +398,12 @@ export function ProjectsPage() {
                           {chip.text}
                         </span>
                       ) : null}
-                      {/* OPEN is what the section a row landed in already says — on a phone,
-                          where the badge costs the title 50px of a line it has none to spare, that
-                          repetition is dropped. DONE and CANCELLED stay: those are the values a
-                          reader would not predict from the header. */}
-                      {phone && p.status === 'OPEN' ? null : (
+                      {/* The selected terminal filter already says Completed or Cancelled, and an
+                          Open phone gets the same answer from its lane. Keep the OPEN tag only on
+                          desktop, where it is useful context and does not squeeze the title. */}
+                      {filter === 'OPEN' && !phone ? (
                         <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
-                      )}
+                      ) : null}
                     </div>
                     <div className="project-row-goal">{goal}</div>
                   </div>
@@ -452,6 +500,7 @@ const PROJECT_COMMAND_NARROW_QUERY = '(max-width: 920px)';
  *  the reader opens. Still no writes: every row is read-only, however deep it sits. */
 export function ProjectDetailPage() {
   const params = useParams();
+  const location = useLocation();
   // The route param can still arrive as a raw UUID (an old bookmark, a pasted link), so normalize
   // before it reaches either the cache key or the URL — otherwise the same project caches twice.
   // Stays nullable: an id we don't have is a different state from one we do, and collapsing it to
@@ -469,7 +518,7 @@ export function ProjectDetailPage() {
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
     // and the ranking bars in the left one stop being readable at half of 900.
     <div style={{ maxWidth: 1040, margin: '0 auto' }}>
-      <Link to="/projects">← All projects</Link>
+      <Link to={projectsReturnPath(location.state)}>← Projects</Link>
 
       {!id ? (
         // Nothing was asked for, so there is nothing to retry — only a way back. A malformed but

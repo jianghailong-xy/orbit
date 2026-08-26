@@ -181,7 +181,7 @@ function wireRow(p: Snapshot) {
 
 function render(rows: Snapshot[], now = SNAPSHOT_AT): string {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(['projects', 'ALL'], rows.map(wireRow));
+  qc.setQueryData(['projects', 'OPEN'], rows.map(wireRow));
   const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
   try {
     return renderToStaticMarkup(
@@ -219,8 +219,9 @@ const decode = (s: string) =>
  * The sections as the browser gets them: sliced out of the markup at `data-section`, with the
  * header's count and small print read off the header and the row titles read off the rows.
  *
- * A collapsed section draws pills instead of rows, so both spellings are collected — otherwise
- * "Completed is folded" and "Completed is ordered by activity" could not both be checked.
+ * A collapsed section draws pills instead of rows, so both spellings are collected. That keeps
+ * this parser useful for the generic section component even though the default Open view has no
+ * collapsed lifecycle history at its bottom.
  */
 function sectionsOf(html: string): RenderedSection[] {
   const out: RenderedSection[] = [];
@@ -322,11 +323,11 @@ describe('projects index — 2026-08-23 production snapshot', () => {
 });
 
 /**
- * The same page over the account as it stands NOW — all 19 projects, DONE ones included, straight
- * off the same aggregate. The snapshot above has no finished project in it, so on its own it never
- * renders Completed and never proves the fold.
+ * The Open read is lifecycle-scoped. Keep a deliberately contaminated cache payload here as a
+ * guard against reintroducing the old mixed list: terminal projects must never acquire an Open
+ * attention lane or recreate a second Completed affordance at the bottom of this view.
  */
-describe('projects index — the live account, including its finished projects', () => {
+describe('projects index — the Open lifecycle view excludes terminal history', () => {
   const FINISHED: Snapshot[] = [
     {
       id: '01a02a15-1cbf-770b-8987-cb5b8d311c67',
@@ -343,8 +344,7 @@ describe('projects index — the live account, including its finished projects',
       lastActivityAt: '2026-08-22T19:55:20.349Z', createdAt: '2026-08-21T05:52:11.284Z',
     },
     {
-      // A DONE project that still has a task IN_PROGRESS — Completed must win over `running > 0`,
-      // or a finished project reappears at the top of the page.
+      // A DONE project that still has a task IN_PROGRESS must not reappear in Open's Running lane.
       id: '01a01ef2-9b0c-7cb2-a7e5-8244a6b3df06',
       title: 'Claude Code 运行中 Prompt 接入改造',
       status: 'DONE',
@@ -353,19 +353,15 @@ describe('projects index — the live account, including its finished projects',
     },
   ];
 
-  it('folds Completed by default and leaves the attention sections open', () => {
+  it('does not render completed rows or a completed section, even from a mixed cache payload', () => {
     const html = render([...SNAPSHOT, ...FINISHED]);
     const rendered = sectionsOf(html);
-    expect(rendered.map((s) => s.key)).toEqual(['attention', 'running', 'ready', 'completed']);
-    expect(rendered.filter((s) => s.collapsed).map((s) => s.key)).toEqual(['completed']);
-    expect(sectionOf(html, 'completed').rows).toEqual(
-      [...FINISHED].sort((a, b) => Date.parse(b.lastActivityAt!) - Date.parse(a.lastActivityAt!)).map((p) => p.title),
-    );
-    // The finished project with a task still running stayed finished.
+    expect(rendered.map((s) => s.key)).toEqual(['attention', 'running', 'ready']);
+    expect(rendered.some((s) => s.key === 'completed')).toBe(false);
+
+    const placed = rendered.flatMap((section) => section.rows);
+    for (const project of FINISHED) expect(placed).not.toContain(project.title);
     expect(sectionOf(html, 'running').rows).not.toContain('Claude Code 运行中 Prompt 接入改造');
-    // Its task-count remainder looks like one FAILED task, but closed project status still wins.
-    expect(sectionOf(html, 'completed').rows).toContain('Codex 运行中 Prompt（turn/steer）接入');
-    expect(sectionOf(html, 'attention').rows).not.toContain('Codex 运行中 Prompt（turn/steer）接入');
   });
 });
 

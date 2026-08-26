@@ -27,9 +27,12 @@ import {
   canCreateProjectTask,
   matchesProjectSearch,
   noMatchDescription,
+  projectFilterFromStatusParam,
   projectsEmptyKind,
   projectsPath,
   projectsQueryKey,
+  projectsReturnPath,
+  projectsRoutePath,
   type NewProjectTaskDraft,
 } from './ProjectsPage';
 
@@ -315,7 +318,7 @@ describe('ProjectsPage', () => {
     // Well past any sensible row-length cap — what proves the row no longer slices the text.
     const longGoal = 'Ship the new marketing site. '.repeat(10);
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -327,8 +330,8 @@ describe('ProjectsPage', () => {
         ...standing({ running: 1 }),
       },
       {
-        // Open, like the other two: this test is about what ONE ROW says, and a finished project
-        // is folded into a pill rather than given a row — see the sections suite below.
+        // Open, like the other two: this test is about what one actionable row says. Terminal
+        // history is reached through its own lifecycle filters rather than repeated below Open.
         id: P2,
         title: 'Legacy Cleanup',
         status: 'OPEN',
@@ -372,7 +375,7 @@ describe('ProjectsPage', () => {
     // flex unit in 23,442 is a fraction of a pixel across the 196px this column gets, so the
     // running segment is exactly the one a proportional bar loses — and "nothing is running" is
     // the opposite of what this row would then be saying.
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       {
         id: P1,
         title: 'FineWeb × Common Crawl',
@@ -425,7 +428,7 @@ describe('ProjectsPage', () => {
 
   it('takes the buckets, their order, their shapes and their colours from the panorama’s own table', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -472,7 +475,7 @@ describe('ProjectsPage', () => {
   it('ends the row with when the project last moved, and the total demoted behind it', () => {
     const qc = newClient();
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -530,7 +533,7 @@ describe('ProjectsPage', () => {
       '- 详见 [依赖图设计](https://example.com/design)',
     ].join('\n');
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       {
         id: P1,
         title: 'Panorama',
@@ -560,7 +563,7 @@ describe('ProjectsPage', () => {
 
   it('gives every row the same height whatever its goal is', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       { id: P1, goal: 'Short', title: 'A' },
       { id: P2, goal: null, title: 'B' },
       { id: P3, goal: '## H\n\n- '.concat('长'.repeat(400)), title: 'C' },
@@ -597,7 +600,7 @@ describe('ProjectsPage', () => {
 
   it('links the whole row to its project at the short public id, never the raw UUID', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], [
+    qc.setQueryData(['projects', 'OPEN'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -626,17 +629,17 @@ describe('ProjectsPage', () => {
     expect(anchor).toContain('5 tasks');
   });
 
-  it('shows an empty state when there are no projects', () => {
+  it('shows an Open-scoped empty state when there are no open projects', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], []);
+    qc.setQueryData(['projects', 'OPEN'], []);
     const html = renderPage(qc);
-    expect(html).toContain('No projects yet');
+    expect(html).toContain('No open projects');
   });
 
   it('shows an error with a Retry action when the load fails', async () => {
     const qc = newClient();
     // Seed a settled error state for the exact same key the page reads, independent of apiMock.
-    await qc.prefetchQuery({ queryKey: ['projects', 'ALL'], queryFn: () => Promise.reject(new Error('network down')) });
+    await qc.prefetchQuery({ queryKey: ['projects', 'OPEN'], queryFn: () => Promise.reject(new Error('network down')) });
     const html = renderPage(qc);
     expect(html).toContain('Projects could not be loaded');
     expect(html).toContain('network down');
@@ -740,11 +743,11 @@ describe('ProjectsPage — sections', () => {
 
   function renderMixed(): string {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], MIXED);
+    qc.setQueryData(['projects', 'OPEN'], MIXED);
     return renderPage(qc);
   }
 
-  it('cuts the list into six next-actor lanes with exceptions first', () => {
+  it('cuts Open into five next-actor lanes with exceptions first', () => {
     const html = renderMixed();
     expect([...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1])).toEqual([
       'attention',
@@ -752,7 +755,6 @@ describe('ProjectsPage — sections', () => {
       'ready',
       'waiting',
       'definition',
-      'completed',
     ]);
   });
 
@@ -769,8 +771,11 @@ describe('ProjectsPage — sections', () => {
     expect(sectionOf(html, 'ready')).toContain('Ledger Migration');
     expect(sectionOf(html, 'waiting')).toContain('Waiting on upstream');
     expect(sectionOf(html, 'definition')).toContain('Brand Refresh');
-    expect(sectionOf(html, 'completed')).toContain('Legacy Cleanup');
-    expect(sectionOf(html, 'completed')).toContain('Abandoned Rewrite');
+    // Even if a stale/mixed cache entry carries terminal rows, Open never repeats that history
+    // below its attention lanes. The dedicated filters are their only list surface.
+    expect(html).not.toContain('Legacy Cleanup');
+    expect(html).not.toContain('Abandoned Rewrite');
+    expect(html).not.toContain('data-section="completed"');
   });
 
   it('orders Ready by oldest activity, not by raw queue size', () => {
@@ -797,7 +802,6 @@ describe('ProjectsPage — sections', () => {
     expect(sectionOf(html, 'ready')).toMatch(/Ready<\/h3>.*?>2</);
     expect(sectionOf(html, 'waiting')).toMatch(/Waiting<\/h3>.*?>1</);
     expect(sectionOf(html, 'definition')).toMatch(/Needs definition<\/h3>.*?>1</);
-    expect(sectionOf(html, 'completed')).toMatch(/Completed<\/h3>.*?>2</);
   });
 
   it('prints under every header what that section is ordered by', () => {
@@ -807,25 +811,21 @@ describe('ProjectsPage — sections', () => {
     expect(sectionOf(html, 'ready')).toContain('oldest task activity first');
     expect(sectionOf(html, 'waiting')).toContain('oldest task activity first');
     expect(sectionOf(html, 'definition')).toContain('title A–Z');
-    expect(sectionOf(html, 'completed')).toContain('folded by default');
   });
 
-  it('folds the completed section by default, into a pill that still opens the project', () => {
+  it('does not repeat terminal projects at the bottom of Open', () => {
     const html = renderMixed();
-    const completed = sectionOf(html, 'completed');
 
-    // Folded means no row: the goal excerpt and the status tag a row carries are gone, while the
-    // project itself is still named, still counted and still one click from being opened.
-    expect(completed).not.toContain('The goal of Legacy Cleanup');
-    expect(completed).not.toContain('ant-list-item');
-    expect(completed).toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
-    expect(completed).toContain('Legacy Cleanup');
+    expect(html).not.toContain('data-section="completed"');
+    expect(html).not.toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
+    expect(html).not.toContain('Legacy Cleanup');
+    expect(html).not.toContain('Abandoned Rewrite');
     expect(sectionOf(html, 'attention')).toContain('The goal of Failed release');
   });
 
   it('leaves out a section with nothing in it', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.title === 'LFS Build'));
+    qc.setQueryData(['projects', 'OPEN'], MIXED.filter((p) => p.title === 'LFS Build'));
     const html = renderPage(qc);
     expect(html).toContain('data-section="running"');
     expect(html).not.toContain('data-section="attention"');
@@ -851,20 +851,41 @@ describe('ProjectsPage — sections', () => {
 });
 
 describe('ProjectsPage — toolbar', () => {
-  it('builds the list URL from the segment, sending no parameter for All', () => {
-    // 'ALL' is the absence of the parameter, not `?status=ALL` — which the endpoint would 400 on,
-    // since it validates against the three real statuses (ProjectsController.parseStatus).
-    expect(projectsPath('ALL')).toBe('/projects');
+  it('builds one status-scoped list URL for each lifecycle segment', () => {
     expect(projectsPath('OPEN')).toBe('/projects?status=OPEN');
     expect(projectsPath('DONE')).toBe('/projects?status=DONE');
+    expect(projectsPath('CANCELLED')).toBe('/projects?status=CANCELLED');
   });
 
   it('keys the cache by the filter, under the prefix every write invalidates', () => {
-    expect(projectsQueryKey('ALL')).toEqual(['projects', 'ALL']);
     expect(projectsQueryKey('OPEN')).toEqual(['projects', 'OPEN']);
+    expect(projectsQueryKey('DONE')).toEqual(['projects', 'DONE']);
+    expect(projectsQueryKey('CANCELLED')).toEqual(['projects', 'CANCELLED']);
     // Same first element for all three: `['projects']` is what task creation invalidates, and a
     // prefix only matches if it is one.
-    expect(projectsQueryKey('DONE')[0]).toBe('projects');
+    const statuses = ['OPEN', 'DONE', 'CANCELLED'] as const;
+    expect(statuses.map((status) => projectsQueryKey(status)[0])).toEqual(['projects', 'projects', 'projects']);
+  });
+
+  it('keeps terminal lifecycle views in a refreshable URL and validates the detail return path', () => {
+    expect(projectFilterFromStatusParam(null)).toBe('OPEN');
+    expect(projectFilterFromStatusParam('OPEN')).toBe('OPEN');
+    expect(projectFilterFromStatusParam('DONE')).toBe('DONE');
+    expect(projectFilterFromStatusParam('CANCELLED')).toBe('CANCELLED');
+    expect(projectFilterFromStatusParam('not-a-status')).toBe('OPEN');
+
+    expect(projectsRoutePath('OPEN')).toBe('/projects');
+    expect(projectsRoutePath('DONE')).toBe('/projects?status=DONE');
+    expect(projectsRoutePath('CANCELLED')).toBe('/projects?status=CANCELLED');
+    expect(projectsReturnPath({ projectsReturnTo: '/projects?status=DONE' })).toBe(
+      '/projects?status=DONE',
+    );
+    expect(projectsReturnPath({ projectsReturnTo: '/projects?status=CANCELLED' })).toBe(
+      '/projects?status=CANCELLED',
+    );
+    // Location state is not trusted as an arbitrary internal redirect.
+    expect(projectsReturnPath({ projectsReturnTo: '/settings' })).toBe('/projects');
+    expect(projectsReturnPath(null)).toBe('/projects');
   });
 
   it('stays on screen while the list is loading and after it fails', () => {
@@ -875,18 +896,19 @@ describe('ProjectsPage — toolbar', () => {
     expect(loading).toContain('New project');
 
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], undefined);
+    qc.setQueryData(['projects', 'OPEN'], undefined);
     expect(renderPage(qc)).toContain('Search projects');
   });
 
   it('offers all three statuses and a way to make a project', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], []);
+    qc.setQueryData(['projects', 'OPEN'], []);
     const html = renderPage(qc);
     expect(html).toContain('Search projects');
-    expect(html).toContain('>All<');
+    expect(html).not.toContain('>All<');
     expect(html).toContain('>Open<');
     expect(html).toContain('>Completed<');
+    expect(html).toContain('>Cancelled<');
     // Twice: once in the toolbar, once as the empty page's own call to action.
     expect(html.split('New project').length - 1).toBe(2);
   });
@@ -927,28 +949,33 @@ describe('ProjectsPage — search matching', () => {
 });
 
 describe('ProjectsPage — which empty state', () => {
-  it('says "no projects" only when nothing is being narrowed', () => {
-    expect(projectsEmptyKind(0, 0, 'ALL', '')).toBe('none');
-    // The same zero rows, but with a reason: an account with projects the filter is hiding must
-    // not be told it has none.
-    expect(projectsEmptyKind(0, 0, 'OPEN', '')).toBe('no-match');
-    expect(projectsEmptyKind(0, 0, 'ALL', 'zzz')).toBe('no-match');
-    expect(projectsEmptyKind(3, 0, 'ALL', 'zzz')).toBe('no-match');
+  it('reserves the create-oriented empty state for an unsearched Open view', () => {
+    expect(projectsEmptyKind(0, 0, 'OPEN', '')).toBe('none');
+    expect(projectsEmptyKind(0, 0, 'DONE', '')).toBe('no-match');
+    expect(projectsEmptyKind(0, 0, 'CANCELLED', '')).toBe('no-match');
+    expect(projectsEmptyKind(0, 0, 'OPEN', 'zzz')).toBe('no-match');
+    expect(projectsEmptyKind(3, 0, 'OPEN', 'zzz')).toBe('no-match');
     // A search of nothing but spaces narrows nothing, so it cannot be the reason either.
-    expect(projectsEmptyKind(0, 0, 'ALL', '   ')).toBe('none');
+    expect(projectsEmptyKind(0, 0, 'OPEN', '   ')).toBe('none');
   });
 
   it('is not an empty state at all when something matched', () => {
-    expect(projectsEmptyKind(3, 1, 'ALL', 'revamp')).toBeNull();
+    expect(projectsEmptyKind(3, 1, 'DONE', 'cleanup')).toBeNull();
     expect(projectsEmptyKind(3, 3, 'OPEN', '')).toBeNull();
   });
 
   it('names whichever narrowing emptied the list, the search first', () => {
-    expect(noMatchDescription('ALL', 'ledger')).toBe('No projects match “ledger”');
     // Both on: the search is the one that was just typed, so it is the one named.
-    expect(noMatchDescription('OPEN', 'ledger')).toBe('No projects match “ledger”');
+    expect(noMatchDescription('OPEN', 'ledger')).toBe('No open projects match “ledger”');
+    expect(noMatchDescription('DONE', 'ledger')).toBe(
+      'No completed projects match “ledger”',
+    );
+    expect(noMatchDescription('CANCELLED', 'ledger')).toBe(
+      'No cancelled projects match “ledger”',
+    );
     expect(noMatchDescription('OPEN', '')).toBe('No open projects');
     expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
+    expect(noMatchDescription('CANCELLED', '')).toBe('No cancelled projects');
   });
 });
 
@@ -1877,7 +1904,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     const qc = newClient();
     qc.setQueryData(['project', encodeId(P1)], detail());
     qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    qc.setQueryData(['projects', 'ALL'], []);
+    qc.setQueryData(['projects', 'OPEN'], []);
     qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
     // Another project's page, open in another tab: it must not be dragged along.
     qc.setQueryData(['project', encodeId(P2)], detail({ id: P2 }));
@@ -1894,7 +1921,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     // ...the list row carrying the same count, under whichever status filter is showing —
     // `['projects']` is the prefix of every filter's entry, which is what makes one invalidation
     // enough...
-    expect(invalidated(['projects', 'ALL'])).toBe(true);
+    expect(invalidated(['projects', 'OPEN'])).toBe(true);
     // ...and the task views elsewhere in the app, which have never heard of this page.
     expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
     // Scoped, though: another project's page is left exactly where it was.
@@ -2559,7 +2586,7 @@ describe('ProjectsPage — badges', () => {
 
   function render(rows: ReturnType<typeof listRow>[]) {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], rows);
+    qc.setQueryData(['projects', 'OPEN'], rows);
     return rowsOf(renderPage(qc));
   }
 

@@ -41,7 +41,7 @@ const SNAPSHOT_AT = Date.parse('2026-08-23T18:55:05.000Z');
 function render(): string {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(
-    ['projects', 'ALL'],
+    ['projects', 'OPEN'],
     SNAPSHOT.map((p) => ({
       id: p.id,
       title: p.title,

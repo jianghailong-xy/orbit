@@ -150,6 +150,10 @@ export function ProjectReopenControl({ projectId }: { projectId: string }) {
       // the prefix covers every one of them, and re-reading is what makes the next confirmation
       // about the epoch the project is in NOW.
       void qc.invalidateQueries({ queryKey: ['project', projectId] });
+      // Reopening moves the row from Completed/Cancelled back to Open. All lifecycle views have
+      // distinct cache entries, so invalidate their shared prefix rather than leaving a stale row
+      // under the terminal filter until the next periodic refresh.
+      void qc.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 

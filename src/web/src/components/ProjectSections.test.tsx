@@ -154,6 +154,19 @@ describe('ProjectSections', () => {
     expect(foldToggle('running').getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('renders a headerless lifecycle list flat, with no hidden fold state', async () => {
+    await mountSections([{ ...THREE[2], hideHeader: true }]);
+
+    const completed = section('completed');
+    expect(completed.getAttribute('aria-label')).toBe('Completed');
+    expect(completed.getAttribute('aria-labelledby')).toBeNull();
+    expect(completed.querySelector('h3')).toBeNull();
+    expect(completed.querySelector('button')).toBeNull();
+    expect(completed.querySelectorAll('[data-testid^="row-"]')).toHaveLength(2);
+    expect(completed.textContent).toContain('Session state model — full row');
+    expect(completed.textContent).toContain('Dark mode — full row');
+  });
+
   it('gives a folded project the same destination its row has', async () => {
     await mountSections(THREE);
 

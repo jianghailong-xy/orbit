@@ -2,10 +2,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
-import { ProjectsPage } from './ProjectsPage';
+import { ProjectDetailPage, ProjectsPage } from './ProjectsPage';
 
 /**
  * The toolbar as the reader drives it: pressing a segment, typing a search, starting a project.
@@ -16,7 +16,10 @@ import { ProjectsPage } from './ProjectsPage';
  * shape (rows, sections, empty copy) is asserted in ProjectsPage.test.tsx; what is only observable
  * here is which URLs the presses put on the wire, and which they do not.
  */
-vi.mock('../api', () => ({ api: vi.fn() }));
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>();
+  return { ...actual, api: vi.fn() };
+});
 // The detail page's graph reaches React Flow through a `lazy()` boundary, and importing this
 // module pulls the whole file in. Stubbed for the reason the other project suites stub it: React
 // Flow measures with a ResizeObserver jsdom does not have, and nothing here renders a graph.
@@ -35,6 +38,7 @@ const apiMock = vi.mocked(api);
 const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
+const P4 = '0195c0de-0000-7000-8000-000000000004';
 const R1 = '0195c0de-0000-7000-8000-0000000000c1';
 const R2 = '0195c0de-0000-7000-8000-0000000000c2';
 const W_SHARED = '0195c0de-0000-7000-8000-0000000000d0';
@@ -81,6 +85,17 @@ const LEDGER = {
   buckets: { running: 1, ready: 0, blocked: 0, done: 1, cancelled: 0 },
   lastActivityAt: '2026-01-06T00:00:00Z',
 };
+const ABANDONED = {
+  id: P4,
+  title: 'Abandoned Prototype',
+  status: 'CANCELLED',
+  goal: 'Archive the discarded spike',
+  createdAt: '2026-01-07T00:00:00Z',
+  updatedAt: '2026-01-08T00:00:00Z',
+  _count: { tasks: 1 },
+  buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 1 },
+  lastActivityAt: '2026-01-08T00:00:00Z',
+};
 
 /**
  * The projects collection, narrowed by `?status=` exactly the way the endpoint narrows it.
@@ -91,10 +106,10 @@ const LEDGER = {
  * failure rather than as a silently empty list.
  */
 function serve(
-  rows: Record<string, unknown[]>,
+  rows: Record<string, unknown>,
   navigation: { workspaces?: unknown[]; runners?: unknown[] } = {},
 ) {
-  const answers: Record<string, unknown[]> = {
+  const answers: Record<string, unknown> = {
     '/workspaces': navigation.workspaces ?? [
       { id: W1, runnerId: R1, createdAt: '2026-01-01T00:00:00Z' },
     ],
@@ -160,7 +175,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function mount(): Promise<void> {
+async function mount(initialEntry = '/projects'): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -168,8 +183,11 @@ async function mount(): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/projects']}>
-          <ProjectsPage />
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <Routes>
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          </Routes>
           <RouteProbe />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -229,38 +247,104 @@ const searchBox = () =>
   container.querySelector('input[aria-label="Search projects"]') as HTMLInputElement;
 
 describe('ProjectsPage — status filter', () => {
-  it('asks the server for the status that was pressed, instead of filtering the rows it holds', async () => {
+  it('restores a terminal lifecycle directly from a deep link without first reading Open', async () => {
+    serve({ '/projects?status=CANCELLED': [ABANDONED] });
+    await mount('/projects?status=CANCELLED');
+
+    expect(landedOn).toBe('/projects?status=CANCELLED');
+    expect(segment('Cancelled').checked).toBe(true);
+    expect(reads()).toEqual(['/projects?status=CANCELLED']);
+    expect(text()).toContain('Abandoned Prototype');
+    expect(text()).not.toContain('Website Revamp');
+  });
+
+  it('starts at Open and asks the server for each lifecycle status that was pressed', async () => {
     serve({
-      '/projects': [REVAMP, CLEANUP, LEDGER],
       '/projects?status=OPEN': [REVAMP, LEDGER],
       '/projects?status=DONE': [CLEANUP],
+      '/projects?status=CANCELLED': [ABANDONED],
     });
     await mount();
-    // The unnarrowed read sends no parameter at all — which is how the endpoint spells "all".
-    expect(reads()).toEqual(['/projects']);
-
-    await click(segment('Open'));
-    expect(reads()).toEqual(['/projects', '/projects?status=OPEN']);
+    expect(reads()).toEqual(['/projects?status=OPEN']);
+    expect(landedOn).toBe('/projects');
+    expect(segment('Open').checked).toBe(true);
+    expect(
+      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+    ).toEqual(['Open', 'Completed', 'Cancelled']);
 
     await click(segment('Completed'));
-    expect(reads()).toEqual(['/projects', '/projects?status=OPEN', '/projects?status=DONE']);
+    expect(reads()).toEqual(['/projects?status=OPEN', '/projects?status=DONE']);
+    expect(landedOn).toBe('/projects?status=DONE');
     // The answer on screen is the one the server just gave, not a slice of the first read.
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
+    expect(segment('Completed').checked).toBe(true);
 
-    // ...and back to All, which is a request of its own rather than "show what was hidden".
-    await click(segment('All'));
+    // A terminal filter is already its own heading. The list is immediately readable, with no
+    // second Completed title, expander, pills, or row-level DONE repetition beneath the segment.
+    const completed = container.querySelector('section[data-section="completed"]')!;
+    expect(completed).toBeTruthy();
+    expect(completed.getAttribute('aria-label')).toBe('Completed projects');
+    expect(completed.querySelector('h3')).toBeNull();
+    expect(completed.querySelector('button')).toBeNull();
+    expect(completed.querySelector('.project-row-title')?.textContent).toBe('Legacy Cleanup');
+    expect(completed.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
+
+    await click(segment('Cancelled'));
     expect(reads()).toEqual([
-      '/projects',
       '/projects?status=OPEN',
       '/projects?status=DONE',
-      '/projects',
+      '/projects?status=CANCELLED',
     ]);
+    expect(text()).toContain('Abandoned Prototype');
+    expect(text()).not.toContain('Legacy Cleanup');
+    expect(landedOn).toBe('/projects?status=CANCELLED');
+    expect(segment('Cancelled').checked).toBe(true);
+
+    const cancelled = container.querySelector('section[data-section="cancelled"]')!;
+    expect(cancelled).toBeTruthy();
+    expect(cancelled.getAttribute('aria-label')).toBe('Cancelled projects');
+    expect(cancelled.querySelector('h3')).toBeNull();
+    expect(cancelled.querySelector('button')).toBeNull();
+    expect(cancelled.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
   }, 10_000);
+
+  it('returns from a completed project detail to the same URL-owned lifecycle view', async () => {
+    const projectId = encodeId(P2);
+    serve({
+      '/projects?status=OPEN': [REVAMP, LEDGER],
+      '/projects?status=DONE': [CLEANUP],
+      [`/projects/${projectId}`]: {
+        ...CLEANUP,
+        acceptanceCriteria: null,
+        instructions: null,
+        tasksByStatus: { DONE: 1 },
+      },
+    });
+    await mount();
+    await click(segment('Completed'));
+
+    const row = container.querySelector('a.project-row-link') as HTMLAnchorElement;
+    expect(row).toBeTruthy();
+    await click(row);
+    expect(landedOn).toBe(`/projects/${projectId}`);
+    expect(apiMock).toHaveBeenCalledWith(`/projects/${projectId}`);
+
+    const back = [...container.querySelectorAll('a')].find(
+      (candidate) => candidate.textContent?.trim() === '← Projects',
+    );
+    expect(back).toBeTruthy();
+    await click(back! as HTMLAnchorElement);
+
+    expect(landedOn).toBe('/projects?status=DONE');
+    expect(segment('Completed').checked).toBe(true);
+    expect(text()).toContain('Legacy Cleanup');
+    expect(text()).not.toContain('Website Revamp');
+  });
 
   it('keeps each filter in its own cache entry, so switching back does not show the other one’s rows', async () => {
     serve({
-      '/projects': [REVAMP, CLEANUP, LEDGER],
+      '/projects?status=OPEN': [REVAMP, LEDGER],
       '/projects?status=DONE': [CLEANUP],
     });
     await mount();
@@ -275,7 +359,7 @@ describe('ProjectsPage — status filter', () => {
 
 describe('ProjectsPage — search', () => {
   it('matches the goal with its Markdown removed, which is what the row shows', async () => {
-    serve({ '/projects': [REVAMP, CLEANUP, LEDGER] });
+    serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
     const before = reads().length;
 
@@ -300,26 +384,40 @@ describe('ProjectsPage — search', () => {
     expect(reads().length).toBe(before);
   });
 
-  it('searches inside a folded section too, rather than only what is expanded', async () => {
-    serve({ '/projects': [REVAMP, CLEANUP, LEDGER] });
+  it('searches only the selected lifecycle and clearing it preserves that selection', async () => {
+    serve({
+      '/projects?status=OPEN': [REVAMP, LEDGER],
+      '/projects?status=DONE': [CLEANUP],
+    });
     await mount();
-    // Completed folds by default, so this project is a pill rather than a row — and still has to
-    // be findable, which it would not be if the search only saw what was expanded.
+    await click(segment('Completed'));
+    const before = reads().length;
+
     await type(searchBox(), 'retire the old admin');
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
+
+    // A miss offers to clear only the local search. It must not silently jump lifecycle states.
+    await type(searchBox(), 'nothing in completed history');
+    expect(text()).toContain('No completed projects match “nothing in completed history”');
+    await click(button('Clear search'));
+    expect(searchBox().value).toBe('');
+    expect(segment('Completed').checked).toBe(true);
+    expect(text()).toContain('Legacy Cleanup');
+    expect(text()).not.toContain('Website Revamp');
+    expect(reads().length).toBe(before);
   });
 });
 
 describe('ProjectsPage — empty states', () => {
   it('tells "you have no projects" apart from "nothing here matches", and offers the way out of each', async () => {
-    serve({ '/projects': [REVAMP, CLEANUP, LEDGER] });
+    serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
 
     await type(searchBox(), 'zzzz');
     // The account HAS projects, so the sentence that says otherwise would be a lie — and the
     // control it comes with (create a project) would be the one thing that does not help.
-    expect(text()).toContain('No projects match “zzzz”');
+    expect(text()).toContain('No open projects match “zzzz”');
     expect(text()).not.toContain('No projects yet');
     // And nothing of the list survives beside it — every section is a header that would be
     // counting zero. ("Completed" is a segment as well as a section, which is why this asks the
@@ -334,23 +432,25 @@ describe('ProjectsPage — empty states', () => {
   });
 
   it('names the filter when that is what emptied the list', async () => {
-    serve({ '/projects': [REVAMP, LEDGER], '/projects?status=DONE': [] });
+    serve({ '/projects?status=OPEN': [REVAMP, LEDGER], '/projects?status=DONE': [] });
     await mount();
     await click(segment('Completed'));
 
     expect(text()).toContain('No completed projects');
     expect(text()).not.toContain('No projects yet');
 
-    // Show all projects puts the filter back where it started, and the rows with it.
-    await click(button('Show all projects'));
+    // A terminal dead end returns to the actionable Open list.
+    await click(button('Show open projects'));
+    expect(segment('Open').checked).toBe(true);
     expect(text()).toContain('Website Revamp');
   });
 
   it('offers a create CTA on an account with nothing in it', async () => {
-    serve({ '/projects': [] });
+    serve({ '/projects?status=OPEN': [] });
     await mount();
 
-    expect(text()).toContain('No projects yet');
+    // An Open-scoped read cannot claim the account has no project history at all.
+    expect(text()).toContain('No open projects');
     const empty = container.querySelector('.ant-empty')!;
     // In the empty state itself, not only up in the toolbar: a reader who has never seen this page
     // is looking at the middle of it, and that is where the dead end used to be.
@@ -364,7 +464,7 @@ describe('ProjectsPage — empty states', () => {
 describe('ProjectsPage — starting a project', () => {
   it('opens project-intent compose in firstOpenableWorkspace order', async () => {
     serve(
-      { '/projects': [REVAMP] },
+      { '/projects?status=OPEN': [REVAMP] },
       {
         // The first row cannot open, and R2 appears before R1 in workspace order. Runner order
         // still puts W1 first — exactly the choice firstOpenableWorkspace makes for DefaultLanding.
@@ -389,7 +489,7 @@ describe('ProjectsPage — starting a project', () => {
     { label: 'runner picker', runners: [{ id: R1 }, { id: R2 }], expected: '/runners' },
   ])('uses the DefaultLanding $label when no workspace can open', async ({ runners, expected }) => {
     serve(
-      { '/projects': [REVAMP] },
+      { '/projects?status=OPEN': [REVAMP] },
       {
         workspaces: [
           { id: W_SHARED, runnerId: null, createdAt: '2026-01-01T00:00:00Z' },

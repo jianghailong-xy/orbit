@@ -19,23 +19,16 @@ export const PROJECTS_PHONE_QUERY = '(max-width: 640px)';
 /**
  * Which projects the list asks the server for.
  *
- * 'ALL' is not a status the API knows — it is the ABSENCE of `?status=`, which is why this is its
- * own vocabulary rather than `ProjectStatus | undefined`: a segmented control has to have a value
- * for every segment, including the one that narrows nothing.
- *
- * 'DONE' rather than "everything that is not open": `?status=` takes one status, and DONE is the
- * one this segment names. A CANCELLED project is not a completed one — it is work that will not
- * happen — and it stays reachable under All, where the Completed SECTION (which is defined as
- * "not open") folds it away with the finished work.
+ * These are the API's three mutually exclusive lifecycle states. There is deliberately no All:
+ * mixing terminal history into the attention inbox duplicated Completed both as a filter and as a
+ * long section at the bottom, while also calling CANCELLED work completed.
  */
-export type ProjectFilter = 'ALL' | 'OPEN' | 'DONE';
+export type ProjectFilter = 'OPEN' | 'DONE' | 'CANCELLED';
 
 const FILTER_OPTIONS: { label: string; value: ProjectFilter }[] = [
-  { label: 'All', value: 'ALL' },
-  // OPEN contains ready, waiting, and needs-attention projects too. Calling the filter
-  // "In progress" would contradict the lifecycle lanes directly below it.
   { label: 'Open', value: 'OPEN' },
   { label: 'Completed', value: 'DONE' },
+  { label: 'Cancelled', value: 'CANCELLED' },
 ];
 
 /**
@@ -48,7 +41,7 @@ const FILTER_OPTIONS: { label: string; value: ProjectFilter }[] = [
  * The viewport is the one thing it does read, and that is not state either: below
  * PROJECTS_PHONE_QUERY the filter and a labelled create button want 378px of a 361px line on their
  * own, so the row wraps (see .projects-toolbar in index.css) and the button gives up its label —
- * 34px of icon leaves the filter the 319px it needs. Nothing else about the toolbar changes: same
+ * 34px of icon leaves the filter the 229px it needs. Nothing else about the toolbar changes: same
  * control, same handler, same accessible name.
  */
 export function ProjectsToolbar({
