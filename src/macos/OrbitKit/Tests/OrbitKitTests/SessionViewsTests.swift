@@ -22,6 +22,36 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionCompletionPresentation.actionTitle, "Complete")
     }
 
+    func testCompactListTimeIsHiddenExactlyWhileWorkingSpinnerIsVisible() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
+        let running = Session(id: "run", title: "Running", status: .running,
+                              agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                              branch: nil, updatedAt: nil,
+                              lastTurnAt: "2026-08-26T11:59:30Z")
+        let selfDriven = Session(id: "self", title: "Self-driven", status: .awaitingInput,
+                                 agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                                 branch: nil, updatedAt: nil, engineTurnActive: true,
+                                 lastTurnAt: "2026-08-26T11:59:30Z")
+
+        XCTAssertNil(SessionListTime.format(for: running, now: now))
+        XCTAssertNil(SessionListTime.format(for: selfDriven, now: now))
+    }
+
+    func testCompactListTimeRemainsForRowsWithoutWorkingSpinner() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
+        let idle = Session(id: "idle", title: "Idle", status: .awaitingInput,
+                           agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                           branch: nil, updatedAt: nil,
+                           lastTurnAt: "2026-08-26T11:57:00Z")
+        let approval = Session(id: "approval", title: "Approval", status: .running,
+                               agentId: nil, assignedRunnerId: nil, pendingApprovals: 1,
+                               branch: nil, updatedAt: nil,
+                               lastTurnAt: "2026-08-26T11:59:30Z")
+
+        XCTAssertEqual(SessionListTime.format(for: idle, now: now), "3m ago")
+        XCTAssertEqual(SessionListTime.format(for: approval, now: now), "just now")
+    }
+
     /// The list nests the agent — filtering must read `agent.id`, not the (absent) flat `agentId`.
     func testForAgentFiltersByNestedAgent() throws {
         let json = """

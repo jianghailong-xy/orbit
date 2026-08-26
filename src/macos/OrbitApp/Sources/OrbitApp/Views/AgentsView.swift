@@ -887,12 +887,11 @@ struct AgentSessionRow: View {
         SessionLiveIndicator(session: session)
     }
 
-    /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8") — the parity with web's
-    /// `session-time` that the native list was missing. Reuses OrbitKit's `RelativeTime` (also used
-    /// by the session-header subtitle).
+    /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8"). A working row omits
+    /// it while its spinner is visible: the live cue already carries the useful information and a
+    /// column of continuously refreshed "just now" labels only competes with session titles.
     private var relTime: String? {
-        guard let ts = session.lastTurnAt ?? session.createdAt else { return nil }
-        return RelativeTime.format(ts)
+        SessionListTime.format(for: session)
     }
     #endif
 

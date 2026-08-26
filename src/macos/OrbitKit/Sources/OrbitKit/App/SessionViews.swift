@@ -48,6 +48,17 @@ public enum SessionCompletionPresentation {
     public static let actionTitle = "Complete"
 }
 
+/// The relative timestamp at the trailing edge of a compact session-list row. While the row's
+/// live cue is a spinner, the cue already says the session is active and its continuously fresh
+/// `lastTurnAt` would only add a row of identical "just now" labels beside the spinners.
+public enum SessionListTime {
+    public static func format(for session: Session, now: Date = Date()) -> String? {
+        if case .spinner = SessionStatusGlyph.make(for: session, now: now).shape { return nil }
+        guard let timestamp = session.lastTurnAt ?? session.createdAt else { return nil }
+        return RelativeTime.format(timestamp, now: now)
+    }
+}
+
 public enum SessionFilter {
     /// Remove an authoritatively missing record from a loaded list. Idempotent so duplicate 404s
     /// from a control nudge and focused-detail poll cannot resurrect or otherwise disturb rows.
