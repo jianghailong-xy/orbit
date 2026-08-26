@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import { SessionsModule } from '../sessions/sessions.module';
-import { AttemptEndedUnsettledProducer } from './attempt-ended-unsettled.producer';
+import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
-import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 
 /**
  * The timer-free fact → judgment path, shared by ProjectsModule and the task write producer.
@@ -17,17 +16,15 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
   imports: [SessionsModule],
   providers: [
     CoordinatorWakeService,
+    CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
-    AttemptEndedUnsettledProducer,
-    ProjectTasksSettledProducer,
   ],
   exports: [
     CoordinatorWakeService,
+    CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
-    AttemptEndedUnsettledProducer,
-    ProjectTasksSettledProducer,
   ],
 })
 export class CoordinatorJudgmentModule {}

@@ -201,13 +201,13 @@ test('a criterion is ready only when every task serving it is DONE', () => {
   assert.notEqual(wakeIdempotencyKey(elsewhere), wakeIdempotencyKey(ready));
 });
 
-test('the events this unit knows about are the four the migration accepts', () => {
+test('the events this unit knows about are exactly those the latest migration accepts', () => {
   const sql = readFileSync(
-    path.resolve(__dirname, '../../prisma/migrations/0174_project_coordinator_wake/migration.sql'),
+    path.resolve(__dirname, '../../prisma/migrations/0183_completion_input_wake/migration.sql'),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0174 no longer constrains the event column');
+  assert.ok(check, 'migration 0183 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,

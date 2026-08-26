@@ -21,7 +21,7 @@ Consequently:
 | any criterion is not `PASS` | even if every task is `DONE` | refuse and name each non-PASS criterion |
 
 The service gate is `ProjectAcceptanceService.assertDoneAllowed`. Migration
-`0178_project_done_gate_acceptance_only` enforces the same criterion rule for direct database
+`0182_project_done_gate_acceptance_only` enforces the same criterion rule for direct database
 writers and removes the task-change triggers that previously reopened accepted projects.
 
 ## Where a new finding belongs

@@ -13,7 +13,7 @@ const runnerApi = read('src/runner-api/runner-api.controller.ts');
 const workspacesService = read('src/workspaces/workspaces.service.ts');
 const dispatchBoundary = read('prisma/migrations/0122_project_dispatch_boundary/migration.sql');
 const acceptanceRun = read('prisma/migrations/0127_project_acceptance_run/migration.sql');
-const acceptanceOnly = read('prisma/migrations/0178_project_done_gate_acceptance_only/migration.sql');
+const acceptanceOnly = read('prisma/migrations/0182_project_done_gate_acceptance_only/migration.sql');
 const dependencyRevision = read('prisma/migrations/0132_task_dependency_revision/migration.sql');
 
 /**

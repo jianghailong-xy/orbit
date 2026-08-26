@@ -32,7 +32,6 @@ import { SessionsService } from '../sessions/sessions.service';
 import {
   ATTEMPT_UNJUDGED_BLOCKER_KIND,
   ATTEMPT_UNJUDGED_SIGNAL_CODE,
-  ATTEMPT_WAKE_SESSION_PARKED,
   AttemptEndedUnsettledProducer,
 } from './attempt-ended-unsettled.producer';
 import {
@@ -347,7 +346,7 @@ suite('a usable L2 landing opens one judgment and does not duplicate a human sig
     assert.equal((await signalRows(stack.db, f)).blocker, null);
   });
 
-suite('startup compatibility turns a fully answered parked work turn into the explicit signal',
+suite('AWAITING_INPUT remains transport state and produces no attempt judgment or human signal',
   { timeout: 180_000 }, async (t) => {
     assertCoordinatorPgUrlIsIsolated(URL);
     const stack = connect();
@@ -357,19 +356,17 @@ suite('startup compatibility turns a fully answered parked work turn into the ex
       sessionStatus: RunStatus.AWAITING_INPUT,
     });
 
-    const result = await stack.producer.reconcileUnsettledAttempts(100);
-    assert.ok(result.scanned >= 1);
-    assert.ok(result.signaled >= 1);
+    const result = await stack.producer.afterCommit(f.sessionId);
+    assert.equal(result.outcome, 'NOT_ENDED');
     const { blocker, comments } = await signalRows(stack.db, f);
-    assert.ok(blocker);
-    const detail = blocker.detail as {
-      paths: { L2: { reason: string } };
-      sessionStatus: string;
-    };
-    assert.equal(detail.sessionStatus, RunStatus.AWAITING_INPUT);
-    assert.equal(detail.paths.L2.reason, ATTEMPT_WAKE_SESSION_PARKED);
-    assert.equal(comments.length, 1);
-    assert.match(comments[0].body, /工作回合已结束，当前停在 AWAITING_INPUT/);
+    assert.equal(blocker, null);
+    assert.equal(comments.length, 0);
+    assert.equal(
+      await stack.db.projectCoordinatorWake.count({
+        where: { subjectId: f.taskId, event: 'ATTEMPT_ENDED_UNSETTLED' },
+      }),
+      0,
+    );
     assert.equal(
       (await stack.db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
       TaskStatus.OPEN,

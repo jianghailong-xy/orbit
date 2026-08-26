@@ -2001,9 +2001,8 @@ model ProjectCoordinatorWake {
   subjectVersion String @map("subject_version")
   idempotencyKey String @map("idempotency_key")
 
-  /// CLAIMED, SESSION_OPENED or REFUSED. A CHECK, for the reason `event` is one. SESSION_OPENED is
-  /// inside 0174's partial unique index — that is what stops one fact opening a second judgment
-  /// session (unit T3 adds the status in migration 0175).
+  /// CLAIMED, SESSION_OPENED, CONSUMED or REFUSED. Both successful terminal states remain inside
+  /// 0174's partial unique index: one fact opens/feeds one consumer at most once.
   status      String  @default("CLAIMED")
   /// Non-null exactly when `status` is REFUSED, enforced by a CHECK: a stop with no reason is the
   /// one shape this table exists to make impossible.
@@ -2011,6 +2010,11 @@ model ProjectCoordinatorWake {
   /// Display and diagnosis. Never an input to a decision and never part of the key (cf.
   /// `ProjectBlocker.occurrences`, BL7).
   detail      Json    @default("{}")
+
+  /// Non-session completion inputs name their durable consumer exactly when status is CONSUMED.
+  /// Human requests use HUMAN_INBOX; they never acquire a Session pointer.
+  consumerType String?   @map("consumer_type")
+  consumedAt   DateTime? @map("consumed_at")
 
   /// The one judgment session this wake opened (unit T3, migration 0175). Unique, so two wakes
   /// cannot name one session; nullable and `SetNull`, so deleting a session is never refused by

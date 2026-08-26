@@ -407,7 +407,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'The duplicate-ack check, park, merge-state clear and billing accrual are all taken from rows read under their locks inside the closure. The command result, request decision, derived task status and raw-output comment are written only by the same first ACK; a victim leaves all of them absent, and a retry re-locks the current declaration/request before deriving anything.',
-    effects: 'None inside; the wake-up and the realtime publish are after commit.',
+    effects: 'None inside; attempt-budget accounting, EXECUTABLE_RESULT_RECORDED consumption and realtime publication are after commit. The input route is replayed even for a duplicate ACK so an authorization refusal does not burn the immutable result fact.',
     answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs.',
   },
   {
@@ -638,7 +638,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-locks the Task, verifies the source Session belongs to it, derives the criterion snapshot, allocates MAX(revision)+1 and routes the request inside the closure. A committed retry key returns its original evidence/request even if criteria later changed; an older fact is never reopened or allowed to supersede the current request.',
-    effects: 'None outside PostgreSQL inside. A HUMAN_SIGNOFF request insert trigger files its inbox item and device outbox in this same transaction; it performs no push. After commit, VERIFICATION is handed to the deterministic verifier-task upsert/dispatch and HUMAN_SIGNOFF only nudges the durable delivery worker. Replay converges on the same request/task or request/version ledger key.',
+    effects: 'None outside PostgreSQL inside. The transaction never updates Task/Session lifecycle state, comments, notifications or realtime; a HUMAN_SIGNOFF request insert trigger files its inbox item and device outbox in this same transaction but performs no push. After commit the evidence revision is consumed by the request derivation route, HUMAN_SIGNOFF request/supersession facts feed HUMAN_INBOX and nudge the durable delivery worker when needed, and only VERIFICATION is handed to the deterministic verifier-task upsert/dispatch. Replay converges on the same fact keys and request/task or request/version ledger key.',
     answer: 'Typed 503 from the global boundary after retry exhaustion; reused keys with different facts are an explicit 409.',
   },
   {
@@ -695,7 +695,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-locks and re-reads the task criterion/status/request after the owner/project locks. Signoff creation, request decision, every legacy HUMAN_DECISION_REQUIRED resolution and the derived DONE update roll back together; a retry either performs all four or observes the already-committed event.',
-    effects: 'None inside. Dependency release, optional verification filing, aggregation, settled-project delivery and realtime publication all run after commit.',
+    effects: 'None inside. HUMAN_SIGNOFF_DECIDED input consumption, dependency release, optional verification filing, aggregation and realtime publication all run after commit. No project task-set scan runs.',
     answer: 'Typed 503 from the global boundary; criterion, actor and retirement refusals have their own structured 400/403/409 responses.',
   },
   {
@@ -706,7 +706,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'The closure re-reads the task inside the owner mutex on every attempt — `current`, acceptance projects, hierarchy and edges are all derived there. A verifier verdict also re-locks both tasks and requires the request still OPEN before atomically recording the verdict decision and deriving the subject status. The single-statement branch is NOT retried: it owns no transaction.',
-    effects: 'The realtime publish, after.',
+    effects: 'An evidence-bound verdict is delivered as VERIFICATION_VERDICT_RECORDED after commit; unchanged replay derives the same key. Aggregation/dependency and realtime publication are also after. No project task-set scan runs.',
     answer: 'Typed 503 from the global boundary, including for the one-statement branch.',
   },
   {
@@ -990,8 +990,9 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "projects/session-attempt.service.ts#chargeSteer", class: "ONE_ROW_CAS", statements: 1, note: "AU3's charge and its bound are ONE conditional UPDATE, so two coordinators steering at once cannot both read 'one left'. The two `FOR UPDATE` reads around it are each their own implicit transaction and hold nothing between statements — deliberately: the CAS is what decides, and the second read only says WHY it refused." },
   { at: "projects/coordinator-wake.service.ts#insertClaim", class: "INSERT", statements: 1, note: "The wake claim: one INSERT with ON CONFLICT DO NOTHING against the partial unique index of migration 0174, RETURNING the id so the loser of a race learns it lost without a second read. Not in a transaction, deliberately — authorization runs between this statement and the release below, and holding a row lock across a call this unit does not time is how a claim becomes a queue." },
   { at: "projects/coordinator-wake.service.ts#release", class: "ONE_ROW_CAS", statements: 1, note: "Giving the key back. The compare-and-set on CLAIMED is what makes a claim releasable exactly once, so a second refusal cannot rewrite the code the first one recorded. Leaving this write out is the accident it exists to prevent: a refusal that keeps the key welds that fact shut forever (project_action, coordinator rotation)." },
+  { at: "projects/coordinator-wake.service.ts#consume", class: "ONE_ROW_CAS", statements: 1, note: "Binding a claimed criterion-input fact to its non-session consumer. The CLAIMED-to-CONSUMED compare-and-set stamps consumer_type/consumed_at together; CONSUMED remains inside the partial unique index, so replay cannot evaluate or deliver the same event + subject + evidence/version twice." },
   { at: "projects/coordinator-judgment.service.ts#open", class: "ONE_ROW_CAS", statements: 1, note: "Binding the one judgment session a wake gets. The compare-and-set on CLAIMED is what makes 'at most one session per wake' a fact of the database rather than of a read — a second caller holding the same wake matches no row, discards its session and says ALREADY_OPEN. The session row itself is written by sessions.create, which is inventoried under its own entry; this statement only names it. The status it writes, SESSION_OPENED, is inside 0174's partial unique index, so the fact goes on holding its key and can never claim a second session." },
-  { at: "projects/attempt-ended-unsettled.producer.ts#reconcileResolvedHumanSignals", class: "MANY_ROWS", statements: 1, note: "One bounded startup repair UPDATE over this producer's own open signal code. The predicate resolves only when the task is gone/settled/decided, an L0/L1 path now exists, or a later L2 wake has a bound judgment Session; reissuing reaches the same resolved rows and writes no status." },
+  { at: "projects/attempt-ended-unsettled.producer.ts#reconcileResolvedHumanSignals", class: "MANY_ROWS", statements: 1, note: "One explicitly invoked compatibility repair UPDATE over this retired producer's own open signal code. It is no longer a bootstrap/provider path and never treats AWAITING_INPUT as completion input. Reissuing reaches the same resolved rows and writes no status." },
   { at: "projects/attempt-ended-unsettled.producer.ts#resolveHumanSignal", class: "ONE_ROW_CAS", statements: 1, note: "Best-effort close of this Task's one open missing-path blocker after settlement or a successful path. The open-row predicate makes a redelivery a no-op; it never writes Task status." },
   { at: "projects/project-handoff.service.ts#decide", class: "ONE_ROW_CAS", statements: 1, note: "The user's answer, as a compare-and-set on the state it was read in: two clicks produce one answer and one 409. Re-approving a live yes writes nothing at all — it returns the row unchanged, so an approval's own deadline cannot be extended by clicking approve again." },
   { at: "providers/providers.service.ts#create", class: "INSERT", statements: 1 },

@@ -74,7 +74,11 @@ import {
   type HandoffAuthority,
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
-import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import {
+  humanSignoffDecidedFact,
+  verificationVerdictRecordedFact,
+} from '../projects/completion-input';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -1282,37 +1286,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * carrying a null that only explodes when a crossing is declared.
      */
     handoffs?: ProjectHandoffService,
-    /**
-     * Unit T7's post-commit fact producer. Optional only for the many unit fixtures which construct
-     * TasksService directly; TasksModule always injects the shared production instance.
-     */
-    settledProjects?: ProjectTasksSettledProducer,
+    completionInputs?: CompletionInputRouter,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
-    this.settledProjects = settledProjects;
+    this.completionInputs = completionInputs;
   }
 
   private readonly handoffs: ProjectHandoffService;
-  private readonly settledProjects?: ProjectTasksSettledProducer;
-
-  /**
-   * Re-read project task sets only after the write and aggregate propagation have committed.
-   *
-   * Best effort is intentional at this boundary: the task write is already committed, so a
-   * judgment-delivery fault cannot honestly turn its response into a rolled-back failure. T2's
-   * key makes a retry/re-delivery harmless, while the warning keeps a delivery fault observable.
-   */
-  private async deliverSettledProjectFacts(
-    projectIds: ReadonlyArray<string | null | undefined>,
-    cause: string,
-  ): Promise<void> {
-    if (!this.settledProjects) return;
-    await this.settledProjects.afterCommit(projectIds).catch((e) =>
-      this.logger.warn(
-        `PROJECT_TASKS_SETTLED delivery after ${cause} failed: ${e?.message ?? e}`,
-      ),
-    );
-  }
+  private readonly completionInputs?: CompletionInputRouter;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -6733,7 +6714,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         (taskId): taskId is string => !!taskId,
       ),
     ).catch((e) => this.logger.warn(`aggregation after signoff of ${id} failed: ${e?.message ?? e}`));
-    await this.deliverSettledProjectFacts([committed.projectId], `task signoff ${id}`);
+    if (committed.projectId && this.completionInputs) {
+      await this.completionInputs.route(
+        humanSignoffDecidedFact({
+          projectId: committed.projectId,
+          taskId: id,
+          requestId: committed.requestId,
+          signoffId: committed.signoff.id,
+          evidenceDigest: committed.evidenceDigest,
+          decision: 'PASS',
+        }),
+        'DERIVED_COMPLETION_EVALUATOR',
+      );
+    }
     await this.publishAffectedTaskRows(
       ownerId,
       [id, committed.parentTaskId],
@@ -7548,13 +7541,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ].filter((taskId): taskId is string => !!taskId),
       ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
 
-      // The scalar write and every aggregate parent it can settle are now committed. Derive from
-      // the complete OLD and NEW project task sets rather than from `dto.status`: a move can settle
-      // the project it leaves, and an aggregate completion need not be the row this PATCH named.
-      await this.deliverSettledProjectFacts(
-        [before.projectId, updated.projectId],
-        `task update ${id}`,
-      );
+    }
+    // A verdict is one immutable, versioned criterion input. Re-delivering an unchanged PATCH
+    // derives the same key (and therefore no second consumption); if authorization previously
+    // refused it, the partial unique index was released and this same delivery can win now.
+    if (dto.verdict != null && verifiesTaskId && updated.projectId && this.completionInputs) {
+      const request = await this.prisma.taskJudgmentRequest.findUnique({
+        where: { id },
+        select: { id: true, taskId: true, kind: true, evidenceDigest: true, status: true },
+      });
+      if (request?.kind === 'VERIFICATION' && request.status === 'DECIDED') {
+        await this.completionInputs.route(
+          verificationVerdictRecordedFact({
+            projectId: updated.projectId,
+            taskId: request.taskId,
+            requestId: request.id,
+            verifierTaskId: id,
+            verdictRevision: updated.verdictRevision.toString(),
+            evidenceDigest: request.evidenceDigest,
+            verdict: dto.verdict,
+          }),
+          'DERIVED_COMPLETION_EVALUATOR',
+        );
+      }
     }
     // A PASS on an evidence-bound verifier may have derived the SUBJECT's DONE inside the
     // transaction above. Release that subject's dependents now; keying this on the verifier id
@@ -7642,13 +7651,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * The request is the audit fact and retains its exact successor link. Its Task is only the
    * independently runnable carrier. Leaving that carrier OPEN after a newer evidence version
-   * takes ownership would make PROJECT_TASKS_SETTLED wait forever on work that the verdict
-   * boundary correctly refuses to conclude. The current carrier is filed before this runs, so a
-   * project always observes the new OPEN work before an old carrier becomes CANCELLED.
+   * takes ownership would leave stale work addressed to an agent whose verdict the request
+   * boundary correctly refuses. The current carrier is filed before this runs, so the new input's
+   * consumer exists before an old carrier becomes CANCELLED.
    *
    * Use the ordinary Task write path instead of a bulk UPDATE: project-before-task lock ordering,
-   * aggregation, dependency overlays and settlement delivery remain identical to every other
-   * lifecycle transition. Replays are harmless because CANCELLED is written idempotently.
+   * aggregation and dependency overlays remain identical to every other lifecycle transition.
+   * Replays are harmless because CANCELLED is written idempotently.
    */
   async retireSupersededJudgmentVerifications(
     ownerId: string,
@@ -8899,7 +8908,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.loadDetail(ownerId, id);
-    const { survivingLinks, projectIds } = await this.deleteAndStopRuns(ownerId, [id]);
+    const { survivingLinks } = await this.deleteAndStopRuns(ownerId, [id]);
     // Cascades may remove prerequisite edges from other open DAGs, so the deleted id is not an
     // incremental answer: it cannot be fetched, and it does not name all surviving rows affected
     // by the cascades. Say explicitly that the owner's task snapshots must be reconciled.
@@ -8915,9 +8924,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`aggregation after delete of ${id} failed: ${e?.message ?? e}`),
       );
     }
-    // Deleting the last unsettled row can make what remains settled; an empty project still derives
-    // no fact because `projectTasksSettledFact` rejects vacuous completion.
-    await this.deliverSettledProjectFacts(projectIds, `task delete ${id}`);
     return { ok: true };
   }
 
@@ -11472,7 +11478,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async batchDelete(ownerId: string, taskIds: string[]) {
     const uniqueIds = [...new Set(taskIds)];
     if (uniqueIds.length === 0) return { deleted: 0 };
-    const { deleted, survivingLinks, projectIds } = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    const { deleted, survivingLinks } = await this.deleteAndStopRuns(ownerId, uniqueIds);
     if (deleted > 0) {
       // A representative deleted id is neither fetchable nor complete (verification tasks and
       // dependency edges can cascade). Future incremental clients need an explicit reconciliation
@@ -11485,7 +11491,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           this.logger.warn(`aggregation after batch delete failed: ${e?.message ?? e}`),
         );
       }
-      await this.deliverSettledProjectFacts(projectIds, 'batch task delete');
     }
     return { deleted };
   }

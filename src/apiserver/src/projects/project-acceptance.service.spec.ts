@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ProjectAcceptanceVerdict } from '@prisma/client';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
-import { ACCEPTANCE_MISSING, criteriaSemanticRevision, sha256 } from './project-acceptance';
+import {
+  ACCEPTANCE_FINDING_ROUTING,
+  ACCEPTANCE_MISSING,
+  criteriaSemanticRevision,
+  sha256,
+} from './project-acceptance';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-000000000101';
@@ -338,6 +343,8 @@ test('evaluateGate digests a large project once and gives that read explicit sca
     allowed: false,
     runId: null,
     code: ACCEPTANCE_MISSING,
-    reason: 'no project acceptance has been run — DONE is a claim about evidence, and there is none',
+    reason:
+      'no project acceptance has been run — DONE is a claim about evidence, and there is none. ' +
+      ACCEPTANCE_FINDING_ROUTING,
   });
 });

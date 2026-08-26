@@ -101,7 +101,8 @@ import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../a
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
-import { AttemptEndedUnsettledProducer } from '../projects/attempt-ended-unsettled.producer';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { executableResultRecordedFact } from '../projects/completion-input';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -349,12 +350,9 @@ export class RunnerApiController {
      * charged on a turn is re-derived from the same columns on the next one.
      */
     private readonly attemptBudgets?: AttemptBudgetMeterService,
-    /**
-     * T8: after the runner transaction has made a Session terminal, derive the committed
-     * ATTEMPT_ENDED_UNSETTLED fact and open its one-shot judgment. Optional only for direct unit
-     * fixtures; RunnerApiModule imports the production provider through ProjectsModule.
-     */
-    private readonly attemptEndedUnsettled?: AttemptEndedUnsettledProducer,
+    /** Criterion inputs are optional only for direct unit fixtures. Production resolves the
+     * shared, durable input router through ProjectsModule. */
+    private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2705,11 +2703,10 @@ export class RunnerApiController {
           }
         }
       }
-      // A reserved turn whose Task still needs an answer but whose evidence cannot be compared is
-      // an unsettled attempt, not an idle conversation. End the Session so T2's
-      // ATTEMPT_ENDED_UNSETTLED fact can wake L2; leave the Task IN_PROGRESS because no exit-code
-      // judgement was actually possible. This includes an older runner omitting the new fields
-      // and a declaration edited while its old command was running.
+      // A reserved turn whose evidence cannot be compared is a transport failure, not a criterion
+      // input. End the Session, but leave the Task IN_PROGRESS and its evidence-bound request open:
+      // no EXECUTABLE_RESULT_RECORDED fact exists to derive a judgment from. This includes an older
+      // runner omitting the fields and a declaration edited while its old command was running.
       if (taskAcceptanceTurn && acceptanceTaskStillInProgress && !acceptanceTaskChanged) {
         failSession = true;
         acceptanceFailureReason = dto.status === RunStatus.FAILED
@@ -2916,9 +2913,39 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
-      // T8: a failure may have ended the Session and left its Task FAILED. Re-read both committed
-      // rows; the producer itself rejects parked/retrying/settled attempts and de-duplicates facts.
-      await this.attemptEndedUnsettled?.afterCommitQuietly(sessionId);
+    }
+    // The command observation, not the Session's resulting lifecycle state, is the criterion
+    // input. Querying it on duplicate acknowledgements is intentional: a prior authorization
+    // refusal released the key, while an already-consumed result simply loses the same INSERT.
+    if (!finalized.steer && this.completionInputs) {
+      const request = await this.prisma.taskJudgmentRequest.findFirst({
+        where: {
+          kind: 'EXECUTABLE',
+          recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+          recipientId: sessionId,
+          status: 'DECIDED',
+          executableResult: { isNot: null },
+          task: { projectId: { not: null } },
+        },
+        orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
+        include: {
+          executableResult: true,
+          task: { select: { id: true, projectId: true } },
+        },
+      });
+      if (request?.executableResult && request.task.projectId) {
+        await this.completionInputs.route(
+          executableResultRecordedFact({
+            projectId: request.task.projectId,
+            taskId: request.task.id,
+            requestId: request.id,
+            resultId: request.executableResult.id,
+            evidenceDigest: request.evidenceDigest,
+            actualExitCode: request.executableResult.actualExitCode,
+          }),
+          'DERIVED_COMPLETION_EVALUATOR',
+        );
+      }
     }
     if (
       'taskReclaimed' in finalized

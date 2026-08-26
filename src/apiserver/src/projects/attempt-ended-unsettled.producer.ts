@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { uuidToBase62 } from '@orbit/shared';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 
@@ -18,13 +18,6 @@ export const ATTEMPT_WAKE_PROJECT_GONE = 'PROJECT_GONE';
 
 /** The project still exists, but its automation switch is off at authorization time. */
 export const ATTEMPT_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
-
-/**
- * An interactive task-work Session is parked after a complete turn, so opening a parallel
- * judgment would race work which is still legally resumable. The durable human signal is the
- * exit for this legacy shape; it is deliberately a refusal, never evidence that the Task is DONE.
- */
-export const ATTEMPT_WAKE_SESSION_PARKED = 'ATTEMPT_SESSION_PARKED';
 
 /** A task without a Project has no coordinator to which an L2 judgment can be delivered. */
 export const ATTEMPT_WAKE_NO_PROJECT_COORDINATOR = 'NO_PROJECT_COORDINATOR';
@@ -107,19 +100,15 @@ interface HumanSignalInput {
  * claim its own result and a pre-commit snapshot cannot race the Task write. A retry which is still
  * armed is not an ended attempt yet: the same Session may run another turn.
  *
- * There are two admissible sources:
- *
- *  - a Session in SUCCEEDED / FAILED / CANCELLED, which may take the ordinary L2 judgment path;
- *  - a task-work Session parked in AWAITING_INPUT after at least one fully answered turn, with no
- *    engine generation or retry still active. It is the legacy shape in which work has stopped but
- *    the Session remains resumable, so L2 is refused rather than raced and a person is signaled.
+ * Its only legacy source is a Session in SUCCEEDED / FAILED / CANCELLED. AWAITING_INPUT is a
+ * transport fact and is never interpreted here; N7 routes new completion evidence independently.
  *
  * L0 and L1 are checked before either branch. Their existence means this producer has no decision
  * to make: executable acceptance or a live verifier owns the verdict. No branch here writes Task
  * status, especially DONE.
  */
 @Injectable()
-export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
+export class AttemptEndedUnsettledProducer {
   private readonly logger = new Logger(AttemptEndedUnsettledProducer.name);
 
   constructor(
@@ -127,30 +116,6 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
     private readonly judgments: CoordinatorJudgmentService,
     private readonly convergence: CoordinatorConvergenceService,
   ) {}
-
-  /**
-   * One bounded compatibility pass at process start recovers facts committed before this exit
-   * existed. It is intentionally not a timer: future facts arrive through the runner's existing
-   * post-commit delivery, while a restart only repairs rows an older binary could have stranded.
-   */
-  async onApplicationBootstrap(): Promise<void> {
-    try {
-      const result = await this.reconcileUnsettledAttempts(STARTUP_RECONCILE_LIMIT);
-      if (result.scanned > 0 || result.resolved > 0) {
-        this.logger.log(
-          `ATTEMPT_ENDED_UNSETTLED startup reconciliation scanned ${result.scanned}, `
-            + `signaled ${result.signaled}, resolved ${result.resolved}`,
-        );
-      }
-    } catch (error) {
-      // A compatibility delivery cannot honestly roll back application startup or an older task.
-      // The error is loud and the rows remain derivable for the next restart/manual redelivery.
-      this.logger.error(
-        `ATTEMPT_ENDED_UNSETTLED startup reconciliation failed: `
-          + (error instanceof Error ? error.message : String(error)),
-      );
-    }
-  }
 
   async afterCommit(sessionId: string): Promise<AttemptEndedDelivery> {
     const session = await this.readSession(sessionId);
@@ -169,8 +134,7 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
 
     const terminal = TERMINAL_SESSION_STATUSES.includes(session.status)
       && session.retryAt == null;
-    const parked = this.isParkedAttempt(session);
-    if (!terminal && !parked) return { outcome: 'NOT_ENDED' };
+    if (!terminal) return { outcome: 'NOT_ENDED' };
 
     if (!task.projectId) {
       const signal = await this.raiseHumanSignal({
@@ -181,13 +145,6 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
         l2RefusalCode: ATTEMPT_WAKE_NO_PROJECT_COORDINATOR,
       });
       return { outcome: 'NOT_PROJECT_TASK', taskId: task.id, signal };
-    }
-
-    // A parked fact already carrying an open human signal needs no second refused wake row. A
-    // terminal redelivery is different: it retries L2, because the landing may have been repaired
-    // since the signal was raised and a successful judgment is what resolves that signal.
-    if (parked && await this.hasOpenHumanSignal(task.id, task.projectId)) {
-      return { outcome: 'HUMAN_SIGNAL_EXISTS' };
     }
 
     const projectId = task.projectId;
@@ -204,9 +161,6 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
     }
 
     const result = await this.judgments.wake(fact, async (claimedFact, claim) => {
-      if (parked) {
-        return { allowed: false as const, refusalCode: ATTEMPT_WAKE_SESSION_PARKED };
-      }
       const project = await this.prisma.project.findUnique({
         where: { id: projectId },
         select: { coordinatorEnabled: true },
@@ -251,8 +205,8 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
   }
 
   /**
-   * Repair pre-T11 terminal/parked task attempts once at startup. Candidates are facts, not time:
-   * the query asks only whether work is inactive and every queued turn has a durable answer.
+   * Explicit compatibility repair for pre-T11 terminal attempts. It is not a bootstrap hook and
+   * does not interpret AWAITING_INPUT or any elapsed time as an input.
    */
   async reconcileUnsettledAttempts(
     limit = STARTUP_RECONCILE_LIMIT,
@@ -277,34 +231,7 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
               AND verifier."terminal_reason" IS NULL
               AND verifier."superseded_by_task_id" IS NULL
          )
-         AND (
-           s."status" IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
-           OR (
-             s."status" = 'AWAITING_INPUT'
-             AND s."engine_turn_active" = false
-             AND s."num_turns" > 0
-             AND NOT EXISTS (
-               SELECT 1 FROM "conversation_turn" turn_row
-                WHERE turn_row."session_id" = s."id" AND turn_row."status" <> 'ANSWERED'
-             )
-             AND NOT EXISTS (
-               SELECT 1 FROM "project_blocker" blocker
-                WHERE blocker."project_id" = t."project_id"
-                  AND blocker."dedupe_key" =
-                      ${ATTEMPT_UNJUDGED_BLOCKER_KIND}
-                      || ':' || ${ATTEMPT_UNJUDGED_DEDUPE_SUBJECT} || ':' || t."id"::text
-                  AND blocker."resolved_at" IS NULL
-             )
-             AND (
-               t."project_id" IS NOT NULL
-               OR NOT EXISTS (
-                 SELECT 1 FROM "task_comment" comment_row
-                  WHERE comment_row."task_id" = t."id"
-                    AND comment_row."body" LIKE ${`${ATTEMPT_UNJUDGED_COMMENT_MARKER}%`}
-               )
-             )
-           )
-         )
+         AND s."status" IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
        ORDER BY s."task_id", s."updated_at" DESC, s."id" DESC
        LIMIT ${limit}
     `);
@@ -378,27 +305,12 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
     };
   }
 
-  private isParkedAttempt(session: AttemptSessionSnapshot): boolean {
-    return session.status === RunStatus.AWAITING_INPUT
-      && session.retryAt == null
-      && session.startsTaskWork
-      && !session.engineTurnActive
-      && session.numTurns > 0
-      && !session.hasUnansweredTurn;
-  }
-
   private isSettled(status: TaskStatus): boolean {
     return status === TaskStatus.DONE || status === TaskStatus.CANCELLED;
   }
 
   private dedupeKey(taskId: string): string {
     return `${ATTEMPT_UNJUDGED_BLOCKER_KIND}:${ATTEMPT_UNJUDGED_DEDUPE_SUBJECT}:${taskId}`;
-  }
-
-  private async hasOpenHumanSignal(taskId: string, projectId: string): Promise<boolean> {
-    return (await this.prisma.projectBlocker.count({
-      where: { projectId, dedupeKey: this.dedupeKey(taskId), resolvedAt: null },
-    })) > 0;
   }
 
   /**

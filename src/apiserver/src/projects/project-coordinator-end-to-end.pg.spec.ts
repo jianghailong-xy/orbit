@@ -36,6 +36,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { AttemptEndedUnsettledProducer } from './attempt-ended-unsettled.producer';
+import { CompletionInputRouter } from './completion-input-router.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -57,6 +58,8 @@ interface Stack {
   projects: ProjectsService;
   acceptance: ProjectAcceptanceService;
   runnerApi: RunnerApiController;
+  attemptEnded: AttemptEndedUnsettledProducer;
+  settled: ProjectTasksSettledProducer;
 }
 
 function realtimeStub(): RealtimeService {
@@ -77,13 +80,16 @@ function buildStack(db: PrismaClient): Stack {
   );
   const attemptEnded = new AttemptEndedUnsettledProducer(prisma, judgments, convergence);
   const settled = new ProjectTasksSettledProducer(prisma, judgments, convergence);
-  const tasks = new TasksService(prisma, sessions, realtime, undefined, settled);
+  const completionInputs = new CompletionInputRouter(new CoordinatorWakeService(prisma));
+  const tasks = new TasksService(prisma, sessions, realtime);
   return {
     db,
     sessions,
     tasks,
     projects: new ProjectsService(prisma, acceptance, sessions),
     acceptance,
+    attemptEnded,
+    settled,
     runnerApi: new RunnerApiController(
       prisma,
       queue,
@@ -93,7 +99,7 @@ function buildStack(db: PrismaClient): Stack {
       {} as never,
       undefined,
       undefined,
-      attemptEnded,
+      completionInputs,
     ),
   };
 }
@@ -264,6 +270,9 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       result: 'T8 intentional first-attempt failure',
       numTurns: 1,
     });
+    // Historical T8 calls the retired producer explicitly. It is no longer wired to runner
+    // lifecycle; N7 production routing is driven only by criterion inputs.
+    await stack.attemptEnded.afterCommit(firstRun.id);
     assert.equal(failed.status, RunStatus.FAILED);
     assert.equal(
       (await db.task.findUniqueOrThrow({ where: { id: firstAttempt.id } })).status,
@@ -325,6 +334,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
     // facts dynamically file. The last real TasksService write invokes T7 after commit.
     await stack.tasks.update(ownerId, firstAttempt.id, { status: TaskStatus.CANCELLED } as never);
     await settleEveryProjectTask(stack, ownerId, project.id);
+    await stack.settled.afterCommit([project.id]);
     const terminalTasks = await db.task.findMany({
       where: { projectId: project.id },
       select: { id: true, status: true },

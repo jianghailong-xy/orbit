@@ -13,15 +13,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
 import { verificationEpochOpenSql } from './verification-dependency';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
 
-function tasksService(db: PrismaClient): TasksService {
+function tasksService(db: PrismaClient, completionInputs?: CompletionInputRouter): TasksService {
   return new TasksService(
     db as unknown as PrismaService,
     { create: () => { throw new Error('unassigned verifier must not dispatch'); } } as never,
     { publishForUser: () => undefined, publishTaskChanged: () => undefined } as never,
+    undefined,
+    completionInputs,
   );
 }
 
@@ -41,11 +45,15 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
     `);
 
     const ownerId = randomUUID();
+    const projectId = randomUUID();
     const subjectId = randomUUID();
     const dependentId = randomUUID();
     const sourceSessionId = randomUUID();
     await db.user.create({
       data: { id: ownerId, email: `${ownerId}@n11-verification.invalid`, name: 'N11 verifier', passwordHash: 'x' },
+    });
+    await db.project.create({
+      data: { id: projectId, ownerId, title: 'N7 versioned verification inputs' },
     });
     await db.task.create({
       data: {
@@ -54,6 +62,7 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
         title: 'Subject requiring independent verification',
         creatorType: CreatorType.USER,
         creatorId: ownerId,
+        projectId,
         completionCriterion: 'VERIFICATION',
         completionPolicy: 'VERIFICATION_PASSED',
         status: TaskStatus.IN_PROGRESS,
@@ -66,6 +75,7 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
         title: 'Waits for verified subject',
         creatorType: CreatorType.USER,
         creatorId: ownerId,
+        projectId,
       },
     });
     await db.taskDependency.create({ data: { taskId: dependentId, dependsOnTaskId: subjectId } });
@@ -84,10 +94,14 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
       },
     });
 
-    const tasks = tasksService(db);
+    const router = new CompletionInputRouter(
+      new CoordinatorWakeService(db as unknown as PrismaService),
+    );
+    const tasks = tasksService(db, router);
     const evidenceService = new TaskCompletionEvidenceService(
       db as unknown as PrismaService,
       tasks,
+      router,
     );
     const evidence = await evidenceService.submit(
       ownerId,
@@ -108,6 +122,17 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
     assert.equal(verifier.verifiesTaskId, subjectId);
     assert.match(verifier.description ?? '', new RegExp(evidence.evidenceDigest));
     assert.equal(await db.task.count({ where: { verifiesTaskId: subjectId } }), 1);
+    assert.equal(
+      await db.projectCoordinatorWake.count({
+        where: {
+          projectId,
+          event: 'COMPLETION_EVIDENCE_REVISED',
+          status: 'CONSUMED',
+          consumerType: 'JUDGMENT_REQUEST_DERIVER',
+        },
+      }),
+      1,
+    );
     assert.equal(
       (await tasks.get(ownerId, dependentId) as { dependencyState: string }).dependencyState,
       'BLOCKED',
@@ -145,6 +170,12 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
     assert.equal(request.decision, 'PASS');
     assert.equal(request.decidedByType, 'USER');
     assert.ok(request.decidedAt);
+    const verdictInput = await db.projectCoordinatorWake.findFirstOrThrow({
+      where: { projectId, event: 'VERIFICATION_VERDICT_RECORDED', subjectId: request.id },
+    });
+    assert.equal(verdictInput.status, 'CONSUMED');
+    assert.equal(verdictInput.consumerType, 'DERIVED_COMPLETION_EVALUATOR');
+    assert.match(verdictInput.subjectVersion, new RegExp(`^${decidedVerifier.verdictRevision}:`));
     assert.equal((await sql.query(
       `SELECT count(*)::int AS n FROM "task_judgment_signal" WHERE "task_id" = $1::uuid`,
       [subjectId],

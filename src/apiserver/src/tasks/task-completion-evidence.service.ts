@@ -13,6 +13,12 @@ import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 import { routeTaskJudgment } from './task-judgment-request';
 import { TasksService } from './tasks.service';
 import { JudgmentDeliveryService } from '../push/judgment-delivery.service';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import {
+  completionEvidenceRevisedFact,
+  humanSignoffRequestedFact,
+  humanSignoffRequestSupersededFact,
+} from '../projects/completion-input';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -249,6 +255,7 @@ export class TaskCompletionEvidenceService {
     private readonly prisma: PrismaService,
     @Optional() private readonly tasks?: TasksService,
     @Optional() private readonly deliveries?: JudgmentDeliveryService,
+    @Optional() private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
   async submit(ownerId: string, taskId: string, actor: CompletionEvidenceActor, input: SubmitCompletionEvidence) {
@@ -308,8 +315,17 @@ export class TaskCompletionEvidenceService {
           if (!sameRequest) {
             throw new ConflictException('idempotencyKey is already bound to different completion evidence');
           }
-          const request = await this.requestForEvidenceFact(tx, taskId, replay.evidence);
-          return { evidence: response(replay.evidence, request), request };
+          const request = await this.requestForEvidenceFact(tx, taskId, replay.evidence, task);
+          const superseded = await tx.taskJudgmentRequest.findMany({
+            where: { supersededById: request.id },
+          });
+          return {
+            evidence: response(replay.evidence, request),
+            evidenceRow: replay.evidence,
+            request,
+            superseded,
+            projectId: task.projectId,
+          };
         }
       }
 
@@ -361,8 +377,64 @@ export class TaskCompletionEvidenceService {
         });
       }
       const request = await this.requestForEvidenceFact(tx, taskId, evidence, task);
-      return { evidence: response(evidence, request), request };
+      const superseded = await tx.taskJudgmentRequest.findMany({
+        where: { supersededById: request.id },
+      });
+      return {
+        evidence: response(evidence, request),
+        evidenceRow: evidence,
+        request,
+        superseded,
+        projectId: task.projectId,
+      };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
+
+    // The revision itself is the trigger. A source Session may still be RUNNING or
+    // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
+    // facts appears in this route or its key.
+    if (committed.projectId && this.completionInputs) {
+      await this.completionInputs.route(
+        completionEvidenceRevisedFact({
+          projectId: committed.projectId,
+          taskId,
+          revision: committed.evidenceRow.revision.toString(),
+          criterionRevision: committed.evidenceRow.criterionRevision,
+          evidenceDigest: committed.evidenceRow.evidenceDigest,
+          requestId: committed.request.id,
+          requestKind: committed.request.kind,
+        }),
+        'JUDGMENT_REQUEST_DERIVER',
+      );
+      // HUMAN_SIGNOFF is addressed to a person. These facts feed N12's inbox/delivery surface and
+      // deliberately never call CoordinatorJudgmentService or SessionsService.
+      if (committed.request.kind === 'HUMAN_SIGNOFF') {
+        await this.completionInputs.route(
+          humanSignoffRequestedFact({
+            projectId: committed.projectId,
+            taskId,
+            requestId: committed.request.id,
+            criterionRevision: committed.request.criterionRevision,
+            evidenceDigest: committed.request.evidenceDigest,
+            recipientId: committed.request.recipientId,
+          }),
+          'HUMAN_INBOX',
+        );
+      }
+      for (const request of committed.superseded) {
+        if (request.kind !== 'HUMAN_SIGNOFF') continue;
+        await this.completionInputs.route(
+          humanSignoffRequestSupersededFact({
+            projectId: committed.projectId,
+            taskId,
+            requestId: request.id,
+            evidenceDigest: request.evidenceDigest,
+            supersededById: committed.request.id,
+            replacementEvidenceDigest: committed.request.evidenceDigest,
+          }),
+          'HUMAN_INBOX',
+        );
+      }
+    }
 
     await this.afterEvidenceCommit(ownerId, taskId, committed.request);
     return committed.evidence;

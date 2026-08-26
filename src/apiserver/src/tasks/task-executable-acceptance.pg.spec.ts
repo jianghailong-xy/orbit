@@ -26,16 +26,13 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { AttemptEndedUnsettledProducer } from '../projects/attempt-ended-unsettled.producer';
-import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
-import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { SessionsService } from '../sessions/sessions.service';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
 
@@ -62,13 +59,7 @@ function controller(db: PrismaClient): RunnerApiController {
     waitForInbox: async () => undefined,
   } as unknown as RealtimeService;
   const prisma = db as unknown as PrismaService;
-  const sessions = new SessionsService(prisma, queue, realtime);
-  const convergence = new CoordinatorConvergenceService(prisma);
-  const attemptEnded = new AttemptEndedUnsettledProducer(
-    prisma,
-    new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
-    convergence,
-  );
+  const completionInputs = new CompletionInputRouter(new CoordinatorWakeService(prisma));
   return new RunnerApiController(
     prisma,
     queue,
@@ -78,7 +69,7 @@ function controller(db: PrismaClient): RunnerApiController {
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
     undefined,
-    attemptEnded,
+    completionInputs,
   );
 }
 
@@ -257,6 +248,26 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
   assert.equal(commandResult.actualExitCode, 0);
   assert.equal(commandResult.rawOutput, rawOutput);
   assert.equal(commandResult.recordedById, f.runnerId);
+  const inputWake = await db.projectCoordinatorWake.findFirstOrThrow({
+    where: { event: 'EXECUTABLE_RESULT_RECORDED', subjectId: request.id },
+  });
+  assert.equal(inputWake.status, 'CONSUMED');
+  assert.equal(inputWake.consumerType, 'DERIVED_COMPLETION_EVALUATOR');
+  assert.match(inputWake.subjectVersion, new RegExp(`^${commandResult.id}:`));
+  await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellExitCode: 0,
+    shellOutput: rawOutput,
+  });
+  assert.equal(
+    await db.projectCoordinatorWake.count({
+      where: { event: 'EXECUTABLE_RESULT_RECORDED', subjectId: request.id },
+    }),
+    1,
+    'an unchanged command result is consumed once',
+  );
   const comment = await db.taskComment.findFirstOrThrow({
     where: { taskId: f.taskId },
     orderBy: { createdAt: 'desc' },

@@ -1,7 +1,7 @@
 /**
  * §8.6 LO1/LO4's compatibility pre-lock helpers, plus their historical database contract.
  *
- * Migration 0178 retires the task/acceptance triggers, so these helpers are no longer part of the
+ * Migration 0182 retires the task/acceptance triggers, so these helpers are no longer part of the
  * DONE definition. They remain conservative application locking until that broader task-write
  * machinery is simplified; the final test makes the semantic retirement explicit.
  */
@@ -62,7 +62,7 @@ const MIGRATION = readFileSync(
 );
 const RETIREMENT = readFileSync(
   join(__dirname, '..', '..', 'prisma', 'migrations',
-    '0178_project_done_gate_acceptance_only', 'migration.sql'),
+    '0182_project_done_gate_acceptance_only', 'migration.sql'),
   'utf8',
 );
 
@@ -113,7 +113,7 @@ test('the migration deliberately guards nothing on the dependency table', () => 
   assert.match(MIGRATION, /task_dependency_revision/);
 });
 
-test('0178 retires both task acceptance triggers and both historical pre-lock triggers', () => {
+test('0182 retires both task acceptance triggers and both historical pre-lock triggers', () => {
   for (const trigger of [
     'project_acceptance_task_fact',
     'project_acceptance_task_fact_update',
