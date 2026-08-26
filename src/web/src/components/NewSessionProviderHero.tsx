@@ -58,6 +58,7 @@ export function NewSessionProviderHero({
   runnerId,
   disabled,
   note,
+  projectIntent = false,
 }: {
   current: ProviderChoice;
   choices: ProviderChoice[];
@@ -69,6 +70,8 @@ export function NewSessionProviderHero({
   disabled?: boolean;
   /** Transient line under the summary (what a switch just changed, and where it was saved). */
   note?: string | null;
+  /** The Projects entry point still uses this same provider picker; only its framing copy changes. */
+  projectIntent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -145,8 +148,14 @@ export function NewSessionProviderHero({
 
   return (
     <div className="np-hero">
-      <div className="np-title">Start a new session</div>
-      <div className="np-sub">Describe the task — Orbit remembers who runs it.</div>
+      <div className="np-title">
+        {projectIntent ? 'Start a new project' : 'Start a new session'}
+      </div>
+      <div className="np-sub">
+        {projectIntent
+          ? 'Describe what you want done — 目标、验收标准和任务拆解在对话里定。'
+          : 'Describe the task — Orbit remembers who runs it.'}
+      </div>
       {disabled ? (
         card
       ) : (

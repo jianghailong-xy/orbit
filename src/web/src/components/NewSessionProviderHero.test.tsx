@@ -28,7 +28,12 @@ const catalog = { claude: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }] }
 
 function markup(
   provider: string,
-  opts: { disabled?: boolean; note?: string; engines?: RunnerEngineHealth[] } = {},
+  opts: {
+    disabled?: boolean;
+    note?: string;
+    engines?: RunnerEngineHealth[];
+    projectIntent?: boolean;
+  } = {},
 ) {
   const choices = providerChoices(configured, catalog, undefined, opts.engines);
   return renderToStaticMarkup(
@@ -40,12 +45,35 @@ function markup(
         runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
         disabled={opts.disabled}
         note={opts.note}
+        projectIntent={opts.projectIntent}
       />
     </MemoryRouter>,
   );
 }
 
 describe('NewSessionProviderHero', () => {
+  it('keeps the ordinary New Session framing word-for-word by default', () => {
+    const html = markup('claude');
+
+    expect(html).toContain('<div class="np-title">Start a new session</div>');
+    expect(html).toContain(
+      '<div class="np-sub">Describe the task — Orbit remembers who runs it.</div>',
+    );
+    expect(html).not.toContain('Start a new project');
+    expect(html).not.toContain('目标、验收标准和任务拆解');
+  });
+
+  it('switches only the framing copy for a project-intent session', () => {
+    const html = markup('claude', { projectIntent: true });
+
+    expect(html).toContain('<div class="np-title">Start a new project</div>');
+    expect(html).toContain(
+      '<div class="np-sub">Describe what you want done — 目标、验收标准和任务拆解在对话里定。</div>',
+    );
+    expect(html).not.toContain('Start a new session');
+    expect(html).not.toContain('Orbit remembers who runs it.');
+  });
+
   it('shows the current provider as the collapsed identity, name under the mark', () => {
     const html = markup('claude');
     // Mark first, name second — the vertical order is the point of the layout.

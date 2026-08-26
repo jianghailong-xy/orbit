@@ -52,7 +52,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMatch, useNavigate } from 'react-router-dom';
+import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
@@ -971,6 +971,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Merge and Commit finish asynchronously on a runner heartbeat. Keep accepted operations by
   // session id so their result continues polling even if the user opens another conversation.
   const pendingOperationSeq = useRef(0);
@@ -1718,6 +1719,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const composing =
     !selectedId &&
     (composingRoute || view !== 'open' || (sessionsQ.isSuccess && visibleSessions.length === 0));
+  // The Projects CTA lands on the ordinary New Session route with one piece of transient framing:
+  // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
+  // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
+  const projectIntent = composing && searchParams.get('intent') === 'project';
+  const dismissProjectIntent = useCallback(() => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('intent');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   // Remember the open session as this workspace's last-viewed one, so returning to the workspace
   // (a workspace-switch away and back, or clicking it in the sidebar) restores it below.
@@ -5115,6 +5130,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
                 disabled={!pickedWorkspace}
                 note={providerSwitchNote}
+                projectIntent={projectIntent}
               />
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
@@ -5278,6 +5294,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               aria-label="Cancel reply"
             >
               <CloseOutlined />
+            </button>
+          </div>
+        )}
+        {projectIntent && (
+          <div className="composer-project-intent" role="status">
+            <b>◧ 这次会开出一个新项目</b>
+            <span>—— 说清楚要做成什么，它会先读仓库再跟你敲定计划</span>
+            <button
+              type="button"
+              className="composer-project-intent-close"
+              onClick={dismissProjectIntent}
+              aria-label="关闭项目意图"
+            >
+              ✕
             </button>
           </div>
         )}

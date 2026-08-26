@@ -4112,6 +4112,42 @@ html[data-theme='dark'] .session-tag-chip {
   padding-top: 12px;
   margin-top: 8px;
 }
+.composer-project-intent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-tint);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.composer-project-intent b {
+  flex: none;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.composer-project-intent-close {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 0 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.composer-project-intent-close:hover {
+  color: var(--text-1);
+}
+.composer-project-intent-close:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .composer-box {
   position: relative;
   display: flex;
