@@ -947,6 +947,15 @@ describe('transcript Markdown links', () => {
     expect(html).toContain('rel="noopener noreferrer"');
   });
 
+  it('keeps a relative app link in the same tab even without router context', () => {
+    // Standalone transcript export renders outside BrowserRouter. It still needs a usable link,
+    // just without making React Router context a requirement of the static render.
+    const html = renderToStaticMarkup(<MD>[Task](/tasks/task-1?view=activity#latest)</MD>);
+
+    expect(html).toContain('href="/tasks/task-1?view=activity#latest"');
+    expect(html).not.toContain('target="_blank"');
+  });
+
   it('routes a #-reference instead of leaving the blanked href react-markdown produces', () => {
     // react-markdown's urlTransform strips any scheme off its allow-list, which left href="" —
     // and an empty href in an SPA reloads the page on click.

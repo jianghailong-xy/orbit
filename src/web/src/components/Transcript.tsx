@@ -50,6 +50,7 @@ import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
+import { SameOriginLink } from './SameOriginLink';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -336,9 +337,9 @@ function linkifyLogText(text: string): ReactNode[] {
     if (!url) continue;
     if (start > at) out.push(text.slice(at, start));
     out.push(
-      <a key={start} href={url} rel="noreferrer" target="_blank">
+      <SameOriginLink key={start} href={url}>
         {url}
-      </a>,
+      </SameOriginLink>,
     );
     at = start + url.length;
   }
@@ -1688,9 +1689,9 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
     );
   }
   return (
-    <a {...rest} href={href} title={title} target="_blank" rel="noopener noreferrer">
+    <SameOriginLink {...rest} href={href} title={title}>
       {children}
-    </a>
+    </SameOriginLink>
   );
 }
 
