@@ -726,12 +726,41 @@ export function projectBackLink(session: any): { path: string; title: string | n
 
 /** Relation metadata, deliberately separate from user-created tags. Optional `projectId` keeps
  * rolling upgrades quiet: an older API simply renders no badge. */
-export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
+export function CoordinatorBadge({
+  projectId,
+  label = '协调',
+  accessibleName = '项目协调会话',
+}: {
+  projectId?: string | null;
+  label?: string;
+  accessibleName?: string;
+}) {
   if (!projectId) return null;
   return (
-    <span className="coordinator-badge" title="This session coordinates a project">
-      Coordinator
+    <span className="coordinator-badge" aria-label={accessibleName} title={accessibleName}>
+      {label}
     </span>
+  );
+}
+
+/** The title is the only flexible item: time, merge state, and coordinator relation stay visible
+ * while a long title ellipsizes into whatever width remains. */
+export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session: any; hoverTipOpen?: boolean }) {
+  return (
+    <div className="session-title-row">
+      <div className="session-title">{s.title}</div>
+      {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
+        <Tooltip
+          title={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
+          placement="top"
+          open={hoverTipOpen}
+        >
+          <span className="session-merge-badge">⚠</span>
+        </Tooltip>
+      )}
+      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <CoordinatorBadge projectId={s.projectId} />
+    </div>
   );
 }
 
@@ -4748,30 +4777,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <StatusIcon session={s} />
                       </span>
                       <div className="session-main">
-                        <div className="session-title-row">
-                          <div className="session-title">{s.title}</div>
-                          {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
-                            <Tooltip
-                              title={
-                                s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'
-                              }
-                              placement="top"
-                              open={hoverTipOpen}
-                            >
-                              <span className="session-merge-badge">⚠</span>
-                            </Tooltip>
-                          )}
-                          <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
-                        </div>
-                        {/* Coordinator metadata and tags lead the second line; the reply preview
-                            follows them. Tags sat
+                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+                        {/* Tags lead the second line and the reply preview follows them. They sat
                             beside the title as bare colour dots until the naming pass started
                             writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
                             meaning lived only in a tooltip. Here they read at a glance and the
-                            title keeps its full width — the preview yields instead, being the
-                            echo of a reply rather than the handle you file the session under. */}
+                            preview yields, being the echo of a reply rather than the handle you
+                            file the session under. */}
                         <div className="session-sub">
-                          <CoordinatorBadge projectId={s.projectId} />
                           <SessionTagChips
                             tags={s.tags as SessionTagRef[] | null | undefined}
                             tooltipOpen={hoverTipOpen}
@@ -4981,7 +4994,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
                 </div>
               )}
-              {!composing && <CoordinatorBadge projectId={selectedSession?.projectId} />}
+              {!composing && (
+                <CoordinatorBadge
+                  projectId={selectedSession?.projectId}
+                  label="Coordinator"
+                  accessibleName="This session coordinates a project"
+                />
+              )}
             </div>
             <div className="workspace-sub">{headSub}</div>
           </div>

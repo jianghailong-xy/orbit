@@ -2676,9 +2676,8 @@ body {
   height: 8px;
   border-radius: 50%;
 }
-/* Second line of a row: fixed relation metadata, capped tags, then the reply preview. The preview
-   takes what's left (and ellipsizes), so none of them wrap the 64px row taller or steal width from
-   the title above. */
+/* Second line of a row: capped tags, then the reply preview. The preview takes what's left (and
+   ellipsizes), so neither wraps the 64px row taller. */
 .session-sub {
   display: flex;
   align-items: center;
@@ -2686,10 +2685,10 @@ body {
   min-width: 0;
   margin-top: 4px;
 }
-/* Per-row tags: one named chip plus a fixed "+N" summary. Coordinator is also fixed metadata on
-   this line, so the whole tag group has both a proportional and an absolute cap; otherwise two or
-   three ordinary names can consume the reply preview completely in a resized column. The colour
-   remains a scan aid only; the adjacent sr-only text carries every name independently of colour. */
+/* Per-row tags: one named chip plus a fixed "+N" summary. The group has both a proportional and
+   an absolute cap; otherwise two or three ordinary names can consume the reply preview completely
+   in a resized column. The colour remains a scan aid only; the adjacent sr-only text carries every
+   name independently of colour. */
 .session-tag-chips {
   flex: 0 1 auto;
   min-width: 0;
@@ -2735,9 +2734,8 @@ html[data-theme='dark'] .session-tag-chip {
 .session-tag-more--total {
   display: none;
 }
-/* At the default 320px outer column the list content is about 280px wide. Below that, a named
-   tag no longer leaves a useful reply preview beside the 80px Coordinator badge, so show the
-   exact total instead. */
+/* At the default 320px outer column the list content is about 280px wide. Below that, a named tag
+   no longer leaves a useful reply preview, so show the exact total instead. */
 @container session-list (max-width: 279px) {
   .session-tag-chips {
     flex: none;
@@ -2749,15 +2747,6 @@ html[data-theme='dark'] .session-tag-chip {
   }
   .session-tag-more--total {
     display: inline;
-  }
-}
-/* Near the 200px minimum outer width (about 160–180px inside its gutters), a coordinator row's
-   reply preview is only one or two characters wide. Keep the exact tag total instead and drop that
-   no-longer-useful tertiary copy. Ordinary rows, which do not spend 80px on the Coordinator badge,
-   keep both their total and their preview. */
-@container session-list (max-width: 179px) {
-  .session-sub:has(.coordinator-badge):has(.session-tag-chips) .session-preview {
-    display: none;
   }
 }
 /* View + tag menu. Names the current view rather than showing a bare icon, so the list is
@@ -2896,13 +2885,13 @@ html[data-theme='dark'] .session-tag-chip {
   display: inline-flex;
   align-items: center;
   flex: none;
-  min-height: 18px;
-  padding: 1px 7px;
-  border: 1px solid var(--border);
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--brand-border);
   border-radius: 999px;
-  background: var(--fill-muted);
-  color: var(--text-1);
-  font-size: 10.5px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: 0.01em;
@@ -3817,11 +3806,12 @@ html[data-theme='dark'] .session-tag-chip {
   flex: 1;
   min-width: 0;
 }
-/* Title and time share the first row: title fills, time pins to the right. */
+/* Title is the only flexible item; fixed trailing metadata stays visible while it ellipsizes. */
 .session-title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .session-title {
   flex: 1;

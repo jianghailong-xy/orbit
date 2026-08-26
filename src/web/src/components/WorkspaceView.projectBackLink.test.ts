@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CoordinatorBadge, projectBackLink, SessionTagChips } from './WorkspaceView';
+import { CoordinatorBadge, projectBackLink, SessionTagChips, SessionTitleRow } from './WorkspaceView';
 import type { SessionTagRef } from '../lib/sessionGrouping';
 
 /**
@@ -41,16 +41,46 @@ describe('projectBackLink', () => {
 });
 
 describe('CoordinatorBadge', () => {
-  it('renders read-only relation metadata for a coordinator session', () => {
+  it('renders an accessible marker only when the row coordinates a project', () => {
     const html = renderToStaticMarkup(createElement(CoordinatorBadge, { projectId: 'project-1' }));
     expect(html).toContain('class="coordinator-badge"');
-    expect(html).toContain('Coordinator');
+    expect(html).toContain('aria-label="项目协调会话"');
+    expect(html).toContain('>协调</span>');
     expect(html).not.toContain('<button');
-  });
-
-  it('renders nothing for ordinary and rolling-upgrade session rows', () => {
     expect(renderToStaticMarkup(createElement(CoordinatorBadge, { projectId: null }))).toBe('');
     expect(renderToStaticMarkup(createElement(CoordinatorBadge))).toBe('');
+  });
+
+  it('keeps the marker when a long row title ellipsizes', () => {
+    const title = '会话标题非常长'.repeat(20);
+    const html = renderToStaticMarkup(
+      createElement(SessionTitleRow, {
+        session: {
+          title,
+          projectId: 'project-1',
+          createdAt: '2026-08-26T12:00:00.000Z',
+        },
+      }),
+    );
+    expect(html).toContain(`class="session-title">${title}</div>`);
+    expect(html).toContain('class="coordinator-badge"');
+    expect(html.indexOf('class="coordinator-badge"')).toBeGreaterThan(html.indexOf('class="session-title"'));
+
+    // jsdom has no layout engine, so assert the responsive flex contract directly: the title is
+    // the shrinking, ellipsized item and the trailing chip never shrinks.
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const row = css.match(/\.session-title-row\s*\{([^}]*)\}/)?.[1] ?? '';
+    const titleRule = css.match(/\.session-title\s*\{([^}]*)\}/)?.[1] ?? '';
+    const marker = css.match(/\.coordinator-badge\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(row).toContain('min-width: 0');
+    expect(titleRule).toContain('flex: 1');
+    expect(titleRule).toContain('min-width: 0');
+    expect(titleRule).toContain('overflow: hidden');
+    expect(titleRule).toContain('text-overflow: ellipsis');
+    expect(titleRule).toContain('white-space: nowrap');
+    expect(marker).toContain('flex: none');
+    expect(marker).toContain('white-space: nowrap');
   });
 });
 
@@ -101,9 +131,5 @@ describe('SessionTagChips', () => {
     expect(label).toContain('white-space: nowrap');
     expect(count).toContain('flex: none');
     expect(css).toMatch(/@container session-list \(max-width: 279px\)/);
-    expect(css).toMatch(/@container session-list \(max-width: 179px\)/);
-    expect(css).toMatch(
-      /\.session-sub:has\(\.coordinator-badge\):has\(\.session-tag-chips\) \.session-preview\s*\{[^}]*display: none/,
-    );
   });
 });
