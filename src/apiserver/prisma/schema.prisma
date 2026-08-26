@@ -3057,6 +3057,10 @@ model Task {
   /// indexes, which is what keeps a project or parent delete from scanning the task table.
   @@index([projectId])
   @@index([parentTaskId])
+  /// Cover GET /projects' page-wide rollup without visiting the wide Task heap (154 MB for 111k
+  /// rows on the production workload). Created PARTIAL for project tasks in migration 0178; the
+  /// schema cannot express that predicate, just like the two task-tree indexes below.
+  @@index([ownerId, projectId, status, id, updatedAt], map: "task_project_rollup_covering_idx")
   /// The two reads `GET /projects/:id/tasks/page` makes: one project's top-level tasks, and one
   /// task's direct children, both in cursor order. They need SEPARATE indexes because the top
   /// level is `parent_task_id IS NULL` — an index scan key PostgreSQL can seek on but cannot
