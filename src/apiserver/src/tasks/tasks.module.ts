@@ -3,6 +3,7 @@ import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.modu
 import { ProjectAttributionModule } from '../projects/project-attribution.module';
 import { ProjectHandoffModule } from '../projects/project-handoff.module';
 import { SessionsModule } from '../sessions/sessions.module';
+import { PushModule } from '../push/push.module';
 import { TasksController } from './tasks.controller';
 import { ReferenceExpansionService } from './reference-expansion';
 import { TasksService } from './tasks.service';
@@ -16,6 +17,7 @@ import { TaskJudgmentRequestController } from './task-judgment-request.controlle
     ProjectHandoffModule,
     ProjectAttributionModule,
     CoordinatorJudgmentModule,
+    PushModule,
   ],
   controllers: [TasksController, TaskCompletionEvidenceController, TaskJudgmentRequestController],
   providers: [TasksService, ReferenceExpansionService, TaskCompletionEvidenceService],

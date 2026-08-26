@@ -140,6 +140,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `session_dispatch_authority_guard`（0122，BEFORE INSERT ON session） | 被派发 `task` 行 `FOR SHARE` | **保留** | 它是派发权限的插入时门。Session INSERT 因此是 50 → 30 的形状；但一次 Session INSERT 持有的 Session 行同样是别人看不见的新行，与 §2 的 INSERT 论证同构。 |
 | `project_acceptance_task_fact` / `_update`（0127） | 该 Task 的 `project` 行 `FOR NO KEY UPDATE` | **保留；它是 §6 那条倒序的来源** | 见 §6。 |
 | `project_acceptance_criteria_fact`（0172） | 已持有 `project`(40) 后写当前 criterion definition 子行、acceptance audit/run 子行(60)；definition normalize 只改正在写入的同一行 | **结构化改造后保留** | 旧客户端的文本写在同一事务内同步成定义行；新客户端先写定义行再写兼容投影。两条路径都保持 40 → 60，不新增反向等待边。 |
+| `task_judgment_delivery_file` / `_stop`（0182） | 已持有 `task`(50) 后插入 request，并由 trigger 写 inbox/push 子行(60)；request 终结只更新它自己的 push 子行 | **新增** | 收件项/outbox 与 request 同事务，且 recipient 由 request 的 `owner_id` 快照约束，不另建 `user` FK，因而不会在 50 之后倒取 owner(10)。worker 的 APNs 调用在事务外，靠 delivery 行 lease/CAS fencing。 |
 | `project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project） | 该 project 下**全部** `task` 行 | **保留** | 40 → 50，顺序内。只在协调开关翻转时发生。 |
 | `Task.updated_at` 作为版本边界 | — | **已取消（0132）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
 | `Session.inbox_lease_owner` / `inbox_lease_generation` fencing | 与 `SELECT … FOR UPDATE` 同一条语句 | **保留，未触碰** | 本次没有任何改动会改变 lease fencing 的语义：`lockSessionLeaseOwner` 一字未动，`runner-write-lease-owner.spec.ts` 与 `inbox-lease-generation.spec.ts` 全绿。 |

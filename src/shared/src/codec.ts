@@ -151,6 +151,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // legacy/manual Sessions, but when present it is as followable as the source Session beside it.
   'sourceAttemptId',
   'evidenceId',
+  // N12's device receipt names the reliable in-app item it projects. A delivery audit reader can
+  // follow this address back to the independent request/version item; it is not a lease token.
+  'inboxItemId',
+  // N12's in-app item resolves the N11 text recipient into the concrete account UUID that owns the
+  // inbox. It is an address returned to inbox/audit readers, not an opaque transport token.
+  'recipientId',
   // Unit L4's recorded answer about one crossing (migration 0155): the two ends, the session that
   // asked, the person who answered and the one task the yes was spent on. Every one of them is an
   // address a reader follows — open that project, open that session, run that task — which is the

@@ -112,6 +112,7 @@ export class TaskJudgmentRequestDto {
   evidenceDigest!: string;
   kind!: TaskCompletionCriterionValue;
   recipientType!: 'SYSTEM_EXECUTABLE_EVALUATOR' | 'VERIFIER_TASK' | 'ACCOUNT_OWNER';
+  @IsPublicId()
   recipientId!: string;
   status!: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
   createdAt!: Date;

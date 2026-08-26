@@ -12,7 +12,7 @@
 #   scripts/deadlock-barrier.sh dependency-revision  # the 0132 dispatch boundary, both commit orders
 #   scripts/deadlock-barrier.sh dispatch-epoch # the 0137 two-pass advance vs 0154's one batch
 #   scripts/deadlock-barrier.sh evidence       # N10 completion evidence against real PostgreSQL
-#   scripts/deadlock-barrier.sh judgment       # N11 evidence-bound request/signoff lifecycle
+#   scripts/deadlock-barrier.sh judgment       # N11/N12 request, signoff and delivery lifecycle
 #   scripts/deadlock-barrier.sh reorder        # the reversed sidebar reorder, control and fix
 #   scripts/deadlock-barrier.sh all            # every gate above, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
@@ -141,6 +141,7 @@ run_target() {
       build/tasks/task-executable-acceptance.pg.spec.js \
       build/tasks/task-judgment-verification.pg.spec.js \
       build/tasks/task-human-signoff.pg.spec.js \
+      build/push/judgment-delivery.pg.spec.js \
       build/tasks/verification-epoch.pg.spec.js) ;;
   esac
   echo "==> $1"

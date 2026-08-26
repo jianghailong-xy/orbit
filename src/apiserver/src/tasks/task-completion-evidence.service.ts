@@ -7,6 +7,7 @@ import { TaskCompletionEvidenceDto, TaskJudgmentRequestDto } from './dto';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 import { routeTaskJudgment } from './task-judgment-request';
 import { TasksService } from './tasks.service';
+import { JudgmentDeliveryService } from '../push/judgment-delivery.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -153,6 +154,7 @@ export class TaskCompletionEvidenceService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly tasks?: TasksService,
+    @Optional() private readonly deliveries?: JudgmentDeliveryService,
   ) {}
 
   async submit(ownerId: string, taskId: string, actor: CompletionEvidenceActor, input: SubmitCompletionEvidence) {
@@ -285,6 +287,13 @@ export class TaskCompletionEvidenceService {
         );
       }
       await this.tasks.retireSupersededJudgmentVerifications(ownerId, taskId);
+    }
+    if (committed.request.kind === 'HUMAN_SIGNOFF'
+      && committed.request.status === TaskJudgmentRequestStatus.OPEN) {
+      // The trigger already committed the inbox/outbox rows. This is only the low-latency nudge;
+      // startup recovery and the persisted nextAttemptAt remain the guarantee if this process dies
+      // between COMMIT and this line.
+      this.deliveries?.kick();
     }
     return committed.evidence;
   }

@@ -260,6 +260,21 @@ enum TaskJudgmentDecision {
   @@map("task_judgment_decision")
 }
 
+/// What happened to the retryable device projection of one durable in-app judgment item.
+/// PENDING/BLOCKED may be retried, DELIVERING is leased, and the remaining three values are
+/// terminal receipts. CANCELLED means the request was decided or superseded before delivery; it
+/// is deliberately different from DEAD, which means the delivery budget itself was exhausted.
+enum TaskJudgmentPushDeliveryStatus {
+  PENDING
+  DELIVERING
+  DELIVERED
+  BLOCKED
+  DEAD
+  CANCELLED
+
+  @@map("task_judgment_push_delivery_status")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -2994,6 +3009,7 @@ model Task {
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
   judgmentRequests TaskJudgmentRequest[]
+  judgmentInboxItems TaskJudgmentInboxItem[]
   /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
   /// criterion, and retries return that same event rather than minting a second judgment.
   humanSignoffs TaskHumanSignoff[]
@@ -3183,6 +3199,7 @@ model TaskJudgmentRequest {
 
   executableResult TaskExecutableJudgmentResult?
   humanSignoff TaskHumanSignoff?
+  inboxItems TaskJudgmentInboxItem[]
 
   @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
   @@unique([taskId, criterionRevision, evidenceDigest, kind], map: "task_judgment_request_fact_key")
@@ -3190,6 +3207,82 @@ model TaskJudgmentRequest {
   @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
   @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
   @@map("task_judgment_request")
+}
+
+/// The reliable, in-app delivery of one HUMAN_SIGNOFF request to one concrete person.
+///
+/// Migration 0182 files this row from an AFTER INSERT trigger on `TaskJudgmentRequest`, in the
+/// request's own transaction. `deliveredAt` is therefore the receipt for the reliable primary
+/// channel: if the request commits, this row has already committed; if either insert fails, both
+/// roll back. Titles, action and deep link are snapshots so the inbox remains an audit of what was
+/// put in front of the recipient even if the task/project is renamed later.
+model TaskJudgmentInboxItem {
+  id             String @id @default(uuid(7)) @db.Uuid
+  requestId      String @map("request_id") @db.Uuid
+  requestVersion Int    @default(1) @map("request_version")
+  request        TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  taskId         String @map("task_id") @db.Uuid
+  ownerId        String @map("owner_id") @db.Uuid
+  task           Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  recipientId    String @map("recipient_id") @db.Uuid
+
+  projectId     String? @map("project_id") @db.Uuid
+  projectTitle  String? @map("project_title")
+  taskTitle     String  @map("task_title")
+  requiredAction String @map("required_action")
+  deepLink       String @map("deep_link")
+  createdAt      DateTime @default(now()) @map("created_at")
+  deliveredAt    DateTime @default(now()) @map("delivered_at")
+
+  pushDelivery TaskJudgmentPushDelivery?
+
+  @@unique([requestId, requestVersion], map: "task_judgment_inbox_request_version_key")
+  @@unique([id, requestId, requestVersion], map: "task_judgment_inbox_delivery_fkey")
+  @@index([recipientId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_recipient_idx")
+  @@index([taskId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_task_idx")
+  @@map("task_judgment_inbox_item")
+}
+
+/// The retryable APNs projection of one in-app item.
+///
+/// There is one logical notification key per request/version. A worker lease prevents concurrent
+/// sends; a stable APNs collapse id makes the unavoidable "APNs accepted, process died before the
+/// receipt" replay replace the earlier banner rather than build a notification storm. `attempts`
+/// counts every transport pass, while `failures` alone spends the DEAD budget: no device or an
+/// unconfigured sender remains BLOCKED and can recover years later without losing the request.
+model TaskJudgmentPushDelivery {
+  id             String @id @default(uuid(7)) @db.Uuid
+  inboxItemId    String @unique @map("inbox_item_id") @db.Uuid
+  requestId      String @map("request_id") @db.Uuid
+  requestVersion Int    @map("request_version")
+  inboxItem      TaskJudgmentInboxItem @relation(fields: [inboxItemId, requestId, requestVersion], references: [id, requestId, requestVersion], onDelete: Cascade, map: "task_judgment_push_inbox_fkey")
+
+  logicalNotificationKey String @unique @map("logical_notification_key")
+  collapseId             String @map("collapse_id")
+  status                  TaskJudgmentPushDeliveryStatus @default(PENDING)
+  attempts                Int @default(0)
+  failures                Int @default(0)
+  /// Consecutive expired DELIVERING leases. Reset whenever a worker records an outcome.
+  claims                  Int @default(0)
+  nextAttemptAt           DateTime? @default(now()) @map("next_attempt_at")
+  leaseHolder             String? @map("lease_holder")
+  leaseExpiresAt          DateTime? @map("lease_expires_at")
+  lastAttemptAt           DateTime? @map("last_attempt_at")
+  errorCode               String? @map("error_code")
+  requiredAction          String? @map("required_action")
+  lastError               String? @map("last_error")
+  lastPayload             Json? @map("last_payload")
+  deliveredDevices        Int? @map("delivered_devices")
+  deliveredAt             DateTime? @map("delivered_at")
+  stoppedAt               DateTime? @map("stopped_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([nextAttemptAt, createdAt], map: "task_judgment_push_due_idx")
+  @@index([status, updatedAt], map: "task_judgment_push_status_idx")
+  @@unique([inboxItemId, requestId, requestVersion], map: "task_judgment_push_inbox_request_version_key")
+  @@unique([requestId, requestVersion], map: "task_judgment_push_request_version_key")
+  @@map("task_judgment_push_delivery")
 }
 
 /// The command observation that decides an EXECUTABLE request. A comment may render it, but this

@@ -28,8 +28,8 @@ write appears, moves or changes shape without its entry moving with it.
 |---|---:|---|
 | `TRANSACTION_UNITS` | 56 | Owns a transaction. This is where the retry decision lives. |
 | `TRANSACTION_PARTICIPANTS` | 31 | Writes only through a transaction client its caller owns. |
-| `STATEMENT_UNITS` | 106 | Runs outside any transaction, in one of five classes. |
-| `TRIGGER_WRITE_SOURCES` | 77 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
+| `STATEMENT_UNITS` | 109 | Runs outside any transaction, in one of five classes. |
+| `TRIGGER_WRITE_SOURCES` | 79 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
 
 The trigger list is the half no scan of the TypeScript could find, and it is the half both
 production deadlocks turned on: in each of them at least one wait edge came from a lock no
@@ -64,6 +64,13 @@ than spend four deadlines on the same one.
 statement has no transaction to re-run; wrapping one in `$transaction` purely so a retry loop had
 something to hold would change what the statement is. They are covered by the global boundary's
 typed 503 instead. The five classes and their exposure are in `STATEMENT_CLASSES`.
+
+**N12's device delivery is an inventoried outbox, not an exception to that rule.** The request
+trigger writes the in-app item and push ledger inside the evidence transaction. The worker's three
+autocommit fences then (1) claim one due row with `FOR UPDATE SKIP LOCKED`, (2) record the APNs
+outcome only while that lease and OPEN request still match, and (3) retire a repeated worker-crash
+lease as DEAD. APNs is called between claim and receipt, never inside a retried transaction; the
+stable logical/collapse keys make replay one notification rather than a second business fact.
 
 **One residual is recorded rather than fixed.** `TasksService.clearFailedForRetry` writes `status`
 as a single statement, so an `AFTER` trigger takes the project `FOR NO KEY UPDATE` while the task
