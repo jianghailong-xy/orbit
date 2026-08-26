@@ -35,6 +35,37 @@ test('user REST submit derives actor from auth and forwards the required source 
   assert.deepEqual(calls[1], [OWNER, TASK]);
 });
 
+test('legacy comment import is a distinct authenticated user call, never a comment side effect', async () => {
+  const calls: unknown[][] = [];
+  const evidence = {
+    importLegacyComment: async (...args: unknown[]) => {
+      calls.push(args);
+      return { id: 'legacy-evidence-1' };
+    },
+  };
+  const controller = new TaskCompletionEvidenceController(evidence as never);
+  const dto = {
+    sourceCommentId: '00000000-0000-7000-8000-000000000014',
+    sourceSessionId: SESSION,
+    evidence: { commands: [{ command: 'npm test', exitCode: 0 }] },
+    idempotencyKey: 'review-comment-14',
+    reviewNote: 'I read the source and selected only the recorded command result.',
+    devicePush: false,
+  };
+
+  assert.deepEqual(await controller.importLegacyComment(
+    { userId: OWNER, email: 'n8@invalid.test' },
+    TASK,
+    dto,
+  ), { id: 'legacy-evidence-1' });
+  assert.deepEqual(calls, [[
+    OWNER,
+    TASK,
+    { type: CreatorType.USER, id: OWNER },
+    dto,
+  ]]);
+});
+
 test('runner REST submit derives actor and source from authenticated headers, not evidence prose', async () => {
   const calls: unknown[][] = [];
   const evidence = {

@@ -151,6 +151,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // legacy/manual Sessions, but when present it is as followable as the source Session beside it.
   'sourceAttemptId',
   'evidenceId',
+  // N8's explicit legacy-import and bounded-backfill receipts. Each is an address returned by
+  // the audit response (and pushTaskIds is the exact allowlist the operator supplied).
+  'sourceCommentId',
+  'sourceAuthorId',
+  'importedById',
+  'backfillBatchId',
+  'pushTaskIds',
   // N12's device receipt names the reliable in-app item it projects. A delivery audit reader can
   // follow this address back to the independent request/version item; it is not a lease token.
   'inboxItemId',

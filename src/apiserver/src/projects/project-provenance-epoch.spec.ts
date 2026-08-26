@@ -152,6 +152,8 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':
     'validates and records completion-evidence source provenance; grants no project authority',
+  'src/apiserver/src/tasks/task-signoff-migration.cli.ts':
+    'forwards an operator-named legacy evidence source Session; does not read Task provenance',
   'src/apiserver/src/tasks/task-judgment-request.ts':
     'routes an evidence source Session to its executable evaluator; grants no project authority',
   'src/apiserver/src/runner-api/runner-task-completion-evidence.controller.ts':

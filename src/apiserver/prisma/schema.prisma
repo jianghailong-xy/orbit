@@ -240,6 +240,25 @@ enum TaskJudgmentRequestStatus {
   @@map("task_judgment_request_status")
 }
 
+/// How a request entered the durable judgment ledger. BACKFILL is never a migration side effect:
+/// it always names the separately invoked, bounded batch row that selected it.
+enum TaskJudgmentRequestOrigin {
+  LIVE_EVIDENCE
+  LEGACY_IMPORT
+  BACKFILL
+
+  @@map("task_judgment_request_origin")
+}
+
+/// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
+/// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
+enum TaskJudgmentDevicePolicy {
+  IMMEDIATE
+  IN_APP_ONLY
+
+  @@map("task_judgment_device_policy")
+}
+
 /// The concrete principal that owns the next decision. These are peers selected from the task's
 /// declared criterion; no row moves from one recipient type to another as a fallback.
 enum TaskJudgmentRecipientType {
@@ -330,6 +349,8 @@ model User {
   /// Human completion judgments authored by this person. The event carries its own signer rather
   /// than borrowing Task.ownerId so the audit answers who actually signed.
   taskHumanSignoffs TaskHumanSignoff[]
+  legacyEvidenceImports TaskLegacyEvidenceImport[]
+  judgmentBackfillBatches TaskJudgmentBackfillBatch[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -3009,6 +3030,7 @@ model Task {
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
   judgmentRequests TaskJudgmentRequest[]
+  legacyEvidenceImports TaskLegacyEvidenceImport[]
   judgmentInboxItems TaskJudgmentInboxItem[]
   /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
   /// criterion, and retries return that same event rather than minting a second judgment.
@@ -3126,6 +3148,7 @@ model TaskCompletionEvidence {
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
   judgmentRequests TaskJudgmentRequest[]
+  legacyImport TaskLegacyEvidenceImport?
 
   @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
   @@unique([id, taskId, criterionRevision, evidenceDigest], map: "task_completion_evidence_bound_fact_key")
@@ -3147,6 +3170,73 @@ model TaskCompletionEvidenceIdempotency {
   @@unique([taskId, idempotencyKey], map: "task_completion_evidence_idempotency_task_key")
   @@index([evidenceId], map: "task_completion_evidence_idempotency_evidence_idx")
   @@map("task_completion_evidence_idempotency")
+}
+
+/// The audit receipt for an explicit conversion of one historical TaskComment into one structured
+/// evidence revision. No comment producer writes this table; only the user-authenticated import
+/// path does, after the caller supplies the structured fact and a non-blank review note.
+model TaskLegacyEvidenceImport {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_legacy_evidence_import_task_fkey")
+
+  evidenceId String @map("evidence_id") @db.Uuid
+  evidence TaskCompletionEvidence @relation(fields: [evidenceId, taskId], references: [id, taskId], onDelete: Cascade, map: "task_legacy_evidence_import_evidence_fkey")
+
+  sourceCommentId String @map("source_comment_id") @db.Uuid
+  sourceComment TaskComment @relation(fields: [sourceCommentId, taskId], references: [id, taskId], onDelete: NoAction, map: "task_legacy_evidence_import_comment_fkey")
+  /// An immutable provenance snapshot, deliberately not an FK: Session retention must not erase
+  /// which execution the reviewer explicitly named as the source.
+  sourceSessionId String @map("source_session_id") @db.Uuid
+  sourceAuthorType CreatorType @map("source_author_type")
+  sourceAuthorId String @map("source_author_id") @db.Uuid
+  sourceCreatedAt DateTime @map("source_created_at")
+  sourceDigest String @map("source_digest") @db.Char(64)
+  structuredEvidenceDigest String @map("structured_evidence_digest") @db.Char(64)
+
+  importedById String @map("imported_by_id") @db.Uuid
+  importedBy User @relation(fields: [importedById], references: [id], onDelete: Restrict)
+  importedAt DateTime @default(now()) @map("imported_at")
+  idempotencyKey String @map("idempotency_key")
+  reviewNote String @map("review_note")
+  devicePolicy TaskJudgmentDevicePolicy @map("device_policy")
+
+  @@unique([evidenceId, taskId], map: "task_legacy_evidence_import_evidence_key")
+  @@unique([taskId, sourceCommentId], map: "task_legacy_evidence_import_source_key")
+  @@unique([taskId, idempotencyKey], map: "task_legacy_evidence_import_idempotency_key")
+  @@index([importedById, importedAt(sort: Desc)], map: "task_legacy_evidence_import_reviewer_idx")
+  @@index([sourceSessionId], map: "task_legacy_evidence_import_source_session_idx")
+  @@map("task_legacy_evidence_import")
+}
+
+/// One bounded operator invocation of the request backfill. The selection and push allowlist are
+/// immutable input facts; all counters are filled in the same transaction as its request rows.
+model TaskJudgmentBackfillBatch {
+  id      String @id @default(uuid(7)) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  actorType CreatorType @map("actor_type")
+  actorId String @map("actor_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  inputDigest String @map("input_digest") @db.Char(64)
+  batchSize Int @map("batch_size")
+  pushTaskIds String[] @default([]) @map("push_task_ids") @db.Uuid
+  selection Json
+  startedAt DateTime @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  scannedCount Int? @map("scanned_count")
+  requestCount Int? @map("request_count")
+  inboxCount Int? @map("inbox_count")
+  pushSelectedCount Int? @map("push_selected_count")
+  pushSuppressedCount Int? @map("push_suppressed_count")
+  durationMs BigInt? @map("duration_ms")
+
+  requests TaskJudgmentRequest[]
+
+  @@unique([ownerId, idempotencyKey], map: "task_judgment_backfill_batch_owner_key")
+  @@index([ownerId, startedAt(sort: Desc)], map: "task_judgment_backfill_batch_owner_started_idx")
+  @@map("task_judgment_backfill_batch")
 }
 
 /// A person's explicit judgment that the task's HUMAN_SIGNOFF criterion is satisfied.
@@ -3190,6 +3280,10 @@ model TaskJudgmentRequest {
   recipientType TaskJudgmentRecipientType @map("recipient_type")
   recipientId   String @map("recipient_id")
   status        TaskJudgmentRequestStatus @default(OPEN)
+  origin        TaskJudgmentRequestOrigin @default(LIVE_EVIDENCE)
+  devicePolicy  TaskJudgmentDevicePolicy @default(IMMEDIATE) @map("device_policy")
+  backfillBatchId String? @map("backfill_batch_id") @db.Uuid
+  backfillBatch TaskJudgmentBackfillBatch? @relation(fields: [backfillBatchId], references: [id], onDelete: Restrict)
 
   createdAt   DateTime @default(now()) @map("created_at")
   decidedAt   DateTime? @map("decided_at")
@@ -3210,6 +3304,7 @@ model TaskJudgmentRequest {
   @@index([taskId, status, createdAt(sort: Desc)], map: "task_judgment_request_task_status_idx")
   @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
   @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
+  @@index([backfillBatchId], map: "task_judgment_request_backfill_batch_idx")
   @@map("task_judgment_request")
 }
 
@@ -3783,7 +3878,9 @@ model TaskComment {
   createdAt  DateTime    @default(now()) @map("created_at")
 
   deliveries TaskCommentMentionDelivery[]
+  legacyEvidenceImports TaskLegacyEvidenceImport[]
 
+  @@unique([id, taskId], map: "task_comment_id_task_id_key")
   @@index([taskId, createdAt])
   @@map("task_comment")
 }

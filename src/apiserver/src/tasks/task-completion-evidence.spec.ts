@@ -28,9 +28,19 @@ test('substantive evidence changes affect the digest while array order and white
   assert.match(completionDigest(base), /^[0-9a-f]{64}$/);
 });
 
-test('the evidence service is state-orthogonal and contains no comment/final-reply inference', () => {
+test('the evidence service is state-orthogonal and only the explicit legacy door reads a comment', () => {
   const source = readFileSync('src/tasks/task-completion-evidence.service.ts', 'utf8');
-  assert.doesNotMatch(source, /taskComment|lastAssistant|finalReply|publish|notify/);
+  const liveSubmit = source.slice(source.indexOf('  async submit('), source.indexOf('  private async afterEvidenceCommit('));
+  assert.ok(liveSubmit.length > 1_000, 'the static check did not locate the live submission path');
+  assert.doesNotMatch(liveSubmit, /taskComment|lastAssistant|finalReply/,
+    'ordinary evidence submission must never infer a fact from prose');
+  assert.doesNotMatch(source, /lastAssistant|finalReply|publish|notify/);
+  assert.equal((source.match(/taskComment\.findFirst/g) ?? []).length, 1,
+    'exactly the explicit one-comment import may read a historical comment');
+  assert.doesNotMatch(source, /taskComment\.(?:findMany|aggregate|count)/,
+    'legacy import must not enumerate comments for bulk inference');
+  assert.match(source, /async importLegacyComment[\s\S]*actor\.type !== CreatorType\.USER/);
+  assert.match(source, /createHash\('sha256'\)\.update\(sourceComment\.body, 'utf8'\)/);
   assert.doesNotMatch(source, /(?:tx|this\.prisma)\.task\.update|(?:tx|this\.prisma)\.session\.update/);
   assert.doesNotMatch(source, /ATTEMPT_WAKE_SESSION_PARKED/);
   assert.match(source, /source session for task not found/);

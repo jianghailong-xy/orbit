@@ -3,7 +3,7 @@ import { CreatorType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { SubmitTaskCompletionEvidenceDto } from './dto';
+import { ImportLegacyTaskCommentEvidenceDto, SubmitTaskCompletionEvidenceDto } from './dto';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 
 /** The user REST face of N10's evidence fact. It shares the service and response with runner/MCP. */
@@ -24,6 +24,18 @@ export class TaskCompletionEvidenceController {
       { type: CreatorType.USER, id: user.userId },
       dto,
     );
+  }
+
+  @Post('legacy-import')
+  importLegacyComment(
+    @CurrentUser() user: AuthUser,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: ImportLegacyTaskCommentEvidenceDto,
+  ) {
+    return this.evidence.importLegacyComment(user.userId, taskId, {
+      type: CreatorType.USER,
+      id: user.userId,
+    }, dto);
   }
 
   @Get()

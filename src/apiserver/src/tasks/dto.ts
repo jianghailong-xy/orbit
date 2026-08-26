@@ -76,6 +76,54 @@ export class SubmitRunnerTaskCompletionEvidenceDto {
   idempotencyKey?: string;
 }
 
+/** A human-reviewed, explicit conversion of one historical comment into structured evidence. */
+export class ImportLegacyTaskCommentEvidenceDto {
+  @IsPublicId()
+  sourceCommentId!: string;
+
+  @IsPublicId()
+  sourceSessionId!: string;
+
+  @IsObject()
+  evidence!: Record<string, unknown>;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4_000)
+  reviewNote!: string;
+
+  /** Default false. Only an explicit true puts this one import on the APNs due ledger. */
+  @IsOptional()
+  @IsBoolean()
+  devicePush?: boolean;
+}
+
+export class TaskLegacyEvidenceImportDto {
+  @IsPublicId()
+  id!: string;
+  @IsPublicId()
+  sourceCommentId!: string;
+  @IsPublicId()
+  sourceSessionId!: string;
+  sourceAuthorType!: CreatorType;
+  @IsPublicId()
+  sourceAuthorId!: string;
+  sourceCreatedAt!: Date;
+  sourceDigest!: string;
+  structuredEvidenceDigest!: string;
+  @IsPublicId()
+  importedById!: string;
+  importedAt!: Date;
+  idempotencyKey!: string;
+  reviewNote!: string;
+  devicePolicy!: 'IMMEDIATE' | 'IN_APP_ONLY';
+}
+
 /** The shared REST/runner/CLI/MCP read shape; every provenance and version field is required. */
 export class TaskCompletionEvidenceDto {
   @IsPublicId()
@@ -97,6 +145,7 @@ export class TaskCompletionEvidenceDto {
   evidenceDigest!: string;
   revision!: string;
   idempotencyKeys!: string[];
+  legacyImport!: TaskLegacyEvidenceImportDto | null;
   judgmentRequest!: TaskJudgmentRequestDto;
 }
 
@@ -115,6 +164,11 @@ export class TaskJudgmentRequestDto {
   @IsPublicId()
   recipientId!: string;
   status!: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
+  origin!: 'LIVE_EVIDENCE' | 'LEGACY_IMPORT' | 'BACKFILL';
+  devicePolicy!: 'IMMEDIATE' | 'IN_APP_ONLY';
+  @IsOptional()
+  @IsPublicId()
+  backfillBatchId!: string | null;
   createdAt!: Date;
   decidedAt!: Date | null;
   decidedByType!: string | null;
