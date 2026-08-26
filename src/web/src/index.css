@@ -5742,6 +5742,13 @@ html[data-theme='dark'] .session-tag-chip {
 
 /* ── rich transcript: Markdown + per-tool cards + sub-agent nesting ───────── */
 .md {
+  /* Markdown appears inside vertical scrollers (the transcript, task panel and document view).
+     `overflow-y: auto` also makes their horizontal overflow scrollable, so one path-like inline
+     code span otherwise gives the whole mobile page a desktop-sized scroll width. `anywhere`
+     contributes an emergency break to min-content sizing while leaving ordinary prose alone;
+     fenced code opts out below and keeps its own horizontal scroller. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.6;
   /* Markdown is rendered to real HTML; reset the pre-wrap inherited from
@@ -5792,12 +5799,15 @@ html[data-theme='dark'] .session-tag-chip {
   border-radius: 4px;
 }
 .md pre {
+  max-width: 100%;
   margin: 8px 0;
   padding: 10px 12px;
   background: var(--bg-sunken);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   overflow-x: auto;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .md pre code {
   background: none;

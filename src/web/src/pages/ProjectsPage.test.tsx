@@ -1036,6 +1036,39 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('Land behind a flag,<br/>');
   });
 
+  it('contains long inline Markdown tokens without taking scrolling away from fenced code', () => {
+    // This exact shape widened the project document on an iPhone: inline code has no natural
+    // break point, and the document's vertical `overflow:auto` consequently grew a horizontal
+    // scrollbar for the whole page. The fenced command is intentionally different — it should
+    // remain verbatim and scroll inside its own box.
+    const path = 'src/macos/OrbitKit/Tests/OrbitKitTests/PerfBaselineTests.swift';
+    const command =
+      'docker run --rm -e ORBIT_PERF=1 -v "$PWD:/src" -w /src/src/macos/OrbitKit swift:6.1';
+    const qc = newClient();
+    qc.setQueryData(
+      ['project', encodeId(P1)],
+      detail({ instructions: `Harness: \`${path}\`\n\n\`\`\`bash\n${command}\n\`\`\`` }),
+    );
+    const html = renderDetail(qc, encodeId(P1));
+
+    expect(html).toContain(`<code>${path}</code>`);
+    expect(html).toContain('<pre>');
+    expect(html).toContain('language-bash');
+    expect(html).toContain('ORBIT_PERF=1');
+
+    // jsdom has no layout engine, so pin the two halves of the CSS contract directly. The prose
+    // can break an otherwise unbreakable token; preformatted code stays whole and owns x-scroll.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const markdown = css.match(/\.md\s*\{([^}]*)\}/)?.[1] ?? '';
+    const fenced = css.match(/\.md pre\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(markdown).toContain('min-width: 0');
+    expect(markdown).toContain('overflow-wrap: anywhere');
+    expect(fenced).toContain('max-width: 100%');
+    expect(fenced).toContain('overflow-x: auto');
+    expect(fenced).toContain('overflow-wrap: normal');
+    expect(fenced).toContain('word-break: normal');
+  });
+
   it('falls back for every empty field and for a project with no tasks', () => {
     const qc = newClient();
     qc.setQueryData(
