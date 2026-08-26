@@ -410,16 +410,8 @@ private struct NavigationDrawer: View {
     /// still render their static content — only the animated live cues are held back, so opening never
     /// waits on anything. See the call site in `CompactShell`.
     let live: Bool
-    /// Which runner groups are expanded to reveal their agents. A lone group always shows; the group
-    /// holding the current agent is seeded open once (see the `.onChange` below) so the drawer lands
-    /// showing your context, but a tap can still collapse it. Persists across open/close because this
-    /// view stays mounted (offset off-screen) in the shell's ZStack.
-    @State private var expandedRunners: Set<String> = []
-    /// Guards the one-time seed of the selected agent's machine, so a later agent list reload doesn't
-    /// re-open a group the user has since collapsed.
-    @State private var didSeedExpansion = false
     /// The drawer is a quick switcher, not the full task-list directory. Four rows preserve room
-    /// for machines and Recents on a compact screen; the directory page owns the complete set.
+    /// for task lists and Recents on a compact screen; the directory page owns the complete set.
     private let taskListPreviewLimit = 4
     /// How many Recents rows are currently rendered. Grows a page at a time as you scroll to the
     /// bottom of the feed (see `recentsRows`); never reset, so a drawer you reopen keeps the window
@@ -454,12 +446,10 @@ private struct NavigationDrawer: View {
 
             List {
                 // Runners is dropped from the drawer rail on iOS (it lives under Settings); Settings is
-                // the action bar's gear below, and Admin sits inside Settings. The runner-grouped agents
-                // still surface each machine by name — so the rail is just Agents (as machines) + Tasks.
+                // the action bar's gear below, and Admin sits inside Settings. Workspaces occupy the
+                // former Agents destination directly, with Runner demoted to same-line metadata.
                 ForEach(AppSection.visible(isAdmin: isAdmin).filter { ![.runners, .settings, .admin].contains($0) }) { section in
-                    // The Agents nav row is replaced in place by its runner-grouped agents. Each runner
-                    // is a collapsible row (icon · online dot · agent count) that expands to its agents,
-                    // so the machine list stays collapsible instead of always-expanded.
+                    // The Agents nav row is replaced in place by first-level Workspace rows.
                     if section == .agents {
                         agentsRows
                     } else if section == .tasks {
@@ -484,13 +474,6 @@ private struct NavigationDrawer: View {
             // Task-list summaries and the No-list count are navigation data, so fetch them with the
             // drawer rather than waiting until the user opens one list.
             .task { await model.tasks?.loadNavigation() }
-            // Seed the machine you're currently in open on first load (so the drawer lands showing your
-            // context), then let taps win — the selected machine stays collapsible. See `isExpanded`.
-            .onChange(of: selectedGroupKey, initial: true) { _, key in
-                guard !didSeedExpansion, let key else { return }
-                expandedRunners.insert(key)
-                didSeedExpansion = true
-            }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
@@ -799,134 +782,39 @@ private struct NavigationDrawer: View {
         .drawerRow()
     }
 
-    // MARK: Agents grouped by runner (collapsible)
+    // MARK: First-level Workspaces
 
-    /// The runner-grouped agents, where the Agents nav row used to be: each runner is a collapsible
-    /// row that expands to its agents. Renders nothing until the list loads (or with no agents).
+    /// Workspaces replace the Agents nav row directly. Their order remains runner-stable, but Runner
+    /// is metadata on each row rather than a parent the user must expand.
     @ViewBuilder
     private var agentsRows: some View {
         if let agents = model.agents, !agents.items.isEmpty {
-            ForEach(agents.groups) { group in
-                runnerRow(group, agents: agents)
-                if isExpanded(group, totalGroups: agents.groups.count) {
-                    ForEach(group.agents) { agent in
-                        agentRow(agent)
-                    }
-                }
+            ForEach(agents.orderedItems) { agent in
+                agentRow(agent, agents: agents)
             }
         }
     }
 
-    /// A collapsible runner header row (sibling of the section rows): machine icon · name · online
-    /// dot · agent count · disclosure chevron. Tapping expands/collapses its agents.
-    private func runnerRow(_ group: AgentGroup, agents: AgentsModel) -> some View {
-        let expanded = isExpanded(group, totalGroups: agents.groups.count)
-        return Button {
-            toggle(group)
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: group.runnerId == nil ? "shippingbox" : "desktopcomputer")
-                        .frame(width: 24)
-                        .foregroundStyle(.primary)
-                    Text(agents.runnerLabel(group.runnerId))
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 6)
-                    if group.runnerId != nil {
-                        Circle()
-                            .fill(agents.runnerIsOnline(group.runnerId) ? Color.green : Color.secondary.opacity(0.4))
-                            .frame(width: 7, height: 7)
-                    }
-                    Text("\(group.agents.count)")
-                        .font(.orbitMeta)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.orbitMeta)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-    }
-
-    private func groupKey(_ g: AgentGroup) -> String { g.runnerId ?? "host" }
-
-    /// The group key of the machine holding the currently-selected agent, if any — the seed target.
-    private var selectedGroupKey: String? {
-        guard let sel = model.selectedAgentID, let groups = model.agents?.groups else { return nil }
-        return groups.first(where: { $0.agents.contains(where: { $0.id == sel }) }).map(groupKey)
-    }
-
-    /// A group is shown expanded when it's the only group or when it's in `expandedRunners` (seeded from
-    /// the selected agent on first load, then driven by taps). Otherwise collapsed — Recents is the
-    /// primary way in, so the machine list stays tidy by default.
-    private func isExpanded(_ g: AgentGroup, totalGroups: Int) -> Bool {
-        if totalGroups <= 1 { return true }
-        return expandedRunners.contains(groupKey(g))
-    }
-
-    private func toggle(_ g: AgentGroup) {
-        let k = groupKey(g)
-        if expandedRunners.contains(k) { expandedRunners.remove(k) } else { expandedRunners.insert(k) }
-    }
-
-    /// A compact agent row: the native folder glyph in the same icon column as the drawer's primary
-    /// destinations, the name (which already carries the "@ provider" suffix), a disabled pill and
-    /// one trailing status slot. An amber count wins while the workspace needs the user; otherwise a
-    /// running session reuses the exact spinner from the compact Session list. Tapping jumps straight
-    /// to the agent.
-    ///
-    /// The badge is the *quiet* half of the needs-you story — it answers "which workspace", not
-    /// "go now": `NeedsYouBannerView` already carries the urgency and the one-tap jump from wherever
-    /// the user actually is. That's why there is deliberately no roll-up on the runner rows above and
-    /// no dot on the hamburger: a collapsed machine group hiding a badge costs nothing when nobody
-    /// has to hunt through the tree, and restating one fact on four surfaces is noise, not emphasis.
-    private func agentRow(_ agent: Agent) -> some View {
+    /// A compact Workspace row: folder/offline state leads; Workspace · Runner carries identity; one
+    /// trailing slot shows attention or running state. Tapping jumps straight to its sessions.
+    private func agentRow(_ agent: Agent, agents: AgentsModel) -> some View {
         // Yield the pill to the Recents row when the open session is listed there, so the same session
         // isn't highlighted twice (agent row + Recents). Without a Recents row the agent row keeps it.
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
             && !model.selectedSessionInRecents
-        let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
+        let offline = agents.runnerIsOffline(agent.runnerId)
         return Button {
             openAgent(agent.id)
         } label: {
-            // The folder occupies the drawer's standard 24pt icon column. Runner grouping still
-            // supplies the hierarchy; keeping the icon column fixed makes Workspace labels line up
-            // with the other destinations instead of shifting whenever their status changes.
             pill(selected: selected) {
-                HStack(spacing: 12) {
-                    WorkspaceFolderIcon(selected: selected, offline: offline)
-                    HStack(spacing: 6) {
-                        Text(agent.name)
-                            .lineLimit(1)
-                            .foregroundStyle(.primary)
-                        if agent.enabled == false {
-                            Text("disabled")
-                                .font(.orbitMeta)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(.quaternary, in: Capsule())
-                        }
-                    }
-                    Spacer(minLength: 0)
-                    if let waiting = model.agentNeedsYou[agent.id], waiting > 0 {
-                        // Amber on an amber wash, mirroring web's `.tp-count.needs-you` — a count in
-                        // the row's trailing slot, not an alarm.
-                        Text("\(waiting)")
-                            .font(.orbitMeta.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15), in: Capsule())
-                            .accessibilityLabel("\(waiting) waiting for you")
-                    } else if live && !offline && model.runningWorkspaceIDs.contains(agent.id) {
-                        SpinnerGlyph(color: .blue)
-                            .accessibilityLabel("Session running")
-                    }
-                }
+                WorkspaceNavigationRow(
+                    agent: agent,
+                    runnerLabel: agents.runnerLabel(agent.runnerId),
+                    selected: selected,
+                    offline: offline,
+                    running: live && model.runningWorkspaceIDs.contains(agent.id),
+                    waiting: model.agentNeedsYou[agent.id] ?? 0
+                )
             }
         }
         .buttonStyle(.plain)

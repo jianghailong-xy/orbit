@@ -1,8 +1,9 @@
 import SwiftUI
 import OrbitKit
 
-// Batch D + Agents-in-sidebar refinement: the agent *list* (grouped by runner) now lives in the
-// sidebar source list (see `SectionSidebar`), folding away the old middle column. What remains
+// Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar source list
+// (see `SectionSidebar`), folding away the old middle column. iOS renders first-level Workspaces;
+// macOS retains its runner grouping. What remains
 // here is the selected agent's detail, split across the two right panes to mirror Open:
 //   • content column → the agent's sessions as a plain list; the window toolbar hosts the
 //                       Open/Completed/Trash scope switcher (principal), a New-session button
@@ -41,11 +42,69 @@ struct WorkspaceFolderIcon: View {
             .accessibilityHidden(!offline)
     }
 }
+
+/// The shared first-level Workspace row used by both iPhone and iPad navigation. Runner is
+/// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
+/// state, with user attention taking precedence over background work.
+struct WorkspaceNavigationRow: View {
+    let agent: Agent
+    let runnerLabel: String
+    let selected: Bool
+    let offline: Bool
+    let running: Bool
+    let waiting: Int
+    var shortcutIndex: Int? = nil
+
+    var body: some View {
+        let status = WorkspaceNavigationStatusLogic.resolve(
+            waiting: waiting, running: running, runnerOffline: offline)
+        HStack(spacing: 12) {
+            WorkspaceFolderIcon(selected: selected, offline: offline)
+            HStack(spacing: 0) {
+                Text(agent.name)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+                    .layoutPriority(2)
+                if agent.enabled == false {
+                    Text("disabled")
+                        .font(.orbitMeta)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                        .padding(.leading, 6)
+                        .fixedSize()
+                }
+                Text(" · \(runnerLabel)")
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 6)
+            if case .needsYou(let count) = status {
+                Text("\(count)")
+                    .font(.orbitMeta.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.15), in: Capsule())
+                    .accessibilityLabel("\(count) waiting for you")
+            } else if status == .running {
+                SpinnerGlyph(color: .blue)
+                    .accessibilityLabel("Session running")
+            }
+            if let shortcutIndex {
+                Text("⌘\(shortcutIndex + 1)")
+                    .font(.orbitMeta)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
 #endif
 
-/// A row for an agent in the sidebar disclosure: name (+ disabled pill) over runtime · workDir.
-/// `shortcutIndex`, when set (the first nine agents), shows a faint "⌘N" hint for the switch
-/// shortcut so it's learnable.
+/// A Workspace row for the regular-width sidebar. iOS uses the shared first-level single-line row;
+/// macOS preserves its two-line disclosure content. `shortcutIndex`, when set, shows a faint ⌘N.
 struct AgentRowView: View {
     #if os(iOS)
     @Environment(AppModel.self) private var model
@@ -55,18 +114,24 @@ struct AgentRowView: View {
     var configuredProviders: [ConfiguredProvider] = []
     var body: some View {
         #if os(iOS)
-        // Keep the regular-width row's existing design: it has no per-workspace needs-you badge,
-        // so a different session waiting for approval must not hide this workspace's running cue.
         let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
-        let running = !offline && model.runningWorkspaceIDs.contains(agent.id)
+        let running = model.runningWorkspaceIDs.contains(agent.id)
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
+        WorkspaceNavigationRow(
+            agent: agent,
+            runnerLabel: model.agents?.runnerLabel(agent.runnerId) ?? "Shared",
+            selected: selected,
+            offline: offline,
+            running: running,
+            // Regular-width iOS keeps its existing status policy: another Session waiting for the
+            // user must not replace this Workspace's running cue. The compact drawer owns the
+            // needs-you badge; the shared row only supplies its visual when that surface opts in.
+            waiting: 0,
+            shortcutIndex: shortcutIndex
+        )
+        .padding(.vertical, 2)
         #else
-        let running = false
-        #endif
         HStack(spacing: 8) {
-            #if os(iOS)
-            WorkspaceFolderIcon(selected: selected, offline: offline)
-            #endif
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(agent.name).lineLimit(1)
@@ -80,7 +145,7 @@ struct AgentRowView: View {
                      + (agent.workDir.map { " · \($0)" } ?? ""))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
-            if running || shortcutIndex != nil {
+            if shortcutIndex != nil {
                 Spacer(minLength: 4)
             }
             if let shortcutIndex {
@@ -88,14 +153,9 @@ struct AgentRowView: View {
                     .font(.orbitMeta).monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
-            #if os(iOS)
-            if running {
-                SpinnerGlyph(color: .blue)
-                    .accessibilityLabel("Session running")
-            }
-            #endif
         }
         .padding(.vertical, 2)
+        #endif
     }
 }
 

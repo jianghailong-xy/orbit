@@ -27,25 +27,25 @@ struct MainView: View {
     }
 }
 
-/// UI-only selection for the source-list sidebar: a top-level section, or — nested under the
-/// "Workspaces" row — a specific agent. (The web keeps the agent list in a middle column; on macOS we
-/// fold it into the sidebar so picking an agent goes straight to its detail, dropping a column.)
+/// UI-only selection for the source-list sidebar: a top-level section or a specific Workspace.
+/// iPad renders Workspaces directly; macOS keeps them inside its historical disclosure row.
 enum SidebarSelection: Hashable {
     case section(AppSection)
     case agent(String)
 }
 
-/// The leftmost rail, now a source list: top-level sections, with "Workspaces" expandable to its
-/// runner-grouped agents (the list that used to live in the middle column). Admin is role-gated.
-/// Section list + gating come from OrbitKit's `AppSection`.
+/// The leftmost rail, now a source list. iPad uses first-level Workspace rows with Runner metadata;
+/// macOS retains the existing expandable, runner-grouped Workspaces section. Admin is role-gated.
 struct SectionSidebar: View {
     @Environment(AppModel.self) private var model
     let isAdmin: Bool
+    #if !os(iOS)
     @State private var agentsExpanded = true
+    #endif
 
     /// Bridge the two model fields (`selectedSection` + `selectedAgentID`) to the List's single
-    /// selection. The "Workspaces" parent only expands/collapses (it isn't tagged), so `.agents` is
-    /// reached by selecting an agent — which is also the only way it carries a detail.
+    /// selection. A Workspace is the only `.agents` destination that carries a detail; on macOS the
+    /// disclosure parent remains untagged, while iPad presents these same tagged rows directly.
     private var selection: Binding<SidebarSelection?> {
         Binding(
             get: {
@@ -73,7 +73,11 @@ struct SectionSidebar: View {
         return List(selection: selection) {
             ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
                 if section == .agents {
+                    #if os(iOS)
+                    workspaceRows(shortcutIndex: shortcutIndex)
+                    #else
                     agentsDisclosure(shortcutIndex: shortcutIndex)
+                    #endif
                 } else {
                     Label(section.title, systemImage: section.systemImage)
                         .tag(SidebarSelection.section(section))
@@ -91,6 +95,21 @@ struct SectionSidebar: View {
         .task { await model.loadAgentsThenLand() }
     }
 
+    #if os(iOS)
+    @ViewBuilder
+    private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
+        if let agents = model.agents, !agents.items.isEmpty {
+            ForEach(agents.orderedItems) { workspace in
+                AgentRowView(agent: workspace, shortcutIndex: shortcutIndex[workspace.id])
+                    .tag(SidebarSelection.agent(workspace.id))
+            }
+        } else {
+            Text(model.agents?.loading == true ? "Loading…" : "No workspaces")
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+    #else
     private func agentsDisclosure(shortcutIndex: [String: Int]) -> some View {
         DisclosureGroup(isExpanded: $agentsExpanded) {
             if let agents = model.agents, !agents.items.isEmpty {
@@ -111,6 +130,7 @@ struct SectionSidebar: View {
             Label(AppSection.agents.title, systemImage: AppSection.agents.systemImage)
         }
     }
+    #endif
 }
 
 /// Pinned to the bottom of the sidebar, mirroring the web's `tp-user` footer: a monogram avatar

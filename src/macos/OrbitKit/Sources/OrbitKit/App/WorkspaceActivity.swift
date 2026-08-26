@@ -40,3 +40,21 @@ public enum WorkspaceRunnerAvailabilityLogic {
         return !online
     }
 }
+
+/// The one trailing state slot on a first-level Workspace navigation row. User attention wins over
+/// background activity, while an explicitly-offline Runner suppresses a stale spinner without
+/// hiding work that still needs the user's response.
+public enum WorkspaceNavigationStatus: Equatable, Sendable {
+    case needsYou(Int)
+    case running
+    case idle
+}
+
+public enum WorkspaceNavigationStatusLogic {
+    public static func resolve(waiting: Int, running: Bool,
+                               runnerOffline: Bool) -> WorkspaceNavigationStatus {
+        if waiting > 0 { return .needsYou(waiting) }
+        if running && !runnerOffline { return .running }
+        return .idle
+    }
+}

@@ -74,4 +74,20 @@ final class WorkspaceActivityLogicTests: XCTestCase {
         XCTAssertEqual(WorkspaceRunnerAvailabilityLogic.onlineValue(
             explicit: true, status: .offline), true)
     }
+
+    func testWorkspaceNavigationStatusPrioritizesAttentionOverRunning() {
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 2, running: true, runnerOffline: false), .needsYou(2))
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 2, running: true, runnerOffline: true), .needsYou(2))
+    }
+
+    func testWorkspaceNavigationStatusSuppressesOfflineSpinner() {
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: true, runnerOffline: false), .running)
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: true, runnerOffline: true), .idle)
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: false, runnerOffline: false), .idle)
+    }
 }

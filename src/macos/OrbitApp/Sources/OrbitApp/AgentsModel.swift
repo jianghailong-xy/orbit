@@ -2,19 +2,19 @@ import Foundation
 import Observation
 import OrbitKit
 
-/// Drives the Agents section: the list (grouped by runner via OrbitKit `AgentListLogic`) plus
-/// edit/delete. Owned by `AppModel` so the list and the edit form share it. Also fetches runner
-/// names (best-effort) for the group headers.
+/// Drives the Agents section: its Workspace list plus edit/delete. macOS keeps the historical
+/// runner grouping; iOS flattens the same stable order and shows Runner as row metadata instead.
+/// Owned by `AppModel` so the list and the edit form share it. Runner names are best-effort.
 @MainActor
 @Observable
 final class AgentsModel {
     private(set) var items: [Agent] = []
     private(set) var runnerNames: [String: String] = [:]
     /// Runner ids in the order `GET /runners` returns them (the user's persisted runner order), so
-    /// the drawer's runner groups match the web sidebar. Empty until that fetch lands, which leaves
-    /// the groups in first-seen order.
+    /// flat iOS Workspace rows and macOS groups match the web sidebar. Empty until that fetch lands,
+    /// which leaves Runner order first-seen.
     private(set) var runnerOrder: [String] = []
-    /// runnerId → is-online, for the drawer's runner rows and iOS Workspace folder badges.
+    /// runnerId → is-online, for iOS Workspace folder badges.
     /// Populated from the same best-effort `runners()` fetch that feeds `runnerNames`.
     private(set) var runnerOnline: [String: Bool] = [:]
     /// runnerId → runtime model catalog, reported by that runner.
@@ -48,19 +48,12 @@ final class AgentsModel {
     }
 
     var groups: [AgentGroup] { AgentListLogic.grouped(items, runnerOrder: runnerOrder) }
+    var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
 
     /// Display name for a group header (runner display-name, else id, else "Shared" for host).
     func runnerLabel(_ runnerId: String?) -> String {
         guard let id = runnerId else { return "Shared" }
         return runnerNames[id] ?? id
-    }
-
-    /// Whether a runner is currently reachable — drives the drawer runner row's connection dot.
-    /// Host-level and not-yet-loaded runners read as "not online" (no green dot); callers that need
-    /// an authoritative offline state must use `runnerIsOffline`, which preserves unknown.
-    func runnerIsOnline(_ runnerId: String?) -> Bool {
-        guard let id = runnerId else { return false }
-        return runnerOnline[id] ?? false
     }
 
     /// Whether a runner is authoritatively known to be offline. A missing runner relation and a
