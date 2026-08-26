@@ -157,7 +157,7 @@ describe('TasksSidePanel workspace rows', () => {
     expect(idle).toBe('');
   });
 
-  it('renders both running marks and lets the actual desktop two-pane layout choose the quiet dot', () => {
+  it('lets the actual desktop two-pane layout choose quiet dots in both sidebar densities', () => {
     const html = renderToStaticMarkup(
       <WorkspaceRow
         workspace={workspace}
@@ -185,14 +185,38 @@ describe('TasksSidePanel workspace rows', () => {
       '.app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-icon-running';
     const desktopSpinnerSelector =
       '.app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-running';
-    expect(styles).toContain(desktopDotSelector);
-    expect(styles).toContain(desktopSpinnerSelector);
+    const collapsedRailSpinnerSelector =
+      '.app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running';
+    const collapsedRailSvgSelector = `${collapsedRailSpinnerSelector} > svg`;
+    const collapsedRailDotSelector = `${collapsedRailSpinnerSelector}::after`;
+    const desktopStart = styles.indexOf('@media (min-width: 961px)');
+    const mobileStart = styles.indexOf('@media (max-width: 960px)', desktopStart);
+    const desktopStyles = styles.slice(desktopStart, mobileStart);
+    expect(desktopStart).toBeGreaterThanOrEqual(0);
+    expect(mobileStart).toBeGreaterThan(desktopStart);
+    expect(desktopStyles).toContain(desktopDotSelector);
+    expect(desktopStyles).toContain(desktopSpinnerSelector);
+    expect(desktopStyles).toContain(collapsedRailSpinnerSelector);
+    expect(desktopStyles).toContain(collapsedRailSvgSelector);
+    expect(desktopStyles).toContain(collapsedRailDotSelector);
     expect(
       styles.match(new RegExp(`${desktopDotSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
     ).toContain('display: block');
     expect(
       styles.match(new RegExp(`${desktopSpinnerSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
     ).toContain('display: none');
+    expect(
+      styles.match(new RegExp(`${collapsedRailSpinnerSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
+    ).toMatch(/background:\s*transparent;[\s\S]*animation:\s*none !important;/);
+    expect(
+      styles.match(new RegExp(`${collapsedRailSvgSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
+    ).toMatch(/visibility:\s*hidden;[\s\S]*animation:\s*none !important;/);
+    const collapsedDotRule =
+      styles.match(new RegExp(`${collapsedRailDotSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1] ?? '';
+    expect(collapsedDotRule).toMatch(
+      /width:\s*6px;[\s\S]*height:\s*6px;[\s\S]*background:\s*var\(--brand\);[\s\S]*box-shadow:\s*0 0 0 1\.5px var\(--bg-raised\);/,
+    );
+    expect(collapsedDotRule).not.toContain('animation');
   });
 
   it('keeps needs-you and offline states ahead of the quiet running dot', () => {

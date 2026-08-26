@@ -1072,14 +1072,35 @@ body {
    (which toggles on .open, not .collapsed) is never touched — there the panel
    always opens as the full list. */
 @media (min-width: 961px) {
-  /* Only de-duplicate activity once the real desktop Session list has rendered beside the expanded
-     sidebar. Loading/not-found consoles, other pages, mobile drawers, and the collapsed rail keep
-     the Workspace spinner because it remains their only visible running signal. */
+  /* Only de-duplicate activity once the real desktop Session list has rendered. The expanded
+     sidebar uses a quiet folder dot; the collapsed rail turns its existing status slot into the
+     same static mark. Loading/not-found consoles, other pages, and mobile drawers keep the
+     Workspace spinner because it remains their only visible running signal. */
   .app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-icon-running {
     display: block;
   }
   .app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-running {
     display: none;
+  }
+  .app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running {
+    background: transparent;
+    animation: none !important;
+  }
+  .app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running > svg {
+    visibility: hidden;
+    animation: none !important;
+  }
+  .app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--brand);
+    box-shadow: 0 0 0 1.5px var(--bg-raised);
+    transform: translate(-50%, -50%);
   }
 
   /* Animate the collapse/expand width change so the panel glides between the full
