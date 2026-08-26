@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
+import { uuidToBase62 } from '@orbit/shared';
 import {
   CreatorType,
   PrismaClient,
@@ -254,6 +255,8 @@ suite('terminal attempt with no L0, L1 or reachable L2 persists one needs-human 
     assert.deepEqual(detail.paths.L2, { outcome: 'REFUSED', reason: JUDGMENT_NO_LANDING });
     assert.equal(detail.automaticTaskStatusWrite, 'NONE');
     assert.equal(comments.length, 1);
+    assert.match(comments[0].body, new RegExp(uuidToBase62(f.sessionId)));
+    assert.doesNotMatch(comments[0].body, new RegExp(f.sessionId));
     assert.match(comments[0].body, /工作可能已经完成/);
     assert.match(comments[0].body, /没有合法证据自动判定 DONE；任务状态未被修改/);
     assert.equal(

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { uuidToBase62 } from '@orbit/shared';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -544,9 +545,10 @@ export class AttemptEndedUnsettledProducer implements OnApplicationBootstrap {
   }
 
   private humanSignalComment(input: HumanSignalInput, taskStatus: TaskStatus): string {
+    const sessionPublicId = uuidToBase62(input.sessionId);
     const sessionLine = TERMINAL_SESSION_STATUSES.includes(input.sessionStatus)
-      ? `执行会话 ${input.sessionId} 已到终态 ${input.sessionStatus}`
-      : `执行会话 ${input.sessionId} 的工作回合已结束，当前停在 ${input.sessionStatus}`;
+      ? `执行会话 ${sessionPublicId} 已到终态 ${input.sessionStatus}`
+      : `执行会话 ${sessionPublicId} 的工作回合已结束，当前停在 ${input.sessionStatus}`;
     return `${ATTEMPT_UNJUDGED_COMMENT_MARKER}\n`
       + `**需要人工判定（系统自动记录）**\n\n`
       + `${sessionLine}，但任务仍为 ${taskStatus}。\n\n`
