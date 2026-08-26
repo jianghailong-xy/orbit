@@ -138,6 +138,7 @@ test('the identity binds every field an approval authorises, not just the prose'
       acceptanceCommand: 'test -f result.json',
       acceptanceExpectedExitCode: 0,
     })],
+    ['completion criterion', identity({ completionCriterion: 'HUMAN_SIGNOFF' })],
     ['assignee', identity({ assigneeId: TASK })],
     ['list', identity({ listId: TASK })],
     ['provider', identity({ provider: 'codex' })],

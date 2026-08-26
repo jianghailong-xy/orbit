@@ -117,10 +117,10 @@ test('the ids the write itself uses stay uuids', async () => {
   ]);
 });
 
-test('a DONE task that stays DONE files nothing', async () => {
+test('reasserting DONE is refused and files no completion-reverted event', async () => {
   const f = makeService();
 
-  await f.revert(TaskStatus.DONE);
+  await assert.rejects(f.revert(TaskStatus.DONE));
 
   assert.deepEqual(f.events, []);
 });

@@ -13,12 +13,57 @@ import {
   CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
+  SignoffTaskDto,
+  SubmitRunnerTaskCompletionEvidenceDto,
+  SubmitTaskCompletionEvidenceDto,
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
 
 const TASK_A = '550e8400-e29b-41d4-a716-446655440000';
 const TASK_B = '550e8400-e29b-41d4-a716-446655440001';
+
+test('completion evidence DTOs require a structured object and REST requires its source Session', async () => {
+  const validRest = Object.assign(new SubmitTaskCompletionEvidenceDto(), {
+    sourceSessionId: TASK_A,
+    evidence: { commands: [{ exitCode: 0 }] },
+    idempotencyKey: 'turn-17-completion',
+  });
+  const missingSource = Object.assign(new SubmitTaskCompletionEvidenceDto(), { evidence: {} });
+  const scalarEvidence = Object.assign(new SubmitTaskCompletionEvidenceDto(), {
+    sourceSessionId: TASK_A,
+    evidence: 'finished',
+  });
+  const missingRunnerEvidence = new SubmitRunnerTaskCompletionEvidenceDto();
+  const oversizedKey = Object.assign(new SubmitRunnerTaskCompletionEvidenceDto(), {
+    evidence: {},
+    idempotencyKey: 'x'.repeat(201),
+  });
+
+  assert.equal((await validate(validRest)).length, 0);
+  assert.notEqual((await validate(missingSource)).length, 0);
+  assert.notEqual((await validate(scalarEvidence)).length, 0);
+  assert.notEqual((await validate(missingRunnerEvidence)).length, 0);
+  assert.notEqual((await validate(oversizedKey)).length, 0);
+});
+
+test('human signoff DTO binds the current request and exact evidence digest', async () => {
+  const valid = Object.assign(new SignoffTaskDto(), {
+    requestId: TASK_A,
+    evidenceDigest: 'a'.repeat(64),
+    evidence: 'I reviewed this exact evidence revision.',
+  });
+  const missingRequest = Object.assign(new SignoffTaskDto(), {
+    evidenceDigest: 'a'.repeat(64), evidence: 'reviewed',
+  });
+  const commitShaInsteadOfDigest = Object.assign(new SignoffTaskDto(), {
+    requestId: TASK_A, evidenceDigest: 'a'.repeat(40), evidence: 'reviewed',
+  });
+
+  assert.equal((await validate(valid)).length, 0);
+  assert.notEqual((await validate(missingRequest)).length, 0);
+  assert.notEqual((await validate(commitShaInsteadOfDigest)).length, 0);
+});
 
 async function dependencyErrors(value: unknown, present = true) {
   const dto = new UpdateTaskDto();
@@ -47,6 +92,16 @@ test('task creation and single-edge DTOs reject non-UUID dependency ids', async 
 
   assert.notEqual((await validate(create)).length, 0);
   assert.notEqual((await validate(add)).length, 0);
+});
+
+test('REST task create exposes the three completion criteria as peer enum values', async () => {
+  for (const completionCriterion of ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF']) {
+    const dto = plainToInstance(CreateTaskDto, { title: completionCriterion, completionCriterion });
+    assert.equal((await validate(dto)).length, 0, completionCriterion);
+  }
+  assert.notEqual((await validate(plainToInstance(CreateTaskDto, {
+    title: 'fallback', completionCriterion: 'ESCALATE_TO_HUMAN',
+  }))).length, 0);
 });
 
 test('batch delete accepts UUID arrays and rejects malformed task ids', async () => {
@@ -161,6 +216,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
         autoRunWhenReady: false,
         acceptanceCommand: 'test -f result.json',
         acceptanceExpectedExitCode: 0,
+        completionCriterion: 'EXECUTABLE',
         unknown: 'drop me',
       },
       {
@@ -189,6 +245,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
     autoRunWhenReady: false,
     acceptanceCommand: 'test -f result.json',
     acceptanceExpectedExitCode: 0,
+    completionCriterion: 'EXECUTABLE',
   });
   assert.deepEqual(kept(1), {
     title: 'S1',
