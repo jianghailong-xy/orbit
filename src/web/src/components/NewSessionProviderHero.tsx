@@ -153,7 +153,7 @@ export function NewSessionProviderHero({
       </div>
       <div className="np-sub">
         {projectIntent
-          ? 'Describe what you want done — 目标、验收标准和任务拆解在对话里定。'
+          ? 'Describe what you want done — define the goal, acceptance criteria, and task breakdown together.'
           : 'Describe the task — Orbit remembers who runs it.'}
       </div>
       {disabled ? (

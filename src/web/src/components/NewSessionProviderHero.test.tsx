@@ -60,7 +60,7 @@ describe('NewSessionProviderHero', () => {
       '<div class="np-sub">Describe the task — Orbit remembers who runs it.</div>',
     );
     expect(html).not.toContain('Start a new project');
-    expect(html).not.toContain('目标、验收标准和任务拆解');
+    expect(html).not.toContain('define the goal, acceptance criteria, and task breakdown together.');
   });
 
   it('switches only the framing copy for a project-intent session', () => {
@@ -68,7 +68,7 @@ describe('NewSessionProviderHero', () => {
 
     expect(html).toContain('<div class="np-title">Start a new project</div>');
     expect(html).toContain(
-      '<div class="np-sub">Describe what you want done — 目标、验收标准和任务拆解在对话里定。</div>',
+      '<div class="np-sub">Describe what you want done — define the goal, acceptance criteria, and task breakdown together.</div>',
     );
     expect(html).not.toContain('Start a new session');
     expect(html).not.toContain('Orbit remembers who runs it.');

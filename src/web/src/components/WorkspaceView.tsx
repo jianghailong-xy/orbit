@@ -5299,13 +5299,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         )}
         {projectIntent && (
           <div className="composer-project-intent" role="status">
-            <b>◧ 这次会开出一个新项目</b>
-            <span>—— 说清楚要做成什么，它会先读仓库再跟你敲定计划</span>
+            <b>◧ This will create a new project</b>
+            <span>— Describe the outcome you want; Orbit will read the repository before working out the plan with you</span>
             <button
               type="button"
               className="composer-project-intent-close"
               onClick={dismissProjectIntent}
-              aria-label="关闭项目意图"
+              aria-label="Dismiss project intent"
             >
               ✕
             </button>

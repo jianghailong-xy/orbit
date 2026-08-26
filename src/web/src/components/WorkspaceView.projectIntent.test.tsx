@@ -151,14 +151,14 @@ describe('New Session project intent', () => {
 
     expect(one('.np-title').textContent).toBe('Start a new project');
     expect(one('.np-sub').textContent).toBe(
-      'Describe what you want done — 目标、验收标准和任务拆解在对话里定。',
+      'Describe what you want done — define the goal, acceptance criteria, and task breakdown together.',
     );
     const intent = one('.composer-project-intent');
-    expect(intent.querySelector('b')?.textContent).toBe('◧ 这次会开出一个新项目');
+    expect(intent.querySelector('b')?.textContent).toBe('◧ This will create a new project');
     expect(intent.querySelector('span')?.textContent).toBe(
-      '—— 说清楚要做成什么，它会先读仓库再跟你敲定计划',
+      '— Describe the outcome you want; Orbit will read the repository before working out the plan with you',
     );
-    expect(intent.querySelectorAll('button[aria-label="关闭项目意图"]')).toHaveLength(1);
+    expect(intent.querySelectorAll('button[aria-label="Dismiss project intent"]')).toHaveLength(1);
   });
 
   it('keeps the ordinary compose framing byte-for-byte when the route has no intent', async () => {
@@ -179,7 +179,7 @@ describe('New Session project intent', () => {
   it('dismisses into the ordinary New Session route and framing', async () => {
     await mount(`${NEW_SESSION_PATH}?intent=project`);
 
-    await act(async () => one('button[aria-label="关闭项目意图"]').click());
+    await act(async () => one('button[aria-label="Dismiss project intent"]').click());
     await flush();
 
     expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
