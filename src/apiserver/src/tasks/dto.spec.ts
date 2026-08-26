@@ -75,6 +75,16 @@ test('task creation and single-edge DTOs reject non-UUID dependency ids', async 
   assert.notEqual((await validate(add)).length, 0);
 });
 
+test('REST task create exposes the three completion criteria as peer enum values', async () => {
+  for (const completionCriterion of ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF']) {
+    const dto = plainToInstance(CreateTaskDto, { title: completionCriterion, completionCriterion });
+    assert.equal((await validate(dto)).length, 0, completionCriterion);
+  }
+  assert.notEqual((await validate(plainToInstance(CreateTaskDto, {
+    title: 'fallback', completionCriterion: 'ESCALATE_TO_HUMAN',
+  }))).length, 0);
+});
+
 test('batch delete accepts UUID arrays and rejects malformed task ids', async () => {
   const valid = Object.assign(new BatchDeleteDto(), { taskIds: [TASK_A, TASK_A, TASK_B] });
   const empty = Object.assign(new BatchDeleteDto(), { taskIds: [] });
@@ -187,6 +197,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
         autoRunWhenReady: false,
         acceptanceCommand: 'test -f result.json',
         acceptanceExpectedExitCode: 0,
+        completionCriterion: 'EXECUTABLE',
         unknown: 'drop me',
       },
       {
@@ -215,6 +226,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
     autoRunWhenReady: false,
     acceptanceCommand: 'test -f result.json',
     acceptanceExpectedExitCode: 0,
+    completionCriterion: 'EXECUTABLE',
   });
   assert.deepEqual(kept(1), {
     title: 'S1',

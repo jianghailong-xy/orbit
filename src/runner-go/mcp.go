@@ -538,7 +538,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -569,7 +569,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -595,7 +595,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1414,10 +1414,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
 			"criterionKey":       criterionKeyProp,
+			"completionCriterion": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
+				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; HUMAN_SIGNOFF uses one human signoff. They are peer choices, not a fallback chain. Omission is HUMAN_SIGNOFF unless the legacy executable pair or VERIFICATION_PASSED policy is supplied.",
+			},
 			"acceptanceCommand": map[string]interface{}{
 				"type":        "string",
 				"minLength":   1,
-				"description": "The one L0 shell acceptance command. Set it together with acceptanceExpectedExitCode; after the execution turn, the existing task session runs it and the server derives DONE/FAILED from the exit code without an LLM judgement. If one command is not enough, split the task.",
+				"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; after the execution turn, the existing task session runs it and the server derives DONE/FAILED from the exit code without an LLM judgement. If one command is not enough, split the task.",
 			},
 			"acceptanceExpectedExitCode": map[string]interface{}{
 				"type":        "integer",
@@ -1942,9 +1947,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"provider":           providerProp,
 				"model":              modelProp,
 				"acceptanceCriteria": updateAcceptanceCriteriaProp,
+				"completionCriterion": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
+					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and HUMAN_SIGNOFF are peers, not an escalation order.",
+				},
 				"acceptanceCommand": map[string]interface{}{
 					"type":        []string{"string", "null"},
-					"description": "The one L0 shell acceptance command. Set it together with acceptanceExpectedExitCode; null/null clears executable acceptance. Omit both to preserve them. One command only — split the task if that is insufficient.",
+					"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; null/null clears executable acceptance. Omit both to preserve them. One command only — split the task if that is insufficient.",
 				},
 				"acceptanceExpectedExitCode": map[string]interface{}{
 					"type":        []string{"integer", "null"},

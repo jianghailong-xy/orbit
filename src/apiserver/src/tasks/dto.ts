@@ -27,10 +27,15 @@ import {
   TaskCompletionPolicyValue,
   TaskVerdictValue,
 } from '../projects/task-aggregation';
+import {
+  TASK_COMPLETION_CRITERIA,
+  type TaskCompletionCriterionValue,
+} from './task-completion-criterion';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
 const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
+const TASK_COMPLETION_CRITERION_VALUES = [...TASK_COMPLETION_CRITERIA];
 const TASK_TERMINAL_REASON_VALUES = [...TASK_TERMINAL_REASONS];
 
 /**
@@ -164,9 +169,13 @@ export class CreateTaskDto {
   // read back from the project at admission time, so a key that was valid when the criteria said
   // one thing does not stay valid after a person rewrites them.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
-  // L0 acceptance is intentionally only this pair: one command, one expected exit code.
+  // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
+  // One ordinary completion criterion. Omission is the compatibility spelling of HUMAN_SIGNOFF;
+  // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
+  @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
+  completionCriterion?: TaskCompletionCriterionValue;
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
@@ -353,9 +362,13 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string | null;
-  // Null/null clears L0 acceptance; omission preserves the corresponding stored value.
+  // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;
+  // Omit to preserve it. A criterion is never nullable: HUMAN_SIGNOFF is the explicit normal
+  // choice rather than clearing the field or escalating after another criterion failed.
+  @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
+  completionCriterion?: TaskCompletionCriterionValue;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // Three-state like dueDate above: omit to keep the current schedule, null to cancel it, an ISO
   // instant to (re)schedule. Rescheduling a task whose dispatch is in flight is safe — the

@@ -193,6 +193,11 @@ import {
 import { loadVerificationEpochGates } from './verification-epoch-read';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
+import {
+  resolveTaskCompletionCriterion,
+  taskCompletionDeclarationError,
+  type TaskCompletionCriterionValue,
+} from './task-completion-criterion';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -312,6 +317,7 @@ type IdempotentTaskWrite = {
   // winner so two same-title creates in one turn cannot silently disagree about what runs.
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  completionCriterion?: TaskCompletionCriterionValue | null;
 };
 
 export type IdempotentTaskOperation = 'CREATE_TASK';
@@ -384,7 +390,7 @@ export function buildTaskExecutionPrompt(task: {
     `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
     `2. 执行任务。\n` +
     (executableAcceptance
-      ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 L0 验收命令` +
+      ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令` +
         `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
         `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
         ` coordinator 审批这个机械结论。\n`
@@ -585,6 +591,7 @@ export const TASK_LIST_SELECT = {
   acceptanceCriteria: true,
   acceptanceCommand: true,
   acceptanceExpectedExitCode: true,
+  completionCriterion: true,
   labels: true,
   creatorSessionId: true,
   autoRunWhenReady: true,
@@ -2400,48 +2407,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return loggedRetry(this.logger, operation, policy);
   }
 
-  /**
-   * One Task has either no L0 acceptance or exactly one command/expected-exit pair. Keeping the
-   * check here as well as in PostgreSQL gives API callers a useful reason instead of a constraint
-   * name; there is deliberately no normalization because the command executed must be the command
-   * the caller stored.
-   */
-  private assertExecutableAcceptance(
-    command: string | null,
-    expectedExitCode: number | null,
-    completionPolicy: string,
-    verifiesTaskId: string | null,
-  ): void {
-    if ((command == null) !== (expectedExitCode == null)) {
-      throw new BadRequestException(
-        'acceptanceCommand and acceptanceExpectedExitCode must be set or cleared together',
-      );
-    }
-    if (command != null && command.trim() === '') {
-      throw new BadRequestException('acceptanceCommand must not be blank');
-    }
-    if (command != null && completionPolicy !== 'MANUAL') {
-      throw new BadRequestException(
-        'Executable acceptance requires completionPolicy MANUAL — use the command for L0 or an '
-          + 'aggregate/verification policy for L1, not both',
-      );
-    }
-    if (command != null && verifiesTaskId != null) {
-      throw new BadRequestException(
-        'A verification task cannot use executable acceptance — its independent verdict is the '
-          + 'L1 decision',
-      );
-    }
+  /** One declaration, one peer criterion. This validates facts only and never writes status. */
+  private assertCompletionDeclaration(
+    declaration: Parameters<typeof taskCompletionDeclarationError>[0],
+  ): TaskCompletionCriterionValue {
+    const error = taskCompletionDeclarationError(declaration);
+    if (error) throw new BadRequestException(error);
+    return resolveTaskCompletionCriterion(declaration);
   }
 
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
-    this.assertExecutableAcceptance(
-      dto.acceptanceCommand ?? null,
-      dto.acceptanceExpectedExitCode ?? null,
-      dto.completionPolicy ?? 'MANUAL',
-      dto.verifiesTaskId ?? null,
-    );
+    this.assertCompletionDeclaration(dto);
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
@@ -2465,6 +2442,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             description: dto.description,
             acceptanceCommand: dto.acceptanceCommand,
             acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
+            completionCriterion: dto.completionCriterion,
           }
         : undefined;
     const idempotencyKey = idempotentWrite ? this.taskIdempotencyKey(idempotentWrite) : undefined;
@@ -2842,6 +2820,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       acceptanceCriteria: dto.acceptanceCriteria,
       acceptanceCommand: dto.acceptanceCommand,
       acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
+      completionCriterion: resolveTaskCompletionCriterion(dto),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -2886,12 +2865,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
     for (const item of items) {
-      this.assertExecutableAcceptance(
-        item.acceptanceCommand ?? null,
-        item.acceptanceExpectedExitCode ?? null,
-        item.completionPolicy ?? 'MANUAL',
-        item.verifiesTaskId ?? item.verifiesRef ?? null,
-      );
+      this.assertCompletionDeclaration({
+        ...item,
+        verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,
+      });
     }
 
     const positionByRef = new Map<string, number>();
@@ -3249,6 +3226,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             description: item.description,
             acceptanceCommand: item.acceptanceCommand,
             acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
+            completionCriterion: item.completionCriterion,
           }
         : undefined;
     const replayed = await Promise.all(validated.map(async (item) => {
@@ -4000,6 +3978,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         acceptanceCriteria: item.acceptanceCriteria ?? null,
         acceptanceCommand: item.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
+        completionCriterion: item.completionCriterion ?? null,
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
         listId: item.listId ?? null,
@@ -4695,6 +4674,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ) {
       mismatch('different expected exit code');
     }
+    // Optional on purpose: pre-N1 callers never declared this field, so their replay remains
+    // compatible. Once a caller does declare it, handing back a row with another criterion would
+    // turn an idempotent retry into a different completion contract.
+    if (
+      write.completionCriterion != null
+      && existing.completionCriterion !== write.completionCriterion
+    ) mismatch('different completion criterion');
     // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
     // normalised payload — or it is not this write's earlier attempt.
     const rebuilt = this.taskIdempotencyKey({
@@ -6505,16 +6491,44 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // mutated in place by PublicIdInterceptor, so joining that response's single-flight promise
     // could turn ids into their display spelling before this write uses them as database keys.
     const before = await this.loadDetail(ownerId, id);
-    this.assertExecutableAcceptance(
-      dto.acceptanceCommand === undefined
-        ? before.acceptanceCommand
-        : (dto.acceptanceCommand ?? null),
-      dto.acceptanceExpectedExitCode === undefined
-        ? before.acceptanceExpectedExitCode
-        : (dto.acceptanceExpectedExitCode ?? null),
-      dto.completionPolicy ?? before.completionPolicy,
-      dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null),
-    );
+    const acceptanceCommand = dto.acceptanceCommand === undefined
+      ? before.acceptanceCommand
+      : (dto.acceptanceCommand ?? null);
+    const acceptanceExpectedExitCode = dto.acceptanceExpectedExitCode === undefined
+      ? before.acceptanceExpectedExitCode
+      : (dto.acceptanceExpectedExitCode ?? null);
+    const completionPolicy = dto.completionPolicy ?? before.completionPolicy;
+    let completionCriterion = (
+      before.completionCriterion ?? 'HUMAN_SIGNOFF'
+    ) as TaskCompletionCriterionValue;
+    if (dto.completionCriterion !== undefined) {
+      completionCriterion = dto.completionCriterion;
+    } else if (
+      dto.acceptanceCommand !== undefined || dto.acceptanceExpectedExitCode !== undefined
+    ) {
+      completionCriterion = acceptanceCommand != null
+        ? 'EXECUTABLE'
+        : completionPolicy === 'VERIFICATION_PASSED' ? 'VERIFICATION' : 'HUMAN_SIGNOFF';
+    } else if (dto.completionPolicy !== undefined) {
+      completionCriterion = completionPolicy === 'VERIFICATION_PASSED'
+        ? 'VERIFICATION'
+        : completionCriterion === 'VERIFICATION' ? 'HUMAN_SIGNOFF' : completionCriterion;
+    }
+    const touchesCompletionDeclaration = dto.completionCriterion !== undefined
+      || dto.acceptanceCommand !== undefined
+      || dto.acceptanceExpectedExitCode !== undefined
+      || dto.completionPolicy !== undefined
+      || dto.verifiesTaskId !== undefined;
+    if (touchesCompletionDeclaration) {
+      this.assertCompletionDeclaration({
+        completionCriterion,
+        acceptanceCommand,
+        acceptanceExpectedExitCode,
+        completionPolicy,
+        verifiesTaskId:
+          dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null),
+      });
+    }
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -6588,6 +6602,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dto.acceptanceExpectedExitCode === undefined
           ? undefined
           : (dto.acceptanceExpectedExitCode ?? null),
+      completionCriterion: touchesCompletionDeclaration ? completionCriterion : undefined,
       autoRunWhenReady: dto.autoRunWhenReady,
       completionPolicy: dto.completionPolicy,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is

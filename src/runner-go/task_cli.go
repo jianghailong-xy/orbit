@@ -145,7 +145,9 @@ Options:
   --criterion-key KEY         Which of the PROJECT's acceptance criteria this work serves — a
                               key from project_get. Required of a project's judgment session,
                               optional for everybody else
-  --acceptance-command SHELL  The one L0 command; requires --acceptance-expected-exit-code
+  --completion-criterion EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF
+                              The task's one normal completion criterion (default HUMAN_SIGNOFF)
+  --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
   --acceptance-expected-exit-code N
                               Exit code that mechanically derives DONE; every other code is FAILED
   --due-date ISO_DATE
@@ -194,11 +196,17 @@ accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin, 
 '-'; since --description-file reads the same stdin, the two file flags cannot be used together,
 but passing one field inline and the other on stdin is fine.
 
---acceptance-command and --acceptance-expected-exit-code are one L0 declaration and must be
-passed together. After the execution turn, that same task session runs the command once, records
-its untrimmed combined output and actual exit code, and the server derives DONE only when the code
-matches. There is no LLM judgement and no coordinator approval on this path. If one command is
-not enough, split the task instead of encoding a workflow in the command fields.
+--completion-criterion declares one of three peer outcomes, never an escalation order:
+EXECUTABLE compares one command's exit code, VERIFICATION reads the verdict of an independent
+verification task (with --completion-policy VERIFICATION_PASSED), and HUMAN_SIGNOFF waits for one
+human signoff. Omitting it is HUMAN_SIGNOFF for compatibility, unless the legacy executable pair
+or VERIFICATION_PASSED policy makes the intended criterion explicit.
+
+For EXECUTABLE, --acceptance-command and --acceptance-expected-exit-code must be passed together.
+After the execution turn, that same task session runs the command once and records its untrimmed
+combined output and actual exit code. If one command is not enough, split the task instead of
+encoding a workflow in the command fields. The exact cwd, environment, and PostgreSQL boundary are
+documented in docs/task-completion-criteria.md.
 `,
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
 
@@ -207,7 +215,7 @@ Usage:
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId,
-parentTaskId, verifiesTaskId, acceptanceCriteria, acceptanceCommand,
+parentTaskId, verifiesTaskId, acceptanceCriteria, completionCriterion, acceptanceCommand,
 acceptanceExpectedExitCode, dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady,
 completionPolicy. Nothing is written unless every item is valid.
 
@@ -215,7 +223,7 @@ completionPolicy. Nothing is written unless every item is valid.
 observable result somebody else can check — where "description" says what work to
 perform; the server accepts up to 4,000 characters each.
 
-"acceptanceCommand" and "acceptanceExpectedExitCode" are the optional L0 pair: one shell
+"acceptanceCommand" and "acceptanceExpectedExitCode" are the optional EXECUTABLE pair: one shell
 command and the one exit code that derives DONE. Set both or neither. A different exit code
 derives FAILED; needing several commands means the task should be split.
 
@@ -319,7 +327,9 @@ Options:
   --acceptance-criteria-file -
                               Read the replacement criteria from stdin; paths are rejected
   --clear-acceptance-criteria Leave the task with no acceptance criteria
-  --acceptance-command SHELL  Replace the one L0 command
+  --completion-criterion EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF
+                              Replace the task's one normal completion criterion
+  --acceptance-command SHELL  Replace the one EXECUTABLE command
   --acceptance-expected-exit-code N
                               Replace the exit code that mechanically derives DONE
   --clear-executable-acceptance
@@ -364,7 +374,11 @@ be combined with either form. The server accepts up to 4,000 characters.
 --description-file reads the same stdin, the two file flags cannot be used together, but passing
 one field inline and the other on stdin is fine.
 
-The executable L0 acceptance is exactly two fields: --acceptance-command and
+The completion criterion is one of EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF. They are peer
+choices: HUMAN_SIGNOFF is not what happens when either other criterion fails. Omitting
+--completion-criterion preserves the stored choice; it cannot be cleared.
+
+The executable acceptance is exactly two fields: --acceptance-command and
 --acceptance-expected-exit-code. Either flag may replace its stored half, while
 --clear-executable-acceptance clears both; a task may never be left with only one. The task's own
 session runs the command and the server derives DONE/FAILED from the actual exit code, without an
@@ -744,6 +758,15 @@ func validateTaskCLICompletionPolicy(policy string) error {
 	}
 }
 
+func validateTaskCLICompletionCriterion(criterion string) error {
+	switch criterion {
+	case "EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF":
+		return nil
+	default:
+		return fmt.Errorf("completion-criterion must be one of EXECUTABLE, VERIFICATION, HUMAN_SIGNOFF")
+	}
+}
+
 func validateTaskCLIVerdict(verdict string) error {
 	switch verdict {
 	case "PASS", "FAIL", "INCONCLUSIVE":
@@ -1103,7 +1126,8 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
-	acceptanceCommand := fs.String("acceptance-command", "", "the one L0 shell acceptance command")
+	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF)")
+	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
@@ -1134,6 +1158,11 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if commandSet && strings.TrimSpace(*acceptanceCommand) == "" {
 		return fmt.Errorf("--acceptance-command cannot be blank")
+	}
+	if flagWasSet(fs, "completion-criterion") {
+		if err := validateTaskCLICompletionCriterion(*completionCriterion); err != nil {
+			return err
+		}
 	}
 	// Two fields, one stdin. readCLIText sees a single field at a time, so nothing downstream can
 	// notice that the first read drains the stream and the second gets an empty string — a create
@@ -1222,6 +1251,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// exactly as given; only omitting the flag omits the field.
 	if criteriaSet {
 		body["acceptanceCriteria"] = criteria
+	}
+	if flagWasSet(fs, "completion-criterion") {
+		body["completionCriterion"] = *completionCriterion
 	}
 	if commandSet {
 		body["acceptanceCommand"] = *acceptanceCommand
@@ -1412,7 +1444,8 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
 	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
-	acceptanceCommand := fs.String("acceptance-command", "", "replace the one L0 shell acceptance command")
+	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF)")
+	acceptanceCommand := fs.String("acceptance-command", "", "replace the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
 	clearExecutableAcceptance := fs.Bool("clear-executable-acceptance", false, "clear the command and expected exit code together")
 	var dependsOn csvFlag
@@ -1499,6 +1532,11 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if flagWasSet(fs, "acceptance-command") && strings.TrimSpace(*acceptanceCommand) == "" {
 		return fmt.Errorf("--acceptance-command cannot be blank; use --clear-executable-acceptance")
+	}
+	if flagWasSet(fs, "completion-criterion") {
+		if err := validateTaskCLICompletionCriterion(*completionCriterion); err != nil {
+			return err
+		}
 	}
 	// Two fields, one stdin — the same collision `orbit task create` has. readCLIText sees a single
 	// field at a time, so nothing downstream can notice that the first read drains the stream and the
@@ -1599,6 +1637,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 		body["acceptanceCriteria"] = nil
 	} else if criteriaSet {
 		body["acceptanceCriteria"] = criteria
+	}
+	if flagWasSet(fs, "completion-criterion") {
+		body["completionCriterion"] = *completionCriterion
 	}
 	if *clearExecutableAcceptance {
 		body["acceptanceCommand"] = nil
@@ -2044,7 +2085,7 @@ type cliCapabilitySpec struct {
 	Mutates     bool
 }
 
-var baseCLICapabilities = withExecutableAcceptanceCapabilityArgs([]cliCapabilitySpec{
+var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
@@ -2068,24 +2109,26 @@ var baseCLICapabilities = withExecutableAcceptanceCapabilityArgs([]cliCapability
 	{Tool: "tasklist_delete", Argv: []string{"orbit", "task-list", "delete"}, Usage: "orbit task-list delete LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}, Description: "Delete a task list. Its tasks are not deleted — they are detached and become listless; the grouping, its standing instructions and its policy revisions are what go, and that cannot be undone. To stop dispatch without discarding them, pass --paused true to task-list update instead.", Mutates: true},
 })
 
-func withExecutableAcceptanceCapabilityArgs(capabilities []cliCapabilitySpec) []cliCapabilitySpec {
+func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCapabilitySpec {
 	// Kept beside the flag implementation instead of expanding the already very wide legacy
 	// capability literals above. The capability document must name every MCP field the equivalent
-	// CLI can send; these are still only the same command/expected-exit pair, not another shape.
+	// CLI can send; completionCriterion and EXECUTABLE's pair stay beside their flag implementation.
 	for i := range capabilities {
 		switch capabilities[i].Tool {
 		case "task_create":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
-				"--acceptance-command <shell> (the one L0 command; use with --acceptance-expected-exit-code)",
+				"--completion-criterion <EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF> (the task's one normal completion criterion; peers, default HUMAN_SIGNOFF)",
+				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
 			)
 		case "task_update":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
-				"--acceptance-command <shell> (replace the one L0 command)",
+				"--completion-criterion <EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF> (replace the task's one normal completion criterion)",
+				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
-				"--clear-executable-acceptance (clear both L0 fields)",
+				"--clear-executable-acceptance (clear both EXECUTABLE fields)",
 			)
 		}
 	}

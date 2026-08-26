@@ -251,7 +251,7 @@ test('step 4 says FAILED, and says it instead of IN_PROGRESS', async () => {
   assert.equal(/再将状态置为 IN_PROGRESS/.test(step4), false, step4);
 });
 
-test('an L0 task delegates its terminal status to the one declared command', async () => {
+test('an EXECUTABLE task delegates its terminal status to the one declared command', async () => {
   const text = await (await promptFor({
     description: 'x',
     acceptanceCommand: 'npm test',
@@ -259,7 +259,7 @@ test('an L0 task delegates its terminal status to the one declared command', asy
     list: null,
   }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-  assert.match(step3, /唯一 L0 验收命令/);
+  assert.match(step3, /唯一 EXECUTABLE 验收命令/);
   assert.match(step3, /期望退出码 0/);
   assert.match(step3, /相等则推导 DONE，否则推导 FAILED/);
   assert.match(step3, /不要自行写 status/);
