@@ -55,6 +55,10 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
 import {
+  emptyProjectListAttention,
+  readProjectListAttention,
+} from './project-list-attention';
+import {
   DEFAULT_BLOCKING_LIMIT,
   MAX_BLOCKING_LIMIT,
   ProjectBlockingLeaderboard,
@@ -977,7 +981,9 @@ export class ProjectsService {
    * `_count.tasks` is kept and is no longer the number a reader acts on: it counts DONE and
    * CANCELLED alongside the rest, so it says how big a project is and nothing about where it
    * stands. `buckets` and `lastActivityAt` are that — see `readProjectListRollups`, which
-   * produces them for the WHOLE page in one grouped query rather than once per project.
+   * produces them for the WHOLE page in one grouped query rather than once per project. Open
+   * blockers are folded separately into `attention`: their owner is the durable answer to who
+   * must act, and joining them into the task aggregate would multiply both counts.
    */
   async list(ownerId: string, status?: ProjectStatus) {
     const projects = await this.prisma.project.findMany({
@@ -985,14 +991,21 @@ export class ProjectsService {
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { tasks: true } }, ...COORDINATION_INCLUDE },
     });
+    if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    const rollups = await readProjectListRollups(this.prisma, ownerId, status);
+    const [rollups, attention] = await Promise.all([
+      readProjectListRollups(this.prisma, ownerId, status),
+      readProjectListAttention(this.prisma, ownerId, status),
+    ]);
     return projects.map((project) => ({
       ...withCoordination(project),
       // A project with no tasks has no group in the aggregate. It reports five zeroes and no
       // activity, rather than dropping the fields and making every client handle two shapes.
       ...(rollups.get(project.id) ?? emptyProjectListRollup()),
+      // The same total shape for a project with no open blockers: clients never have to infer
+      // whether an absent field means "none" or "this server did not compute attention".
+      attention: attention.get(project.id) ?? emptyProjectListAttention(),
     }));
   }
 

@@ -117,6 +117,7 @@ test('a new project starts OPEN without the caller saying so', async () => {
 
 test('the index is owner-scoped and newest first, and narrows only when asked', async () => {
   const queries: any[] = [];
+  let rawQueries = 0;
   const service = serviceWith({
     project: {
       findMany: async (args: any) => {
@@ -124,7 +125,10 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
         return [];
       },
     },
-    $queryRaw: async () => [],
+    $queryRaw: async () => {
+      rawQueries += 1;
+      return [];
+    },
   });
 
   await service.list(OWNER_ID);
@@ -141,6 +145,8 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     runtime: { select: { coordinatorGeneration: true } },
   });
   assert.deepEqual(queries[1].where, { ownerId: OWNER_ID, status: 'DONE' });
+  // An empty page has no task or blocker groups to discover.
+  assert.equal(rawQueries, 0);
 });
 
 // The one claim a fake Prisma can settle about the buckets: what they COST. Their values are
@@ -158,6 +164,17 @@ test('the index buckets every project in one aggregate, not one query per projec
     project: { findMany: async () => listed },
     $queryRaw: async () => {
       rawQueries += 1;
+      if (rawQueries === 2) {
+        return [{
+          projectId: 'a1',
+          userBlockers: 2,
+          coordinatorBlockers: 1,
+          systemBlockers: 0,
+          maxSeverity: 'CRITICAL',
+          attentionSinceAt: new Date('2026-07-31T00:00:00.000Z'),
+          nextCheckAt: new Date('2026-08-01T01:00:00.000Z'),
+        }];
+      }
       // Two of the three projects grouped; `c3` has no tasks and so has no row here at all.
       return [
         { projectId: 'a1', running: 1, ready: 2, blocked: 3, done: 4, cancelled: 5,
@@ -170,15 +187,31 @@ test('the index buckets every project in one aggregate, not one query per projec
 
   const rows: any[] = await service.list(OWNER_ID);
 
-  // Three projects, one round trip. Looping `readProjectPanorama` would make this 3 — and 18 on
-  // the deployment, one of them over a 23,442-task project.
-  assert.equal(rawQueries, 1);
+  // Two page-wide aggregates: one over tasks, one over open blockers. Neither grows with the
+  // number of projects; looping the per-project readers would make this 6 — and 36 in production.
+  assert.equal(rawQueries, 2);
   assert.deepEqual(rows[0].buckets, { running: 1, ready: 2, blocked: 3, done: 4, cancelled: 5 });
   assert.deepEqual(rows[0].lastActivityAt, new Date('2026-08-01T00:00:00.000Z'));
   // A project the aggregate had nothing to say about is five zeroes and no activity, never a row
   // missing the fields: one shape for every element, so no client has to handle two.
   assert.deepEqual(rows[2].buckets, { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 });
   assert.equal(rows[2].lastActivityAt, null);
+  assert.deepEqual(rows[0].attention, {
+    userBlockers: 2,
+    coordinatorBlockers: 1,
+    systemBlockers: 0,
+    maxSeverity: 'CRITICAL',
+    attentionSinceAt: new Date('2026-07-31T00:00:00.000Z'),
+    nextCheckAt: new Date('2026-08-01T01:00:00.000Z'),
+  });
+  assert.deepEqual(rows[2].attention, {
+    userBlockers: 0,
+    coordinatorBlockers: 0,
+    systemBlockers: 0,
+    maxSeverity: null,
+    attentionSinceAt: null,
+    nextCheckAt: null,
+  });
   // The old tally is kept beside them, unchanged.
   assert.deepEqual(rows.map((row) => row._count.tasks), [7, 7, 7]);
 });

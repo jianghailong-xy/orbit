@@ -53,11 +53,11 @@ const REVAMP = {
   goal: '**Ship** the new marketing site',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-02T00:00:00Z',
-  _count: { tasks: 5 },
+  _count: { tasks: 1 },
   // Something running, so the row lands in a section that is expanded by default and its goal is
   // on the page for the search assertions to find. See lib/projectAttention.
   buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
-  lastActivityAt: '2026-01-02T00:00:00Z',
+  lastActivityAt: new Date().toISOString(),
 };
 const CLEANUP = {
   id: P2,
@@ -239,7 +239,7 @@ describe('ProjectsPage — status filter', () => {
     // The unnarrowed read sends no parameter at all — which is how the endpoint spells "all".
     expect(reads()).toEqual(['/projects']);
 
-    await click(segment('In progress'));
+    await click(segment('Open'));
     expect(reads()).toEqual(['/projects', '/projects?status=OPEN']);
 
     await click(segment('Completed'));

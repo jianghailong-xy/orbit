@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
@@ -38,7 +38,11 @@ import { firstOpenableWorkspace } from '../lib/workspaceOrder';
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
 // page that says "3h ago" should not be two functions that agree by coincidence.
 import { ago } from '../lib/runnerEngines';
-import { attentionChipOf, projectAttentionSections } from '../lib/projectAttention';
+import {
+  attentionChipOf,
+  projectAttentionSections,
+  type ProjectAttentionSummary,
+} from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
   providersQuery,
@@ -82,6 +86,8 @@ interface Project {
   buckets: ProjectPanoramaBuckets;
   /** The most recent write to any of its tasks, or null on a project that has none yet. */
   lastActivityAt: string | null;
+  /** Open blocker ownership: the durable signal for whether a person must act next. */
+  attention: ProjectAttentionSummary;
 }
 
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
@@ -182,12 +188,15 @@ export function projectsEmptyKind(
 export function noMatchDescription(filter: ProjectFilter, search: string): string {
   const term = search.trim();
   if (term) return `No projects match “${term}”`;
-  return filter === 'OPEN' ? 'No projects are in progress' : 'No completed projects';
+  return filter === 'OPEN' ? 'No open projects' : 'No completed projects';
 }
 
-/** Index of the signed-in user's projects: search and status filter above, then the four sections
- *  in attention order — what has stalled, what only needs closing, what is already running, what
- *  is finished and folded — and a way to start one from either the toolbar or an empty page. */
+/** The age display and the server facts advance together while the index stays open. */
+export const PROJECTS_REFRESH_MS = 60_000;
+
+/** Index of the signed-in user's projects: search and status filter above, then lanes ordered by
+ *  who needs to act — exceptions first, healthy work and expected waits after them, and closed
+ *  history folded at the bottom. */
 export function ProjectsPage() {
   const [filter, setFilter] = useState<ProjectFilter>('ALL');
   const [search, setSearch] = useState('');
@@ -197,20 +206,26 @@ export function ProjectsPage() {
   const projects = useQuery({
     queryKey: projectsQueryKey(filter),
     queryFn: () => api<Project[]>(projectsPath(filter)),
+    // Task writes and blocker ownership are server facts. Advancing only the local clock would
+    // eventually label a still-active project quiet, so refresh the evidence at the same cadence.
+    refetchInterval: PROJECTS_REFRESH_MS,
   });
   const matches = useMemo(
     () => (projects.data ?? []).filter((p) => matchesProjectSearch(p, search)),
     [projects.data, search],
   );
-  // In progress, Stalled, Wrapping up, Completed — in that order, off the buckets and
-  // `lastActivityAt` every row carries. The rules and the reason for that order live in
-  // lib/projectAttention; the server's unrendered `createdAt desc` no longer orders anything here.
-  const sections = useMemo(() => projectAttentionSections(matches), [matches]);
-  // ONE instant for the whole render, read here rather than per row: the badges are ages, and two
-  // rows reading the clock a millisecond apart could land either side of a day boundary and
-  // disagree about how long the same silence has been. Re-read on every render, so a page left
-  // open does not keep reporting the age it had when it mounted.
-  const now = Date.now();
+  // ONE instant for the whole render, rather than one clock read per row: badges and lane
+  // classification cannot disagree at a day boundary. Advance it only AFTER a successful
+  // projects refresh, so a network failure freezes the age instead of turning stale evidence
+  // into a false quiet-work alert.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (projects.dataUpdatedAt > 0) setNow(Date.now());
+  }, [projects.dataUpdatedAt]);
+  // Classification and badges share the same instant. The lanes are deliberately recomputed on
+  // every render: crossing the one-day quiet threshold changes not just a chip but WHERE the row
+  // belongs, and memoising only on the payload would leave those two surfaces disagreeing.
+  const sections = projectAttentionSections(matches, now);
   // Read once for the whole list rather than per row: every row asks the same question of the
   // same viewport. False under `renderToStaticMarkup`, which is the desktop answer — see
   // useMediaQuery.

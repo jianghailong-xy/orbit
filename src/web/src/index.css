@@ -10231,7 +10231,8 @@ html[data-theme='dark'] .session-tag-chip {
   white-space: nowrap;
 }
 
-/* The row's badge: "Stalled 4d", "No progress 3d", "12/12 settled · still open". Sized from
+/* The row's badge: "Needs you · Critical · 3d · 2 blockers", "Running · no activity 3d", or
+   "12/12 settled · still open". Sized from
    projects-redesign.html — 11px/600 in a 5px pill. It keeps its own width through the
    `.project-row-head > *` rule above, which is what stops the badge from being the thing that
    ellipses when a long title runs out of room.

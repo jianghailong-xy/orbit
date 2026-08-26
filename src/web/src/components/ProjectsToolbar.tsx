@@ -32,7 +32,9 @@ export type ProjectFilter = 'ALL' | 'OPEN' | 'DONE';
 
 const FILTER_OPTIONS: { label: string; value: ProjectFilter }[] = [
   { label: 'All', value: 'ALL' },
-  { label: 'In progress', value: 'OPEN' },
+  // OPEN contains ready, waiting, and needs-attention projects too. Calling the filter
+  // "In progress" would contradict the lifecycle lanes directly below it.
+  { label: 'Open', value: 'OPEN' },
   { label: 'Completed', value: 'DONE' },
 ];
 

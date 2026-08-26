@@ -33,6 +33,8 @@ interface Snapshot {
   createdAt: string;
 }
 
+const SNAPSHOT_AT = Date.parse('2026-08-23T18:55:05.000Z');
+
 /**
  * The snapshot, verbatim from production, in `createdAt desc` — the order the endpoint still
  * returns and the order the page used to render. Reading down this list is reading the old page.
@@ -177,16 +179,21 @@ function wireRow(p: Snapshot) {
   };
 }
 
-function render(rows: Snapshot[]): string {
+function render(rows: Snapshot[], now = SNAPSHOT_AT): string {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['projects', 'ALL'], rows.map(wireRow));
-  return renderToStaticMarkup(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <ProjectsPage />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+  try {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <ProjectsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  } finally {
+    clock.mockRestore();
+  }
 }
 
 interface RenderedSection {
@@ -245,84 +252,45 @@ function sectionOf(html: string, key: string): RenderedSection {
   return found;
 }
 
-/** Where a title sits in a section's rendered rows, 1-based; 0 when it is not in that section. */
-function rankIn(section: RenderedSection, title: string): number {
-  return section.rows.indexOf(title) + 1;
-}
-
-const activity = (title: string) => {
-  const at = byTitle.get(title)?.lastActivityAt ?? null;
-  return at ? Date.parse(at) : -Infinity;
-};
-
 describe('projects index — 2026-08-23 production snapshot', () => {
   const html = render(SNAPSHOT);
 
   it('renders every snapshot project exactly once, in some section', () => {
     const placed = sectionsOf(html).flatMap((s) => s.rows);
     expect(placed.slice().sort()).toEqual(SNAPSHOT.map((p) => p.title).sort());
-    // No project is drawn twice, and none fell off the page — the failure a four-way `if` invites.
     expect(new Set(placed).size).toBe(SNAPSHOT.length);
     for (const s of sectionsOf(html)) expect(s.count).toBe(s.rows.length);
   });
 
-  // ── 1 ───────────────────────────────────────────────────────────────────────────────────────
-  it('puts iOS 客户端性能与内存优化 in Stalled, second — behind FineWeb and nothing else', () => {
-    const stalled = sectionOf(html, 'stalled');
-    expect(rankIn(stalled, NAME.ios)).toBe(2);
-    expect(stalled.rows[0]).toBe(NAME.fineweb);
-    expect(sectionsOf(html)[0].key).toBe('running');
-  });
-
-  // ── 2 ───────────────────────────────────────────────────────────────────────────────────────
-  it('puts Session 列表重设计 (12/12 done, project still OPEN) in Wrapping up, nowhere else', () => {
-    expect(sectionOf(html, 'wrapping-up').rows).toContain(NAME.sessionList);
-    for (const s of sectionsOf(html)) {
-      if (s.key !== 'wrapping-up') expect(s.rows).not.toContain(NAME.sessionList);
-    }
-  });
-
-  // ── 3 ───────────────────────────────────────────────────────────────────────────────────────
-  it('puts both projects with a task running in In progress', () => {
-    const running = sectionOf(html, 'running');
-    expect(running.rows).toContain(NAME.fairSched);
-    expect(running.rows).toContain(NAME.brand);
-    // The third running project in the snapshot, so the section is not accidentally right by
-    // holding only two rows.
-    expect(running.rows).toContain(NAME.lfs);
-    expect(sectionOf(html, 'stalled').rows).not.toContain(NAME.fairSched);
-    expect(sectionOf(html, 'stalled').rows).not.toContain(NAME.brand);
-  });
-
-  // ── 4 ───────────────────────────────────────────────────────────────────────────────────────
-  it('orders Stalled strictly by ready, descending, over the real counts', () => {
-    const rows = sectionOf(html, 'stalled').rows;
-    expect(rows.map((t) => byTitle.get(t)!.ready)).toEqual([6118, 9, 6, 4, 4, 2, 1, 1]);
-    expect(rows).toEqual([
-      NAME.fineweb,        // 6118
-      NAME.ios,            // 9
-      NAME.coordinator,    // 6
-      NAME.runner,         // 4, active 08-23
-      NAME.iosProject,     // 4, active 08-19
-      NAME.sessionState,   // 2
-      NAME.multiAgent,     // 1, active 08-21T18:52
-      NAME.agentContract,  // 1, active 08-21T07:43
+  it('leads with the seven projects that need intervention, ordered by reason then age', () => {
+    expect(sectionOf(html, 'attention').rows).toEqual([
+      NAME.brand,
+      NAME.fairSched,
+      NAME.iosProject,
+      NAME.agentContract,
+      NAME.ios,
+      NAME.multiAgent,
+      NAME.sessionList,
     ]);
   });
 
-  it('breaks each ready tie on activity, the other value the header names', () => {
-    const rows = sectionOf(html, 'stalled').rows;
-    for (const [i, title] of rows.entries()) {
-      const next = rows[i + 1];
-      if (!next) continue;
-      if (byTitle.get(title)!.ready !== byTitle.get(next)!.ready) continue;
-      expect(activity(title)).toBeGreaterThan(activity(next));
-    }
+  it('keeps the genuinely active project in Running', () => {
+    expect(sectionOf(html, 'running').rows).toEqual([NAME.lfs]);
+  });
+
+  it('keeps fresh queues in Ready and orders them by age, not queue size', () => {
+    const ready = sectionOf(html, 'ready').rows;
+    expect(ready).toEqual([
+      NAME.coordinator,
+      NAME.fineweb,
+      NAME.runner,
+      NAME.sessionState,
+    ]);
+    // FineWeb's 6,118 shards do not make it outrank the older six-task queue.
+    expect(ready.map((title) => byTitle.get(title)!.ready)).toEqual([6, 6118, 4, 2]);
   });
 
   it('holds that order whatever order the endpoint returned the rows in', () => {
-    // The endpoint sorts `createdAt desc`; nothing guarantees it keeps doing so, and a page whose
-    // ties survive only because the server happened to hand them over that way is not sorted.
     const permutations: Record<string, Snapshot[]> = {
       'as returned': SNAPSHOT,
       reversed: [...SNAPSHOT].reverse(),
@@ -343,71 +311,12 @@ describe('projects index — 2026-08-23 production snapshot', () => {
     for (const [i, h] of again.entries()) expect(h, `render #${i + 2}`).toBe(html);
   });
 
-  // ── 5 ───────────────────────────────────────────────────────────────────────────────────────
-  /**
-   * The header's small print, checked against the rows under it rather than against the constant
-   * it was written from. Each clause is turned into a predicate or a comparator and applied to
-   * what actually rendered, so a note that drifts from the sort — the one defect a test NAMED
-   * "orders Stalled by ready" cannot catch, because the name is not the page — fails here.
-   */
-  const CLAIMS: Array<{
-    phrase: string;
-    holds: (p: Snapshot) => boolean;
-  }> = [
-    { phrase: 'Nothing running', holds: (p) => p.running === 0 },
-    { phrase: 'work outstanding', holds: (p) => p.ready + p.blocked > 0 },
-    { phrase: 'Every task settled', holds: (p) => p.running + p.ready + p.blocked === 0 },
-    { phrase: 'project still open', holds: (p) => p.status === 'OPEN' },
-    { phrase: 'Work in flight, or no tasks filed yet', holds: (p) => p.running > 0 || p.tasks === 0 },
-  ];
-
-  it('says something true of every row under it in each header', () => {
-    for (const section of sectionsOf(html)) {
-      expect(section.note, `section ${section.key} has no small print`).not.toBe('');
-      for (const claim of CLAIMS) {
-        if (!section.note.includes(claim.phrase)) continue;
-        for (const title of section.rows) {
-          expect(
-            claim.holds(byTitle.get(title)!),
-            `"${claim.phrase}" is false of ${title} under ${section.title}`,
-          ).toBe(true);
-        }
-      }
-    }
-  });
-
-  it('orders each section the way its own header says it does', () => {
-    const exercised: string[] = [];
-    for (const section of sectionsOf(html)) {
-      if (section.rows.length > 1) exercised.push(section.key);
-      const keys: Array<(t: string) => number> = [];
-      // "most ready first" is a claim about the ready bucket and nothing else; it must come first
-      // when present, because the note reads "most ready first, THEN newest activity".
-      if (/most ready first/i.test(section.note)) keys.push((t) => byTitle.get(t)!.ready);
-      if (/newest activity/i.test(section.note)) keys.push(activity);
-      expect(keys.length, `section ${section.key} names no ordering: "${section.note}"`).toBeGreaterThan(0);
-
-      for (const [i, title] of section.rows.entries()) {
-        const next = section.rows[i + 1];
-        if (!next) continue;
-        const first = keys.map((k) => [k(title), k(next)] as const).find(([a, b]) => a !== b);
-        expect(
-          first ? first[0] > first[1] : true,
-          `${title} is above ${next} in ${section.title}, but "${section.note}" puts it below`,
-        ).toBe(true);
-      }
-    }
-    // Named, not assumed: a section holding one row cannot contradict its own ordering, so a pass
-    // over it says nothing. Wrapping up is that section in this account — see the reconstruction
-    // below, which is what actually exercises its header.
-    expect(exercised).toEqual(['running', 'stalled']);
-  });
-
-  it('names an ordering in every header, and folds only the finished work', () => {
+  it('renders only the non-empty lanes and states each lane’s ordering', () => {
     const rendered = sectionsOf(html);
-    expect(rendered.map((s) => s.key)).toEqual(['running', 'stalled', 'wrapping-up']);
-    // Completed is absent because the snapshot's twelve projects are all OPEN — an empty section
-    // is dropped rather than drawn as a header counting nothing.
+    expect(rendered.map((s) => s.key)).toEqual(['attention', 'running', 'ready']);
+    expect(sectionOf(html, 'attention').note).toContain('reason/severity first, then oldest signal');
+    expect(sectionOf(html, 'running').note).toContain('newest task activity first');
+    expect(sectionOf(html, 'ready').note).toContain('oldest task activity first');
     for (const s of rendered) expect(s.collapsed).toBe(false);
   });
 });
@@ -447,20 +356,21 @@ describe('projects index — the live account, including its finished projects',
   it('folds Completed by default and leaves the attention sections open', () => {
     const html = render([...SNAPSHOT, ...FINISHED]);
     const rendered = sectionsOf(html);
-    expect(rendered.map((s) => s.key)).toEqual(['running', 'stalled', 'wrapping-up', 'completed']);
+    expect(rendered.map((s) => s.key)).toEqual(['attention', 'running', 'ready', 'completed']);
     expect(rendered.filter((s) => s.collapsed).map((s) => s.key)).toEqual(['completed']);
     expect(sectionOf(html, 'completed').rows).toEqual(
       [...FINISHED].sort((a, b) => Date.parse(b.lastActivityAt!) - Date.parse(a.lastActivityAt!)).map((p) => p.title),
     );
     // The finished project with a task still running stayed finished.
     expect(sectionOf(html, 'running').rows).not.toContain('Claude Code 运行中 Prompt 接入改造');
-    // And adding them changed nothing above: iOS is still second in Stalled.
-    expect(rankIn(sectionOf(html, 'stalled'), NAME.ios)).toBe(2);
+    // Its task-count remainder looks like one FAILED task, but closed project status still wins.
+    expect(sectionOf(html, 'completed').rows).toContain('Codex 运行中 Prompt（turn/steer）接入');
+    expect(sectionOf(html, 'attention').rows).not.toContain('Codex 运行中 Prompt（turn/steer）接入');
   });
 });
 
 /**
- * Wrapping up, with more than one row in it.
+ * Ready-to-close work, with more than one row in Needs attention.
  *
  * The live account holds exactly one all-settled OPEN project, and one row cannot disagree with a
  * header that says "newest activity first" — so the check above records that section as
@@ -470,7 +380,7 @@ describe('projects index — the live account, including its finished projects',
  * between its last task closing and somebody marking the project DONE. That window is precisely
  * what this section exists to render.
  */
-describe('projects index — Wrapping up with more than one row in it', () => {
+describe('projects index — ready-to-close work inside Needs attention', () => {
   const BEFORE_CLOSING: Snapshot[] = [
     {
       id: '01a02a15-1cbf-770b-8987-cb5b8d311c67',
@@ -488,21 +398,22 @@ describe('projects index — Wrapping up with more than one row in it', () => {
     },
   ];
 
-  it('orders it newest activity first, as its header says', () => {
+  it('puts closure after operational faults and orders closure peers oldest first', () => {
     const rows = [...SNAPSHOT, ...BEFORE_CLOSING];
     const extra = new Map(BEFORE_CLOSING.map((p) => [p.title, p]));
     const html = render(rows);
-    const wrapping = sectionOf(html, 'wrapping-up');
-    expect(wrapping.note).toContain('newest activity first');
-    expect(wrapping.rows).toEqual([
-      'Project 详情页全景重做：从任务树到注意力路由', // 08-22T19:05
-      'Kimi ACP stdio MCP 断裂修复（方案 A：KIMI_CODE_HOME 覆盖层）', // 08-22T18:09
+    const attention = sectionOf(html, 'attention');
+    expect(attention.note).toContain('reason/severity first, then oldest signal');
+    const closing = attention.rows.filter((title) => title === NAME.sessionList || extra.has(title));
+    expect(closing).toEqual([
       NAME.sessionList, // 08-22T01:48
+      'Kimi ACP stdio MCP 断裂修复（方案 A：KIMI_CODE_HOME 覆盖层）', // 08-22T18:09
+      'Project 详情页全景重做：从任务树到注意力路由', // 08-22T19:05
     ]);
     const at = (t: string) => Date.parse((byTitle.get(t) ?? extra.get(t))!.lastActivityAt!);
-    for (const [i, t] of wrapping.rows.entries()) {
-      const next = wrapping.rows[i + 1];
-      if (next) expect(at(t)).toBeGreaterThan(at(next));
+    for (const [i, t] of closing.entries()) {
+      const next = closing[i + 1];
+      if (next) expect(at(t)).toBeLessThan(at(next));
     }
   });
 });
@@ -515,22 +426,10 @@ describe('projects index — Wrapping up with more than one row in it', () => {
  * for either. That is checkable here and nowhere else — a fixture named "Zombie Run" can only show
  * that the rule works, not that anything in the deployment trips it.
  *
- * The snapshot is REPLAYED AS OF NOW rather than rendered against the wall clock: every instant is
- * moved forward by one offset, so the GAPS between them — which is all a badge measures — are the
- * production gaps, and the suite says the same thing in a year as it does today. Mocking the clock
- * the page reads would work too; shifting the data leaves the page exactly as a browser runs it.
+ * The page clock is fixed at the snapshot instant, so both lane membership and badge ages remain
+ * reproducible no matter when the suite runs.
  */
 describe('projects index — badges over the 2026-08-23 production snapshot', () => {
-  const SNAPSHOT_AT = Date.parse('2026-08-23T18:55:05.000Z');
-  const OFFSET = Date.now() - SNAPSHOT_AT;
-  const asOfNow = (rows: Snapshot[]): Snapshot[] =>
-    rows.map((p) => ({
-      ...p,
-      lastActivityAt: p.lastActivityAt
-        ? new Date(Date.parse(p.lastActivityAt) + OFFSET).toISOString()
-        : null,
-    }));
-
   /** Every badged row, as `[title, badge]`, in the order the page draws them. */
   function badges(html: string): Array<[string, string]> {
     return [...html.matchAll(/<li [\s\S]*?<\/li>/g)].flatMap((li) => {
@@ -540,17 +439,14 @@ describe('projects index — badges over the 2026-08-23 production snapshot', ()
     });
   }
 
-  const html = render(asOfNow(SNAPSHOT));
+  const html = render(SNAPSHOT);
 
-  it('badges the two zombie runs production is actually carrying, and no other running project', () => {
-    // Both are in In progress — the section whose header reads "Work in flight" — and neither has
-    // been written to since the 20th/21st. Before this unit the page said "Work in flight" about
-    // them and nothing else at all.
-    const stale = badges(html).filter(([, chip]) => chip.startsWith('No progress'));
+  it('moves the two quiet runs to Needs attention and names the missing activity', () => {
+    const stale = badges(html).filter(([, chip]) => chip.startsWith('Running · no activity'));
 
     expect(stale).toEqual([
-      [NAME.fairSched, 'No progress 2d'],
-      [NAME.brand, 'No progress 3d'],
+      [NAME.brand, 'Running · no activity 3d'],
+      [NAME.fairSched, 'Running · no activity 2d'],
     ]);
     // Linux From Scratch is the control: it is in the same section, it also has a task running,
     // and it wrote three minutes before the snapshot — so the badge is about the silence, not
@@ -562,22 +458,18 @@ describe('projects index — badges over the 2026-08-23 production snapshot', ()
     expect(badges(html)).toContainEqual([NAME.sessionList, '12/12 settled · still open']);
   });
 
-  it('leaves most of the page unbadged, including six of the eight stalled rows', () => {
-    // Eight rows in Stalled, four badged. The other four were touched within the day — FineWeb
-    // three hours before the snapshot, with 6,118 ready tasks — and a badge on those would make
-    // amber the colour of the section rather than the mark on the rows that have gone cold.
+  it('moves only quiet ready queues to attention and leaves fresh queues in Ready', () => {
     const badged = badges(html);
-    const stalledBadges = badged.filter(([, chip]) => chip.startsWith('Stalled'));
+    const readyBadges = badged.filter(([, chip]) => chip.startsWith('Ready · no activity'));
 
-    expect(stalledBadges).toEqual([
-      [NAME.ios, 'Stalled 2d'],
-      [NAME.iosProject, 'Stalled 4d'],
-      // Both hold one ready task, so Stalled's tie-break on activity is what puts them this way
-      // round — and the badge is what makes that tie-break checkable from the row.
-      [NAME.multiAgent, 'Stalled 2d'],
-      [NAME.agentContract, 'Stalled 2d'],
+    expect(readyBadges).toEqual([
+      [NAME.iosProject, 'Ready · no activity 4d'],
+      [NAME.agentContract, 'Ready · no activity 2d'],
+      [NAME.ios, 'Ready · no activity 2d'],
+      [NAME.multiAgent, 'Ready · no activity 2d'],
     ]);
-    expect(sectionOf(html, 'stalled').rows).toHaveLength(8);
+    expect(sectionOf(html, 'attention').rows).toHaveLength(7);
+    expect(sectionOf(html, 'ready').rows).toHaveLength(4);
     expect(badged).toHaveLength(7);
     expect(badged.map(([t]) => t)).not.toContain(NAME.fineweb);
   });
@@ -586,7 +478,7 @@ describe('projects index — badges over the 2026-08-23 production snapshot', ()
     // The snapshot's thinnest real segment: 1 running against 117 blocked. Across the 196px this
     // column gets, one flex unit in 118 is under two pixels, and a proportional bar would round it
     // away — leaving the row saying nothing is running in the project that is the only reason it
-    // is filed under In progress at all. The 3px floor is what stops that.
+    // is filed under Running at all. The 3px floor is what stops that.
     const row = [...html.matchAll(/<li [\s\S]*?<\/li>/g)]
       .map((m) => m[0])
       .find((li) => li.includes(NAME.lfs))!;

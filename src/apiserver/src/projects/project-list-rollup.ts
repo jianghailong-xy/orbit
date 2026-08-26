@@ -9,7 +9,8 @@ import type { ProjectPanoramaBuckets } from './project-panorama';
  * `_count.tasks` is not: it counts DONE and CANCELLED alongside everything else, so a finished
  * project's 16 and a stalled project's 16 are the same number about two unrelated situations, and
  * across the deployment that number ranges from 8 to 23,442. The buckets are the same five numbers
- * the project page leads with, and `lastActivityAt` is what orders them by attention.
+ * the project page leads with; they choose a lifecycle lane, and `lastActivityAt` orders peers
+ * inside it. Durable human blockers are aggregated separately by project-list-attention.
  */
 export interface ProjectListRollup {
   buckets: ProjectPanoramaBuckets;

@@ -8,11 +8,9 @@ import { ProjectsPage } from './ProjectsPage';
 /**
  * ACCEPTANCE — assertion 6: the value a section sorts on must be ON the row it sorts.
  *
- * lib/projectAttention's own rule 1: "Every value a section sorts on is ON the row it sorts —
- * `ready` in the row's bucket numbers, `lastActivityAt` in its last column." Stalled is ordered
- * by ready descending (tie on activity); every other section by activity alone. If neither number
- * is on the row, the order the header promises is indistinguishable from no order at all — the
- * reader cannot check it, which is the same defect `createdAt desc` was.
+ * Needs attention is ordered by the reason chip and task activity. Running, Ready and Waiting use
+ * task activity; Needs definition uses the visible title. If those values are absent, the order
+ * the header promises is indistinguishable from no order at all.
  *
  * Renders the same 2026-08-23 production snapshot as ProjectsPageProductionSnapshot.test.tsx and
  * reads the rows off the markup. Nothing here imports projectAttention; it reads only what the
@@ -38,6 +36,7 @@ const SNAPSHOT = [
 ] as const;
 
 const byTitle = new Map(SNAPSHOT.map((p) => [p.title, p]));
+const SNAPSHOT_AT = Date.parse('2026-08-23T18:55:05.000Z');
 
 function render(): string {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -58,13 +57,18 @@ function render(): string {
       lastActivityAt: p.lastActivityAt,
     })),
   );
-  return renderToStaticMarkup(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <ProjectsPage />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(SNAPSHOT_AT);
+  try {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <ProjectsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  } finally {
+    clock.mockRestore();
+  }
 }
 
 const decode = (s: string) =>
@@ -91,16 +95,18 @@ function rowTextOf(html: string, title: string): string {
 const html = render();
 
 describe('projects index — the sort keys are on the rows they sort', () => {
-  it('shows each Stalled row\'s ready count — the number its header orders by', () => {
-    // "most ready first, then newest activity": the reader must be able to see the 6,118 that
-    // puts FineWeb first, or the order is unverifiable from the page itself.
-    const stalled = SNAPSHOT.filter((p) => p.running === 0 && (p.ready > 0 || p.blocked > 0));
-    expect(stalled.length).toBe(8); // the section the snapshot actually renders
-    for (const p of stalled) {
-      expect(
-        rowTextOf(html, p.title),
-        `row of "${p.title}" must carry its ready count ${p.ready.toLocaleString('en-US')}`,
-      ).toContain(p.ready.toLocaleString('en-US'));
+  it('shows the reason on every Needs attention row', () => {
+    const expected = new Map<string, string>([
+      ['Orbit 成熟开源项目品牌化建设', 'Running · no activity 3d'],
+      ['Project 公平调度域改造', 'Running · no activity 2d'],
+      ['Orbit iOS Project 支持', 'Ready · no activity 4d'],
+      ['Orbit Agent Contract 与渐进式使用指南', 'Ready · no activity 2d'],
+      ['iOS 客户端性能与内存优化', 'Ready · no activity 2d'],
+      ['Project 多 Agent 协作与 Agent 级 Provider 调度', 'Ready · no activity 2d'],
+      ['Session 列表重设计：注意力收件箱 + 项目上卷', '12/12 settled · still open'],
+    ]);
+    for (const [title, reason] of expected) {
+      expect(rowTextOf(html, title)).toContain(reason);
     }
   });
 
