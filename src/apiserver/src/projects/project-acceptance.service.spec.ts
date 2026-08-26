@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ProjectAcceptanceVerdict } from '@prisma/client';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { criteriaSemanticRevision, sha256 } from './project-acceptance';
+import { ACCEPTANCE_MISSING, criteriaSemanticRevision, sha256 } from './project-acceptance';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-000000000101';
@@ -231,4 +231,37 @@ test('openRun freezes definition identity, revision and text into both snapshot 
     { criterionId: CRITERION_A_ID, definitionRevision: 2 },
     { criterionId: CRITERION_B_ID, definitionRevision: 1 },
   ]);
+});
+
+test('evaluateGate digests a large project once and gives that read explicit scale headroom', async () => {
+  let digestReads = 0;
+  let transactionOptions: unknown;
+  const tx = {
+    projectBlocker: { count: async () => 0 },
+    projectAcceptanceRun: { findFirst: async () => null },
+    $queryRaw: async () => [{ count: 0 }],
+  };
+  const prisma = {
+    $transaction: async (work: (client: typeof tx) => unknown, options: unknown) => {
+      transactionOptions = options;
+      return work(tx);
+    },
+  };
+  const service = new ProjectAcceptanceService(prisma as never);
+  service.digest = async () => {
+    digestReads += 1;
+    return 'current-digest';
+  };
+
+  const evaluated = await service.evaluateGate(PROJECT_ID);
+
+  assert.equal(digestReads, 1, 'the overview must not materialize and hash every task twice');
+  assert.deepEqual(transactionOptions, { timeout: 30_000, maxWait: 10_000 });
+  assert.deepEqual(evaluated, {
+    digest: 'current-digest',
+    allowed: false,
+    runId: null,
+    code: ACCEPTANCE_MISSING,
+    reason: 'no project acceptance has been run — DONE is a claim about evidence, and there is none',
+  });
 });

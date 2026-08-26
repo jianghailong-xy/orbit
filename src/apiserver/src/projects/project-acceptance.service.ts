@@ -681,7 +681,21 @@ export class ProjectAcceptanceService {
     projectId: string,
   ): Promise<{ runId: string; attempt: bigint; digest: string }> {
     const digest = await this.digest(tx, projectId);
+    return this.assertDoneAllowedForDigest(tx, projectId, digest);
+  }
 
+  /** The gate after its acceptance digest has already been read in this transaction.
+   *
+   * The write path calls {@link assertDoneAllowed}, which computes the digest here under its
+   * project lock. The read-only overview has to return that same digest beside the gate result, so
+   * it computes it once and enters here directly. Keeping the rest of the decision in one helper
+   * prevents a large project from materializing and hashing its complete task set twice merely to
+   * describe why it is not DONE. */
+  private async assertDoneAllowedForDigest(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    digest: string,
+  ): Promise<{ runId: string; attempt: bigint; digest: string }> {
     const openBlockers = await tx.projectBlocker.count({
       where: { projectId, resolvedAt: null },
     });
@@ -1000,7 +1014,7 @@ export class ProjectAcceptanceService {
     return withTransactionRetry(this.prisma, async (tx) => {
       const digest = await this.digest(tx, projectId);
       try {
-        const allowed = await this.assertDoneAllowed(tx, projectId);
+        const allowed = await this.assertDoneAllowedForDigest(tx, projectId, digest);
         return { digest, allowed: true, runId: allowed.runId, code: null, reason: null };
       } catch (e) {
         if (e instanceof AcceptanceRefusal) {
@@ -1009,7 +1023,13 @@ export class ProjectAcceptanceService {
         }
         throw e;
       }
-    }, loggedRetry(this.logger, 'projectAcceptance.evaluateGate'));
+    }, loggedRetry(this.logger, 'projectAcceptance.evaluateGate', {
+      // Digesting is linear in the number of tasks. Prisma's five-second default is smaller than
+      // one legitimate large-project read, and expiring it also holds a pool connection long
+      // enough to make unrelated runner requests fail while the client unwinds. This is a ceiling,
+      // not a delay: ordinary projects still commit immediately.
+      transaction: { timeout: 30_000, maxWait: 10_000 },
+    }));
   }
 
   /**
