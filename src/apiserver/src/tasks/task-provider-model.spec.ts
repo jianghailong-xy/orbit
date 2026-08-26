@@ -126,6 +126,18 @@ test('an unpinned task still resumes its last session whatever provider that ses
 });
 
 /** update()'s three-state write: omitted keeps the pin, null clears it back to inheriting. */
+function serviceForUpdate(prisma: unknown): TasksService {
+  const service = new TasksService(prisma as never, {} as never, {
+    publishForUser: () => undefined,
+  } as never);
+  (service as unknown as Record<string, unknown>).loadDetail = async () => ({
+    id: TASK_ID,
+    status: 'OPEN',
+    creatorSessionId: null,
+  });
+  return service;
+}
+
 function updateFixture() {
   const writes: any[] = [];
   const prisma = {
@@ -139,8 +151,7 @@ function updateFixture() {
     },
     modelProvider: { findFirst: async () => ({ slug: 'deepseek' }) },
   } as never;
-  const service = new TasksService(prisma, {} as never, {} as never);
-  (service as any).get = async () => ({ id: TASK_ID, status: 'OPEN', creatorSessionId: null });
+  const service = serviceForUpdate(prisma);
   return { service, writes };
 }
 
@@ -164,8 +175,7 @@ test('a provider the caller cannot dispatch with is rejected on the write, not a
     // No configured row matches, and the slug isn't a built-in engine either.
     modelProvider: { findFirst: async () => null },
   } as never;
-  const service = new TasksService(prisma, {} as never, {} as never);
-  (service as any).get = async () => ({ id: TASK_ID, status: 'OPEN', creatorSessionId: null });
+  const service = serviceForUpdate(prisma);
 
   await assert.rejects(
     service.update('owner-1', TASK_ID, { provider: 'not-a-provider' }),
@@ -184,8 +194,7 @@ test('a built-in engine slug needs no configured provider row', async () => {
       },
     },
   } as never;
-  const service = new TasksService(prisma, {} as never, {} as never);
-  (service as any).get = async () => ({ id: TASK_ID, status: 'OPEN', creatorSessionId: null });
+  const service = serviceForUpdate(prisma);
 
   await service.update('owner-1', TASK_ID, { provider: 'kimi' });
 });

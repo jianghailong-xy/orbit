@@ -527,14 +527,16 @@ test('a replayed item does not admit a fresh out-of-scope item beside it', async
 
 // ── the update path ─────────────────────────────────────────────────────────────────────────
 
-// `get` is stubbed rather than faked: it hydrates comments, sessions, dependencies and epochs, and
-// reproducing that here would test the fixture. What this asserts is the gate, and the gate reads
-// exactly one thing off the task — which project owns it.
+// `loadDetail` is stubbed rather than faked: it hydrates comments, sessions, dependencies and
+// epochs, and reproducing that here would test the fixture. What this asserts is the gate, and the
+// gate reads exactly one thing off the task — which project owns it.
 function updateService(currentProjectId: string | null) {
   const built = fixture();
   const updates: unknown[] = [];
-  (built.service as unknown as Record<string, unknown>).get = async (_owner: string, id: string) =>
-    ({ id, projectId: currentProjectId, parentTaskId: null, verifiesTaskId: null });
+  (built.service as unknown as Record<string, unknown>).loadDetail = async (
+    _owner: string,
+    id: string,
+  ) => ({ id, projectId: currentProjectId, parentTaskId: null, verifiesTaskId: null });
   (built.service as unknown as { prisma: Record<string, unknown> }).prisma.task = {
     ...(built.service as unknown as { prisma: { task: Record<string, unknown> } }).prisma.task,
     update: async (args: unknown) => {

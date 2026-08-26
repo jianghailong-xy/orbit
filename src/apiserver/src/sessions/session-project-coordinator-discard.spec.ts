@@ -40,6 +40,7 @@ function fixture(adopted: boolean) {
   const realtime: any = {
     notifyInbox: () => undefined,
     requestCancel: () => undefined,
+    publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: (id: string) => lifecycle.push(id),
   };
   return {

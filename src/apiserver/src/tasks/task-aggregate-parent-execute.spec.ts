@@ -281,7 +281,7 @@ test('deleting a parent that loses the lock race is a 409, not a 500', async () 
     {} as never,
     {} as never,
   );
-  (service as unknown as Record<string, unknown>).get = async () => ({ id: TASK });
+  (service as unknown as Record<string, unknown>).loadDetail = async () => ({ id: TASK });
   await assert.rejects(
     () => service.remove('owner-1', TASK),
     (error: unknown) => {

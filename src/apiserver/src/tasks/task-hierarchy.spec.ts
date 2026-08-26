@@ -43,6 +43,12 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
       ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
       : (strings as Prisma.Sql);
     const sql = query.text.replace(/\s+/g, ' ').trim();
+    // Status writes perform a post-commit completeness read for their realtime invalidation. Keep
+    // that distinct from the hierarchy admission/locking statements these tests pin down.
+    if (sql.includes('changed(id) AS') && sql.includes('family_probe(id) AS')) {
+      calls.push('publish:affected-rows');
+      return [{ id: null, requiresResync: false }];
+    }
     // Labelled by the table it locks: the owner lock is `... FROM "user" ... FOR UPDATE`.
     calls.push(
       /FOR UPDATE/i.test(sql) ? `lock:${/FROM\s+"(\w+)"/i.exec(sql)?.[1] ?? '?'}` : `raw:${sql}`,
@@ -58,7 +64,12 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
     calls.push('COMMIT');
     return result;
   };
-  return { service: new TasksService(client as never, {} as never, {} as never), calls };
+  return {
+    service: new TasksService(client as never, {} as never, {
+      publishForUser: () => undefined,
+    } as never),
+    calls,
+  };
 }
 
 /** A task row as `get` returns it, with only what update() reads off it. */
@@ -442,8 +453,9 @@ test('acceptance criteria are replaced when sent and cleared by null', async () 
 });
 
 // The guarantee this whole phase rests on: an update that says nothing about a project or a parent
-// behaves exactly as it did before the columns existed — same writes, no extra query, and no lock.
-test('an update that mentions neither column asks no hierarchy questions', async () => {
+// behaves exactly as it did before the columns existed — same admission reads and no owner lock.
+// The post-commit affected-row read belongs to realtime publication, not hierarchy admission.
+test('an update that mentions neither column asks no hierarchy admission questions', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
     {
@@ -482,6 +494,7 @@ test('an update that mentions neither column asks no hierarchy questions', async
     'raw:SELECT DISTINCT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ANY($1::uuid[]) AND t."owner_id" = $2::uuid',
     'updateTask',
     'COMMIT',
+    'publish:affected-rows',
   ]);
   // Not the owner mutex: a status write restructures nothing, so it must not queue behind
   // another request's DAG rewrite. And not the creator-Session pre-lock: that is for a write
@@ -491,8 +504,8 @@ test('an update that mentions neither column asks no hierarchy questions', async
 });
 
 // The other half of that rule: no project, no acceptance fact, nothing to order against — so the
-// cheapest write stays the cheapest write.
-test('a status write on a task with no project stays a single statement', async () => {
+// write itself stays transaction-free. Its post-commit publication audit is a separate read.
+test('a status write on a task with no project stays transaction-free', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
     {
@@ -510,7 +523,7 @@ test('a status write on a task with no project stays a single statement', async 
 
   await service.update(OWNER_ID, TASK_ID, { status: TaskStatus.OPEN } as never);
 
-  assert.deepEqual(calls, ['updateTask']);
+  assert.deepEqual(calls, ['updateTask', 'publish:affected-rows']);
 });
 
 // batch-create shares taskCreateData with create, so it would otherwise be a way to write the

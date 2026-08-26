@@ -16,7 +16,9 @@ function serviceWith(prisma: unknown): TasksService {
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(client),
     ...(prisma as Record<string, unknown>),
   };
-  return new TasksService(client as never, {} as never, {} as never);
+  return new TasksService(client as never, {} as never, {
+    publishForUser: () => undefined,
+  } as never);
 }
 
 /** Same recorder as task-list-pagination.spec: renders the tagged template PostgreSQL would get. */
