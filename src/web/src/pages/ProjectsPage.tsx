@@ -592,8 +592,8 @@ export function ProjectDetailPage() {
         <>
           {/* Project identity gets one quiet row of its own. The old head put a tall Coordinator
               card beside two lines of title metadata, creating a large dead rectangle under the
-              title. The stable goal now frames the page, followed by a balanced command centre
-              for changing work state and the way to act on it. */}
+              title. A balanced command centre now leads with changing work state and the way to
+              act on it, followed by the stable goal they are working toward. */}
           <header className="project-detail-identity">
             <Typography.Title level={2} className="page-title">
               {p.title}
@@ -605,11 +605,6 @@ export function ProjectDetailPage() {
               </span>
             </div>
           </header>
-
-          {/* The stable definition of the project comes before its changing execution state. A
-              long brief stays complete here; its full Markdown remains the one source rather than
-              being hidden behind a disclosure or repeated below the graph. */}
-          <ProjectGoalCard goal={p.goal} />
 
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On
@@ -625,9 +620,14 @@ export function ProjectDetailPage() {
             />
           </div>
 
-          {/* Directly under the counts it is the picture of, so the graph lands where a reader is
-              already looking. Every project gets one, at any size: the section draws whatever the
-              graph endpoint serves and says so when the server truncates. */}
+          {/* The stable definition of the project follows the changing execution state and its
+              coordinator. A long brief stays complete here; its full Markdown remains the one
+              source rather than being hidden behind a disclosure or repeated below the graph. */}
+          <ProjectGoalCard goal={p.goal} />
+
+          {/* The graph is the picture summarized by the overview above. Every project gets one,
+              at any size: the section draws whatever the graph endpoint serves and says so when
+              the server truncates. */}
           <ProjectTasksGraph projectId={id} />
 
           {/* Draws nothing at all unless this project is a chain: it reads the same shape the

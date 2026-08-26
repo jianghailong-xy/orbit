@@ -4,8 +4,8 @@ import { Suspense, lazy } from 'react';
 /**
  * The project's dependency picture, as a section of its page.
  *
- * It sits directly under the panorama header, whose counts are a summary of this same graph. The
- * task list — the same tasks as an indented topological plan — is a SEPARATE section further down
+ * The panorama header above carries counts that summarize this same graph. The task list — the
+ * same tasks as an indented topological plan — is a SEPARATE section further down
  * the page, not the other half of a toggle: 82.5% of tasks in this database have at most one
  * prerequisite, so the list stays the exact reading at any size, while the picture is what makes a
  * mesh legible. Both are worth having, one after the other, and neither is a mode the reader has

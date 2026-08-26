@@ -318,10 +318,11 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const ready = at('Run queue');
     const acceptance = at('Acceptance</div>');
 
-    // The stable goal frames every changing reading below it. It is one compact card between the
-    // identity and the command centre, not a long-form appendix after the graph.
+    // The changing work account and its Coordinator lead. The stable goal follows both as one
+    // full-width card, before the graph of the work it defines.
     expect(goal).toBeGreaterThan(-1);
-    expect(header).toBeGreaterThan(goal);
+    expect(goal).toBeGreaterThan(coordinator);
+    expect(goal).toBeLessThan(graph);
     // Work state then establishes context, and the coordinator offers the action on it. Both
     // belong to one command-centre grid and stay ahead of the graph.
     expect(coordinator).toBeGreaterThan(-1);
@@ -443,12 +444,12 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // second copy of the list would be caught if one ever came back.
     expect(shows('Lighthouse ≥ 90 on every page')).toBe(false);
 
-    // Goal is read before the changing work account and the Coordinator action, while the task
-    // list still follows the outcome measure.
-    expect(at('Ship the new marketing site')).toBeLessThan(at('Work overview'));
+    // Goal follows the changing work account and the Coordinator action, while the task list still
+    // follows the outcome measure.
+    expect(at('Ship the new marketing site')).toBeGreaterThan(at('Work overview'));
     expect(at('Ship the new marketing site')).toBeLessThan(at('>Tasks<'));
-    expect(at('>Goal</h5>')).toBeLessThan(at('aria-label="Coordinator"'));
-    expect(at('Ship the new marketing site')).toBeLessThan(at('aria-label="Coordinator"'));
+    expect(at('>Goal</h5>')).toBeGreaterThan(at('aria-label="Coordinator"'));
+    expect(at('Ship the new marketing site')).toBeGreaterThan(at('aria-label="Coordinator"'));
 
     // Once each — the assembly places these, it does not repeat them. Ordering assertions read the
     // first match and stay green on a page that draws the whole block a second time lower down.

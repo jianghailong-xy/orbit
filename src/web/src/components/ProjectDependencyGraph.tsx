@@ -1,6 +1,6 @@
 /**
- * A project's dependency graph, drawn — the picture `ProjectTasksGraph` puts under the project's
- * panorama header.
+ * A project's dependency graph, drawn — the picture `ProjectTasksGraph` puts below the project's
+ * panorama header and goal.
  *
  * ## The structural decision this component is built on
  *

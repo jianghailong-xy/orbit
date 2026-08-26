@@ -9490,8 +9490,8 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
 }
 
-/* Project identity stays visually quiet; the goal and then the command centre beneath it own the
-   purpose, live numbers and actions. This avoids both the old repeated status tags and the large
+/* Project identity stays visually quiet; the command centre and then the goal beneath it own the
+   live numbers, actions and purpose. This avoids both the old repeated status tags and the large
    blank rectangle created when a 90px title block shared a row with a 250px coordinator card. */
 .project-detail-identity {
   margin: 14px 0;
@@ -9516,8 +9516,8 @@ html[data-theme='dark'] .session-tag-chip {
   margin-inline-end: 0;
 }
 
-/* A project's stable purpose precedes the live work account. Long Markdown stays complete here,
-   so links, lists and code are always readable without a disclosure control or a second copy. */
+/* A project's stable purpose follows the live work account. Long Markdown stays complete here, so
+   links, lists and code are always readable without a disclosure control or a second copy. */
 .project-goal-card {
   margin-bottom: 14px;
   padding: 15px 18px 16px;
