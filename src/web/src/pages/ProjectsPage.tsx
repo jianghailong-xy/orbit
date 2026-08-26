@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { TaskStatus } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
@@ -890,7 +891,9 @@ interface ProjectTaskPage {
 interface ProjectTask {
   id: string;
   title: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+  // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
+  // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
+  status: TaskStatus;
   parentTaskId: string | null;
   acceptanceCriteria?: string | null;
   createdAt: string;
@@ -921,30 +924,36 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
   IN_PROGRESS: 'gold',
   DONE: 'green',
   CANCELLED: 'default',
+  FAILED: 'red',
 };
 
 /**
  * The same status, carried by a SHAPE rather than by colour alone.
  *
- * Four shapes for four statuses, spelled the way the panorama header's KPI row spells its four —
- * disc, triangle, square, check — so a reader moving between the two surfaces is not learning a
- * second vocabulary. Blocked-ness deliberately gets no fifth shape: it is already said in words by
- * the `waits N` badge, and a mark that meant two things at once would say neither.
+ * Five shapes for five statuses. The first four reuse the panorama header's vocabulary — disc,
+ * triangle, square, check — and FAILED adds the conventional cross. Blocked-ness deliberately gets
+ * no sixth shape: it is already said in words by the `waits N` badge, and a mark that meant two
+ * things at once would say neither.
  */
-type TaskStatusGlyph = 'disc' | 'triangle' | 'square' | 'check';
+type TaskStatusGlyph = 'disc' | 'triangle' | 'square' | 'check' | 'cross' | 'ring';
 
 const TASK_STATUS_MARK: Record<ProjectTask['status'], { glyph: TaskStatusGlyph; color: string }> = {
   IN_PROGRESS: { glyph: 'disc', color: 'var(--brand)' },
   OPEN: { glyph: 'triangle', color: 'var(--warning-solid)' },
   DONE: { glyph: 'check', color: 'var(--success)' },
   CANCELLED: { glyph: 'square', color: 'var(--text-3)' },
+  FAILED: { glyph: 'cross', color: 'var(--error)' },
 };
+
+// API payloads outlive any one web bundle. If the server grows another status before a cached
+// client refreshes, keep the row renderable with a neutral mark instead of taking down the page.
+const UNKNOWN_TASK_STATUS_MARK = { glyph: 'ring', color: 'var(--text-3)' } as const;
 
 /** `aria-hidden` on purpose: the row's own status Tag already spells the status out, so a second
  *  reading of it is noise. The shape is here for the eye — the text is what the screen reader
- *  gets. `data-glyph` is what makes the four marks tellable apart without reading their colour. */
+ *  gets. `data-glyph` is what makes the marks tellable apart without reading their colour. */
 function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
-  const { glyph, color } = TASK_STATUS_MARK[status];
+  const { glyph, color } = TASK_STATUS_MARK[status] ?? UNKNOWN_TASK_STATUS_MARK;
   return (
     <svg
       data-glyph={glyph}
@@ -966,6 +975,23 @@ function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
           width="9"
           height="9"
           rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      ) : glyph === 'cross' ? (
+        <path
+          d="M2.2 2.2 L9.8 9.8 M9.8 2.2 L2.2 9.8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      ) : glyph === 'ring' ? (
+        <circle
+          cx="6"
+          cy="6"
+          r="4.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
@@ -1178,7 +1204,7 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
             title={
               <span className="project-task-row-title">
                 <TaskStatusMark status={task.status} /> {task.title}{' '}
-                <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
+                <Tag color={TASK_STATUS_COLOR[task.status] ?? 'default'}>{task.status}</Tag>
                 {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
                     real project have nothing on either side, and a list where every row carries two
                     zeroes is a list where the rows that do carry a number stop standing out. */}

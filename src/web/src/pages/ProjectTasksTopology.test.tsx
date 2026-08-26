@@ -327,32 +327,45 @@ describe('ProjectTasks — which prerequisites a converging row waits on', () =>
 });
 
 describe('ProjectTasks — status carried by shape', () => {
-  it('gives the four statuses four different marks, and does not lean on colour to do it', () => {
+  it('gives the five statuses five different marks, including a failed task', () => {
     const { out } = withPage([
       task({ id: T1, title: 'Open one', status: 'OPEN' }),
       task({ id: T2, title: 'Running one', status: 'IN_PROGRESS' }),
       task({ id: T3, title: 'Cancelled one', status: 'CANCELLED' }),
       task({ id: T4, title: 'Done one', status: 'DONE' }),
+      task({ id: '0195c0de-0000-7000-8000-0000000000a5', title: 'Failed one', status: 'FAILED' }),
     ]);
 
     const glyphs = [...out.matchAll(/data-glyph="([^"]+)"/g)].map((m) => m[1]);
-    expect(glyphs).toHaveLength(4);
-    expect(new Set(glyphs).size).toBe(4);
+    expect(glyphs).toHaveLength(5);
+    expect(new Set(glyphs).size).toBe(5);
+    expect(glyphs).toContain('cross');
 
-    // Not four names for one drawing: strip every paint attribute and the four marks are still
+    // Not five names for one drawing: strip every paint attribute and the five marks are still
     // pairwise different, which is what makes them readable to someone who cannot tell the
     // colours apart.
     const drawings = [...out.matchAll(/<svg[^>]*data-glyph="[^"]*"[^>]*>([\s\S]*?)<\/svg>/g)].map(
       (m) => m[1].replace(/\s*(?:fill|stroke)="[^"]*"/g, ''),
     );
-    expect(drawings).toHaveLength(4);
-    expect(new Set(drawings).size).toBe(4);
+    expect(drawings).toHaveLength(5);
+    expect(new Set(drawings).size).toBe(5);
 
     // The mark is for the eye only — the row's own status text is what a screen reader gets, so a
     // second reading of "DONE" from the shape would be noise.
     expect(out).toMatch(/<svg[^>]*data-glyph="[^"]*"[^>]*aria-hidden="true"/);
     expect(out).toContain('CANCELLED');
     expect(out).toContain('IN_PROGRESS');
+    expect(out).toContain('FAILED');
+  });
+
+  it('uses a neutral fallback mark for a status newer than this web bundle', () => {
+    const { out } = withPage([
+      task({ id: T1, title: 'Future state', status: 'FUTURE_STATUS' }),
+    ]);
+
+    expect(out).toContain('Future state');
+    expect(out).toContain('FUTURE_STATUS');
+    expect(out).toContain('data-glyph="ring"');
   });
 });
 
