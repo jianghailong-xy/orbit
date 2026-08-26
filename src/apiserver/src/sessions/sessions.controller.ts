@@ -181,10 +181,15 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto);
   }
 
-  // Still-queued (PENDING) user messages, so reopening/deep-linking a running session
-  // can restore the visible queue (these aren't in the event stream until delivered).
+  // Default stays the installed native client's queue-only contract. Web opts into `active` to
+  // bridge the dequeue → first-event window and receive authoritative placement metadata.
   @Get(':id/turns')
-  queuedTurns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+  queuedTurns(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('view') view?: string,
+  ) {
+    if (view === 'active') return this.sessions.listQueuedTurns(user.userId, id, 'active');
     return this.sessions.listQueuedTurns(user.userId, id);
   }
 

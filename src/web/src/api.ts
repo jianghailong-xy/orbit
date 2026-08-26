@@ -319,14 +319,21 @@ const uuid = (): string => {
  *  The response's `kind` is what the server filed it as, which is not what was asked for: a
  *  message sent while a turn is running becomes a `steer` — written into that turn instead of
  *  queued behind it — and a steer is neither withdrawable nor waiting. See lib/steerDelivery.
- *  Older servers omit it; absent means the pre-steer behaviour (queued behind the turn). */
+ *  `placement` is the server's row-locked answer to whether this specific turn was accepted as
+ *  the next executable, queued behind an earlier one, or steered into the running one. Older
+ *  servers omit both response hints, so each remains optional during rolling upgrades. */
 export const sendTurn = (
   sessionId: string,
   content: string,
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
 ) =>
-  api<{ turnId: string; seq: number; kind?: ConversationTurnKind }>(`/sessions/${sessionId}/turns`, {
+  api<{
+    turnId: string;
+    seq: number;
+    kind?: ConversationTurnKind;
+    placement?: 'accepted' | 'queued' | 'steer';
+  }>(`/sessions/${sessionId}/turns`, {
     method: 'POST',
     body: {
       clientTurnId: uuid(),
@@ -393,24 +400,29 @@ export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
-/** Still-queued (PENDING) turns for a session — restores the visible queue when a
- *  running session is reopened/deep-linked (queued turns aren't in the event stream
- *  until the runner delivers them). `kind` is 'shell' for a queued `!cmd`. */
+/** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
+ *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
+ *  its PENDING-only response for older native clients. Placement distinguishes the accepted head,
+ *  queued successors, and steers; placement/createdAt stay optional for rolling upgrades. */
 export const listQueuedTurns = (sessionId: string) =>
   api<
     {
       turnId: string;
-      kind?: string;
+      kind?: ConversationTurnKind;
+      placement?: 'accepted' | 'queued' | 'steer';
       content: string;
+      createdAt?: string;
       attachments?: { id: string; mimeType: string }[];
     }[]
-  >(`/sessions/${sessionId}/turns`);
+  >(`/sessions/${sessionId}/turns?view=active`);
 
 /** Revive an ended session with a new message: the runner --resumes claude's
  *  existing context. Requires the session's runner to be online. `config` re-applies
  *  mode/model/effort changes made while ended (omitted fields keep the prior value).
  *  `kind: 'shell'` revives via a `!cmd` shell turn (run on the runner, output buffered
- *  for the next message) instead of a normal prompt — claude still --resumes and idles. */
+ *  for the next message) instead of a normal prompt — claude still --resumes and idles.
+ *  A true terminal revive is accepted; if the session became live before the request landed,
+ *  kind/placement carry sendTurn's row-locked decision. Both hints are optional for old servers. */
 export const resumeSession = (
   sessionId: string,
   content: string,
@@ -418,7 +430,12 @@ export const resumeSession = (
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
 ) =>
-  api<{ turnId: string; seq: number }>(`/sessions/${sessionId}/resume`, {
+  api<{
+    turnId: string;
+    seq: number;
+    kind?: ConversationTurnKind;
+    placement?: 'accepted' | 'queued' | 'steer';
+  }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
     body: {
       clientTurnId: uuid(),

@@ -169,9 +169,11 @@ test('a `!cmd` shell turn never becomes a steer, however busy the engine is', as
 test('the response says which kind the message was filed as', async () => {
   const steered = await send(makeService(1));
   assert.equal(steered.kind, 'steer');
+  assert.equal(steered.placement, 'steer');
 
-  const queued = await send(makeService(0, RunStatus.AWAITING_INPUT));
-  assert.equal(queued.kind, 'message');
+  const accepted = await send(makeService(0, RunStatus.AWAITING_INPUT));
+  assert.equal(accepted.kind, 'message');
+  assert.equal(accepted.placement, 'accepted');
 });
 
 test('the response still carries the turn id and seq it always did', async () => {
@@ -294,6 +296,7 @@ test('the answer tells a non-steering session what it got, so no client shows th
   // 'message' is what a client renders as "Queued" with a withdraw — which is exactly what this
   // is. A blank kind would leave every door guessing from a status it may not have caught up on.
   assert.equal(accepted.kind, 'message');
+  assert.equal(accepted.placement, 'queued');
 });
 
 test('a steer still needs a live engine turn, not merely a runner that could deliver one', async () => {
@@ -338,6 +341,7 @@ test('sending the same clientTurnId twice mid-turn files one steer, not two', as
   // Answered as the steer it already is, so the client goes on showing the delivery it was
   // already watching rather than starting a second bubble beside it.
   assert.equal(out.kind, 'steer');
+  assert.equal(out.placement, 'steer');
 });
 
 test('a retry does not re-decide the kind, even if the turn ended in between', async () => {
@@ -357,4 +361,5 @@ test('a retry does not re-decide the kind, even if the turn ended in between', a
 
   assert.equal(h.created.length, 0);
   assert.equal(out.kind, 'steer');
+  assert.equal(out.placement, 'steer');
 });

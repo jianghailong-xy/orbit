@@ -194,6 +194,14 @@ import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
 import { loadTranscript, saveTranscript } from '../lib/transcriptStore';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
 import {
+  acceptedUserTurnEvent,
+  acceptedUserTurnLanded,
+  queuedTurnsOutsideTranscript,
+  reconcileQueuedTurnSnapshot,
+  type AcceptedUserTurn,
+} from '../lib/acceptedUserTurn';
+import { turnPlacementOf } from '../lib/turnPlacement';
+import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
   sessionCapabilityOf,
@@ -203,6 +211,7 @@ import {
   sessionSendDispositionOf,
 } from '../lib/sessionCapabilities';
 import {
+  QUEUED_NOTICE_DELAY_MS,
   STARTING_DESCRIPTION,
   STARTING_LABEL,
   STARTING_NOTICE_DELAY_MS,
@@ -210,6 +219,7 @@ import {
   type QueuedGate,
   pendingSlotDescription,
   queuedLabel,
+  queuedNoticeVisible,
   queuedTitle,
   runnerSlotUsage,
 } from '../lib/runnerSlots';
@@ -1104,6 +1114,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const tagSaveInFlight = useRef(false);
   const [workspaceId, setWorkspaceId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
+  // `events` is replaced in an effect after navigation. Keep its owner explicit so a render in
+  // between cannot treat the previous session's transcript as the newly selected session's.
+  const [eventsSessionId, setEventsSessionId] = useState<string | null>(selectedId);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
   // "Chat about this" on a pending AskUserQuestion routes the next composer send back to
   // that approval as a deny+message (resolving the blocking question) instead of a fresh
@@ -1118,6 +1131,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const streamAnchorRef = useRef<number | null>(null);
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
+  const queuedRef = useRef<QueuedTurn[]>(queued);
+  queuedRef.current = queued;
+  const [queuedSessionId, setQueuedSessionId] = useState<string | null>(selectedId);
+  // A normal idle/new-session send is accepted before the runner emits its durable `user` event.
+  // Keep that acknowledged message visible in the gap; queued/steered follow-ups stay in `queued`
+  // above because their status + Cancel affordance are meaningful rather than transport noise.
+  const [acceptedUserTurns, setAcceptedUserTurns] = useState<AcceptedUserTurn[]>([]);
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
   // The apiserver's authoritative background-shell list (all launches + output recovered from the
   // workspace's Read polls). The loaded event window only holds recent launches, so the tray merges
@@ -2159,6 +2179,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     (selectedSession ?? selected) as QueuedGate | null,
   );
   const selectedStartingSession = selectedSession ?? selected;
+  const selectedIsQueued = selected
+    ? sessionRunStateOf(selectedStartingSession) === 'QUEUED'
+    : false;
+  const queuedNoticeScope = selectedId
+    ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
+    : null;
+  const delayedQueuedNotice = useDelayedFlag(
+    selectedIsQueued && selectedStartingSession?.queuedReason == null,
+    QUEUED_NOTICE_DELAY_MS,
+    queuedNoticeScope,
+  );
+  const showQueuedNotice =
+    selectedIsQueued && queuedNoticeVisible(selectedStartingSession, delayedQueuedNotice);
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   const startingNoticeScope = selectedId
     ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
@@ -2171,6 +2204,53 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     STARTING_NOTICE_DELAY_MS,
     startingNoticeScope,
   );
+  const scopedEvents = useMemo(
+    () => (eventsSessionId === selectedId ? events : []),
+    [events, eventsSessionId, selectedId],
+  );
+  const visibleAcceptedUserTurns = useMemo(
+    () =>
+      acceptedUserTurns.filter(
+        (turn) =>
+          turn.sessionId === selectedId &&
+          !acceptedUserTurnLanded(turn, eventsSessionId, scopedEvents),
+      ),
+    [acceptedUserTurns, eventsSessionId, scopedEvents, selectedId],
+  );
+  const transcriptEvents = useMemo(() => {
+    if (visibleAcceptedUserTurns.length === 0) return scopedEvents;
+    const lastSeq = scopedEvents.reduce((max, event) => Math.max(max, event.seq), 0);
+    return [
+      ...scopedEvents,
+      ...visibleAcceptedUserTurns.map((turn, index) =>
+        acceptedUserTurnEvent(
+          turn,
+          lastSeq + (index + 1) / (visibleAcceptedUserTurns.length + 1),
+        ),
+      ),
+    ];
+  }, [scopedEvents, visibleAcceptedUserTurns]);
+  const scopedQueuedTurns = useMemo(
+    () => (queuedSessionId === selectedId ? queued : []),
+    [queued, queuedSessionId, selectedId],
+  );
+  const visibleQueuedTurns = useMemo(
+    () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
+    [scopedQueuedTurns, transcriptEvents],
+  );
+  // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
+  // the acknowledged copy afterwards so landed turns do not accumulate in memory.
+  useEffect(() => {
+    if (!selectedId) return;
+    setAcceptedUserTurns((current) => {
+      const next = current.filter(
+        (turn) =>
+          turn.sessionId !== selectedId ||
+          !acceptedUserTurnLanded(turn, eventsSessionId, scopedEvents),
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [acceptedUserTurns, eventsSessionId, scopedEvents, selectedId]);
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -2179,7 +2259,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     runState: selected ? sessionRunStateOf(selectedSession ?? selected) : null,
     starting: selectedIsStarting,
     live: selected ? isSessionLive(selectedSession ?? selected) : false,
-    eventCount: events.length,
+    eventCount: transcriptEvents.length,
     seeding,
     streaming: !!streamingText || !!streamingThink,
   });
@@ -2210,6 +2290,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   // Subscribe to the session's event stream; reset only when the selection changes.
   useEffect(() => {
+    setEventsSessionId(selectedId);
+    setQueuedSessionId(selectedId);
+    // Keep API-accepted turns across navigation. Rendering is session-scoped above, the list is
+    // bounded to 32, and returning to this session lets its matching durable user event retire the
+    // transient copy. Dropping it here creates a visible REST debounce gap and loses it entirely
+    // when startup fails after acceptance but before the first user event.
     // Live/ephemeral drafts belong to the previous selection — clear them at once.
     setStreamingText('');
     setStreamingThink('');
@@ -2271,15 +2357,68 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     let closed = false;
     // Queue refreshes can overlap when another client quickly adds/withdraws turns. Only the most
     // recently requested snapshot may paint, or a slower stale response can resurrect a cancelled
-    // row. Queued turns have no transcript event until leased, so this REST list is authoritative.
+    // row. The snapshot is authoritative for rows known when its request began; reconcile below
+    // preserves a local POST that committed while that older request was in flight.
     let queuedRefreshGeneration = 0;
     const refreshQueued = (): void => {
       const generation = ++queuedRefreshGeneration;
+      const knownBefore = new Set(queuedRef.current.map((turn) => turn.turnId));
       listQueuedTurns(selectedId)
         .then((rows) => {
           if (closed || generation !== queuedRefreshGeneration) return;
-          setQueued(
-            rows.map((r) => ({ ...r, shell: r.kind === 'shell', steer: isSteerKind(r.kind) })),
+          const acceptedRows = rows.filter(
+            (row) => turnPlacementOf(row, false) === 'accepted' && row.kind !== 'shell',
+          );
+          if (acceptedRows.length > 0) {
+            setAcceptedUserTurns((current) => {
+              const landedTurnIds = new Set(
+                accRef.current.flatMap((event) =>
+                  event.type === 'user' && typeof event.turnId === 'string'
+                    ? [event.turnId]
+                    : [],
+                ),
+              );
+              const accepted = acceptedRows
+                .filter((row) => !landedTurnIds.has(row.turnId))
+                .map((row): AcceptedUserTurn => ({
+                  key: row.turnId,
+                  sessionId: selectedId,
+                  turnId: row.turnId,
+                  text: row.content,
+                  acceptedAt: row.createdAt ?? new Date().toISOString(),
+                  attachments: (row.attachments ?? []).map((attachment) => ({
+                    id: attachment.id,
+                    mime: attachment.mimeType || 'application/octet-stream',
+                  })),
+                }));
+              if (accepted.length === 0) return current;
+              const acceptedIds = new Set(accepted.map((turn) => turn.turnId));
+              return [
+                ...current.filter((turn) => !acceptedIds.has(turn.turnId)),
+                ...accepted,
+              ].slice(-32);
+            });
+          }
+          const serverQueued = rows.flatMap((row) => {
+            const placement = turnPlacementOf(row, false);
+            return placement === 'accepted'
+              ? []
+              : [
+                  {
+                    ...row,
+                    shell: row.kind === 'shell',
+                    steer: placement === 'steer' || isSteerKind(row.kind),
+                  },
+                ];
+          });
+          const representedTurnIds = new Set(rows.map((row) => row.turnId));
+          setQueued((current) =>
+            reconcileQueuedTurnSnapshot(
+              serverQueued,
+              current,
+              knownBefore,
+              representedTurnIds,
+            ),
           );
         })
         .catch(() => undefined);
@@ -2717,7 +2856,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!el) return;
     if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
     measure(); // content grew — the in-view prompt may have just scrolled off the top
-  }, [events, streamingText, streamingThink, approvals, queued, localStatusCards, measure]);
+  }, [
+    transcriptEvents,
+    streamingText,
+    streamingThink,
+    approvals,
+    visibleQueuedTurns,
+    localStatusCards,
+    measure,
+  ]);
 
   // Track at-bottom + which prompt to surface as the user scrolls.
   useEffect(() => {
@@ -2806,23 +2953,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // and keeps the chips visible instead of passing invalid attachment ids or dropping them.
       if (selected && live) {
         const res = await sendTurn(selected.id, content, attachmentIds, shell ? 'shell' : undefined);
-        // A turn already running ⇒ this message is queued (delivered once that turn
-        // finishes); surface it as a pending bubble the user can withdraw. When idle
-        // it's delivered right away, so it'll arrive via its own `user` event instead —
-        // for a shell turn that's the Bash card its output lands in. A mid-turn `!cmd`
-        // waits behind the running turn exactly like a message, so it gets a bubble too:
-        // without one it sat in the queue invisibly and read as a dropped command.
-        //
-        // Unless the server filed it as a steer, in which case it is not queued at all: it
-        // goes into the turn already running. Its own kind is authoritative over our `idle`
-        // belief — that belief is a stream-derived guess, while the server decided this under
-        // the Session row lock — so a steer always gets a bubble, saying what it actually is.
-        const steer = isSteerKind(res.kind);
-        const queuedItem = steer
-          ? { turnId: res.turnId, content, shell, steer: true }
-          : idle
+        // The server decides this under the same Session row lock as enqueue/claim: accepted
+        // starts normally, queued waits behind an earlier executable turn, and steer joins the
+        // turn already running. `idle` is only a rolling-upgrade fallback for an older server.
+        const placement = turnPlacementOf(res, idle);
+        const queuedItem =
+          placement === 'accepted'
             ? undefined
-            : { turnId: res.turnId, content, shell };
+            : {
+                turnId: res.turnId,
+                content,
+                shell,
+                ...(placement === 'steer' ? { steer: true } : {}),
+              };
         return { id: selected.id, turnId: res.turnId, queuedItem };
       }
       if (selected && !live) {
@@ -2848,10 +2991,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             attachmentIds,
             shell ? 'shell' : undefined,
           );
+          const placement = turnPlacementOf(
+            res,
+            sessionRunStateOf(fresh) === 'AWAITING_INPUT',
+          );
           const queuedItem =
-            sessionRunStateOf(fresh) === 'AWAITING_INPUT' || shell
+            placement === 'accepted'
               ? undefined
-              : { turnId: res.turnId, content };
+              : {
+                  turnId: res.turnId,
+                  content,
+                  shell,
+                  ...(placement === 'steer' ? { steer: true } : {}),
+                };
           return { id: selected.id, turnId: res.turnId, queuedItem };
         }
         if (disposition === 'RESUME') {
@@ -2884,7 +3036,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             attachmentIds,
             shell ? 'shell' : undefined,
           );
-          return { id: selected.id, turnId: res.turnId };
+          // A genuinely terminal revive is accepted. If another client revived the row between
+          // the capability read and this request, /resume routes through live createTurn and its
+          // row-locked placement preserves a real queued/steer state here.
+          const placement = turnPlacementOf(res, true);
+          const queuedItem =
+            placement === 'accepted'
+              ? undefined
+              : {
+                  turnId: res.turnId,
+                  content,
+                  shell,
+                  ...(placement === 'steer' ? { steer: true } : {}),
+                };
+          return { id: selected.id, turnId: res.turnId, queuedItem };
         }
         if (attachmentIds.length > 0)
           throw new Error(scopedAttachmentCreateBlockedMessage(attachmentIds.length));
@@ -2999,8 +3164,46 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }
       setImages([]);
       setView('open'); // a new/continued session lives in Open
-      if (queuedItem) setQueued((q) => [...q, queuedItem]);
-      else setIdle(false); // a turn is now starting
+      if (queuedItem)
+        setQueued((current) =>
+          current.some((turn) => turn.turnId === queuedItem.turnId)
+            ? current.map((turn) =>
+                turn.turnId === queuedItem.turnId ? { ...turn, ...queuedItem } : turn,
+              )
+            : [...current, queuedItem],
+        );
+      else {
+        setIdle(false); // a turn is now starting
+        // Shell sends settle into a Bash card rather than a user bubble. Ordinary accepted sends
+        // paint immediately and are replaced, by turn id (or the new session's first user event),
+        // as soon as the runner's durable transcript event arrives.
+        if (!vars.shell && (turnId || created)) {
+          const key = turnId ?? `initial:${id}`;
+          setAcceptedUserTurns((current) =>
+            [
+              ...current.filter((turn) => turn.key !== key),
+              {
+                key,
+                sessionId: id,
+                turnId,
+                text: vars.content,
+                acceptedAt: new Date().toISOString(),
+                attachments: vars.images.flatMap((image) =>
+                  image.id
+                    ? [
+                        {
+                          id: image.id,
+                          mime: image.file.type || 'application/octet-stream',
+                          name: image.file.name,
+                        },
+                      ]
+                    : [],
+                ),
+              },
+            ].slice(-32),
+          );
+        }
+      }
       qc.invalidateQueries({ queryKey: ['sessions'] });
       // Reviving moves the row from Completed to Open server-side (see SessionsService.resume),
       // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
@@ -3017,14 +3220,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // resent — the composer is guaranteed empty here (showStop only offers Stop with an
       // empty composer), so this never clobbers an in-progress draft. Queued images can't
       // be rehydrated (a ComposerImage needs its File), so flag any that were dropped.
-      const restored = queued
+      const restored = visibleQueuedTurns
         .map((q) => {
           const body = q.content.trim();
           return body && q.shell ? `!${body}` : body; // a `!cmd` comes back as one
         })
         .filter(Boolean)
         .join('\n\n');
-      const droppedImages = queued.reduce(
+      const droppedImages = visibleQueuedTurns.reduce(
         (n, q) => n + (q.attachments?.length ?? turnImages[q.turnId]?.length ?? 0),
         0,
       );
@@ -4952,7 +5155,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
               {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
-              {placeholder === 'queued' && (
+              {placeholder === 'queued' && showQueuedNotice && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -4984,7 +5187,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
                         <StreamingDraftsCtx.Provider value={streamingDrafts}>
                           <Transcript
-                            events={events}
+                            events={transcriptEvents}
                             live={live}
                             turnImages={turnImages}
                             artifactSessionId={selectedId}
@@ -4998,8 +5201,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </SessionNavCtx.Provider>
               {selected &&
                 !selectedTrashed &&
-                sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
-                events.length > 0 && (
+                showQueuedNotice &&
+                transcriptEvents.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
@@ -5008,7 +5211,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {selected &&
                 !selectedTrashed &&
                 showStartingNotice &&
-                events.length > 0 && (
+                transcriptEvents.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>{STARTING_TITLE}</span>
                   <span>{STARTING_DESCRIPTION}</span>
@@ -5030,7 +5233,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onChatAbout={startChatReply}
                 />
               ))}
-              {!selectedTrashed && queued.map((q) => (
+              {!selectedTrashed && visibleQueuedTurns.map((q) => (
                 <div className="chat-msg chat-user chat-queued" key={q.turnId}>
                   {turnImages[q.turnId]?.length ? (
                     // Fresh local previews (object URLs) — instant, before a reload drops them.

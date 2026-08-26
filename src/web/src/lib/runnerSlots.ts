@@ -39,6 +39,10 @@ export const PENDING_SLOT_TITLE = 'Waiting for a free slot';
  *  paints at all. Saying "waiting for a free slot" here sent people to look at capacity for a
  *  wait that had nothing to do with capacity. */
 export const QUEUED_LABEL = 'Queued';
+// The ordinary runner-pickup queue is normally a transport-sized wait. Giving it the same grace
+// period as startup prevents a status card from flashing before the accepted user message lands.
+// Explicit gates (offline/capacity/git) bypass this delay; they are actionable explanations.
+export const QUEUED_NOTICE_DELAY_MS = 3_000;
 
 /** Copy for a session that holds a slot but whose runtime is still coming up (sessionIsStarting).
  *  Distinct from both neighbours on purpose: unlike Queued nothing is contended and the user
@@ -56,6 +60,16 @@ export interface QueuedGate {
   queuedReason?: string | null;
   queuedActive?: number | null;
   queuedLimit?: number | null;
+}
+
+/** Whether the transcript's queue notice should be visible at this instant. A missing reason is
+ *  also delayed: it is commonly the detail-first frame before the authoritative list row arrives,
+ *  and an old payload has not proved there is a real gate worth flashing immediately. */
+export function queuedNoticeVisible(
+  gate: QueuedGate | null | undefined,
+  delayedVisible: boolean,
+): boolean {
+  return gate?.queuedReason != null || delayedVisible;
 }
 
 /**

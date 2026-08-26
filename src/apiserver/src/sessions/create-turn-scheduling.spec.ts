@@ -5,7 +5,12 @@ import { SessionsService } from './sessions.service';
 
 function makeService(
   initialStatus: RunStatus,
-  opts: { existing?: boolean; sessionOverrides?: Record<string, unknown> } = {},
+  opts: {
+    existing?: boolean;
+    existingStatus?: string;
+    earlierExecutable?: number;
+    sessionOverrides?: Record<string, unknown>;
+  } = {},
 ) {
   const session = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -28,6 +33,7 @@ function makeService(
   let inboxWakes = 0;
   let queueChanges = 0;
   let attachmentValidations = 0;
+  const countFilters: Record<string, unknown>[] = [];
   const turn = {
     id: '33333333-3333-4333-8333-333333333333',
     sessionId: session.id,
@@ -35,7 +41,7 @@ function makeService(
     clientTurnId: 'client-1',
     kind: 'message',
     content: 'follow up',
-    status: 'PENDING',
+    status: opts.existingStatus ?? 'PENDING',
   };
   const tx = {
     $queryRaw: async () => [{ id: session.id }],
@@ -52,7 +58,12 @@ function makeService(
       findUnique: async () => (opts.existing ? turn : null),
       findFirst: async () => ({ seq: 1 }),
       create: async () => turn,
-      count: async () => 0,
+      count: async ({ where }: { where: Record<string, unknown> }) => {
+        countFilters.push(where);
+        return 'leaseDeadlineAt' in where
+          ? 0
+          : (opts.earlierExecutable ?? (initialStatus === RunStatus.RUNNING ? 1 : 0));
+      },
     },
     attachment: {
       findMany: async () => {
@@ -79,10 +90,11 @@ function makeService(
     wakes: () => ({ queue: queueWakes, inbox: inboxWakes }),
     queueChanges: () => queueChanges,
     attachmentValidations: () => attachmentValidations,
+    countFilters,
   };
 }
 
-test('a turn sent to AWAITING_INPUT is atomically queued for a new slot', async () => {
+test('a turn sent to AWAITING_INPUT is accepted as next and atomically queues a new slot', async () => {
   const h = makeService(RunStatus.AWAITING_INPUT);
 
   const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
@@ -90,7 +102,12 @@ test('a turn sent to AWAITING_INPUT is atomically queued for a new slot', async 
     content: 'follow up',
   });
 
-  assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2, kind: 'message' });
+  assert.deepEqual(result, {
+    turnId: '33333333-3333-4333-8333-333333333333',
+    seq: 2,
+    kind: 'message',
+    placement: 'accepted',
+  });
   assert.deepEqual(h.statusWrites, [RunStatus.PENDING]);
   assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
   assert.equal(h.queueChanges(), 1, 'focused clients are nudged to refresh the durable queue');
@@ -99,13 +116,25 @@ test('a turn sent to AWAITING_INPUT is atomically queued for a new slot', async 
 test('a turn sent while RUNNING stays behind the slot already being used', async () => {
   const h = makeService(RunStatus.RUNNING);
 
-  await h.service.createTurn(h.session.ownerId, h.session.id, {
+  const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
     clientTurnId: 'client-1',
     content: 'follow up',
   });
 
+  assert.equal(result.placement, 'queued');
   assert.deepEqual(h.statusWrites, [RunStatus.RUNNING]);
   assert.deepEqual(h.wakes(), { queue: 0, inbox: 1 });
+});
+
+test('a new turn is queued when an earlier executable is already pending', async () => {
+  const h = makeService(RunStatus.PENDING, { earlierExecutable: 1 });
+
+  const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
+    clientTurnId: 'client-1',
+    content: 'follow up',
+  });
+
+  assert.equal(result.placement, 'queued');
 });
 
 /**
@@ -143,11 +172,46 @@ test('an idempotent retry returns its linked turn before revalidating attachment
     attachmentIds: ['44444444-4444-4444-8444-444444444444'],
   });
 
-  assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2, kind: 'message' });
+  assert.deepEqual(result, {
+    turnId: '33333333-3333-4333-8333-333333333333',
+    seq: 2,
+    kind: 'message',
+    placement: 'accepted',
+  });
   assert.equal(h.attachmentValidations(), 0);
   assert.deepEqual(h.statusWrites, []);
   assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
 });
+
+test('an idempotent PENDING retry is queued only behind a lower-seq executable turn', async () => {
+  const h = makeService(RunStatus.PENDING, { existing: true, earlierExecutable: 1 });
+
+  const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
+    clientTurnId: 'client-1',
+    content: 'follow up',
+  });
+
+  assert.equal(result.placement, 'queued');
+  assert.deepEqual(h.countFilters[0]?.seq, { lt: 2 });
+});
+
+for (const existingStatus of ['IN_FLIGHT', 'ANSWERED']) {
+  test(`an idempotent ${existingStatus} retry is already accepted`, async () => {
+    const h = makeService(RunStatus.RUNNING, {
+      existing: true,
+      existingStatus,
+      earlierExecutable: 1,
+    });
+
+    const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
+      clientTurnId: 'client-1',
+      content: 'follow up',
+    });
+
+    assert.equal(result.placement, 'accepted');
+    assert.deepEqual(h.countFilters, [], 'started/answered retries do not inspect predecessors');
+  });
+}
 
 for (const tc of [
   {
@@ -180,7 +244,12 @@ for (const tc of [
     });
 
     // Accepted and parked for a slot — the claim fence holds it until the op settles.
-    assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2, kind: 'message' });
+    assert.deepEqual(result, {
+      turnId: '33333333-3333-4333-8333-333333333333',
+      seq: 2,
+      kind: 'message',
+      placement: 'accepted',
+    });
     assert.deepEqual(h.statusWrites, [RunStatus.PENDING]);
     assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
     // The executing operation is left pending (not superseded), so it still completes.

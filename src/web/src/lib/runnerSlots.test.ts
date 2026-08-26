@@ -3,6 +3,7 @@ import {
   activeSlotCount,
   pendingSlotDescription,
   queuedLabel,
+  queuedNoticeVisible,
   queuedTitle,
   runnerSlotUsage,
 } from './runnerSlots';
@@ -142,5 +143,29 @@ describe('why a queued session has not started', () => {
     expect(pendingSlotDescription(3, 16, undefined)).toBe(
       'This session starts as soon as a slot frees up.',
     );
+  });
+});
+
+describe('when the transcript explains a queued session', () => {
+  it('waits before painting an ordinary or not-yet-resolved queue', () => {
+    expect(queuedNoticeVisible({ queuedReason: null }, false)).toBe(false);
+    expect(queuedNoticeVisible(undefined, false)).toBe(false);
+    expect(queuedNoticeVisible({}, false)).toBe(false);
+
+    expect(queuedNoticeVisible({ queuedReason: null }, true)).toBe(true);
+    expect(queuedNoticeVisible(undefined, true)).toBe(true);
+  });
+
+  it('shows every explicit gate immediately', () => {
+    for (const queuedReason of [
+      'runner_offline',
+      'runner_at_capacity',
+      'tree_at_capacity',
+      'batch_at_capacity',
+      'worktree_op_pending',
+      'a_future_gate',
+    ]) {
+      expect(queuedNoticeVisible({ queuedReason }, false), queuedReason).toBe(true);
+    }
   });
 });

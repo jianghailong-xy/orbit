@@ -12,6 +12,7 @@ const OPERATION_OWNER = '44444444-4444-4444-8444-444444444444';
 function makeService(
   fastOverrides: Record<string, unknown>,
   lockedOverrides: Record<string, unknown> = {},
+  earlierExecutable = 0,
 ) {
   const now = new Date();
   const fast = {
@@ -63,7 +64,8 @@ function makeService(
         turnCreates++;
         return { id: 'turn-2', ...data };
       },
-      count: async () => 0,
+      count: async ({ where }: { where: Record<string, unknown> }) =>
+        'leaseDeadlineAt' in where ? 0 : earlierExecutable,
     },
   };
   const prisma = {
@@ -91,6 +93,18 @@ function makeService(
     wakes: () => ({ queue: queueWakes, inbox: inboxWakes }),
   };
 }
+
+test('a live resume preserves createTurn\'s row-locked queued placement', async () => {
+  const h = makeService({}, {}, 1);
+
+  const result = await h.service.resume(OWNER_ID, SESSION_ID, {
+    clientTurnId: 'client-2',
+    content: 'follow the earlier turn',
+  });
+
+  assert.equal(result.kind, 'message');
+  assert.equal(result.placement, 'queued');
+});
 
 function sql(call: unknown[] | undefined): string {
   return ((call?.[0] as readonly string[] | undefined) ?? []).join('?');
@@ -137,7 +151,7 @@ for (const tc of [
         clientTurnId: 'client-2',
         content: 'resolve this in the session',
       }),
-      { turnId: 'turn-2', seq: 2, kind: 'message' },
+      { turnId: 'turn-2', seq: 2, kind: 'message', placement: 'accepted' },
     );
 
     assert.equal(h.lockCalls.length, 1);
@@ -187,7 +201,12 @@ for (const tc of [
       content: 'resolve this in the session',
     });
 
-    assert.deepEqual(result, { turnId: 'turn-2', seq: 2, kind: 'message' });
+    assert.deepEqual(result, {
+      turnId: 'turn-2',
+      seq: 2,
+      kind: 'message',
+      placement: 'accepted',
+    });
     assert.equal(h.lockCalls.length, 1);
     assert.deepEqual(h.outerUpdates, []);
     assert.equal(h.turnCreates(), 1);

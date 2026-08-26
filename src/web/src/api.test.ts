@@ -5,7 +5,7 @@ import {
   TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS,
   transientDbConflictBody,
 } from '@orbit/shared';
-import { ApiError, api, getSessionEventPage } from './api';
+import { ApiError, api, getSessionEventPage, listQueuedTurns } from './api';
 
 const okJson = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as Response;
@@ -56,6 +56,18 @@ describe('getSessionEventPage', () => {
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.signal).toBeUndefined();
+  });
+});
+
+describe('listQueuedTurns', () => {
+  it('opts into the active view without changing the legacy native endpoint', async () => {
+    const fetchMock = vi.fn(async () => okJson([]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listQueuedTurns('session-1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/sessions/session-1/turns?view=active');
   });
 });
 

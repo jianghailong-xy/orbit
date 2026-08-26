@@ -152,6 +152,20 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
  */
 export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: string | null };
 
+type TurnPlacement = 'accepted' | 'queued' | 'steer';
+
+interface ListedQueuedTurn {
+  turnId: string;
+  kind: string;
+  content: string;
+  attachments: Array<{ id: string; mimeType: string }>;
+}
+
+interface ListedActiveTurn extends ListedQueuedTurn {
+  placement: TurnPlacement;
+  createdAt: string;
+}
+
 /**
  * Guards the two spawn paths a machine drives — `orbit mcp` / `orbit session create` and the
  * headless service-token bridge. Their caller is a model or a script, not a form with a picker, so
@@ -3078,6 +3092,31 @@ export class SessionsService {
   }
 
   /**
+   * Tell the sender where its turn actually landed, from the same row-locked queue snapshot that
+   * decides and inserts it. A PENDING message/shell is only waiting when another executable turn
+   * has a lower seq; the first executable is accepted even though enqueue changes the Session to
+   * PENDING while it waits for a runner slot. Once a retried turn has started or finished it is no
+   * longer queued, and a steer always keeps its distinct placement however its delivery progressed.
+   */
+  private async turnPlacement(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    turn: { kind: string; status: string; seq?: number },
+  ): Promise<TurnPlacement> {
+    if (turn.kind === 'steer') return 'steer';
+    if (turn.status !== 'PENDING') return 'accepted';
+    const earlierExecutable = await tx.conversationTurn.count({
+      where: {
+        sessionId,
+        kind: { in: ['message', 'shell'] },
+        status: { in: ['PENDING', 'IN_FLIGHT'] },
+        ...(turn.seq === undefined ? {} : { seq: { lt: turn.seq } }),
+      },
+    });
+    return earlierExecutable > 0 ? 'queued' : 'accepted';
+  }
+
+  /**
    * Whether a message sent to this session right now can be written into the turn already
    * running — which takes BOTH an engine that can be handed one and a runner that can hand
    * it over.
@@ -3285,6 +3324,7 @@ export class SessionsService {
       if (existing) {
         return {
           turn: existing,
+          placement: await this.turnPlacement(tx, id, existing),
           wakeQueue: session.status === RunStatus.PENDING,
           wakeInbox: session.status === RunStatus.RUNNING,
         };
@@ -3332,6 +3372,10 @@ export class SessionsService {
           : (await this.engineTurnInFlight(tx, id)) && (await this.runtimeTakesSteer(tx, session))
             ? 'steer'
             : 'message';
+      // This is the authoritative queue placement: it is read before this row exists and while
+      // the Session lock prevents dequeue/complete from changing its predecessors underneath it.
+      // A steer takes precedence because it joins the running turn instead of waiting behind it.
+      const placement = await this.turnPlacement(tx, id, { kind, status: 'PENDING' });
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
@@ -3400,6 +3444,7 @@ export class SessionsService {
       });
       return {
         turn,
+        placement,
         wakeQueue: nextStatus === RunStatus.PENDING,
         wakeInbox: nextStatus === RunStatus.RUNNING,
       };
@@ -3414,7 +3459,12 @@ export class SessionsService {
     // message queues behind it. Every entry point sends the same request, so this is what lets
     // web and the native clients tell "waiting its turn" from "going into this one" — and stop
     // offering to withdraw something that is already on its way.
-    return { turnId: queued.turn.id, seq: queued.turn.seq, kind: queued.turn.kind };
+    return {
+      turnId: queued.turn.id,
+      seq: queued.turn.seq,
+      kind: queued.turn.kind,
+      placement: queued.placement,
+    };
   }
 
   /**
@@ -3564,13 +3614,12 @@ export class SessionsService {
     return `interrupt-${clientTurnId}`;
   }
 
-  /** The session's still-queued user turns (PENDING — accepted but not yet picked
-   *  up by the runner), oldest first. A queued turn emits no event until it's delivered,
-   *  so it can't be recovered from the event stream; reopening or deep-linking a running
-   *  session fetches this to restore the visible queue (mirrors listApprovals). `!cmd`
-   *  shell turns queue behind the running turn exactly like messages do, so they're
-   *  listed too (tagged by `kind`) — omitting them made a mid-turn command invisible
-   *  until it eventually ran.
+  /** The session's user turns that do not have a transcript event yet, oldest first. `active` is
+   *  an explicit web-client opt-in: it includes the accepted executable across dequeue → first
+   *  event as well as queued successors. The default preserves the installed native contract by
+   *  returning only rows it can truthfully render as queued/on-the-way without understanding
+   *  placement — PENDING queued successors and steers, never the accepted head or IN_FLIGHT rows.
+   *  `!cmd` shell turns queue and cross that handoff like messages do, so they're classified too.
    *
    *  A still-PENDING `steer` is listed for the same reason and NOT for the same purpose: it
    *  is not waiting its turn, it is on its way into the one already running, and the runner
@@ -3578,37 +3627,82 @@ export class SessionsService {
    *  from — the transcript event only exists once the runner leases it — and a message that
    *  vanishes on refresh is the one outcome mid-turn sending must not produce. Callers tell the
    *  two apart by `kind`: a steer must not be offered a withdraw, because cancelQueuedTurn
-   *  refuses it (a message the engine may already be reading is not withdrawable). */
-  async listQueuedTurns(ownerId: string, id: string) {
+   *  refuses it (a message the engine may already be reading is not withdrawable).
+   *
+   *  Classification comes from one ordered snapshot containing PENDING and IN_FLIGHT rows. The
+   *  initial prompt is not returned, but remains in that snapshot because it can be the head that
+   *  makes every later message/shell truly queued. In the active view, IN_FLIGHT rows are returned:
+   *  they bridge the dequeue → first-user-event window and, as the executable head, remain
+   *  accepted/non-cancellable. Splitting the head probe from the returned-row query would let a
+   *  lease/complete between the two make one response contradict itself. */
+  listQueuedTurns(ownerId: string, id: string, view: 'active'): Promise<ListedActiveTurn[]>;
+  listQueuedTurns(ownerId: string, id: string, view?: undefined): Promise<ListedQueuedTurn[]>;
+  async listQueuedTurns(
+    ownerId: string,
+    id: string,
+    view?: 'active',
+  ): Promise<ListedQueuedTurn[] | ListedActiveTurn[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
-      // Exclude the seeded prompt turn (still PENDING until the runner claims the session):
-      // it's the session's opening message, not a withdrawable queued follow-up.
+      // One snapshot, including rows that are needed only to identify the executable head.
       where: {
         sessionId: id,
         kind: { in: ['message', 'shell', 'steer'] },
-        status: 'PENDING',
-        clientTurnId: { not: SessionsService.initialTurnClientId(id) },
+        status: { in: ['PENDING', 'IN_FLIGHT'] },
       },
       orderBy: { seq: 'asc' },
       // Carry each queued turn's image refs so the composer can still render them after a
       // reload (the local object-URL previews are gone by then) — e.g. an image-only turn.
       select: {
         id: true,
+        seq: true,
+        clientTurnId: true,
         kind: true,
+        status: true,
         content: true,
+        createdAt: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
-    return turns.map((t) => ({
-      turnId: t.id,
-      kind: t.kind,
-      content: t.content ?? '',
-      attachments: t.attachments.map((a) => ({ id: a.id, mimeType: a.mimeType })),
+    const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
+    const initialClientTurnId = SessionsService.initialTurnClientId(id);
+    const classified = turns
+      .filter((turn) => turn.clientTurnId !== initialClientTurnId)
+      .map((turn) => ({
+        turn,
+        placement: (turn.kind === 'steer'
+          ? 'steer'
+          : turn.id === headExecutableId
+            ? 'accepted'
+            : 'queued') as TurnPlacement,
+      }));
+    if (view !== 'active') {
+      return classified
+        .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted')
+        .map(({ turn }) => ({
+          turnId: turn.id,
+          kind: turn.kind,
+          content: turn.content ?? '',
+          attachments: turn.attachments.map((attachment) => ({
+            id: attachment.id,
+            mimeType: attachment.mimeType,
+          })),
+        }));
+    }
+    return classified.map(({ turn, placement }) => ({
+      turnId: turn.id,
+      kind: turn.kind,
+      placement,
+      content: turn.content ?? '',
+      createdAt: turn.createdAt.toISOString(),
+      attachments: turn.attachments.map((attachment) => ({
+        id: attachment.id,
+        mimeType: attachment.mimeType,
+      })),
     }));
   }
 
@@ -4794,7 +4888,15 @@ export class SessionsService {
     if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
     else if (revived.wasRevived) this.realtime.publishSessionUpdated(id);
     this.queue.notifySessionQueued();
-    return { turnId: revived.turn.id, seq: revived.turn.seq };
+    return {
+      turnId: revived.turn.id,
+      seq: revived.turn.seq,
+      kind: revived.turn.kind,
+      // This transaction revived a terminal row with this turn as its first executable. A fast
+      // read that found the session live returned through createTurn above instead, preserving
+      // createTurn's row-locked accepted/queued/steer decision verbatim.
+      placement: 'accepted' as const,
+    };
   }
 
   /**

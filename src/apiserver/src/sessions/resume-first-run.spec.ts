@@ -8,7 +8,7 @@ const now = new Date();
 
 function makeService(
   overrides: Record<string, unknown> = {},
-  existingTurn: { id: string; seq: number } | null = null,
+  existingTurn: { id: string; seq: number; kind: string } | null = null,
 ) {
   const session = {
     id: 'session-1',
@@ -85,6 +85,8 @@ test('a claimed zero-turn Codex session can restart after sign-in without a runt
 
   assert.equal(accepted.turnId, 'retry-turn');
   assert.equal(accepted.seq, 2);
+  assert.equal(accepted.kind, 'message');
+  assert.equal(accepted.placement, 'accepted');
   assert.equal(notified(), 1);
   assert.equal(retired(), 1);
   const reviveData = (updates[0] as {
@@ -95,6 +97,19 @@ test('a claimed zero-turn Codex session can restart after sign-in without a runt
     reviveData.inboxLeaseOwner,
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
+});
+
+test('a terminal shell resume reports its kind and accepted placement', async () => {
+  const { service } = makeService();
+
+  const accepted = await service.resume('owner-1', 'session-1', {
+    ...retry,
+    clientTurnId: 'retry-shell',
+    kind: 'shell',
+  });
+
+  assert.equal(accepted.kind, 'shell');
+  assert.equal(accepted.placement, 'accepted');
 });
 
 test('reviving a terminal session tells the control plane it is no longer ended', async () => {
@@ -154,7 +169,7 @@ test('a graceful terminal cancel remains resumable despite historical cancelRequ
 });
 
 test('a lost resume response can retry its clientTurnId after the session became PENDING', async () => {
-  const existingTurn = { id: 'already-queued-turn', seq: 7 };
+  const existingTurn = { id: 'already-queued-turn', seq: 7, kind: 'message' };
   const { service, updates, announced, notified, retired } = makeService(
     { status: RunStatus.PENDING },
     existingTurn,
@@ -162,7 +177,12 @@ test('a lost resume response can retry its clientTurnId after the session became
 
   const accepted = await service.resume('owner-1', 'session-1', retry);
 
-  assert.deepEqual(accepted, { turnId: existingTurn.id, seq: existingTurn.seq });
+  assert.deepEqual(accepted, {
+    turnId: existingTurn.id,
+    seq: existingTurn.seq,
+    kind: 'message',
+    placement: 'accepted',
+  });
   assert.equal(updates.length, 0);
   assert.equal(retired(), 0);
   assert.equal(notified(), 1);
