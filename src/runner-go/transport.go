@@ -1147,10 +1147,9 @@ func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}
 	return out, err
 }
 
-// updateTask carries the acting session, which the server reads for the two decisions that turn on
-// WHO is writing: a verification cannot be concluded from the session that ran the task it verifies
-// (§13.2), and a run cannot write its own task DONE. Without the header the server cannot tell an
-// independent writer from the run grading itself, and both rules silently never fire.
+// updateTask carries the acting session, which the server reads for decisions that turn on WHO is
+// writing, including independent verification. Direct DONE is refused for every actor; retaining
+// the header keeps the refusal attributable and preserves the separate verdict-independence rule.
 func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
@@ -1158,6 +1157,19 @@ func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.Raw
 	var out json.RawMessage
 	err := t.doHeaders(nil, "PATCH", "/runner/tasks/"+url.PathEscape(id), body, &out, taskOpTimeout,
 		sessionHeader(sessionID))
+	return out, err
+}
+
+// signoffTask carries the acting session for the opposite reason to an ordinary attributed write:
+// the absence of a session is the runner owner's human door, while any agent session must be
+// refused rather than allowed to impersonate that person in a HUMAN_SIGNOFF event.
+func (t *Transport) signoffTask(sessionID, id, evidence string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/signoff",
+		map[string]string{"evidence": evidence}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

@@ -194,7 +194,9 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import {
+  deriveTaskCompletionStatus,
   resolveTaskCompletionCriterion,
+  taskCompletionRequiredAction,
   taskCompletionDeclarationError,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
@@ -394,16 +396,9 @@ export function buildTaskExecutionPrompt(task: {
         `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
         `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
         ` coordinator 审批这个机械结论。\n`
-      : systemRun
-      // A foreman and a verifier finish themselves, and the server lets them: their own run IS the
-      // deliverable, and nothing else in the system completes either one. Told the ordinary step 3
-      // they would be handed two contradictory instructions in one prompt — this one saying not to
-      // write a status, their own brief saying to write DONE — which is worse than either rule.
-      ? `3. 完成后，用 task_evidence_submit 显式提交结构化完成证据（命令、原始输出、退出码和结论）；`
-        + `再用 task_update 将本任务状态（status）置为 DONE。不要用 task_comment 代替证据提交。\n`
       : `3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，`
         + `以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，`
-        + `由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n`) +
+        + `只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
     `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
     `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
     `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
@@ -6311,6 +6306,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             },
           },
         },
+        humanSignoffs: {
+          orderBy: { signedAt: 'desc' },
+          include: { signedBy: { select: { id: true, name: true } } },
+        },
         sessions: {
           orderBy: { createdAt: 'desc' },
           select: {
@@ -6480,6 +6479,201 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Record the one human judgment that satisfies a HUMAN_SIGNOFF task.
+   *
+   * Event creation, closure of the task's open HUMAN_DECISION_REQUIRED view and the derived DONE
+   * status are deliberately one retried PostgreSQL transaction. The status write is last: a
+   * trigger observing the transition already sees both the evidence row and no corresponding open
+   * blocker, and another connection sees either the old three facts or the new three facts.
+   */
+  async signoff(
+    ownerId: string,
+    id: string,
+    evidenceInput: string,
+    actingSessionId?: string,
+  ) {
+    if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
+    const declared = await this.prisma.task.findFirst({
+      where: { id, ownerId },
+      select: { completionCriterion: true },
+    });
+    if (!declared) throw new NotFoundException('task not found');
+    if (declared.completionCriterion !== 'HUMAN_SIGNOFF') {
+      const criterion = declared.completionCriterion as TaskCompletionCriterionValue;
+      const remedy = taskCompletionRequiredAction(criterion);
+      throw new BadRequestException({
+        code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
+        criterion,
+        requiredAction: remedy.requiredAction,
+        message:
+          `task_signoff cannot satisfy this task because it declares ${criterion}; ` +
+          `${remedy.instruction}.`,
+      });
+    }
+    if (actingSessionId) {
+      throw new ForbiddenException({
+        code: 'HUMAN_SIGNOFF_REQUIRES_USER',
+        criterion: 'HUMAN_SIGNOFF',
+        requiredAction: 'ASK_A_PERSON_TO_SIGN_OFF_WITH_EVIDENCE',
+        message:
+          'A HUMAN_SIGNOFF must be authored by a person, not by a coordinator, verifier or task ' +
+          'execution session. Ask a person to use task_signoff with the evidence they judged.',
+      });
+    }
+    const evidence = evidenceInput.trim();
+    if (!evidence) {
+      throw new BadRequestException({
+        code: 'HUMAN_SIGNOFF_EVIDENCE_REQUIRED',
+        criterion: 'HUMAN_SIGNOFF',
+        requiredAction: 'PROVIDE_NON_BLANK_SIGNOFF_EVIDENCE',
+        message: 'HUMAN_SIGNOFF evidence must not be blank',
+      });
+    }
+
+    // These are the identity and event time of this request, so a database retry replays the same
+    // judgment instead of manufacturing a later one on every attempt.
+    const signoffId = randomUUID();
+    const signedAt = new Date();
+    const committed = await withTransactionRetry(this.prisma, async (tx) => {
+      // Rank 10: serializes project/tree moves before discovering which rank-40 project to lock.
+      await lockOwnerTaskGraph(tx, ownerId);
+      const located = await tx.task.findFirst({
+        where: { id, ownerId },
+        select: { projectId: true },
+      });
+      if (!located) throw new NotFoundException('task not found');
+      if (located.projectId) {
+        await tx.$queryRaw`
+          SELECT "id" FROM "project"
+          WHERE "id" = ${located.projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+          FOR NO KEY UPDATE`;
+      }
+      // Rank 50. Held before any child row is touched, so the later status UPDATE cannot wait on a
+      // lower-ranked relation even though it is intentionally the final statement in this unit.
+      const rows = await tx.$queryRaw<Array<{
+        id: string;
+        status: TaskStatus;
+        projectId: string | null;
+        parentTaskId: string | null;
+        verifiesTaskId: string | null;
+        completionCriterion: TaskCompletionCriterionValue;
+        supersededByTaskId: string | null;
+        terminalReason: string | null;
+      }>>`
+        SELECT "id", "status",
+               "project_id" AS "projectId",
+               "parent_task_id" AS "parentTaskId",
+               "verifies_task_id" AS "verifiesTaskId",
+               "completion_criterion"::text AS "completionCriterion",
+               "superseded_by_task_id" AS "supersededByTaskId",
+               "terminal_reason" AS "terminalReason"
+          FROM "task"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR UPDATE`;
+      const task = rows[0];
+      if (!task) throw new NotFoundException('task not found');
+      if (task.projectId !== located.projectId) {
+        throw new ConflictException('task moved projects while it was being signed; retry signoff');
+      }
+      if (task.completionCriterion !== 'HUMAN_SIGNOFF') {
+        const remedy = taskCompletionRequiredAction(task.completionCriterion);
+        throw new BadRequestException({
+          code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
+          criterion: task.completionCriterion,
+          requiredAction: remedy.requiredAction,
+          message:
+            `task_signoff cannot satisfy this task because it now declares ` +
+            `${task.completionCriterion}; ${remedy.instruction}.`,
+        });
+      }
+      if (task.status === TaskStatus.CANCELLED || task.terminalReason || task.supersededByTaskId) {
+        throw new ConflictException({
+          code: 'TASK_SIGNOFF_RETIRED',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'REOPEN_OR_RESTORE_TASK_BEFORE_SIGNOFF',
+          message:
+            'A cancelled, superseded or abandoned task must be restored before a human signoff ' +
+            'can complete it.',
+        });
+      }
+
+      let signoff = await tx.taskHumanSignoff.findUnique({
+        where: { taskId: id },
+        include: { signedBy: { select: { id: true, name: true } } },
+      });
+      if (!signoff) {
+        signoff = await tx.taskHumanSignoff.create({
+          data: { id: signoffId, taskId: id, signedById: ownerId, evidence, signedAt },
+          include: { signedBy: { select: { id: true, name: true } } },
+        });
+      }
+
+      // Rank 60. The signal is a view of an unsatisfied criterion: once the signoff event exists,
+      // every open human-decision blocker about this exact task stops being open by definition.
+      const resolved = task.projectId
+        ? await tx.projectBlocker.updateMany({
+            where: {
+              projectId: task.projectId,
+              kind: 'HUMAN_DECISION_REQUIRED',
+              subjectType: 'TASK',
+              subjectId: id,
+              resolvedAt: null,
+            },
+            data: { resolvedAt: signedAt, resolvedBy: 'AUTO', updatedAt: signedAt },
+          })
+        : { count: 0 };
+
+      const status = deriveTaskCompletionStatus({
+        completionCriterion: task.completionCriterion,
+        humanSignoff: true,
+      });
+      if (status !== TaskStatus.DONE) {
+        throw new Error('HUMAN_SIGNOFF event did not satisfy HUMAN_SIGNOFF criterion');
+      }
+      const transitioned = task.status !== TaskStatus.DONE;
+      if (transitioned) {
+        // Last statement in the unit. Project acceptance and dispatch-epoch triggers therefore see
+        // the signoff and blocker resolution already present in this same transaction.
+        await tx.task.update({ where: { id }, data: { status } });
+      }
+      return {
+        taskId: id,
+        projectId: task.projectId,
+        parentTaskId: task.parentTaskId,
+        verifiesTaskId: task.verifiesTaskId,
+        status,
+        transitioned,
+        blockersResolved: resolved.count,
+        signoff,
+      };
+    }, this.transientWriteRetry('tasks.signoff'));
+
+    // Everything below observes committed facts and is best-effort, like update's existing
+    // dependency/aggregation fan-out. None of it is needed to make the signoff atomic.
+    if (committed.transitioned) {
+      await this.triggerDependents(ownerId, id).catch((e) =>
+        this.logger.warn(`triggerDependents failed for signed task ${id}: ${e?.message ?? e}`),
+      );
+      await this.fileVerification(ownerId, id).catch((e) =>
+        this.logger.warn(`verification dispatch for signed task ${id} failed: ${e?.message ?? e}`),
+      );
+    }
+    await this.recomputeAggregates(
+      ownerId,
+      [id, committed.parentTaskId, committed.verifiesTaskId].filter(
+        (taskId): taskId is string => !!taskId,
+      ),
+    ).catch((e) => this.logger.warn(`aggregation after signoff of ${id} failed: ${e?.message ?? e}`));
+    await this.deliverSettledProjectFacts([committed.projectId], `task signoff ${id}`);
+    await this.publishAffectedTaskRows(
+      ownerId,
+      [id, committed.parentTaskId],
+      [id, committed.verifiesTaskId],
+    );
+    return committed;
+  }
+
+  /**
    * `actingSessionId` is the run this edit is being made FROM, when there is one — the runner
    * sends it on every task write an agent makes. It answers the two questions on this path that
    * turn on WHO is writing rather than on what is being written: §13.2's independence rule, and
@@ -6491,6 +6685,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // mutated in place by PublicIdInterceptor, so joining that response's single-flight promise
     // could turn ids into their display spelling before this write uses them as database keys.
     const before = await this.loadDetail(ownerId, id);
+    // DONE is the output of `deriveTaskCompletionStatus`, never an edit. Keep DONE in the DTO enum
+    // so this boundary can answer with the task's actual criterion and its usable remedy; rejecting
+    // it in generic request validation would recreate the "forbidden, but no path" wall this
+    // change exists to remove. The rule applies equally to a person (no Session header), a project
+    // judgment/coordinator Session, the task's own run, a verifier and any other Session.
+    if (dto.status === TaskStatus.DONE) {
+      const criterion = (
+        before.completionCriterion ?? 'HUMAN_SIGNOFF'
+      ) as TaskCompletionCriterionValue;
+      const remedy = taskCompletionRequiredAction(criterion);
+      throw new ForbiddenException({
+        code: 'DIRECT_TASK_DONE_REFUSED',
+        criterion,
+        requiredAction: remedy.requiredAction,
+        message:
+          `task.status DONE is derived from the declared ${criterion} criterion and cannot be ` +
+          `written directly by a person, coordinator or execution session; ${remedy.instruction}. ` +
+          'A task run may still write FAILED as its conservative outcome.',
+      });
+    }
     const acceptanceCommand = dto.acceptanceCommand === undefined
       ? before.acceptanceCommand
       : (dto.acceptanceCommand ?? null);
@@ -6626,12 +6840,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // `[K5]` criterion 6, and §13.2 V1 said as a refusal for the first time.
     //
-    // "A check's carrier is its own TERMINAL state plus a structured result" has always been the
-    // rule and has never been enforced on the way IN: `status: DONE` with no verdict is accepted,
-    // and everything downstream then behaves correctly and uselessly — the subject can never reach
-    // the PASS its policy waits for, every dependent stays blocked, `planVerificationVerdicts`
-    // skips it as `NO_VERDICT`, and the whole of the loop's response is one WARN a minute. `[H0V2]`
-    // found that shape by exhaustion and could not find anybody it was reported to.
+    // "A check's carrier is its own TERMINAL state plus a structured result" was the legacy rule.
+    // Direct DONE is now refused before this point and an explicit VERIFICATION criterion consumes
+    // PASS itself, but this invariant remains for existing rows and non-API writers: a verifier row
+    // that somehow reaches DONE without a verdict must still fail closed rather than look settled.
     //
     // Judged on the row AFTER the write, so both legal spellings survive: conclude and finish in
     // one call, or write the verdict first and the status after. What stops being expressible is
@@ -6699,12 +6911,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     // Unit T6: `CONCLUDE_VERDICT_PASS` is HUMAN_ONLY, and this is the other door that reaches a
-    // PASS. A verification's PASS is not an opinion filed beside the work — `task-aggregation.ts`
-    // completes the subject on `status DONE && verdict PASS`, so writing one here finishes a task
-    // for every reader downstream. A judgment session is not the independent check that earns
-    // that; it is the thing that decides what to do next. FAIL and INCONCLUSIVE stay open to it,
-    // which is the same asymmetry the self-DONE boundary makes: the conservative conclusion
-    // releases nothing and asks for a person.
+    // PASS. A verification's PASS is not an opinion filed beside the work — for an explicit
+    // VERIFICATION criterion, `task-aggregation.ts` feeds that PASS to the completion evaluator and
+    // finishes the subject for every reader downstream. A judgment session is not the independent
+    // check that earns that; it is the thing that decides what to do next. FAIL and INCONCLUSIVE
+    // stay open to it: the conservative conclusion releases nothing and asks for a person.
     //
     // Only a write that MOVES the verdict to PASS, and read off the acting session's own row —
     // never off this request, which carries no principal a caller could name.
@@ -6717,69 +6928,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         authorityPrincipal(acting?.dispatchOrigin), 'CONCLUDE_VERDICT_PASS',
       );
       if (refusal) throw new ForbiddenException(refusal);
-    }
-    // A task's DONE is not the executor's account of itself. It is an AUTHORISATION: the DAG
-    // unlocks the next task on it (`computeDependencyState` reads DONE and only DONE as
-    // satisfaction) and a project's acceptance counts it. Written by the run being judged, it is
-    // the graded party writing its own grade, and the grade takes effect the instant it lands —
-    // nothing reads it back afterwards to ask whether the world it claimed is the world there is.
-    //
-    // Deliberately ASYMMETRIC: this same session may write FAILED through this same path, and
-    // that is the point rather than an oversight. Nobody misreports their own failure to release
-    // downstream work, and FAILED releases nothing — `computeDependencyState` reads it as
-    // BLOCKED_FAILED, which stops the successors and asks for a person. The conservative
-    // self-report is allowed; the optimistic one is not.
-    //
-    // Scoped to the one relation that makes it wrong, exactly like the verification-independence
-    // refusal above: the acting session's own task IS this task. A person editing from no session,
-    // the coordinator, and any other session are all left alone — none of them is the run being
-    // judged. And only a write that MOVES the task to DONE is refused: re-asserting a DONE that is
-    // already there authorises nothing that was not already authorised.
-    //
-    // TWO KINDS ARE EXEMPT, and they are the two whose OWN RUN is the deliverable rather than the
-    // report about one — the same pair `buildTaskExecutionPrompt` already calls a system run:
-    //
-    //  - A foreman task. §13.1 AG6 is explicit that `is_foreman` means "this task's SESSION is the
-    //    work", and nothing else in the system completes one. Refusing it does not move the
-    //    decision to somebody else, it wedges the row for ever.
-    //  - A verification task. `task-aggregation.ts` counts a check only as `status DONE && verdict
-    //    PASS`, so refusing its own DONE makes VERIFICATION_PASSED unreachable for every subject.
-    //    And a check is not the party being graded: it is the SECOND opinion, its finding is the
-    //    `verdict` rather than the status, that verdict already may not be reached by the run that
-    //    produced the work (the independence refusal above), and a DONE with no verdict is already
-    //    refused. Every authority its status carries is fenced somewhere else already.
-    //
-    // Both are read off the STORED row, never off this request: `verifiesTaskId` is on the update
-    // DTO, so judging the exemption on the value this write ASKS for would let any run mint itself
-    // an exemption in the same call it uses it in.
-    if (
-      dto.status === TaskStatus.DONE && before.status !== TaskStatus.DONE && actingSessionId
-      && before.verifiesTaskId == null
-    ) {
-      const actingSession = await this.prisma.session.findFirst({
-        where: { id: actingSessionId, ownerId },
-        select: { taskId: true },
-      });
-      const isOwnRun = actingSession?.taskId === id;
-      // Read only once the session IS this task's run, so an ordinary edit pays nothing for it.
-      // Its own query because `isForeman` is deliberately not in the `get` projection.
-      const foreman = isOwnRun
-        ? (await this.prisma.task.findFirst({ where: { id, ownerId }, select: { isForeman: true } }))
-          ?.isForeman === true
-        : false;
-      if (isOwnRun && !foreman) {
-        throw new ForbiddenException({
-          code: 'SELF_REPORTED_DONE_REFUSED',
-          message:
-            'A task run cannot write its own task DONE — DONE is the authorisation the next task '
-            + 'unlocks on and the project counts, not the executor\'s account of itself. Report '
-            + 'instead: task_evidence_submit with structured commands, raw output and exit codes, '
-            + 'and which acceptance criterion each one satisfies; whoever accepts the work writes '
-            + 'DONE. Writing FAILED from this session is allowed and is what you should write if '
-            + 'the work did not finish.',
-          requiredAction: 'REPORT_EVIDENCE_AND_LET_ACCEPTANCE_DECIDE',
-        });
-      }
     }
     // §13.1 AG6's other end, refused here so the API answers in a sentence rather than letting
     // `task_foreman_manual_policy` answer with a constraint name. `is_foreman` says "this task's
@@ -6810,26 +6958,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             'cannot also be completed by aggregating subtasks. Clear the foreman role, or leave ' +
             'completionPolicy as MANUAL',
         );
-      }
-    }
-    // §13.1's other half: a policy that decides a parent's completion decides it, and a status
-    // write is not a way around it. Refused rather than written-then-recomputed, because a DONE
-    // that survives for one reconcile is a DONE somebody can read, quote and act on.
-    //
-    // AG4's condition is checked as AG4 states it — the policy is inert on a childless task — so
-    // this refuses only where the policy actually answers the question.
-    if (dto.status === TaskStatus.DONE && before.status !== TaskStatus.DONE) {
-      const policy = dto.completionPolicy ?? before.completionPolicy;
-      if (policy && policy !== 'MANUAL') {
-        const children = await this.prisma.task.count({ where: { ownerId, parentTaskId: id } });
-        if (children > 0) {
-          throw new BadRequestException(
-            `This task completes by ${policy}, not by a status write — its ${children} subtask(s)` +
-              (policy === 'VERIFICATION_PASSED' ? ' and its verifications' : '') +
-              ' decide when it is DONE. Set completionPolicy to MANUAL if you mean to write it' +
-              ' by hand',
-          );
-        }
       }
     }
     // §13.6 SU4, the direction only a status write can break.
@@ -7266,22 +7394,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (fenced) throw new ConflictException(fenced);
       throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     });
-    // This is the dependency trigger point: "A 完成" is anchored on Task.status === DONE
-    // (both the user PATCH and the workspace's task_update MCP flow through here). On the
-    // transition into DONE, release & auto-run any now-ready dependents. Best-effort: a
-    // trigger failure must never fail the status write that caused it.
-    if (dto.status === TaskStatus.DONE && before.status !== 'DONE') {
-      await this.triggerDependents(ownerId, id).catch((e) =>
-        this.logger.warn(`triggerDependents failed for task ${id}: ${e?.message ?? e}`),
-      );
-      // Second opinion on the claim just made. Best-effort for the same reason as above: a task
-      // that reports itself done has done so, and failing that write because we could not file a
-      // check would lose the report to protect the audit of it.
-      await this.fileVerification(ownerId, id).catch((e) =>
-        this.logger.warn(`verification dispatch for task ${id} failed: ${e?.message ?? e}`),
-      );
-    }
-    // The other direction: something that reported itself finished has been put back. That is the
+    // The other direction: something whose criterion derived DONE has been put back. That is the
     // verifier's rejection path (it has no verdict API — it just moves the task, deliberately),
     // but a human does it the same way and `update` carries no actor, so the note states the
     // observation and lets the reader infer the cause from the verification count rather than
@@ -7330,7 +7443,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `task update ${id}`,
       );
     }
-    if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
+    if (before.status === 'DONE' && dto.status !== undefined && before.listId) {
       const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
       // The id is encoded where it becomes prose. This detail is stored and replayed to agents,
       // and `PublicIdInterceptor` rewrites response *fields* only, so an id spelled here as the
@@ -7369,8 +7482,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * File a run that checks whether `taskId` actually did what it says it did.
    *
-   * Asynchronous, and it does not gate the DONE it follows: the task genuinely reported itself
-   * finished, and a verification is a second opinion, not a precondition. A rejected check puts
+   * Asynchronous, and it does not gate the DONE it follows: the declared criterion already
+   * derived completion, and a list verification is a second opinion, not a precondition. A rejected check puts
    * the subject back to IN_PROGRESS through the ordinary task_update the verifier already has —
    * no separate verdict API, and the rejection is a normal, readable task event.
    *
@@ -7401,14 +7514,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // workspace deleted in August before this check existed.
     if (!task.assignee?.runnerId || task.assignee.deletedAt) return;
     // Did anything actually run? `numTurns > 0` and not "has a SUCCEEDED session": at the moment
-    // an agent writes DONE its own session is still RUNNING, so success is not yet recorded —
+    // an EXECUTABLE criterion derives DONE its own session is still RUNNING, so success is not yet recorded —
     // but its turns are. The task that motivated all of this had 18 sessions and numTurns 0 on
     // every one of them, and a comment claiming acceptance had passed.
     const executed = await this.prisma.session.count({
       where: {
         taskId,
         // A run in flight counts as evidence. `numTurns` is incremented when a turn *ends*, and a
-        // task is almost always marked DONE by the agent from inside the turn doing the work — so
+        // an EXECUTABLE task may derive DONE from inside the turn doing the work — so
         // at this instant the run that just did it still reads zero, and a task that genuinely
         // executed is indistinguishable from one that never did.
         //
@@ -7513,10 +7626,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `3. 综合判断：产物齐备且符合验收标准 → 通过（即使没有运行记录，也要在结论里写明证据是你亲自核验的，` +
       `并指出运行记录缺失这一异常）；产物缺失、不符，或根本无从核验 → 不通过。\n\n` +
       `结论处理：\n` +
-      `- 通过：用 task_evidence_submit 在**本验收任务**提交结构化核验事实，然后把**本验收任务**置为 DONE；不要用评论代替证据提交。\n` +
+      `- 通过：用 task_evidence_submit 在**本验收任务**提交结构化核验事实，再用 task_update 给` +
+      `**本验收任务**写 verdict=PASS；不要用评论代替证据，也不要写任何任务的 status=DONE。\n` +
       `- 不通过：用 task_comment 在**该任务**下写清缺什么、证据是什么，用 task_update 把**该任务**状态改回 IN_PROGRESS，` +
-      `再把**本验收任务**置为 DONE。\n\n` +
-      `注意区分两个任务：核实结论写在被验收的任务上，状态回退也改它；本验收任务无论结论如何都应置为 DONE。`
+      `再给**本验收任务**写 verdict=FAIL；不要写 status=DONE。\n\n` +
+      `注意区分两个任务：核实结论写在被验收的任务上，状态回退也改它；本验收任务的 status ` +
+      `由它声明的 completionCriterion 求值产生。`
     );
   }
 
@@ -8166,7 +8281,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
       `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
       `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
-      `完成后请用 task_evidence_submit 提交结构化判断与所做的改动，再将本任务置为 DONE；不要用评论代替证据提交。`
+      `完成后请用 task_evidence_submit 提交结构化判断与所做的改动；不要用评论代替证据，也不要写 ` +
+      `status=DONE，本任务的 status 由它声明的 completionCriterion 求值产生。`
     );
   }
 

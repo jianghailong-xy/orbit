@@ -101,6 +101,15 @@ export interface TaskCompletionEvaluation {
   satisfied: boolean;
 }
 
+/**
+ * The only optimistic Task.status this criterion boundary can produce.
+ *
+ * `null` is deliberate: an unsatisfied criterion does not guess whether the task is OPEN,
+ * IN_PROGRESS or FAILED. Those states still describe work/run outcomes. DONE is different — it
+ * authorises downstream work — so callers may obtain it only by presenting a satisfied criterion.
+ */
+export type DerivedTaskCompletionStatus = 'DONE' | null;
+
 /** Evaluate one declared criterion. It observes facts only and never writes Task.status. */
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
@@ -121,4 +130,45 @@ export function evaluateTaskCompletion(
       break;
   }
   return { criterion, state: satisfied ? 'SATISFIED' : 'UNSATISFIED', satisfied };
+}
+
+/** Project a criterion evaluation onto Task.status without creating a second predicate. */
+export function deriveTaskCompletionStatus(
+  facts: TaskCompletionFacts,
+): DerivedTaskCompletionStatus {
+  return evaluateTaskCompletion(facts).satisfied ? 'DONE' : null;
+}
+
+/**
+ * The executable remedy returned when somebody tries to write DONE directly.
+ *
+ * This belongs beside the predicate so a new criterion cannot be added with a generic "not
+ * allowed" wall. Every refusal must tell the caller which fact can actually complete this task.
+ */
+export function taskCompletionRequiredAction(
+  criterion: TaskCompletionCriterionValue,
+): { requiredAction: string; instruction: string } {
+  switch (criterion) {
+    case 'EXECUTABLE':
+      return {
+        requiredAction: 'RUN_EXECUTABLE_CRITERION',
+        instruction:
+          'finish the task run and let Orbit run its declared acceptanceCommand; the recorded ' +
+          'exit code must equal acceptanceExpectedExitCode',
+      };
+    case 'VERIFICATION':
+      return {
+        requiredAction: 'OBTAIN_INDEPENDENT_VERIFICATION_PASS',
+        instruction:
+          'complete an independent verification task with verdict PASS; Orbit derives the ' +
+          'subject status from that verification fact',
+      };
+    case 'HUMAN_SIGNOFF':
+      return {
+        requiredAction: 'CREATE_HUMAN_SIGNOFF_WITH_EVIDENCE',
+        instruction:
+          'have a person create a HUMAN_SIGNOFF event with non-blank evidence (task_signoff / ' +
+          'POST /tasks/:id/signoff)',
+      };
+  }
 }

@@ -74,6 +74,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'creatorSessionId',
   'authorSessionId',
   'ownerSessionId',
+  // The person whose HUMAN_SIGNOFF event supplied a task's completion judgment. It is returned
+  // beside the event and names the user row exactly as ownerId/userId do.
+  'signedById',
   'coordinatorSessionId',
   'workspaceId',
   'foremanWorkspaceId',

@@ -102,7 +102,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_completion_evidence, task_completion_evidence_idempotency, conversation_turn, run_event, tool_call, attachment, project_event, project_action, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision',
+    relation: 'task_dependency, task_comment, task_completion_evidence, task_completion_evidence_idempotency, task_human_signoff, conversation_turn, run_event, tool_call, attachment, project_event, project_action, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision',
     modes: 'INSERT/UPDATE/DELETE only',
     why: 'Child rows whose FK parents are already held by this point, so they add no wait edge of their own.',
   },
@@ -180,7 +180,7 @@ export const LOCK_ORDER_COMPATIBLE = [
       'Workspace FK check takes, so an FK check never waits on a heartbeat.',
   },
   {
-    relation: 'run_event, tool_call, conversation_turn, task_comment, task_completion_evidence, task_completion_evidence_idempotency, attachment',
+    relation: 'run_event, tool_call, conversation_turn, task_comment, task_completion_evidence, task_completion_evidence_idempotency, task_human_signoff, attachment',
     why:
       'Child rows only. They are inserted or updated by the transaction that already holds their ' +
       'Session row, so they introduce no lock their parent has not already given.',

@@ -605,6 +605,21 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_signoff":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		evidence := getString(args, "evidence")
+		if strings.TrimSpace(evidence) == "" {
+			return toolResult("evidence is required and must not be blank", true)
+		}
+		raw, err := s.t.signoffTask(s.sessionID, id, evidence)
+		if err != nil {
+			return toolResult("sign off task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_delete":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -1252,6 +1267,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"supersededByTaskId in ONE call when a later attempt took over, so the attempt keeps " +
 			"how it ended and gains what replaced it.",
 	}
+	taskUpdateStatus := map[string]interface{}{
+		"type": "string",
+		"enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "FAILED"},
+		"description": "Direct DONE is refused for every person, coordinator, and execution " +
+			"session; satisfy the task's declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF " +
+			"criterion instead. FAILED remains writable as a run's conservative self-report.",
+	}
 	providerProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to start where the assignee's project last started, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
@@ -1443,7 +1465,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
-				"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks.",
+				"description": "How this task rolls up subtasks. MANUAL (default) performs no child aggregation; the declared completionCriterion decides DONE. ALL_CHILDREN_DONE derives completion when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED uses independent PASS verdict evidence. Direct status DONE is never a completion mechanism.",
 			},
 			"verifiesTaskId": map[string]interface{}{
 				"type":        "string",
@@ -1934,12 +1956,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF path. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
 				"description":        taskDescriptionProp,
-				"status":             status,
+				"status":             taskUpdateStatus,
 				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 				"parentTaskId":       updateParentTaskIDProp,
@@ -1972,7 +1994,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"completionPolicy": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
-					"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks. Switching back to MANUAL stops the recomputation without undoing what it last concluded.",
+					"description": "How this task rolls up subtasks. MANUAL (default) performs no child aggregation; the declared completionCriterion decides DONE. ALL_CHILDREN_DONE derives completion when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails. VERIFICATION_PASSED uses independent PASS verdict evidence. Direct status DONE is never a completion mechanism. Switching back to MANUAL stops child recomputation without undoing what it last concluded.",
 				},
 				"verifiesTaskId": map[string]interface{}{
 					"type":        []string{"string", "null"},
@@ -1999,6 +2021,22 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Why this task stopped, when its status alone does not say. Setting supersededByTaskId implies SUPERSEDED and needs no second spelling; ABANDONED is the other case — dropped on purpose, with nothing replacing it. FAILED and CANCELLED are not values here because they are already `status`.",
 				},
 			}),
+		},
+		{
+			"name": "task_signoff",
+			"description": "Human-sign a task whose declared completion criterion is " +
+				"HUMAN_SIGNOFF. Records who signed, the server time, and the non-empty evidence; " +
+				"the same transaction derives status DONE and closes that task's open " +
+				"HUMAN_DECISION_REQUIRED signal/blocker. This is a human-only door: an MCP call " +
+				"inside an agent session is refused instead of signing for that person.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"evidence": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"description": "Non-blank evidence the person reviewed and based this signoff on.",
+				},
+			}, "evidence"),
 		},
 		{
 			"name":        "task_delete",

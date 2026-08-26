@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  deriveTaskCompletionStatus,
   evaluateTaskCompletion,
   resolveTaskCompletionCriterion,
   taskCompletionDeclarationError,
+  taskCompletionRequiredAction,
 } from './task-completion-criterion';
 
 test('undeclared completion is the ordinary HUMAN_SIGNOFF criterion', () => {
@@ -40,6 +42,52 @@ test('each completion criterion evaluates both satisfied and unsatisfied facts',
       criterion, state: 'UNSATISFIED', satisfied: false,
     });
   }
+});
+
+test('a satisfied EXECUTABLE criterion evaluates task status to DONE', () => {
+  assert.equal(deriveTaskCompletionStatus({
+    completionCriterion: 'EXECUTABLE',
+    acceptanceExpectedExitCode: 7,
+    executableExitCode: 7,
+  }), 'DONE');
+});
+
+test('a satisfied VERIFICATION criterion evaluates task status to DONE', () => {
+  assert.equal(deriveTaskCompletionStatus({
+    completionCriterion: 'VERIFICATION',
+    verificationVerdict: 'PASS',
+  }), 'DONE');
+});
+
+test('a satisfied HUMAN_SIGNOFF criterion evaluates task status to DONE', () => {
+  assert.equal(deriveTaskCompletionStatus({
+    completionCriterion: 'HUMAN_SIGNOFF',
+    humanSignoff: true,
+  }), 'DONE');
+});
+
+test('an unsatisfied criterion cannot manufacture an optimistic status', () => {
+  assert.equal(deriveTaskCompletionStatus({
+    completionCriterion: 'HUMAN_SIGNOFF',
+    humanSignoff: false,
+  }), null);
+});
+
+test('every direct-DONE refusal points at the declared criterion remedy', () => {
+  assert.deepEqual(taskCompletionRequiredAction('EXECUTABLE'), {
+    requiredAction: 'RUN_EXECUTABLE_CRITERION',
+    instruction:
+      'finish the task run and let Orbit run its declared acceptanceCommand; the recorded ' +
+      'exit code must equal acceptanceExpectedExitCode',
+  });
+  assert.match(
+    taskCompletionRequiredAction('VERIFICATION').instruction,
+    /independent verification task with verdict PASS/,
+  );
+  assert.match(
+    taskCompletionRequiredAction('HUMAN_SIGNOFF').instruction,
+    /HUMAN_SIGNOFF event with non-blank evidence/,
+  );
 });
 
 test('the three peer declarations require only their own evidence shape', () => {

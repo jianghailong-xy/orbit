@@ -282,6 +282,10 @@ model User {
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
 
+  /// Human completion judgments authored by this person. The event carries its own signer rather
+  /// than borrowing Task.ownerId so the audit answers who actually signed.
+  taskHumanSignoffs TaskHumanSignoff[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -2959,6 +2963,9 @@ model Task {
 
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
+  /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
+  /// criterion, and retries return that same event rather than minting a second judgment.
+  humanSignoffs TaskHumanSignoff[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3087,6 +3094,23 @@ model TaskCompletionEvidenceIdempotency {
   @@unique([taskId, idempotencyKey], map: "task_completion_evidence_idempotency_task_key")
   @@index([evidenceId], map: "task_completion_evidence_idempotency_evidence_idx")
   @@map("task_completion_evidence_idempotency")
+}
+
+/// A person's explicit judgment that the task's HUMAN_SIGNOFF criterion is satisfied.
+///
+/// This is an event, not a disguised status edit: signer, server timestamp and evidence are all
+/// non-null, and the service derives Task.status from its existence in the same transaction.
+model TaskHumanSignoff {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  taskId     String   @unique @map("task_id") @db.Uuid
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  signedById String   @map("signed_by_id") @db.Uuid
+  signedBy   User     @relation(fields: [signedById], references: [id])
+  evidence   String
+  signedAt   DateTime @default(now()) @map("signed_at")
+
+  @@index([signedById, signedAt(sort: Desc)])
+  @@map("task_human_signoff")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).

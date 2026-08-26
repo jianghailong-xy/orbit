@@ -431,6 +431,13 @@ export class UpdateTaskDto {
   labels?: string[];
 }
 
+/** The evidence a person signs, with signer and timestamp supplied by the server. */
+export class SignoffTaskDto {
+  @IsString()
+  @MinLength(1)
+  evidence!: string;
+}
+
 export class AddDependencyDto {
   // The prerequisite task this task should wait on. Must be owned by the caller, differ
   // from the task itself, and not introduce a dependency cycle.  //

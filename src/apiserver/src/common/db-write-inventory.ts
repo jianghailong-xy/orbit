@@ -666,6 +666,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; a lost duplicate-key race is answered as the batch replay, not a retry.',
   },
   {
+    at: 'tasks/tasks.service.ts#signoff',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10), project FOR NO KEY UPDATE when present (40), task FOR UPDATE (50), then task_human_signoff INSERT and project_blocker resolution (60), followed by the status write on the task row already held and its task_dispatch_epoch trigger (70). The event/blocker children precede status intentionally; the parent lock is already held, so that final write adds no descending wait edge.',
+    identity: 'The task id plus its unique task_human_signoff row. The request UUID and signedAt are fixed above the closure; a committed replay reads the existing event, while an aborted attempt leaves none.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks and re-reads the task criterion/status after the owner/project locks. Event creation, every corresponding open HUMAN_DECISION_REQUIRED resolution and the derived DONE update roll back together; a retry either performs all three or observes the already-committed event.',
+    effects: 'None inside. Dependency release, optional verification filing, aggregation, settled-project delivery and realtime publication all run after commit.',
+    answer: 'Typed 503 from the global boundary; criterion, actor and retirement refusals have their own structured 400/403/409 responses.',
+  },
+  {
     at: 'tasks/tasks.service.ts#update',
     shape: 'TX_RETRIED',
     locks: 'user FOR UPDATE (10, when it restructures), task_list (20), creator Session (30, when it writes the task row twice), project FOR NO KEY UPDATE (40, when it names a column project_acceptance_task_fact_update is declared over), task NOWAIT (50, on the supersession/move paths), then the writes.',
