@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from './runner-provider-support';
 
@@ -15,7 +15,11 @@ test('legacy claim explains the pending OpenCode stall without stranding other w
   const published: string[] = [];
   const prisma = {
     session: {
-      findMany: async () => [{ id: 'session-1', error: null }],
+      // Two preflights now share this door — the OpenCode one and the SOURCE one — and they are
+      // told apart by what they ask for. Answering both with the same row would make this spec
+      // agree with a claim that marked the wrong sessions.
+      findMany: async ({ where }: { where: Record<string, unknown> }) =>
+        where.provider === AgentProvider.OPENCODE ? [{ id: 'session-1', error: null }] : [],
       updateMany: async ({ data }: { data: { error: string } }) => {
         storedError = data.error;
         return { count: 1 };
@@ -58,7 +62,12 @@ test('current claim advertises OpenCode directly to the atomic queue gate', asyn
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
 
-  assert.equal(await controller.claim(RUNNER, undefined, 'claude,codex,opencode'), null);
+  // Fully capable: OpenCode advertised AND `source-pin/v1` declared, so neither preflight has
+  // anything to explain and the claim goes straight to the queue.
+  assert.equal(
+    await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode'),
+    null,
+  );
   assert.deepEqual(advertised, [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE]);
 });
 

@@ -16,11 +16,15 @@ import {
   treeActiveTurns,
   treeCeiling,
 } from '../common/session-tree-sql';
-import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
+import {
+  OPENCODE_RUNNER_UPGRADE_ERROR,
+  SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
+} from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
+import { sessionSourceSnapshot } from '../projects/session-source';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -62,10 +66,11 @@ export class QueueService {
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     waitMs = 0,
     supportsTerminalHandoff = false,
+    supportsSourcePin = false,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff);
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
@@ -76,6 +81,7 @@ export class QueueService {
   private async trySessionClaim(
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     supportsTerminalHandoff: boolean,
+    supportsSourcePin: boolean,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     // Atomically claim one PENDING session assigned to this runner. The runner id
@@ -111,8 +117,12 @@ export class QueueService {
         return tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         UPDATE "session" SET
           status = 'RUNNING',
+          -- A stall this claim just disproved. Both markers are written by a preflight that saw a
+          -- runner unable to drive the row and had nothing else to say why it sat there; the row
+          -- being claimed IS the answer, so leaving the text behind would make a running session
+          -- read as blocked on the machine that is running it.
           error = CASE
-            WHEN error = ${OPENCODE_RUNNER_UPGRADE_ERROR} THEN NULL
+            WHEN error IN (${OPENCODE_RUNNER_UPGRADE_ERROR}, ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}) THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -145,6 +155,20 @@ export class QueueService {
             AND (
               ${supportsTerminalHandoff}::boolean
               OR substring(s."inbox_lease_owner"::text, 15, 1) IS DISTINCT FROM '5'
+            )
+            -- SR35. A session whose SOURCE was resolved carries a baseline the runner must PIN
+            -- before it may create a worktree; a runner that does not declare the source-pin/v1
+            -- capability would receive that snapshot, ignore the field it has never heard of, and
+            -- fork from the workDir's HEAD — the exact silent baseline this contract removes. So
+            -- the row is not offered at all, and it stays PENDING/SELECTED rather than becoming
+            -- REFUSED: upgrading a runner (or bringing a newer one online) makes it runnable,
+            -- which is not what a configuration error looks like.
+            --
+            -- UNBOUND is every Legacy session, which is every session that exists today, so this
+            -- predicate is invisible to every runner until a Project binds a codebase.
+            AND (
+              ${supportsSourcePin}::boolean
+              OR s."source_state" = 'UNBOUND'
             )
             -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
             -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
@@ -359,6 +383,10 @@ export class QueueService {
     }
     const runtimeSessionId = session.runtimeSessionId ?? undefined;
     const sessionUuid = runtimeSessionId ?? session.id;
+    // §6.3 step 1: hand the runner the frozen SOURCE snapshot. `undefined` for a Legacy session —
+    // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
+    // every runner has always received, so nothing about their behaviour changes (SR46).
+    const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
     return {
       sessionId: session.id,
       provider,
@@ -431,7 +459,28 @@ export class QueueService {
         // Includes a custom provider's injected baseUrl/key (else just the workspace's env).
         env: exec.env,
       },
+      source,
     };
+  }
+
+  /**
+   * How to ASK the authority, read live — as opposed to WHAT is being asked, which is frozen on the
+   * session row (§3.2's nine columns).
+   *
+   * The remote's local name and the machine a `RUNNER_LOCAL` authority names are not part of the
+   * frozen selector, so they are read from the binding at claim time. A binding that has since been
+   * deleted returns null and the snapshot falls back to `origin`: `sourceCodebaseId` carries no
+   * foreign key precisely so that deleting a binding cannot rewrite a snapshot already frozen
+   * against it, which means this lookup has to tolerate the row being gone.
+   */
+  private async sourceBinding(
+    codebaseId: string | null,
+  ): Promise<{ remoteName: string; authorityRunnerId: string | null } | null> {
+    if (!codebaseId) return null;
+    return this.prisma.projectCodebase.findUnique({
+      where: { id: codebaseId },
+      select: { remoteName: true, authorityRunnerId: true },
+    });
   }
 
   /**

@@ -159,6 +159,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		RuntimeSessionID:   r.RuntimeSessionID,
 		LeaseOwner:         r.LeaseOwner,
 		MaxSeq:             r.MaxSeq,
+		Source:             r.Source,
 	}
 }
 
@@ -1113,6 +1114,23 @@ func runLoop(cfg *RunnerConfig) bool {
 	// A supervisor that was silently engine-evicted remains registered cold; its
 	// next claim wakes it without creating a duplicate supervisor.
 	startSession := func(job *ClaimedSession, initiallyActive bool) {
+		// §6.3 steps 2–3, and the only place they can go: BEFORE anything is staged, before a
+		// worktree exists and before an engine could be spawned. SR33 makes engine start a
+		// conjunction — the SOURCE is PINNED *and* the checkout stands on that commit — so a run
+		// that cannot reach the first half must not begin the second. A Legacy session returns from
+		// here immediately without a single network call, and one that is already PINNED does too:
+		// resume, reclaim and takeover READ the pin, they never resolve again (SR29).
+		//
+		// Bailing out leaves this session unstarted rather than started from somewhere else. That is
+		// the entire point (§0): every failure on the old path degraded — to the shared checkout, to
+		// `git init`, to whatever HEAD happened to be — and each degradation let an agent write
+		// files against code nobody chose. Reporting the refusal so a person sees WHY belongs with
+		// the rest of the fail-closed behaviour on the worktree task (34D2Ag9O0KnLGxLXifk39); what
+		// may not wait for it is the refusal itself.
+		if err := ensureSourcePinned(loopCtx, t, job); err != nil {
+			logln("session", job.SessionID, "— not starting:", err)
+			return
+		}
 		stageCredential := func() {
 			// Keep the signed proof out of the provider environment. New MCP/CLI calls read
 			// this private file for every operation, so a refreshed proof becomes visible

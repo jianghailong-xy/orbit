@@ -79,6 +79,9 @@ import {
   SessionDiffResultRequest,
   SessionEndReason,
   SessionMergeResultRequest,
+  SESSION_SOURCE_PIN_V1,
+  SourcePinRequest,
+  SourcePinResponse,
   TakeoverTurnLeasesRequest,
   TakeoverTurnLeasesResponse,
   TurnAttachment,
@@ -177,9 +180,15 @@ import {
 } from '../common/session-inbox-fence';
 import {
   OPENCODE_RUNNER_UPGRADE_ERROR,
+  SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
 } from './runner-provider-support';
+import {
+  freezeSessionSourcePin,
+  hasResolvedSource,
+  sessionSourceSnapshot,
+} from '../projects/session-source';
 import { sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
@@ -1267,6 +1276,52 @@ export class RunnerApiController {
     return true;
   }
 
+  /**
+   * SR35, said out loud on the rows it applies to.
+   *
+   * Mirrors `markOpenCodeUpgradeRequired` exactly, because the situation is the same one: a session
+   * this machine's binary cannot drive, withheld by the claim SQL, which would otherwise sit PENDING
+   * with nothing on it to say why. What differs is only that "cannot drive" here means "would drive
+   * it from the wrong commit" — a runner without `source-pin/v1` does not fail on the payload, it
+   * ignores the field and starts from the workDir's HEAD, which is worse than failing.
+   *
+   * `error` and NOT `source_refusal_code`: the refusal column is welded to `sourceState = 'REFUSED'`
+   * by migration 0175, and REFUSED is terminal. This row is not terminal — a newer runner makes it
+   * runnable — so it stays SELECTED and the explanation rides on the display column instead (§10.1's
+   * note on why this one dispatch-path code never lands in the state machine).
+   */
+  private async markSourceProtocolUnsupported(runnerId: string): Promise<boolean> {
+    const pending = await this.prisma.session.findMany({
+      where: {
+        assignedRunnerId: runnerId,
+        status: RunStatus.PENDING,
+        cancelRequestedAt: null,
+        sourceState: { not: 'UNBOUND' },
+      },
+      select: { id: true, error: true },
+    });
+    if (pending.length === 0) return false;
+    const unmarked = pending
+      .filter((session) => session.error !== SOURCE_PROTOCOL_UNSUPPORTED_ERROR)
+      .map((session) => session.id);
+    if (unmarked.length > 0) {
+      const marked = await this.prisma.session.updateMany({
+        where: {
+          id: { in: unmarked },
+          assignedRunnerId: runnerId,
+          status: RunStatus.PENDING,
+          cancelRequestedAt: null,
+          sourceState: { not: 'UNBOUND' },
+        },
+        data: { error: SOURCE_PROTOCOL_UNSUPPORTED_ERROR },
+      });
+      if (marked.count > 0) {
+        for (const id of unmarked) this.realtime.publishSessionCreated(id);
+      }
+    }
+    return true;
+  }
+
   // ── Interactive sessions (Route B) ──
 
   /** Long-poll: returns one claimed session, or null when nothing is available. */
@@ -1278,6 +1333,7 @@ export class RunnerApiController {
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ClaimedSession | null> {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
+    const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
     if (!supportedProviders.includes(AgentProvider.OPENCODE)) {
       // Explain the stall on the OpenCode rows themselves and then carry on: the claim SQL
@@ -1285,10 +1341,19 @@ export class RunnerApiController {
       // failing the request would only strand this runner's Claude/Codex work as well.
       await this.markOpenCodeUpgradeRequired(runner.id);
     }
+    if (!supportsSourcePin) {
+      // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
+      // whole long-poll over one row this process cannot drive would strand every other session
+      // assigned to this machine. What the marking adds is the WHY — without it the row sits
+      // PENDING forever with nothing on it to explain that the machine, not the queue, is the
+      // reason.
+      await this.markSourceProtocolUnsupported(runner.id);
+    }
     const job = await this.queue.claimSessionForRunner(
       { id: runner.id, supportedProviders },
       LONG_POLL_MS,
       supportsTerminalHandoff,
+      supportsSourcePin,
     );
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
@@ -1324,6 +1389,7 @@ export class RunnerApiController {
       capabilities,
       SESSION_TERMINAL_HANDOFF_V1,
     );
+    const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: {
@@ -1360,6 +1426,23 @@ export class RunnerApiController {
     const reclaimable = legacyOpenCode
       ? sessions.filter((session) => !openCodeSessions.includes(session))
       : sessions;
+    // How to ASK each authority, read once for the whole response rather than per session: the
+    // frozen identity travels on each session row, and only the remote's local name and the
+    // `RUNNER_LOCAL` machine come from the binding (§3.2 freezes neither). A binding that has been
+    // deleted since is simply absent here, and `sessionSourceSnapshot` falls back to `origin` —
+    // deleting a binding must not rewrite a snapshot frozen against it (SR29).
+    const sourceBindings = new Map<string, { remoteName: string; authorityRunnerId: string | null }>();
+    const bindingIds = [
+      ...new Set(sessions.map((s) => s.sourceCodebaseId).filter((id): id is string => !!id)),
+    ];
+    if (bindingIds.length > 0) {
+      for (const binding of await this.prisma.projectCodebase.findMany({
+        where: { id: { in: bindingIds } },
+        select: { id: true, remoteName: true, authorityRunnerId: true },
+      })) {
+        sourceBindings.set(binding.id, binding);
+      }
+    }
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only write below is an
@@ -1367,6 +1450,13 @@ export class RunnerApiController {
     const out: ReclaimSession[] = [];
     for (const s of reclaimable) {
       if (!supportsTerminalHandoff && isTerminalResumeHandoffOwner(s.inboxLeaseOwner)) {
+        continue;
+      }
+      // SR35 again, on the other door. A downgraded runner must not re-attach a session whose
+      // baseline it cannot honour: reclaim is where a process rebuilds supervisors from checkouts,
+      // and one rebuilt without the pin is one that resumes from whatever the shared checkout says
+      // now. Omitted rather than refused, for the same reason the OpenCode rows are.
+      if (!supportsSourcePin && hasResolvedSource(s.sourceState)) {
         continue;
       }
       const workspace = s.workspace;
@@ -1493,9 +1583,41 @@ export class RunnerApiController {
         orchestrationToken: allowOrchestration
           ? await this.orchestration.issue(runner.id, s.id)
           : undefined,
+        // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first
+        // claim froze, whatever the binding's configuration or the ref's tip have done since —
+        // that is what makes a runner restart a continuation of the same run rather than a new one
+        // that happens to have the same id.
+        source: sessionSourceSnapshot(
+          s,
+          s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null,
+        ),
       });
     }
     return { sessions: out };
+  }
+
+  /**
+   * §6.3 step 3: the runner reports the commit it resolved (or the gate's refusal), and this freezes
+   * it by compare-and-set. `freezeSessionSourcePin` holds the argument and the statements; this
+   * route is the door and the one side effect the door owes its clients.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/source/pin')
+  @HttpCode(200)
+  async pinSessionSource(
+    @CurrentRunner() runner: { id: string; ownerId: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: SourcePinRequest,
+  ): Promise<SourcePinResponse> {
+    const result = await freezeSessionSourcePin(
+      this.prisma,
+      { sessionId, runnerId: runner.id, ownerId: runner.ownerId },
+      dto,
+    );
+    // Only the winner changed anything, so only the winner announces it. A loser publishing would
+    // make the same freeze look like two events to every connected client.
+    if (result.wonRace) this.realtime.publishSessionUpdated(sessionId);
+    return result;
   }
 
   /** Hand inbox activation authority from the owner observed in claim/reclaim to this process. */

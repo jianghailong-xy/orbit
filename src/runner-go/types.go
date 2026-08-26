@@ -573,10 +573,79 @@ type ClaimedSession struct {
 	// agent's default) — the same branch the UI's Merge button names. Seeds branchMergedInto so
 	// the "already merged" chip judges that branch instead of main. Empty → auto-detect.
 	MergeTarget string `json:"mergeTarget,omitempty"`
+	// Source is which commit this run must start from (docs/project-source-contract.md §6.3).
+	// Nil for every Legacy session — which is every session that is not a code task of a Project
+	// with a codebase binding — and those keep the pre-0175 behaviour byte for byte: setupWorktree
+	// forks from the workDir's HEAD (SR45/SR46).
+	//
+	// Non-nil means the opposite, and the server only sends it to a process that declared
+	// source-pin/v1 (SR35), because a runner that ignored the field would fork from that same HEAD.
+	// The engine may not be spawned until State is PINNED and the worktree stands on BaseSha
+	// (SR33).
+	Source *SessionSource `json:"source,omitempty"`
 	// WT and IsolationStatus are runner-internal, resolved by setupWorktree at start: WT
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
 	WT              *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
+}
+
+// SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen
+// when the session was created, plus the FACT (which commit) once a first claim froze it.
+//
+// Branch states intent and commit SHA states what happened, and both are on the record: a run with
+// only a selector cannot be reproduced, and one with only a pin cannot be explained (SR4).
+type SessionSource struct {
+	// UNBOUND | SELECTED | PINNED | REFUSED. UNBOUND never travels — it is sent as an absent field.
+	State string `json:"state"`
+	// Which row of the priority table produced this selector (§4.1).
+	Kind string `json:"kind"`
+	// The binding this resolved against, as it was AT resolution.
+	CodebaseID string `json:"codebaseId"`
+	// Repository identity (§7.1), frozen: editing the binding's URL cannot reach an in-flight run.
+	RepoURL       string `json:"repoUrl"`
+	RootCommitSha string `json:"rootCommitSha,omitempty"`
+	// Exactly one of Ref / RevisionSha is set. A ref-valued selector has to be resolved against the
+	// authority at claim time; a SHA-valued one is already the answer.
+	Ref         string `json:"ref,omitempty"`
+	RevisionSha string `json:"revisionSha,omitempty"`
+	// The binding's CONFIGURATION version at resolution — a counter, never a git object.
+	ConfigRevision string `json:"configRevision,omitempty"`
+	// REMOTE (ask the remote) | RUNNER_LOCAL (one named machine's checkout is authoritative).
+	RefAuthority string `json:"refAuthority"`
+	// How to ask, as opposed to what is being asked: not part of the frozen selector.
+	RemoteName        string `json:"remoteName,omitempty"`
+	AuthorityRunnerID string `json:"authorityRunnerId,omitempty"`
+	// Commits the baseline must contain (gate G5).
+	RequiredContains []string `json:"requiredContains,omitempty"`
+	// The pin. Set exactly when State is PINNED; from then on it is read and never re-derived.
+	BaseSha            string `json:"baseSha,omitempty"`
+	ResolvedAt         string `json:"resolvedAt,omitempty"`
+	ResolvedByRunnerID string `json:"resolvedByRunnerId,omitempty"`
+	RefusalCode        string `json:"refusalCode,omitempty"`
+}
+
+// SourcePinRequest reports what the machine that owns the repository concluded (§6.3 step 3).
+// Exactly one half is sent: a resolved commit to freeze, or the gate's refusal code.
+type SourcePinRequest struct {
+	BaseSha string            `json:"baseSha,omitempty"`
+	Refusal *SourcePinRefusal `json:"refusal,omitempty"`
+}
+
+type SourcePinRefusal struct {
+	Code   string                 `json:"code"`
+	Detail map[string]interface{} `json:"detail,omitempty"`
+}
+
+// SourcePinResponse is what is frozen NOW, which is not always what this runner asked for: a loser
+// of the compare-and-set is handed the WINNER's pin with WonRace false (SR30). A worktree already
+// exists on that commit, so adopting it is the only answer that keeps one session to one baseline.
+type SourcePinResponse struct {
+	State              string `json:"state"`
+	BaseSha            string `json:"baseSha,omitempty"`
+	ResolvedAt         string `json:"resolvedAt,omitempty"`
+	ResolvedByRunnerID string `json:"resolvedByRunnerId,omitempty"`
+	RefusalCode        string `json:"refusalCode,omitempty"`
+	WonRace            bool   `json:"wonRace"`
 }
 
 // Interactive sessions (Route B) — wire DTOs mirroring @orbit/shared.
@@ -673,6 +742,9 @@ type ReclaimSession struct {
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// MergeTarget, cf. ClaimedSession.MergeTarget.
 	MergeTarget string `json:"mergeTarget,omitempty"`
+	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session
+	// already PINNED comes back on the SHA its first claim froze.
+	Source *SessionSource `json:"source,omitempty"`
 }
 
 type ReclaimResponse struct {

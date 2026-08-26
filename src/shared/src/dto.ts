@@ -23,6 +23,7 @@ import {
   SessionState,
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
+import { SessionSourceSnapshot } from './source';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -806,6 +807,18 @@ export interface ClaimedSession {
   /** Signed, runner/session-bound proof persisted in the runner's private per-session
    *  credential store. Required alongside ORBIT_SESSION_ID for orchestration calls. */
   orchestrationToken?: string;
+  /** Which commit this run starts from (`docs/project-source-contract.md` §6.3 step 1).
+   *
+   *  Omitted for every Legacy session — `sourceState = 'UNBOUND'`, which is every session that
+   *  is not a code task of a Project with a codebase binding — and those keep the pre-0175
+   *  behaviour byte for byte: the runner forks from the workDir's HEAD (SR45/SR46).
+   *
+   *  Present means the opposite is now true, and a runner that ignores it would start from that
+   *  same HEAD: the field therefore is NOT optional in the negotiated sense. The control plane
+   *  refuses to dispatch such a session at all to a runner that does not declare
+   *  `source-pin/v1` (SR35), so a payload carrying this field only ever reaches a process that
+   *  knows it must pin before it may create a worktree or spawn an engine (SR33). */
+  source?: SessionSourceSnapshot;
 }
 
 export interface RunEventBatch {
@@ -1102,6 +1115,10 @@ export interface ReclaimSession {
   allowOrchestration?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
+  /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived
+   *  (SR29): a session already `PINNED` keeps the SHA its first claim froze, whatever the
+   *  binding's configuration or the ref's tip have done since. */
+  source?: SessionSourceSnapshot;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */

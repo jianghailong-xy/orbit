@@ -8,6 +8,7 @@ async function capturedClaimCapability(
   supportedProviders: AgentProvider[],
 ): Promise<{ capability: unknown; claimSetting: unknown; settingSql: string; sql: string }> {
   let values: unknown[] = [];
+  let segments: readonly string[] = [];
   let sql = '';
   let claimSetting: unknown;
   let settingSql = '';
@@ -26,6 +27,7 @@ async function capturedClaimCapability(
       const rendered = renderRawQuery(args);
       sql = rendered.text;
       values = [...rendered.values];
+      segments = rendered.strings;
       return [];
     },
   };
@@ -37,8 +39,15 @@ async function capturedClaimCapability(
     id: '11111111-1111-4111-8111-111111111111',
     supportedProviders,
   });
-  // UPDATE interpolations are: upgrade error, runner id, capability, then runner ids/caps.
-  return { capability: values[2], claimSetting, settingSql, sql };
+  // Found by the predicate it feeds, not by its position. A tagged template's values are a flat
+  // list, so counting into it makes this spec fail the next time an unrelated interpolation is
+  // added anywhere above — which says nothing about the capability it exists to check. `values[i]`
+  // sits between `strings[i]` and `strings[i + 1]`, so the segment AFTER the value is what names it.
+  const index = segments.findIndex((segment, i) =>
+    i > 0 && segment.includes("COALESCE(s.provider, 'claude') <> 'opencode'"),
+  );
+  assert.ok(index > 0, 'the claim no longer gates OpenCode on a bound capability');
+  return { capability: values[index - 1], claimSetting, settingSql, sql };
 }
 
 test('the atomic claim selection receives a false OpenCode capability for legacy runners', async () => {

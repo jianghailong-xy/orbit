@@ -69,6 +69,7 @@ import {
 } from '../common/session-tree-sql';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
+import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { MergeReceiptRow, mergeReceiptRow } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
@@ -698,14 +699,36 @@ export class SessionsService {
       // default is untouched, and a session cannot move to a runner that would have honored it.
       if (target?.runsAsRoot) rootRefusedFallback = ROOT_FALLBACK_PERMISSION_MODE;
     }
-    // Linking to a task: it must belong to the same user (no cross-tenant linking).
+    // Linking to a task: it must belong to the same user (no cross-tenant linking). The same read
+    // carries §4's inputs, so which code this run starts from is decided from the row this caller
+    // was just proved to own rather than from a second lookup that could answer differently.
+    let sourceTask: SessionSourceTaskRow | null = null;
     if (dto.taskId) {
       const task = await this.prisma.task.findFirst({
         where: { id: dto.taskId, ownerId },
-        select: { id: true },
+        select: {
+          id: true,
+          projectId: true,
+          verifiesTaskId: true,
+          pinnedRevision: true,
+          codeless: true,
+          attemptGeneration: true,
+          knownGoodSha: true,
+        },
       });
       if (!task) throw new ForbiddenException('task not found');
+      sourceTask = task;
     }
+    // The fourth resolution chain: WHICH COMMIT this run starts from
+    // (`docs/project-source-contract.md`). Resolved here, before the insert, because its answer is
+    // nine columns of that same insert (SR28) — a session that is claimable before its selector is
+    // written is a session a claim starts Legacy.
+    //
+    // Deliberately reads only the task and its project's code binding: no workspace, no workDir, no
+    // `defaultMergeTarget` (SR1/SR3). Which machine this lands on is decided above and contributes
+    // nothing here. A session that executes no task, or whose project has no binding, resolves
+    // `UNBOUND` and behaves exactly as it did before migration 0175 (SR45).
+    const source = await decideSessionSource(this.prisma, sourceTask);
     // Validate any compose-page image refs up front (caller's, still unscoped) so a bad
     // one fails the request before a session is created. They're scoped to the session
     // below and linked to the seeded first turn when the runner claims it (queue.service).
@@ -797,6 +820,10 @@ export class SessionsService {
         parentSessionId: opts?.parentSessionId ?? null,
         creatorId: ownerId,
         ownerId,
+        // SR28: the SOURCE selector is frozen by THIS statement, not a follow-up UPDATE. The
+        // database agrees — migration 0175's freeze guard refuses every later write to these nine
+        // columns, so there is no second statement that could write them.
+        ...source.columns,
       },
     }));
     // Scope the compose-page uploads to this session now that it exists. They stay

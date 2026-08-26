@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	runnerCapabilitiesHeader             = "X-Orbit-Runner-Capabilities"
-	sessionOrchestrationCredentialV1     = "session-orchestration-credential-v1"
-	sessionTerminalHandoffV1             = "session-terminal-handoff-v1"
-	sessionWorktreeOpsV1                 = "session-worktree-ops-v1"
+	runnerCapabilitiesHeader         = "X-Orbit-Runner-Capabilities"
+	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
+	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
+	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
@@ -32,6 +32,13 @@ const (
 	// of spending it on every user message. Kimi/OpenCode intentionally do not claim this yet.
 	sessionClaudeCoordinatorContextV1 = "session-claude-coordinator-context-v1"
 	sessionCodexCoordinatorContextV1  = "session-codex-coordinator-context-v1"
+	// The SOURCE handshake (docs/project-source-contract.md §6.3). Declaring it is what makes the
+	// control plane willing to dispatch a session whose baseline is a pinned project commit: a
+	// runner that does not is REFUSED those rows outright rather than sent them to ignore (SR35),
+	// because ignoring the field means forking from the workDir's HEAD — the silent baseline the
+	// whole contract exists to remove. So this token must be added in the same change that
+	// implements the handshake, and never before it.
+	sessionSourcePinV1 = "source-pin/v1"
 	// Mid-turn delivery for the codex runtime (`turn/steer`). Declared from the runtime table
 	// rather than listed here — see declaredSteerCapabilities — because a runner that names
 	// it is telling the control plane to file codex steers for this machine, and one whose
@@ -61,6 +68,7 @@ func init() {
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
+		sessionSourcePinV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -317,6 +325,20 @@ func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
 func (t *Transport) reclaim(ctx context.Context) (*ReclaimResponse, error) {
 	var r ReclaimResponse
 	if err := t.do(ctx, "GET", "/runner/sessions/reclaim", nil, &r, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// pinSessionSource reports this machine's resolution and receives what is frozen (§6.3 step 3).
+//
+// The answer is authoritative even when this runner lost the compare-and-set: a loser is handed the
+// winner's pin, because a worktree already stands on it and one session may only have one baseline
+// (SR30). The caller therefore uses the RESPONSE's BaseSha, never the SHA it computed.
+func (t *Transport) pinSessionSource(ctx context.Context, sessionID string, req SourcePinRequest) (*SourcePinResponse, error) {
+	var r SourcePinResponse
+	path := "/runner/sessions/" + sessionID + "/source/pin"
+	if err := t.do(ctx, "POST", path, req, &r, 30*time.Second); err != nil {
 		return nil, err
 	}
 	return &r, nil
