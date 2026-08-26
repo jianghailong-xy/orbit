@@ -74,6 +74,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'creatorSessionId',
   'authorSessionId',
   'ownerSessionId',
+  // The person whose HUMAN_SIGNOFF event supplied a task's completion judgment. It is returned
+  // beside the event and names the user row exactly as ownerId/userId do.
+  'signedById',
   'coordinatorSessionId',
   'workspaceId',
   'foremanWorkspaceId',
@@ -102,6 +105,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // §13.5's supersession link: the later attempt that took a cancelled one's place. An address a
   // reader hands straight to task_get, exactly like `parentTaskId` beside it.
   'supersededByTaskId',
+  // N11 judgment-request history points at the request for the newer evidence revision. It is an
+  // address returned beside the old request and can be handed straight back to the request read.
+  'supersededById',
   // §13.8: the task a session is ABOUT rather than one it executes — an @-mention's reply thread.
   // Named in a session payload beside `taskId`, and handed to task_get by whoever reads it.
   'contextTaskId',
@@ -141,6 +147,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // (contract §3 SC7); what puts them here is that a person handed one has somewhere to hand it.
   'discoveredFromProjectId',
   'sourceSessionId',
+  // N10 completion evidence keeps both immutable source identities. The attempt is nullable for
+  // legacy/manual Sessions, but when present it is as followable as the source Session beside it.
+  'sourceAttemptId',
+  'evidenceId',
   // Unit L4's recorded answer about one crossing (migration 0155): the two ends, the session that
   // asked, the person who answered and the one task the yes was spent on. Every one of them is an
   // address a reader follows — open that project, open that session, run that task — which is the

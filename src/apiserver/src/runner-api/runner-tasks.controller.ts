@@ -10,6 +10,7 @@ import {
   CreateTasksBatchDto,
   ProposeDagDto,
   RunTaskDto,
+  SignoffTaskDto,
   UpdateTaskDto,
 } from '../tasks/dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
@@ -205,15 +206,30 @@ export class RunnerTasksController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     // The run this edit is being made from. Sent by the runner on every agent-side task write,
-    // and read for the two decisions that turn on WHO is writing: a verification cannot be
-    // concluded from the session that ran the task it verifies (§13.2), and a run cannot write
-    // its own task DONE (`task-self-done-boundary.spec.ts`). A header rather than a body field
+    // and read for decisions that turn on WHO is writing, including the independent-verification
+    // rule (§13.2). Direct DONE is refused for every actor by `task-self-done-boundary.spec.ts`;
+    // carrying identity still makes the refusal attributable. A header rather than a body field
     // because it is the caller's identity, not part of the edit — nothing an agent writes should
     // be able to claim it came from a different run.
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateTaskDto,
   ) {
     return this.tasks.update(runner.ownerId, id, dto, sessionId);
+  }
+
+  /**
+   * Headless `orbit task signoff` is the owner's CLI door. An in-session MCP call carries the
+   * acting Session header and is refused by TasksService: an agent cannot turn itself into the
+   * human named by a HUMAN_SIGNOFF event merely by calling the human endpoint.
+   */
+  @Post('tasks/:id/signoff')
+  signoffTask(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Body() dto: SignoffTaskDto,
+  ) {
+    return this.tasks.signoff(runner.ownerId, id, dto, sessionId);
   }
 
   @Delete('tasks/:id')

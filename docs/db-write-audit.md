@@ -26,7 +26,7 @@ write appears, moves or changes shape without its entry moving with it.
 
 | | count | what it is |
 |---|---:|---|
-| `TRANSACTION_UNITS` | 55 | Owns a transaction. This is where the retry decision lives. |
+| `TRANSACTION_UNITS` | 56 | Owns a transaction. This is where the retry decision lives. |
 | `TRANSACTION_PARTICIPANTS` | 31 | Writes only through a transaction client its caller owns. |
 | `STATEMENT_UNITS` | 106 | Runs outside any transaction, in one of five classes. |
 | `TRIGGER_WRITE_SOURCES` | 77 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
@@ -53,8 +53,8 @@ one 40P01 with the two wait edges that close the ring, and the ordered sequence 
 orders, asserted to commit with the stored positions still a permutation belonging to one whole
 request.
 
-**Every transaction boundary is now retried.** All 55 are pure database work — the spec proves the
-"pure" half by scanning every closure for an external call — so all 52 re-run whole through
+**Every transaction boundary is now retried.** All 56 are pure database work — the spec proves the
+"pure" half by scanning every closure for an external call — so all 56 re-run whole through
 `withTransactionRetry`. Two cap themselves at 2 attempts rather than 4: `TaskListsService.remove`
 and `TasksService.deleteAndStopRuns` each carry a 60s per-attempt deadline for a cascade that can
 run through tens of thousands of rows, and a cascade that size should absorb one collision rather

@@ -8,6 +8,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
+import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
@@ -53,6 +54,7 @@ import { ProvidersModule } from '../providers/providers.module';
   controllers: [
     RunnerApiController,
     RunnerTasksController,
+    RunnerTaskCompletionEvidenceController,
     RunnerServiceTokensController,
     RunnerSessionsController,
     RunnerAgentsController,

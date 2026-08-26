@@ -15,7 +15,9 @@ import (
 const shellTurnTimeout = 2 * time.Minute
 
 // runShellTurn executes `command` with bash in execDir — with the agent's configured env
-// layered on the runner's own, matching the claude process — bypassing claude entirely. It
+// layered on the runner's own, matching the claude process — bypassing claude entirely. This is
+// also the frozen EXECUTABLE completion environment documented in docs/task-completion-criteria.md.
+// It
 // emits a Bash tool_use/tool_result pair — the same shape claude's own Bash tool emits,
 // so the transcript renders it identically (a `$ command` card + output) with no UI
 // changes — and returns the combined stdout+stderr plus the process exit code.
@@ -60,7 +62,7 @@ func splitBackground(command string) (string, bool) {
 }
 
 // shellTurnBackgroundCommand applies the user-shell `&` convenience only to user turns. A Task's
-// server-generated L0 command needs a completed process and its exit code, so it always takes the
+// server-generated EXECUTABLE command needs a completed process and its exit code, so it always takes the
 // synchronous branch and executes resp.Content exactly as stored.
 func shellTurnBackgroundCommand(resp *RunInboxResponse) (string, bool) {
 	command, background := splitBackground(resp.Content)

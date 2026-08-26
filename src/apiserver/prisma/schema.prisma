@@ -217,6 +217,49 @@ enum TaskVerdict {
   @@map("task_verdict")
 }
 
+/// The one fact that is allowed to settle a task's own work.
+///
+/// These are peers, not a fallback chain. HUMAN_SIGNOFF is the ordinary compatibility default for
+/// tasks created before this distinction existed; it does not mean that executable or verification
+/// acceptance failed and escalated to a person.
+enum TaskCompletionCriterion {
+  EXECUTABLE
+  VERIFICATION
+  HUMAN_SIGNOFF
+
+  @@map("task_completion_criterion")
+}
+
+/// Lifecycle of one evidence-bound request for a criterion decision. It is monotonic: OPEN may
+/// become DECIDED or SUPERSEDED, and neither terminal fact is rewritten or reopened.
+enum TaskJudgmentRequestStatus {
+  OPEN
+  DECIDED
+  SUPERSEDED
+
+  @@map("task_judgment_request_status")
+}
+
+/// The concrete principal that owns the next decision. These are peers selected from the task's
+/// declared criterion; no row moves from one recipient type to another as a fallback.
+enum TaskJudgmentRecipientType {
+  SYSTEM_EXECUTABLE_EVALUATOR
+  VERIFIER_TASK
+  ACCOUNT_OWNER
+
+  @@map("task_judgment_recipient_type")
+}
+
+/// A request conclusion. PASS is the only optimistic conclusion; the other two remain durable
+/// evidence without manufacturing Task.status DONE.
+enum TaskJudgmentDecision {
+  PASS
+  FAIL
+  INCONCLUSIVE
+
+  @@map("task_judgment_decision")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -268,6 +311,10 @@ model User {
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
+
+  /// Human completion judgments authored by this person. The event carries its own signer rather
+  /// than borrowing Task.ownerId so the audit answers who actually signed.
+  taskHumanSignoffs TaskHumanSignoff[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -2771,11 +2818,14 @@ model Task {
   /// What would settle that this task is actually done, as opposed to reported done. The task-level
   /// counterpart of `Project.acceptanceCriteria`; nothing assembles it into a prompt in this phase.
   acceptanceCriteria String?   @map("acceptance_criteria")
-  /// L0 acceptance: one shell command and the exit code that mechanically settles this task.
+  /// EXECUTABLE acceptance: one shell command and its expected exit code.
   /// The database constraint added with these columns requires both or neither; there is no
   /// command list, expression language, or separate acceptance entity behind them.
   acceptanceCommand          String? @map("acceptance_command")
   acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
+  /// The declared completion fact for this task. HUMAN_SIGNOFF is a first-class criterion and the
+  /// compatibility value for every row that predates this column, never an exceptional fallback.
+  completionCriterion TaskCompletionCriterion @default(HUMAN_SIGNOFF) @map("completion_criterion")
   /// Free-text labels, written by whoever files the task (in practice the agent creating it).
   /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
   /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and
@@ -2942,6 +2992,11 @@ model Task {
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
   comments     TaskComment[]
+  completionEvidence TaskCompletionEvidence[]
+  judgmentRequests TaskJudgmentRequest[]
+  /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
+  /// criterion, and retries return that same event rather than minting a second judgment.
+  humanSignoffs TaskHumanSignoff[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3025,6 +3080,133 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// An explicit, immutable claim that structured completion evidence was submitted for a Task.
+/// This is deliberately neither a Task status transition nor a TaskComment inference. Source ids
+/// are snapshots rather than relations so execution retention cannot erase accepted provenance.
+model TaskCompletionEvidence {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_completion_evidence_task_fkey")
+
+  actorType  CreatorType @map("actor_type")
+  actorId    String      @map("actor_id") @db.Uuid
+  submittedAt DateTime   @default(now()) @map("submitted_at")
+
+  sourceSessionId String  @map("source_session_id") @db.Uuid
+  sourceAttemptId String? @map("source_attempt_id") @db.Uuid
+
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  criterion         Json
+  evidence          Json
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  revision          BigInt
+
+  idempotencyKeys TaskCompletionEvidenceIdempotency[]
+  judgmentRequests TaskJudgmentRequest[]
+
+  @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
+  @@unique([id, taskId, criterionRevision, evidenceDigest], map: "task_completion_evidence_bound_fact_key")
+  @@unique([taskId, revision], map: "task_completion_evidence_task_revision_key")
+  @@unique([taskId, actorType, actorId, sourceSessionId, criterionRevision, evidenceDigest], map: "task_completion_evidence_stable_fact_key")
+  @@index([taskId, submittedAt, id], map: "task_completion_evidence_task_submitted_idx")
+  @@map("task_completion_evidence")
+}
+
+/// Caller retry keys are separate rows so distinct keys for the same stable fact both replay it.
+model TaskCompletionEvidenceIdempotency {
+  id             String @id @default(uuid(7)) @db.Uuid
+  taskId         String @map("task_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  evidenceId     String @map("evidence_id") @db.Uuid
+  evidence       TaskCompletionEvidence @relation(fields: [evidenceId, taskId], references: [id, taskId], onDelete: Cascade, map: "task_completion_evidence_idempotency_evidence_fkey")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, idempotencyKey], map: "task_completion_evidence_idempotency_task_key")
+  @@index([evidenceId], map: "task_completion_evidence_idempotency_evidence_idx")
+  @@map("task_completion_evidence_idempotency")
+}
+
+/// A person's explicit judgment that the task's HUMAN_SIGNOFF criterion is satisfied.
+///
+/// This is an event, not a disguised status edit: signer, server timestamp and evidence are all
+/// non-null, and the service derives Task.status from its existence in the same transaction.
+model TaskHumanSignoff {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  taskId     String   @unique @map("task_id") @db.Uuid
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestId  String   @unique @map("request_id") @db.Uuid
+  request    TaskJudgmentRequest @relation(fields: [requestId, taskId, evidenceDigest], references: [id, taskId, evidenceDigest], onDelete: Restrict, map: "task_human_signoff_request_fact_fkey")
+  signedById String   @map("signed_by_id") @db.Uuid
+  signedBy   User     @relation(fields: [signedById], references: [id])
+  evidenceDigest String @map("evidence_digest") @db.Char(64)
+  evidence   String
+  signedAt   DateTime @default(now()) @map("signed_at")
+
+  @@unique([requestId, taskId, evidenceDigest], map: "task_human_signoff_request_fact_key")
+  @@index([signedById, signedAt(sort: Desc)])
+  @@map("task_human_signoff")
+}
+
+/// The durable question created for exactly one criterion snapshot and evidence digest.
+///
+/// `recipientId` is deliberately text: an account owner, Session and verifier Task are UUIDs
+/// today, but the discriminator is the authority boundary and callers must never infer one kind
+/// from another merely because their identifiers share a representation.
+model TaskJudgmentRequest {
+  id       String @id @default(uuid(7)) @db.Uuid
+  taskId   String @map("task_id") @db.Uuid
+  ownerId  String @map("owner_id") @db.Uuid
+  task     Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_judgment_request_task_fkey")
+
+  evidenceId       String @map("evidence_id") @db.Uuid
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  evidence           TaskCompletionEvidence @relation(fields: [evidenceId, taskId, criterionRevision, evidenceDigest], references: [id, taskId, criterionRevision, evidenceDigest], onDelete: Restrict, map: "task_judgment_request_evidence_fact_fkey")
+
+  kind          TaskCompletionCriterion
+  recipientType TaskJudgmentRecipientType @map("recipient_type")
+  recipientId   String @map("recipient_id")
+  status        TaskJudgmentRequestStatus @default(OPEN)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedByType String? @map("decided_by_type")
+  decidedById String? @map("decided_by_id")
+  decision    TaskJudgmentDecision?
+  supersededAt DateTime? @map("superseded_at")
+  supersededById String? @map("superseded_by_id") @db.Uuid
+  supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)
+  supersedes TaskJudgmentRequest[] @relation("JudgmentRequestSupersession")
+
+  executableResult TaskExecutableJudgmentResult?
+  humanSignoff TaskHumanSignoff?
+
+  @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
+  @@unique([taskId, criterionRevision, evidenceDigest, kind], map: "task_judgment_request_fact_key")
+  @@index([taskId, status, createdAt(sort: Desc)], map: "task_judgment_request_task_status_idx")
+  @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
+  @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
+  @@map("task_judgment_request")
+}
+
+/// The command observation that decides an EXECUTABLE request. A comment may render it, but this
+/// row—not prose—is the fact consumed by completion derivation.
+model TaskExecutableJudgmentResult {
+  id               String @id @default(uuid(7)) @db.Uuid
+  requestId        String @unique @map("request_id") @db.Uuid
+  request          TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  command          String
+  expectedExitCode Int @map("expected_exit_code")
+  actualExitCode   Int @map("actual_exit_code")
+  rawOutput        String @map("raw_output")
+  recordedById     String @map("recorded_by_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  @@index([recordedAt(sort: Desc)], map: "task_executable_judgment_result_recorded_idx")
+  @@map("task_executable_judgment_result")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).

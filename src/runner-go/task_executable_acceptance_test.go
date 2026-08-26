@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -20,6 +22,41 @@ func TestTaskAcceptanceCommandProducesRawOutputAndExitCodeWithoutAModel(t *testi
 	)
 	if output != "raw output" || exitCode != 7 {
 		t.Fatalf("shell result = (%q, %d), want raw output and exit 7", output, exitCode)
+	}
+}
+
+func TestTaskAcceptanceCommandEnvironmentContract(t *testing.T) {
+	execDir := t.TempDir()
+	t.Setenv("N1_RUNNER_VALUE", "runner")
+	t.Setenv("N1_OVERRIDE", "runner")
+	t.Setenv("ORBIT_TASK_ID", "stale-task-context")
+	output, exitCode := runShellTurn(
+		context.Background(),
+		execDir,
+		`printf '%s\n%s\n%s\n%s\n%s' "$PWD" "$N1_RUNNER_VALUE" "$N1_AGENT_VALUE" "$N1_OVERRIDE" "${ORBIT_TASK_ID-unset}"`,
+		func(string, map[string]interface{}) {},
+		"acceptance-environment",
+		map[string]string{
+			"N1_AGENT_VALUE": "agent",
+			"N1_OVERRIDE":    "agent",
+			"ORBIT_TASK_ID":  "agent-task-context",
+		},
+	)
+	want := strings.Join([]string{execDir, "runner", "agent", "agent", "unset"}, "\n")
+	if exitCode != 0 || output != want {
+		t.Fatalf("shell environment = (%q, %d), want (%q, 0)", output, exitCode, want)
+	}
+
+	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "task-completion-criteria.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, contract := range []string{
+		"session execution directory", "runner process environment", "COORDINATOR_PG_URL",
+	} {
+		if !strings.Contains(string(doc), contract) {
+			t.Errorf("executable environment documentation omits %q", contract)
+		}
 	}
 }
 

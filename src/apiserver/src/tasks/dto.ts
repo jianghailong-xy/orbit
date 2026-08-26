@@ -7,16 +7,19 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
   MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
+import type { CreatorType } from '@prisma/client';
 import { IsPublicId } from '../common/public-id';
 import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
@@ -25,10 +28,15 @@ import {
   TaskCompletionPolicyValue,
   TaskVerdictValue,
 } from '../projects/task-aggregation';
+import {
+  TASK_COMPLETION_CRITERIA,
+  type TaskCompletionCriterionValue,
+} from './task-completion-criterion';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
 const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
+const TASK_COMPLETION_CRITERION_VALUES = [...TASK_COMPLETION_CRITERIA];
 const TASK_TERMINAL_REASON_VALUES = [...TASK_TERMINAL_REASONS];
 
 /**
@@ -40,6 +48,84 @@ export const TASK_LABEL_MAX_LENGTH = 64;
 
 /** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
 export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
+
+/** One explicit completion-evidence submission. The source is caller identity, never payload prose. */
+export class SubmitTaskCompletionEvidenceDto {
+  @IsPublicId()
+  sourceSessionId!: string;
+
+  @IsObject()
+  evidence!: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey?: string;
+}
+
+/** Runner/MCP submissions take their source Session from the authenticated execution header. */
+export class SubmitRunnerTaskCompletionEvidenceDto {
+  @IsObject()
+  evidence!: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey?: string;
+}
+
+/** The shared REST/runner/CLI/MCP read shape; every provenance and version field is required. */
+export class TaskCompletionEvidenceDto {
+  @IsPublicId()
+  id!: string;
+  @IsPublicId()
+  taskId!: string;
+  actorType!: CreatorType;
+  @IsPublicId()
+  actorId!: string;
+  submittedAt!: Date;
+  @IsPublicId()
+  sourceSessionId!: string;
+  @IsOptional()
+  @IsPublicId()
+  sourceAttemptId!: string | null;
+  criterionRevision!: string;
+  criterion!: Record<string, unknown>;
+  evidence!: Record<string, unknown>;
+  evidenceDigest!: string;
+  revision!: string;
+  idempotencyKeys!: string[];
+  judgmentRequest!: TaskJudgmentRequestDto;
+}
+
+/** One durable, evidence-bound request and the explicit principal responsible for deciding it. */
+export class TaskJudgmentRequestDto {
+  @IsPublicId()
+  id!: string;
+  @IsPublicId()
+  taskId!: string;
+  @IsPublicId()
+  evidenceId!: string;
+  criterionRevision!: string;
+  evidenceDigest!: string;
+  kind!: TaskCompletionCriterionValue;
+  recipientType!: 'SYSTEM_EXECUTABLE_EVALUATOR' | 'VERIFIER_TASK' | 'ACCOUNT_OWNER';
+  recipientId!: string;
+  status!: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
+  createdAt!: Date;
+  decidedAt!: Date | null;
+  decidedByType!: string | null;
+  @IsOptional()
+  @IsPublicId()
+  decidedById!: string | null;
+  decision!: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
+  supersededAt!: Date | null;
+  @IsOptional()
+  @IsPublicId()
+  supersededById!: string | null;
+}
 
 /**
  * Unit L4: this write DECLARES that it crosses into another project.
@@ -112,9 +198,13 @@ export class CreateTaskDto {
   // read back from the project at admission time, so a key that was valid when the criteria said
   // one thing does not stay valid after a person rewrites them.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
-  // L0 acceptance is intentionally only this pair: one command, one expected exit code.
+  // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
+  // One ordinary completion criterion. Omission is the compatibility spelling of HUMAN_SIGNOFF;
+  // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
+  @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
+  completionCriterion?: TaskCompletionCriterionValue;
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
@@ -301,9 +391,13 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string | null;
-  // Null/null clears L0 acceptance; omission preserves the corresponding stored value.
+  // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;
+  // Omit to preserve it. A criterion is never nullable: HUMAN_SIGNOFF is the explicit normal
+  // choice rather than clearing the field or escalating after another criterion failed.
+  @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
+  completionCriterion?: TaskCompletionCriterionValue;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // Three-state like dueDate above: omit to keep the current schedule, null to cancel it, an ISO
   // instant to (re)schedule. Rescheduling a task whose dispatch is in flight is safe — the
@@ -364,6 +458,22 @@ export class UpdateTaskDto {
   @IsString({ each: true })
   @MaxLength(TASK_LABEL_MAX_LENGTH, { each: true })
   labels?: string[];
+}
+
+/** The evidence a person signs, with signer and timestamp supplied by the server. */
+export class SignoffTaskDto {
+  @IsPublicId()
+  requestId!: string;
+
+  @IsString()
+  @MinLength(64)
+  @MaxLength(64)
+  @Matches(/^[0-9a-fA-F]{64}$/)
+  evidenceDigest!: string;
+
+  @IsString()
+  @MinLength(1)
+  evidence!: string;
 }
 
 export class AddDependencyDto {
