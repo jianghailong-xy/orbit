@@ -1018,6 +1018,10 @@ export interface RunInboxResponse {
    *  must fail the steer visibly instead: that control plane's turn-complete does not read
    *  `subtype`, so a `steer_requeue` sent to it would ack the row and lose the message. */
   steerRequeue?: boolean;
+  /** True only for the server-generated shell turn that runs this task's one L0 acceptance
+   *  command. The runner must execute it synchronously even when the command ends in `&`, because
+   *  only a completed process has an exit code the control plane can compare. */
+  taskAcceptance?: boolean;
 }
 
 /** Runner → control plane: expire only leases owned by one dead engine process.
@@ -1107,6 +1111,12 @@ export interface TurnCompleteRequest {
   /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
   status: RunStatus;
   result?: string;
+  /** Present for a completed shell turn. The control plane consults it only for a
+   *  server-generated taskAcceptance delivery. */
+  shellExitCode?: number;
+  /** The shell's combined stdout/stderr, untrimmed. An empty string is a real raw output and is
+   *  therefore distinct from omission by older runners. */
+  shellOutput?: string;
   /** The engine's own result subtype, except for the two the runner uses to say what KIND of
    *  completion this is: `steer` settles one mid-turn message, and TURN_COMPLETE_STEER_REQUEUE
    *  un-files one. */

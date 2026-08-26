@@ -154,7 +154,15 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
   const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
   const payload = {
     tasks: [
-      { title: 'S0', ref: 's0', description: 'first', autoRunWhenReady: false, unknown: 'drop me' },
+      {
+        title: 'S0',
+        ref: 's0',
+        description: 'first',
+        autoRunWhenReady: false,
+        acceptanceCommand: 'test -f result.json',
+        acceptanceExpectedExitCode: 0,
+        unknown: 'drop me',
+      },
       {
         title: 'S1',
         dependsOnRefs: ['s0'],
@@ -179,6 +187,8 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
     ref: 's0',
     description: 'first',
     autoRunWhenReady: false,
+    acceptanceCommand: 'test -f result.json',
+    acceptanceExpectedExitCode: 0,
   });
   assert.deepEqual(kept(1), {
     title: 'S1',

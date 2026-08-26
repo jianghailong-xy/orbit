@@ -391,11 +391,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#turnComplete',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then conversation_turn, llm_usage and session_diff (rank 60). One write of the Session row per transaction (I3).',
-    identity: 'The turn id and the usage in the request body, both outside the closure — so a retry books the same numbers, not a second set.',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30); for an L0 acceptance result, its project FOR NO KEY UPDATE (rank 40) then task FOR UPDATE (rank 50); conversation_turn ACK (rank 60), then the database-maintained task dispatch epoch (rank 70). Later task_comment, llm_usage and session_diff writes add no wait edge because their parent Task/Session rows are already held. One write of the Session row per transaction (I3).',
+    identity: 'The turn id, usage and shell result in the request body are outside the closure. A queued L0 turn also binds its command in content and its expected exit code in client_turn_id, so a retry compares the same evidence rather than a declaration edited while it ran.',
     isolation: '',
     attempts: 4,
-    replay: 'The duplicate-ack check, the park, the merge-state clear and the billing accrual are all taken from the Session row read under its own lock inside the closure.',
+    replay: 'The duplicate-ack check, the park, the merge-state clear and the billing accrual are all taken from rows read under their locks inside the closure. The task status and raw-output comment are written only by the same first ACK; a victim leaves neither, and a retry re-locks the current declaration before deriving anything.',
     effects: 'None inside; the wake-up and the realtime publish are after commit.',
     answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs.',
   },
@@ -816,6 +816,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'task-lists/list-events.service.ts#blockFor', under: 'taskLists.writePolicy' },
   { at: 'tasks/reclaim-stalled-task.ts#reclaimStalledTask', under: 'runnerApi.finalize, reaper.forceFinalize' },
   { at: 'tasks/reclaim-stalled-task.ts#postRunFailureComment', under: 'runnerApi.finalize, reaper.forceFinalize' },
+  { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceComment', under: 'runnerApi.turnComplete — after the rank-40 project and rank-50 task are locked; the first conversation-turn ACK owns both the derived status and its evidence comment' },
   { at: 'tasks/tasks.service.ts#linkSupersededBy', under: 'tasks.create, tasks.update' },
   { at: 'tasks/tasks.service.ts#lockTaskForSupersessionWrite', under: 'tasks.update' },
   // Unit L3's effect-time fence. Rank 40 only — the project row its callers already take at that

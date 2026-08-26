@@ -103,7 +103,11 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
-import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
+import {
+  postExecutableAcceptanceComment,
+  postRunFailureComment,
+  reclaimStalledTask,
+} from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
@@ -197,6 +201,37 @@ const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
+
+// Existing ConversationTurn is the whole L0 execution queue. The reserved client-turn prefix
+// marks provenance and binds the expected exit code: one successful message mints one shell turn,
+// and its unique key makes a lost /turn-complete response unable to enqueue the command twice.
+const TASK_ACCEPTANCE_CLIENT_TURN_PREFIX = 'system:task-acceptance:v1:';
+
+function taskAcceptanceClientTurnId(
+  completedTurnId: string,
+  expectedExitCode: number,
+): string {
+  // The expectation is part of the queued work's identity. If somebody edits it while the shell
+  // is running, that old result must not be judged against the new declaration.
+  return `${TASK_ACCEPTANCE_CLIENT_TURN_PREFIX}${completedTurnId}:${expectedExitCode}`;
+}
+
+function taskAcceptanceExpectedExitCode(
+  clientTurnId: string | null | undefined,
+): number | null {
+  if (!clientTurnId?.startsWith(TASK_ACCEPTANCE_CLIENT_TURN_PREFIX)) return null;
+  const identity = clientTurnId.slice(TASK_ACCEPTANCE_CLIENT_TURN_PREFIX.length);
+  const separator = identity.lastIndexOf(':');
+  if (separator <= 0) return null;
+  const encoded = identity.slice(separator + 1);
+  if (!/^-?\d+$/.test(encoded)) return null;
+  const expected = Number(encoded);
+  return Number.isSafeInteger(expected) ? expected : null;
+}
+
+function isTaskAcceptanceClientTurnId(clientTurnId: string | null | undefined): boolean {
+  return taskAcceptanceExpectedExitCode(clientTurnId) != null;
+}
 
 export function runnerSupportsCapability(
   header: string | string[] | undefined,
@@ -1818,7 +1853,13 @@ export class RunnerApiController {
       const deliverSteer =
         acceptsSteer &&
         supportsMidTurnSteer(await sessionExecRuntime(tx, owned[0]), declaredCapabilities);
-      const rows = await tx.$queryRaw<Array<{ id: string; seq: number; kind: string; content: string | null }>>`
+      const rows = await tx.$queryRaw<Array<{
+        id: string;
+        seq: number;
+        kind: string;
+        content: string | null;
+        clientTurnId: string;
+      }>>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
               "delivered_at" = now(),
@@ -1896,7 +1937,7 @@ export class RunnerApiController {
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
-        RETURNING id, seq, kind, content
+        RETURNING id, seq, kind, content, "client_turn_id" AS "clientTurnId"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -1983,6 +2024,10 @@ export class RunnerApiController {
         // never reached the engine can come back here as an ordinary message (see turnComplete)
         // instead of being reported as a failure the person has to re-send by hand.
         steerRequeue: t.kind === 'steer' ? true : undefined,
+        taskAcceptance:
+          t.kind === 'shell' && isTaskAcceptanceClientTurnId(t.clientTurnId)
+            ? true
+            : undefined,
       };
     }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
   }
@@ -2209,12 +2254,69 @@ export class RunnerApiController {
           retryAt: true,
         },
       });
+      // Read the row being completed before changing it. A reserved shell turn is the one path
+      // below that may write its Task, so it pre-locks project → task now — before the
+      // conversation-turn ACK — and later applies the derived outcome only if that ACK wins.
+      const completedTurn = await tx.conversationTurn.findFirst({
+        where: { id: dto.turnId, sessionId },
+        select: { id: true, kind: true, clientTurnId: true, content: true },
+      });
+      const queuedAcceptanceExpectedExitCode = taskAcceptanceExpectedExitCode(
+        completedTurn?.clientTurnId,
+      );
+      const taskAcceptanceTurn =
+        completedTurn?.kind === 'shell'
+        && queuedAcceptanceExpectedExitCode != null;
+      let lockedAcceptanceTask: {
+        id: string;
+        status: TaskStatus;
+        projectId: string | null;
+        acceptanceCommand: string | null;
+        acceptanceExpectedExitCode: number | null;
+      } | null = null;
+      let acceptanceTaskStillInProgress = false;
+      if (taskAcceptanceTurn && current.taskId) {
+        // The first read only tells us which rank-40 project row to take. If the task moves while
+        // we wait, the locked re-read below disagrees and this attempt stays unsettled for L2;
+        // taking the new project after the task would invert the canonical order.
+        const taskProject = await tx.task.findUnique({
+          where: { id: current.taskId },
+          select: { projectId: true },
+        });
+        if (taskProject?.projectId) {
+          await tx.$queryRaw`
+            SELECT "id" FROM "project"
+            WHERE "id" = ${taskProject.projectId}::uuid
+            FOR NO KEY UPDATE`;
+        }
+        const rows = await tx.$queryRaw<Array<{
+          id: string;
+          status: TaskStatus;
+          projectId: string | null;
+          acceptanceCommand: string | null;
+          acceptanceExpectedExitCode: number | null;
+        }>>`
+          SELECT "id", "status",
+                 "project_id" AS "projectId",
+                 "acceptance_command" AS "acceptanceCommand",
+                 "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode"
+          FROM "task"
+          WHERE "id" = ${current.taskId}::uuid
+          FOR UPDATE`;
+        acceptanceTaskStillInProgress = rows[0]?.status === TaskStatus.IN_PROGRESS;
+        if (rows[0]?.projectId === (taskProject?.projectId ?? null)) {
+          lockedAcceptanceTask = rows[0] ?? null;
+        }
+      }
       // A steer settles only itself. It joined a turn that is still running — the `result`
       // that ends that turn belongs to the message it was folded into, and the slot, the
       // billing and the session's status all belong there too. So this acks the steer's own
       // row and stops: no numTurns, no parking, no terminal transition, and in particular no
       // FAILED session when a steer merely failed to reach the engine (the runner reports
       // that as a user_delivery event, which is where a person can act on it).
+      // Keep the explicit kind-qualified read: besides making the steer boundary self-contained,
+      // it preserves the narrow query shape every caller and regression fixture has always relied
+      // on. The completed-turn read above serves the L0 shell path; neither query mutates the row.
       const steering = await tx.conversationTurn.findFirst({
         where: { id: dto.turnId, sessionId, kind: 'steer' },
         select: { id: true },
@@ -2304,8 +2406,10 @@ export class RunnerApiController {
       // it's what the list must show. The session stays resumable, so retrying is still one
       // message away. A task-bound session additionally reclaims its task as FAILED (it
       // would otherwise sit IN_PROGRESS with nothing watching).
-      const failSession = dto.status === RunStatus.FAILED;
-      const failTask = failSession && !!current.taskId;
+      let failSession = dto.status === RunStatus.FAILED;
+      // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
+      // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
+      const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
@@ -2350,15 +2454,111 @@ export class RunnerApiController {
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
+      let acceptanceTaskChanged = false;
+      let acceptanceFailureReason: string | null = null;
+      if (
+        taskAcceptanceTurn
+        && lockedAcceptanceTask?.status === TaskStatus.IN_PROGRESS
+        && lockedAcceptanceTask.acceptanceCommand != null
+        && lockedAcceptanceTask.acceptanceExpectedExitCode != null
+        && lockedAcceptanceTask.acceptanceExpectedExitCode === queuedAcceptanceExpectedExitCode
+        && completedTurn?.content === lockedAcceptanceTask.acceptanceCommand
+        && dto.status === RunStatus.SUCCEEDED
+        && Number.isInteger(dto.shellExitCode)
+        && typeof dto.shellOutput === 'string'
+      ) {
+        const actualExitCode = dto.shellExitCode!;
+        const expectedExitCode = lockedAcceptanceTask.acceptanceExpectedExitCode;
+        const derivedStatus = actualExitCode === expectedExitCode
+          ? TaskStatus.DONE
+          : TaskStatus.FAILED;
+        // The command, expectation and IN_PROGRESS state are repeated in the write even though
+        // their row is locked: they make the compare-and-set visible in SQL and fail closed if
+        // this code is ever moved away from the lock without its guard.
+        const changed = await tx.task.updateMany({
+          where: {
+            id: lockedAcceptanceTask.id,
+            status: TaskStatus.IN_PROGRESS,
+            acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
+            acceptanceExpectedExitCode: expectedExitCode,
+          },
+          data: { status: derivedStatus },
+        });
+        if (changed.count > 0) {
+          await postExecutableAcceptanceComment(
+            tx,
+            lockedAcceptanceTask.id,
+            lockedAcceptanceTask.acceptanceCommand,
+            expectedExitCode,
+            actualExitCode,
+            stripNul(dto.shellOutput),
+            derivedStatus,
+          );
+          acceptanceTaskChanged = true;
+          if (derivedStatus === TaskStatus.FAILED) {
+            failSession = true;
+            acceptanceFailureReason =
+              `acceptance command exited ${actualExitCode}; expected ${expectedExitCode}`;
+          }
+        }
+      }
+      // A reserved turn whose Task still needs an answer but whose evidence cannot be compared is
+      // an unsettled attempt, not an idle conversation. End the Session so T2's
+      // ATTEMPT_ENDED_UNSETTLED fact can wake L2; leave the Task IN_PROGRESS because no exit-code
+      // judgement was actually possible. This includes an older runner omitting the new fields
+      // and a declaration edited while its old command was running.
+      if (taskAcceptanceTurn && acceptanceTaskStillInProgress && !acceptanceTaskChanged) {
+        failSession = true;
+        acceptanceFailureReason = dto.status === RunStatus.FAILED
+          ? (dto.result || 'acceptance command did not return a comparable result')
+          : 'acceptance command result no longer matches the current declaration';
+      }
+      // A successful model turn on a task with L0 acceptance queues exactly one existing shell
+      // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
+      // boundary: either both commit or neither does, so retrying /turn-complete cannot run the
+      // command twice. Tasks without the pair do not enter this branch.
+      if (
+        completedTurn?.kind === 'message'
+        && dto.status === RunStatus.SUCCEEDED
+        && current.taskId
+      ) {
+        const executable = await tx.task.findUnique({
+          where: { id: current.taskId },
+          select: {
+            status: true,
+            acceptanceCommand: true,
+            acceptanceExpectedExitCode: true,
+          },
+        });
+        if (
+          executable?.status === TaskStatus.IN_PROGRESS
+          && executable.acceptanceCommand != null
+          && executable.acceptanceExpectedExitCode != null
+        ) {
+          const last = await tx.conversationTurn.aggregate({
+            where: { sessionId },
+            _max: { seq: true },
+          });
+          await tx.conversationTurn.create({
+            data: {
+              sessionId,
+              seq: (last._max.seq ?? 0) + 1,
+              clientTurnId: taskAcceptanceClientTurnId(
+                completedTurn.id,
+                executable.acceptanceExpectedExitCode,
+              ),
+              kind: 'shell',
+              content: executable.acceptanceCommand,
+              status: 'PENDING',
+            },
+          });
+        }
+      }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
       // would make a shell-first session (claude never received a message) try to --resume a
       // conversation that was never established, failing with "No conversation found".
-      const completed = await tx.conversationTurn.findUnique({
-        where: { id: dto.turnId },
-        select: { kind: true },
-      });
-      const turnInc = completed?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
+      const turnInc = completedTurn?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
       // A steer still queued when its turn ends has nothing left to steer, so it becomes
       // what it would have been had it arrived a moment later: the next ordinary message.
       // Same row, same seq, same clientTurnId — the kind is the only thing that was ever
@@ -2399,7 +2599,7 @@ export class RunnerApiController {
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failSession
             ? {
-                error: dto.result || 'run failed',
+                error: (acceptanceFailureReason ?? dto.result) || 'run failed',
                 finishedAt: new Date(),
                 cancelRequestedAt: new Date(),
               }
@@ -2491,6 +2691,7 @@ export class RunnerApiController {
         taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
+      taskReclaimed = taskReclaimed || acceptanceTaskChanged;
       return {
         applied: true,
         steer: false,

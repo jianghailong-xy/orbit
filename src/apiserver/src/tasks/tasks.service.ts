@@ -307,6 +307,10 @@ type IdempotentTaskWrite = {
   turnId: string;
   title: string;
   description?: string | null;
+  // Not part of the frozen key preimage (old rows must remain replayable), but checked on a
+  // winner so two same-title creates in one turn cannot silently disagree about what runs.
+  acceptanceCommand?: string | null;
+  acceptanceExpectedExitCode?: number | null;
 };
 
 export type IdempotentTaskOperation = 'CREATE_TASK';
@@ -352,6 +356,8 @@ export function buildTaskExecutionPrompt(task: {
   title: string;
   description?: string | null;
   acceptanceCriteria?: string | null;
+  acceptanceCommand?: string | null;
+  acceptanceExpectedExitCode?: number | null;
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
@@ -366,6 +372,8 @@ export function buildTaskExecutionPrompt(task: {
   // LIST's work is done and neither of those runs is doing it, whereas a task's own acceptance
   // criteria are about that task whoever is running it.
   const acceptance = task.acceptanceCriteria?.trim();
+  const executableAcceptance =
+    task.acceptanceCommand != null && task.acceptanceExpectedExitCode != null;
   return (
     `请开始执行任务「${task.title}」。\n\n` +
     (task.description ? `任务描述：\n${task.description}\n\n` : '') +
@@ -374,7 +382,12 @@ export function buildTaskExecutionPrompt(task: {
     `请按以下步骤进行：\n` +
     `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
     `2. 执行任务。\n` +
-    (systemRun
+    (executableAcceptance
+      ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 L0 验收命令` +
+        `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
+        `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
+        ` coordinator 审批这个机械结论。\n`
+      : systemRun
       // A foreman and a verifier finish themselves, and the server lets them: their own run IS the
       // deliverable, and nothing else in the system completes either one. Told the ordinary step 3
       // they would be handed two contradictory instructions in one prompt — this one saying not to
@@ -569,6 +582,8 @@ export const TASK_LIST_SELECT = {
   projectId: true,
   parentTaskId: true,
   acceptanceCriteria: true,
+  acceptanceCommand: true,
+  acceptanceExpectedExitCode: true,
   labels: true,
   creatorSessionId: true,
   autoRunWhenReady: true,
@@ -2358,8 +2373,48 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return loggedRetry(this.logger, operation, policy);
   }
 
+  /**
+   * One Task has either no L0 acceptance or exactly one command/expected-exit pair. Keeping the
+   * check here as well as in PostgreSQL gives API callers a useful reason instead of a constraint
+   * name; there is deliberately no normalization because the command executed must be the command
+   * the caller stored.
+   */
+  private assertExecutableAcceptance(
+    command: string | null,
+    expectedExitCode: number | null,
+    completionPolicy: string,
+    verifiesTaskId: string | null,
+  ): void {
+    if ((command == null) !== (expectedExitCode == null)) {
+      throw new BadRequestException(
+        'acceptanceCommand and acceptanceExpectedExitCode must be set or cleared together',
+      );
+    }
+    if (command != null && command.trim() === '') {
+      throw new BadRequestException('acceptanceCommand must not be blank');
+    }
+    if (command != null && completionPolicy !== 'MANUAL') {
+      throw new BadRequestException(
+        'Executable acceptance requires completionPolicy MANUAL — use the command for L0 or an '
+          + 'aggregate/verification policy for L1, not both',
+      );
+    }
+    if (command != null && verifiesTaskId != null) {
+      throw new BadRequestException(
+        'A verification task cannot use executable acceptance — its independent verdict is the '
+          + 'L1 decision',
+      );
+    }
+  }
+
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
+    this.assertExecutableAcceptance(
+      dto.acceptanceCommand ?? null,
+      dto.acceptanceExpectedExitCode ?? null,
+      dto.completionPolicy ?? 'MANUAL',
+      dto.verifiesTaskId ?? null,
+    );
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
@@ -2381,6 +2436,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             turnId,
             title: dto.title,
             description: dto.description,
+            acceptanceCommand: dto.acceptanceCommand,
+            acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
           }
         : undefined;
     const idempotencyKey = idempotentWrite ? this.taskIdempotencyKey(idempotentWrite) : undefined;
@@ -2756,6 +2813,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // means. Omitted leaves it NULL, which is every task that is not a check of something.
       verifiesTaskId: dto.verifiesTaskId,
       acceptanceCriteria: dto.acceptanceCriteria,
+      acceptanceCommand: dto.acceptanceCommand,
+      acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -2798,6 +2857,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!items.length) throw new BadRequestException('tasks is required');
     if (items.length > TASK_BATCH_CREATE_MAX)
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
+
+    for (const item of items) {
+      this.assertExecutableAcceptance(
+        item.acceptanceCommand ?? null,
+        item.acceptanceExpectedExitCode ?? null,
+        item.completionPolicy ?? 'MANUAL',
+        item.verifiesTaskId ?? item.verifiesRef ?? null,
+      );
+    }
 
     const positionByRef = new Map<string, number>();
     items.forEach((item, index) => {
@@ -3152,6 +3220,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             turnId,
             title: item.title,
             description: item.description,
+            acceptanceCommand: item.acceptanceCommand,
+            acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
           }
         : undefined;
     const replayed = await Promise.all(validated.map(async (item) => {
@@ -3901,6 +3971,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         title: item.title,
         description: item.description ?? null,
         acceptanceCriteria: item.acceptanceCriteria ?? null,
+        acceptanceCommand: item.acceptanceCommand ?? null,
+        acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
         listId: item.listId ?? null,
@@ -4587,6 +4659,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
     if (existing.ownerId !== ownerId) mismatch('different account');
     if ((existing.creatorSessionId ?? null) !== write.sessionId) mismatch('different session');
+    if ((existing.acceptanceCommand ?? null) !== (write.acceptanceCommand ?? null)) {
+      mismatch('different acceptance command');
+    }
+    if (
+      (existing.acceptanceExpectedExitCode ?? null)
+      !== (write.acceptanceExpectedExitCode ?? null)
+    ) {
+      mismatch('different expected exit code');
+    }
     // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
     // normalised payload — or it is not this write's earlier attempt.
     const rebuilt = this.taskIdempotencyKey({
@@ -6397,6 +6478,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // mutated in place by PublicIdInterceptor, so joining that response's single-flight promise
     // could turn ids into their display spelling before this write uses them as database keys.
     const before = await this.loadDetail(ownerId, id);
+    this.assertExecutableAcceptance(
+      dto.acceptanceCommand === undefined
+        ? before.acceptanceCommand
+        : (dto.acceptanceCommand ?? null),
+      dto.acceptanceExpectedExitCode === undefined
+        ? before.acceptanceExpectedExitCode
+        : (dto.acceptanceExpectedExitCode ?? null),
+      dto.completionPolicy ?? before.completionPolicy,
+      dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null),
+    );
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -6464,6 +6555,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       model: dto.model === undefined ? undefined : (dto.model ?? null),
       acceptanceCriteria:
         dto.acceptanceCriteria === undefined ? undefined : (dto.acceptanceCriteria ?? null),
+      acceptanceCommand:
+        dto.acceptanceCommand === undefined ? undefined : (dto.acceptanceCommand ?? null),
+      acceptanceExpectedExitCode:
+        dto.acceptanceExpectedExitCode === undefined
+          ? undefined
+          : (dto.acceptanceExpectedExitCode ?? null),
       autoRunWhenReady: dto.autoRunWhenReady,
       completionPolicy: dto.completionPolicy,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
@@ -10087,6 +10184,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         description: true,
         // What the run is judged against, read here because the prompt now carries it.
         acceptanceCriteria: true,
+        acceptanceCommand: true,
+        acceptanceExpectedExitCode: true,
         projectId: true,
         provider: true,
         model: true,
@@ -10458,6 +10557,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     title: string;
     description?: string | null;
     acceptanceCriteria?: string | null;
+    acceptanceCommand?: string | null;
+    acceptanceExpectedExitCode?: number | null;
     isForeman?: boolean;
     verifiesTaskId?: string | null;
     list?: { instructions?: string | null } | null;
@@ -10560,6 +10661,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         description: true,
         // What the run is judged against, read here because the prompt now carries it.
         acceptanceCriteria: true,
+        acceptanceCommand: true,
+        acceptanceExpectedExitCode: true,
         projectId: true,
         provider: true,
         model: true,

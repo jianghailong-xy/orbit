@@ -59,6 +59,7 @@ before(async () => {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       session_id uuid NOT NULL,
       seq int NOT NULL,
+      client_turn_id text NOT NULL DEFAULT gen_random_uuid()::text,
       kind text NOT NULL,
       content text,
       status text NOT NULL,

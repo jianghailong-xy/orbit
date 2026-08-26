@@ -13,6 +13,8 @@ const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 function promptFor(task: {
   description?: string | null;
   acceptanceCriteria?: string | null;
+  acceptanceCommand?: string | null;
+  acceptanceExpectedExitCode?: number | null;
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
@@ -246,6 +248,22 @@ test('step 4 says FAILED, and says it instead of IN_PROGRESS', async () => {
   // ('再将状态置为 IN_PROGRESS') is what must be gone, and it is now a prohibition instead.
   assert.match(step4, /不要置为 IN_PROGRESS/);
   assert.equal(/再将状态置为 IN_PROGRESS/.test(step4), false, step4);
+});
+
+test('an L0 task delegates its terminal status to the one declared command', async () => {
+  const text = await (await promptFor({
+    description: 'x',
+    acceptanceCommand: 'npm test',
+    acceptanceExpectedExitCode: 0,
+    list: null,
+  }))();
+  const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+  assert.match(step3, /唯一 L0 验收命令/);
+  assert.match(step3, /期望退出码 0/);
+  assert.match(step3, /相等则推导 DONE，否则推导 FAILED/);
+  assert.match(step3, /不要自行写 status/);
+  assert.match(step3, /不要让 coordinator 审批/);
+  assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
 });
 
 test('a system run is told to write its own DONE, because the server lets it', async () => {

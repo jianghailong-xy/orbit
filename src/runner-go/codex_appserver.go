@@ -588,7 +588,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			inflight[resp.TurnID] = true
 			inflightMu.Unlock()
 			setTurn(resp.TurnID)
-			if shCmd, isBg := splitBackground(resp.Content); isBg {
+			if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
 				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded,
@@ -605,6 +605,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
+					ShellExitCode: &shExit, ShellOutput: &shOut,
 					RuntimeSessionID: currentRuntimeSessionID(job),
 					BranchSha:        effectiveBranchSha(job.WT),
 				}); err != nil {

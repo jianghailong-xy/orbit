@@ -59,6 +59,14 @@ func splitBackground(command string) (string, bool) {
 	return command, false
 }
 
+// shellTurnBackgroundCommand applies the user-shell `&` convenience only to user turns. A Task's
+// server-generated L0 command needs a completed process and its exit code, so it always takes the
+// synchronous branch and executes resp.Content exactly as stored.
+func shellTurnBackgroundCommand(resp *RunInboxResponse) (string, bool) {
+	command, background := splitBackground(resp.Content)
+	return command, background && !resp.TaskAcceptance
+}
+
 // shortShellID derives a short, display-friendly id for a user background shell from its turn id.
 func shortShellID(turnID string) string {
 	s := strings.ReplaceAll(turnID, "-", "")

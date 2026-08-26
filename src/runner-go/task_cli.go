@@ -124,6 +124,9 @@ Options:
   --criterion-key KEY         Which of the PROJECT's acceptance criteria this work serves — a
                               key from project_get. Required of a project's judgment session,
                               optional for everybody else
+  --acceptance-command SHELL  The one L0 command; requires --acceptance-expected-exit-code
+  --acceptance-expected-exit-code N
+                              Exit code that mechanically derives DONE; every other code is FAILED
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
@@ -169,6 +172,12 @@ somebody who did not do the work can check it. It answers a different question f
 accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin, accepting only
 '-'; since --description-file reads the same stdin, the two file flags cannot be used together,
 but passing one field inline and the other on stdin is fine.
+
+--acceptance-command and --acceptance-expected-exit-code are one L0 declaration and must be
+passed together. After the execution turn, that same task session runs the command once, records
+its untrimmed combined output and actual exit code, and the server derives DONE only when the code
+matches. There is no LLM judgement and no coordinator approval on this path. If one command is
+not enough, split the task instead of encoding a workflow in the command fields.
 `,
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
 
@@ -177,12 +186,17 @@ Usage:
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId,
-parentTaskId, verifiesTaskId, acceptanceCriteria, dueDate, provider, model, dependsOnTaskIds,
-autoRunWhenReady, completionPolicy. Nothing is written unless every item is valid.
+parentTaskId, verifiesTaskId, acceptanceCriteria, acceptanceCommand,
+acceptanceExpectedExitCode, dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady,
+completionPolicy. Nothing is written unless every item is valid.
 
 "acceptanceCriteria" states per item what would settle that THAT task is done — the
 observable result somebody else can check — where "description" says what work to
 perform; the server accepts up to 4,000 characters each.
+
+"acceptanceCommand" and "acceptanceExpectedExitCode" are the optional L0 pair: one shell
+command and the one exit code that derives DONE. Set both or neither. A different exit code
+derives FAILED; needing several commands means the task should be split.
 
 To make one item depend on another item of the same batch — whose id does not exist
 yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
@@ -284,6 +298,11 @@ Options:
   --acceptance-criteria-file -
                               Read the replacement criteria from stdin; paths are rejected
   --clear-acceptance-criteria Leave the task with no acceptance criteria
+  --acceptance-command SHELL  Replace the one L0 command
+  --acceptance-expected-exit-code N
+                              Replace the exit code that mechanically derives DONE
+  --clear-executable-acceptance
+                              Clear the command and expected exit code together
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable. Name the SUBJECT of the
                               work, not its verification task — a dependency on a verified
                               task is already held until that task's check PASSES
@@ -323,6 +342,12 @@ be combined with either form. The server accepts up to 4,000 characters.
 --acceptance-criteria-file reads the replacement from stdin, accepting only '-'; since
 --description-file reads the same stdin, the two file flags cannot be used together, but passing
 one field inline and the other on stdin is fine.
+
+The executable L0 acceptance is exactly two fields: --acceptance-command and
+--acceptance-expected-exit-code. Either flag may replace its stored half, while
+--clear-executable-acceptance clears both; a task may never be left with only one. The task's own
+session runs the command and the server derives DONE/FAILED from the actual exit code, without an
+LLM verdict or coordinator approval.
 
 --parent-task-id moves this task under another task you own, and --clear-parent detaches it and
 leaves it standing on its own; omitting both leaves the parent it already has alone. A
@@ -980,6 +1005,8 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
+	acceptanceCommand := fs.String("acceptance-command", "", "the one L0 shell acceptance command")
+	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -1001,6 +1028,14 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *unassigned && flagWasSet(fs, "assignee-id") {
 		return fmt.Errorf("--unassigned and --assignee-id cannot be used together")
+	}
+	commandSet := flagWasSet(fs, "acceptance-command")
+	exitSet := flagWasSet(fs, "acceptance-expected-exit-code")
+	if commandSet != exitSet {
+		return fmt.Errorf("--acceptance-command and --acceptance-expected-exit-code must be used together")
+	}
+	if commandSet && strings.TrimSpace(*acceptanceCommand) == "" {
+		return fmt.Errorf("--acceptance-command cannot be blank")
 	}
 	// Two fields, one stdin. readCLIText sees a single field at a time, so nothing downstream can
 	// notice that the first read drains the stream and the second gets an empty string — a create
@@ -1089,6 +1124,10 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// exactly as given; only omitting the flag omits the field.
 	if criteriaSet {
 		body["acceptanceCriteria"] = criteria
+	}
+	if commandSet {
+		body["acceptanceCommand"] = *acceptanceCommand
+		body["acceptanceExpectedExitCode"] = *acceptanceExpectedExitCode
 	}
 	if flagWasSet(fs, "due-date") {
 		if strings.TrimSpace(*dueDate) == "" {
@@ -1275,6 +1314,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
 	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
+	acceptanceCommand := fs.String("acceptance-command", "", "replace the one L0 shell acceptance command")
+	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
+	clearExecutableAcceptance := fs.Bool("clear-executable-acceptance", false, "clear the command and expected exit code together")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
 	clearDependencies := fs.Bool("clear-dependencies", false, "clear all prerequisite task ids")
@@ -1350,6 +1392,15 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearAcceptanceCriteria && flagWasSet(fs, "acceptance-criteria-file") {
 		return fmt.Errorf("--clear-acceptance-criteria and --acceptance-criteria-file cannot be used together")
+	}
+	if *clearExecutableAcceptance && flagWasSet(fs, "acceptance-command") {
+		return fmt.Errorf("--clear-executable-acceptance and --acceptance-command cannot be used together")
+	}
+	if *clearExecutableAcceptance && flagWasSet(fs, "acceptance-expected-exit-code") {
+		return fmt.Errorf("--clear-executable-acceptance and --acceptance-expected-exit-code cannot be used together")
+	}
+	if flagWasSet(fs, "acceptance-command") && strings.TrimSpace(*acceptanceCommand) == "" {
+		return fmt.Errorf("--acceptance-command cannot be blank; use --clear-executable-acceptance")
 	}
 	// Two fields, one stdin — the same collision `orbit task create` has. readCLIText sees a single
 	// field at a time, so nothing downstream can notice that the first read drains the stream and the
@@ -1450,6 +1501,17 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 		body["acceptanceCriteria"] = nil
 	} else if criteriaSet {
 		body["acceptanceCriteria"] = criteria
+	}
+	if *clearExecutableAcceptance {
+		body["acceptanceCommand"] = nil
+		body["acceptanceExpectedExitCode"] = nil
+	} else {
+		if flagWasSet(fs, "acceptance-command") {
+			body["acceptanceCommand"] = *acceptanceCommand
+		}
+		if flagWasSet(fs, "acceptance-expected-exit-code") {
+			body["acceptanceExpectedExitCode"] = *acceptanceExpectedExitCode
+		}
 	}
 	if *clearDependencies {
 		body["dependsOnTaskIds"] = []string{}
@@ -1884,7 +1946,7 @@ type cliCapabilitySpec struct {
 	Mutates     bool
 }
 
-var baseCLICapabilities = []cliCapabilitySpec{
+var baseCLICapabilities = withExecutableAcceptanceCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
@@ -1904,6 +1966,30 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "tasklist_update", Argv: []string{"orbit", "task-list", "update"}, Usage: "orbit task-list update LIST_ID [options]", Arguments: []string{"[list-id] (required)", "--title <text>", "--instructions <text> | --instructions-file -", "--paused[=true|false]", "--verify-on-done[=true|false]", "--max-concurrent <n> | --clear-max-concurrent", "--foreman-workspace-id <id> | --clear-foreman", "--foreman-stall-minutes <n>", "--note <text>", "--json"}, Description: "Change a task list's dispatch policy. In a session the change is attributed to this agent (like the MCP path); headless it falls back to the runner owner. Every change is recorded as a restorable revision.", Mutates: true},
 	{Tool: "tasklist_propose_dag", Argv: []string{"orbit", "task-list", "propose-dag"}, Usage: "orbit task-list propose-dag LIST_ID --add A:B [--remove C:D] [--apply] [--json]", Arguments: []string{"[list-id] (required)", "--add <task-id>:<depends-on-id> (repeatable, sets ops)", "--remove <task-id>:<depends-on-id> (repeatable, sets ops)", "--note <text>", "--apply", "--json"}, Description: "Preview a batch of dependency changes to a list's DAG, and with --apply write it. Unlike the MCP tool this raises no approval — at a terminal the human is already the one deciding. The preview names what would be written and, more usefully, which tasks change dependency state as a result.", Mutates: true},
 	{Tool: "tasklist_delete", Argv: []string{"orbit", "task-list", "delete"}, Usage: "orbit task-list delete LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}, Description: "Delete a task list. Its tasks are not deleted — they are detached and become listless; the grouping, its standing instructions and its policy revisions are what go, and that cannot be undone. To stop dispatch without discarding them, pass --paused true to task-list update instead.", Mutates: true},
+})
+
+func withExecutableAcceptanceCapabilityArgs(capabilities []cliCapabilitySpec) []cliCapabilitySpec {
+	// Kept beside the flag implementation instead of expanding the already very wide legacy
+	// capability literals above. The capability document must name every MCP field the equivalent
+	// CLI can send; these are still only the same command/expected-exit pair, not another shape.
+	for i := range capabilities {
+		switch capabilities[i].Tool {
+		case "task_create":
+			capabilities[i].Arguments = append(
+				capabilities[i].Arguments,
+				"--acceptance-command <shell> (the one L0 command; use with --acceptance-expected-exit-code)",
+				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
+			)
+		case "task_update":
+			capabilities[i].Arguments = append(
+				capabilities[i].Arguments,
+				"--acceptance-command <shell> (replace the one L0 command)",
+				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
+				"--clear-executable-acceptance (clear both L0 fields)",
+			)
+		}
+	}
+	return capabilities
 }
 
 type cliCapability struct {

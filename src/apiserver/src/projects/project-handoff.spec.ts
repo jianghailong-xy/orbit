@@ -134,6 +134,10 @@ test('the identity binds every field an approval authorises, not just the prose'
     ['title', identity({ title: 'something else' })],
     ['description', identity({ description: 'other' })],
     ['acceptanceCriteria', identity({ acceptanceCriteria: 'other' })],
+    ['executable acceptance', identity({
+      acceptanceCommand: 'test -f result.json',
+      acceptanceExpectedExitCode: 0,
+    })],
     ['assignee', identity({ assigneeId: TASK })],
     ['list', identity({ listId: TASK })],
     ['provider', identity({ provider: 'codex' })],
@@ -158,6 +162,25 @@ test('the identity binds every field an approval authorises, not just the prose'
   for (const [what, moved_] of moved) {
     assert.notEqual(handoffPayloadDigest(moved_), base, `${what} must change the identity`);
   }
+  assert.notEqual(
+    handoffPayloadDigest(identity({
+      acceptanceCommand: 'test -f result.json',
+      acceptanceExpectedExitCode: 0,
+    })),
+    handoffPayloadDigest(identity({
+      acceptanceCommand: 'test -f result.json',
+      acceptanceExpectedExitCode: 7,
+    })),
+    'the expected exit code is part of the approved payload',
+  );
+  assert.equal(
+    handoffPayloadDigest(identity({
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+    })),
+    base,
+    'a task with no L0 command keeps its pre-T10 approval identity',
+  );
 });
 
 test('two spellings of one request are one question; two sources are two', () => {

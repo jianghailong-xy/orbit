@@ -615,6 +615,9 @@ type RunInboxResponse struct {
 	// message is gone. False here means a provably-undelivered steer is reported as a visible
 	// failure instead — worse for the person, but nothing is lost.
 	SteerRequeue bool `json:"steerRequeue,omitempty"`
+	// TaskAcceptance marks the server-generated L0 command. It always runs synchronously so the
+	// control plane receives one definitive exit code, even if its text ends in `&`.
+	TaskAcceptance bool `json:"taskAcceptance,omitempty"`
 }
 
 // AbandonedSteer is a mid-turn message a dead runner process left leased, handed to the process
@@ -671,15 +674,19 @@ type ReclaimResponse struct {
 }
 
 type TurnCompleteRequest struct {
-	LeaseOwner string                 `json:"leaseOwner,omitempty"`
-	TurnID     string                 `json:"turnId"`
-	Status     string                 `json:"status"`
-	Result     string                 `json:"result,omitempty"`
-	Subtype    string                 `json:"subtype,omitempty"`
-	NumTurns   int                    `json:"numTurns"`
-	CostUsd    float64                `json:"costUsd"`
-	Usage      *TokenUsage            `json:"usage,omitempty"`
-	ModelUsage map[string]interface{} `json:"modelUsage,omitempty"`
+	LeaseOwner string `json:"leaseOwner,omitempty"`
+	TurnID     string `json:"turnId"`
+	Status     string `json:"status"`
+	Result     string `json:"result,omitempty"`
+	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
+	// the difference between a real zero/empty result and an older runner that sent neither.
+	ShellExitCode *int                   `json:"shellExitCode,omitempty"`
+	ShellOutput   *string                `json:"shellOutput,omitempty"`
+	Subtype       string                 `json:"subtype,omitempty"`
+	NumTurns      int                    `json:"numTurns"`
+	CostUsd       float64                `json:"costUsd"`
+	Usage         *TokenUsage            `json:"usage,omitempty"`
+	ModelUsage    map[string]interface{} `json:"modelUsage,omitempty"`
 	// Provider-neutral runtime session/thread id discovered during this turn.
 	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
 	// Worktree isolation, reported each turn so the web can show a LIVE status bar (branch +

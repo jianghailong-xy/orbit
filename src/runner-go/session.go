@@ -1476,7 +1476,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				inflight[resp.TurnID] = true
 				inflightMu.Unlock()
 				setTurn(resp.TurnID)
-				if shCmd, isBg := splitBackground(resp.Content); isBg {
+				if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 					// `!cmd &`: launch detached and finish the turn now — the process keeps
 					// running, surfaced in the Background-processes tray (output + completion),
 					// not buffered into the next message's context.
@@ -1496,6 +1496,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
+						ShellExitCode: &shExit, ShellOutput: &shOut,
 						RuntimeSessionID: currentRuntimeSessionID(job),
 						BranchSha:        effectiveBranchSha(job.WT),
 					}); err != nil {

@@ -92,6 +92,8 @@ export interface HandoffPlan {
   title: string;
   description?: string | null;
   acceptanceCriteria?: string | null;
+  acceptanceCommand?: string | null;
+  acceptanceExpectedExitCode?: number | null;
   labels?: readonly string[] | null;
   /** WHO — the workspace that would execute it. */
   assigneeId?: string | null;
@@ -154,13 +156,24 @@ export interface HandoffRequestIdentity {
 export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
   const plan = identity.plan;
   const source = identity.source;
+  // Preserve every pre-T10 approval byte-for-byte when it authorises no executable acceptance.
+  // A task that does carry the new pair gets a new digest version and binds both fields, so an old
+  // approval can never be stretched to authorise a command it did not show.
+  const executableAcceptance =
+    plan.acceptanceCommand != null || plan.acceptanceExpectedExitCode != null;
   return createHash('sha256')
     .update(canonicalJson({
-      v: 2,
+      v: executableAcceptance ? 3 : 2,
       plan: {
         title: plan.title,
         description: plan.description ?? null,
         acceptanceCriteria: plan.acceptanceCriteria ?? null,
+        ...(executableAcceptance
+          ? {
+              acceptanceCommand: plan.acceptanceCommand ?? null,
+              acceptanceExpectedExitCode: plan.acceptanceExpectedExitCode ?? null,
+            }
+          : {}),
         // Order-insensitive: `normalizeTaskLabels` dedupes but preserves the caller's order, and
         // two orderings of one label set are the same task to every reader of it.
         labels: [...(plan.labels ?? [])].sort(),

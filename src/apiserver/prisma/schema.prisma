@@ -2771,6 +2771,11 @@ model Task {
   /// What would settle that this task is actually done, as opposed to reported done. The task-level
   /// counterpart of `Project.acceptanceCriteria`; nothing assembles it into a prompt in this phase.
   acceptanceCriteria String?   @map("acceptance_criteria")
+  /// L0 acceptance: one shell command and the exit code that mechanically settles this task.
+  /// The database constraint added with these columns requires both or neither; there is no
+  /// command list, expression language, or separate acceptance entity behind them.
+  acceptanceCommand          String? @map("acceptance_command")
+  acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
   /// Free-text labels, written by whoever files the task (in practice the agent creating it).
   /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
   /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and

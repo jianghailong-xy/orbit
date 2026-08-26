@@ -1667,7 +1667,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				}
 				inflight[resp.TurnID] = true
 				setTurn(resp.TurnID)
-				if shellCommand, background := splitBackground(resp.Content); background {
+				if shellCommand, background := shellTurnBackgroundCommand(resp); background {
 					runShellTurnBackground(bg, execDir, scratchDir, shellCommand, resp.TurnID, emit, job.Agent.Env)
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
@@ -1681,6 +1681,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, output))
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode), Subtype: "shell",
+						ShellExitCode: &exitCode, ShellOutput: &output,
 						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)

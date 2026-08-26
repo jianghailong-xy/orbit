@@ -214,7 +214,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			}
 			seen[resp.TurnID] = true
 			setTurn(resp.TurnID)
-			if shCmd, isBg := splitBackground(resp.Content); isBg {
+			if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
 				if err := completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell", RuntimeSessionID: currentRuntimeSessionID(job)}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
@@ -224,7 +224,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 				shOut, shExit := runShellTurn(shellCtx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
 				stopShell()
 				pendingShellCtx = append(pendingShellCtx, fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-				if err := completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell", RuntimeSessionID: currentRuntimeSessionID(job)}); err != nil {
+				if err := completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", shExit), ShellExitCode: &shExit, ShellOutput: &shOut, Subtype: "shell", RuntimeSessionID: currentRuntimeSessionID(job)}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
 			}
