@@ -165,7 +165,8 @@ test('the run executing a task cannot write that task DONE', async () => {
   assert.equal(body.code, 'SELF_REPORTED_DONE_REFUSED');
   assert.equal(body.requiredAction, 'REPORT_EVIDENCE_AND_LET_ACCEPTANCE_DECIDE');
   // And the message says what to do instead, in the terms of the tools the reader has.
-  assert.match(String(body.message), /task_comment/);
+  assert.match(String(body.message), /task_evidence_submit/);
+  assert.doesNotMatch(String(body.message), /task_comment/);
   assert.match(String(body.message), /exit codes/);
   assert.match(String(body.message), /acceptance criterion/);
   assert.match(String(body.message), /FAILED/);

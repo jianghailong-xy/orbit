@@ -631,6 +631,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503. Capped at 2 attempts with a 60s per-attempt deadline: a cascade this size should absorb one collision, not spend four deadlines on the same one.',
   },
   {
+    at: 'tasks/task-completion-evidence.service.ts#submit',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), then task_completion_evidence and task_completion_evidence_idempotency children (rank 60). The Session and optional TaskAttempt provenance reads take no row lock and no FK is written to either snapshot id.',
+    identity: 'The caller idempotency key when supplied, otherwise the stable fact tuple (task, actor type/id, source Session, criterion revision, evidence digest). Both are unique in PostgreSQL; two keys may intentionally name the same fact.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the Task, verifies the source Session belongs to it, derives the current criterion snapshot and allocates MAX(revision)+1 inside the closure. A committed retry key returns its original row even if criteria later changed; a stable-fact winner is read back instead of appended again.',
+    effects: 'None. The transaction writes only the append-only evidence row and optional retry-key row; it does not update Task/Session state, create a comment, publish realtime, notify or nudge.',
+    answer: 'Typed 503 from the global boundary after retry exhaustion; reused keys with different facts are an explicit 409.',
+  },
+  {
     at: 'tasks/tasks.service.ts#create',
     shape: 'TX_RETRIED',
     locks: 'user FOR UPDATE (rank 10, only when it links), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40, only when it retires a predecessor), then the task INSERT and its edges (50/60).',

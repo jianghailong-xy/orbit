@@ -245,6 +245,37 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_evidence_list":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.listTaskEvidence(id)
+		if err != nil {
+			return toolResult("list task evidence failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "task_evidence_submit":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("task_evidence_submit requires an Orbit task Session", true)
+		}
+		evidence, ok := args["evidence"].(map[string]interface{})
+		if !ok || evidence == nil {
+			return toolResult("evidence must be one JSON object", true)
+		}
+		body := map[string]interface{}{"evidence": evidence}
+		copyIfPresent(body, args, "idempotencyKey")
+		raw, err := s.t.submitTaskEvidence(id, s.agentID, s.sessionID, body)
+		if err != nil {
+			return toolResult("submit task evidence failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_get":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1485,6 +1516,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_get",
 			"description": "Get one task with its comments and linked sessions.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name":        "task_evidence_list",
+			"description": "List the task's explicit structured completion-evidence revisions in stable task-local order. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name":        "task_evidence_submit",
+			"description": "Submit structured completion evidence as a first-class immutable fact from the current task Session. A retry key and canonical evidence digest replay the same revision; substantively changed evidence appends one. This does not write task.status, change Session state, add a comment or send a notification.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"evidence": map[string]interface{}{
+					"type":        "object",
+					"description": "Structured facts supporting completion, such as commands, raw outputs, exit codes and artifact hashes. Object-key order is not significant; array order and string whitespace are.",
+				},
+				"idempotencyKey": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"maxLength":   200,
+					"description": "Stable identity reused for every transport retry of this submission.",
+				},
+			}, "evidence"),
 		},
 		{
 			"name":        "task_attribution",

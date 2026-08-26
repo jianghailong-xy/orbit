@@ -141,6 +141,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // (contract §3 SC7); what puts them here is that a person handed one has somewhere to hand it.
   'discoveredFromProjectId',
   'sourceSessionId',
+  // N10 completion evidence keeps both immutable source identities. The attempt is nullable for
+  // legacy/manual Sessions, but when present it is as followable as the source Session beside it.
+  'sourceAttemptId',
+  'evidenceId',
   // Unit L4's recorded answer about one crossing (migration 0155): the two ends, the session that
   // asked, the person who answered and the one task the yes was spent on. Every one of them is an
   // address a reader follows — open that project, open that session, run that task — which is the

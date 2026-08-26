@@ -144,6 +144,16 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'renders provenance as evidence, labelled as evidence; decides nothing',
   'src/apiserver/src/projects/project-attribution.service.ts':
     'reads the four columns back for the surface; decides nothing',
+  // N10 completion-evidence provenance happens to reuse the generic `sourceSessionId` spelling.
+  // These files do not read Task.sourceSessionId (the L2 project-provenance column): they validate,
+  // persist, and render the source session on an append-only completion-evidence fact. The value is
+  // never consulted by project authorization, dispatch, scheduling, or acceptance counting.
+  'src/apiserver/src/tasks/dto.ts':
+    'types completion-evidence source provenance; does not read task project provenance',
+  'src/apiserver/src/tasks/task-completion-evidence.service.ts':
+    'validates and records completion-evidence source provenance; grants no project authority',
+  'src/apiserver/src/runner-api/runner-task-completion-evidence.controller.ts':
+    'forwards the authenticated runner session as completion-evidence provenance',
   // Unit L7, the far side of the API. These render what the surface sent and are the reason the
   // rule has to travel IN the payload rather than in a comment: a client is where "I found this
   // here" would most plausibly be mistaken for "so it belongs here", and the card prints the

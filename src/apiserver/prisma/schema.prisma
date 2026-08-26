@@ -2942,6 +2942,7 @@ model Task {
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
   comments     TaskComment[]
+  completionEvidence TaskCompletionEvidence[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3025,6 +3026,51 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// An explicit, immutable claim that structured completion evidence was submitted for a Task.
+/// This is deliberately neither a Task status transition nor a TaskComment inference. Source ids
+/// are snapshots rather than relations so execution retention cannot erase accepted provenance.
+model TaskCompletionEvidence {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_completion_evidence_task_fkey")
+
+  actorType  CreatorType @map("actor_type")
+  actorId    String      @map("actor_id") @db.Uuid
+  submittedAt DateTime   @default(now()) @map("submitted_at")
+
+  sourceSessionId String  @map("source_session_id") @db.Uuid
+  sourceAttemptId String? @map("source_attempt_id") @db.Uuid
+
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  criterion         Json
+  evidence          Json
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  revision          BigInt
+
+  idempotencyKeys TaskCompletionEvidenceIdempotency[]
+
+  @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
+  @@unique([taskId, revision], map: "task_completion_evidence_task_revision_key")
+  @@unique([taskId, actorType, actorId, sourceSessionId, criterionRevision, evidenceDigest], map: "task_completion_evidence_stable_fact_key")
+  @@index([taskId, submittedAt, id], map: "task_completion_evidence_task_submitted_idx")
+  @@map("task_completion_evidence")
+}
+
+/// Caller retry keys are separate rows so distinct keys for the same stable fact both replay it.
+model TaskCompletionEvidenceIdempotency {
+  id             String @id @default(uuid(7)) @db.Uuid
+  taskId         String @map("task_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  evidenceId     String @map("evidence_id") @db.Uuid
+  evidence       TaskCompletionEvidence @relation(fields: [evidenceId, taskId], references: [id, taskId], onDelete: Cascade, map: "task_completion_evidence_idempotency_evidence_fkey")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, idempotencyKey], map: "task_completion_evidence_idempotency_task_key")
+  @@index([evidenceId], map: "task_completion_evidence_idempotency_evidence_idx")
+  @@map("task_completion_evidence_idempotency")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).

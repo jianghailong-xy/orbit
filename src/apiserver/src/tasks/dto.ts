@@ -7,6 +7,7 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -17,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
+import type { CreatorType } from '@prisma/client';
 import { IsPublicId } from '../common/public-id';
 import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
@@ -40,6 +42,56 @@ export const TASK_LABEL_MAX_LENGTH = 64;
 
 /** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
 export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
+
+/** One explicit completion-evidence submission. The source is caller identity, never payload prose. */
+export class SubmitTaskCompletionEvidenceDto {
+  @IsPublicId()
+  sourceSessionId!: string;
+
+  @IsObject()
+  evidence!: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey?: string;
+}
+
+/** Runner/MCP submissions take their source Session from the authenticated execution header. */
+export class SubmitRunnerTaskCompletionEvidenceDto {
+  @IsObject()
+  evidence!: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey?: string;
+}
+
+/** The shared REST/runner/CLI/MCP read shape; every provenance and version field is required. */
+export class TaskCompletionEvidenceDto {
+  @IsPublicId()
+  id!: string;
+  @IsPublicId()
+  taskId!: string;
+  actorType!: CreatorType;
+  @IsPublicId()
+  actorId!: string;
+  submittedAt!: Date;
+  @IsPublicId()
+  sourceSessionId!: string;
+  @IsOptional()
+  @IsPublicId()
+  sourceAttemptId!: string | null;
+  criterionRevision!: string;
+  criterion!: Record<string, unknown>;
+  evidence!: Record<string, unknown>;
+  evidenceDigest!: string;
+  revision!: string;
+  idempotencyKeys!: string[];
+}
 
 /**
  * Unit L4: this write DECLARES that it crosses into another project.

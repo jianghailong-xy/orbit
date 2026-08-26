@@ -24,6 +24,8 @@ Usage:
   orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
   orbit task labels [--list-id ID] [--json]
   orbit task get [task-id] [--json]
+  orbit task evidence-list [task-id] [--json]
+  orbit task evidence-submit [task-id] (--evidence JSON | --evidence-file -) [--source-session-id ID] [--idempotency-key KEY] [--json]
   orbit task attribution [task-id] [--json]
   orbit task create --title TITLE [options]
   orbit task create-batch (--tasks JSON | --tasks-file -) [--dry-run] [--json]
@@ -99,6 +101,25 @@ Usage:
   orbit task get [task-id] [--json]
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+`,
+	"evidence-list": `orbit task evidence-list — list explicit completion-evidence revisions
+
+Usage:
+  orbit task evidence-list [task-id] [--json]
+
+Returns every immutable revision in task-local order. This does not inspect task comments or
+Session status. task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+`,
+	"evidence-submit": `orbit task evidence-submit — submit structured completion evidence
+
+Usage:
+  orbit task evidence-submit [task-id] (--evidence JSON | --evidence-file -) [--source-session-id ID] [--idempotency-key KEY] [--json]
+
+Evidence must be one JSON object. --evidence-file accepts only '-' (stdin). The source Session
+defaults to ORBIT_SESSION_ID and must execute this task; its lifecycle state is irrelevant.
+--idempotency-key makes transport retries return the same revision. Equivalent object-key order,
+Unicode composition and line endings share one stable digest; changed evidence makes a new revision.
+This command does not change task status and does not add a comment.
 `,
 	"create": `orbit task create — create a task
 
@@ -473,6 +494,10 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskLabels(args[1:], out)
 	case "get":
 		return cliTaskGet(args[1:], out)
+	case "evidence-list":
+		return cliTaskEvidenceList(args[1:], out)
+	case "evidence-submit":
+		return cliTaskEvidenceSubmit(args[1:], in, out)
 	case "attribution":
 		return cliTaskAttributionRead(args[1:], out)
 	case "create":
@@ -958,6 +983,79 @@ func cliTaskGet(args []string, out io.Writer) error {
 	raw, err := t.getTask(id)
 	if err != nil {
 		return fmt.Errorf("get task: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+func cliTaskEvidenceList(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task evidence-list")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.listTaskEvidence(id)
+	if err != nil {
+		return fmt.Errorf("list task evidence: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+func cliTaskEvidenceSubmit(args []string, in io.Reader, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task evidence-submit")
+	evidenceText := fs.String("evidence", "", "completion evidence as one JSON object")
+	evidenceFile := fs.String("evidence-file", "", "read evidence JSON from stdin (-)")
+	sourceSessionID := fs.String("source-session-id", "", "source task Session (defaults to ORBIT_SESSION_ID)")
+	idempotencyKey := fs.String("idempotency-key", "", "caller retry identity (max 200 characters)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	rawEvidence, evidenceSet, err := readCLIText(in, *evidenceText, flagWasSet(fs, "evidence"), *evidenceFile, flagWasSet(fs, "evidence-file"), "evidence")
+	if err != nil {
+		return err
+	}
+	if !evidenceSet || strings.TrimSpace(rawEvidence) == "" {
+		return fmt.Errorf("--evidence or --evidence-file - is required")
+	}
+	var evidence map[string]interface{}
+	if err := json.Unmarshal([]byte(rawEvidence), &evidence); err != nil || evidence == nil {
+		if err == nil {
+			err = fmt.Errorf("root is not an object")
+		}
+		return fmt.Errorf("evidence must be one JSON object: %w", err)
+	}
+	if strings.TrimSpace(*sourceSessionID) == "" {
+		*sourceSessionID = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+	}
+	if *sourceSessionID == "" {
+		return fmt.Errorf("--source-session-id or ORBIT_SESSION_ID is required")
+	}
+	body := map[string]interface{}{"evidence": evidence}
+	if strings.TrimSpace(*idempotencyKey) != "" {
+		body["idempotencyKey"] = *idempotencyKey
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	agentID, _ := cliTaskAttribution()
+	raw, err := t.submitTaskEvidence(id, agentID, *sourceSessionID, body)
+	if err != nil {
+		return fmt.Errorf("submit task evidence: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -1950,6 +2048,8 @@ var baseCLICapabilities = withExecutableAcceptanceCapabilityArgs([]cliCapability
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
+	{Tool: "task_evidence_list", Argv: []string{"orbit", "task", "evidence-list"}, Usage: "orbit task evidence-list [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "List immutable structured completion-evidence revisions in task-local order. Reads no comments and depends on no Session lifecycle state."},
+	{Tool: "task_evidence_submit", Argv: []string{"orbit", "task", "evidence-submit"}, Usage: "orbit task evidence-submit [task-id] (--evidence JSON | --evidence-file -) [--source-session-id ID] [--idempotency-key KEY] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--evidence <JSON object> | --evidence-file - (required)", "--source-session-id <id> (defaults to ORBIT_SESSION_ID)", "--idempotency-key <key> (max 200 characters)", "--json"}, Description: "Submit an explicit structured completion-evidence fact from a task Session. It appends or replays a revision without changing Task or Session state and without adding a comment.", Mutates: true},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
 	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id, status and acceptance epoch: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the project acceptance criteria that CITE this task with the verdict each reached and whether that epoch is still the current one (an old PASS stays readable and stops counting), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. Every absent fact is null beside a reason, so \"no acceptance criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title, status and acceptance epoch), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},

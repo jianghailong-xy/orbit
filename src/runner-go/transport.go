@@ -885,6 +885,30 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// Completion evidence has one transport shape for both native CLI and MCP. The source Session
+// and acting workspace are authenticated headers, not caller-editable fields in the evidence.
+func (t *Transport) submitTaskEvidence(id, agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("source session id is required")
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/evidence",
+		body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
+func (t *Transport) listTaskEvidence(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id)+"/evidence", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // getProject reads one project's durable context: its goal, acceptance criteria, instructions,
 // status, coordinator ids and task tallies. Tallies rather than task rows — the tasks themselves
 // are what the task routes above are for.

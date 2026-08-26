@@ -44,7 +44,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// about your own work, not a power over somebody else's session. Unit L7's three READS are
 	// here too — task_attribution, project_crossings and project_reopen_impact — all answering
 	// questions an agent could previously only learn by being refused, and none of them writing.
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 33 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 35 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script

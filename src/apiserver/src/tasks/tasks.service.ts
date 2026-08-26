@@ -393,10 +393,10 @@ export function buildTaskExecutionPrompt(task: {
       // deliverable, and nothing else in the system completes either one. Told the ordinary step 3
       // they would be handed two contradictory instructions in one prompt — this one saying not to
       // write a status, their own brief saying to write DONE — which is worse than either rule.
-      ? `3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，`
-        + `并写明你的结论；再用 task_update 将本任务状态（status）置为 DONE。\n`
-      : `3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，`
-        + `并逐条说明你认为哪条验收标准因此被满足。不要写 status——DONE 是解锁下游任务的授权，`
+      ? `3. 完成后，用 task_evidence_submit 显式提交结构化完成证据（命令、原始输出、退出码和结论）；`
+        + `再用 task_update 将本任务状态（status）置为 DONE。不要用 task_comment 代替证据提交。\n`
+      : `3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，`
+        + `以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，`
         + `由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n`) +
     `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
     `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
@@ -6758,7 +6758,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           message:
             'A task run cannot write its own task DONE — DONE is the authorisation the next task '
             + 'unlocks on and the project counts, not the executor\'s account of itself. Report '
-            + 'instead: task_comment with the commands you ran, their raw output and exit codes, '
+            + 'instead: task_evidence_submit with structured commands, raw output and exit codes, '
             + 'and which acceptance criterion each one satisfies; whoever accepts the work writes '
             + 'DONE. Writing FAILED from this session is allowed and is what you should write if '
             + 'the work did not finish.',
@@ -7498,7 +7498,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `3. 综合判断：产物齐备且符合验收标准 → 通过（即使没有运行记录，也要在结论里写明证据是你亲自核验的，` +
       `并指出运行记录缺失这一异常）；产物缺失、不符，或根本无从核验 → 不通过。\n\n` +
       `结论处理：\n` +
-      `- 通过：用 task_comment 在**该任务**下写明你核实了什么、依据是什么，然后把**本验收任务**置为 DONE。\n` +
+      `- 通过：用 task_evidence_submit 在**本验收任务**提交结构化核验事实，然后把**本验收任务**置为 DONE；不要用评论代替证据提交。\n` +
       `- 不通过：用 task_comment 在**该任务**下写清缺什么、证据是什么，用 task_update 把**该任务**状态改回 IN_PROGRESS，` +
       `再把**本验收任务**置为 DONE。\n\n` +
       `注意区分两个任务：核实结论写在被验收的任务上，状态回退也改它；本验收任务无论结论如何都应置为 DONE。`
@@ -8151,7 +8151,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
       `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
       `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
-      `完成后请用 task_comment 记录你的判断与所做的改动，再将本任务置为 DONE。`
+      `完成后请用 task_evidence_submit 提交结构化判断与所做的改动，再将本任务置为 DONE；不要用评论代替证据提交。`
     );
   }
 

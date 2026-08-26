@@ -13,12 +13,38 @@ import {
   CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
+  SubmitRunnerTaskCompletionEvidenceDto,
+  SubmitTaskCompletionEvidenceDto,
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
 
 const TASK_A = '550e8400-e29b-41d4-a716-446655440000';
 const TASK_B = '550e8400-e29b-41d4-a716-446655440001';
+
+test('completion evidence DTOs require a structured object and REST requires its source Session', async () => {
+  const validRest = Object.assign(new SubmitTaskCompletionEvidenceDto(), {
+    sourceSessionId: TASK_A,
+    evidence: { commands: [{ exitCode: 0 }] },
+    idempotencyKey: 'turn-17-completion',
+  });
+  const missingSource = Object.assign(new SubmitTaskCompletionEvidenceDto(), { evidence: {} });
+  const scalarEvidence = Object.assign(new SubmitTaskCompletionEvidenceDto(), {
+    sourceSessionId: TASK_A,
+    evidence: 'finished',
+  });
+  const missingRunnerEvidence = new SubmitRunnerTaskCompletionEvidenceDto();
+  const oversizedKey = Object.assign(new SubmitRunnerTaskCompletionEvidenceDto(), {
+    evidence: {},
+    idempotencyKey: 'x'.repeat(201),
+  });
+
+  assert.equal((await validate(validRest)).length, 0);
+  assert.notEqual((await validate(missingSource)).length, 0);
+  assert.notEqual((await validate(scalarEvidence)).length, 0);
+  assert.notEqual((await validate(missingRunnerEvidence)).length, 0);
+  assert.notEqual((await validate(oversizedKey)).length, 0);
+});
 
 async function dependencyErrors(value: unknown, present = true) {
   const dto = new UpdateTaskDto();
