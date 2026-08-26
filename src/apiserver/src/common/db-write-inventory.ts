@@ -103,6 +103,17 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'projects/attempt-ended-unsettled.producer.ts#raiseHumanSignal',
+    shape: 'TX_RETRIED',
+    locks: 'An unlocked task read discovers the owner, then user FOR UPDATE (rank 10, the owner graph mutex), project FOR NO KEY UPDATE (rank 40, project tasks only), task FOR NO KEY UPDATE (rank 50), then project_blocker and task_comment (rank 60). The authoritative task/path read is after every lock; both branches only descend.',
+    identity: 'The open episode key `HUMAN_DECISION_REQUIRED:TASK_NO_JUDGMENT:<taskId>` for project tasks, enforced by the partial unique blocker index. A project-less task uses the hidden signal marker in its append-only comment under the owner/task locks. Both collapse a redelivery of the same missing-path condition.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks and re-reads the task, L0 declaration and live L1 verifier inside the closure. If another path or settlement won, it writes nothing. Otherwise ON CONFLICT chooses the one open blocker and only that INSERT winner writes the paired comment; a rolled-back attempt leaves neither.',
+    effects: 'None inside. The blocker and its readable task comment are database rows committed atomically; logging happens only after this method returns.',
+    answer: 'The post-commit caller logs the exhausted conflict and leaves the source Session/Task facts derivable for startup or explicit redelivery; an API caller still receives the global typed 503.',
+  },
+  {
     at: 'projects/coordinator-convergence.service.ts#judge',
     shape: 'TX_RETRIED',
     locks: 'project FOR NO KEY UPDATE (rank 40), then project_blocker and project_convergence_decision (rank 60). Monotone, and nothing above the project is reached for: the measurement reads `task`, `task_verification_finding`, `project_acceptance_*` and `project_blocker` without locking any of them, because the only writer it has to be serialised against is another judgment of the same project — which is holding the same project row.',
@@ -935,6 +946,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "projects/coordinator-wake.service.ts#insertClaim", class: "INSERT", statements: 1, note: "The wake claim: one INSERT with ON CONFLICT DO NOTHING against the partial unique index of migration 0174, RETURNING the id so the loser of a race learns it lost without a second read. Not in a transaction, deliberately — authorization runs between this statement and the release below, and holding a row lock across a call this unit does not time is how a claim becomes a queue." },
   { at: "projects/coordinator-wake.service.ts#release", class: "ONE_ROW_CAS", statements: 1, note: "Giving the key back. The compare-and-set on CLAIMED is what makes a claim releasable exactly once, so a second refusal cannot rewrite the code the first one recorded. Leaving this write out is the accident it exists to prevent: a refusal that keeps the key welds that fact shut forever (project_action, coordinator rotation)." },
   { at: "projects/coordinator-judgment.service.ts#open", class: "ONE_ROW_CAS", statements: 1, note: "Binding the one judgment session a wake gets. The compare-and-set on CLAIMED is what makes 'at most one session per wake' a fact of the database rather than of a read — a second caller holding the same wake matches no row, discards its session and says ALREADY_OPEN. The session row itself is written by sessions.create, which is inventoried under its own entry; this statement only names it. The status it writes, SESSION_OPENED, is inside 0174's partial unique index, so the fact goes on holding its key and can never claim a second session." },
+  { at: "projects/attempt-ended-unsettled.producer.ts#reconcileResolvedHumanSignals", class: "MANY_ROWS", statements: 1, note: "One bounded startup repair UPDATE over this producer's own open signal code. The predicate resolves only when the task is gone/settled/decided, an L0/L1 path now exists, or a later L2 wake has a bound judgment Session; reissuing reaches the same resolved rows and writes no status." },
+  { at: "projects/attempt-ended-unsettled.producer.ts#resolveHumanSignal", class: "ONE_ROW_CAS", statements: 1, note: "Best-effort close of this Task's one open missing-path blocker after settlement or a successful path. The open-row predicate makes a redelivery a no-op; it never writes Task status." },
   { at: "projects/project-handoff.service.ts#decide", class: "ONE_ROW_CAS", statements: 1, note: "The user's answer, as a compare-and-set on the state it was read in: two clicks produce one answer and one 409. Re-approving a live yes writes nothing at all — it returns the row unchanged, so an approval's own deadline cannot be extended by clicking approve again." },
   { at: "providers/providers.service.ts#create", class: "INSERT", statements: 1 },
   { at: "providers/providers.service.ts#remove", class: "ONE_ROW_BY_KEY", statements: 1 },

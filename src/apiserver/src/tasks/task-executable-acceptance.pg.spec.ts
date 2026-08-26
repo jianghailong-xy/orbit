@@ -26,9 +26,16 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { AttemptEndedUnsettledProducer } from '../projects/attempt-ended-unsettled.producer';
+import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
+import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
+import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from '../queue/queue.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -44,7 +51,7 @@ interface Fixture {
 }
 
 function controller(db: PrismaClient): RunnerApiController {
-  const queue = { notifySessionQueued: () => undefined };
+  const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const realtime = {
     publishSessionUpdated: () => undefined,
     publishTaskChanged: () => undefined,
@@ -52,15 +59,25 @@ function controller(db: PrismaClient): RunnerApiController {
     publish: () => undefined,
     notifyInbox: () => undefined,
     waitForInbox: async () => undefined,
-  };
+  } as unknown as RealtimeService;
+  const prisma = db as unknown as PrismaService;
+  const sessions = new SessionsService(prisma, queue, realtime);
+  const convergence = new CoordinatorConvergenceService(prisma);
+  const attemptEnded = new AttemptEndedUnsettledProducer(
+    prisma,
+    new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+    convergence,
+  );
   return new RunnerApiController(
-    db as unknown as PrismaService,
-    queue as never,
-    realtime as never,
+    prisma,
+    queue,
+    realtime,
     {} as never,
     {} as never,
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
+    undefined,
+    attemptEnded,
   );
 }
 
@@ -217,6 +234,12 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
   });
   assert.match(comment.body, /期望退出码：0[\s\S]*实际退出码：0[\s\S]*推导状态：DONE/);
   assert.ok(comment.body.endsWith(rawOutput), 'the raw combined output is stored untrimmed at the end');
+  assert.equal(
+    await db.projectBlocker.count(),
+    0,
+    'L0 settled the task mechanically, so the missing-judgment-path signal must not exist',
+  );
+  assert.doesNotMatch(comment.body, /ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH/);
 });
 
 suite('a different exit code derives FAILED, never OPEN', async (t) => {
@@ -248,6 +271,13 @@ suite('a different exit code derives FAILED, never OPEN', async (t) => {
   assert.notEqual(task.status, TaskStatus.OPEN);
   const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
   assert.equal(session.status, RunStatus.FAILED);
+  assert.equal(
+    await db.taskComment.count({
+      where: { taskId: f.taskId, body: { contains: 'ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH' } },
+    }),
+    0,
+    'a declared L0 path remains the verdict owner even when its derived result is FAILED',
+  );
 });
 
 suite('an in-flight result cannot settle a declaration whose expected exit code changed', async (t) => {

@@ -74,7 +74,7 @@ import { canonicalJson, compare } from './canonical-json';
 
 /** The closed set of facts that may wake a coordinator. */
 export const COORDINATOR_WAKE_EVENTS = [
-  /** A task's session ended and the task did not reach a terminal status. */
+  /** A task's bounded work attempt/turn ended and the task did not reach a settled status. */
   'ATTEMPT_ENDED_UNSETTLED',
   /** One attempt spent one of its six budget dimensions (`[K3]` §5). Produced by unit T5. */
   'ATTEMPT_BUDGET_SPENT',
@@ -185,7 +185,7 @@ export function criterionSubjectId(projectId: string, criterionKey: string): str
 }
 
 /**
- * `ATTEMPT_ENDED_UNSETTLED` — a task's session is over and the task is not.
+ * `ATTEMPT_ENDED_UNSETTLED` — a task's bounded work attempt/turn is over and the task is not.
  *
  * `null` when the task DID settle, which is the ordinary end of a run and is not a fact anybody
  * has to judge. The decision is made here, from the two committed values, rather than by the
@@ -196,6 +196,8 @@ export function attemptEndedUnsettledFact(ended: {
   taskId: string;
   taskStatus: string;
   sessionId: string;
+  /** Diagnosis only: terminal runs and legacy AWAITING_INPUT parked turns keep one fact shape. */
+  sessionStatus?: string;
 }): WakeFact | null {
   if (isSettledTaskStatus(ended.taskStatus)) return null;
   return {
@@ -204,7 +206,11 @@ export function attemptEndedUnsettledFact(ended: {
     subjectType: 'TASK',
     subjectId: ended.taskId,
     subjectVersion: ended.sessionId,
-    detail: { sessionId: ended.sessionId, taskStatus: ended.taskStatus },
+    detail: {
+      sessionId: ended.sessionId,
+      taskStatus: ended.taskStatus,
+      ...(ended.sessionStatus ? { sessionStatus: ended.sessionStatus } : {}),
+    },
   };
 }
 
