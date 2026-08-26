@@ -122,6 +122,7 @@ export class TaskJudgmentRequestDto {
   @IsPublicId()
   decidedById!: string | null;
   decision!: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
+  decisionNote!: string | null;
   supersededAt!: Date | null;
   @IsOptional()
   @IsPublicId()
@@ -475,6 +476,26 @@ export class SignoffTaskDto {
   @IsString()
   @MinLength(1)
   evidence!: string;
+}
+
+/** One person's decision on the exact HUMAN_SIGNOFF request/evidence fact currently reviewed. */
+export class DecideTaskJudgmentDto {
+  @IsPublicId()
+  requestId!: string;
+
+  @IsString()
+  @MinLength(64)
+  @MaxLength(64)
+  @Matches(/^[0-9a-fA-F]{64}$/)
+  evidenceDigest!: string;
+
+  @IsIn(['PASS', 'REQUEST_MORE_EVIDENCE'])
+  action!: 'PASS' | 'REQUEST_MORE_EVIDENCE';
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4_000)
+  note!: string;
 }
 
 export class AddDependencyDto {

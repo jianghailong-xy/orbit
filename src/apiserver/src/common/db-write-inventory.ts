@@ -677,6 +677,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; criterion, actor and retirement refusals have their own structured 400/403/409 responses.',
   },
   {
+    at: 'tasks/tasks.service.ts#requestMoreEvidence',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), then the named task_judgment_request FOR UPDATE and the request-terminal delivery-child update (rank 60). There is deliberately no Task status write and no project/blocker row write; both signal and blocker are read-only projections of the request.',
+    identity: 'The current request id, its evidence digest and the terminal INCONCLUSIVE decision. A committed replay reads the first decision, time and note without rewriting them.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the Task and request, rechecks the HUMAN_SIGNOFF recipient/digest/current OPEN request, and either commits one INCONCLUSIVE audit or returns that exact audit. A superseding evidence submission takes the same Task mutex and therefore wins wholly before or after this decision.',
+    effects: 'None inside. After commit, one task.changed publication makes task/project/inbox readers refetch the derived request/signal/blocker state.',
+    answer: 'Typed 503 after retry exhaustion; stale, terminal, mismatched and retired facts are structured 409 responses.',
+  },
+  {
     at: 'tasks/tasks.service.ts#update',
     shape: 'TX_RETRIED',
     locks: 'user FOR UPDATE (10, when it restructures), task_list (20), creator Session (30, when it writes the task row twice), project FOR NO KEY UPDATE (40, when it touches acceptance), then Task rows in UUID order (50; verifier plus subject for a verdict), followed by task_judgment_request / request-delivery / legacy blocker children (60) and the derived subject status trigger boundary (70). Supersession/move paths retain their Task NOWAIT fence.',

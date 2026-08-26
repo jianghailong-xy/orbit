@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   handleProjectsShortcut,
+  handleNavActivation,
   projectsShortcutLabel,
   WorkspaceRow,
   WorkspaceStateMark,
@@ -77,11 +78,11 @@ describe('TasksSidePanel nav', () => {
     );
   });
 
-  it('keeps individual Workspaces out of a redundant fixed-nav parent', () => {
+  it('keeps the judgment inbox in TOP while leaving individual Workspaces out of a redundant parent', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
-    expect(keys).toEqual(['projects', 'runners', 'providers']);
+    expect(keys).toEqual(['judgments', 'projects', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });
@@ -94,6 +95,21 @@ describe('TasksSidePanel nav', () => {
     );
     expect(source).toContain('{TOP.map((t) => (');
     expect(source).toContain('{navItems.map((t) => (');
+  });
+
+  it('makes both fixed-nav surfaces keyboard-operable links with a current-page state', () => {
+    let opened = 0;
+    let prevented = 0;
+    expect(handleNavActivation({
+      key: 'Enter',
+      preventDefault: () => { prevented += 1; },
+    }, () => { opened += 1; })).toBe(true);
+    expect({ opened, prevented }).toEqual({ opened: 1, prevented: 1 });
+    expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
+      () => { opened += 1; })).toBe(false);
+    expect(source.match(/role="link"/g)).toHaveLength(2);
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(2);
+    expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(2);
   });
 
   it('highlights the matching TOP item by sel === t.key in both surfaces', () => {

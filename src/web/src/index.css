@@ -52,6 +52,378 @@
   --invert-text: #ffffff;
 }
 
+/* ---- Human judgment inbox and evidence review (N13) ----
+   Every content box yields below its intrinsic text width. Evidence digests, commands and JSON are
+   untrusted long tokens, so wrapping them here is the viewport-safety boundary for both phone
+   targets (390×844 and 430×932), not an assumption that producers insert spaces. */
+.judgment-page,
+.judgment-page *,
+.judgment-summary,
+.judgment-summary * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.judgment-page {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  overflow-wrap: anywhere;
+}
+
+.judgment-page-head,
+.judgment-review-head,
+.judgment-section-title-row,
+.judgment-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.judgment-page-head p,
+.judgment-review-head p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+}
+
+.judgment-count,
+.judgment-summary-head > span {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  font-weight: 650;
+}
+
+.judgment-loading {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+}
+
+.judgment-inbox-list,
+.judgment-summary-list,
+.judgment-dependencies {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0 0;
+}
+
+.judgment-inbox-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.judgment-inbox-card,
+.judgment-review-section,
+.judgment-decision,
+.judgment-summary {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+}
+
+.judgment-inbox-card > a {
+  display: block;
+  height: 100%;
+  padding: 18px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.judgment-inbox-card > a:hover,
+.judgment-inbox-card > a:focus-visible,
+.judgment-summary-link:hover,
+.judgment-summary-link:focus-visible {
+  border-color: var(--brand);
+  outline: 2px solid var(--brand-tint-hover);
+  outline-offset: 2px;
+}
+
+.judgment-inbox-title {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.judgment-inbox-project,
+.judgment-summary-meta,
+.judgment-muted {
+  color: var(--text-2);
+}
+
+.judgment-inbox-project {
+  margin-top: 3px;
+}
+
+.judgment-inbox-facts,
+.judgment-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  margin: 18px 0 0;
+}
+
+.judgment-inbox-facts > div,
+.judgment-facts > div {
+  min-width: 0;
+}
+
+.judgment-inbox-facts dt,
+.judgment-facts dt {
+  margin-bottom: 3px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.judgment-inbox-facts dd,
+.judgment-facts dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.judgment-inbox-open,
+.judgment-summary-action,
+.judgment-summary-all {
+  display: inline-block;
+  margin-top: 16px;
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.judgment-review-page > a:first-child {
+  display: inline-block;
+  margin-bottom: 18px;
+}
+
+.judgment-review-head {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.judgment-review-head .page-title:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.judgment-state-alert,
+.judgment-inline-error,
+.judgment-review-section,
+.judgment-decision {
+  margin-top: 16px;
+}
+
+.judgment-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+}
+
+.judgment-inline-error span {
+  flex: 1;
+}
+
+.judgment-review-section,
+.judgment-decision {
+  padding: 20px;
+}
+
+.judgment-review-section h2,
+.judgment-decision h2,
+.judgment-summary h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.judgment-review-section h3 {
+  margin: 20px 0 8px;
+  font-size: 14px;
+}
+
+.judgment-json {
+  width: 100%;
+  max-width: 100%;
+  margin: 10px 0 0;
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  font: 12px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.judgment-digest {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  word-break: break-all;
+}
+
+.judgment-dependencies li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.judgment-dependencies li span {
+  color: var(--text-2);
+  text-align: right;
+}
+
+.judgment-history details {
+  border-top: 1px solid var(--border);
+}
+
+.judgment-history details:first-child {
+  border-top: 0;
+}
+
+.judgment-history summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  padding: 12px 0;
+  cursor: pointer;
+}
+
+.judgment-decision label {
+  display: block;
+  margin: 14px 0 6px;
+  font-weight: 600;
+}
+
+.judgment-decision textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  color: var(--text-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.judgment-decision textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.judgment-decision textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.judgment-decision > p {
+  margin: 6px 0 14px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.judgment-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.judgment-summary {
+  margin: 18px 0 22px;
+  padding: 16px;
+}
+
+.judgment-summary-loading,
+.judgment-summary-error {
+  margin: 12px 0;
+}
+
+.judgment-summary-list {
+  margin-top: 10px;
+}
+
+.judgment-summary-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.judgment-summary-link {
+  display: grid;
+  padding: 12px 2px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.judgment-summary-task {
+  font-weight: 650;
+}
+
+.judgment-summary-action {
+  margin-top: 5px;
+}
+
+@media (max-width: 720px) {
+  .judgment-page-head,
+  .judgment-review-head,
+  .judgment-section-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .judgment-inbox-list,
+  .judgment-inbox-facts,
+  .judgment-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .judgment-review-section,
+  .judgment-decision,
+  .judgment-inbox-card > a {
+    padding: 14px;
+  }
+
+  .judgment-history summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .judgment-inline-error,
+  .judgment-dependencies li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .judgment-dependencies li span {
+    text-align: left;
+  }
+
+  .judgment-decision-actions {
+    flex-direction: column;
+  }
+
+  .judgment-decision-actions .ant-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
 :root[data-theme='dark'] {
   color-scheme: dark;
   --bg-base: #202023;
@@ -685,9 +1057,13 @@ body {
   background: var(--brand-tint);
   color: var(--brand);
 }
-.tp-item:focus,
-.tp-item:focus-visible {
+.tp-item:focus {
   outline: none;
+}
+.tp-item:focus-visible,
+.tp-rail-item:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 .tp-item.inset {
   padding-left: 30px;

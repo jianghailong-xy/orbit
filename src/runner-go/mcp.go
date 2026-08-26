@@ -605,29 +605,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "task_signoff":
-		id, ok := s.resolveTaskID(args)
-		if !ok {
-			return toolResult(noTaskMsg, true)
-		}
-		requestID := getString(args, "requestId")
-		if strings.TrimSpace(requestID) == "" {
-			return toolResult("requestId is required: sign the current open HUMAN_SIGNOFF judgment request", true)
-		}
-		evidenceDigest := getString(args, "evidenceDigest")
-		if !isSHA256Hex(evidenceDigest) {
-			return toolResult("evidenceDigest must be the current request's 64-character sha256 digest", true)
-		}
-		evidence := getString(args, "evidence")
-		if strings.TrimSpace(evidence) == "" {
-			return toolResult("evidence is required and must not be blank", true)
-		}
-		raw, err := s.t.signoffTask(s.sessionID, id, requestID, strings.ToLower(evidenceDigest), evidence)
-		if err != nil {
-			return toolResult("sign off task failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "task_delete":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2045,33 +2022,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Why this task stopped, when its status alone does not say. Setting supersededByTaskId implies SUPERSEDED and needs no second spelling; ABANDONED is the other case — dropped on purpose, with nothing replacing it. FAILED and CANCELLED are not values here because they are already `status`.",
 				},
 			}),
-		},
-		{
-			"name": "task_signoff",
-			"description": "Human-sign a task whose declared completion criterion is " +
-				"HUMAN_SIGNOFF by deciding its current evidence-bound judgment request. Records " +
-				"the request id, evidence digest, who signed, server time, and non-empty review evidence; " +
-				"the same transaction derives status DONE and closes the request and its derived " +
-				"signal/blocker. This is a human-only door: an MCP call " +
-				"inside an agent session is refused instead of signing for that person.",
-			"inputSchema": obj(map[string]interface{}{
-				"taskId": taskIDProp,
-				"requestId": map[string]interface{}{
-					"type":        "string",
-					"minLength":   1,
-					"description": "The current open HUMAN_SIGNOFF judgment request id returned with the evidence revision.",
-				},
-				"evidenceDigest": map[string]interface{}{
-					"type":        "string",
-					"pattern":     "^[0-9a-fA-F]{64}$",
-					"description": "The exact evidence digest bound to that request; a superseded digest cannot be signed.",
-				},
-				"evidence": map[string]interface{}{
-					"type":        "string",
-					"minLength":   1,
-					"description": "Non-blank evidence the person reviewed and based this signoff on.",
-				},
-			}, "requestId", "evidenceDigest", "evidence"),
 		},
 		{
 			"name":        "task_delete",

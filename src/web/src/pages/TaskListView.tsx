@@ -72,6 +72,10 @@ import {
   writeTaskSort,
 } from '../lib/taskSorting';
 import { useToast } from '../lib/toast';
+import {
+  judgmentRequestFromTaskDeepLink,
+  judgmentReviewPath,
+} from '../lib/judgments';
 
 // A checkbox is focusable but is not text entry, and clicking a row's checkbox leaves the
 // focus sitting on it — so treating every <input> as "typing" would silence the whole list
@@ -343,6 +347,7 @@ function BatchesTable({
 
 export function TaskListView() {
   const loc = useLocation();
+  const navigate = useNavigate();
   const message = useToast();
   const qc = useQueryClient();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -358,6 +363,16 @@ export function TaskListView() {
   // refresh and are shareable. A param is dropped when it equals its default, keeping
   // the URL clean for the initial view.
   const [searchParams, setSearchParams] = useSearchParams();
+  // N12 shipped notification links on the task route. Request identity already pins the exact
+  // evidence revision, so turn that legacy-compatible landing directly into the review surface.
+  const linkedJudgmentRequest = judgmentRequestFromTaskDeepLink(
+    searchParams.get('judgmentRequest'),
+  );
+  useEffect(() => {
+    if (linkedJudgmentRequest) {
+      navigate(judgmentReviewPath(linkedJudgmentRequest), { replace: true });
+    }
+  }, [linkedJudgmentRequest, navigate]);
   const setParam = (key: string, value: string, def: string) =>
     setSearchParams(
       (prev) => {
@@ -535,7 +550,6 @@ export function TaskListView() {
   // goes back to the same conversation, with the reasoning behind every earlier policy change
   // still in it. Only offered on an actual list — "Active" and "No list" are views over tasks,
   // not campaigns with a policy to steer.
-  const navigate = useNavigate();
   const [openingConsole, setOpeningConsole] = useState(false);
   const openConsole = async () => {
     if (!listId || openingConsole) return;

@@ -1,4 +1,4 @@
-import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
@@ -42,6 +42,7 @@ import { MD } from './Transcript';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
+import { JudgmentRequestSummary } from './JudgmentRequestSummary';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -576,17 +577,6 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
-  // Safety net for the "workspace forgot to mark DONE" case (see §6.3): mark the task done
-  // so its waiting dependents are released (and auto-run).
-  const markDone = useMutation({
-    mutationFn: () => api(`/tasks/${taskId}`, { method: 'PATCH', body: { status: 'DONE' } }),
-    onSuccess: () => {
-      message.success('Marked done — downstream tasks released');
-      return refreshTaskViews();
-    },
-    onError: (e: Error) => message.error(e.message),
-  });
-
   const addComment = useMutation({
     mutationFn: (vars: { body: string; mentions: string[] }) =>
       api(`/tasks/${taskId}/comments`, { method: 'POST', body: vars }),
@@ -717,14 +707,6 @@ export function TaskDetailPanel({
   const dependencyOptions = (dependencyTasksQ.data?.items ?? [])
     .filter((t: any) => t.id !== taskId && !prereqIds.has(t.id))
     .map((t: any) => ({ value: t.id, label: t.title }));
-  // §6.3 safety net: a run finished successfully but the task still isn't DONE while
-  // dependents wait — surface a one-click "标记完成" so the pipeline doesn't stall.
-  const hasSucceededSession = sessions.some(
-    (s: any) => sessionRunStateOf(s) === 'SUCCEEDED',
-  );
-  const needsDoneConfirm =
-    dependedOnBy.length > 0 && task?.status !== 'DONE' && hasSucceededSession;
-
   // Need a responsible workspace to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
@@ -812,15 +794,6 @@ export function TaskDetailPanel({
               </Button>
             </span>
           </Tooltip>
-          {task && task.status !== 'DONE' && (
-            <Button
-              icon={<CheckOutlined />}
-              loading={markDone.isPending}
-              onClick={() => markDone.mutate()}
-            >
-              Mark done
-            </Button>
-          )}
           <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
       </div>
@@ -833,28 +806,7 @@ export function TaskDetailPanel({
         <div className="tdp-empty">Failed to load task details.</div>
       ) : (
         <div className="tdp-body">
-          {needsDoneConfirm && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 12px',
-                marginBottom: 12,
-                background: 'var(--warning-bg)',
-                border: '1px solid var(--warning-border)',
-                borderRadius: 6,
-                fontSize: 13,
-              }}
-            >
-              <span style={{ flex: 1 }}>
-                {dependedOnBy.length} downstream task(s) are waiting, but this task isn't marked done yet.
-              </span>
-              <Button size="small" type="primary" loading={markDone.isPending} onClick={() => markDone.mutate()}>
-                Mark done
-              </Button>
-            </div>
-          )}
+          <JudgmentRequestSummary taskId={taskId} heading="Open HUMAN_SIGNOFF request" />
           <section className="tdp-section">
             <div className="tdp-section-title">Details</div>
             <div className="tdp-field">

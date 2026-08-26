@@ -3192,6 +3192,10 @@ model TaskJudgmentRequest {
   decidedByType String? @map("decided_by_type")
   decidedById String? @map("decided_by_id")
   decision    TaskJudgmentDecision?
+  /// Human-readable audit for a human request conclusion. PASS keeps its richer review text on
+  /// TaskHumanSignoff; INCONCLUSIVE requires this field and means "wait for a new evidence
+  /// revision", never "change Task.status".
+  decisionNote String? @map("decision_note")
   supersededAt DateTime? @map("superseded_at")
   supersededById String? @map("superseded_by_id") @db.Uuid
   supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)

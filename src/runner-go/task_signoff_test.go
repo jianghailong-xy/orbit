@@ -9,23 +9,10 @@ import (
 	"testing"
 )
 
-func TestTaskSignoffIsAlignedAcrossMCPAndCLI(t *testing.T) {
+func TestTaskSignoffIsAHeadlessHumanCLIDoorNotAnMCPTool(t *testing.T) {
 	tools := toolDescriptors(false, false)
-	if !hasMCPTool(tools, "task_signoff") {
-		t.Fatal("task_signoff missing from the base task tools")
-	}
-	props := mcpToolProps(tools, "task_signoff")
-	requestID, _ := props["requestId"].(map[string]interface{})
-	if requestID["type"] != "string" || requestID["minLength"] != 1 {
-		t.Fatalf("task_signoff requestId schema = %#v", requestID)
-	}
-	digest, _ := props["evidenceDigest"].(map[string]interface{})
-	if digest["pattern"] != "^[0-9a-fA-F]{64}$" {
-		t.Fatalf("task_signoff evidenceDigest schema = %#v", digest)
-	}
-	evidence, _ := props["evidence"].(map[string]interface{})
-	if evidence["type"] != "string" || evidence["minLength"] != 1 {
-		t.Fatalf("task_signoff evidence schema = %#v", evidence)
+	if hasMCPTool(tools, "task_signoff") {
+		t.Fatal("a coordinator/task session must not receive a control that signs for the person")
 	}
 	if !strings.Contains(taskActionHelp["signoff"], "HUMAN_SIGNOFF judgment request") ||
 		!strings.Contains(taskActionHelp["signoff"], "request id, evidence digest") ||
@@ -36,20 +23,39 @@ func TestTaskSignoffIsAlignedAcrossMCPAndCLI(t *testing.T) {
 	for _, capability := range baseCLICapabilities {
 		if capability.Tool == "task_signoff" {
 			foundCLI = true
+			if !capability.HeadlessOnly {
+				t.Fatal("task_signoff CLI capability must be headless-only")
+			}
 		}
 	}
 	if !foundCLI {
 		t.Fatal("task_signoff missing from CLI capabilities")
 	}
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
+	for _, capability := range buildCLICapabilities("/usr/local/bin/orbit").Capabilities {
+		if capability.ID == "task_signoff" {
+			t.Fatal("task_signoff was advertised to a running coordinator")
+		}
+	}
+	t.Setenv("ORBIT_SESSION_ID", "")
+	foundHeadless := false
+	for _, capability := range buildCLICapabilities("/usr/local/bin/orbit").Capabilities {
+		if capability.ID == "task_signoff" {
+			foundHeadless = true
+			if capability.MCPInputSchema != nil {
+				t.Fatalf("headless-only signoff claimed an MCP schema: %#v", capability.MCPInputSchema)
+			}
+		}
+	}
+	if !foundHeadless {
+		t.Fatal("headless human capability document omitted task_signoff")
+	}
 }
 
-func TestMCPTaskSignoffCarriesSessionAndEvidence(t *testing.T) {
-	var gotMethod, gotPath, gotSession string
-	var gotBody map[string]interface{}
+func TestMCPTaskSignoffIsNotDispatchable(t *testing.T) {
+	requests := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath = r.Method, r.URL.Path
-		gotSession = r.Header.Get("X-Orbit-Session-Id")
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		requests++
 		_, _ = w.Write([]byte(`{"status":"DONE"}`))
 	}))
 	defer srv.Close()
@@ -59,30 +65,17 @@ func TestMCPTaskSignoffCarriesSessionAndEvidence(t *testing.T) {
 		sessionID: "session-1",
 		t:         NewTransport(srv.URL, "token"),
 	}
-	digest := strings.Repeat("a", 64)
 	result := mcp.callTool("task_signoff", map[string]interface{}{
 		"requestId":      "request-1",
-		"evidenceDigest": digest,
+		"evidenceDigest": strings.Repeat("a", 64),
 		"evidence":       "reviewed build 42",
 	})
-	if result["isError"] == true {
-		t.Fatalf("task_signoff returned error: %#v", result["content"])
-	}
-	if gotMethod != http.MethodPost || gotPath != "/api/runner/tasks/task-1/signoff" {
-		t.Fatalf("task_signoff hit %s %s", gotMethod, gotPath)
-	}
-	if gotSession != "session-1" {
-		t.Fatalf("task_signoff session header = %q", gotSession)
-	}
-	if gotBody["evidence"] != "reviewed build 42" {
-		t.Fatalf("task_signoff body = %#v", gotBody)
-	}
-	if gotBody["requestId"] != "request-1" || gotBody["evidenceDigest"] != digest {
-		t.Fatalf("task_signoff request binding = %#v", gotBody)
+	if result["isError"] != true || requests != 0 {
+		t.Fatalf("unadvertised task_signoff = %#v, requests = %d", result, requests)
 	}
 }
 
-func TestTaskSignoffRejectsBlankEvidenceBeforeTransport(t *testing.T) {
+func TestMCPBlankTaskSignoffAlsoCannotReachTransport(t *testing.T) {
 	requests := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++

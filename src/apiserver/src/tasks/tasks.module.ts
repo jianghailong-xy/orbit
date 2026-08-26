@@ -10,6 +10,8 @@ import { TasksService } from './tasks.service';
 import { TaskCompletionEvidenceController } from './task-completion-evidence.controller';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TaskJudgmentRequestController } from './task-judgment-request.controller';
+import { TaskJudgmentReviewController } from './task-judgment-review.controller';
+import { TaskJudgmentReviewService } from './task-judgment-review.service';
 
 @Module({
   imports: [
@@ -19,8 +21,18 @@ import { TaskJudgmentRequestController } from './task-judgment-request.controlle
     CoordinatorJudgmentModule,
     PushModule,
   ],
-  controllers: [TasksController, TaskCompletionEvidenceController, TaskJudgmentRequestController],
-  providers: [TasksService, ReferenceExpansionService, TaskCompletionEvidenceService],
+  controllers: [
+    TasksController,
+    TaskCompletionEvidenceController,
+    TaskJudgmentRequestController,
+    TaskJudgmentReviewController,
+  ],
+  providers: [
+    TasksService,
+    ReferenceExpansionService,
+    TaskCompletionEvidenceService,
+    TaskJudgmentReviewService,
+  ],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService
   // in a second module would construct a second one, and its onModuleInit would start a
   // second auto-run reconcile timer (every sweep, and every dispatch, would run twice).

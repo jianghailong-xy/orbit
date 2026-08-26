@@ -115,6 +115,7 @@ function requestResponse(row: JudgmentRequestRow): TaskJudgmentRequestDto {
     decidedByType: row.decidedByType,
     decidedById: row.decidedById,
     decision: row.decision,
+    decisionNote: row.decisionNote,
     supersededAt: row.supersededAt,
     supersededById: row.supersededById,
   };

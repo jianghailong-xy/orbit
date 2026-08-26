@@ -154,6 +154,8 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'validates and records completion-evidence source provenance; grants no project authority',
   'src/apiserver/src/tasks/task-judgment-request.ts':
     'routes an evidence source Session to its executable evaluator; grants no project authority',
+  'src/apiserver/src/tasks/task-judgment-review.service.ts':
+    'renders completion-evidence source provenance on the human review face; grants no project authority',
   'src/apiserver/src/runner-api/runner-task-completion-evidence.controller.ts':
     'forwards the authenticated runner session as completion-evidence provenance',
   // Unit L7, the far side of the API. These render what the surface sent and are the reason the
@@ -165,6 +167,10 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   'src/web/src/components/TaskAttributionCard.tsx':
     'renders provenance beside authority, labelled evidence; decides nothing',
   'src/web/src/components/TaskAttributionCard.test.tsx': 'asserts the label is rendered',
+  'src/web/src/lib/judgments.ts':
+    'types completion-evidence source provenance for the human review face; decides nothing',
+  'src/web/src/pages/JudgmentReviewPage.test.tsx':
+    'asserts completion-evidence source provenance is rendered for human review',
 };
 
 /**

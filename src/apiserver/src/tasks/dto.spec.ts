@@ -11,6 +11,7 @@ import {
   BatchDeleteDto,
   CreateTaskDto,
   CreateTasksBatchDto,
+  DecideTaskJudgmentDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
   SignoffTaskDto,
@@ -63,6 +64,25 @@ test('human signoff DTO binds the current request and exact evidence digest', as
   assert.equal((await validate(valid)).length, 0);
   assert.notEqual((await validate(missingRequest)).length, 0);
   assert.notEqual((await validate(commitShaInsteadOfDigest)).length, 0);
+});
+
+test('human judgment decisions bind request, digest, action and a non-blank audit note', async () => {
+  const valid = Object.assign(new DecideTaskJudgmentDto(), {
+    requestId: TASK_A,
+    evidenceDigest: 'b'.repeat(64),
+    action: 'REQUEST_MORE_EVIDENCE',
+    note: 'Include the mobile viewport run and its exit code.',
+  });
+  assert.equal((await validate(valid)).length, 0);
+
+  for (const invalid of [
+    { ...valid, requestId: 'not-a-request' },
+    { ...valid, evidenceDigest: 'b'.repeat(63) },
+    { ...valid, action: 'DONE' },
+    { ...valid, note: '' },
+  ]) {
+    assert.notEqual((await validate(Object.assign(new DecideTaskJudgmentDto(), invalid))).length, 0);
+  }
 });
 
 async function dependencyErrors(value: unknown, present = true) {
