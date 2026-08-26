@@ -804,9 +804,26 @@ func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 		{"wait for a yes", "and it waits — this call is the answer, not the asking"},
 		{"task graph", "the reason to say out loud: the plan leaves the conversation"},
 		{"context", "and survives the context that would otherwise take it down"},
+		{"single reported bug", "one bug may still need durable multi-session coordination"},
+		{"Do not create a standalone task", "a task must not pre-empt the proposal"},
 	} {
 		if !strings.Contains(description, want.phrase) {
 			t.Fatalf("project_create description does not mention %q (%s): %q", want.phrase, want.why, description)
+		}
+	}
+}
+
+func TestMCPTaskCreateDefersMultiSessionBugsToAProjectProposal(t *testing.T) {
+	description := mcpToolDescription(toolDescriptors(false, false), "task_create")
+	for _, want := range []string{
+		"single reported bug",
+		"span more than one session",
+		"PROPOSE a project",
+		"wait for a yes",
+		"do not park the work as a standalone task",
+	} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("task_create description does not mention %q: %q", want, description)
 		}
 	}
 }

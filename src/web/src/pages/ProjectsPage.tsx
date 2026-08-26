@@ -35,7 +35,7 @@ import {
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
-import { firstOpenableWorkspace } from '../lib/workspaceOrder';
+import { firstOpenableWorkspace, workspaceRunnerId } from '../lib/workspaceOrder';
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
 // page that says "3h ago" should not be two functions that agree by coincidence.
 import { ago } from '../lib/runnerEngines';
@@ -290,8 +290,22 @@ export function ProjectsPage() {
     }
 
     const runnerList = runners.data ?? [];
+    // A workspace attached to an offline runner can still render its shell, but it cannot start
+    // the coordinator conversation this entry promises. Treat it like no openable workspace and
+    // send the reader to the existing runner guidance instead of a compose whose Send button is
+    // disabled. This is intentionally narrower than DefaultLanding: ordinary browsing may open
+    // an offline workspace, while starting a project requires a live conversation now.
+    const onlineRunnerIds = new Set(
+      runnerList.filter((runner) => runner.online === true).map((runner) => runner.id),
+    );
     const first = workspaces.isSuccess
-      ? firstOpenableWorkspace(workspaces.data, runnerList)
+      ? firstOpenableWorkspace(
+          workspaces.data.filter((workspace) => {
+            const runnerId = workspaceRunnerId(workspace);
+            return runnerId !== null && onlineRunnerIds.has(runnerId);
+          }),
+          runnerList,
+        )
       : undefined;
     if (first) {
       navigate(`/workspaces/${encodeId(first.id)}/new?intent=project`);

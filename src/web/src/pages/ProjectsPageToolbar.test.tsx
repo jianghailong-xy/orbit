@@ -113,7 +113,7 @@ function serve(
     '/workspaces': navigation.workspaces ?? [
       { id: W1, runnerId: R1, createdAt: '2026-01-01T00:00:00Z' },
     ],
-    '/runners': navigation.runners ?? [{ id: R1 }],
+    '/runners': navigation.runners ?? [{ id: R1, online: true }],
     ...rows,
   };
   apiMock.mockImplementation((path: string) => {
@@ -473,7 +473,7 @@ describe('ProjectsPage — starting a project', () => {
           { id: W2, runnerId: R2, position: 1, createdAt: '2026-01-02T00:00:00Z' },
           { id: W1, runnerId: R1, position: 2, createdAt: '2026-01-03T00:00:00Z' },
         ],
-        runners: [{ id: R1 }, { id: R2 }],
+        runners: [{ id: R1, online: true }, { id: R2, online: true }],
       },
     );
     await mount();
@@ -481,6 +481,24 @@ describe('ProjectsPage — starting a project', () => {
     await click(button('New project', container));
 
     expect(landedOn).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+  });
+
+  it('routes to runner guidance when every workspace runner is offline', async () => {
+    serve(
+      { '/projects?status=OPEN': [REVAMP] },
+      {
+        workspaces: [
+          { id: W1, runnerId: R1, createdAt: '2026-01-01T00:00:00Z' },
+          { id: W2, runnerId: R2, createdAt: '2026-01-02T00:00:00Z' },
+        ],
+        runners: [{ id: R1, online: false }, { id: R2, online: false }],
+      },
+    );
+    await mount();
+
+    await click(button('New project', container));
+
+    expect(landedOn).toBe('/runners');
   });
 
   it.each([

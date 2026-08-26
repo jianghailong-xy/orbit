@@ -870,7 +870,12 @@ export class ProjectsService {
       // There is nothing half-written to clean up. A rejected INSERT writes no row, so the project
       // this conflict is about does not exist — which is what makes the report safe to act on.
       if (coordinator && e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException(ProjectsService.ALREADY_COORDINATING);
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: 'ALREADY_COORDINATING',
+          message: ProjectsService.ALREADY_COORDINATING,
+        });
       }
       throw e;
     }

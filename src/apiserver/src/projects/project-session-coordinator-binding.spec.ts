@@ -380,7 +380,14 @@ test('a second project from the same session is a 409, and writes nothing', asyn
     () => f.inSession({ title: 'Crawl again' }),
     (e: unknown) => {
       assert.ok(e instanceof ConflictException, `expected a 409, got ${String(e)}`);
-      assert.match(JSON.stringify(e.getResponse()), /coordinates at most one/);
+      assert.deepEqual(e.getResponse(), {
+        statusCode: 409,
+        error: 'Conflict',
+        code: 'ALREADY_COORDINATING',
+        message:
+          'this session already coordinates another project, and a session coordinates at most one — ' +
+          'so this project was not created. Record it from a session that coordinates nothing yet.',
+      });
       return true;
     },
   );
