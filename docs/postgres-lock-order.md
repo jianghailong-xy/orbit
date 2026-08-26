@@ -52,7 +52,7 @@ UPDATE "session" SET last_assistant_text = …          → 持有 session "user
 | 30 | `session` | `FOR UPDATE`（runner lease fence / inbox / lifecycle）· `FOR KEY SHARE`（`task.creator_session_id` 外键） | 见 I2、I3。也是 runner events 事务的**全部**锁集合。 |
 | 40 | `project` | `FOR NO KEY UPDATE`（容量 fence、verdict 门、acceptance reopen、reconcile）· `FOR KEY SHARE`（外键、outbox） | 在 `session` 之下：`session_project_capacity_serialize` 是 Session 写入的 BEFORE 触发器，那时 Session 行已经在手。在 `task` 之上：Project 授权适配器本来就是这个顺序（project `FOR NO KEY UPDATE` → task `FOR SHARE`）。 |
 | 50 | `task` | `FOR UPDATE`（删除）· `FOR NO KEY UPDATE`（更新）· `FOR SHARE`（session 派发守卫、授权适配器）· `FOR KEY SHARE`（边、`session.task_id` 外键） | 多行一律 `ORDER BY id`。 |
-| 60 | `task_dependency` / `conversation_turn` / `run_event` / `tool_call` / `attachment` / `project_event` / `project_action` / `project_acceptance_criterion_definition` | 只插入/更新/删除 | 子行：到这一步它们的外键父行都已经在手，不会引入新的等待边。Acceptance definition 的整组替换先锁 `project`(40)，再移动/删除/写入这些子行。 |
+| 60 | `task_dependency` / `task_comment` / `task_completion_evidence` / `task_completion_evidence_idempotency` / `conversation_turn` / `run_event` / `tool_call` / `attachment` / `project_event` / `project_action` / `project_acceptance_criterion_definition` | 只插入/更新/删除 | 子行：到这一步它们的外键父行都已经在手，不会引入新的等待边。完成证据先锁 `task`(50)，再追加 evidence 与幂等键子行；来源 Session/Attempt 是不取锁、无外键的审计快照。Acceptance definition 的整组替换先锁 `project`(40)，再移动/删除/写入这些子行。 |
 | 70 | `task_dependency_revision` | `FOR NO KEY UPDATE`（0132：边写之后推进）· `FOR SHARE`（dispatch 决策在它之下读边集） | 最后一把。在边（60）**之下**，因为写入方是"先改边再推进"，而决策也按同一方向取（前置 50 → 边 60 → revision 70），两边不可能反序。它让**空边集**可锁，这正是 0122 去 touch dependent Task 的全部理由。见 `docs/task-dependency-revision.md`。 |
 
 ### 三条让它可执行的不变量
@@ -140,6 +140,8 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `session_dispatch_authority_guard`（0122，BEFORE INSERT ON session） | 被派发 `task` 行 `FOR SHARE` | **保留** | 它是派发权限的插入时门。Session INSERT 因此是 50 → 30 的形状；但一次 Session INSERT 持有的 Session 行同样是别人看不见的新行，与 §2 的 INSERT 论证同构。 |
 | `project_acceptance_task_fact` / `_update`（0127） | 该 Task 的 `project` 行 `FOR NO KEY UPDATE` | **保留；它是 §6 那条倒序的来源** | 见 §6。 |
 | `project_acceptance_criteria_fact`（0172） | 已持有 `project`(40) 后写当前 criterion definition 子行、acceptance audit/run 子行(60)；definition normalize 只改正在写入的同一行 | **结构化改造后保留** | 旧客户端的文本写在同一事务内同步成定义行；新客户端先写定义行再写兼容投影。两条路径都保持 40 → 60，不新增反向等待边。 |
+| `task_judgment_delivery_file` / `_stop`（0182） | 已持有 `task`(50) 后插入 request，并由 trigger 写 inbox/push 子行(60)；request 终结只更新它自己的 push 子行 | **新增** | 收件项/outbox 与 request 同事务，且 recipient 由 request 的 `owner_id` 快照约束，不另建 `user` FK，因而不会在 50 之后倒取 owner(10)。worker 的 APNs 调用在事务外，靠 delivery 行 lease/CAS fencing。 |
+| N8 legacy import / request backfill（0184） | import 先取 owner `FOR KEY SHARE`(10)，再锁单个 task(50)；backfill 的 batch owner FK 先取得同等锁，再按 UUID 以 `FOR UPDATE SKIP LOCKED` 锁有界 task 集(50)；两者最后写 evidence/request/inbox/delivery/audit 子行(60) | **新增** | import 的 reviewer FK 不会在 task 之后倒取 owner；backfill 在锁任何 task 前先创建审计 batch。schema migration 不扫描 task，批次默认把设备 ledger 终结为 `IN_APP_ONLY`，只有显式 allowlist 产生 due push。 |
 | `project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project） | 该 project 下**全部** `task` 行 | **保留** | 40 → 50，顺序内。只在协调开关翻转时发生。 |
 | `Task.updated_at` 作为版本边界 | — | **已取消（0132）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
 | `Session.inbox_lease_owner` / `inbox_lease_generation` fencing | 与 `SELECT … FOR UPDATE` 同一条语句 | **保留，未触碰** | 本次没有任何改动会改变 lease fencing 的语义：`lockSessionLeaseOwner` 一字未动，`runner-write-lease-owner.spec.ts` 与 `inbox-lease-generation.spec.ts` 全绿。 |

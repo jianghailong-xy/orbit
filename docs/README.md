@@ -60,6 +60,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Task dependency revision](task-dependency-revision.md) — why migration 0132 replaces the dispatch
   boundary's `task.updated_at` touch with a per-Task revision row, what that takes out of an edge write's
   lock set, and how the deferred commit-boundary check keeps a mixed-version rollout safe.
+- [Task completion criteria](task-completion-criteria.md) — the three peer completion facts and the exact
+  cwd, environment, timeout, and PostgreSQL contract for executable acceptance.
 
 Design notes capture the reasoning and implementation state at the time they were written. When a design note
 conflicts with current code or a current operator guide, the code and operator guide are authoritative. Notes

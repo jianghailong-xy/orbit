@@ -123,6 +123,10 @@ import { runtimeInitSessionId } from './runtime-init';
 import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
+import {
+  deriveTaskCompletionStatus,
+  type TaskCompletionCriterionValue,
+} from '../tasks/task-completion-criterion';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -2407,6 +2411,7 @@ export class RunnerApiController {
         projectId: string | null;
         acceptanceCommand: string | null;
         acceptanceExpectedExitCode: number | null;
+        completionCriterion: TaskCompletionCriterionValue;
       } | null = null;
       let acceptanceTaskStillInProgress = false;
       if (taskAcceptanceTurn && current.taskId) {
@@ -2429,11 +2434,13 @@ export class RunnerApiController {
           projectId: string | null;
           acceptanceCommand: string | null;
           acceptanceExpectedExitCode: number | null;
+          completionCriterion: TaskCompletionCriterionValue;
         }>>`
           SELECT "id", "status",
                  "project_id" AS "projectId",
                  "acceptance_command" AS "acceptanceCommand",
-                 "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode"
+                 "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
+                 "completion_criterion"::text AS "completionCriterion"
           FROM "task"
           WHERE "id" = ${current.taskId}::uuid
           FOR UPDATE`;
@@ -2603,21 +2610,83 @@ export class RunnerApiController {
       ) {
         const actualExitCode = dto.shellExitCode!;
         const expectedExitCode = lockedAcceptanceTask.acceptanceExpectedExitCode;
-        const derivedStatus = actualExitCode === expectedExitCode
-          ? TaskStatus.DONE
-          : TaskStatus.FAILED;
+        const completed = deriveTaskCompletionStatus({
+          completionCriterion: lockedAcceptanceTask.completionCriterion,
+          acceptanceExpectedExitCode: expectedExitCode,
+          executableExitCode: actualExitCode,
+        });
+        // FAILED remains the conservative L0 outcome when the declared command returns a
+        // comparable non-matching exit code. Only the optimistic branch is criterion-derived.
+        const derivedStatus = completed ?? TaskStatus.FAILED;
+        const request = await tx.taskJudgmentRequest.findFirst({
+          where: {
+            taskId: lockedAcceptanceTask.id,
+            kind: 'EXECUTABLE',
+            recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+            status: 'OPEN',
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+        // The request names the source Session as the one system evaluator allowed to consume
+        // this evidence version. Keep the no-request branch for rolling-upgrade/legacy L0 turns,
+        // but once an OPEN request exists it is authoritative: a result from another Session may
+        // neither attach a command-result fact nor use the legacy status path to bypass the
+        // recipient. The unsettled-attempt branch below then closes that wrong Session while the
+        // request and Task remain actionable by their named evaluator.
+        const requestBelongsToThisEvaluator = request == null || request.recipientId === sessionId;
+        const rawOutput = stripNul(dto.shellOutput);
+        if (request && requestBelongsToThisEvaluator) {
+          const decidedAt = new Date();
+          await tx.taskExecutableJudgmentResult.create({
+            data: {
+              id: randomUUID(),
+              requestId: request.id,
+              command: lockedAcceptanceTask.acceptanceCommand,
+              expectedExitCode,
+              actualExitCode,
+              rawOutput,
+              recordedById: runner.id,
+              recordedAt: decidedAt,
+            },
+          });
+          await tx.taskJudgmentRequest.update({
+            where: { id: request.id },
+            data: {
+              status: 'DECIDED',
+              decidedAt,
+              decidedByType: 'SYSTEM',
+              decidedById: runner.id,
+              decision: completed ? 'PASS' : 'FAIL',
+            },
+          });
+          if (lockedAcceptanceTask.projectId) {
+            await tx.projectBlocker.updateMany({
+              where: {
+                projectId: lockedAcceptanceTask.projectId,
+                kind: 'HUMAN_DECISION_REQUIRED',
+                subjectType: 'TASK',
+                subjectId: lockedAcceptanceTask.id,
+                resolvedAt: null,
+              },
+              data: { resolvedAt: decidedAt, resolvedBy: 'AUTO', updatedAt: decidedAt },
+            });
+          }
+        }
         // The command, expectation and IN_PROGRESS state are repeated in the write even though
         // their row is locked: they make the compare-and-set visible in SQL and fail closed if
         // this code is ever moved away from the lock without its guard.
-        const changed = await tx.task.updateMany({
-          where: {
-            id: lockedAcceptanceTask.id,
-            status: TaskStatus.IN_PROGRESS,
-            acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
-            acceptanceExpectedExitCode: expectedExitCode,
-          },
-          data: { status: derivedStatus },
-        });
+        const changed = requestBelongsToThisEvaluator
+          ? await tx.task.updateMany({
+              where: {
+                id: lockedAcceptanceTask.id,
+                status: TaskStatus.IN_PROGRESS,
+                acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
+                acceptanceExpectedExitCode: expectedExitCode,
+                completionCriterion: 'EXECUTABLE',
+              },
+              data: { status: derivedStatus },
+            })
+          : { count: 0 };
         if (changed.count > 0) {
           await postExecutableAcceptanceComment(
             tx,
@@ -2625,7 +2694,7 @@ export class RunnerApiController {
             lockedAcceptanceTask.acceptanceCommand,
             expectedExitCode,
             actualExitCode,
-            stripNul(dto.shellOutput),
+            rawOutput,
             derivedStatus,
           );
           acceptanceTaskChanged = true;
@@ -2662,10 +2731,12 @@ export class RunnerApiController {
             status: true,
             acceptanceCommand: true,
             acceptanceExpectedExitCode: true,
+            completionCriterion: true,
           },
         });
         if (
           executable?.status === TaskStatus.IN_PROGRESS
+          && executable.completionCriterion === 'EXECUTABLE'
           && executable.acceptanceCommand != null
           && executable.acceptanceExpectedExitCode != null
         ) {

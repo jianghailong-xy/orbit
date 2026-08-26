@@ -615,7 +615,7 @@ type RunInboxResponse struct {
 	// message is gone. False here means a provably-undelivered steer is reported as a visible
 	// failure instead — worse for the person, but nothing is lost.
 	SteerRequeue bool `json:"steerRequeue,omitempty"`
-	// TaskAcceptance marks the server-generated L0 command. It always runs synchronously so the
+	// TaskAcceptance marks the server-generated EXECUTABLE command. It always runs synchronously so the
 	// control plane receives one definitive exit code, even if its text ends in `&`.
 	TaskAcceptance bool `json:"taskAcceptance,omitempty"`
 }
