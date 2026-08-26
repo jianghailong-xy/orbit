@@ -2,14 +2,15 @@ import type { ProjectSection, SectionProject } from '../components/ProjectSectio
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
 
 /**
- * The projects index is an attention router, not a second activity feed.
+ * The projects index is an execution-and-attention router, not a second activity feed.
  *
- * A row first answers who must act next. Only then does its time decide where it sits among rows
- * that need the same kind of action. This keeps three different signals in their own jobs:
+ * A row first answers whether work is actively running. When it is not, the row answers who must
+ * act next. Time then decides where it sits among rows that need the same kind of action. This
+ * keeps three different signals in their own jobs:
  *
  *   - counts describe scale;
  *   - time describes how long a condition has existed;
- *   - the section describes the next kind of action.
+ *   - the section describes current execution or the next kind of action.
  *
  * In particular, raw `ready` count never ranks projects. Splitting one unit of work into ten
  * thousand shards must not make the project ten thousand times more important.
@@ -67,7 +68,7 @@ const SECTIONS: ReadonlyArray<{
   {
     key: 'running',
     title: 'Running',
-    note: 'Work in flight · newest task activity first',
+    note: 'Fresh work in flight · newest task activity first',
   },
   {
     key: 'ready',
@@ -143,11 +144,12 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
 }
 
 /**
- * Why an OPEN project must leave the normal lifecycle lanes and lead the page.
+ * Why an OPEN project needs a visible attention signal.
  *
  * The order is intentional and is also the order inside Needs attention: a durable USER-owned
  * blocker leads because nobody else can clear it; an observed failure is stronger evidence than
- * silence; closing settled work is useful but not an operational fault.
+ * silence; closing settled work is useful but not an operational fault. Fresh running work keeps
+ * its execution lane while this reason remains visible on the row as a chip.
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
@@ -165,12 +167,19 @@ export function attentionReasonOf(project: AttentionProject, now: number): Atten
   return null;
 }
 
-/** Every project lands in exactly one lane. Earlier predicates have higher authority. */
+/**
+ * Every project lands in exactly one lane. Fresh execution is the strongest fact; attention takes
+ * priority once a run has gone quiet or no work is actively running.
+ */
 export function attentionSectionOf(project: AttentionProject, now: number): AttentionSectionKey {
   if (project.status !== 'OPEN') return 'completed';
+
+  const quietRunning = project.buckets.running > 0
+    && quietDays(project.lastActivityAt, now) !== null;
+  if (project.buckets.running > 0 && !quietRunning) return 'running';
+
   if (attentionReasonOf(project, now)) return 'attention';
   if (project._count.tasks === 0) return 'definition';
-  if (project.buckets.running > 0) return 'running';
   if (project.buckets.ready > 0) return 'ready';
   if (project.buckets.blocked > 0) return 'waiting';
 

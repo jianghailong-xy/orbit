@@ -717,7 +717,7 @@ describe('ProjectsPage — sections', () => {
       buckets: { running: 1 },
       lastActivityAt: ago(2 * QUIET_MS),
     }),
-    // A durable USER-owned blocker outranks inferred task symptoms even while work is fresh.
+    // A fresh run keeps its execution lane while its durable USER-owned blocker stays visible.
     listRow(P12, 'Needs approval', {
       buckets: { running: 1, blocked: 1 },
       attention: {
@@ -760,13 +760,16 @@ describe('ProjectsPage — sections', () => {
 
   it('separates intervention, healthy work, ready work, expected waits, and drafts', () => {
     const html = renderMixed();
-    expect(sectionOf(html, 'attention')).toContain('Needs approval');
-    expect(sectionOf(html, 'attention')).toContain('Needs you · Warning · 3d · 1 blocker');
-    expect(sectionOf(html, 'attention')).toContain('Failed release');
-    expect(sectionOf(html, 'attention')).toContain('Zombie run');
-    expect(sectionOf(html, 'attention')).toContain('Inbox Redesign');
-    expect(sectionOf(html, 'running')).toContain('LFS Build');
-    expect(sectionOf(html, 'running')).toContain('Website Revamp');
+    const attention = sectionOf(html, 'attention');
+    const running = sectionOf(html, 'running');
+    expect(attention).not.toContain('Needs approval');
+    expect(attention).toContain('Failed release');
+    expect(attention).toContain('Zombie run');
+    expect(attention).toContain('Inbox Redesign');
+    expect(running).toContain('Needs approval');
+    expect(running).toContain('Needs you · Warning · 3d · 1 blocker');
+    expect(running).toContain('LFS Build');
+    expect(running).toContain('Website Revamp');
     expect(sectionOf(html, 'ready')).toContain('FineWeb Corpus');
     expect(sectionOf(html, 'ready')).toContain('Ledger Migration');
     expect(sectionOf(html, 'waiting')).toContain('Waiting on upstream');
@@ -783,22 +786,23 @@ describe('ProjectsPage — sections', () => {
     expect(ready.indexOf('Ledger Migration')).toBeLessThan(ready.indexOf('FineWeb Corpus'));
   });
 
-  it('orders healthy Running by newest activity', () => {
+  it('orders Running by newest activity even when a row carries an attention chip', () => {
     const running = sectionOf(renderMixed(), 'running');
+    expect(running).toContain('Needs approval');
+    expect(running).toContain('Needs you · Warning · 3d · 1 blocker');
     expect(running.indexOf('LFS Build')).toBeLessThan(running.indexOf('Website Revamp'));
   });
 
   it('orders Needs attention by issue severity before age', () => {
     const attention = sectionOf(renderMixed(), 'attention');
-    expect(attention.indexOf('Needs approval')).toBeLessThan(attention.indexOf('Failed release'));
     expect(attention.indexOf('Failed release')).toBeLessThan(attention.indexOf('Zombie run'));
     expect(attention.indexOf('Zombie run')).toBeLessThan(attention.indexOf('Inbox Redesign'));
   });
 
   it('counts each section in its own header', () => {
     const html = renderMixed();
-    expect(sectionOf(html, 'attention')).toMatch(/Needs attention<\/h3>.*?>4</);
-    expect(sectionOf(html, 'running')).toMatch(/Running<\/h3>.*?>2</);
+    expect(sectionOf(html, 'attention')).toMatch(/Needs attention<\/h3>.*?>3</);
+    expect(sectionOf(html, 'running')).toMatch(/Running<\/h3>.*?>3</);
     expect(sectionOf(html, 'ready')).toMatch(/Ready<\/h3>.*?>2</);
     expect(sectionOf(html, 'waiting')).toMatch(/Waiting<\/h3>.*?>1</);
     expect(sectionOf(html, 'definition')).toMatch(/Needs definition<\/h3>.*?>1</);

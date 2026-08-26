@@ -43,7 +43,7 @@ function project(
 }
 
 describe('attention classification', () => {
-  it('puts a durable USER-owned blocker ahead of lifecycle-derived guesses', () => {
+  it('keeps a fresh run in Running while preserving its durable USER-owned blocker signal', () => {
     const row = project({
       buckets: { running: 1 },
       attention: {
@@ -56,7 +56,11 @@ describe('attention classification', () => {
       },
     });
     expect(attentionReasonOf(row, NOW)).toBe('needs-user');
-    expect(attentionSectionOf(row, NOW)).toBe('attention');
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Needs you · Warning · 2d · 1 blocker',
+    });
+    expect(attentionSectionOf(row, NOW)).toBe('running');
   });
 
   it('puts closed projects in Completed before considering inconsistent live buckets', () => {
@@ -67,14 +71,40 @@ describe('attention classification', () => {
     }
   });
 
-  it('derives FAILED from the task-count remainder and surfaces it first', () => {
+  it('keeps a fresh run in Running while preserving FAILED from the task-count remainder', () => {
     const row = project({ _count: { tasks: 5 }, buckets: { running: 1, done: 2 } });
     expect(failedTaskCount(row)).toBe(2);
     expect(attentionReasonOf(row, NOW)).toBe('failed');
-    expect(attentionSectionOf(row, NOW)).toBe('attention');
+    expect(attentionChipOf(row, NOW)).toEqual({ tone: 'warning', text: '2 failed tasks' });
+    expect(attentionSectionOf(row, NOW)).toBe('running');
 
     const inconsistent = project({ _count: { tasks: 1 }, buckets: { done: 2 } });
     expect(failedTaskCount(inconsistent)).toBe(0);
+  });
+
+  it('keeps quiet running work in Needs attention even when blocker or failure signals remain', () => {
+    const needsUser = project({
+      buckets: { running: 1 },
+      lastActivityAt: at(2 * QUIET_MS),
+      attention: {
+        userBlockers: 1,
+        coordinatorBlockers: 0,
+        systemBlockers: 0,
+        maxSeverity: 'CRITICAL',
+        attentionSinceAt: at(3 * QUIET_MS),
+        nextCheckAt: null,
+      },
+    });
+    const failed = project({
+      _count: { tasks: 3 },
+      buckets: { running: 1, done: 1 },
+      lastActivityAt: at(2 * QUIET_MS),
+    });
+
+    expect(attentionReasonOf(needsUser, NOW)).toBe('needs-user');
+    expect(attentionSectionOf(needsUser, NOW)).toBe('attention');
+    expect(attentionReasonOf(failed, NOW)).toBe('failed');
+    expect(attentionSectionOf(failed, NOW)).toBe('attention');
   });
 
   it('separates healthy running work from a quiet run', () => {
