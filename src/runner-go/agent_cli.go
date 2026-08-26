@@ -23,6 +23,10 @@ An agent is a machine plus a project directory. It has no provider of its own �
 --provider to 'orbit session create' when a session needs a specific one. The orchestration
 permission cannot be set here: only a human can grant it in the web UI.
 
+Creating with --repo-url and no --work-dir queues a clone on the selected runner. The create
+response and 'orbit agent list' report provisionState: READY is usable, CLONING is still in
+flight, and FAILED carries git's stderr in provisionError.
+
 These commands run inside a live Orbit session whose agent has enableOrchestration enabled.
 Run 'orbit agent <command> --help' for options.
 `
@@ -33,8 +37,10 @@ var agentActionHelp = map[string]string{
 Usage:
   orbit agent list [--json]
 
-Reports id, name, workDir, runner and the provider each project last ran on — enough to
-resolve an @mention to the --agent-id / --agent-name of 'orbit session create'.
+Reports id, name, repoUrl, workDir, runner, provisionState/provisionError and the provider each
+project last ran on — enough to poll a clone and to resolve an @mention to the --agent-id /
+--agent-name of 'orbit session create'. READY is usable, CLONING is still cloning, and FAILED
+carries git's stderr in provisionError.
 `,
 	"create": `orbit agent create — create an agent
 
@@ -48,10 +54,15 @@ Options:
   --append-system-prompt TEXT
   --work-dir PATH                Project directory on the runner
   --runner-id ID                 Defaults to the current runner
+  --repo-url URL                 Clone this git remote when --work-dir is omitted
   --enable-worktree[=BOOL]       Run each of the agent's sessions in its own git worktree
   --env KEY=VALUE                Repeatable; REPLACES the whole environment map
   --default-merge-target BRANCH  Branch this agent's sessions merge into by default
   --json
+
+The response includes repoUrl, provisionState and provisionError. READY means the directory is
+usable; CLONING means clone is still in flight and sessions cannot start; FAILED means clone
+stopped and provisionError contains git's stderr. Poll 'orbit agent list' after CLONING.
 `,
 	"update": `orbit agent update — update an agent's configuration
 
@@ -77,7 +88,7 @@ complete desired map whenever --env is used at all.
 
 var agentCLICapabilities = []cliCapabilitySpec{
 	{Tool: "agent_list", Argv: []string{"orbit", "agent", "list"}, Usage: "orbit agent list [--json]", Arguments: []string{"--json"}},
-	{Tool: "agent_create", Argv: []string{"orbit", "agent", "create"}, Usage: "orbit agent create --name NAME [options]", Arguments: []string{"--name <text> (required)", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
+	{Tool: "agent_create", Argv: []string{"orbit", "agent", "create"}, Usage: "orbit agent create --name NAME [options]", Arguments: []string{"--name <text> (required)", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--repo-url <url> (without --work-dir, clone on the selected runner)", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
 	{Tool: "agent_update", Argv: []string{"orbit", "agent", "update"}, Usage: "orbit agent update AGENT_ID [options]", Arguments: []string{"[agent-id] (required)", "--name <text>", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
 }
 
@@ -143,7 +154,7 @@ func (v *envFlag) Set(s string) error {
 	return nil
 }
 
-// The write fields agent_create and agent_update share, in MCP's own spelling.
+// The safe workspace write fields, in MCP's own spelling. repoURL is registered only for create.
 type agentCLIWriteFlags struct {
 	name               *string
 	description        *string
@@ -151,12 +162,13 @@ type agentCLIWriteFlags struct {
 	appendSystemPrompt *string
 	workDir            *string
 	runnerID           *string
+	repoURL            *string
 	enableWorktree     *bool
 	defaultMergeTarget *string
 	env                envFlag
 }
 
-func registerAgentWriteFlags(fs *flag.FlagSet) *agentCLIWriteFlags {
+func registerAgentWriteFlags(fs *flag.FlagSet, includeRepoURL bool) *agentCLIWriteFlags {
 	f := &agentCLIWriteFlags{
 		name:               fs.String("name", "", "agent name"),
 		description:        fs.String("description", "", "agent description"),
@@ -166,6 +178,9 @@ func registerAgentWriteFlags(fs *flag.FlagSet) *agentCLIWriteFlags {
 		runnerID:           fs.String("runner-id", "", "runner to bind the agent to"),
 		enableWorktree:     fs.Bool("enable-worktree", false, "run each session in its own git worktree"),
 		defaultMergeTarget: fs.String("default-merge-target", "", "default merge target branch"),
+	}
+	if includeRepoURL {
+		f.repoURL = fs.String("repo-url", "", "git remote to clone when work-dir is omitted")
 	}
 	fs.Var(&f.env, "env", "environment variable KEY=VALUE (repeatable; replaces the whole map)")
 	return f
@@ -181,6 +196,7 @@ func (f *agentCLIWriteFlags) body(fs *flag.FlagSet, body map[string]interface{})
 		"append-system-prompt": f.appendSystemPrompt,
 		"work-dir":             f.workDir,
 		"runner-id":            f.runnerID,
+		"repo-url":             f.repoURL,
 		"default-merge-target": f.defaultMergeTarget,
 	} {
 		if !flagWasSet(fs, flagName) {
@@ -208,6 +224,7 @@ var agentCLIBodyField = map[string]string{
 	"append-system-prompt": "appendSystemPrompt",
 	"work-dir":             "workDir",
 	"runner-id":            "runnerId",
+	"repo-url":             "repoUrl",
 	"default-merge-target": "defaultMergeTarget",
 }
 
@@ -233,7 +250,7 @@ func cliAgentList(args []string, out io.Writer, ctx cliOrchestrationContext) err
 
 func cliAgentCreate(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	fs := newCLIFlagSet("orbit agent create")
-	fields := registerAgentWriteFlags(fs)
+	fields := registerAgentWriteFlags(fs, true)
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -262,7 +279,7 @@ func cliAgentCreate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 func cliAgentUpdate(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit agent update")
-	fields := registerAgentWriteFlags(fs)
+	fields := registerAgentWriteFlags(fs, false)
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err

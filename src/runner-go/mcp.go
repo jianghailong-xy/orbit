@@ -869,7 +869,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("name is required", true)
 		}
 		body := map[string]interface{}{"name": name}
-		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
+		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "repoUrl", "enableWorktree", "env", "defaultMergeTarget")
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -2064,6 +2064,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"type":        "string",
 			"description": "Branch this agent's sessions merge into by default. Omit to leave the runner's auto-detect (main, else master).",
 		}
+		repoURLProp := map[string]interface{}{
+			"type":        "string",
+			"maxLength":   2048,
+			"description": "Git remote for this workspace. With workDir omitted, creating the workspace immediately queues a clone on runnerId (or the current runner) and returns provisionState CLONING; poll agent_list until READY or FAILED. With workDir present, records that the existing checkout came from this remote and returns READY without cloning.",
+		}
 		tools = append(tools,
 			map[string]interface{}{
 				"name":        "session_create",
@@ -2140,12 +2145,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_list",
-				"description": "List this owner's agents (id, name, workDir, runner, and the provider the project last ran on). Use to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
+				"description": "List this owner's agents/workspaces (id, name, repoUrl, workDir, runner, provisioning result, and the provider the project last ran on). provisionState READY means the directory is usable; CLONING means the runner is still cloning and sessions cannot start; FAILED means clone stopped and provisionError carries git's stderr. Poll this after agent_create returns CLONING. Use the list to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
 				"inputSchema": obj(map[string]interface{}{}),
 			},
 			map[string]interface{}{
 				"name":        "agent_create",
-				"description": "Create a new agent under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent is a machine plus a project directory: it has no provider of its own, so pass `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
+				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. repoUrl without workDir immediately queues a clone on that runner. The returned provisionState is the receipt: READY means the directory is usable; CLONING means clone is still in flight and sessions cannot start; FAILED means clone stopped and provisionError carries git's stderr. Poll agent_list after CLONING instead of treating the returned id as proof clone succeeded. repoUrl with workDir records an existing checkout and clones nothing. An agent has no provider of its own, so pass `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
@@ -2153,6 +2158,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"appendSystemPrompt": str,
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
 					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner."},
+					"repoUrl":            repoURLProp,
 					"enableWorktree":     map[string]interface{}{"type": "boolean", "description": "Run each of the agent's sessions in its own git worktree."},
 					"env":                envProp,
 					"defaultMergeTarget": mergeTargetProp,

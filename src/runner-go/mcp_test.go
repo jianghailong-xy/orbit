@@ -551,6 +551,22 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 			t.Fatalf("%s must not expose permissionMode — it is not an agent field", name)
 		}
 	}
+	createProps := mcpToolProps(tools, "agent_create")
+	repoURL, _ := createProps["repoUrl"].(map[string]interface{})
+	if repoURL["type"] != "string" || repoURL["maxLength"] != 2048 {
+		t.Fatalf("agent_create repoUrl schema = %#v", createProps["repoUrl"])
+	}
+	if mcpToolProps(tools, "agent_update")["repoUrl"] != nil {
+		t.Fatal("agent_update must not expose repoUrl — retrying a clone is not a config update")
+	}
+	for _, name := range []string{"agent_list", "agent_create"} {
+		description := mcpToolDescription(tools, name)
+		for _, want := range []string{"provisionState", "READY", "CLONING", "FAILED", "provisionError"} {
+			if !strings.Contains(description, want) {
+				t.Errorf("%s description does not explain %s: %q", name, want, description)
+			}
+		}
+	}
 
 	var gotPath string
 	var gotBody map[string]interface{}
@@ -568,6 +584,7 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		"model":              "gpt-retired-agent-default",
 		"env":                map[string]interface{}{"FOO": "bar"},
 		"permissionMode":     "acceptEdits",
+		"repoUrl":            "https://github.com/acme/child.git",
 		"defaultMergeTarget": "develop",
 	}
 	for _, tc := range []struct{ tool, path string }{
@@ -593,6 +610,13 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		}
 		if _, ok := gotBody["model"]; ok {
 			t.Fatalf("%s forwarded retired per-agent model: %#v", name, gotBody["model"])
+		}
+		if name == "agent_create" {
+			if gotBody["repoUrl"] != "https://github.com/acme/child.git" {
+				t.Fatalf("agent_create body repoUrl = %#v", gotBody["repoUrl"])
+			}
+		} else if _, ok := gotBody["repoUrl"]; ok {
+			t.Fatalf("agent_update forwarded create-only repoUrl: %#v", gotBody["repoUrl"])
 		}
 	}
 }

@@ -18,18 +18,34 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 
-// Fields an in-session orchestrator may set on a workspace. Deliberately EXCLUDES
-// enableOrchestration (and enabled): the orchestration permission is human-granted in the web
-// UI only — a workspace must never be able to grant it to itself or another workspace (privilege
-// escalation). Anything not listed here is dropped by `sanitize` before hitting the service.
+// The exact create contract shared by the runner HTTP route, MCP agent_create and
+// `orbit agent create`. Keep this as one literal: runner-go's parity test reads it and compares all
+// three surfaces, so adding a field to only one door fails the suite instead of silently shipping.
+// Deliberately EXCLUDES enableOrchestration (and enabled): the orchestration permission is
+// human-granted in the web UI only — a workspace must never be able to grant it to itself or
+// another workspace (privilege escalation). `sanitize` iterates this list, so it is also the HTTP
+// route's actual whitelist rather than documentation beside a different implementation.
+export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
+  'name',
+  'description',
+  'systemPrompt',
+  'appendSystemPrompt',
+  'workDir',
+  'runnerId',
+  'repoUrl',
+  'enableWorktree',
+  'env',
+  'defaultMergeTarget',
+] as const;
+
 type OrchestratorWorkspaceInput = {
   name?: string;
   description?: string;
-  provider?: string;
   systemPrompt?: string;
   appendSystemPrompt?: string;
   workDir?: string;
   runnerId?: string;
+  repoUrl?: string;
   enableWorktree?: boolean;
   env?: unknown;
   defaultMergeTarget?: string;
@@ -42,6 +58,9 @@ type OrchestratorWorkspaceRecord = Pick<
   | 'description'
   | 'workDir'
   | 'runnerId'
+  | 'repoUrl'
+  | 'provisionState'
+  | 'provisionError'
   | 'enableWorktree'
   | 'defaultMergeTarget'
 > & {
@@ -133,6 +152,12 @@ export class RunnerAgentsController {
       lastProvider: workspace.lastProvider,
       workDir: workspace.workDir,
       runnerId: workspace.runnerId,
+      repoUrl: workspace.repoUrl,
+      // These three values are the provisioning receipt. A create returns CLONING before the
+      // runner starts, and agent_list keeps returning the same fields until it becomes READY or
+      // FAILED; the caller never has to mistake "an id was allocated" for "git clone worked".
+      provisionState: workspace.provisionState,
+      provisionError: workspace.provisionError,
       enableWorktree: workspace.enableWorktree,
       defaultMergeTarget: workspace.defaultMergeTarget,
       ...(workspace.runner
@@ -162,35 +187,42 @@ export class RunnerAgentsController {
       throw new BadRequestException('workspace body must be an object');
     }
     const input = body as Record<string, unknown>;
-    const name = this.optionalString(input, 'name');
-    if (name !== undefined && name.length === 0) {
-      throw new BadRequestException('name cannot be empty');
+    const creating = defaultRunnerId !== undefined;
+    const sanitized: Record<string, unknown> = {};
+    for (const field of ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) {
+      // repoUrl starts provisioning, so it is create-only. The update path keeps using the same
+      // safe config contract for every other field without accidentally becoming a clone retry.
+      if (!creating && field === 'repoUrl') continue;
+      if (field === 'enableWorktree') {
+        if (input[field] !== undefined && typeof input[field] !== 'boolean') {
+          throw new BadRequestException(`${field} must be a boolean`);
+        }
+        if (input[field] !== undefined) sanitized[field] = input[field];
+        continue;
+      }
+      if (field === 'env') {
+        const env = this.normalizeEnv(input[field]);
+        if (env !== undefined) sanitized[field] = env;
+        continue;
+      }
+      const value = this.optionalString(input, field);
+      if (field === 'name' && value !== undefined && value.length === 0) {
+        throw new BadRequestException('name cannot be empty');
+      }
+      // The pipe above only decodes ids that are PRESENT — `""` and `"   "` fail its trim test,
+      // so it skips them and they arrive here verbatim. Neither is a spelling of an id.
+      if (field === 'runnerId' && value !== undefined && value.trim() === '') {
+        throw new BadRequestException('invalid runnerId');
+      }
+      // Same cap as CreateWorkspaceDto. Resolution and credentials remain git's answer on the
+      // runner; this only prevents an unbounded control-plane value.
+      if (field === 'repoUrl' && value !== undefined && value.length > 2048) {
+        throw new BadRequestException('repoUrl must be shorter than or equal to 2048 characters');
+      }
+      if (value !== undefined) sanitized[field] = value;
     }
-    // The pipe above only decodes ids that are PRESENT — `""` and `"   "` fail its trim test, so
-    // it skips them and they arrive here verbatim. Neither is a spelling of an id, and left alone
-    // each one is a different bug: on create the blank reaches a `@db.Uuid` column as a bare P2023
-    // 500, and on update `""` is falsy, which WorkspacesService reads as `{ disconnect: true }` and
-    // silently unbinds the runner the caller was trying to name. Same 400 as any other undecodable
-    // spelling, on both routes — detaching a runner is not something an empty string may say.
-    const runnerId = this.optionalString(input, 'runnerId');
-    if (runnerId !== undefined && runnerId.trim() === '') {
-      throw new BadRequestException('invalid runnerId');
-    }
-    if (input.enableWorktree !== undefined && typeof input.enableWorktree !== 'boolean') {
-      throw new BadRequestException('enableWorktree must be a boolean');
-    }
-    return {
-      name,
-      description: this.optionalString(input, 'description'),
-      provider: this.optionalString(input, 'provider'),
-      systemPrompt: this.optionalString(input, 'systemPrompt'),
-      appendSystemPrompt: this.optionalString(input, 'appendSystemPrompt'),
-      workDir: this.optionalString(input, 'workDir'),
-      runnerId: runnerId ?? defaultRunnerId,
-      enableWorktree: input.enableWorktree as boolean | undefined,
-      env: this.normalizeEnv(input.env),
-      defaultMergeTarget: this.optionalString(input, 'defaultMergeTarget'),
-    };
+    if (creating && sanitized.runnerId === undefined) sanitized.runnerId = defaultRunnerId;
+    return sanitized as OrchestratorWorkspaceInput;
   }
 
   private optionalString(body: Record<string, unknown>, key: string): string | undefined {
