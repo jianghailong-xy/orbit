@@ -3,6 +3,8 @@ import { fileURLToPath, URL } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  handleProjectsShortcut,
+  projectsShortcutLabel,
   WorkspaceRow,
   WorkspaceStateMark,
   workspaceCountsPollInterval,
@@ -18,13 +20,66 @@ const source = readFileSync(fileURLToPath(new URL('./TasksSidePanel.tsx', import
 const styles = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
 
 describe('TasksSidePanel nav', () => {
-  it('adds a Projects entry (icon + label) to the fixed TOP nav', () => {
-    const topBlock = source.match(/const TOP = \[([\s\S]*?)\n\];/)?.[1] ?? '';
-    expect(topBlock).toMatch(/\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects'\s*,?\s*\}/);
+  it('adds Projects (icon, label, and shortcut) to the fixed TOP nav', () => {
+    const topBlock =
+      source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
+    expect(topBlock).toMatch(
+      /\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects',\s*shortcut:\s*projectsShortcutLabel\(\)\s*,?\s*\}/,
+    );
+  });
+
+  it('opens Projects with Cmd/Ctrl+P and takes the chord from browser Print', () => {
+    const run = (overrides: Partial<Parameters<typeof handleProjectsShortcut>[0]> = {}) => {
+      let opened = 0;
+      let prevented = 0;
+      const handled = handleProjectsShortcut(
+        {
+          altKey: false,
+          ctrlKey: false,
+          key: 'p',
+          metaKey: true,
+          preventDefault: () => {
+            prevented += 1;
+          },
+          shiftKey: false,
+          ...overrides,
+        },
+        () => {
+          opened += 1;
+        },
+      );
+      return { handled, opened, prevented };
+    };
+
+    expect(run()).toEqual({ handled: true, opened: 1, prevented: 1 });
+    expect(run({ ctrlKey: true, key: 'P', metaKey: false })).toEqual({
+      handled: true,
+      opened: 1,
+      prevented: 1,
+    });
+    expect(run({ metaKey: false })).toEqual({ handled: false, opened: 0, prevented: 0 });
+    expect(run({ altKey: true })).toEqual({ handled: false, opened: 0, prevented: 0 });
+    expect(run({ shiftKey: true })).toEqual({ handled: false, opened: 0, prevented: 0 });
+    expect(run({ key: 'k' })).toEqual({ handled: false, opened: 0, prevented: 0 });
+    expect(source).toContain("handleProjectsShortcut(event, () => openTopNav('projects'))");
+  });
+
+  it('shows the Projects shortcut in the expanded sidebar and collapsed-rail tooltip', () => {
+    expect(projectsShortcutLabel(true)).toBe('⌘P');
+    expect(projectsShortcutLabel(false)).toBe('Ctrl P');
+    expect(source).toContain('className="tp-count tp-nav-shortcut"');
+    expect(source).toContain("title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}");
+    expect(styles).toMatch(
+      /\.tp-workspace-shortcut,\s*\.tp-nav-shortcut\s*\{[\s\S]*?display:\s*none;/,
+    );
+    expect(styles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.app-shell \.app-nav:not\(\.collapsed\) \.tp-nav-shortcut\s*\{[\s\S]*?display:\s*inline;/,
+    );
   });
 
   it('keeps individual Workspaces out of a redundant fixed-nav parent', () => {
-    const topBlock = source.match(/const TOP = \[([\s\S]*?)\n\];/)?.[1] ?? '';
+    const topBlock =
+      source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
     expect(keys).toEqual(['projects', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
@@ -34,7 +89,9 @@ describe('TasksSidePanel nav', () => {
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
     // The rail maps TOP directly; the expanded section maps navItems, which starts from TOP —
     // so a TOP entry reaches both surfaces without either render site needing its own list.
-    expect(source).toMatch(/const navItems =\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.TOP,/);
+    expect(source).toMatch(
+      /const navItems(?:\s*:\s*TopNavItem\[\])?\s*=\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.TOP,/,
+    );
     expect(source).toContain('{TOP.map((t) => (');
     expect(source).toContain('{navItems.map((t) => (');
   });

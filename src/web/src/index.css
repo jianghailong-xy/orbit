@@ -793,10 +793,10 @@ body {
 .tp-item.active .tp-count {
   color: var(--brand);
 }
-/* Workspace shortcuts are useful on the keyboard-driven desktop sidebar. The mobile drawer keeps
-   the same rows but has no persistent hardware-key context, so it leaves the trailing slot to
-   status alone. */
-.tp-workspace-shortcut {
+/* Shortcut hints are useful on the keyboard-driven desktop sidebar. The mobile drawer has no
+   persistent hardware-key context, so it leaves the trailing slot to navigation status alone. */
+.tp-workspace-shortcut,
+.tp-nav-shortcut {
   display: none;
   flex: none;
   font-family: inherit;
@@ -1094,6 +1094,9 @@ body {
     display: none;
   }
   .app-shell .app-nav:not(.collapsed) .tp-workspace-shortcut {
+    display: inline;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-nav-shortcut {
     display: inline;
   }
   .app-shell .app-nav.collapsed .tp-rail-running {

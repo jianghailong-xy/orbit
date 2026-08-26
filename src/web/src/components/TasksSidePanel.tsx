@@ -18,7 +18,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown, Tooltip } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
   PlanUsage,
@@ -40,10 +40,55 @@ import {
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 
+const IS_MAC_PLATFORM =
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+
+/** Projects is a global destination: Cmd/Ctrl + P opens it from every routed view. */
+export function projectsShortcutLabel(isMac = IS_MAC_PLATFORM): string {
+  return isMac ? '⌘P' : 'Ctrl P';
+}
+
+type ProjectsShortcutEvent = Pick<
+  KeyboardEvent,
+  'altKey' | 'ctrlKey' | 'key' | 'metaKey' | 'preventDefault' | 'shiftKey'
+>;
+
+/** Framework-independent handler for the Projects keyboard contract. */
+export function handleProjectsShortcut(
+  event: ProjectsShortcutEvent,
+  openProjects: () => void,
+): boolean {
+  if (
+    !(event.metaKey || event.ctrlKey) ||
+    event.altKey ||
+    event.shiftKey ||
+    event.key.toLowerCase() !== 'p'
+  ) {
+    return false;
+  }
+  // Take the chord from the browser's Print command before changing routes.
+  event.preventDefault();
+  openProjects();
+  return true;
+}
+
+interface TopNavItem {
+  key: string;
+  icon: ReactNode;
+  label: string;
+  shortcut?: string;
+}
+
 // Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
 // primary destinations in their own right, so there is no proxy Workspaces parent here.
-const TOP = [
-  { key: 'projects', icon: <ProjectOutlined />, label: 'Projects' },
+const TOP: TopNavItem[] = [
+  {
+    key: 'projects',
+    icon: <ProjectOutlined />,
+    label: 'Projects',
+    shortcut: projectsShortcutLabel(),
+  },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
@@ -59,9 +104,6 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
-const IS_MAC_PLATFORM =
-  typeof navigator !== 'undefined' &&
-  /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -163,7 +205,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const me = useQuery(meQuery());
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
-  const navItems =
+  const navItems: TopNavItem[] =
     me.data?.role === 'ADMIN'
       ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
       : TOP;
@@ -378,6 +420,16 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     [navigate],
   );
 
+  // Cmd/Ctrl + P opens Projects from every route. Like the other modifier shortcuts, it remains
+  // active while an input is focused; preventDefault in the handler suppresses browser Print.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      handleProjectsShortcut(event, () => openTopNav('projects'));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openTopNav]);
+
   // ⌘/Ctrl + 1‒9 opens the matching workspace in the list. The modifier chord never
   // produces text input, so it fires even while a text field is focused;
   // preventDefault stops the browser's own tab-switch on the same chord.
@@ -468,7 +520,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             key={t.key}
             className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
             onClick={() => openTopNav(t.key)}
-            title={t.label}
+            title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
           </div>
@@ -518,6 +570,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
+              {t.shortcut && (
+                <kbd
+                  className="tp-count tp-nav-shortcut"
+                  title={`Open ${t.label} with ${t.shortcut}`}
+                >
+                  {t.shortcut}
+                </kbd>
+              )}
             </div>
           ))}
         </div>
