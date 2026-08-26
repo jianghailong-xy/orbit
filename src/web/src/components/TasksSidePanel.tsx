@@ -740,6 +740,9 @@ export function WorkspaceRow({
   onOpen: (a: Workspace) => void;
 }) {
   const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
+  // Attention and disconnection remain higher priority than background activity. CSS reveals this
+  // quiet mark only when the expanded desktop sidebar and the real Session list are both visible.
+  const showRunningDot = running && !offline && needsYou === 0;
   return (
     <div
       className={`tp-item ${active ? 'active' : ''}`}
@@ -749,7 +752,6 @@ export function WorkspaceRow({
         className="tp-ico tp-workspace-icon"
         role={offline ? 'img' : undefined}
         aria-label={offline ? offlineTitle : undefined}
-        aria-hidden={offline ? undefined : true}
       >
         <FolderOutlined aria-hidden="true" />
         {offline && (
@@ -759,6 +761,14 @@ export function WorkspaceRow({
               aria-hidden="true"
             />
           </Tooltip>
+        )}
+        {showRunningDot && (
+          <span
+            className="tp-workspace-icon-running"
+            title="Running"
+            role="img"
+            aria-label="Workspace has a running session"
+          />
         )}
       </span>
       <span className="tp-label tp-workspace-label">

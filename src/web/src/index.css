@@ -741,6 +741,28 @@ body {
 .tp-workspace-icon {
   position: relative;
 }
+/* On the desktop console the Session list already owns the live spinner. Keep Workspace identity
+   stable and reduce the duplicate motion to a small, static aggregate mark on the folder. */
+.tp-workspace-icon-running {
+  display: none;
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  z-index: 2;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 1.5px var(--bg-raised);
+}
+.tp-item:hover .tp-workspace-icon-running {
+  box-shadow: 0 0 0 1.5px var(--bg-hover);
+}
+.tp-item.active .tp-workspace-icon-running {
+  /* Keep an opaque cutout between two brand-blue strokes, including in the dark theme where
+     --brand-tint is translucent and would visually merge the dot back into the folder. */
+  box-shadow: 0 0 0 1.5px var(--bg-raised);
+}
 /* Runner availability belongs to the Workspace identity: a tiny disconnect badge overlays the
    folder only when that Runner is explicitly offline. Online folders stay visually quiet. */
 .tp-workspace-icon-offline {
@@ -1050,6 +1072,16 @@ body {
    (which toggles on .open, not .collapsed) is never touched — there the panel
    always opens as the full list. */
 @media (min-width: 961px) {
+  /* Only de-duplicate activity once the real desktop Session list has rendered beside the expanded
+     sidebar. Loading/not-found consoles, other pages, mobile drawers, and the collapsed rail keep
+     the Workspace spinner because it remains their only visible running signal. */
+  .app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-icon-running {
+    display: block;
+  }
+  .app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-running {
+    display: none;
+  }
+
   /* Animate the collapse/expand width change so the panel glides between the full
      list and the 56px rail. Suppressed during a drag-resize (.resizing) so the edge
      tracks the cursor 1:1 instead of rubber-banding behind the transition. */

@@ -141,7 +141,7 @@ describe('TasksSidePanel workspace rows', () => {
     expect(source).toContain('<span className="tp-rail-avatar">');
   });
 
-  it('uses the Session-list LoadingOutlined spinner only for genuine running work', () => {
+  it('keeps the trailing spinner when the Session list is not simultaneously visible', () => {
     const running = renderToStaticMarkup(
       <WorkspaceStateMark offline={false} running needsYou={0} />,
     );
@@ -155,6 +155,75 @@ describe('TasksSidePanel workspace rows', () => {
       <WorkspaceStateMark offline={false} running={false} needsYou={0} />,
     );
     expect(idle).toBe('');
+  });
+
+  it('renders both running marks and lets the actual desktop two-pane layout choose the quiet dot', () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active
+        offline={false}
+        running
+        needsYou={0}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toContain('tp-workspace-icon-running');
+    expect(html).toContain('title="Running"');
+    expect(html).toContain('aria-label="Workspace has a running session"');
+    expect(html).toContain('anticon-loading');
+    expect(styles).toMatch(
+      /\.tp-workspace-icon-running\s*\{[\s\S]*?display:\s*none;[\s\S]*?width:\s*6px;[\s\S]*?height:\s*6px;[\s\S]*?background:\s*var\(--brand\)/,
+    );
+    const dotRule = styles.match(/\.tp-workspace-icon-running\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+    expect(dotRule).not.toContain('animation');
+    expect(styles).toMatch(
+      /\.tp-item\.active \.tp-workspace-icon-running\s*\{[\s\S]*?box-shadow:\s*0 0 0 1\.5px var\(--bg-raised\)/,
+    );
+    const desktopDotSelector =
+      '.app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-icon-running';
+    const desktopSpinnerSelector =
+      '.app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-running';
+    expect(styles).toContain(desktopDotSelector);
+    expect(styles).toContain(desktopSpinnerSelector);
+    expect(
+      styles.match(new RegExp(`${desktopDotSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
+    ).toContain('display: block');
+    expect(
+      styles.match(new RegExp(`${desktopSpinnerSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
+    ).toContain('display: none');
+  });
+
+  it('keeps needs-you and offline states ahead of the quiet running dot', () => {
+    const needsYou = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline={false}
+        running
+        needsYou={2}
+        onOpen={() => undefined}
+      />,
+    );
+    const offline = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline
+        running
+        needsYou={0}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(needsYou).toContain('tp-count needs-you');
+    expect(needsYou).not.toContain('tp-workspace-icon-running');
+    expect(needsYou).not.toContain('anticon-loading');
+    expect(offline).toContain('tp-workspace-icon-offline');
+    expect(offline).not.toContain('tp-workspace-icon-running');
+    expect(offline).not.toContain('anticon-loading');
   });
 
   it('moves expanded offline state onto the folder and suppresses a stale running signal', () => {
