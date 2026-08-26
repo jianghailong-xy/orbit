@@ -2,86 +2,117 @@ import { describe, expect, it } from 'vitest';
 import {
   QUIET_MS,
   attentionChipOf,
+  attentionReasonOf,
   attentionSectionOf,
+  failedTaskCount,
   orderWithinSection,
   projectAttentionSections,
   type AttentionProject,
   type AttentionSectionKey,
 } from './projectAttention';
 
-/** A project as the endpoint returns one, named by what makes it interesting. Buckets default to
- *  five zeroes so each case states only the numbers it is about. */
+const NOW = Date.parse('2026-08-23T18:55:05.000Z');
+const HOUR = 60 * 60 * 1000;
+const at = (msBeforeNow: number) => new Date(NOW - msBeforeNow).toISOString();
+
+let nextId = 0;
+
 function project(
   over: Partial<AttentionProject> & { buckets?: Partial<AttentionProject['buckets']> } = {},
 ): AttentionProject {
+  nextId += 1;
+  const buckets = {
+    running: 0,
+    ready: 0,
+    blocked: 0,
+    done: 0,
+    cancelled: 0,
+    ...(over.buckets ?? {}),
+  };
+  const bucketed = Object.values(buckets).reduce((sum, count) => sum + count, 0);
   return {
+    id: `0195c0de-0000-7000-8000-${String(nextId).padStart(12, '0')}`,
+    title: `Project ${nextId}`,
     status: 'OPEN',
-    lastActivityAt: '2026-01-01T00:00:00.000Z',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    _count: { tasks: bucketed },
+    lastActivityAt: bucketed > 0 ? at(HOUR) : null,
     ...over,
-    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
+    buckets,
   };
 }
 
-describe('attentionSectionOf', () => {
-  it('sends ready work with nothing running to Stalled', () => {
-    expect(attentionSectionOf(project({ buckets: { ready: 9, blocked: 1, done: 1 } }))).toBe(
-      'stalled',
-    );
-    // One ready task is enough: the condition is "nothing is serving the queue", not "a lot is
-    // waiting".
-    expect(attentionSectionOf(project({ buckets: { ready: 1 } }))).toBe('stalled');
+describe('attention classification', () => {
+  it('puts a durable USER-owned blocker ahead of lifecycle-derived guesses', () => {
+    const row = project({
+      buckets: { running: 1 },
+      attention: {
+        userBlockers: 1,
+        coordinatorBlockers: 0,
+        systemBlockers: 0,
+        maxSeverity: 'WARNING',
+        attentionSinceAt: at(2 * QUIET_MS),
+        nextCheckAt: at(-HOUR),
+      },
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('needs-user');
+    expect(attentionSectionOf(row, NOW)).toBe('attention');
   });
 
-  it('sends an OPEN project whose tasks are all settled to Wrapping up', () => {
-    expect(attentionSectionOf(project({ buckets: { done: 12 } }))).toBe('wrapping-up');
-    expect(attentionSectionOf(project({ buckets: { done: 5, cancelled: 7 } }))).toBe('wrapping-up');
-    // Cancelled alone still counts as settled — the work stopped on a decision, and there is
-    // nothing left to run either way.
-    expect(attentionSectionOf(project({ buckets: { cancelled: 3 } }))).toBe('wrapping-up');
+  it('puts closed projects in Completed before considering inconsistent live buckets', () => {
+    for (const status of ['DONE', 'CANCELLED'] as const) {
+      const row = project({ status, _count: { tasks: 8 }, buckets: { running: 2, ready: 4 } });
+      expect(attentionSectionOf(row, NOW)).toBe('completed');
+      expect(attentionReasonOf(row, NOW)).toBeNull();
+    }
   });
 
-  it('sends anything with a task running to In progress', () => {
-    expect(attentionSectionOf(project({ buckets: { running: 1, blocked: 117 } }))).toBe('running');
-    // Running WINS over ready: the project holds ready tasks and is also being served, so it is
-    // not the case Stalled exists to surface.
-    expect(attentionSectionOf(project({ buckets: { running: 1, ready: 3, blocked: 10 } }))).toBe(
-      'running',
-    );
+  it('derives FAILED from the task-count remainder and surfaces it first', () => {
+    const row = project({ _count: { tasks: 5 }, buckets: { running: 1, done: 2 } });
+    expect(failedTaskCount(row)).toBe(2);
+    expect(attentionReasonOf(row, NOW)).toBe('failed');
+    expect(attentionSectionOf(row, NOW)).toBe('attention');
+
+    const inconsistent = project({ _count: { tasks: 1 }, buckets: { done: 2 } });
+    expect(failedTaskCount(inconsistent)).toBe(0);
   });
 
-  it('sends DONE and CANCELLED projects to Completed whatever their buckets say', () => {
-    expect(attentionSectionOf(project({ status: 'DONE', buckets: { done: 16 } }))).toBe('completed');
-    expect(attentionSectionOf(project({ status: 'CANCELLED', buckets: { done: 7 } }))).toBe(
-      'completed',
-    );
-    // A closed project with work still open or in flight is still closed: `status` is the
-    // decision, and the buckets do not overrule it.
-    expect(attentionSectionOf(project({ status: 'DONE', buckets: { running: 2, ready: 4 } }))).toBe(
-      'completed',
-    );
+  it('separates healthy running work from a quiet run', () => {
+    const healthy = project({ buckets: { running: 1, ready: 3 }, lastActivityAt: at(HOUR) });
+    const quiet = project({ buckets: { running: 1, ready: 3 }, lastActivityAt: at(2 * QUIET_MS) });
+
+    // Running wins over ready while the run is healthy.
+    expect(attentionSectionOf(healthy, NOW)).toBe('running');
+    expect(attentionReasonOf(healthy, NOW)).toBeNull();
+    expect(attentionSectionOf(quiet, NOW)).toBe('attention');
+    expect(attentionReasonOf(quiet, NOW)).toBe('no-activity-running');
   });
 
-  it('sends an OPEN project with no tasks at all to In progress, never to Wrapping up', () => {
-    const untouched = project({ buckets: {}, lastActivityAt: null });
+  it('gives fresh ready work a grace period before asking for attention', () => {
+    const fresh = project({ buckets: { ready: 9, blocked: 1 }, lastActivityAt: at(HOUR) });
+    const quiet = project({ buckets: { ready: 9, blocked: 1 }, lastActivityAt: at(2 * QUIET_MS) });
 
-    // Wrapping up says "every task settled"; this project has settled nothing. In progress is
-    // where a project that has just been created belongs, and its null activity puts it at the
-    // tail of that section on its own — see the ordering suite below.
-    expect(attentionSectionOf(untouched)).toBe('running');
-    expect(attentionSectionOf(untouched)).not.toBe('wrapping-up');
+    expect(attentionSectionOf(fresh, NOW)).toBe('ready');
+    expect(attentionSectionOf(quiet, NOW)).toBe('attention');
+    expect(attentionReasonOf(quiet, NOW)).toBe('no-activity-ready');
   });
 
-  it('sends a project blocked on another project to Stalled, not off the list', () => {
-    // Nothing running, nothing ready, and open work that cannot start: reachable whenever every
-    // open task waits on a prerequisite filed in ANOTHER project. None of the four plain rules
-    // claims it, so this is the case that would silently vanish.
-    const externallyBlocked = project({ buckets: { blocked: 4 } });
-
-    expect(attentionSectionOf(externallyBlocked)).toBe('stalled');
-    expect(attentionSectionOf(externallyBlocked)).not.toBe('wrapping-up');
+  it('calls dependency-only work Waiting however old it is', () => {
+    const waiting = project({ buckets: { blocked: 4 }, lastActivityAt: at(30 * QUIET_MS) });
+    expect(attentionSectionOf(waiting, NOW)).toBe('waiting');
+    expect(attentionReasonOf(waiting, NOW)).toBeNull();
   });
 
-  it('lands every combination of buckets and statuses in exactly one section', () => {
+  it('puts settled-but-open work in Needs attention, and empty projects in Needs definition', () => {
+    const settled = project({ buckets: { done: 5, cancelled: 7 } });
+    const empty = project({ title: 'Unplanned project' });
+
+    expect(attentionSectionOf(settled, NOW)).toBe('attention');
+    expect(attentionReasonOf(settled, NOW)).toBe('ready-to-close');
+    expect(attentionSectionOf(empty, NOW)).toBe('definition');
+  });
+
+  it('lands every bucket/status combination in exactly one of the six lanes', () => {
     const counts = [0, 1, 2];
     const seen = new Set<AttentionSectionKey>();
     for (const status of ['OPEN', 'DONE', 'CANCELLED'] as const)
@@ -90,284 +121,232 @@ describe('attentionSectionOf', () => {
           for (const blocked of counts)
             for (const done of counts)
               for (const cancelled of counts) {
-                const key = attentionSectionOf(
-                  project({ status, buckets: { running, ready, blocked, done, cancelled } }),
-                );
-                // The type says four; what matters is that it is always one of the four and never
-                // undefined — a project that classified nowhere would be a project off the page.
-                expect(['stalled', 'wrapping-up', 'running', 'completed']).toContain(key);
+                const row = project({
+                  status,
+                  buckets: { running, ready, blocked, done, cancelled },
+                  lastActivityAt: running + ready + blocked + done + cancelled > 0 ? at(HOUR) : null,
+                });
+                const key = attentionSectionOf(row, NOW);
+                expect(['attention', 'running', 'ready', 'waiting', 'definition', 'completed']).toContain(key);
                 seen.add(key);
               }
-    expect([...seen].sort()).toEqual(['completed', 'running', 'stalled', 'wrapping-up']);
+
+    expect([...seen].sort()).toEqual([
+      'attention',
+      'completed',
+      'definition',
+      'ready',
+      'running',
+      'waiting',
+    ]);
   });
 });
 
 describe('orderWithinSection', () => {
-  const stalled = (ready: number, lastActivityAt: string | null): AttentionProject =>
-    project({ buckets: { ready }, lastActivityAt });
+  it('orders Needs attention by reason, then puts the longest-quiet peer first', () => {
+    const closing = project({ title: 'Close', buckets: { done: 2 } });
+    const readyNewer = project({ title: 'Ready newer', buckets: { ready: 1 }, lastActivityAt: at(2 * QUIET_MS) });
+    const readyOlder = project({ title: 'Ready older', buckets: { ready: 1 }, lastActivityAt: at(4 * QUIET_MS) });
+    const zombie = project({ title: 'Zombie', buckets: { running: 1 }, lastActivityAt: at(3 * QUIET_MS) });
+    const failed = project({ title: 'Failed', _count: { tasks: 2 }, buckets: { done: 1 } });
+    const needsUser = project({
+      title: 'Needs user',
+      attention: {
+        userBlockers: 1,
+        coordinatorBlockers: 0,
+        systemBlockers: 0,
+        maxSeverity: 'WARNING',
+        attentionSinceAt: at(QUIET_MS),
+        nextCheckAt: null,
+      },
+    });
 
-  it('orders Stalled by ready count, descending', () => {
-    const ordered = orderWithinSection('stalled', [
-      stalled(4, '2026-01-05T00:00:00.000Z'),
-      stalled(6118, '2026-01-01T00:00:00.000Z'),
-      stalled(9, '2026-01-04T00:00:00.000Z'),
+    expect(orderWithinSection('attention', [closing, readyNewer, failed, needsUser, zombie, readyOlder], NOW)).toEqual([
+      needsUser,
+      failed,
+      zombie,
+      readyOlder,
+      readyNewer,
+      closing,
     ]);
-
-    // The biggest ask first — and NOT the most recently touched, which would put the 4 on top.
-    expect(ordered.map((p) => p.buckets.ready)).toEqual([6118, 9, 4]);
   });
 
-  it('breaks a tie in Stalled on activity, so equal ready counts still have a readable order', () => {
-    const older = stalled(3, '2026-01-01T00:00:00.000Z');
-    const newer = stalled(3, '2026-02-01T00:00:00.000Z');
+  it('does not let raw Ready count determine priority', () => {
+    const oneOlder = project({ buckets: { ready: 1 }, lastActivityAt: at(10 * HOUR) });
+    const tenThousandNewer = project({ buckets: { ready: 10_000 }, lastActivityAt: at(HOUR) });
 
-    // Both orderings of the same input give the same answer: the tie is decided by a value on the
-    // row, not by the order the server happened to send.
-    expect(orderWithinSection('stalled', [older, newer])).toEqual([newer, older]);
-    expect(orderWithinSection('stalled', [newer, older])).toEqual([newer, older]);
+    expect(orderWithinSection('ready', [tenThousandNewer, oneOlder], NOW)).toEqual([
+      oneOlder,
+      tenThousandNewer,
+    ]);
   });
 
-  it('orders In progress by last activity, descending', () => {
-    const days = (d: string) => project({ buckets: { running: 1 }, lastActivityAt: d });
-    const recent = days('2026-03-01T12:00:00.000Z');
-    const middle = days('2026-02-01T12:00:00.000Z');
-    const stale = days('2026-01-01T12:00:00.000Z');
+  it('orders human blockers by visible severity, then by how long the user has owned them', () => {
+    const warningNew = project({
+      attention: {
+        userBlockers: 1, coordinatorBlockers: 0, systemBlockers: 0,
+        maxSeverity: 'WARNING', attentionSinceAt: at(QUIET_MS), nextCheckAt: null,
+      },
+    });
+    const warningOld = project({
+      attention: {
+        userBlockers: 2, coordinatorBlockers: 0, systemBlockers: 0,
+        maxSeverity: 'WARNING', attentionSinceAt: at(4 * QUIET_MS), nextCheckAt: null,
+      },
+    });
+    const criticalNew = project({
+      attention: {
+        userBlockers: 1, coordinatorBlockers: 0, systemBlockers: 0,
+        maxSeverity: 'CRITICAL', attentionSinceAt: at(HOUR), nextCheckAt: null,
+      },
+    });
 
-    expect(orderWithinSection('running', [middle, stale, recent])).toEqual([recent, middle, stale]);
+    expect(orderWithinSection('attention', [warningNew, warningOld, criticalNew], NOW)).toEqual([
+      criticalNew,
+      warningOld,
+      warningNew,
+    ]);
   });
 
-  it('puts a project that has never had activity at the tail, not the head', () => {
-    const never = project({ lastActivityAt: null });
-    const longAgo = project({ buckets: { running: 1 }, lastActivityAt: '2020-01-01T00:00:00Z' });
+  it('uses newest activity for healthy Running and Completed', () => {
+    const older = project({ buckets: { running: 1 }, lastActivityAt: at(3 * HOUR) });
+    const newer = project({ buckets: { running: 1 }, lastActivityAt: at(HOUR) });
+    expect(orderWithinSection('running', [older, newer], NOW)).toEqual([newer, older]);
 
-    // Null is "nothing has ever happened here", which must not read as "happened at the epoch,
-    // therefore newest" — nor sort above a project that moved six years ago.
-    expect(orderWithinSection('running', [never, longAgo])).toEqual([longAgo, never]);
+    const closedOlder = project({ status: 'DONE', buckets: { done: 1 }, lastActivityAt: at(3 * HOUR) });
+    const closedNewer = project({ status: 'DONE', buckets: { done: 1 }, lastActivityAt: at(HOUR) });
+    expect(orderWithinSection('completed', [closedOlder, closedNewer], NOW)).toEqual([
+      closedNewer,
+      closedOlder,
+    ]);
   });
 
-  it('gives two projects that have never had a task a definite order', () => {
-    const a = project({ lastActivityAt: null });
-    const b = project({ lastActivityAt: null });
+  it('uses oldest activity for Ready and Waiting to prevent starvation', () => {
+    const olderReady = project({ buckets: { ready: 1 }, lastActivityAt: at(10 * HOUR) });
+    const newerReady = project({ buckets: { ready: 1 }, lastActivityAt: at(HOUR) });
+    expect(orderWithinSection('ready', [newerReady, olderReady], NOW)).toEqual([olderReady, newerReady]);
 
-    // Neither outranks the other, so the incoming order stands — and stands the same way round
-    // whichever way it arrived. Never an order left to whatever the engine does with a NaN.
-    expect(orderWithinSection('running', [a, b])).toEqual([a, b]);
-    expect(orderWithinSection('running', [b, a])).toEqual([b, a]);
+    const olderWait = project({ buckets: { blocked: 1 }, lastActivityAt: at(5 * QUIET_MS) });
+    const newerWait = project({ buckets: { blocked: 1 }, lastActivityAt: at(QUIET_MS) });
+    expect(orderWithinSection('waiting', [newerWait, olderWait], NOW)).toEqual([olderWait, newerWait]);
   });
 
-  it('orders Wrapping up and Completed by activity too', () => {
-    const older = project({ buckets: { done: 2 }, lastActivityAt: '2026-01-01T00:00:00.000Z' });
-    const newer = project({ buckets: { done: 5 }, lastActivityAt: '2026-06-01T00:00:00.000Z' });
-
-    expect(orderWithinSection('wrapping-up', [older, newer])).toEqual([newer, older]);
-    expect(orderWithinSection('completed', [older, newer])).toEqual([newer, older]);
+  it('orders Needs definition by its visible title, then uses id as a deterministic tie-break', () => {
+    const zulu = project({ title: 'Zulu' });
+    const alphaLaterId = project({ title: 'Alpha', id: 'b' });
+    const alphaEarlierId = project({ title: 'Alpha', id: 'a' });
+    expect(orderWithinSection('definition', [zulu, alphaLaterId, alphaEarlierId], NOW)).toEqual([
+      alphaEarlierId,
+      alphaLaterId,
+      zulu,
+    ]);
   });
 
-  it('leaves the array it was handed alone', () => {
-    const input = [stalled(1, '2026-01-01T00:00:00.000Z'), stalled(9, '2026-01-01T00:00:00.000Z')];
+  it('does not mutate the query-cache array', () => {
+    const input = [
+      project({ buckets: { ready: 1 }, lastActivityAt: at(HOUR) }),
+      project({ buckets: { ready: 1 }, lastActivityAt: at(2 * HOUR) }),
+    ];
     const before = [...input];
-
-    orderWithinSection('stalled', input);
-
-    // The array is react-query's cache entry; sorting it in place would reorder the cache.
+    orderWithinSection('ready', input, NOW);
     expect(input).toEqual(before);
   });
 });
 
 describe('projectAttentionSections', () => {
-  /** Rows carrying the fields `ProjectSections` needs on top of the ones this module reads. */
-  const row = (id: string, over: Parameters<typeof project>[0] = {}) => ({
-    id: `0195c0de-0000-7000-8000-0000000000${id}`,
-    title: `Project ${id}`,
-    _count: { tasks: 1 },
-    ...project(over),
-  });
-
-  it('returns the four sections with in-progress work first', () => {
-    const sections = projectAttentionSections([]);
-
-    expect(sections.map((s) => s.key)).toEqual(['running', 'stalled', 'wrapping-up', 'completed']);
-    expect(sections.map((s) => s.title)).toEqual([
-      'In progress',
-      'Stalled',
-      'Wrapping up',
+  it('returns the six lanes in next-actor order and folds only Completed', () => {
+    const sections = projectAttentionSections([], NOW);
+    expect(sections.map((section) => section.key)).toEqual([
+      'attention',
+      'running',
+      'ready',
+      'waiting',
+      'definition',
+      'completed',
+    ]);
+    expect(sections.map((section) => section.title)).toEqual([
+      'Needs attention',
+      'Running',
+      'Ready',
+      'Waiting',
+      'Needs definition',
       'Completed',
     ]);
-  });
-
-  it('gives every section a header line naming what orders it', () => {
-    for (const section of projectAttentionSections([])) {
-      expect(section.note.length).toBeGreaterThan(0);
-      // Each note names its ordering key in words a reader can check against the row: the ready
-      // count, or the activity column. An order whose key is not on the page is not verifiable.
-      expect(section.note).toMatch(/ready|activity/);
-    }
-  });
-
-  it('folds only Completed by default', () => {
-    const collapsed = projectAttentionSections([])
-      .filter((s) => s.defaultCollapsed)
-      .map((s) => s.key);
-
-    expect(collapsed).toEqual(['completed']);
-  });
-
-  it('files a mixed list into its four sections and orders each', () => {
-    const sections = projectAttentionSections([
-      row('01', { buckets: { running: 1 }, lastActivityAt: '2026-01-02T00:00:00.000Z' }),
-      row('02', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: '2026-01-01T00:00:00.000Z' }),
-      row('03', { status: 'DONE', buckets: { done: 16 } }),
-      row('04', { buckets: { done: 12 } }),
-      row('05', { buckets: { ready: 6118, blocked: 17324 } }),
-      row('06', { buckets: { running: 1 }, lastActivityAt: '2026-05-02T00:00:00.000Z' }),
-      row('07', { status: 'CANCELLED', buckets: { done: 3 } }),
-      row('08', { buckets: {}, lastActivityAt: null }),
+    expect(sections.filter((section) => section.defaultCollapsed).map((section) => section.key)).toEqual([
+      'completed',
     ]);
-
-    const titles = (key: AttentionSectionKey) =>
-      sections.find((s) => s.key === key)!.projects.map((p) => p.title);
-
-    expect(titles('stalled')).toEqual(['Project 05', 'Project 02']);
-    expect(titles('wrapping-up')).toEqual(['Project 04']);
-    // The task-less project 08 is here, and it is LAST — no special case in the sort, just null
-    // activity sorting below every real instant.
-    expect(titles('running')).toEqual(['Project 06', 'Project 01', 'Project 08']);
-    expect(titles('completed')).toEqual(['Project 03', 'Project 07']);
+    for (const section of sections) expect(section.note).not.toBe('');
   });
 
-  it('keeps a section that matched nothing, for its caller to drop', () => {
-    const sections = projectAttentionSections([row('01', { buckets: { running: 1 } })]);
-
-    // Four sections come back whatever the data — ProjectSections is the one place that decides
-    // an empty section is not worth a header, and deciding it twice is how the two drift.
-    expect(sections).toHaveLength(4);
-    expect(sections.find((s) => s.key === 'stalled')!.projects).toEqual([]);
+  it('keeps empty lanes for ProjectSections to drop', () => {
+    const sections = projectAttentionSections([project({ buckets: { running: 1 } })], NOW);
+    expect(sections).toHaveLength(6);
+    expect(sections.find((section) => section.key === 'waiting')?.projects).toEqual([]);
   });
 });
 
 describe('attentionChipOf', () => {
-  // A fixed instant to measure ages against, so the assertions below say what they mean rather
-  // than what the clock happened to be during the run.
-  const NOW = Date.parse('2026-08-23T18:55:05.000Z');
-  const HOUR = 60 * 60 * 1000;
-  /** An ISO instant `ms` before NOW — the way every case here spells "quiet this long". */
-  const quietFor = (ms: number) => new Date(NOW - ms).toISOString();
-
-  it('says how long a stalled project has been quiet', () => {
-    const chip = attentionChipOf(
-      project({ buckets: { ready: 9, blocked: 1 }, lastActivityAt: quietFor(2 * QUIET_MS) }),
-      NOW,
-    );
-
-    expect(chip).toEqual({ tone: 'warning', text: 'Stalled 2d' });
+  it('shows the highest-priority failure reason with correct plurality', () => {
+    const one = project({ _count: { tasks: 2 }, buckets: { done: 1 } });
+    const many = project({ _count: { tasks: 4 }, buckets: { done: 1 } });
+    expect(attentionChipOf(one, NOW)).toEqual({ tone: 'warning', text: '1 failed task' });
+    expect(attentionChipOf(many, NOW)).toEqual({ tone: 'warning', text: '3 failed tasks' });
   });
 
-  it('calls out a project whose run says RUNNING and has written nothing for days', () => {
-    // The zombie: `running > 0` puts it under a header that reads "Work in flight", and nothing
-    // has moved since three days ago. Production had two of these with no signal at all.
-    const chip = attentionChipOf(
-      project({ buckets: { running: 1, ready: 3, blocked: 10 }, lastActivityAt: quietFor(3 * QUIET_MS) }),
-      NOW,
-    );
-
-    expect(chip).toEqual({ tone: 'warning', text: 'No progress 3d' });
+  it('names an outstanding human-owned blocker', () => {
+    const row = project({
+      attention: {
+        userBlockers: 2,
+        coordinatorBlockers: 1,
+        systemBlockers: 0,
+        maxSeverity: 'CRITICAL',
+        attentionSinceAt: at(2 * QUIET_MS),
+        nextCheckAt: null,
+      },
+    });
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Needs you · Critical · 2d · 2 blockers',
+    });
   });
 
-  it('counts the settled work on a finished project nobody closed', () => {
-    const chip = attentionChipOf(project({ buckets: { done: 12 } }), NOW);
-
-    expect(chip).toEqual({ tone: 'brand', text: '12/12 settled · still open' });
-    // Cancelled work is in the count and was never "done" — which is why the badge says settled,
-    // the same word the section header above it uses.
-    expect(attentionChipOf(project({ buckets: { done: 5, cancelled: 7 } }), NOW)?.text).toBe(
-      '12/12 settled · still open',
-    );
+  it('distinguishes a quiet run from an idle ready queue', () => {
+    const run = project({ buckets: { running: 1 }, lastActivityAt: at(3 * QUIET_MS) });
+    const ready = project({ buckets: { ready: 1 }, lastActivityAt: at(2 * QUIET_MS) });
+    expect(attentionChipOf(run, NOW)).toEqual({ tone: 'warning', text: 'Running · no activity 3d' });
+    expect(attentionChipOf(ready, NOW)).toEqual({ tone: 'warning', text: 'Ready · no activity 2d' });
   });
 
-  it('is the only badge that does not depend on the clock', () => {
-    // Wrapping up is not an age: the ask is "close this", and it is equally true one minute after
-    // the last task finished as it is a week later.
-    const justFinished = project({ buckets: { done: 12 }, lastActivityAt: quietFor(1000) });
-
-    expect(attentionChipOf(justFinished, NOW)?.tone).toBe('brand');
+  it('shows settled work that still needs the project closed', () => {
+    const row = project({ buckets: { done: 5, cancelled: 7 } });
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'brand',
+      text: '12/12 settled · still open',
+    });
   });
 
-  it('leaves a stalled project that was touched inside the threshold unbadged', () => {
-    // The negative case the whole threshold exists for: nothing is running here either, and the
-    // section already says so. Three hours of quiet is a long turn, not a problem.
-    const recent = project({ buckets: { ready: 6118, blocked: 17324 }, lastActivityAt: quietFor(3 * HOUR) });
-
-    expect(attentionSectionOf(recent)).toBe('stalled');
-    expect(attentionChipOf(recent, NOW)).toBeNull();
+  it('holds the quiet threshold exactly', () => {
+    const justFresh = project({ buckets: { ready: 1 }, lastActivityAt: at(QUIET_MS - 1) });
+    const justQuiet = project({ buckets: { ready: 1 }, lastActivityAt: at(QUIET_MS) });
+    expect(attentionChipOf(justFresh, NOW)).toBeNull();
+    expect(attentionChipOf(justQuiet, NOW)?.text).toBe('Ready · no activity 1d');
   });
 
-  it('leaves a running project that just wrote something unbadged', () => {
-    const busy = project({ buckets: { running: 2, blocked: 117 }, lastActivityAt: quietFor(3 * 60 * 1000) });
-
-    expect(attentionSectionOf(busy)).toBe('running');
-    expect(attentionChipOf(busy, NOW)).toBeNull();
-  });
-
-  it('holds the threshold exactly: one second short of a day is silent, one second past is not', () => {
-    const buckets = { ready: 4 };
-
-    expect(attentionChipOf(project({ buckets, lastActivityAt: quietFor(QUIET_MS - 1000) }), NOW)).toBeNull();
-    expect(attentionChipOf(project({ buckets, lastActivityAt: quietFor(QUIET_MS + 1000) }), NOW)?.text).toBe(
-      'Stalled 1d',
-    );
-  });
-
-  it('never badges a completed project, however long ago it was finished', () => {
-    for (const status of ['DONE', 'CANCELLED'] as const) {
-      const closed = project({ status, buckets: { done: 16 }, lastActivityAt: quietFor(90 * QUIET_MS) });
-      expect(attentionChipOf(closed, NOW)).toBeNull();
+  it('does not infer silence from missing, invalid, or future timestamps', () => {
+    for (const lastActivityAt of [null, 'not a date', new Date(NOW + HOUR).toISOString()]) {
+      const row = project({ buckets: { ready: 1 }, lastActivityAt });
+      expect(attentionChipOf(row, NOW)).toBeNull();
     }
   });
 
-  it('never badges a project that has no tasks to have stalled', () => {
-    // In progress by section (see attentionSectionOf) but `running` is 0 and there is no activity
-    // to be old — "No progress 19,000d" measured from the epoch is what a bare section test would
-    // have shipped.
-    const untouched = project({ buckets: {}, lastActivityAt: null });
-
-    expect(attentionSectionOf(untouched)).toBe('running');
-    expect(attentionChipOf(untouched, NOW)).toBeNull();
-    expect(attentionChipOf(project({ buckets: {}, lastActivityAt: 'not a date' }), NOW)).toBeNull();
-  });
-
-  it('reads an activity stamp in the future as silence, not as a badge', () => {
-    // A reader's clock behind the server's makes this reachable, and `now - at` is negative.
-    const skewed = project({ buckets: { ready: 9 }, lastActivityAt: new Date(NOW + 5 * HOUR).toISOString() });
-
-    expect(attentionChipOf(skewed, NOW)).toBeNull();
-  });
-
-  it('badges only the three cases, over every combination of buckets and statuses', () => {
-    const counts = [0, 1, 5];
-    const badged: string[] = [];
-
-    for (const status of ['OPEN', 'DONE', 'CANCELLED'] as const)
-      for (const running of counts)
-        for (const ready of counts)
-          for (const blocked of counts)
-            for (const done of counts)
-              for (const cancelled of counts) {
-                const p = project({
-                  status,
-                  buckets: { running, ready, blocked, done, cancelled },
-                  lastActivityAt: quietFor(2 * QUIET_MS),
-                });
-                const chip = attentionChipOf(p, NOW);
-                if (!chip) continue;
-                badged.push(`${attentionSectionOf(p)}:${chip.tone}`);
-              }
-
-    // Three shapes and no fourth. Completed never appears — a finished project is not an ask —
-    // and no section ever produces two different tones.
-    expect([...new Set(badged)].sort()).toEqual([
-      'running:warning',
-      'stalled:warning',
-      'wrapping-up:brand',
-    ]);
+  it('does not badge healthy, expected-waiting, empty, or closed projects', () => {
+    const rows = [
+      project({ buckets: { running: 1 }, lastActivityAt: at(HOUR) }),
+      project({ buckets: { ready: 1 }, lastActivityAt: at(HOUR) }),
+      project({ buckets: { blocked: 1 }, lastActivityAt: at(20 * QUIET_MS) }),
+      project(),
+      project({ status: 'DONE', buckets: { done: 1 }, lastActivityAt: at(20 * QUIET_MS) }),
+    ];
+    for (const row of rows) expect(attentionChipOf(row, NOW)).toBeNull();
   });
 });

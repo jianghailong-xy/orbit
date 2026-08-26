@@ -210,9 +210,9 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
      * exercises only the half of that contract the task status carries, and an implementation
      * that had never heard of the other half would pass all of them.
      *
-     * `ready` is the number the index sorts its Stalled section by and the number the stalled
-     * banner fires on, so a dispatched task counted as ready is not an off-by-one: it is a project
-     * with an agent working in it, listed under a header that reads "nothing running".
+     * `ready` decides whether the index calls a project ready to start, so a dispatched task
+     * counted there is not an off-by-one: it is a project with an agent working in it, listed
+     * under a header that claims nothing is running.
      */
     await t.test('a live session is what makes a task running, not its status column', async () => {
       const owner = await makeUser(db);

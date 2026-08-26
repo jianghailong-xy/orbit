@@ -13,6 +13,7 @@ import {
   NewProjectTaskForm,
   ProjectDetailPage,
   ProjectTaskLevel,
+  PROJECTS_REFRESH_MS,
   ProjectsPage,
   coordinatorSessionPath,
   createProjectTask,
@@ -81,6 +82,10 @@ const P5 = '0195c0de-0000-7000-8000-000000000005';
 const P6 = '0195c0de-0000-7000-8000-000000000006';
 const P7 = '0195c0de-0000-7000-8000-000000000007';
 const P8 = '0195c0de-0000-7000-8000-000000000008';
+const P9 = '0195c0de-0000-7000-8000-000000000009';
+const P10 = '0195c0de-0000-7000-8000-000000000010';
+const P11 = '0195c0de-0000-7000-8000-000000000011';
+const P12 = '0195c0de-0000-7000-8000-000000000012';
 // A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
 // what goes on the wire has to be the short public id whichever spelling the row was handed.
 const T1 = '0195c0de-0000-7000-8000-0000000000a1';
@@ -640,54 +645,87 @@ describe('ProjectsPage', () => {
 });
 
 describe('ProjectsPage — sections', () => {
-  /**
-   * One project per section, plus the two cases the plain rules do not cover.
-   *
-   * Buckets are what decides where each lands, not `status` alone and never `createdAt` — so the
-   * fixture is deliberately in an order no section reproduces, and `createdAt` runs the opposite
-   * way to `lastActivityAt` on the two In-progress rows. A page still sorting by the old key would
-   * put them the wrong way round.
-   */
+  const HOUR = 60 * 60 * 1000;
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+  /** A complete GET /projects row. Unless a test explicitly supplies `_count`, its task count is
+   *  derived from the five buckets so the fixture does not accidentally claim FAILED work. */
   const listRow = (
     id: string,
     title: string,
     over: Record<string, unknown> & { buckets?: Partial<Record<string, number>> },
-  ) => ({
-    id,
-    title,
-    status: 'OPEN',
-    goal: `The goal of ${title}`,
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-02T00:00:00Z',
-    _count: { tasks: 5 },
-    lastActivityAt: '2026-01-02T00:00:00Z',
-    ...over,
-    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
-  });
+  ) => {
+    const buckets = {
+      running: 0,
+      ready: 0,
+      blocked: 0,
+      done: 0,
+      cancelled: 0,
+      ...(over.buckets ?? {}),
+    };
+    return {
+      id,
+      title,
+      status: 'OPEN',
+      goal: `The goal of ${title}`,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      lastActivityAt: ago(HOUR),
+      ...over,
+      _count: over._count ?? { tasks: Object.values(buckets).reduce((sum, count) => sum + count, 0) },
+      buckets,
+    };
+  };
 
   const MIXED = [
-    // Running, and the OLDER of the two — so In progress must put it second.
+    // Healthy work: newest activity wins inside Running.
     listRow(P1, 'Website Revamp', {
-      createdAt: '2026-06-01T00:00:00Z',
       buckets: { running: 1, blocked: 3 },
-      lastActivityAt: '2026-01-02T00:00:00Z',
+      lastActivityAt: ago(4 * HOUR),
     }),
     listRow(P2, 'Legacy Cleanup', { status: 'DONE', buckets: { done: 16 } }),
-    // Nine ready and nothing running: the case the flat list buried seventh.
-    listRow(P3, 'Ledger Migration', { buckets: { ready: 9, blocked: 1, done: 1 } }),
-    listRow(P4, 'Abandoned Rewrite', { status: 'CANCELLED', buckets: { done: 7 } }),
-    // Every task settled, project still open.
-    listRow(P5, 'Inbox Redesign', { buckets: { done: 12 } }),
-    // The most ready of all — the top row of the page.
-    listRow(P6, 'FineWeb Corpus', { buckets: { ready: 6118, blocked: 17324 } }),
-    // Running, and the more recently active.
-    listRow(P7, 'LFS Build', {
-      createdAt: '2026-01-01T00:00:00Z',
-      buckets: { running: 1, blocked: 117 },
-      lastActivityAt: '2026-05-02T00:00:00Z',
+    // One older ready task must outrank a much larger but newer queue.
+    listRow(P3, 'Ledger Migration', {
+      buckets: { ready: 1, blocked: 1, done: 1 },
+      lastActivityAt: ago(10 * HOUR),
     }),
-    // Created, never filed against: no tasks at all, and so no activity.
+    listRow(P4, 'Abandoned Rewrite', { status: 'CANCELLED', buckets: { done: 7 } }),
+    // Every task settled, but the project still needs a close decision.
+    listRow(P5, 'Inbox Redesign', { buckets: { done: 12 } }),
+    listRow(P6, 'FineWeb Corpus', {
+      buckets: { ready: 6118, blocked: 17324 },
+      lastActivityAt: ago(2 * HOUR),
+    }),
+    listRow(P7, 'LFS Build', {
+      buckets: { running: 1, blocked: 117 },
+      lastActivityAt: ago(HOUR),
+    }),
+    // Created, never filed against.
     listRow(P8, 'Brand Refresh', { _count: { tasks: 0 }, lastActivityAt: null }),
+    // Expected dependency wait is not called an operational failure.
+    listRow(P9, 'Waiting on upstream', {
+      buckets: { blocked: 4 },
+      lastActivityAt: ago(8 * QUIET_MS),
+    }),
+    // One task is outside the five buckets: TaskStatus.FAILED.
+    listRow(P10, 'Failed release', { _count: { tasks: 3 }, buckets: { done: 2 } }),
+    // A run that has emitted no task activity for two days is an exception, not healthy Running.
+    listRow(P11, 'Zombie run', {
+      buckets: { running: 1 },
+      lastActivityAt: ago(2 * QUIET_MS),
+    }),
+    // A durable USER-owned blocker outranks inferred task symptoms even while work is fresh.
+    listRow(P12, 'Needs approval', {
+      buckets: { running: 1, blocked: 1 },
+      attention: {
+        userBlockers: 1,
+        coordinatorBlockers: 0,
+        systemBlockers: 0,
+        maxSeverity: 'WARNING',
+        attentionSinceAt: ago(3 * QUIET_MS),
+        nextCheckAt: null,
+      },
+    }),
   ];
 
   /** The markup of ONE section, sliced off the flat render at the marker each one carries — the
@@ -706,93 +744,70 @@ describe('ProjectsPage — sections', () => {
     return renderPage(qc);
   }
 
-  it('cuts the list into four with in-progress work first', () => {
+  it('cuts the list into six next-actor lanes with exceptions first', () => {
     const html = renderMixed();
-
-    // Work currently under way leads, followed by the queues that need attention or closing,
-    // then the folded history.
     expect([...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      'attention',
       'running',
-      'stalled',
-      'wrapping-up',
+      'ready',
+      'waiting',
+      'definition',
       'completed',
     ]);
   });
 
-  it('files each project by its buckets, not by its status alone', () => {
+  it('separates intervention, healthy work, ready work, expected waits, and drafts', () => {
     const html = renderMixed();
-
-    // ready > 0 with nothing running.
-    expect(sectionOf(html, 'stalled')).toContain('FineWeb Corpus');
-    expect(sectionOf(html, 'stalled')).toContain('Ledger Migration');
-    // OPEN, but running + ready + blocked all zero.
-    expect(sectionOf(html, 'wrapping-up')).toContain('Inbox Redesign');
-    expect(sectionOf(html, 'wrapping-up')).not.toContain('Ledger Migration');
-    // running > 0 — including the one that also holds 117 blocked tasks.
+    expect(sectionOf(html, 'attention')).toContain('Needs approval');
+    expect(sectionOf(html, 'attention')).toContain('Needs you · Warning · 3d · 1 blocker');
+    expect(sectionOf(html, 'attention')).toContain('Failed release');
+    expect(sectionOf(html, 'attention')).toContain('Zombie run');
+    expect(sectionOf(html, 'attention')).toContain('Inbox Redesign');
     expect(sectionOf(html, 'running')).toContain('LFS Build');
     expect(sectionOf(html, 'running')).toContain('Website Revamp');
-    expect(sectionOf(html, 'running')).not.toContain('FineWeb Corpus');
-    // DONE and CANCELLED alike, and neither dilutes the half of the list that still needs anyone.
+    expect(sectionOf(html, 'ready')).toContain('FineWeb Corpus');
+    expect(sectionOf(html, 'ready')).toContain('Ledger Migration');
+    expect(sectionOf(html, 'waiting')).toContain('Waiting on upstream');
+    expect(sectionOf(html, 'definition')).toContain('Brand Refresh');
     expect(sectionOf(html, 'completed')).toContain('Legacy Cleanup');
     expect(sectionOf(html, 'completed')).toContain('Abandoned Rewrite');
-    expect(sectionOf(html, 'stalled')).not.toContain('Legacy Cleanup');
-    expect(sectionOf(html, 'running')).not.toContain('Abandoned Rewrite');
   });
 
-  it('puts an OPEN project with no tasks at the tail of In progress, not into Wrapping up', () => {
-    const html = renderMixed();
-
-    // Wrapping up says "every task settled"; a project that never had a task settled nothing.
-    expect(sectionOf(html, 'wrapping-up')).not.toContain('Brand Refresh');
-    const running = sectionOf(html, 'running');
-    expect(running).toContain('Brand Refresh');
-    expect(running.indexOf('Brand Refresh')).toBeGreaterThan(running.indexOf('Website Revamp'));
+  it('orders Ready by oldest activity, not by raw queue size', () => {
+    const ready = sectionOf(renderMixed(), 'ready');
+    expect(ready.indexOf('Ledger Migration')).toBeLessThan(ready.indexOf('FineWeb Corpus'));
   });
 
-  it('orders the stalled section by ready count, descending', () => {
-    const stalled = sectionOf(renderMixed(), 'stalled');
-
-    // 6,118 ready above 9 ready — the number the header names, and the number the row shows.
-    expect(stalled.indexOf('FineWeb Corpus')).toBeLessThan(stalled.indexOf('Ledger Migration'));
-  });
-
-  it('orders the in-progress section by last activity, descending', () => {
+  it('orders healthy Running by newest activity', () => {
     const running = sectionOf(renderMixed(), 'running');
-
-    // LFS Build was created FIRST and touched LAST; Website Revamp the other way round. Under the
-    // list's old `createdAt desc` this pair came out reversed, which is what makes it the pair.
     expect(running.indexOf('LFS Build')).toBeLessThan(running.indexOf('Website Revamp'));
+  });
+
+  it('orders Needs attention by issue severity before age', () => {
+    const attention = sectionOf(renderMixed(), 'attention');
+    expect(attention.indexOf('Needs approval')).toBeLessThan(attention.indexOf('Failed release'));
+    expect(attention.indexOf('Failed release')).toBeLessThan(attention.indexOf('Zombie run'));
+    expect(attention.indexOf('Zombie run')).toBeLessThan(attention.indexOf('Inbox Redesign'));
   });
 
   it('counts each section in its own header', () => {
     const html = renderMixed();
-    expect(sectionOf(html, 'stalled')).toMatch(/Stalled<\/h3>.*?>2</);
-    expect(sectionOf(html, 'wrapping-up')).toMatch(/Wrapping up<\/h3>.*?>1</);
-    expect(sectionOf(html, 'running')).toMatch(/In progress<\/h3>.*?>3</);
+    expect(sectionOf(html, 'attention')).toMatch(/Needs attention<\/h3>.*?>4</);
+    expect(sectionOf(html, 'running')).toMatch(/Running<\/h3>.*?>2</);
+    expect(sectionOf(html, 'ready')).toMatch(/Ready<\/h3>.*?>2</);
+    expect(sectionOf(html, 'waiting')).toMatch(/Waiting<\/h3>.*?>1</);
+    expect(sectionOf(html, 'definition')).toMatch(/Needs definition<\/h3>.*?>1</);
     expect(sectionOf(html, 'completed')).toMatch(/Completed<\/h3>.*?>2</);
   });
 
   it('prints under every header what that section is ordered by', () => {
     const html = renderMixed();
-
-    // The whole point of the redesign: the sort key is ON the page, in words, beside the rows it
-    // ordered — and both values it names are readable on each row (the ready count in the row's
-    // buckets, the activity in its last column). An order nobody can see is an order nobody can
-    // check, which is what `createdAt desc` was.
-    expect(sectionOf(html, 'stalled')).toContain('most ready first');
-    expect(sectionOf(html, 'wrapping-up')).toContain('newest activity first');
-    expect(sectionOf(html, 'running')).toContain('newest activity first');
+    expect(sectionOf(html, 'attention')).toContain('reason/severity first, then oldest signal');
+    expect(sectionOf(html, 'running')).toContain('newest task activity first');
+    expect(sectionOf(html, 'ready')).toContain('oldest task activity first');
+    expect(sectionOf(html, 'waiting')).toContain('oldest task activity first');
+    expect(sectionOf(html, 'definition')).toContain('title A–Z');
     expect(sectionOf(html, 'completed')).toContain('folded by default');
-  });
-
-  it('says in each header what lands in it, truthfully about its awkward rows', () => {
-    const html = renderMixed();
-
-    // Stalled holds a project with 17,324 blocked tasks and no ready ones, so the header does not
-    // claim "has ready tasks"; In progress holds a project with no tasks at all, so it says so.
-    expect(sectionOf(html, 'stalled')).toContain('Nothing running, work outstanding');
-    expect(sectionOf(html, 'running')).toContain('or no tasks filed yet');
-    expect(sectionOf(html, 'wrapping-up')).toContain('Every task settled, project still open');
   });
 
   it('folds the completed section by default, into a pill that still opens the project', () => {
@@ -805,16 +820,15 @@ describe('ProjectsPage — sections', () => {
     expect(completed).not.toContain('ant-list-item');
     expect(completed).toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
     expect(completed).toContain('Legacy Cleanup');
-    // ...and the sections that need attention are NOT folded — their rows are right there.
-    expect(sectionOf(html, 'stalled')).toContain('The goal of FineWeb Corpus');
+    expect(sectionOf(html, 'attention')).toContain('The goal of Failed release');
   });
 
   it('leaves out a section with nothing in it', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.buckets.running > 0));
+    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.title === 'LFS Build'));
     const html = renderPage(qc);
     expect(html).toContain('data-section="running"');
-    expect(html).not.toContain('data-section="stalled"');
+    expect(html).not.toContain('data-section="attention"');
     expect(html).not.toContain('data-section="completed"');
     // Below the toolbar only: "Completed" is also the name of a filter segment, which is on the
     // page whether or not anything is completed — the word must be gone from the LIST, not from
@@ -823,12 +837,16 @@ describe('ProjectsPage — sections', () => {
   });
 
   it('no longer renders the list as one flat run in the server’s order', () => {
-    // The old page filtered on `status` alone and left each half in the server's `createdAt desc`.
-    // Both are gone: the section a project lands in is decided by its buckets, and every section
-    // sorts a key of its own.
-    expect(source).toContain('projectAttentionSections(matches)');
+    expect(source).toContain('projectAttentionSections(matches, now)');
     expect(source).not.toMatch(/note: 'Newest first'/);
     expect(source).not.toMatch(/projects: all\.filter\(\(p\) => p\.status/);
+  });
+
+  it('refreshes server facts at the same cadence as the local attention clock', () => {
+    expect(PROJECTS_REFRESH_MS).toBe(60_000);
+    expect(source).toContain('refetchInterval: PROJECTS_REFRESH_MS');
+    expect(source).toContain('if (projects.dataUpdatedAt > 0) setNow(Date.now())');
+    expect(source).toContain('[projects.dataUpdatedAt]');
   });
 });
 
@@ -867,7 +885,7 @@ describe('ProjectsPage — toolbar', () => {
     const html = renderPage(qc);
     expect(html).toContain('Search projects');
     expect(html).toContain('>All<');
-    expect(html).toContain('>In progress<');
+    expect(html).toContain('>Open<');
     expect(html).toContain('>Completed<');
     // Twice: once in the toolbar, once as the empty page's own call to action.
     expect(html.split('New project').length - 1).toBe(2);
@@ -929,7 +947,7 @@ describe('ProjectsPage — which empty state', () => {
     expect(noMatchDescription('ALL', 'ledger')).toBe('No projects match “ledger”');
     // Both on: the search is the one that was just typed, so it is the one named.
     expect(noMatchDescription('OPEN', 'ledger')).toBe('No projects match “ledger”');
-    expect(noMatchDescription('OPEN', '')).toBe('No projects are in progress');
+    expect(noMatchDescription('OPEN', '')).toBe('No open projects');
     expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
   });
 });
@@ -2495,18 +2513,28 @@ describe('ProjectsPage — badges', () => {
     id: string,
     title: string,
     over: Record<string, unknown> & { buckets?: Partial<Record<string, number>> },
-  ) => ({
-    id,
-    title,
-    status: 'OPEN',
-    goal: `The goal of ${title}`,
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-02T00:00:00Z',
-    _count: { tasks: 5 },
-    lastActivityAt: ago(2 * QUIET_MS),
-    ...over,
-    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
-  });
+  ) => {
+    const buckets = {
+      running: 0,
+      ready: 0,
+      blocked: 0,
+      done: 0,
+      cancelled: 0,
+      ...(over.buckets ?? {}),
+    };
+    return {
+      id,
+      title,
+      status: 'OPEN',
+      goal: `The goal of ${title}`,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      lastActivityAt: ago(2 * QUIET_MS),
+      ...over,
+      _count: over._count ?? { tasks: Object.values(buckets).reduce((sum, count) => sum + count, 0) },
+      buckets,
+    };
+  };
 
   /** Every row of the page, read back out of the markup: which section it is in and what its badge
    *  says. The assertions below are about the rendered row — a rule that is right in
@@ -2537,12 +2565,12 @@ describe('ProjectsPage — badges', () => {
 
   const rowFor = (rows: ReturnType<typeof render>, title: string) => rows.find((r) => r.title === title)!;
 
-  it('badges a stalled project with how long it has been quiet', () => {
+  it('moves a quiet ready queue into Needs attention and explains why', () => {
     const rows = render([listRow(P1, 'Ledger Migration', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(4 * QUIET_MS) })]);
 
     expect(rowFor(rows, 'Ledger Migration')).toMatchObject({
-      section: 'stalled',
-      chip: 'Stalled 4d',
+      section: 'attention',
+      chip: 'Ready · no activity 4d',
       tone: 'warning',
     });
   });
@@ -2554,8 +2582,8 @@ describe('ProjectsPage — badges', () => {
     const rows = render([listRow(P2, 'Fair Scheduling', { buckets: { running: 1, ready: 1, blocked: 9, done: 5 }, lastActivityAt: ago(2 * QUIET_MS) })]);
 
     expect(rowFor(rows, 'Fair Scheduling')).toMatchObject({
-      section: 'running',
-      chip: 'No progress 2d',
+      section: 'attention',
+      chip: 'Running · no activity 2d',
       tone: 'warning',
     });
   });
@@ -2564,13 +2592,13 @@ describe('ProjectsPage — badges', () => {
     const rows = render([listRow(P3, 'Inbox Redesign', { _count: { tasks: 12 }, buckets: { done: 12 } })]);
 
     expect(rowFor(rows, 'Inbox Redesign')).toMatchObject({
-      section: 'wrapping-up',
+      section: 'attention',
       chip: '12/12 settled · still open',
       tone: 'brand',
     });
   });
 
-  it('leaves a stalled project touched inside the threshold unbadged', () => {
+  it('keeps a recently touched ready queue out of Needs attention', () => {
     // The negative case the threshold is FOR. Same section, same buckets, three hours instead of
     // four days: the section already says nothing is running, and a badge here would say only
     // that the reader should stop reading badges.
@@ -2579,9 +2607,9 @@ describe('ProjectsPage — badges', () => {
       listRow(P4, 'Touched This Morning', { buckets: { ready: 6118, blocked: 17324 }, lastActivityAt: ago(3 * 60 * 60 * 1000) }),
     ]);
 
-    expect(rowFor(rows, 'Touched This Morning').section).toBe('stalled');
+    expect(rowFor(rows, 'Touched This Morning').section).toBe('ready');
     expect(rowFor(rows, 'Touched This Morning').chip).toBeNull();
-    expect(rowFor(rows, 'Quiet For Days').chip).toBe('Stalled 4d');
+    expect(rowFor(rows, 'Quiet For Days').chip).toBe('Ready · no activity 4d');
   });
 
   it('leaves a running project that just wrote something unbadged', () => {
@@ -2592,9 +2620,7 @@ describe('ProjectsPage — badges', () => {
   });
 
   it('badges nothing else on a page full of rows', () => {
-    // Three badges out of eight rows. A badge on every row is a second background colour: the
-    // stalled section alone holds eight projects in production, and the reader would be back to
-    // a page where nothing stands out — one screen further down than before.
+    // Three badges out of eight rows. Healthy, expected-waiting, empty and closed rows stay quiet.
     const rows = render([
       listRow(P1, 'Stalled Quiet', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(2 * QUIET_MS) }),
       listRow(P2, 'Stalled Fresh', { buckets: { ready: 40 }, lastActivityAt: ago(60 * 1000) }),
@@ -2607,8 +2633,8 @@ describe('ProjectsPage — badges', () => {
     ]);
 
     expect(rows.filter((r) => r.chip).map((r) => [r.title, r.chip])).toEqual([
-      ['Zombie Run', 'No progress 3d'],
-      ['Stalled Quiet', 'Stalled 2d'],
+      ['Zombie Run', 'Running · no activity 3d'],
+      ['Stalled Quiet', 'Ready · no activity 2d'],
       ['Needs Closing', '7/7 settled · still open'],
     ]);
   });

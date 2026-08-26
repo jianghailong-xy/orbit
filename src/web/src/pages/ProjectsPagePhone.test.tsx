@@ -42,7 +42,7 @@ const PROJECTS = [
     updatedAt: '2026-01-02T00:00:00Z',
     _count: { tasks: 3 },
     buckets: { running: 1, ready: 2, blocked: 0, done: 0, cancelled: 0 },
-    lastActivityAt: '2026-01-02T00:00:00Z',
+    lastActivityAt: new Date().toISOString(),
   },
   {
     id: DONE_ID,
