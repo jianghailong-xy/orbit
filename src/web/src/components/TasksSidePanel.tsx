@@ -4,7 +4,9 @@ import {
   CaretDownOutlined,
   CheckOutlined,
   DesktopOutlined,
+  FolderOutlined,
   InboxOutlined,
+  LoadingOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -14,7 +16,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Avatar, Dropdown } from 'antd';
+import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
@@ -28,21 +30,21 @@ import type {
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
-import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
   groupWorkspacesByRunner,
   orderWorkspaceGroupsByRunners,
   orderWorkspaces,
-  type WorkspaceGroup,
+  workspaceRunnerId,
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 
-// Feishu-style top navigation. Each entry routes to "/<key>": "Projects" opens the projects
-// page (Admin is appended for admins below). The workspaces themselves live in the "Workspaces"
-// group further down.
+// Feishu-style top navigation (Admin is appended for admins below). Workspaces is deliberately a
+// peer of Projects and Runners: its click resolves to real workspace content rather than exposing
+// the runner hierarchy as the only way into a workspace.
 const TOP = [
   { key: 'projects', icon: <ProjectOutlined />, label: 'Projects' },
+  { key: 'workspaces', icon: <FolderOutlined />, label: 'Workspaces' },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
@@ -106,9 +108,29 @@ interface Workspace {
   position?: number | null;
   // The machine this workspace belongs to (null for config-only workspaces); a workspace
   // with no runner has no console to open. GET /workspaces embeds the runner's name/
-  // displayName so the sidebar can label the runner group without a second lookup.
+  // displayName so the sidebar can paint the inline runner metadata before its second query lands.
   runnerId?: string | null;
   runner?: { id: string; name?: string; displayName?: string | null } | null;
+}
+
+/**
+ * The first-level Workspaces entry is a way into the user's work, not a link to a made-up empty
+ * index page. Keep the current workspace when there is one; otherwise open the first usable row
+ * in the exact order shown below. An account with definitions but no attached runner goes to the
+ * real recovery surface instead.
+ */
+export function workspacesNavPath(
+  activeWorkspaceId: string | null,
+  workspaces: readonly Workspace[],
+): string {
+  const id = activeWorkspaceId ?? workspaces.find((workspace) => workspaceRunnerId(workspace))?.id;
+  return id ? `/workspaces/${encodeId(id)}` : '/runners';
+}
+
+export function workspaceCountsPollInterval(
+  counts: readonly { active: number; running?: number }[],
+): number {
+  return counts.some((count) => count.active > 0 || (count.running ?? 0) > 0) ? 5_000 : 15_000;
 }
 
 interface TaskList {
@@ -132,9 +154,6 @@ async function logout() {
 export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const loc = useLocation();
   const navigate = useNavigate();
-  // While the control-plane stream is live it pushes list changes, so the Open-session poll
-  // below stands down; it resumes automatically on any stream gap.
-  const controlLive = useControlPlaneLive();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
@@ -169,29 +188,27 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // row highlighted after navigating away to a list or top-nav route.
   const activeWorkspaceId = openWorkspaceId ?? (sessionId ? sessionQ.data?.workspace?.id : null) ?? null;
 
-  // The runner-centric routes (/runners, /runner, /workspaces, /sessions) keep "Runners"
-  // highlighted; an open workspace highlights its own row below instead. Clicking a list item
-  // below overrides it locally. A project's detail page (/projects/<id>) stays under "Projects"
-  // — the bare /projects reaches the same key through the pathname fallback at the end.
+  // An open workspace highlights its own row below instead of duplicating the highlight on the
+  // first-level Workspaces entry. During a session deep-link load (before its workspace resolves),
+  // Workspaces is the honest parent. Runner management remains scoped to Runners.
   const routeKey = activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
-        loc.pathname.startsWith('/runner')
-      ? 'runners'
-      : loc.pathname.startsWith('/projects/')
-        ? 'projects'
-        : loc.pathname.startsWith('/lists/')
-          ? loc.pathname.slice('/lists/'.length)
-          : loc.pathname.slice(1);
+        loc.pathname.startsWith('/agents/')
+      ? 'workspaces'
+      : loc.pathname.startsWith('/runner')
+        ? 'runners'
+        : loc.pathname.startsWith('/projects/')
+          ? 'projects'
+          : loc.pathname.startsWith('/lists/')
+            ? loc.pathname.slice('/lists/'.length)
+            : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
   const [listOpen, setListOpen] = useState(true);
   const [completedOpen, setCompletedOpen] = useState(false);
-  // Which runner groups are expanded. With more than one runner they default to collapsed (like the
-  // iOS drawer); the effect below keeps the open workspace's group expanded, and the user toggles the rest.
-  const [expandedRunners, setExpandedRunners] = useState<Set<string>>(new Set());
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -269,42 +286,18 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
-  // Base workspace order; the runner-group order is applied below. Within each group, custom Workspace
-  // positions still drive the rows before the flattened ⌘1‒9 order is calculated.
+  // Base workspace order; the existing runner order remains a stable sort key, but runner is now
+  // metadata rather than a visible/collapsible parent. Flattening every group keeps all workspaces
+  // present as one compact list while preserving the familiar order and ⌘1‒9 shortcuts.
   const workspaceList = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
-  // Workspaces grouped by their machine (runner), mirroring the iOS/macOS drawer: each runner is a
-  // collapsible header and host-level workspaces sink to a "Shared" group. ⌘1‒9 index into the flattened
-  // grouped order, so the shortcut number and the on-screen position stay in lockstep.
-  const workspaceGroups = useMemo(
-    () => orderWorkspaceGroupsByRunners(groupWorkspacesByRunner(workspaceList), runners.data ?? []),
+  const orderedWorkspaces = useMemo(
+    () =>
+      orderWorkspaceGroupsByRunners(
+        groupWorkspacesByRunner(workspaceList),
+        runners.data ?? [],
+      ).flatMap((group) => group.workspaces),
     [workspaceList, runners.data],
   );
-  const orderedWorkspaces = useMemo(() => workspaceGroups.flatMap((g) => g.workspaces), [workspaceGroups]);
-  const workspaceOrderIndex = useMemo(
-    () => new Map(orderedWorkspaces.map((a, i) => [a.id, i])),
-    [orderedWorkspaces],
-  );
-  const runnerGroupKey = (g: WorkspaceGroup<Workspace>) => g.runnerId ?? 'host';
-  // Keep the open workspace's group expanded — seeded on load and re-applied on navigation — while
-  // leaving every other group under the user's own toggles. A lone group is always shown expanded.
-  useEffect(() => {
-    if (!activeWorkspaceId) return;
-    const g = workspaceGroups.find((grp) => grp.workspaces.some((a) => a.id === activeWorkspaceId));
-    if (!g) return;
-    const k = runnerGroupKey(g);
-    setExpandedRunners((prev) => (prev.has(k) ? prev : new Set(prev).add(k)));
-  }, [activeWorkspaceId, workspaceGroups]);
-  const isRunnerExpanded = (g: WorkspaceGroup<Workspace>) =>
-    workspaceGroups.length <= 1 || expandedRunners.has(runnerGroupKey(g));
-  const toggleRunner = (g: WorkspaceGroup<Workspace>) => {
-    const k = runnerGroupKey(g);
-    setExpandedRunners((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
-      return next;
-    });
-  };
 
   // User-created task lists shown in the "Task List" group below. Poll so the
   // per-list running indicator stays live: 5s while anything is running (mirrors the
@@ -341,18 +334,25 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // Per-workspace Open-session tallies, counted server-side. Polls faster while anything is live.
   // This used to fetch every open session and tally them here, which on an account with
   // thousands of sessions was the app's heaviest request — and it ran on a 5–15s loop for two
-  // numbers per workspace. Sessions with no workspace still belong to no row, as before.
+  // badges per workspace. Sessions with no workspace still belong to no row, as before.
   const sessionCounts = useQuery({
     ...workspaceSessionCountsQuery(),
-    refetchInterval: controlLive
-      ? false
-      : (q) => ((q.state.data ?? []).some((c) => c.active > 0) ? 5_000 : 15_000),
+    // Keep this small aggregate polling even with the control-plane stream connected: the
+    // engineTurnActive/runningSubagents transitions behind `running` are intentionally finer than
+    // its coarse session.updated events, so SSE alone cannot keep the spinner truthful.
+    refetchInterval: (q) => workspaceCountsPollInterval(q.state.data ?? []),
   });
   // The "needs you" signal per workspace: how many of its Open sessions are blocked on an approval.
-  // Lets a workspace row show its own attention count (and hide its ⌘ shortcut) so you can jump
-  // straight to the workspace that needs you.
+  // Lets a workspace row show its own attention count so you can jump straight to the workspace
+  // that needs you.
   const workspaceNeedsYou = useMemo(
     () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.needsYou])),
+    [sessionCounts.data],
+  );
+  // Unlike `active` (which also includes queued sessions), `running` mirrors the blue working
+  // spinner in the Session list. A queued-only workspace must keep its ordinary online dot.
+  const workspaceRunning = useMemo(
+    () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.running ?? 0])),
     [sessionCounts.data],
   );
 
@@ -364,6 +364,17 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       navigate(`/workspaces/${encodeId(a.id)}`);
     },
     [navigate],
+  );
+
+  const openTopNav = useCallback(
+    (key: string) => {
+      navigate(
+        key === 'workspaces'
+          ? workspacesNavPath(activeWorkspaceId, orderedWorkspaces)
+          : `/${key}`,
+      );
+    },
+    [activeWorkspaceId, navigate, orderedWorkspaces],
   );
 
   // ⌘/Ctrl + 1‒9 opens the matching workspace in the list. The modifier chord never
@@ -455,7 +466,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           <div
             key={t.key}
             className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
-            onClick={() => navigate(`/${t.key}`)}
+            onClick={() => openTopNav(t.key)}
             title={t.label}
           >
             <span className="tp-ico">{t.icon}</span>
@@ -466,16 +477,27 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             text-titled task lists they read fine as icons). Same order, same shortcuts. */}
         {orderedWorkspaces.length > 0 && <div className="tp-rail-divider" />}
         {orderedWorkspaces.map((a, i) => {
-          const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
+          const runnerId = workspaceRunnerId(a);
+          const online = onlineRunnerIds.has(runnerId ?? '');
+          const runnerLabel =
+            (runnerId ? runnerLabels.get(runnerId) : null) ??
+            a.runner?.displayName ??
+            a.runner?.name ??
+            'Shared';
           return (
             <div
               key={a.id}
               className={`tp-rail-item ${a.id === activeWorkspaceId ? 'active' : ''}`}
               onClick={() => openWorkspace(a)}
-              title={i < 9 ? `${a.name}  ⌘${i + 1}` : a.name}
+              title={`${a.name} · ${runnerLabel}${i < 9 ? `  ⌘${i + 1}` : ''}`}
             >
               <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
-              <span className={`tp-rail-adot ${online ? 'online' : ''}`} />
+              <WorkspaceStateMark
+                compact
+                online={online}
+                running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+              />
             </div>
           );
         })}
@@ -487,7 +509,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
-              onClick={() => navigate(`/${t.key}`)}
+              onClick={() => openTopNav(t.key)}
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
@@ -497,48 +519,31 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
         <div className="tp-divider" />
 
-        <div className="tp-group">
-          {workspaceGroups.map((group) => {
-              const expanded = isRunnerExpanded(group);
-              // Host workspaces read as "Shared"; a real runner uses its display name, falling back to
-              // the name embedded in the workspace payload until the ['runners'] cache lands.
-              const label =
-                group.runnerId == null
-                  ? 'Shared'
-                  : (runnerLabels.get(group.runnerId) ??
-                    group.workspaces[0]?.runner?.displayName ??
-                    group.workspaces[0]?.runner?.name ??
-                    'Machine');
-              return (
-                <div key={runnerGroupKey(group)}>
-                  <div className="tp-item tp-runner-head" onClick={() => toggleRunner(group)}>
-                    <span className="tp-ico">
-                      {group.runnerId == null ? <InboxOutlined /> : <DesktopOutlined />}
-                    </span>
-                    <span className="tp-label">{label}</span>
-                    {group.runnerId != null && (
-                      <span
-                        className={`tp-adot ${onlineRunnerIds.has(group.runnerId) ? 'online' : ''}`}
-                      />
-                    )}
-                    <span className="tp-count">{group.workspaces.length}</span>
-                    <CaretDownOutlined className={`tp-caret ${expanded ? '' : 'collapsed'}`} />
-                  </div>
-                  {expanded &&
-                    group.workspaces.map((a) => (
-                      <WorkspaceRow
-                        key={a.id}
-                        workspace={a}
-                        index={workspaceOrderIndex.get(a.id) ?? 0}
-                        active={a.id === activeWorkspaceId}
-                        online={onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '')}
-                        needsYou={workspaceNeedsYou.get(a.id) ?? 0}
-                        onOpen={openWorkspace}
-                      />
-                    ))}
-                </div>
-              );
-            })}
+        <div className="tp-group tp-workspaces">
+          <div className="tp-group-head tp-workspaces-head">
+            <span className="tp-group-name">Workspaces</span>
+            <span className="tp-count">{orderedWorkspaces.length}</span>
+          </div>
+          {orderedWorkspaces.map((a) => {
+            const runnerId = workspaceRunnerId(a);
+            const runnerLabel =
+              (runnerId ? runnerLabels.get(runnerId) : null) ??
+              a.runner?.displayName ??
+              a.runner?.name ??
+              'Shared';
+            return (
+              <WorkspaceRow
+                key={a.id}
+                workspace={a}
+                runnerLabel={runnerLabel}
+                active={a.id === activeWorkspaceId}
+                online={onlineRunnerIds.has(runnerId ?? '')}
+                running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                onOpen={openWorkspace}
+              />
+            );
+          })}
         </div>
 
         {(unlistedCount > 0 || activeLists.length > 0 || completedLists.length > 0) && (
@@ -660,20 +665,68 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   );
 }
 
-// One workspace row under its runner group: an online dot, the workspace name, and the ⌘ shortcut hint
-// (or an amber "needs you" count). A plain click opens the workspace's console.
-function WorkspaceRow({
+/** One status slot shared by the expanded row and collapsed rail.
+ *
+ * Attention wins over work in progress; genuine work wins over machine availability. The working
+ * glyph intentionally has the same component, spin prop, colour and size as `StatusIcon` in the
+ * Session list, so "running" never changes visual language between the two navigation levels.
+ */
+export function WorkspaceStateMark({
+  online,
+  running,
+  needsYou,
+  compact = false,
+}: {
+  online: boolean;
+  running: boolean;
+  needsYou: number;
+  compact?: boolean;
+}) {
+  if (needsYou > 0) {
+    return (
+      <span
+        className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
+        title={`${needsYou} session(s) need your reply`}
+      >
+        {needsYou}
+      </span>
+    );
+  }
+  if (running) {
+    return (
+      <Tooltip title="Running">
+        <LoadingOutlined
+          className={compact ? 'tp-rail-running' : 'tp-workspace-running'}
+          spin
+          style={{ color: 'var(--brand)', fontSize: 16 }}
+        />
+      </Tooltip>
+    );
+  }
+  return (
+    <span
+      className={`${compact ? 'tp-rail-adot' : 'tp-adot'} ${online ? 'online' : ''}`}
+      title={online ? 'Online' : 'Offline'}
+    />
+  );
+}
+
+// A compact, permanently visible workspace row. Runner is descriptive metadata on the same line,
+// no longer a disclosure parent the user has to remember and expand before finding their work.
+export function WorkspaceRow({
   workspace,
-  index,
+  runnerLabel,
   active,
   online,
+  running,
   needsYou,
   onOpen,
 }: {
   workspace: Workspace;
-  index: number;
+  runnerLabel: string;
   active: boolean;
   online: boolean;
+  running: boolean;
   needsYou: number;
   onOpen: (a: Workspace) => void;
 }) {
@@ -682,19 +735,16 @@ function WorkspaceRow({
       className={`tp-item inset ${active ? 'active' : ''}`}
       onClick={() => onOpen(workspace)}
     >
-      <span className={`tp-adot ${online ? 'online' : ''}`} style={{ marginRight: 8 }} />
-      <span className="tp-label">{workspace.name}</span>
-      {/* When one of this workspace's sessions is waiting on you, the right slot shows an
-          amber attention count instead of the ⌘ shortcut — the "it's your turn" signal
-          wins over the discoverability hint. Falls back to the shortcut when nothing's
-          waiting. */}
-      {needsYou > 0 ? (
-        <span className="tp-count needs-you" title={`${needsYou} session(s) need your reply`}>
-          {needsYou}
+      <span className="tp-label tp-workspace-label">
+        <span className="tp-workspace-name">{workspace.name}</span>
+        <span className="tp-workspace-separator" aria-hidden="true">
+          ·
         </span>
-      ) : (
-        index < 9 && <span className="tp-count">⌘{index + 1}</span>
-      )}
+        <span className="tp-workspace-runner" title={runnerLabel}>
+          {runnerLabel}
+        </span>
+      </span>
+      <WorkspaceStateMark online={online} running={running} needsYou={needsYou} />
     </div>
   );
 }

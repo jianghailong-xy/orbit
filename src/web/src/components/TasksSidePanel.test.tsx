@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import {
+  WorkspaceRow,
+  WorkspaceStateMark,
+  workspaceCountsPollInterval,
+  workspacesNavPath,
+} from './TasksSidePanel';
 
 // TasksSidePanel itself reaches for localStorage, several polled queries and an SSE hook on
 // mount, none of which exist in this Node test environment — so instead of mounting it, this
@@ -17,7 +24,7 @@ describe('TasksSidePanel nav', () => {
   it('keeps Projects first in the fixed navigation', () => {
     const topBlock = source.match(/const TOP = \[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
-    expect(keys).toEqual(['projects', 'runners', 'providers']);
+    expect(keys).toEqual(['projects', 'workspaces', 'runners', 'providers']);
   });
 
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
@@ -40,6 +47,12 @@ describe('TasksSidePanel nav', () => {
     expect(source).toContain(': loc.pathname.slice(1);');
   });
 
+  it('treats an unresolved workspace/session route as Workspaces, not Runners', () => {
+    expect(source).toMatch(
+      /startsWith\('\/workspaces\/'\)[\s\S]*startsWith\('\/sessions\/'\)[\s\S]*\? 'workspaces'/,
+    );
+  });
+
   it('keeps Projects selected on a project detail URL', () => {
     // /projects/<id> would otherwise reach the slice(1) fallback above and produce
     // sel === 'projects/<id>', which matches no TOP key — the entry would go dark on the very
@@ -47,5 +60,88 @@ describe('TasksSidePanel nav', () => {
     expect(source).toMatch(/startsWith\('\/projects\/'\)\s*\n?\s*\?\s*'projects'/);
     // The runner branch is checked first and its /runner prefix must not swallow it.
     expect(source).not.toMatch(/startsWith\('\/project'\)/);
+  });
+});
+
+const FIRST = '11111111-1111-4111-8111-111111111111';
+const CURRENT = '22222222-2222-4222-8222-222222222222';
+const workspace = {
+  id: FIRST,
+  name: 'orbit',
+  createdAt: '2026-08-26T00:00:00.000Z',
+  runnerId: 'runner-1',
+};
+
+describe('TasksSidePanel workspace navigation', () => {
+  it('keeps the current workspace, otherwise opens the first usable row without inventing an index page', () => {
+    expect(workspacesNavPath(CURRENT, [workspace])).toContain('/workspaces/');
+    expect(workspacesNavPath(CURRENT, [workspace])).not.toBe(workspacesNavPath(null, [workspace]));
+    expect(workspacesNavPath(null, [{ ...workspace, runnerId: null }, workspace])).toBe(
+      workspacesNavPath(null, [workspace]),
+    );
+    expect(workspacesNavPath(null, [{ ...workspace, runnerId: null }])).toBe('/runners');
+  });
+
+  it('keeps polling the aggregate quickly for running-only work that coarse SSE omits', () => {
+    expect(workspaceCountsPollInterval([{ active: 0, running: 1 }])).toBe(5_000);
+    expect(workspaceCountsPollInterval([{ active: 1, running: 0 }])).toBe(5_000);
+    expect(workspaceCountsPollInterval([{ active: 0, running: 0 }])).toBe(15_000);
+    expect(source).not.toContain('controlLive ? false');
+  });
+});
+
+describe('TasksSidePanel workspace rows', () => {
+  it('keeps workspace and runner metadata on one row', () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        online
+        running={false}
+        needsYou={0}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toContain('tp-workspace-label');
+    expect(html).toContain('tp-workspace-name">orbit');
+    expect(html).toContain('tp-workspace-runner');
+    expect(html).toContain('wikova');
+  });
+
+  it('uses the Session-list LoadingOutlined spinner only for genuine running work', () => {
+    const running = renderToStaticMarkup(
+      <WorkspaceStateMark online running needsYou={0} />,
+    );
+    expect(running).toContain('anticon-loading');
+    expect(running).toContain('anticon-spin');
+    expect(running).toContain('color:var(--brand)');
+    expect(running).toContain('font-size:16px');
+
+    const idle = renderToStaticMarkup(
+      <WorkspaceStateMark online running={false} needsYou={0} />,
+    );
+    expect(idle).toContain('tp-adot online');
+    expect(idle).not.toContain('anticon-loading');
+  });
+
+  it('uses one priority order in expanded rows and the collapsed rail', () => {
+    const expanded = renderToStaticMarkup(
+      <WorkspaceStateMark online running needsYou={2} />,
+    );
+    const compact = renderToStaticMarkup(
+      <WorkspaceStateMark compact online running needsYou={2} />,
+    );
+    expect(expanded).toContain('tp-count needs-you');
+    expect(compact).toContain('tp-rail-badge needs-you');
+    expect(expanded).not.toContain('anticon-loading');
+    expect(compact).not.toContain('anticon-loading');
+
+    const compactRunning = renderToStaticMarkup(
+      <WorkspaceStateMark compact online running needsYou={0} />,
+    );
+    expect(compactRunning).toContain('tp-rail-running');
+    expect(compactRunning).toContain('anticon-spin');
+    expect(compactRunning).not.toContain('tp-rail-adot');
   });
 });

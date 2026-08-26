@@ -150,6 +150,11 @@ final class AppModel {
     /// blocked rows, not the list.
     private(set) var needsYouSessions: [Session] = []
     private(set) var agentNeedsYou: [String: Int] = [:]
+    #if os(iOS)
+    /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
+    /// `agentNeedsYou` so the iPhone drawer and iPad sidebar never rescan Open once per row/render.
+    private(set) var runningWorkspaceIDs: Set<String> = []
+    #endif
 
     /// The compact drawer lists the open session twice when its runner group is expanded — once as the
     /// owning agent's row (`selectedAgentID`) and once as its Recents row (`selectedAgentSessionID`) —
@@ -409,6 +414,9 @@ final class AppModel {
         recentSessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
+        #if os(iOS)
+        runningWorkspaceIDs = []
+        #endif
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
@@ -912,7 +920,7 @@ final class AppModel {
         // primary store. If that row later leaves a loaded scope, its fallback is still the
         // newest lifecycle/capability snapshot we observed rather than the original fetch.
         sessionDetails.reconcile(with: list)
-        // Observation invalidates observers on assignment, equal value or not, and these three
+        // Observation invalidates observers on assignment, equal value or not, and these fields
         // drive the drawer + every session list — so an identical snapshot (most 4s ticks of an idle
         // app) must not write them at all. The field-wise compare is far cheaper than the re-render
         // it avoids. The badge / notification reconciles below deliberately stay outside this gate:
@@ -923,6 +931,9 @@ final class AppModel {
             recentSessions = RecentsLogic.recent(list, limit: list.count)
             needsYouSessions = SessionGrouping.group(list).needsYou
             agentNeedsYou = NeedsYouLogic.byAgent(list)
+            #if os(iOS)
+            runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
+            #endif
             // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
             // here instead of leaving it to fetch the identical payload on its own timer.
             agents?.applyOpenSnapshot(list)

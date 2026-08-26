@@ -18,10 +18,20 @@ import OrbitKit
 /// `shortcutIndex`, when set (the first nine agents), shows a faint "⌘N" hint for the switch
 /// shortcut so it's learnable.
 struct AgentRowView: View {
+    #if os(iOS)
+    @Environment(AppModel.self) private var model
+    #endif
     let agent: Agent
     var shortcutIndex: Int? = nil
     var configuredProviders: [ConfiguredProvider] = []
     var body: some View {
+        #if os(iOS)
+        // Keep the regular-width row's existing design: it has no per-workspace needs-you badge,
+        // so a different session waiting for approval must not hide this workspace's running cue.
+        let running = model.runningWorkspaceIDs.contains(agent.id)
+        #else
+        let running = false
+        #endif
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -36,12 +46,20 @@ struct AgentRowView: View {
                      + (agent.workDir.map { " · \($0)" } ?? ""))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
-            if let shortcutIndex {
+            if running || shortcutIndex != nil {
                 Spacer(minLength: 4)
+            }
+            if let shortcutIndex {
                 Text("⌘\(shortcutIndex + 1)")
                     .font(.orbitMeta).monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
+            #if os(iOS)
+            if running {
+                SpinnerGlyph(color: .blue)
+                    .accessibilityLabel("Session running")
+            }
+            #endif
         }
         .padding(.vertical, 2)
     }
@@ -853,7 +871,7 @@ struct SessionLiveIndicator: View {
 /// an agent streams output the running row re-renders many times a second — those repeats stack on
 /// the `rotationEffect` and the arc visibly accelerates. A time-derived angle is a pure function of
 /// wall-clock time, so no amount of re-rendering can change how fast it spins.
-private struct SpinnerGlyph: View {
+struct SpinnerGlyph: View {
     let color: Color
     private let period: Double = 0.85   // seconds per rotation; the steady "normal" cadence
     /// One of these exists per *running* session row — and a session list, plus the drawer's Recents

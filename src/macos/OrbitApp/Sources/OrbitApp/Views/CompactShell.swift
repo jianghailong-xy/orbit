@@ -873,8 +873,9 @@ private struct NavigationDrawer: View {
     }
 
     /// A compact agent row: just the name (which already carries the "@ provider" suffix, so it
-    /// disambiguates on its own) plus a disabled pill, and an amber count when some of this agent's
-    /// sessions are blocked on an approval. Tapping jumps straight to the agent.
+    /// disambiguates on its own) plus a disabled pill and one trailing status slot. An amber count
+    /// wins while the workspace needs the user; otherwise a running session reuses the exact spinner
+    /// from the compact Session list. Tapping jumps straight to the agent.
     ///
     /// The badge is the *quiet* half of the needs-you story — it answers "which workspace", not
     /// "go now": `NeedsYouBannerView` already carries the urgency and the one-tap jump from wherever
@@ -917,6 +918,9 @@ private struct NavigationDrawer: View {
                             .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.15), in: Capsule())
                             .accessibilityLabel("\(waiting) waiting for you")
+                    } else if live && model.runningWorkspaceIDs.contains(agent.id) {
+                        SpinnerGlyph(color: .blue)
+                            .accessibilityLabel("Session running")
                     }
                 }
             }

@@ -1708,12 +1708,12 @@ export class SessionsService {
   }
 
   /**
-   * Per-workspace tallies over the Open list: how many of a workspace's sessions are mid-turn, and how
-   * many are blocked on an approval. The nav sidebar shows one number per workspace and used to
-   * derive them by fetching every open session — the heaviest poll in the app once an account
-   * has thousands. Same definitions as the list payload, including that only a RUNNING session
-   * can hold a live approval (see `list`). Sessions with no workspace belong to no row and are
-   * skipped, exactly as the sidebar skipped them.
+   * Per-workspace tallies over the Open list. `active` remains the admitted-work/fast-poll signal
+   * (queued + dispatched); `running` is deliberately narrower and matches the Session list's blue
+   * spinner: a dispatched turn, a self-driven engine turn, or a parked parent with a sub-agent
+   * still working. Keeping both prevents queued-only workspaces from falsely looking as though the
+   * model is already running. `needsYou` is returned separately and wins the sidebar status slot.
+   * Sessions with no workspace belong to no row and are skipped.
    */
   async workspaceSessionCounts(ownerId: string) {
     const open = {
@@ -1723,31 +1723,50 @@ export class SessionsService {
       deletedAt: null,
       workspaceId: { not: null },
     } as const;
-    const [active, blocked] = await Promise.all([
+    const [active, running, blocked] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
         where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
         _count: { _all: true },
       }),
+      this.prisma.session.groupBy({
+        by: ['workspaceId'],
+        where: {
+          ...open,
+          OR: [
+            { status: RunStatus.RUNNING },
+            {
+              status: RunStatus.AWAITING_INPUT,
+              OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
+            },
+          ],
+        },
+        _count: { _all: true },
+      }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
-      // of the whole list. `active` above counts runner slots, so it stays on RUNNING/PENDING;
-      // this one counts prompts a human has to answer, which a self-driven turn raises just as
-      // well — and those sit at AWAITING_INPUT for the whole turn.
+      // of the whole list. This one counts prompts a human has to answer, which a self-driven
+      // turn raises just as well — and those sit at AWAITING_INPUT for the whole turn.
       this.prisma.session.findMany({
         where: { ...open, ...GENERATING_SESSION_FILTER, approvals: { some: { status: 'PENDING' } } },
         select: { workspaceId: true },
       }),
     ]);
-    const counts = new Map<string, { workspaceId: string; active: number; needsYou: number }>();
+    const counts = new Map<
+      string,
+      { workspaceId: string; active: number; running: number; needsYou: number }
+    >();
     const row = (workspaceId: string) => {
       const existing = counts.get(workspaceId);
       if (existing) return existing;
-      const fresh = { workspaceId, active: 0, needsYou: 0 };
+      const fresh = { workspaceId, active: 0, running: 0, needsYou: 0 };
       counts.set(workspaceId, fresh);
       return fresh;
     };
     for (const group of active) {
       if (group.workspaceId) row(group.workspaceId).active = group._count._all;
+    }
+    for (const group of running) {
+      if (group.workspaceId) row(group.workspaceId).running = group._count._all;
     }
     for (const session of blocked) {
       if (session.workspaceId) row(session.workspaceId).needsYou += 1;

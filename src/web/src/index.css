@@ -707,6 +707,37 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Workspace identity and its runner now share one compact line. The runner is secondary metadata:
+   it absorbs truncation first, while the workspace name keeps as much room as possible. */
+.tp-workspace-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  text-overflow: clip;
+}
+.tp-workspace-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp-workspace-separator {
+  flex: none;
+  color: var(--text-3);
+}
+.tp-workspace-runner {
+  flex: 1 8 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+.tp-workspace-running {
+  flex: none;
+}
 .tp-count {
   color: var(--text-3);
   font-size: 13px;
@@ -829,6 +860,16 @@ body {
   padding: 0 8px;
   cursor: pointer;
 }
+.tp-workspaces-head {
+  cursor: default;
+}
+.tp-workspaces-head .tp-group-name {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tp-workspaces-head .tp-count {
+  margin-left: auto;
+}
 .tp-caret {
   font-size: 12px;
   color: var(--text-3);
@@ -840,11 +881,6 @@ body {
 }
 .tp-caret.collapsed {
   transform: rotate(-90deg);
-}
-/* A runner-group header is itself a row (not a section head), so its disclosure chevron stays
-   visible instead of only appearing on hover like the section carets above. */
-.tp-runner-head .tp-caret {
-  opacity: 1;
 }
 .tp-group-name {
   font-size: 13px;
@@ -1003,6 +1039,13 @@ body {
 }
 .tp-rail-adot.online {
   background: var(--success-solid);
+}
+.tp-rail-running {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  border-radius: 50%;
+  background: var(--bg-raised);
 }
 
 /* Desktop collapse behaviour. Scoped to >960px so the ≤960 off-canvas drawer

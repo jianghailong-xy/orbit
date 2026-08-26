@@ -199,8 +199,11 @@ export const sessionsQuery = (
 /** One workspace's Open-session tallies, as returned by `GET /sessions/counts`. */
 export interface WorkspaceSessionCounts {
   workspaceId: string;
-  /** Sessions with a turn in flight (RUNNING or queued). */
+  /** Sessions with work admitted or queued (RUNNING or PENDING); used for the fast poll cadence. */
   active: number;
+  /** Sessions that use the Session list's blue spinner (queued sessions deliberately excluded).
+   *  Optional only for rolling compatibility with a control plane from before this field existed. */
+  running?: number;
   /** Sessions blocked on an approval — the nav sidebar's per-workspace attention badge. */
   needsYou: number;
 }
