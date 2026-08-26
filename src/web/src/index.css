@@ -1072,25 +1072,24 @@ body {
    (which toggles on .open, not .collapsed) is never touched — there the panel
    always opens as the full list. */
 @media (min-width: 961px) {
-  /* Only de-duplicate activity once the real desktop Session list has rendered. The expanded
-     sidebar uses a quiet folder dot; the collapsed rail turns its existing status slot into the
-     same static mark. Loading/not-found consoles, other pages, and mobile drawers keep the
-     Workspace spinner because it remains their only visible running signal. */
-  .app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-icon-running {
+  /* Workspace-level activity keeps one stable visual language across desktop routes: a quiet dot
+     on the expanded folder or collapsed avatar. Session rows remain the only rotating indicators;
+     the <=960px drawer keeps its existing spinner. */
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-running {
     display: block;
   }
-  .app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-running {
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-running {
     display: none;
   }
-  .app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running {
+  .app-shell .app-nav.collapsed .tp-rail-running {
     background: transparent;
     animation: none !important;
   }
-  .app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running > svg {
+  .app-shell .app-nav.collapsed .tp-rail-running > svg {
     visibility: hidden;
     animation: none !important;
   }
-  .app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running::after {
+  .app-shell .app-nav.collapsed .tp-rail-running::after {
     content: '';
     position: absolute;
     top: 50%;

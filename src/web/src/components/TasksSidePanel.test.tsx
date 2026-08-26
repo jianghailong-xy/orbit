@@ -157,7 +157,7 @@ describe('TasksSidePanel workspace rows', () => {
     expect(idle).toBe('');
   });
 
-  it('lets the actual desktop two-pane layout choose quiet dots in both sidebar densities', () => {
+  it('uses quiet Workspace dots across desktop routes in both sidebar densities', () => {
     const html = renderToStaticMarkup(
       <WorkspaceRow
         workspace={workspace}
@@ -182,11 +182,11 @@ describe('TasksSidePanel workspace rows', () => {
       /\.tp-item\.active \.tp-workspace-icon-running\s*\{[\s\S]*?box-shadow:\s*0 0 0 1\.5px var\(--bg-raised\)/,
     );
     const desktopDotSelector =
-      '.app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-icon-running';
+      '.app-shell .app-nav:not(.collapsed) .tp-workspace-icon-running';
     const desktopSpinnerSelector =
-      '.app-shell:has(.workspace-split > .session-col) .app-nav:not(.collapsed) .tp-workspace-running';
+      '.app-shell .app-nav:not(.collapsed) .tp-workspace-running';
     const collapsedRailSpinnerSelector =
-      '.app-shell:has(.workspace-split > .session-col) .app-nav.collapsed .tp-rail-running';
+      '.app-shell .app-nav.collapsed .tp-rail-running';
     const collapsedRailSvgSelector = `${collapsedRailSpinnerSelector} > svg`;
     const collapsedRailDotSelector = `${collapsedRailSpinnerSelector}::after`;
     const desktopStart = styles.indexOf('@media (min-width: 961px)');
@@ -194,6 +194,7 @@ describe('TasksSidePanel workspace rows', () => {
     const desktopStyles = styles.slice(desktopStart, mobileStart);
     expect(desktopStart).toBeGreaterThanOrEqual(0);
     expect(mobileStart).toBeGreaterThan(desktopStart);
+    expect(desktopStyles).not.toContain(':has(.workspace-split > .session-col)');
     expect(desktopStyles).toContain(desktopDotSelector);
     expect(desktopStyles).toContain(desktopSpinnerSelector);
     expect(desktopStyles).toContain(collapsedRailSpinnerSelector);
