@@ -421,7 +421,9 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 理由：`project_blocker.kind` 是一套**路由词汇** —— 它回答"谁来修、UI 给哪个按钮"。这八个码路由到**同一个结论**："必须有人改配置或先把前置合进去，重试不会有帮助"。把不改变路由决策的粒度放进封闭集合，只会让 `project_blocker_kind_chk` 每加一个错误码就要改一次；放进 payload 则粒度不丢（UI 仍按 `code` 显示不同的修复按钮，靠 `fixAction`）。
 
-**SR51（恰好一条已声明的落地位置）**：`SOURCE_UNRESOLVED` 尚未在 `project_blocker_kind_chk`（迁移 `0142_project_blocker_verdict_apply_exhausted` 的封闭集合）中。它的落地位置**有且只有一条**：数据模型任务 `34D2Afu5EbYy5pjIhTeyA` 的迁移中，一条 `ALTER TABLE "project_blocker" DROP/ADD CONSTRAINT "project_blocker_kind_chk"` 步骤，把 `SOURCE_UNRESOLVED` 加入现有 25 个 kind。契约自检断言：本契约声称的 blocker kind 集合恰好等于该迁移新增的集合。
+**SR51（恰好一条已声明的落地位置）**：`SOURCE_UNRESOLVED` 的落地位置**有且只有一条**：数据模型任务 `34D2Afu5EbYy5pjIhTeyA` 的迁移 `0175_project_codebase_session_source` 中，一条 `ALTER TABLE "project_blocker" DROP/ADD CONSTRAINT "project_blocker_kind_chk"` 步骤，把它加进 `0142_project_blocker_verdict_apply_exhausted` 留下的封闭集合，此后共 26 个 kind。契约自检断言：本契约声称的 blocker kind 集合恰好等于当前封闭集合里的新增项，且这条声明在全文只出现一次 —— 第二处落地声明就是第二个会漂移的真相。
+
+v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺席**。0175 落地后该断言翻面：现在断言的是它**在**封闭集合里，且集合大小与这里写下的数字相等。翻的是断言的方向，不是它守的东西 —— 两个版本守的都是同一句话：契约与迁移对这个 kind 的说法必须一致。
 
 一个写不进去的拒绝码，等于一次静默跳过的派发 —— 真实数据库对它的回答是 `violates check constraint "project_blocker_kind_chk"`，而那正是 SR33 禁止的东西。
 

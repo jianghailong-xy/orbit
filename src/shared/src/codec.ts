@@ -350,6 +350,20 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'edgeId',
   'dependentTaskId',
   'replacementEdgeId',
+  // The SOURCE snapshot's two uuid references and the codebase's authority machine (migration
+  // 0175). All three are addresses, and the reason is the whole point of the snapshot: a person
+  // asking "why did this run start from that commit" follows them — open the binding it resolved
+  // against, open the machine that resolved it. Deliberately NOT fences: nothing echoes them back,
+  // and the one comparison the pin path makes is a compare-and-set on `source_base_sha`, which is
+  // a git SHA and not a uuid at all.
+  //
+  // `sourceCodebaseId` has no foreign key (deleting a binding must not rewrite a frozen snapshot),
+  // so it can name a row that is gone. That does not make it a fence: an address that 404s is
+  // still an address, and rendering it in the spelling clients use is what lets a reader find out
+  // that it is gone rather than see an opaque uuid.
+  'sourceCodebaseId',
+  'sourceResolvedByRunnerId',
+  'authorityRunnerId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

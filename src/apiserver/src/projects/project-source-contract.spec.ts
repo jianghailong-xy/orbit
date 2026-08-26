@@ -130,26 +130,37 @@ test('SR50/SR51 blocker kind 恰好一个，且确实是新增的', () => {
   assert.deepEqual([...new Set(kinds)], ['SOURCE_UNRESOLVED'], '本契约只贡献一个 blocker kind');
   // 现行封闭集合来自最后一次改写 project_blocker_kind_chk 的迁移。
   const dirs = readdirSync(MIGRATIONS).filter((d) => /^\d{4}_/.test(d)).sort();
-  let closed: string[] = [];
+  const closedSetsByMigration: string[][] = [];
   for (const d of dirs) {
     let sql = '';
     try { sql = readFileSync(path.join(MIGRATIONS, d, 'migration.sql'), 'utf8'); } catch { continue; }
     const m = sql.match(/ADD CONSTRAINT "project_blocker_kind_chk"[\s\S]*?CHECK \("kind" IN \(([\s\S]*?)\)\)/);
-    if (m) closed = [...m[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]);
+    if (m) closedSetsByMigration.push([...m[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]));
   }
+  const closed = closedSetsByMigration.at(-1) ?? [];
   assert.ok(closed.length > 0, '读不到 project_blocker_kind_chk 的封闭集合');
-  assert.equal(
+  // 0175 之前这里断言的是它的**缺席**（SR51 那时读作"尚未落地"）。0175 落地后断言翻面，守的仍是
+  // 同一句话：契约与迁移对这个 kind 的说法必须一致。
+  assert.ok(
     closed.includes('SOURCE_UNRESOLVED'),
-    false,
-    'SOURCE_UNRESOLVED 已在封闭集合内：SR51 的"尚未落地"过期了，改契约而不是改这条断言',
+    'SOURCE_UNRESOLVED 不在封闭集合内 —— 一个写不进去的拒绝码，等于一次静默跳过的派发',
+  );
+  // 而且它是**这一次**加进去的：读到最后一次改写该 CHECK 的迁移的上一次，断言那时它还不在。
+  // 只断言"现在在"会让一次把它挪进更早迁移的改动悄悄通过，SR51 声称的落地位置就此失真。
+  const before = closedSetsByMigration.at(-2);
+  assert.ok(before, '至少要有两次对 project_blocker_kind_chk 的改写才谈得上"新增"');
+  assert.deepEqual(
+    closed.filter((k) => !before.includes(k)),
+    ['SOURCE_UNRESOLVED'],
+    '本契约只贡献一个 blocker kind，且它必须是最后一次改写新增的那一个',
   );
   // 落地位置有且只有一条声明。
   // 数**出现次数**而不是行数：同一行里写第二处落地，按行数看仍然是一行。
   const landings = DOC.split('ALTER TABLE "project_blocker"').length - 1;
   assert.equal(landings, 1, '落地位置必须有且只有一条声明');
-  // 契约声称"加入现有 25 个 kind"。那个数字也是一句可以过期的断言。
-  const claimed = DOC.match(/加入现有 (\d+) 个 kind/);
-  assert.ok(claimed, '落地声明必须写明现有 kind 数');
+  // 契约声称落地后"共 26 个 kind"。那个数字也是一句可以过期的断言。
+  const claimed = DOC.match(/此后共 (\d+) 个 kind/);
+  assert.ok(claimed, '落地声明必须写明落地后的 kind 数');
   assert.equal(closed.length, Number(claimed[1]), '封闭集合的大小与契约声称的不一致');
 });
 
