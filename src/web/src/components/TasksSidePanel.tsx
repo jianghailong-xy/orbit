@@ -5,7 +5,6 @@ import {
   CheckOutlined,
   DesktopOutlined,
   DisconnectOutlined,
-  FolderOutlined,
   InboxOutlined,
   LoadingOutlined,
   LogoutOutlined,
@@ -40,12 +39,10 @@ import {
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 
-// Feishu-style top navigation (Admin is appended for admins below). Workspaces is deliberately a
-// peer of Projects and Runners: its click resolves to real workspace content rather than exposing
-// the runner hierarchy as the only way into a workspace.
+// Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
+// primary destinations in their own right, so there is no proxy Workspaces parent here.
 const TOP = [
   { key: 'projects', icon: <ProjectOutlined />, label: 'Projects' },
-  { key: 'workspaces', icon: <FolderOutlined />, label: 'Workspaces' },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
@@ -114,20 +111,6 @@ interface Workspace {
   runner?: { id: string; name?: string; displayName?: string | null } | null;
 }
 
-/**
- * The first-level Workspaces entry is a way into the user's work, not a link to a made-up empty
- * index page. Keep the current workspace when there is one; otherwise open the first usable row
- * in the exact order shown below. An account with definitions but no attached runner goes to the
- * real recovery surface instead.
- */
-export function workspacesNavPath(
-  activeWorkspaceId: string | null,
-  workspaces: readonly Workspace[],
-): string {
-  const id = activeWorkspaceId ?? workspaces.find((workspace) => workspaceRunnerId(workspace))?.id;
-  return id ? `/workspaces/${encodeId(id)}` : '/runners';
-}
-
 export function workspaceCountsPollInterval(
   counts: readonly { active: number; running?: number }[],
 ): number {
@@ -189,8 +172,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId
-    // never blips to null between sessions — otherwise the highlight flickers to
-    // the top "Runners" item and back on each ArrowUp/ArrowDown.
+    // never blips to null between sessions — otherwise the active Workspace row briefly goes
+    // dark on each ArrowUp/ArrowDown.
     placeholderData: keepPreviousData,
   });
   // Only resolve the workspace from session data while we're actually on a session
@@ -199,15 +182,15 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // row highlighted after navigating away to a list or top-nav route.
   const activeWorkspaceId = openWorkspaceId ?? (sessionId ? sessionQ.data?.workspace?.id : null) ?? null;
 
-  // An open workspace highlights its own row below instead of duplicating the highlight on the
-  // first-level Workspaces entry. During a session deep-link load (before its workspace resolves),
-  // Workspaces is the honest parent. Runner management remains scoped to Runners.
+  // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
+  // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
+  // remains scoped to Runners.
   const routeKey = activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
-      ? 'workspaces'
+      ? ''
       : loc.pathname.startsWith('/runner')
         ? 'runners'
         : loc.pathname.startsWith('/projects/')
@@ -381,14 +364,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   );
 
   const openTopNav = useCallback(
-    (key: string) => {
-      navigate(
-        key === 'workspaces'
-          ? workspacesNavPath(activeWorkspaceId, orderedWorkspaces)
-          : `/${key}`,
-      );
-    },
-    [activeWorkspaceId, navigate, orderedWorkspaces],
+    (key: string) => navigate(`/${key}`),
+    [navigate],
   );
 
   // ⌘/Ctrl + 1‒9 opens the matching workspace in the list. The modifier chord never
@@ -536,11 +513,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
         <div className="tp-divider" />
 
-        <div className="tp-group tp-workspaces">
-          <div className="tp-group-head tp-workspaces-head">
-            <span className="tp-group-name">Workspaces</span>
-            <span className="tp-count">{orderedWorkspaces.length}</span>
-          </div>
+        <div className="tp-group">
           {orderedWorkspaces.map((a) => {
             const runnerId = workspaceRunnerId(a);
             const runnerLabel =
@@ -566,9 +539,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           })}
         </div>
 
-        {(unlistedCount > 0 || activeLists.length > 0 || completedLists.length > 0) && (
-          <div className="tp-divider" />
-        )}
+        {orderedWorkspaces.length > 0 &&
+          (unlistedCount > 0 || activeLists.length > 0 || completedLists.length > 0) && (
+            <div className="tp-divider" />
+          )}
 
         {/* "No list" is the complement of the lists below — tasks in no list at all.
             It's a peer of the Task List group, not a child of it, so it never reads
@@ -769,7 +743,7 @@ export function WorkspaceRow({
 }) {
   return (
     <div
-      className={`tp-item inset ${active ? 'active' : ''}`}
+      className={`tp-item ${active ? 'active' : ''}`}
       onClick={() => onOpen(workspace)}
     >
       <span className="tp-label tp-workspace-label">

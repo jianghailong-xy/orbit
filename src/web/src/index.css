@@ -867,16 +867,6 @@ body {
   padding: 0 8px;
   cursor: pointer;
 }
-.tp-workspaces-head {
-  cursor: default;
-}
-.tp-workspaces-head .tp-group-name {
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.tp-workspaces-head .tp-count {
-  margin-left: auto;
-}
 .tp-caret {
   font-size: 12px;
   color: var(--text-3);

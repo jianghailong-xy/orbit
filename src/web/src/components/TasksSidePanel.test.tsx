@@ -7,7 +7,6 @@ import {
   WorkspaceStateMark,
   workspaceCountsPollInterval,
   workspaceRunnerIsOffline,
-  workspacesNavPath,
 } from './TasksSidePanel';
 
 // TasksSidePanel itself reaches for localStorage, several polled queries and an SSE hook on
@@ -22,10 +21,12 @@ describe('TasksSidePanel nav', () => {
     expect(topBlock).toMatch(/\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects'\s*,?\s*\}/);
   });
 
-  it('keeps Projects first in the fixed navigation', () => {
+  it('keeps individual Workspaces out of a redundant fixed-nav parent', () => {
     const topBlock = source.match(/const TOP = \[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
-    expect(keys).toEqual(['projects', 'workspaces', 'runners', 'providers']);
+    expect(keys).toEqual(['projects', 'runners', 'providers']);
+    expect(source).not.toContain('tp-workspaces-head');
+    expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });
 
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
@@ -48,9 +49,9 @@ describe('TasksSidePanel nav', () => {
     expect(source).toContain(': loc.pathname.slice(1);');
   });
 
-  it('treats an unresolved workspace/session route as Workspaces, not Runners', () => {
+  it('leaves fixed navigation unselected for an unresolved workspace/session route', () => {
     expect(source).toMatch(
-      /startsWith\('\/workspaces\/'\)[\s\S]*startsWith\('\/sessions\/'\)[\s\S]*\? 'workspaces'/,
+      /startsWith\('\/workspaces\/'\)[\s\S]*startsWith\('\/sessions\/'\)[\s\S]*\? ''/,
     );
   });
 
@@ -65,7 +66,6 @@ describe('TasksSidePanel nav', () => {
 });
 
 const FIRST = '11111111-1111-4111-8111-111111111111';
-const CURRENT = '22222222-2222-4222-8222-222222222222';
 const workspace = {
   id: FIRST,
   name: 'orbit',
@@ -74,15 +74,6 @@ const workspace = {
 };
 
 describe('TasksSidePanel workspace navigation', () => {
-  it('keeps the current workspace, otherwise opens the first usable row without inventing an index page', () => {
-    expect(workspacesNavPath(CURRENT, [workspace])).toContain('/workspaces/');
-    expect(workspacesNavPath(CURRENT, [workspace])).not.toBe(workspacesNavPath(null, [workspace]));
-    expect(workspacesNavPath(null, [{ ...workspace, runnerId: null }, workspace])).toBe(
-      workspacesNavPath(null, [workspace]),
-    );
-    expect(workspacesNavPath(null, [{ ...workspace, runnerId: null }])).toBe('/runners');
-  });
-
   it('keeps polling the aggregate quickly for running-only work that coarse SSE omits', () => {
     expect(workspaceCountsPollInterval([{ active: 0, running: 1 }])).toBe(5_000);
     expect(workspaceCountsPollInterval([{ active: 1, running: 0 }])).toBe(5_000);
@@ -95,6 +86,12 @@ describe('TasksSidePanel workspace navigation', () => {
     expect(workspaceRunnerIsOffline('runner-1', true)).toBe(false);
     expect(workspaceRunnerIsOffline('runner-1', undefined)).toBe(false);
     expect(workspaceRunnerIsOffline(null, false)).toBe(false);
+  });
+
+  it('does not add a second divider when there are no Workspace rows', () => {
+    expect(source).toMatch(
+      /orderedWorkspaces\.length > 0 &&\s*\(unlistedCount > 0 \|\| activeLists\.length > 0/,
+    );
   });
 });
 
@@ -115,6 +112,7 @@ describe('TasksSidePanel workspace rows', () => {
     expect(html).toContain('tp-workspace-name">orbit');
     expect(html).toContain('tp-workspace-runner');
     expect(html).toContain('wikova');
+    expect(html).not.toContain('inset');
   });
 
   it('uses the Session-list LoadingOutlined spinner only for genuine running work', () => {
