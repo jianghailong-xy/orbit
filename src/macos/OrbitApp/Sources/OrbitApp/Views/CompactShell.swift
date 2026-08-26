@@ -872,10 +872,11 @@ private struct NavigationDrawer: View {
         if expandedRunners.contains(k) { expandedRunners.remove(k) } else { expandedRunners.insert(k) }
     }
 
-    /// A compact agent row: just the name (which already carries the "@ provider" suffix, so it
-    /// disambiguates on its own) plus a disabled pill and one trailing status slot. An amber count
-    /// wins while the workspace needs the user; otherwise a running session reuses the exact spinner
-    /// from the compact Session list. Tapping jumps straight to the agent.
+    /// A compact agent row: the native folder glyph in the same icon column as the drawer's primary
+    /// destinations, the name (which already carries the "@ provider" suffix), a disabled pill and
+    /// one trailing status slot. An amber count wins while the workspace needs the user; otherwise a
+    /// running session reuses the exact spinner from the compact Session list. Tapping jumps straight
+    /// to the agent.
     ///
     /// The badge is the *quiet* half of the needs-you story — it answers "which workspace", not
     /// "go now": `NeedsYouBannerView` already carries the urgency and the one-tap jump from wherever
@@ -887,24 +888,27 @@ private struct NavigationDrawer: View {
         // isn't highlighted twice (agent row + Recents). Without a Recents row the agent row keeps it.
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
             && !model.selectedSessionInRecents
+        let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
         return Button {
             openAgent(agent.id)
         } label: {
-            // Indent the content to sit under the machine's *label* (icon width + its spacing) while
-            // the selection pill still lines up with every other row. Uses the drawer's standard row
-            // height (like machines / Tasks / Recents) — nesting is conveyed by the indent alone, so the
-            // whole rail shares one rhythm rather than making the agent sub-rows read a size smaller.
-            pill(selected: selected, indent: 24 + 12) {
-                HStack(spacing: 6) {
-                    Text(agent.name)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                    if agent.enabled == false {
-                        Text("disabled")
-                            .font(.orbitMeta)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.quaternary, in: Capsule())
+            // The folder occupies the drawer's standard 24pt icon column. Runner grouping still
+            // supplies the hierarchy; keeping the icon column fixed makes Workspace labels line up
+            // with the other destinations instead of shifting whenever their status changes.
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    WorkspaceFolderIcon(selected: selected, offline: offline)
+                    HStack(spacing: 6) {
+                        Text(agent.name)
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                        if agent.enabled == false {
+                            Text("disabled")
+                                .font(.orbitMeta)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(.quaternary, in: Capsule())
+                        }
                     }
                     Spacer(minLength: 0)
                     if let waiting = model.agentNeedsYou[agent.id], waiting > 0 {
@@ -918,7 +922,7 @@ private struct NavigationDrawer: View {
                             .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.15), in: Capsule())
                             .accessibilityLabel("\(waiting) waiting for you")
-                    } else if live && model.runningWorkspaceIDs.contains(agent.id) {
+                    } else if live && !offline && model.runningWorkspaceIDs.contains(agent.id) {
                         SpinnerGlyph(color: .blue)
                             .accessibilityLabel("Session running")
                     }

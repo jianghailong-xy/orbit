@@ -14,6 +14,7 @@ import {
 // asserts directly on the source for the two contract points TOP (not exported) drives: the
 // fixed nav array both surfaces render from, and the `sel === t.key` highlight it feeds.
 const source = readFileSync(fileURLToPath(new URL('./TasksSidePanel.tsx', import.meta.url)), 'utf8');
+const styles = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
 
 describe('TasksSidePanel nav', () => {
   it('adds a Projects entry (icon + label) to the fixed TOP nav', () => {
@@ -115,6 +116,31 @@ describe('TasksSidePanel workspace rows', () => {
     expect(html).not.toContain('inset');
   });
 
+  it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active
+        offline={false}
+        running={false}
+        needsYou={0}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toContain('class="tp-item active"');
+    expect(html).toContain('class="tp-ico tp-workspace-icon"');
+    expect(html).toContain('anticon-folder');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).not.toContain('tp-workspace-icon-offline');
+    expect(html).not.toContain('online');
+    expect(html.indexOf('tp-workspace-icon')).toBeLessThan(html.indexOf('tp-workspace-label'));
+    expect(styles).toMatch(/\.tp-ico\s*\{[\s\S]*?color:\s*var\(--text-2\)/);
+    expect(styles).toMatch(/\.tp-item\.active \.tp-ico\s*\{[\s\S]*?color:\s*var\(--brand\)/);
+    expect(styles).toMatch(/\.tp-workspace-icon-offline\s*\{[\s\S]*?position:\s*absolute/);
+    expect(source).toContain('<span className="tp-rail-avatar">');
+  });
+
   it('uses the Session-list LoadingOutlined spinner only for genuine running work', () => {
     const running = renderToStaticMarkup(
       <WorkspaceStateMark offline={false} running needsYou={0} />,
@@ -131,17 +157,28 @@ describe('TasksSidePanel workspace rows', () => {
     expect(idle).toBe('');
   });
 
-  it('shows an explicit offline state ahead of a stale running signal', () => {
+  it('moves expanded offline state onto the folder and suppresses a stale running signal', () => {
     const expanded = renderToStaticMarkup(
-      <WorkspaceStateMark offline running needsYou={0} runnerLabel="wikova" />,
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline
+        running
+        needsYou={0}
+        onOpen={() => undefined}
+      />,
     );
     const compact = renderToStaticMarkup(
       <WorkspaceStateMark compact offline running needsYou={0} runnerLabel="wikova" />,
     );
-    expect(expanded).toContain('tp-workspace-offline');
+    expect(expanded).toContain('tp-workspace-icon-offline');
     expect(expanded).toContain('anticon-disconnect');
-    expect(expanded).toContain('Offline');
+    expect(expanded).toContain('role="img"');
+    expect(expanded).toContain('aria-label="wikova is offline"');
     expect(expanded).toContain('wikova is offline');
+    expect(expanded).not.toContain('tp-workspace-offline');
+    expect(expanded).not.toContain('>Offline<');
     expect(expanded).not.toContain('anticon-loading');
     expect(compact).toContain('tp-rail-offline');
     expect(compact).toContain('anticon-disconnect');
@@ -150,18 +187,27 @@ describe('TasksSidePanel workspace rows', () => {
 
   it('uses one priority order in expanded rows and the collapsed rail', () => {
     const expanded = renderToStaticMarkup(
-      <WorkspaceStateMark offline running needsYou={2} />,
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active={false}
+        offline
+        running
+        needsYou={2}
+        onOpen={() => undefined}
+      />,
     );
     const compact = renderToStaticMarkup(
       <WorkspaceStateMark compact offline running needsYou={2} />,
     );
     expect(expanded).toContain('tp-count needs-you');
+    expect(expanded).toContain('tp-workspace-icon-offline');
     expect(compact).toContain('tp-rail-badge needs-you');
     expect(expanded).toContain('aria-label="2 sessions need your reply"');
     expect(compact).toContain('aria-label="2 sessions need your reply"');
     expect(expanded).not.toContain('anticon-loading');
     expect(compact).not.toContain('anticon-loading');
-    expect(expanded).not.toContain('anticon-disconnect');
+    expect(expanded).toContain('anticon-disconnect');
     expect(compact).not.toContain('anticon-disconnect');
 
     const compactRunning = renderToStaticMarkup(

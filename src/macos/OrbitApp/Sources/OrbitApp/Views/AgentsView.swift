@@ -14,6 +14,35 @@ import OrbitKit
 // IA note: the web edits agents *inside* the Runner detail page (an agent belongs to a runner);
 // this surfaces a flatter Agents nav whose items are the agents themselves.
 
+#if os(iOS)
+/// The Workspace identity glyph shared by the iPhone drawer and iPad sidebar. Online/unknown is the
+/// calm native folder and stays decorative; an explicitly-offline Runner adds a small muted
+/// `wifi.slash` corner badge and exposes that state to VoiceOver.
+struct WorkspaceFolderIcon: View {
+    let selected: Bool
+    let offline: Bool
+
+    var body: some View {
+        Image(systemName: "folder")
+            .frame(width: 24)
+            .foregroundStyle(selected ? Color.accentColor : .primary)
+            .overlay(alignment: .bottomTrailing) {
+                if offline {
+                    Image(systemName: "wifi.slash")
+                        .font(.orbitMeta.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .padding(1)
+                        .background(.background, in: Circle())
+                        .offset(x: 4, y: 4)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Runner offline")
+            .accessibilityHidden(!offline)
+    }
+}
+#endif
+
 /// A row for an agent in the sidebar disclosure: name (+ disabled pill) over runtime · workDir.
 /// `shortcutIndex`, when set (the first nine agents), shows a faint "⌘N" hint for the switch
 /// shortcut so it's learnable.
@@ -28,11 +57,16 @@ struct AgentRowView: View {
         #if os(iOS)
         // Keep the regular-width row's existing design: it has no per-workspace needs-you badge,
         // so a different session waiting for approval must not hide this workspace's running cue.
-        let running = model.runningWorkspaceIDs.contains(agent.id)
+        let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
+        let running = !offline && model.runningWorkspaceIDs.contains(agent.id)
+        let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
         #else
         let running = false
         #endif
         HStack(spacing: 8) {
+            #if os(iOS)
+            WorkspaceFolderIcon(selected: selected, offline: offline)
+            #endif
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(agent.name).lineLimit(1)

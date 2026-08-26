@@ -173,6 +173,13 @@ final class AppModel {
     /// Invalidates async detail reads when logout or an instance switch replaces their scope.
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
+    #if os(iOS)
+    /// The 4s Open loop also keeps the Workspace navigation's Runner state fresh, but Runner
+    /// heartbeats do not need that cadence. This gate yields an approximately 16s refresh on the
+    /// existing tick (15s minimum) without starting another long-lived task.
+    private var runnerSnapshotRefreshNotBefore = Date.distantPast
+    private static let runnerSnapshotRefreshInterval: TimeInterval = 15
+    #endif
     private var lastSnapshot: [Session]?
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
@@ -482,6 +489,11 @@ final class AppModel {
     func startPolling() {
         guard pollTask == nil else { return }
         startControlPlane()
+        #if os(iOS)
+        // The always-mounted iPhone drawer / iPad sidebar performs the initial Workspace + Runner
+        // load. Start the lightweight refresh one interval later instead of duplicating that request.
+        runnerSnapshotRefreshNotBefore = Date().addingTimeInterval(Self.runnerSnapshotRefreshInterval)
+        #endif
         pollTask = Task { @MainActor [weak self] in
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is still nil — prime it once so the sidebar account footer shows the real name
@@ -490,6 +502,9 @@ final class AppModel {
             while !Task.isCancelled {
                 if let self { await self.loadSessions() }
                 if let self {
+                    #if os(iOS)
+                    await self.refreshRunnerSnapshotIfDue()
+                    #endif
                     // The control stream has no purge event, and a Completed / Trash cold route is
                     // absent from Open by definition. Refresh only that one focused fallback so a
                     // remote lifecycle change or permanent deletion cannot leave a ghost console.
@@ -500,6 +515,17 @@ final class AppModel {
             }
         }
     }
+
+    #if os(iOS)
+    /// Claim one Runner refresh when the shared poll reaches the 15s gate. The claim is recorded
+    /// before awaiting so a re-entrant UI task cannot start a duplicate request; cancellation rides
+    /// the parent `pollTask`, which logout already cancels.
+    private func refreshRunnerSnapshotIfDue(now: Date = Date()) async {
+        guard now >= runnerSnapshotRefreshNotBefore, let agents else { return }
+        runnerSnapshotRefreshNotBefore = now.addingTimeInterval(Self.runnerSnapshotRefreshInterval)
+        await agents.refreshRunnerSnapshot()
+    }
+    #endif
 
     // MARK: control-plane stream (GET /api/events)
 

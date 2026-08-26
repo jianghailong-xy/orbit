@@ -45,4 +45,33 @@ final class WorkspaceActivityLogicTests: XCTestCase {
             session("two", state: .running, agentID: "workspace"),
         ]), ["workspace"])
     }
+
+    func testRunnerOfflineRequiresAnExplicitOfflineSnapshot() {
+        let availability = ["online": true, "offline": false]
+
+        XCTAssertFalse(WorkspaceRunnerAvailabilityLogic.isOffline(
+            runnerID: nil, onlineByRunnerID: availability))
+        XCTAssertFalse(WorkspaceRunnerAvailabilityLogic.isOffline(
+            runnerID: "not-loaded", onlineByRunnerID: availability))
+        XCTAssertFalse(WorkspaceRunnerAvailabilityLogic.isOffline(
+            runnerID: "online", onlineByRunnerID: availability))
+        XCTAssertTrue(WorkspaceRunnerAvailabilityLogic.isOffline(
+            runnerID: "offline", onlineByRunnerID: availability))
+    }
+
+    func testRunnerOnlineValuePreservesUnknownAndTreatsDrainingAsConnected() {
+        XCTAssertNil(WorkspaceRunnerAvailabilityLogic.onlineValue(explicit: nil, status: nil))
+        XCTAssertEqual(WorkspaceRunnerAvailabilityLogic.onlineValue(
+            explicit: nil, status: .online), true)
+        XCTAssertEqual(WorkspaceRunnerAvailabilityLogic.onlineValue(
+            explicit: nil, status: .draining), true)
+        XCTAssertEqual(WorkspaceRunnerAvailabilityLogic.onlineValue(
+            explicit: nil, status: .offline), false)
+
+        // The newer explicit field is authoritative even when legacy status disagrees.
+        XCTAssertEqual(WorkspaceRunnerAvailabilityLogic.onlineValue(
+            explicit: false, status: .online), false)
+        XCTAssertEqual(WorkspaceRunnerAvailabilityLogic.onlineValue(
+            explicit: true, status: .offline), true)
+    }
 }

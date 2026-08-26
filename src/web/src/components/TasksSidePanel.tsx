@@ -5,6 +5,7 @@ import {
   CheckOutlined,
   DesktopOutlined,
   DisconnectOutlined,
+  FolderOutlined,
   InboxOutlined,
   LoadingOutlined,
   LogoutOutlined,
@@ -659,11 +660,11 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   );
 }
 
-/** One status slot shared by the expanded row and collapsed rail.
+/** The trailing status slot shared by the expanded row and collapsed rail.
  *
- * Attention wins first. A disconnected Runner then outranks the spinner so stale work never looks
- * healthy; genuine work is the only normal state worth drawing, while online + idle stays quiet.
- * Both running and disconnected glyphs reuse their Session-list components.
+ * Attention wins first. In the expanded list, Runner availability lives on the leading folder;
+ * this slot therefore stays empty for offline and merely suppresses a stale spinner. The compact
+ * rail keeps its existing Disconnect overlay here because its avatar is a separate surface.
  */
 export function WorkspaceStateMark({
   offline,
@@ -691,8 +692,9 @@ export function WorkspaceStateMark({
     );
   }
   if (offline) {
+    if (!compact) return null;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
-    return compact ? (
+    return (
       <Tooltip title={title}>
         <DisconnectOutlined
           className="tp-rail-offline"
@@ -700,11 +702,6 @@ export function WorkspaceStateMark({
           style={{ color: 'var(--text-3)', fontSize: 16 }}
         />
       </Tooltip>
-    ) : (
-      <span className="tp-workspace-offline" title={title} aria-label={title}>
-        <DisconnectOutlined aria-hidden="true" />
-        <span>Offline</span>
-      </span>
     );
   }
   if (running) {
@@ -722,8 +719,9 @@ export function WorkspaceStateMark({
   return null;
 }
 
-// A compact, permanently visible workspace row. Runner is descriptive metadata on the same line,
-// no longer a disclosure parent the user has to remember and expand before finding their work.
+// A compact, permanently visible workspace row. Its folder occupies the same icon column as the
+// fixed first-level destinations above, so Workspace names share their label alignment. Runner is
+// descriptive metadata on the same line, not a disclosure parent the user has to remember.
 export function WorkspaceRow({
   workspace,
   runnerLabel,
@@ -741,11 +739,28 @@ export function WorkspaceRow({
   needsYou: number;
   onOpen: (a: Workspace) => void;
 }) {
+  const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
   return (
     <div
       className={`tp-item ${active ? 'active' : ''}`}
       onClick={() => onOpen(workspace)}
     >
+      <span
+        className="tp-ico tp-workspace-icon"
+        role={offline ? 'img' : undefined}
+        aria-label={offline ? offlineTitle : undefined}
+        aria-hidden={offline ? undefined : true}
+      >
+        <FolderOutlined aria-hidden="true" />
+        {offline && (
+          <Tooltip title={offlineTitle}>
+            <DisconnectOutlined
+              className="tp-workspace-icon-offline"
+              aria-hidden="true"
+            />
+          </Tooltip>
+        )}
+      </span>
       <span className="tp-label tp-workspace-label">
         <span className="tp-workspace-name">{workspace.name}</span>
         <span className="tp-workspace-separator" aria-hidden="true">

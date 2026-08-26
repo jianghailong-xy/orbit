@@ -14,13 +14,16 @@ final class AgentsModel {
     /// the drawer's runner groups match the web sidebar. Empty until that fetch lands, which leaves
     /// the groups in first-seen order.
     private(set) var runnerOrder: [String] = []
-    /// runnerId → is-online, for the drawer's collapsible runner rows (a leading connection dot).
+    /// runnerId → is-online, for the drawer's runner rows and iOS Workspace folder badges.
     /// Populated from the same best-effort `runners()` fetch that feeds `runnerNames`.
     private(set) var runnerOnline: [String: Bool] = [:]
     /// runnerId → runtime model catalog, reported by that runner.
     private(set) var runnerModelCatalog: [String: RunnerModelCatalog] = [:]
     /// runnerId → runtime → the effective default reported by the latest heartbeat.
     private(set) var runnerRuntimeDefaultModels: [String: [String: String]] = [:]
+    /// `load()` and the iOS availability cadence may meet at an await boundary. Keep their identical
+    /// Runner reads single-flight so an older response cannot overwrite a newer one.
+    private var runnerSnapshotRefreshInFlight = false
     /// Control-plane–configured providers (custom slugs borrowing a built-in runtime), merged into
     /// the agent editor's Runtime picker and composer model picker alongside claude/codex. Loaded
     /// with the agent list; left empty by an older server without the endpoint.
@@ -53,10 +56,19 @@ final class AgentsModel {
     }
 
     /// Whether a runner is currently reachable — drives the drawer runner row's connection dot.
-    /// Host-level agents (nil runner) and not-yet-loaded runners read as offline (no green dot).
+    /// Host-level and not-yet-loaded runners read as "not online" (no green dot); callers that need
+    /// an authoritative offline state must use `runnerIsOffline`, which preserves unknown.
     func runnerIsOnline(_ runnerId: String?) -> Bool {
         guard let id = runnerId else { return false }
         return runnerOnline[id] ?? false
+    }
+
+    /// Whether a runner is authoritatively known to be offline. A missing runner relation and a
+    /// runner whose directory row has not loaded yet are both "unknown", not offline — otherwise
+    /// Workspace folders flash a false disconnect badge while the best-effort runners fetch lands.
+    func runnerIsOffline(_ runnerId: String?) -> Bool {
+        WorkspaceRunnerAvailabilityLogic.isOffline(runnerID: runnerId,
+                                                    onlineByRunnerID: runnerOnline)
     }
 
     func modelCatalog(for runnerId: String?) -> RunnerModelCatalog? {
@@ -87,20 +99,7 @@ final class AgentsModel {
         defer { loading = false }
         do {
             items = try await api.agents()
-            // Best-effort: map runner ids → names (group headers) and → online (connection dots).
-            if let runners = try? await api.runners() {
-                runnerOrder = runners.map(\.id)
-                runnerNames = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
-                                         uniquingKeysWith: { a, _ in a })
-                runnerOnline = Dictionary(runners.map { ($0.id, $0.online ?? ($0.status == .online)) },
-                                          uniquingKeysWith: { a, _ in a })
-                runnerModelCatalog = Dictionary(
-                    runners.compactMap { r in r.modelCatalog.map { (r.id, $0) } },
-                    uniquingKeysWith: { a, _ in a })
-                runnerRuntimeDefaultModels = Dictionary(
-                    runners.compactMap { r in r.runtimeDefaultModels.map { (r.id, $0) } },
-                    uniquingKeysWith: { a, _ in a })
-            }
+            await refreshRunnerSnapshot()
             // Best-effort too: a transient failure keeps the last good list rather than blanking
             // the pickers (mirrors the runners fetch above).
             if let providers = try? await api.providers() {
@@ -108,6 +107,39 @@ final class AgentsModel {
                 configuredProvidersLoaded = true
             }
         } catch { errorText = friendly(error) }
+    }
+
+    /// Refresh only the Runner directory fields consumed by navigation and runtime defaults. This
+    /// is intentionally separate from `load()`: iOS can keep online/offline current without
+    /// repeatedly fetching the full Workspace and provider libraries. Failure preserves the last
+    /// authoritative snapshot, so a transient network gap never manufactures an offline state.
+    func refreshRunnerSnapshot() async {
+        guard !runnerSnapshotRefreshInFlight else { return }
+        runnerSnapshotRefreshInFlight = true
+        defer { runnerSnapshotRefreshInFlight = false }
+        guard let runners = try? await api.runners() else { return }
+        let order = runners.map(\.id)
+        let names = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
+                               uniquingKeysWith: { a, _ in a })
+        let online = Dictionary(runners.compactMap { runner in
+            WorkspaceRunnerAvailabilityLogic.onlineValue(
+                explicit: runner.online, status: runner.status).map { (runner.id, $0) }
+        }, uniquingKeysWith: { a, _ in a })
+        let catalogs = Dictionary(
+            runners.compactMap { r in r.modelCatalog.map { (r.id, $0) } },
+            uniquingKeysWith: { a, _ in a })
+        let runtimeDefaults = Dictionary(
+            runners.compactMap { r in r.runtimeDefaultModels.map { (r.id, $0) } },
+            uniquingKeysWith: { a, _ in a })
+        // Observation invalidates on assignment even when values compare equal. Most 15s refreshes
+        // are unchanged, so only write the fields that moved and leave the visible navigation calm.
+        if order != runnerOrder { runnerOrder = order }
+        if names != runnerNames { runnerNames = names }
+        if online != runnerOnline { runnerOnline = online }
+        if catalogs != runnerModelCatalog { runnerModelCatalog = catalogs }
+        if runtimeDefaults != runnerRuntimeDefaultModels {
+            runnerRuntimeDefaultModels = runtimeDefaults
+        }
     }
 
     func save(_ id: String, _ req: UpdateAgentRequest) async {

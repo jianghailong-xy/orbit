@@ -738,24 +738,31 @@ body {
 .tp-workspace-running {
   flex: none;
 }
-.tp-workspace-offline {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-  box-sizing: border-box;
-  min-height: 22px;
-  padding: 1px 7px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: nowrap;
+.tp-workspace-icon {
+  position: relative;
 }
-.tp-workspace-offline .anticon {
-  font-size: 12px;
+/* Runner availability belongs to the Workspace identity: a tiny disconnect badge overlays the
+   folder only when that Runner is explicitly offline. Online folders stay visually quiet. */
+.tp-workspace-icon-offline {
+  position: absolute;
+  right: -6px;
+  bottom: -5px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 1px var(--bg-raised);
+  color: var(--text-3);
+  font-size: 9px;
+}
+.tp-item.active .tp-workspace-icon-offline {
+  background: var(--brand-tint);
+  box-shadow: 0 0 0 1px var(--brand-tint);
+  color: var(--text-3);
 }
 .tp-count {
   color: var(--text-3);
