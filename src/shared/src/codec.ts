@@ -105,6 +105,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // §13.5's supersession link: the later attempt that took a cancelled one's place. An address a
   // reader hands straight to task_get, exactly like `parentTaskId` beside it.
   'supersededByTaskId',
+  // N11 judgment-request history points at the request for the newer evidence revision. It is an
+  // address returned beside the old request and can be handed straight back to the request read.
+  'supersededById',
   // §13.8: the task a session is ABOUT rather than one it executes — an @-mention's reply thread.
   // Named in a session payload beside `taskId`, and handed to task_get by whoever reads it.
   'contextTaskId',

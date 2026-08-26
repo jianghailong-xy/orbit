@@ -184,7 +184,7 @@ export class TasksController {
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SignoffTaskDto,
   ) {
-    return this.tasks.signoff(user.userId, id, dto.evidence);
+    return this.tasks.signoff(user.userId, id, dto);
   }
 
   @Delete(':id')

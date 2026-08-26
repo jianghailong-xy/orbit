@@ -92,6 +92,7 @@ import {
   CreateTasksBatchDto,
   DAG_PREVIEW_TITLES,
   MAX_DAG_OPS,
+  SignoffTaskDto,
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
@@ -6489,7 +6490,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async signoff(
     ownerId: string,
     id: string,
-    evidenceInput: string,
+    input: SignoffTaskDto,
     actingSessionId?: string,
   ) {
     if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
@@ -6520,7 +6521,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'execution session. Ask a person to use task_signoff with the evidence they judged.',
       });
     }
-    const evidence = evidenceInput.trim();
+    if (!UUID_RE.test(input.requestId)) {
+      throw new BadRequestException('HUMAN_SIGNOFF requestId is invalid');
+    }
+    const evidenceDigest = input.evidenceDigest.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(evidenceDigest)) {
+      throw new BadRequestException(
+        'HUMAN_SIGNOFF evidenceDigest must be 64 lowercase hex characters',
+      );
+    }
+    const evidence = input.evidence.trim();
     if (!evidence) {
       throw new BadRequestException({
         code: 'HUMAN_SIGNOFF_EVIDENCE_REQUIRED',
@@ -6597,14 +6607,71 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
       }
 
+      const request = await tx.taskJudgmentRequest.findUnique({
+        where: { id: input.requestId },
+      });
+      if (!request || request.taskId !== id || request.kind !== 'HUMAN_SIGNOFF'
+        || request.recipientType !== 'ACCOUNT_OWNER' || request.recipientId !== ownerId
+        || request.evidenceDigest !== evidenceDigest) {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_REQUEST_MISMATCH',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'SIGN_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          message:
+            'The signature must name the current HUMAN_SIGNOFF request, its account-owner ' +
+            'recipient and the exact evidence digest being reviewed.',
+        });
+      }
+      if (request.status === 'SUPERSEDED') {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'SIGN_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          message: 'This evidence version was superseded and cannot complete the current task.',
+        });
+      }
+
       let signoff = await tx.taskHumanSignoff.findUnique({
         where: { taskId: id },
         include: { signedBy: { select: { id: true, name: true } } },
       });
       if (!signoff) {
+        if (request.status !== 'OPEN') {
+          throw new ConflictException({
+            code: 'HUMAN_SIGNOFF_REQUEST_NOT_OPEN',
+            criterion: 'HUMAN_SIGNOFF',
+            requiredAction: 'READ_THE_CURRENT_JUDGMENT_REQUEST',
+            message: 'This HUMAN_SIGNOFF request is already decided.',
+          });
+        }
         signoff = await tx.taskHumanSignoff.create({
-          data: { id: signoffId, taskId: id, signedById: ownerId, evidence, signedAt },
+          data: {
+            id: signoffId,
+            taskId: id,
+            requestId: request.id,
+            signedById: ownerId,
+            evidenceDigest,
+            evidence,
+            signedAt,
+          },
           include: { signedBy: { select: { id: true, name: true } } },
+        });
+        await tx.taskJudgmentRequest.update({
+          where: { id: request.id },
+          data: {
+            status: 'DECIDED',
+            decidedAt: signedAt,
+            decidedByType: 'USER',
+            decidedById: ownerId,
+            decision: 'PASS',
+          },
+        });
+      } else if (signoff.requestId !== request.id || signoff.evidenceDigest !== evidenceDigest) {
+        throw new ConflictException({
+          code: 'HUMAN_SIGNOFF_ALREADY_BOUND',
+          criterion: 'HUMAN_SIGNOFF',
+          requiredAction: 'READ_THE_EXISTING_SIGNOFF',
+          message: 'This task already has a HUMAN_SIGNOFF bound to another request fact.',
         });
       }
 
@@ -6644,6 +6711,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status,
         transitioned,
         blockersResolved: resolved.count,
+        requestId: request.id,
+        evidenceDigest,
         signoff,
       };
     }, this.transientWriteRetry('tasks.signoff'));
@@ -7251,6 +7320,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // projects and then WAIT for a task — the cycle, assembled out of the very locks taken
             // to avoid it.
             if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, id);
+            // A verifier request decides two Task rows: its own verdict carrier and its subject.
+            // Lock both at rank 50 in UUID order before reading the rank-60 request, so concurrent
+            // verdicts and evidence supersession cannot take the same pair backwards.
+            if (concludesVerdict && verifiesTaskId) {
+              const taskIds = orderedIds([id, verifiesTaskId]);
+              await tx.$queryRaw`
+                SELECT "id" FROM "task"
+                 WHERE "id" = ANY(${taskIds}::uuid[])
+                 ORDER BY "id" FOR UPDATE`;
+            }
+            // Optional only for old test/rolling transaction-client shapes. A current generated
+            // client always has this model; absence means this is necessarily a legacy verifier.
+            const judgmentRequestStore = (tx as unknown as {
+              taskJudgmentRequest?: Prisma.TransactionClient['taskJudgmentRequest'];
+            }).taskJudgmentRequest;
+            const judgmentRequest = concludesVerdict && verifiesTaskId && judgmentRequestStore
+              ? await judgmentRequestStore.findUnique({ where: { id } })
+              : null;
+            if (judgmentRequest && (
+              judgmentRequest.taskId !== verifiesTaskId
+              || judgmentRequest.kind !== 'VERIFICATION'
+              || judgmentRequest.recipientType !== 'VERIFIER_TASK'
+              || judgmentRequest.recipientId !== id
+            )) {
+              throw new ConflictException('verification task no longer matches its judgment request');
+            }
+            if (judgmentRequest && judgmentRequest.status !== 'OPEN') {
+              throw new ConflictException({
+                code: judgmentRequest.status === 'SUPERSEDED'
+                  ? 'VERIFICATION_REQUEST_SUPERSEDED'
+                  : 'VERIFICATION_REQUEST_NOT_OPEN',
+                requiredAction: 'DECIDE_THE_CURRENT_VERIFICATION_REQUEST',
+                message:
+                  'This verifier belongs to an evidence version that is no longer open; read the ' +
+                  'current judgment request before recording a verdict.',
+              });
+            }
             if (touchesHierarchy) {
               await this.assertHierarchyConsistent(tx, ownerId, id, current!, dto);
             }
@@ -7368,7 +7474,68 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // Delete before re-inserting so a retained prerequisite cannot collide with the
             // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
             // full dependency replacement atomic; [] intentionally stops after the delete.
-            let task = await tx.task.update({ where: { id }, data });
+            // An evidence-bound verifier is the work carrier for exactly one judgment request.
+            // Recording its verdict concludes that carrier as well as deciding the request; both
+            // facts must land in this transaction so project settlement cannot be left waiting on
+            // an OPEN verifier whose only possible conclusion is already immutable. Keep legacy
+            // verifier edits unchanged: without an N11 request they retain their older explicit
+            // lifecycle contract.
+            const taskUpdateData: Prisma.TaskUpdateInput = judgmentRequest && dto.verdict
+              ? { ...data, status: TaskStatus.DONE }
+              : data;
+            let task = await tx.task.update({ where: { id }, data: taskUpdateData });
+            if (judgmentRequest && dto.verdict) {
+              const subjectTaskId = judgmentRequest.taskId;
+              const decidedAt = new Date();
+              const acting = actingSessionId
+                ? await tx.session.findFirst({
+                    where: { id: actingSessionId, ownerId },
+                    select: { workspaceId: true },
+                  })
+                : null;
+              await tx.taskJudgmentRequest.update({
+                where: { id: judgmentRequest.id },
+                data: {
+                  status: 'DECIDED',
+                  decidedAt,
+                  decidedByType: acting?.workspaceId ? 'AGENT' : 'USER',
+                  decidedById: acting?.workspaceId ?? ownerId,
+                  decision: dto.verdict,
+                },
+              });
+              if (current?.projectId) {
+                await tx.projectBlocker.updateMany({
+                  where: {
+                    projectId: current.projectId,
+                    kind: 'HUMAN_DECISION_REQUIRED',
+                    subjectType: 'TASK',
+                    subjectId: subjectTaskId,
+                    resolvedAt: null,
+                  },
+                  data: { resolvedAt: decidedAt, resolvedBy: 'AUTO', updatedAt: decidedAt },
+                });
+              }
+              const derived = deriveTaskCompletionStatus({
+                completionCriterion: 'VERIFICATION',
+                verificationVerdict: dto.verdict,
+              });
+              if (derived === TaskStatus.DONE) {
+                // Final optimistic statement in the unit. The verdict, request decision and
+                // blocker/signal closure are already visible to every trigger on this transition.
+                await tx.task.updateMany({
+                  where: {
+                    id: subjectTaskId,
+                    ownerId,
+                    completionCriterion: 'VERIFICATION',
+                    completionPolicy: 'VERIFICATION_PASSED',
+                    status: { not: TaskStatus.CANCELLED },
+                    supersededByTaskId: null,
+                    terminalReason: null,
+                  },
+                  data: { status: derived },
+                });
+              }
+            }
             if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
@@ -7443,6 +7610,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `task update ${id}`,
       );
     }
+    // A PASS on an evidence-bound verifier may have derived the SUBJECT's DONE inside the
+    // transaction above. Release that subject's dependents now; keying this on the verifier id
+    // would leave ready auto-run work asleep until a later sweep happened to rediscover it.
+    if (concludesVerdict && dto.verdict === 'PASS' && verifiesTaskId) {
+      await this.triggerDependents(ownerId, verifiesTaskId).catch((e) =>
+        this.logger.warn(
+          `triggerDependents failed for verified task ${verifiesTaskId}: ${e?.message ?? e}`,
+        ),
+      );
+    }
     if (before.status === 'DONE' && dto.status !== undefined && before.listId) {
       const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
       // The id is encoded where it becomes prose. This detail is stored and replayed to agents,
@@ -7491,7 +7668,74 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * foreman, a task whose list has not opted in, and one that has already been checked
    * MAX_VERIFICATIONS_PER_TASK times.
    */
-  private async fileVerification(ownerId: string, taskId: string): Promise<void> {
+  async ensureJudgmentVerification(
+    ownerId: string,
+    taskId: string,
+    requestId: string,
+    evidenceDigest: string,
+  ): Promise<string | null> {
+    const request = await this.prisma.taskJudgmentRequest.findFirst({
+      where: {
+        id: requestId,
+        taskId,
+        ownerId,
+        kind: 'VERIFICATION',
+        recipientType: 'VERIFIER_TASK',
+        recipientId: requestId,
+        evidenceDigest,
+        status: 'OPEN',
+      },
+      select: { id: true },
+    });
+    if (!request) return null;
+    return this.fileVerification(ownerId, taskId, { requestId, evidenceDigest });
+  }
+
+  /**
+   * Retire verifier carriers whose evidence-bound requests have been superseded.
+   *
+   * The request is the audit fact and retains its exact successor link. Its Task is only the
+   * independently runnable carrier. Leaving that carrier OPEN after a newer evidence version
+   * takes ownership would make PROJECT_TASKS_SETTLED wait forever on work that the verdict
+   * boundary correctly refuses to conclude. The current carrier is filed before this runs, so a
+   * project always observes the new OPEN work before an old carrier becomes CANCELLED.
+   *
+   * Use the ordinary Task write path instead of a bulk UPDATE: project-before-task lock ordering,
+   * aggregation, dependency overlays and settlement delivery remain identical to every other
+   * lifecycle transition. Replays are harmless because CANCELLED is written idempotently.
+   */
+  async retireSupersededJudgmentVerifications(
+    ownerId: string,
+    taskId: string,
+  ): Promise<void> {
+    const stale = await this.prisma.taskJudgmentRequest.findMany({
+      where: {
+        ownerId,
+        taskId,
+        kind: 'VERIFICATION',
+        recipientType: 'VERIFIER_TASK',
+        status: 'SUPERSEDED',
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    for (const request of stale) {
+      const carrier = await this.prisma.task.findFirst({
+        where: { id: request.id, ownerId, verifiesTaskId: taskId },
+        select: { status: true },
+      });
+      if (!carrier || carrier.status === TaskStatus.DONE || carrier.status === TaskStatus.CANCELLED) {
+        continue;
+      }
+      await this.update(ownerId, request.id, { status: TaskStatus.CANCELLED });
+    }
+  }
+
+  private async fileVerification(
+    ownerId: string,
+    taskId: string,
+    judgment?: { requestId: string; evidenceDigest: string },
+  ): Promise<string | null> {
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, ownerId },
       select: {
@@ -7507,17 +7751,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     // A verification of a verification has nothing left to check, and a foreman's output is a
     // diagnosis rather than a unit of work with an acceptance criterion.
-    if (!task || task.isForeman || task.verifiesTaskId) return;
+    if (!task || task.isForeman || task.verifiesTaskId) return null;
+    if (judgment) {
+      const existing = await this.prisma.task.findFirst({
+        where: { id: judgment.requestId, ownerId, verifiesTaskId: taskId },
+        select: { id: true, sessions: { select: { id: true }, take: 1 } },
+      });
+      if (existing) {
+        if (existing.sessions.length === 0 && task.assignee?.runnerId && !task.assignee.deletedAt) {
+          await this.execute(
+            ownerId,
+            existing.id,
+            undefined,
+            TASK_RUN_TRIGGER.firstRun(existing.id, await this.dispatchEpochOf(existing.id)),
+          ).catch((error) => this.logger.warn(
+            `verification ${existing.id} remains filed but dispatch failed: ` +
+              `${error?.message ?? error}`,
+          ));
+        }
+        return existing.id;
+      }
+    }
     // A runner-bound assignee that still exists. `deletedAt` matters as much as `runnerId`:
     // sessions.create refuses a soft-deleted workspace, so filing here would leave an OPEN task
     // that can never run and reads as pending work forever. Six of those were filed against a
     // workspace deleted in August before this check existed.
-    if (!task.assignee?.runnerId || task.assignee.deletedAt) return;
+    if (!judgment && (!task.assignee?.runnerId || task.assignee.deletedAt)) return null;
     // Did anything actually run? `numTurns > 0` and not "has a SUCCEEDED session": at the moment
     // an EXECUTABLE criterion derives DONE its own session is still RUNNING, so success is not yet recorded —
     // but its turns are. The task that motivated all of this had 18 sessions and numTurns 0 on
     // every one of them, and a comment claiming acceptance had passed.
-    const executed = await this.prisma.session.count({
+    const executed = judgment ? 1 : await this.prisma.session.count({
       where: {
         taskId,
         // A run in flight counts as evidence. `numTurns` is incremented when a turn *ends*, and a
@@ -7540,54 +7804,98 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // expensive nor ambiguous: it is 1.3% of this deployment's DONE tasks (8 of 621), and there
     // is no run to double. Requiring opt-in for it would mean the one case nobody would decline
     // is the one that needs asking for.
-    if (!unevidenced && !task.list?.verifyOnDone) return;
+    if (!judgment && !unevidenced && !task.list?.verifyOnDone) return null;
     // Cancelled checks don't count. The cap exists to stop verify → reject → re-DONE → verify
     // from looping, and a cancelled verification issued no verdict, so it rejected nothing and is
     // not part of any loop. Counting it spends a budget it never used — the same reason a
     // quota-killed run does not spend the auto-run budget. In-flight ones still count, which is
     // what keeps two from being filed for the same subject at once.
-    const already = await this.prisma.task.count({
+    const already = judgment ? 0 : await this.prisma.task.count({
       where: { verifiesTaskId: taskId, status: { not: TaskStatus.CANCELLED } },
     });
     if (already >= MAX_VERIFICATIONS_PER_TASK) {
       this.logger.log(
         `verification skipped for task ${taskId} — already checked ${already} time(s)`,
       );
-      return;
+      return null;
     }
-    const verification = await this.prisma.task.create({
-      data: {
-        title: `[VERIFY] ${task.title}`.slice(0, 200),
-        description: this.buildVerificationBrief(task.title, taskId, unevidenced),
-        ownerId,
-        listId: task.listId,
+    const verificationData: Prisma.TaskUncheckedCreateInput = {
+      id: judgment?.requestId,
+      title: `[VERIFY] ${task.title}`.slice(0, 200),
+      description: judgment
+        ? this.buildJudgmentVerificationBrief(
+            task.title,
+            taskId,
+            judgment.requestId,
+            judgment.evidenceDigest,
+          )
+        : this.buildVerificationBrief(task.title, taskId, unevidenced),
+      ownerId,
+      listId: task.listId,
         // The subject's project, not none. A check filed outside its subject's project is one
         // `GET /projects/:id/verifications` cannot see (it filters on the column) and one
         // `VERIFICATION_PASSED` cannot count — the same rule the deliberate door enforces, which
         // this path was quietly breaking for every project task it ever checked.
-        projectId: task.projectId,
-        assigneeId: task.assignee.id,
-        verifiesTaskId: taskId,
+      projectId: task.projectId,
+      assigneeId: task.assignee?.id ?? null,
+      verifiesTaskId: taskId,
         // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.
-        autoRunWhenReady: false,
-        creatorType: CreatorType.USER,
-        creatorId: ownerId,
-      },
-      select: { id: true },
-    });
+      autoRunWhenReady: false,
+      creatorType: CreatorType.USER,
+      creatorId: ownerId,
+    };
+    const verification = judgment
+      ? await this.prisma.task.upsert({
+          where: { id: judgment.requestId },
+          create: verificationData,
+          update: {},
+          select: { id: true },
+        })
+      : await this.prisma.task.create({ data: verificationData, select: { id: true } });
     // The row is durable before dispatch begins. If opening its first Session fails, no
     // session.created event will exist to reveal it, so announce the fetchable row now.
     this.publishKnownTaskRows(ownerId, [verification.id]);
     // The one run this check exists for. A retry of the filing above makes a DIFFERENT task, so
     // "the first run of this task, at the moment it was filed" names exactly one request for as
     // long as the row exists.
-    await this.execute(
-      ownerId,
-      verification.id,
-      undefined,
-      TASK_RUN_TRIGGER.firstRun(verification.id, await this.dispatchEpochOf(verification.id)),
-    );
+    if (task.assignee?.runnerId && !task.assignee.deletedAt) {
+      const dispatch = this.execute(
+        ownerId,
+        verification.id,
+        undefined,
+        TASK_RUN_TRIGGER.firstRun(verification.id, await this.dispatchEpochOf(verification.id)),
+      );
+      if (judgment) {
+        await dispatch.catch((error) => this.logger.warn(
+          `verification ${verification.id} remains filed but dispatch failed: ` +
+            `${error?.message ?? error}`,
+        ));
+      } else {
+        // Preserve the legacy contract: the verifier row is announced first, then dispatch
+        // failure reaches its caller. N11 catches only its own post-commit delivery failure because
+        // its request is already durable and a replay must converge on that same verifier.
+        await dispatch;
+      }
+    }
     this.logger.log(`verification ${verification.id} filed for task ${taskId}`);
+    return verification.id;
+  }
+
+  private buildJudgmentVerificationBrief(
+    title: string,
+    taskId: string,
+    requestId: string,
+    evidenceDigest: string,
+  ): string {
+    return (
+      `请独立验证任务「${title}」（id: ${uuidToBase62(taskId)}）提交的当前证据。\n\n` +
+      `判定请求：${uuidToBase62(requestId)}\n` +
+      `证据摘要：${evidenceDigest}\n\n` +
+      `这是 VERIFICATION 判据的唯一正常路径，不是人工签字的前置或兜底。请读取该任务的` +
+      `结构化 evidence revision，亲自核验产物和命令，然后在本验证任务写 verdict=PASS、FAIL ` +
+      `或 INCONCLUSIVE。不要直接写任何任务的 status=DONE；PASS 会在同一判定边界派生被验证` +
+      `任务的完成状态。`
+    );
   }
 
   /**

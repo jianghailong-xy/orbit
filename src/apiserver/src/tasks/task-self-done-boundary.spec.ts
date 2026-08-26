@@ -155,7 +155,7 @@ test('a person cannot write DONE and is directed to the HUMAN_SIGNOFF criterion'
     body,
     'HUMAN_SIGNOFF',
     'CREATE_HUMAN_SIGNOFF_WITH_EVIDENCE',
-    /non-blank evidence.*task_signoff/,
+    /current HUMAN_SIGNOFF judgment request.*requestId.*evidenceDigest/,
   );
   assert.deepEqual(f.writes, []);
 });

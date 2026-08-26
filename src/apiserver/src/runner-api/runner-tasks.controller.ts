@@ -229,7 +229,7 @@ export class RunnerTasksController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: SignoffTaskDto,
   ) {
-    return this.tasks.signoff(runner.ownerId, id, dto.evidence, sessionId);
+    return this.tasks.signoff(runner.ownerId, id, dto, sessionId);
   }
 
   @Delete('tasks/:id')

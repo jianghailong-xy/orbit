@@ -230,6 +230,36 @@ enum TaskCompletionCriterion {
   @@map("task_completion_criterion")
 }
 
+/// Lifecycle of one evidence-bound request for a criterion decision. It is monotonic: OPEN may
+/// become DECIDED or SUPERSEDED, and neither terminal fact is rewritten or reopened.
+enum TaskJudgmentRequestStatus {
+  OPEN
+  DECIDED
+  SUPERSEDED
+
+  @@map("task_judgment_request_status")
+}
+
+/// The concrete principal that owns the next decision. These are peers selected from the task's
+/// declared criterion; no row moves from one recipient type to another as a fallback.
+enum TaskJudgmentRecipientType {
+  SYSTEM_EXECUTABLE_EVALUATOR
+  VERIFIER_TASK
+  ACCOUNT_OWNER
+
+  @@map("task_judgment_recipient_type")
+}
+
+/// A request conclusion. PASS is the only optimistic conclusion; the other two remain durable
+/// evidence without manufacturing Task.status DONE.
+enum TaskJudgmentDecision {
+  PASS
+  FAIL
+  INCONCLUSIVE
+
+  @@map("task_judgment_decision")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -2963,6 +2993,7 @@ model Task {
 
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
+  judgmentRequests TaskJudgmentRequest[]
   /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
   /// criterion, and retries return that same event rather than minting a second judgment.
   humanSignoffs TaskHumanSignoff[]
@@ -3074,8 +3105,10 @@ model TaskCompletionEvidence {
   revision          BigInt
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
+  judgmentRequests TaskJudgmentRequest[]
 
   @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
+  @@unique([id, taskId, criterionRevision, evidenceDigest], map: "task_completion_evidence_bound_fact_key")
   @@unique([taskId, revision], map: "task_completion_evidence_task_revision_key")
   @@unique([taskId, actorType, actorId, sourceSessionId, criterionRevision, evidenceDigest], map: "task_completion_evidence_stable_fact_key")
   @@index([taskId, submittedAt, id], map: "task_completion_evidence_task_submitted_idx")
@@ -3104,13 +3137,76 @@ model TaskHumanSignoff {
   id         String   @id @default(uuid(7)) @db.Uuid
   taskId     String   @unique @map("task_id") @db.Uuid
   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestId  String   @unique @map("request_id") @db.Uuid
+  request    TaskJudgmentRequest @relation(fields: [requestId, taskId, evidenceDigest], references: [id, taskId, evidenceDigest], onDelete: Restrict, map: "task_human_signoff_request_fact_fkey")
   signedById String   @map("signed_by_id") @db.Uuid
   signedBy   User     @relation(fields: [signedById], references: [id])
+  evidenceDigest String @map("evidence_digest") @db.Char(64)
   evidence   String
   signedAt   DateTime @default(now()) @map("signed_at")
 
+  @@unique([requestId, taskId, evidenceDigest], map: "task_human_signoff_request_fact_key")
   @@index([signedById, signedAt(sort: Desc)])
   @@map("task_human_signoff")
+}
+
+/// The durable question created for exactly one criterion snapshot and evidence digest.
+///
+/// `recipientId` is deliberately text: an account owner, Session and verifier Task are UUIDs
+/// today, but the discriminator is the authority boundary and callers must never infer one kind
+/// from another merely because their identifiers share a representation.
+model TaskJudgmentRequest {
+  id       String @id @default(uuid(7)) @db.Uuid
+  taskId   String @map("task_id") @db.Uuid
+  ownerId  String @map("owner_id") @db.Uuid
+  task     Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_judgment_request_task_fkey")
+
+  evidenceId       String @map("evidence_id") @db.Uuid
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  evidence           TaskCompletionEvidence @relation(fields: [evidenceId, taskId, criterionRevision, evidenceDigest], references: [id, taskId, criterionRevision, evidenceDigest], onDelete: Restrict, map: "task_judgment_request_evidence_fact_fkey")
+
+  kind          TaskCompletionCriterion
+  recipientType TaskJudgmentRecipientType @map("recipient_type")
+  recipientId   String @map("recipient_id")
+  status        TaskJudgmentRequestStatus @default(OPEN)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedByType String? @map("decided_by_type")
+  decidedById String? @map("decided_by_id")
+  decision    TaskJudgmentDecision?
+  supersededAt DateTime? @map("superseded_at")
+  supersededById String? @map("superseded_by_id") @db.Uuid
+  supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)
+  supersedes TaskJudgmentRequest[] @relation("JudgmentRequestSupersession")
+
+  executableResult TaskExecutableJudgmentResult?
+  humanSignoff TaskHumanSignoff?
+
+  @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
+  @@unique([taskId, criterionRevision, evidenceDigest, kind], map: "task_judgment_request_fact_key")
+  @@index([taskId, status, createdAt(sort: Desc)], map: "task_judgment_request_task_status_idx")
+  @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
+  @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
+  @@map("task_judgment_request")
+}
+
+/// The command observation that decides an EXECUTABLE request. A comment may render it, but this
+/// row—not prose—is the fact consumed by completion derivation.
+model TaskExecutableJudgmentResult {
+  id               String @id @default(uuid(7)) @db.Uuid
+  requestId        String @unique @map("request_id") @db.Uuid
+  request          TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  command          String
+  expectedExitCode Int @map("expected_exit_code")
+  actualExitCode   Int @map("actual_exit_code")
+  rawOutput        String @map("raw_output")
+  recordedById     String @map("recorded_by_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  @@index([recordedAt(sort: Desc)], map: "task_executable_judgment_result_recorded_idx")
+  @@map("task_executable_judgment_result")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).

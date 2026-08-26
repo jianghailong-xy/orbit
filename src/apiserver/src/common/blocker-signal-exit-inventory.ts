@@ -170,7 +170,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'HUMAN_DECISION_REQUIRED',
     resolveWhen:
-      'The human-required finding is answered or invalidated; for a missing judgment-path episode, the task is deleted or decided, gains L0/L1, records a later failure, or opens a later L2 judgment session.',
+      'For evidence-bound completion this is the project_judgment_blocker view and disappears exactly when its judgment request is DECIDED or SUPERSEDED; legacy stored episodes also resolve when that request is created.',
   },
   {
     family: 'PROJECT_BLOCKER',
@@ -188,6 +188,12 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'DURABLE_SIGNAL',
     type: 'ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH',
     resolveWhen:
-      'The task is deleted, DONE or CANCELLED, records a later FAILED decision, gains an executable L0 command or live L1 verifier, or opens a later bound L2 judgment session; its timeline comment remains append-only evidence.',
+      'The task is deleted, DONE or CANCELLED, records a later FAILED decision, or gains an evidence-bound judgment request; its timeline comment remains append-only audit evidence.',
+  },
+  {
+    family: 'DURABLE_SIGNAL',
+    type: 'OPEN_JUDGMENT_REQUEST',
+    resolveWhen:
+      'The bound task_judgment_request becomes DECIDED from its declared consumer or SUPERSEDED by a substantively new evidence revision; the request and old evidence remain auditable.',
   },
 ] as const satisfies readonly BlockerSignalExitRegistration[];

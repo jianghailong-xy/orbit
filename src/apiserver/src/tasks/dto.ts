@@ -12,6 +12,7 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
   MinLength,
   ValidateIf,
@@ -96,6 +97,34 @@ export class TaskCompletionEvidenceDto {
   evidenceDigest!: string;
   revision!: string;
   idempotencyKeys!: string[];
+  judgmentRequest!: TaskJudgmentRequestDto;
+}
+
+/** One durable, evidence-bound request and the explicit principal responsible for deciding it. */
+export class TaskJudgmentRequestDto {
+  @IsPublicId()
+  id!: string;
+  @IsPublicId()
+  taskId!: string;
+  @IsPublicId()
+  evidenceId!: string;
+  criterionRevision!: string;
+  evidenceDigest!: string;
+  kind!: TaskCompletionCriterionValue;
+  recipientType!: 'SYSTEM_EXECUTABLE_EVALUATOR' | 'VERIFIER_TASK' | 'ACCOUNT_OWNER';
+  recipientId!: string;
+  status!: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
+  createdAt!: Date;
+  decidedAt!: Date | null;
+  decidedByType!: string | null;
+  @IsOptional()
+  @IsPublicId()
+  decidedById!: string | null;
+  decision!: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
+  supersededAt!: Date | null;
+  @IsOptional()
+  @IsPublicId()
+  supersededById!: string | null;
 }
 
 /**
@@ -433,6 +462,15 @@ export class UpdateTaskDto {
 
 /** The evidence a person signs, with signer and timestamp supplied by the server. */
 export class SignoffTaskDto {
+  @IsPublicId()
+  requestId!: string;
+
+  @IsString()
+  @MinLength(64)
+  @MaxLength(64)
+  @Matches(/^[0-9a-fA-F]{64}$/)
+  evidenceDigest!: string;
+
   @IsString()
   @MinLength(1)
   evidence!: string;

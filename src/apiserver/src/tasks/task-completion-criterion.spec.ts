@@ -86,7 +86,7 @@ test('every direct-DONE refusal points at the declared criterion remedy', () => 
   );
   assert.match(
     taskCompletionRequiredAction('HUMAN_SIGNOFF').instruction,
-    /HUMAN_SIGNOFF event with non-blank evidence/,
+    /current HUMAN_SIGNOFF judgment request.*requestId.*evidenceDigest/,
   );
 });
 

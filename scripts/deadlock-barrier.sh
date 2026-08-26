@@ -12,6 +12,7 @@
 #   scripts/deadlock-barrier.sh dependency-revision  # the 0132 dispatch boundary, both commit orders
 #   scripts/deadlock-barrier.sh dispatch-epoch # the 0137 two-pass advance vs 0154's one batch
 #   scripts/deadlock-barrier.sh evidence       # N10 completion evidence against real PostgreSQL
+#   scripts/deadlock-barrier.sh judgment       # N11 evidence-bound request/signoff lifecycle
 #   scripts/deadlock-barrier.sh reorder        # the reversed sidebar reorder, control and fix
 #   scripts/deadlock-barrier.sh all            # every gate above, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
@@ -47,8 +48,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|all) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|all] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|judgment|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|judgment|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -94,7 +95,7 @@ URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
 case "$TARGET" in
   # session-scope runs LAST because it rebuilds the pre-0133 trigger mid-test: an interrupted
   # run must never be able to leave a baseline executing against a schema it did not intend.
-  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry reorder dependency-revision dispatch-epoch evidence session-scope) ;;
+  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry reorder dependency-revision dispatch-epoch evidence judgment session-scope) ;;
   *)   TARGETS=("$TARGET") ;;
 esac
 
@@ -135,6 +136,12 @@ run_target() {
     dispatch-epoch)
       CMD=("$NODE" --test --test-concurrency=1 build/deadlock/dispatch-epoch.pg.spec.js) ;;
     evidence)    CMD=("$NODE" --test --test-concurrency=1 build/tasks/task-completion-evidence.pg.spec.js) ;;
+    judgment)    CMD=("$NODE" --test --test-concurrency=1 \
+      build/tasks/task-completion-evidence.pg.spec.js \
+      build/tasks/task-executable-acceptance.pg.spec.js \
+      build/tasks/task-judgment-verification.pg.spec.js \
+      build/tasks/task-human-signoff.pg.spec.js \
+      build/tasks/verification-epoch.pg.spec.js) ;;
   esac
   echo "==> $1"
   # Every target here makes real deadlocks on purpose. This is how the counters in

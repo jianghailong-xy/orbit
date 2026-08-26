@@ -13,6 +13,7 @@ import {
   CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
+  SignoffTaskDto,
   SubmitRunnerTaskCompletionEvidenceDto,
   SubmitTaskCompletionEvidenceDto,
   TASK_BATCH_CREATE_MAX,
@@ -44,6 +45,24 @@ test('completion evidence DTOs require a structured object and REST requires its
   assert.notEqual((await validate(scalarEvidence)).length, 0);
   assert.notEqual((await validate(missingRunnerEvidence)).length, 0);
   assert.notEqual((await validate(oversizedKey)).length, 0);
+});
+
+test('human signoff DTO binds the current request and exact evidence digest', async () => {
+  const valid = Object.assign(new SignoffTaskDto(), {
+    requestId: TASK_A,
+    evidenceDigest: 'a'.repeat(64),
+    evidence: 'I reviewed this exact evidence revision.',
+  });
+  const missingRequest = Object.assign(new SignoffTaskDto(), {
+    evidenceDigest: 'a'.repeat(64), evidence: 'reviewed',
+  });
+  const commitShaInsteadOfDigest = Object.assign(new SignoffTaskDto(), {
+    requestId: TASK_A, evidenceDigest: 'a'.repeat(40), evidence: 'reviewed',
+  });
+
+  assert.equal((await validate(valid)).length, 0);
+  assert.notEqual((await validate(missingRequest)).length, 0);
+  assert.notEqual((await validate(commitShaInsteadOfDigest)).length, 0);
 });
 
 async function dependencyErrors(value: unknown, present = true) {

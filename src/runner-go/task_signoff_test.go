@@ -15,13 +15,22 @@ func TestTaskSignoffIsAlignedAcrossMCPAndCLI(t *testing.T) {
 		t.Fatal("task_signoff missing from the base task tools")
 	}
 	props := mcpToolProps(tools, "task_signoff")
+	requestID, _ := props["requestId"].(map[string]interface{})
+	if requestID["type"] != "string" || requestID["minLength"] != 1 {
+		t.Fatalf("task_signoff requestId schema = %#v", requestID)
+	}
+	digest, _ := props["evidenceDigest"].(map[string]interface{})
+	if digest["pattern"] != "^[0-9a-fA-F]{64}$" {
+		t.Fatalf("task_signoff evidenceDigest schema = %#v", digest)
+	}
 	evidence, _ := props["evidence"].(map[string]interface{})
 	if evidence["type"] != "string" || evidence["minLength"] != 1 {
 		t.Fatalf("task_signoff evidence schema = %#v", evidence)
 	}
-	if !strings.Contains(taskActionHelp["signoff"], "HUMAN_SIGNOFF event") ||
+	if !strings.Contains(taskActionHelp["signoff"], "HUMAN_SIGNOFF judgment request") ||
+		!strings.Contains(taskActionHelp["signoff"], "request id, evidence digest") ||
 		!strings.Contains(taskActionHelp["signoff"], "same transaction") {
-		t.Fatalf("task signoff help omits event/atomicity: %q", taskActionHelp["signoff"])
+		t.Fatalf("task signoff help omits request binding/atomicity: %q", taskActionHelp["signoff"])
 	}
 	foundCLI := false
 	for _, capability := range baseCLICapabilities {
@@ -50,7 +59,12 @@ func TestMCPTaskSignoffCarriesSessionAndEvidence(t *testing.T) {
 		sessionID: "session-1",
 		t:         NewTransport(srv.URL, "token"),
 	}
-	result := mcp.callTool("task_signoff", map[string]interface{}{"evidence": "reviewed build 42"})
+	digest := strings.Repeat("a", 64)
+	result := mcp.callTool("task_signoff", map[string]interface{}{
+		"requestId":      "request-1",
+		"evidenceDigest": digest,
+		"evidence":       "reviewed build 42",
+	})
 	if result["isError"] == true {
 		t.Fatalf("task_signoff returned error: %#v", result["content"])
 	}
@@ -63,6 +77,9 @@ func TestMCPTaskSignoffCarriesSessionAndEvidence(t *testing.T) {
 	if gotBody["evidence"] != "reviewed build 42" {
 		t.Fatalf("task_signoff body = %#v", gotBody)
 	}
+	if gotBody["requestId"] != "request-1" || gotBody["evidenceDigest"] != digest {
+		t.Fatalf("task_signoff request binding = %#v", gotBody)
+	}
 }
 
 func TestTaskSignoffRejectsBlankEvidenceBeforeTransport(t *testing.T) {
@@ -74,7 +91,9 @@ func TestTaskSignoffRejectsBlankEvidenceBeforeTransport(t *testing.T) {
 	defer srv.Close()
 
 	mcp := &mcpServer{taskID: "task-1", t: NewTransport(srv.URL, "token")}
-	result := mcp.callTool("task_signoff", map[string]interface{}{"evidence": " \n\t"})
+	result := mcp.callTool("task_signoff", map[string]interface{}{
+		"requestId": "request-1", "evidenceDigest": strings.Repeat("a", 64), "evidence": " \n\t",
+	})
 	if result["isError"] != true || requests != 0 {
 		t.Fatalf("blank task_signoff = %#v, requests = %d", result, requests)
 	}
@@ -94,7 +113,7 @@ func TestCLITaskSignoffUsesHeadlessHumanDoor(t *testing.T) {
 
 	var out bytes.Buffer
 	if err := cmdTaskCLI(
-		[]string{"signoff", "task-1", "--evidence-file", "-", "--json"},
+		[]string{"signoff", "task-1", "--request-id", "request-1", "--evidence-digest", strings.Repeat("b", 64), "--evidence-file", "-", "--json"},
 		strings.NewReader("human reviewed pg evidence\n"),
 		&out,
 	); err != nil {
@@ -105,5 +124,8 @@ func TestCLITaskSignoffUsesHeadlessHumanDoor(t *testing.T) {
 	}
 	if gotBody["evidence"] != "human reviewed pg evidence\n" {
 		t.Fatalf("headless signoff body = %#v", gotBody)
+	}
+	if gotBody["requestId"] != "request-1" || gotBody["evidenceDigest"] != strings.Repeat("b", 64) {
+		t.Fatalf("headless signoff request binding = %#v", gotBody)
 	}
 }

@@ -167,8 +167,8 @@ export function taskCompletionRequiredAction(
       return {
         requiredAction: 'CREATE_HUMAN_SIGNOFF_WITH_EVIDENCE',
         instruction:
-          'have a person create a HUMAN_SIGNOFF event with non-blank evidence (task_signoff / ' +
-          'POST /tasks/:id/signoff)',
+          'have the account owner decide the current HUMAN_SIGNOFF judgment request, binding ' +
+          'task_signoff / POST /tasks/:id/signoff to its requestId and evidenceDigest',
       };
   }
 }

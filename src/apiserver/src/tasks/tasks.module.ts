@@ -8,6 +8,7 @@ import { ReferenceExpansionService } from './reference-expansion';
 import { TasksService } from './tasks.service';
 import { TaskCompletionEvidenceController } from './task-completion-evidence.controller';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
+import { TaskJudgmentRequestController } from './task-judgment-request.controller';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
     ProjectAttributionModule,
     CoordinatorJudgmentModule,
   ],
-  controllers: [TasksController, TaskCompletionEvidenceController],
+  controllers: [TasksController, TaskCompletionEvidenceController, TaskJudgmentRequestController],
   providers: [TasksService, ReferenceExpansionService, TaskCompletionEvidenceService],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService
   // in a second module would construct a second one, and its onModuleInit would start a

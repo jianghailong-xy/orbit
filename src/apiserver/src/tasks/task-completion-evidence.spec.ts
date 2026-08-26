@@ -31,7 +31,10 @@ test('substantive evidence changes affect the digest while array order and white
 test('the evidence service is state-orthogonal and contains no comment/final-reply inference', () => {
   const source = readFileSync('src/tasks/task-completion-evidence.service.ts', 'utf8');
   assert.doesNotMatch(source, /taskComment|lastAssistant|finalReply|publish|notify/);
-  assert.doesNotMatch(source, /task\.update|session\.update|status\s*[:=]/);
+  assert.doesNotMatch(source, /(?:tx|this\.prisma)\.task\.update|(?:tx|this\.prisma)\.session\.update/);
+  assert.doesNotMatch(source, /ATTEMPT_WAKE_SESSION_PARKED/);
   assert.match(source, /source session for task not found/);
   assert.match(source, /taskCompletionEvidence\.create/);
+  assert.match(source, /taskJudgmentRequest\.create/);
+  assert.match(source, /TaskJudgmentRequestStatus\.SUPERSEDED/);
 });

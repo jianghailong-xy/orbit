@@ -107,8 +107,16 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   )));
   assert.equal(new Set(concurrent.map((row) => row.id)).size, 1);
   assert.equal(new Set(concurrent.map((row) => row.revision)).size, 1);
+  assert.equal(new Set(concurrent.map((row) => row.judgmentRequest.id)).size, 1);
+  assert.equal(concurrent[0].judgmentRequest.status, 'OPEN');
+  assert.equal(concurrent[0].judgmentRequest.kind, 'HUMAN_SIGNOFF');
+  assert.equal(concurrent[0].judgmentRequest.recipientType, 'ACCOUNT_OWNER');
+  assert.equal(concurrent[0].judgmentRequest.recipientId, f.ownerId);
   assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 1);
   assert.equal(await db.taskCompletionEvidenceIdempotency.count({ where: { taskId: f.taskId } }), 1);
+  assert.equal(await db.taskJudgmentRequest.count({
+    where: { taskId: f.taskId, status: 'OPEN' },
+  }), 1, 'concurrent/replayed evidence has one open request');
 
   const replay = await service.submit(f.ownerId, f.taskId, actor, {
     sourceSessionId: f.sessionId,
@@ -128,6 +136,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(replay.sourceAttemptId, null);
   assert.ok(replay.submittedAt instanceof Date);
   assert.deepEqual(replay.idempotencyKeys, ['turn-1-complete', 'turn-1-equivalent']);
+  assert.equal(replay.judgmentRequest.id, concurrent[0].judgmentRequest.id);
 
   await assert.rejects(
     service.submit(f.ownerId, f.taskId, actor, {
@@ -158,9 +167,24 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(changed.revision, '2');
   assert.notEqual(changed.id, replay.id);
   assert.notEqual(changed.evidenceDigest, replay.evidenceDigest);
+  assert.notEqual(changed.judgmentRequest.id, replay.judgmentRequest.id);
   const audit = await service.list(f.ownerId, f.taskId);
   assert.deepEqual(audit.map((row) => row.revision), ['1', '2']);
   assert.equal(audit[0].id, replay.id);
+  assert.equal(audit[0].judgmentRequest.status, 'SUPERSEDED');
+  assert.equal(audit[0].judgmentRequest.supersededById, changed.judgmentRequest.id);
+  assert.equal(audit[1].judgmentRequest.status, 'OPEN');
+  assert.equal(await db.taskJudgmentRequest.count({
+    where: { taskId: f.taskId, status: 'OPEN' },
+  }), 1);
+  const openSignals = await sql.query<{ id: string; evidence_digest: string }>(`
+    SELECT "id", "evidence_digest" FROM "task_judgment_signal"
+     WHERE "task_id" = '${f.taskId}'::uuid
+  `);
+  assert.deepEqual(openSignals.rows, [{
+    id: changed.judgmentRequest.id,
+    evidence_digest: changed.evidenceDigest,
+  }]);
 
   const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
   const task = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });

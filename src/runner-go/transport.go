@@ -1163,13 +1163,17 @@ func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.Raw
 // signoffTask carries the acting session for the opposite reason to an ordinary attributed write:
 // the absence of a session is the runner owner's human door, while any agent session must be
 // refused rather than allowed to impersonate that person in a HUMAN_SIGNOFF event.
-func (t *Transport) signoffTask(sessionID, id, evidence string) (json.RawMessage, error) {
+func (t *Transport) signoffTask(sessionID, id, requestID, evidenceDigest, evidence string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/signoff",
-		map[string]string{"evidence": evidence}, &out, taskOpTimeout, sessionHeader(sessionID))
+		map[string]string{
+			"requestId":      requestID,
+			"evidenceDigest": evidenceDigest,
+			"evidence":       evidence,
+		}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

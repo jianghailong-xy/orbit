@@ -696,9 +696,19 @@ export class ProjectAcceptanceService {
     projectId: string,
     digest: string,
   ): Promise<{ runId: string; attempt: bigint; digest: string }> {
-    const openBlockers = await tx.projectBlocker.count({
-      where: { projectId, resolvedAt: null },
-    });
+    // HUMAN_SIGNOFF judgment blockers are projections of OPEN requests, not mutable
+    // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
+    // merely because there is intentionally no blocker row for somebody to close by hand.
+    const [{ count: openBlockers }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+      SELECT (
+        (SELECT count(*) FROM "project_blocker" blocker
+          WHERE blocker."project_id" = ${projectId}::uuid
+            AND blocker."resolved_at" IS NULL)
+        +
+        (SELECT count(*) FROM "project_judgment_blocker" judgment
+          WHERE judgment."project_id" = ${projectId}::uuid)
+      )::int AS "count"
+    `);
     // §13.6 SU6: a failure whose verifier or whose subject was REPLACED is a record, not a request
     // — nothing will ever run either of them again, so the later PASS that is the only thing which
     // resolves this row can never arrive. Counting it would make a project that re-ran a failed
