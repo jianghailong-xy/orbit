@@ -23,6 +23,7 @@ import {
   toUuid,
 } from '@orbit/shared';
 import { isSessionGenerating } from '../common/session-generating';
+import { SingleFlight } from '../common/single-flight';
 import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
@@ -228,6 +229,24 @@ const COORDINATION_INCLUDE = {
   members: { where: { role: ProjectRole.COORDINATOR }, select: { agentId: true } },
   runtime: { select: { coordinatorGeneration: true } },
 } satisfies Prisma.ProjectInclude;
+
+/**
+ * A row on the project index, as opposed to a project document.
+ *
+ * The detail-only prose and policy fields are intentionally absent. In production, 22 OPEN
+ * projects carried more than 60 KiB of acceptance criteria and instructions that every list
+ * client parsed and discarded. The task total is absent too: the rollup already visits every
+ * scoped task and returns that count, so asking Prisma for a second aggregate only repeats work.
+ */
+const PROJECT_LIST_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  goal: true,
+  createdAt: true,
+  updatedAt: true,
+  ...COORDINATION_INCLUDE,
+} satisfies Prisma.ProjectSelect;
 
 const ACCEPTANCE_DEFINITIONS_INCLUDE = {
   orderBy: { ordinal: 'asc' as const },
@@ -457,6 +476,7 @@ type LandingAbsentReason = 'COORDINATOR_ALREADY_LIVE' | 'LANDING_REFUSED' | null
 @Injectable()
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
+  private readonly listSingleFlight = new SingleFlight();
 
   /**
    * The fields that decide whether an action the coordinator wants to take may happen — and the
@@ -979,9 +999,9 @@ export class ProjectsService {
    * lists projects is deleted in every respect except the one that matters when something goes
    * wrong.
    *
-   * The task tally is a `_count`, not an embedded task array. `GET /task-lists/:id` embeds its
-   * list's tasks and had to grow a `?tasks=none` escape hatch when one list reached 27k of them;
-   * starting from the count is the same decision made once instead of twice.
+   * The task tally is a count, not an embedded task array. It comes from the same page-wide
+   * aggregate that produces the buckets: asking Prisma for `_count.tasks` separately made the
+   * database visit the largest project's task index twice merely to return the same population.
    *
    * `_count.tasks` is kept and is no longer the number a reader acts on: it counts DONE and
    * CANCELLED alongside the rest, so it says how big a project is and nothing about where it
@@ -990,11 +1010,19 @@ export class ProjectsService {
    * blockers are folded separately into `attention`: their owner is the durable answer to who
    * must act, and joining them into the task aggregate would multiply both counts.
    */
-  async list(ownerId: string, status?: ProjectStatus) {
+  list(ownerId: string, status?: ProjectStatus) {
+    // A projects page refresh can arrive from several open clients at once. The aggregate is the
+    // expensive part, so identical concurrent reads share it; settlement removes the promise and
+    // the next request always reads fresh state.
+    return this.listSingleFlight.run(`${ownerId}:${status ?? '*'}`, () =>
+      this.loadList(ownerId, status));
+  }
+
+  private async loadList(ownerId: string, status?: ProjectStatus) {
     const projects = await this.prisma.project.findMany({
       where: { ownerId, ...(status ? { status } : {}) },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { tasks: true } }, ...COORDINATION_INCLUDE },
+      select: PROJECT_LIST_SELECT,
     });
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
@@ -1003,15 +1031,22 @@ export class ProjectsService {
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
     ]);
-    return projects.map((project) => ({
-      ...withCoordination(project),
-      // A project with no tasks has no group in the aggregate. It reports five zeroes and no
-      // activity, rather than dropping the fields and making every client handle two shapes.
-      ...(rollups.get(project.id) ?? emptyProjectListRollup()),
-      // The same total shape for a project with no open blockers: clients never have to infer
-      // whether an absent field means "none" or "this server did not compute attention".
-      attention: attention.get(project.id) ?? emptyProjectListAttention(),
-    }));
+    return projects.map((project) => {
+      // A project with no tasks has no group in the aggregate. It reports a zero total, five zero
+      // buckets and no activity rather than making every client handle two shapes.
+      const { taskCount, ...rollup } = rollups.get(project.id) ?? emptyProjectListRollup();
+      return {
+        ...withCoordination(project),
+        // Preserve the established wire shape while sourcing the value from the rollup's one
+        // task pass. Tenant scope now matches the buckets exactly even if malformed raw data ever
+        // points another owner's task at this project.
+        _count: { tasks: taskCount },
+        ...rollup,
+        // The same total shape for a project with no open blockers: clients never have to infer
+        // whether an absent field means "none" or "this server did not compute attention".
+        attention: attention.get(project.id) ?? emptyProjectListAttention(),
+      };
+    });
   }
 
   /**

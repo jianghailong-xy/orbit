@@ -369,7 +369,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       assert.equal(byId.has(pStranger), false, 'the stranger’s project is not in my index');
     });
 
-    await t.test('the whole index costs one aggregate, not one per project', async () => {
+    await t.test('the whole index costs two page-wide aggregates, not one per project', async () => {
       const owner = await makeUser(db);
       const p1 = await makeProject(db, owner, 'q1');
       const p2 = await makeProject(db, owner, 'q2');
@@ -378,7 +378,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      assert.equal(rawQueries, 1, 'two projects, one grouped aggregate');
+      assert.equal(rawQueries, 2, 'one task rollup and one blocker rollup for the whole page');
     });
   } finally {
     await db.$disconnect();
