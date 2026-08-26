@@ -1,0 +1,33 @@
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { CreatorType } from '@prisma/client';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { PublicIdPipe } from '../common/public-id';
+import { SubmitTaskCompletionEvidenceDto } from './dto';
+import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
+
+/** The user REST face of N10's evidence fact. It shares the service and response with runner/MCP. */
+@UseGuards(JwtAuthGuard)
+@Controller('tasks/:taskId/evidence')
+export class TaskCompletionEvidenceController {
+  constructor(private readonly evidence: TaskCompletionEvidenceService) {}
+
+  @Post()
+  submit(
+    @CurrentUser() user: AuthUser,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: SubmitTaskCompletionEvidenceDto,
+  ) {
+    return this.evidence.submit(
+      user.userId,
+      taskId,
+      { type: CreatorType.USER, id: user.userId },
+      dto,
+    );
+  }
+
+  @Get()
+  list(@CurrentUser() user: AuthUser, @Param('taskId', PublicIdPipe) taskId: string) {
+    return this.evidence.list(user.userId, taskId);
+  }
+}

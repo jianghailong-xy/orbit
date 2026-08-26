@@ -19,6 +19,7 @@ function task(
   options: {
     parent?: string;
     policy?: TaskCompletionPolicyValue;
+    criterion?: AggregationTaskFact['completionCriterion'];
     verifies?: string;
     verdict?: TaskVerdictValue;
   } = {},
@@ -28,6 +29,7 @@ function task(
     status,
     parentTaskId: options.parent ?? null,
     completionPolicy: options.policy ?? 'MANUAL',
+    completionCriterion: options.criterion,
     verifiesTaskId: options.verifies ?? null,
     verdict: options.verdict ?? null,
   };
@@ -255,6 +257,22 @@ const CASES: Case[] = [
       task('v', 'DONE', { verifies: 'p', verdict: 'PASS' }),
     ],
     expect: ['p:OPEN->DONE'],
+  },
+  {
+    name: 'explicit VERIFICATION is derived from PASS without a forbidden verifier DONE write',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v', 'OPEN', { verifies: 'p', verdict: 'PASS' }),
+    ],
+    expect: ['p:OPEN->DONE'],
+  },
+  {
+    name: 'an explicit VERIFICATION PASS revocation reopens the derived subject',
+    tasks: [
+      task('p', 'DONE', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v', 'OPEN', { verifies: 'p' }),
+    ],
+    expect: ['p:DONE->OPEN'],
   },
   {
     name: 'a verification that finished without a verdict is not a pass',

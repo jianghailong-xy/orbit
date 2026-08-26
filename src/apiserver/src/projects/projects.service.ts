@@ -144,6 +144,7 @@ export const PROJECT_TASK_TREE_SELECT = {
   // page a plan is read through, and "which of these rows completes itself", "which of them is a
   // check" and "of what, concluding what" are the three questions a phase is judged by. Without
   // them a coordinator looking at its own project cannot tell a verification from a subtask.
+  completionCriterion: true,
   completionPolicy: true,
   verdict: true,
   verifiesTaskId: true,

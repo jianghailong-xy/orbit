@@ -54,6 +54,7 @@ type ScopeRow = {
   status: AggregationTaskStatus;
   parentTaskId: string | null;
   completionPolicy: AggregationTaskFact['completionPolicy'];
+  completionCriterion: AggregationTaskFact['completionCriterion'];
   verifiesTaskId: string | null;
   verdict: AggregationTaskFact['verdict'];
   supersededByTaskId: string | null;
@@ -65,6 +66,7 @@ const SCOPE_SELECT = {
   status: true,
   parentTaskId: true,
   completionPolicy: true,
+  completionCriterion: true,
   verifiesTaskId: true,
   verdict: true,
   // §13.6 SU6's two inputs. Read here rather than derived later so the closure and the plan judge
@@ -137,6 +139,7 @@ export async function collectAggregationScope(
       status: row.status,
       parentTaskId: row.parentTaskId,
       completionPolicy: row.completionPolicy,
+      completionCriterion: row.completionCriterion,
       verifiesTaskId: row.verifiesTaskId,
       verdict: row.verdict,
       supersededByTaskId: row.supersededByTaskId,
