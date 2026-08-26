@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ProjectAcceptanceVerdict } from '@prisma/client';
-import { ProjectAcceptanceService } from './project-acceptance.service';
+import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { ACCEPTANCE_MISSING, criteriaSemanticRevision, sha256 } from './project-acceptance';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -14,6 +14,83 @@ function definition(id: string, ordinal: number, text: string, revision = 1) {
   return { id, ordinal, text, revision, contentHash: sha256(text) };
 }
 
+test('acceptance facts have no task delegate and read only criteria plus merge evidence', async () => {
+  const definitions = [definition(CRITERION_A_ID, 1, 'Build succeeds')];
+  const prisma = {
+    project: { findUnique: async () => ({ acceptanceCriteria: '1. Build succeeds' }) },
+    projectAcceptanceCriterionDefinition: { findMany: async () => definitions },
+    $queryRaw: async () => [{
+      requirementId: 'release-artifact',
+      targetBranch: 'main',
+      contentHash: 'a'.repeat(64),
+      refGeneration: 2n,
+    }],
+    // Intentionally no `task` delegate: adding task state back to `facts()` makes this spec fail.
+  };
+
+  const result = await new ProjectAcceptanceService(prisma as never)
+    .facts(prisma as never, PROJECT_ID);
+
+  assert.deepEqual(result, {
+    criteriaRevision: criteriaSemanticRevision(definitions),
+    mergeEvidence: [['release-artifact', 'main', 'a'.repeat(64), '2']],
+  });
+});
+
+test('a non-PASS gate refusal names the exact acceptance criterion and routing rule', async () => {
+  const definitions = [
+    definition(CRITERION_A_ID, 1, 'Build succeeds'),
+    definition(CRITERION_B_ID, 2, 'Image boots'),
+  ];
+  let rawRead = 0;
+  const prisma = {
+    project: { findUnique: async () => ({ acceptanceCriteria: 'legacy' }) },
+    projectAcceptanceCriterionDefinition: { findMany: async () => definitions },
+    projectBlocker: { count: async () => 0 },
+    $queryRaw: async () => {
+      rawRead += 1;
+      return rawRead === 1 ? [] : [{ count: 0 }];
+    },
+    projectAcceptanceRun: {
+      findFirst: async () => ({
+        id: RUN_ID,
+        attempt: 1n,
+        verdict: ProjectAcceptanceVerdict.FAIL,
+        decidedBy: 'COORDINATOR_AGENT',
+        criteria: [
+          {
+            ordinal: 1, criterionKey: 'build', criterionText: 'Build succeeds',
+            verdict: ProjectAcceptanceVerdict.PASS,
+          },
+          {
+            ordinal: 2, criterionKey: 'boot', criterionText: 'Image boots',
+            verdict: ProjectAcceptanceVerdict.FAIL,
+          },
+        ],
+      }),
+    },
+    // Intentionally no `task` delegate: task completion cannot make this refusal disappear.
+  };
+
+  await assert.rejects(
+    () => new ProjectAcceptanceService(prisma as never).assertDoneAllowed(prisma as never, PROJECT_ID),
+    (error: unknown) => {
+      assert.ok(error instanceof AcceptanceRefusal);
+      const body = error.getResponse() as Record<string, unknown>;
+      assert.equal(body.code, 'ACCEPTANCE_MISSING');
+      assert.match(String(body.message), /#2 \"Image boots\" \(FAIL\)/);
+      assert.match(String(body.message), /changes an acceptance criterion/);
+      assert.deepEqual(body.unmetCriteria, [{
+        ordinal: 2,
+        criterionKey: 'boot',
+        criterionText: 'Image boots',
+        verdict: 'FAIL',
+      }]);
+      return true;
+    },
+  );
+});
+
 test('criteriaSummary remaps a matching run by stable id after a pure reorder', async () => {
   const current = [
     definition(CRITERION_B_ID, 1, 'Image boots'),
@@ -21,7 +98,7 @@ test('criteriaSummary remaps a matching run by stable id after a pure reorder', 
   ];
   const lookedAt = new Date('2026-08-24T12:00:00.000Z');
   const latest = {
-    digestVersion: 3,
+    digestVersion: 4,
     criteriaRevision: criteriaSemanticRevision(current),
     completedAt: lookedAt,
     startedAt: new Date('2026-08-24T11:00:00.000Z'),
@@ -66,7 +143,7 @@ test('criteriaSummary does not reuse verdicts after the criterion proposition ch
     projectAcceptanceCriterionDefinition: { findMany: async () => current },
     projectAcceptanceRun: {
       findFirst: async () => ({
-        digestVersion: 3,
+        digestVersion: 4,
         criteriaRevision: criteriaSemanticRevision([{ text: 'Build succeeds' }]),
         completedAt: lookedAt,
         startedAt: new Date('2026-08-24T11:00:00.000Z'),
@@ -89,7 +166,7 @@ test('criteriaSummary does not reuse verdicts after the criterion proposition ch
   assert.equal(summary.criteria[0]?.summary, null);
 });
 
-test('criteriaSummary keeps matching pre-v3 conclusions readable without upgrading their gate', async () => {
+test('criteriaSummary keeps matching pre-v4 conclusions readable without upgrading their gate', async () => {
   const current = [
     definition(CRITERION_A_ID, 1, 'Build succeeds'),
     definition(CRITERION_B_ID, 2, 'Image boots'),
@@ -161,7 +238,6 @@ test('openRun freezes definition identity, revision and text into both snapshot 
     projectAcceptanceCriterionDefinition: {
       findMany: async () => definitions,
     },
-    task: { findMany: async () => [] },
     projectRuntime: {
       upsert: async () => ({ acceptanceAttempt: 4n }),
       update: async () => undefined,

@@ -13,6 +13,7 @@ const runnerApi = read('src/runner-api/runner-api.controller.ts');
 const workspacesService = read('src/workspaces/workspaces.service.ts');
 const dispatchBoundary = read('prisma/migrations/0122_project_dispatch_boundary/migration.sql');
 const acceptanceRun = read('prisma/migrations/0127_project_acceptance_run/migration.sql');
+const acceptanceOnly = read('prisma/migrations/0178_project_done_gate_acceptance_only/migration.sql');
 const dependencyRevision = read('prisma/migrations/0132_task_dependency_revision/migration.sql');
 
 /**
@@ -404,10 +405,11 @@ test('the triggers the order is derived from are still declared the way it assum
   // and it is narrowed to the three columns that can move the live-claim set — which is what keeps
   // it out of a telemetry batch entirely.
   assert.match(dispatchBoundary, /CREATE TRIGGER "session_project_capacity_serialize_update"\s+BEFORE UPDATE OF "status", "task_id", "deleted_at" ON "session"/);
-  // Rank 40 is above `task` because THIS is what a status/verdict write takes, from an AFTER
-  // trigger, on the project of the task it just wrote.
-  assert.match(acceptanceRun, /FROM "project" p WHERE p\."id" = p_project FOR NO KEY UPDATE/);
-  assert.match(acceptanceRun, /CREATE TRIGGER project_acceptance_task_fact_update\s+AFTER UPDATE OF "status", "completion_policy", "project_id", "verdict", "verifies_task_id"/);
+  // 0127 used to put rank 40 after a task status/verdict write. 0178 removes that edge because
+  // task-list state is not a project-acceptance fact.
+  assert.match(acceptanceRun, /CREATE TRIGGER project_acceptance_task_fact_update/);
+  assert.match(acceptanceOnly, /DROP TRIGGER IF EXISTS "project_acceptance_task_fact_update" ON "task"/);
+  assert.match(acceptanceOnly, /DROP TRIGGER IF EXISTS "task_acceptance_fact_lock_order_update" ON "task"/);
 });
 
 test('orderedIds is the total order the pre-locks depend on', () => {

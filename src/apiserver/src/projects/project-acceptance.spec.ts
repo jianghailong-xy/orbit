@@ -25,14 +25,12 @@ const PROJECT = '00000000-0000-7000-8000-000000002501';
 function facts(overrides: Partial<AcceptanceFacts> = {}): AcceptanceFacts {
   return {
     criteriaRevision: sha256('every suite green\nmerged to main'),
-    taskSet: [['t1', 'DONE', 'MANUAL', '', ''], ['t2', 'DONE', 'MANUAL', '', '']],
-    verdicts: [['v1', 't1', 'PASS']],
     mergeEvidence: [['r1', 'main', 'a'.repeat(64), '3']],
     ...overrides,
   };
 }
 
-test('the digest is stable under reordering and unstable under every projection', () => {
+test('the digest is stable under evidence reordering and changes with acceptance facts', () => {
   const base = facts();
   assert.equal(acceptanceDigest(PROJECT, base), acceptanceDigest(PROJECT, base));
 
@@ -43,22 +41,14 @@ test('the digest is stable under reordering and unstable under every projection'
     acceptanceDigest(PROJECT, base),
     acceptanceDigest(PROJECT, {
       ...base,
-      taskSet: [...base.taskSet].reverse(),
+      mergeEvidence: [...base.mergeEvidence].reverse(),
     }),
   );
 
-  // ...and each of the four projections moves it. These are the four write paths AE6 closes over,
-  // so a projection that stopped mattering here is a way to change the world without invalidating
-  // the evidence about it.
+  // Each acceptance projection moves it. Task backlog state is intentionally not a projection:
+  // it says how work is organised, not whether these criteria are true.
   const moved: Array<[string, AcceptanceFacts]> = [
     ['criteria edited', facts({ criteriaRevision: sha256('every suite green') })],
-    // A task reopened: the id set is identical and the digest must still move (AE1's note on
-    // carrying `status`, not only ids).
-    ['task reopened', facts({ taskSet: [['t1', 'OPEN', 'MANUAL', '', ''], ['t2', 'DONE', 'MANUAL', '', '']] })],
-    ['task added', facts({ taskSet: [...base.taskSet, ['t3', 'OPEN', 'MANUAL', '', '']] })],
-    ['completion policy changed', facts({ taskSet: [['t1', 'DONE', 'VERIFICATION_PASSED', '', ''], ['t2', 'DONE', 'MANUAL', '', '']] })],
-    ['verdict changed', facts({ verdicts: [['v1', 't1', 'FAIL']] })],
-    ['verifier repointed', facts({ verdicts: [['v1', 't2', 'PASS']] })],
     ['branch content changed', facts({ mergeEvidence: [['r1', 'main', 'b'.repeat(64), '4']] })],
     // AE9's whole point: identical content at a new generation is still a different observation,
     // because "changed and changed back" is real for squash and force-push.
@@ -67,16 +57,26 @@ test('the digest is stable under reordering and unstable under every projection'
   for (const [what, changed] of moved) {
     assert.notEqual(acceptanceDigest(PROJECT, changed), acceptanceDigest(PROJECT, base), what);
   }
+
+  const taskMetadata = {
+    ...base,
+    taskSet: [['nice-to-have', 'OPEN']],
+    taskVerdicts: [['verification-task', 'FAIL']],
+  };
+  assert.equal(
+    acceptanceDigest(PROJECT, taskMetadata),
+    acceptanceDigest(PROJECT, base),
+    'even extra task metadata presented by an older caller is outside the v4 input shape',
+  );
 });
 
 test('the digest names the project and its own version', () => {
   const other = '00000000-0000-7000-8000-0000000025ff';
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
-  // match a new reading of the same world. It moved to 3 when structured, order-independent
-  // criterion definitions replaced raw formatting bytes — an older run re-digests differently and is refused
-  // ACCEPTANCE_EVIDENCE_STALE, which is the recoverable outcome and the honest one.
-  assert.equal(ACCEPTANCE_DIGEST_VERSION, 3);
+  // match a new reading of the same world. It moved to 4 when task state left the completion
+  // definition — an older run is refused ACCEPTANCE_EVIDENCE_STALE and must be re-run.
+  assert.equal(ACCEPTANCE_DIGEST_VERSION, 4);
 });
 
 test('the result digest is about the conclusions, not the world', () => {

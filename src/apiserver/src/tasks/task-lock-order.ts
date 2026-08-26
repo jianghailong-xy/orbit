@@ -53,16 +53,18 @@ export interface AcceptanceFactPatch {
 }
 
 /**
- * Does this PATCH touch an acceptance fact — i.e. will it reach an AFTER trigger that takes a
- * project row?
+ * The legacy task/acceptance column predicate, retained as a conservative project pre-lock during
+ * the 0178 rolling-upgrade window.
  *
- * `!== undefined`, deliberately, and this is the whole of the bug it replaces. The old routing
+ * 0178 removes the AFTER trigger and none of these columns is a DONE input anymore. The exported
+ * name remains for source compatibility while TasksService still routes these writes through the
+ * pre-existing transactional path; this function must never be used by ProjectAcceptanceService.
+ *
+ * `!== undefined`, deliberately. The old routing
  * asked whether the write REACHED a verdict (`dto.verdict != null && dto.verdict !== before`),
- * which is the right question for §13.2 V7's revision counter and the wrong one for a lock: a
- * verdict REVOCATION (`verdict: null`) changes the column, fires the trigger and takes the project
- * — while `concludesVerdict` was false, so the request took the no-lock fast path. The same held
- * for a pure `{status}` and a pure `{completionPolicy}`. What decides whether a lock is needed is
- * whether the COLUMN is written, never what the value means.
+ * which was the right question for §13.2 V7's revision counter and the wrong one for the former
+ * lock path. Keeping the closed predicate intact lets old-schema and new-schema app instances
+ * coexist without changing which writes use that conservative transaction branch.
  */
 export function touchesAcceptanceFact(dto: AcceptanceFactPatch): boolean {
   return dto.status !== undefined

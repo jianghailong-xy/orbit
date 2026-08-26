@@ -2367,13 +2367,12 @@ model ProjectAcceptanceRun {
   criteriaSnapshotV2 Json? @map("criteria_snapshot_v2")
   criteriaRevision String  @map("criteria_revision") @db.Char(64)
 
-  /// AE1's `acceptanceDigest` over the four projections, computed under the project row lock when
-  /// the run opened. The DONE gate recomputes it and compares; a mismatch is `ACCEPTANCE_EVIDENCE_STALE`.
+  /// The acceptance-only input digest (current criterion revision plus cited merge evidence),
+  /// computed under the project row lock when the run opened. Task status is deliberately absent:
+  /// the DONE gate recomputes this digest from the outcome being accepted, not the work backlog.
   /// Which reading of the world this evidence was taken under (`ACCEPTANCE_DIGEST_VERSION`).
-  /// Defaults to 1, so every pre-0130 row — and every write by a binary that predates the column —
-  /// reads as the older reading, which migration 0130's DONE gate refuses. Fail-closed on purpose:
-  /// evidence digested before §13.6 SU6's columns joined the facts cannot speak to whether the
-  /// tasks it counted had been replaced.
+  /// Defaults to 1, so a row produced by a binary that predates digest versioning fails closed.
+  /// Version 4 removed task rows and task-verification verdicts from this input shape.
   digestVersion   Int      @default(1) @map("digest_version")
   inputDigest String @map("input_digest") @db.Char(64)
   /// The digest of what this run CONCLUDED — the ordered per-criterion verdicts. Null until the run

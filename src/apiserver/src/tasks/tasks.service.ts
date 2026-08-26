@@ -7163,23 +7163,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // `TaskListsService` locks a list row and then writes every Task in it: without the ordered
     // pre-lock below, that pause and this move take `task_list` and `task` in opposite orders.
     //
-    // `status` and `completionPolicy` join them for the OTHER endpoint. Both are in the column
-    // list `project_acceptance_task_fact_update` is declared over, so writing either makes an
-    // AFTER trigger take `FOR NO KEY UPDATE` on this task's project — measured, not inferred:
-    // `lock-order.pg.spec.ts` holds that lock and watches a status write block on it while a
-    // title write sails past. Left on the one-statement path, such a write holds the task row and
-    // then asks for the project, which is the reverse of the order the Project authorization
-    // adapter takes them in (project first, then the task FOR SHARE).
-    //
-    // ...and the set of columns is read from `ACCEPTANCE_FACT_TASK_COLUMNS`, not spelled again.
-    //
-    // Spelled here it was FIVE, and the trigger is declared over SEVEN: 0130 added
-    // `terminal_reason` and `superseded_by_task_id` to it. Both happen to be covered anyway,
-    // because a write to either sets `supersession` and that forces the transaction branch through
-    // `restructures` — so the gap was real and invisible, held shut by a second condition that has
-    // nothing to do with acceptance facts. `touchesAcceptanceFact` asks the closed set directly,
-    // and `task-lock-order.spec.ts` checks that set against migration 0136's trigger text, so the
-    // next column added to the trigger cannot be forgotten here.
+    // `status` and `completionPolicy` historically joined the transaction branch because the
+    // task/acceptance AFTER trigger took the project afterwards. Migration 0178 removes that
+    // trigger and excludes task state from DONE. The legacy predicate remains conservative here
+    // for a mixed-version deployment; it is transaction routing only and feeds no acceptance
+    // digest or completion decision.
     const touchesAcceptanceFacts = touchesAcceptanceFact(dto);
     // Restructuring is what rank 10 is for. A status write moves one row and no edge, so it must
     // not queue behind another request's DAG rewrite — the same reasoning that keeps a rename off
@@ -7219,49 +7207,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // re-runs every one of its foreign keys.
             await lockTaskLists(tx, [dto.listId]);
             if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);
-            // §13.4 AE6-a. A verdict is one of the facts a project's acceptance is computed from,
-            // so reaching one takes the project's own row before it writes — the same lock the
-            // acceptance gate takes, which is what puts the two in an order instead of letting
-            // both commit and leave a DONE project asserting a verdict it never saw. Taken after
-            // the owner lock and before the task write, so the order here is always
-            // user -> project -> task and two of these can never wait on each other backwards.
-            //
-            // §13.6 SU6 joins it, and had to: 0130 adds `terminal_reason` and
-            // `superseded_by_task_id` to `project_acceptance_task_fact_update`, so a
-            // supersession-only PATCH now reaches `project_acceptance_reopen` from an AFTER trigger
-            // — which takes the PROJECT row while this transaction already holds the TASK row. The
-            // Coordinator's own dispatch takes them the other way (project lease, then the task),
-            // so without this prelock the two wait on each other. Same lock, same place, one order.
-            //
-            // And so does every OTHER write of an acceptance fact, not only a verdict or a
-            // supersession: `project_acceptance_task_fact_update` is declared over five columns,
-            // so a plain `status` or `completionPolicy` PATCH reaches the same AFTER trigger and
-            // takes the same PROJECT row — measured, not inferred, in `lock-order.pg.spec.ts`,
-            // which holds that lock and watches a status write block on it while a title write
-            // sails past. Pre-locking changes nothing about WHICH locks this transaction ends up
-            // holding, only when: rank 40, after the Session pre-lock (so it can never hold the
-            // project while waiting for a Session a runner owns — session_project_capacity_serialize
-            // comes at the project from that side) and before the task write (so it can never hold
-            // the task while the Project authorization adapter, which takes the project first and
-            // the task FOR SHARE second, waits for it).
-            //
-            // A PATCH that also MOVES the project touches two of them, and AE10 already fixed what
-            // to do about that: both, in UUID order, so a concurrent A→B and B→A cannot make a
-            // cycle out of each other. That ordering is the trigger's own (§8.6 LO2) and is
-            // reproduced here rather than reinvented.
-            //
-            // Re-read INSIDE the owner lock, and prelock from THAT. `before` was loaded before the
-            // lock was held, so by now another request may have moved this task into a different
-            // project — and locking the project `before` named would leave the AFTER trigger to
-            // take the real one, which is the task→project order this prelock exists to avoid.
-            // The same stale copy is what `touchesHierarchy` has always re-read for, so one read
-            // serves both rather than two reads disagreeing about one row.
-            // `touchesAcceptanceFacts`, not `concludesVerdict`: the prelock below is taken for
-            // EVERY project-filed update, because `project_acceptance_reopen` takes this exact
-            // lock from an AFTER trigger on any status, policy, project or verification-link write
-            // too — so pre-locking changes nothing about WHICH locks this transaction ends up
-            // holding, only when. Rank 40, and after the rank-30 Session prelock above, so it can
-            // never hold the project while waiting for a Session a runner owns.
+            // Compatibility pre-lock for the task/acceptance triggers retired by 0178. It remains
+            // during the rolling-upgrade window and preserves the established rank-40 ordering,
+            // but it no longer expresses acceptance semantics: no task column below enters the
+            // project acceptance digest or DONE gate.
             const needsCurrent = touchesHierarchy || touchesAcceptanceFacts || !!supersession;
             const current = needsCurrent
               ? await tx.task.findFirst({
@@ -7270,11 +7219,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               })
               : null;
             if (needsCurrent && !current) throw new NotFoundException('task not found');
-            // A pure project MOVE belongs here too, and the comment above already said why without
-            // the code doing it: 0127's `project_acceptance_task_fact` reopens BOTH projects from
-            // an AFTER trigger, so a move takes the task row first and the two projects second —
-            // against every Coordinator path's project-then-task. The old condition
-            // (`concludesVerdict || supersession`) left exactly that case with an empty list.
+            // A pure project MOVE stays on the compatibility path too, with both possible project
+            // rows ordered exactly as they were before the 0178 trigger retirement.
             const movesProject = dto.projectId !== undefined
               && (dto.projectId ?? null) !== current!.projectId;
             // Unit L3's fence takes rank 40 first and takes the acceptance projects with it, so

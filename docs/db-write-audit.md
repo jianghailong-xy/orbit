@@ -29,14 +29,15 @@ write appears, moves or changes shape without its entry moving with it.
 | `TRANSACTION_UNITS` | 56 | Owns a transaction. This is where the retry decision lives. |
 | `TRANSACTION_PARTICIPANTS` | 31 | Writes only through a transaction client its caller owns. |
 | `STATEMENT_UNITS` | 109 | Runs outside any transaction, in one of five classes. |
-| `TRIGGER_WRITE_SOURCES` | 79 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
+| `TRIGGER_WRITE_SOURCES` | 75 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
 
 The trigger list is the half no scan of the TypeScript could find, and it is the half both
 production deadlocks turned on: in each of them at least one wait edge came from a lock no
 statement spelled. `takes` records what a trigger reaches for in *other* relations, following the
 functions it calls — which is what makes
-`project_acceptance_task_fact_update` visible as the reason a plain `status` write on a task is a
-two-lock operation and has to pre-lock the project.
+the cross-relation effects of every live trigger visible. Migration 0178 deliberately removes the
+four task/acceptance triggers: task-list writes are no longer acceptance writes and no longer reach
+a project through that path.
 
 ## What the audit found
 
@@ -72,11 +73,10 @@ outcome only while that lease and OPEN request still match, and (3) retire a rep
 lease as DEAD. APNs is called between claim and receipt, never inside a retried transaction; the
 stable logical/collapse keys make replay one notification rather than a second business fact.
 
-**One residual is recorded rather than fixed.** `TasksService.clearFailedForRetry` writes `status`
-as a single statement, so an `AFTER` trigger takes the project `FOR NO KEY UPDATE` while the task
-row is held — the project/task inversion in [the lock order](postgres-lock-order.md) §6. It is not
-resolvable from that side, and wrapping four of the fifteen single-statement status writers in
-transactions would buy the appearance of coverage rather than the property.
+**The former task-status residual is retired.** Migration 0178 removes the `AFTER` trigger that
+used to take a project lock from a task-status write. This is a semantic change, not merely a lock
+repair: [project completion](project-done-gate.md) no longer treats task-list state as an acceptance
+fact, so there is no project acceptance write for `clearFailedForRetry` to serialize.
 
 ## Running the evidence
 

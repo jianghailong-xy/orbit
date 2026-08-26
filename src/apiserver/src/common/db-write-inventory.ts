@@ -701,7 +701,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'tasks/tasks.service.ts#update',
     shape: 'TX_RETRIED',
-    locks: 'user FOR UPDATE (10, when it restructures), task_list (20), creator Session (30, when it writes the task row twice), project FOR NO KEY UPDATE (40, when it touches acceptance), then Task rows in UUID order (50; verifier plus subject for a verdict), followed by task_judgment_request / request-delivery / legacy blocker children (60) and the derived subject status trigger boundary (70). Supersession/move paths retain their Task NOWAIT fence.',
+    locks: 'user FOR UPDATE (10, when it restructures), task_list (20), creator Session (30, when it writes the task row twice), a conservative project FOR NO KEY UPDATE pre-lock (40, retained in application code after the task-acceptance triggers were retired), then Task rows in UUID order (50; verifier plus subject for a verdict, with NOWAIT on supersession/move paths), followed by task_judgment_request / request-delivery / legacy blocker children (60) and the derived subject status trigger boundary (70).',
     identity: 'The task id and the DTO, above the closure.',
     isolation: '',
     attempts: 4,
@@ -1128,8 +1128,8 @@ export interface TriggerWriteSource {
  *
  * `takes` is the deadlock-relevant field. A trigger with an empty `takes` adds no wait edge; the
  * ones that do are exactly the entries `docs/postgres-lock-order.md` derives the canonical order
- * from — most visibly `project_acceptance_task_fact_update`, whose project lock is why a plain
- * `status` write on a task is a two-lock operation and has to pre-lock the project.
+ * from. Migration 0178 removed the four task/acceptance triggers: task-list state is no longer an
+ * acceptance fact and a plain task-status write no longer reaches a project through that path.
  */
 export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_delete", event: "BEFORE DELETE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
@@ -1167,10 +1167,6 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "session", trigger: "session_superseded_task_revive_guard", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"dispatch_origin\", \"deleted_at\", \"starts_task_work\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["task LOCK"] },
   { table: "session_merge_receipt", trigger: "session_merge_receipt_checkpoint_accepted_trg", event: "BEFORE INSERT OR UPDATE", kind: "ROW/STATEMENT", since: "0152_task_checkpoint", takes: [] },
   { table: "session_merge_receipt", trigger: "session_merge_receipt_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0128_task_supersession_merge_receipt", takes: [] },
-  { table: "task", trigger: "project_acceptance_task_fact", event: "AFTER INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: ["project LOCK", "project WRITE", "project_acceptance_audit WRITE", "project_acceptance_run WRITE"] },
-  { table: "task", trigger: "project_acceptance_task_fact_update", event: "AFTER UPDATE OF \"status\", \"completion_policy\", \"project_id\", \"verdict\", \"verifies_task_id\", \"terminal_reason\", \"superseded_by_task_id\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["project LOCK", "project WRITE", "project_acceptance_audit WRITE", "project_acceptance_run WRITE"] },
-  { table: "task", trigger: "task_acceptance_fact_lock_order_insert_delete", event: "BEFORE INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0136_task_acceptance_fact_lock_order", takes: ["project LOCK"] },
-  { table: "task", trigger: "task_acceptance_fact_lock_order_update", event: "BEFORE UPDATE OF \"status\", \"completion_policy\", \"project_id\", \"verdict\", \"verifies_task_id\", \"terminal_reason\", \"superseded_by_task_id\"", kind: "ROW/STATEMENT", since: "0136_task_acceptance_fact_lock_order", takes: ["project LOCK"] },
   { table: "task", trigger: "task_aggregate_parent_child_delete_touch", event: "BEFORE DELETE", kind: "ROW/STATEMENT", since: "0134_task_aggregate_parent_dispatch_guard", takes: ["project LOCK"] },
   { table: "task", trigger: "task_aggregate_parent_shape_guard", event: "BEFORE INSERT OR UPDATE OF \"parent_task_id\", \"completion_policy\", \"is_foreman\", \"owner_id\"", kind: "ROW/STATEMENT", since: "0134_task_aggregate_parent_dispatch_guard", takes: ["project LOCK"] },
   { table: "task", trigger: "task_claimed_project_move_guard", event: "BEFORE UPDATE OF \"project_id\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
