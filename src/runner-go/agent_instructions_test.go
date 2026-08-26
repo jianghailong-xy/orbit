@@ -25,6 +25,11 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		" mcp` directly",
 		"durable record",
 		"returned its id",
+		"MUST proactively propose recording it as an Orbit Project",
+		"A single reported bug can still have that shape",
+		"wait for an explicit yes before calling project_create",
+		"Do not offer or create a standalone task as a substitute",
+		"from this same session",
 	} {
 		if !strings.Contains(got, phrase) {
 			t.Errorf("merged instructions do not contain %q", phrase)

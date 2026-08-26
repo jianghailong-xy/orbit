@@ -64,6 +64,11 @@ func orbitCLIInstructions(executable string) string {
 		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
 		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
 		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
+		"Before offering or creating an Orbit task for newly discovered work, judge its scope. If it spans dependent phases, " +
+		"will need more than this session or context window, or needs several agents, you MUST proactively propose recording it " +
+		"as an Orbit Project, explain why, and wait for an explicit yes before calling project_create. A single reported bug can " +
+		"still have that shape. Do not offer or create a standalone task as a substitute while waiting. After yes, create the " +
+		"Project from this same session so the conversation becomes its coordinator; do not switch or open a session for it.\n\n" +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
