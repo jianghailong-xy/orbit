@@ -192,6 +192,7 @@ import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
 import { loadTranscript, saveTranscript } from '../lib/transcriptStore';
+import { useDelayedFlag } from '../lib/useDelayedFlag';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -204,6 +205,7 @@ import {
 import {
   STARTING_DESCRIPTION,
   STARTING_LABEL,
+  STARTING_NOTICE_DELAY_MS,
   STARTING_TITLE,
   type QueuedGate,
   pendingSlotDescription,
@@ -2141,13 +2143,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     runner.maxConcurrent,
     (selectedSession ?? selected) as QueuedGate | null,
   );
+  const selectedStartingSession = selectedSession ?? selected;
+  const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
+  const startingNoticeScope = selectedId
+    ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
+    : null;
+  // A normal cold start is only a few seconds. Preserve its honest state everywhere else, but
+  // keep this explanatory transcript notice out of the common fast path so sending a message does
+  // not immediately make a large banner flash below it.
+  const showStartingNotice = useDelayedFlag(
+    selectedIsStarting,
+    STARTING_NOTICE_DELAY_MS,
+    startingNoticeScope,
+  );
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
     hasSession: !!selected,
     trashed: selectedTrashed,
     runState: selected ? sessionRunStateOf(selectedSession ?? selected) : null,
-    starting: selected ? sessionIsStarting(selectedSession ?? selected) : false,
+    starting: selectedIsStarting,
     live: selected ? isSessionLive(selectedSession ?? selected) : false,
     eventCount: events.length,
     seeding,
@@ -4933,7 +4948,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <div className="chat-queued-desc">{slotWaitDescription}</div>
                 </div>
               )}
-              {placeholder === 'starting' && (
+              {placeholder === 'starting' && showStartingNotice && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -4977,7 +4992,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               )}
               {selected &&
                 !selectedTrashed &&
-                sessionIsStarting(selectedSession ?? selected) &&
+                showStartingNotice &&
                 events.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>{STARTING_TITLE}</span>

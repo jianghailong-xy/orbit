@@ -47,6 +47,9 @@ export const STARTING_LABEL = 'Starting';
 export const STARTING_TITLE = 'Starting the workspace';
 export const STARTING_DESCRIPTION =
   'The runner has this session and is bringing its workspace up — checkout, engine, tools. Your message runs as soon as that finishes.';
+// Keep the first three seconds quiet, then explain the wait only once the startup is long enough
+// for this large transcript notice to be useful rather than an immediate flash after Send.
+export const STARTING_NOTICE_DELAY_MS = 3_000;
 
 /** Which gate the server found holding a queued session, with the numbers it judged on. */
 export interface QueuedGate {
