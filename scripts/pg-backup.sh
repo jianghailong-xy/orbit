@@ -11,6 +11,10 @@
 # Layout, all under the bind mount both containers see:
 #   /archive/wal/<segment>.gz     continuously archived WAL
 #   /archive/base/<UTC stamp>/    base.tar.gz + pg_wal.tar.gz + start-wal
+#
+# That bind mount is on the same disk as the database, so with ORBIT_BACKUP_SYNC_TARGET
+# set the loop also mirrors it to another machine over ssh — the only copy that survives
+# losing this disk.
 set -eu
 
 ARCHIVE_DIR="${ORBIT_ARCHIVE_DIR:-/archive}"
@@ -19,6 +23,13 @@ WAL_DIR="$ARCHIVE_DIR/wal"
 INTERVAL="${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
 KEEP="${ORBIT_BASE_BACKUP_KEEP:-2}"
 MIN_FREE_MB="${ORBIT_BACKUP_MIN_FREE_MB:-2048}"
+# Off-host copy: empty disables it. The target is an rsync destination this container can
+# reach over ssh, e.g. root@backup-host:/data/backup/orbit-pg-archive — give it a directory
+# of its own, since the mirror deletes whatever is there and is not part of the archive.
+SYNC_TARGET="${ORBIT_BACKUP_SYNC_TARGET:-}"
+SYNC_SSH_PORT="${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
+SYNC_SSH_KEY="${ORBIT_BACKUP_SYNC_SSH_KEY:-/ssh/id_rsa}"
+SYNC_KNOWN_HOSTS="${ORBIT_BACKUP_SYNC_KNOWN_HOSTS:-/ssh/known_hosts}"
 # Backups are due on the interval; the loop wakes at least every 15 minutes so a run
 # skipped for disk space retries without waiting a whole day.
 if [ "$INTERVAL" -lt 900 ]; then POLL="$INTERVAL"; else POLL=900; fi
@@ -64,6 +75,36 @@ trim_wal() {
     return 0
   fi
   pg_archivecleanup -x .gz "$WAL_DIR" "$start_wal"
+}
+
+# Mirror the archive to another machine. Runs every poll rather than only after a base
+# backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
+sync_archive() {
+  [ -n "$SYNC_TARGET" ] || return 0
+  # postgres:16-alpine ships neither rsync nor an ssh client; pull them in once per
+  # container start, and keep taking local backups if that is not possible.
+  if ! command -v rsync >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1; then
+    if ! apk add --no-cache rsync openssh-client >/dev/null 2>&1; then
+      log "ERROR: cannot install rsync/openssh-client, skipping off-host sync to $SYNC_TARGET"
+      return 1
+    fi
+  fi
+  ssh_opts="-p $SYNC_SSH_PORT -i $SYNC_SSH_KEY -o BatchMode=yes -o ConnectTimeout=15"
+  # Trust the same host keys the operator already trusts; without that file this would be
+  # trust-on-first-use inside a container that forgets it on every recreate.
+  if [ -f "$SYNC_KNOWN_HOSTS" ]; then
+    ssh_opts="$ssh_opts -o UserKnownHostsFile=$SYNC_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
+  fi
+  # --delete so the copy mirrors retention instead of growing forever; --timeout so a
+  # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
+  # still being written, so it never ships.
+  if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
+       -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1)"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+    return 1
+  fi
+  changed="$(printf '%s\n' "$out" | grep -c . || true)"
+  [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
 }
 
 take_backup() {
@@ -122,11 +163,12 @@ check_archiver() {
 }
 
 mkdir -p "$BASE_DIR" "$WAL_DIR"
-log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR"
+log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET}"
 while :; do
   if backup_due; then
     take_backup || true
   fi
   check_archiver
+  sync_archive || true
   sleep "$POLL"
 done

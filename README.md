@@ -139,9 +139,10 @@ rebuild and recreate only the services that changed — the `upgrade` skill auto
 
 Postgres comes up with continuous WAL archiving on, and a `pgbackup` sidecar takes a daily
 base backup into `./data/pg-archive` — together enough to restore the database to any moment,
-including just before a bad write. Copy that directory off the host (it shares a disk with the
-database) and keep [docs/postgres-backup-restore.md](docs/postgres-backup-restore.md) handy;
-it is the restore runbook.
+including just before a bad write. Set `ORBIT_BACKUP_SYNC_TARGET` to mirror that directory to
+another machine over ssh (it shares a disk with the database, so the local copy dies with it),
+and keep [docs/postgres-backup-restore.md](docs/postgres-backup-restore.md) handy; it is the
+restore runbook.
 
 ### Run a runner (on the machine that should execute tasks)
 
