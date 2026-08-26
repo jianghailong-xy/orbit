@@ -63,6 +63,11 @@ services:
       ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
       ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"
       ORBIT_BACKUP_MIN_FREE_MB: "${ORBIT_BACKUP_MIN_FREE_MB:-2048}"
+      # Off-host mirror (unset = local backups only). The archive shares a disk with the
+      # database, so this is the copy that survives losing it. Point it at a directory of
+      # its own on the far side — the mirror deletes anything there it did not put there.
+      ORBIT_BACKUP_SYNC_TARGET: "${ORBIT_BACKUP_SYNC_TARGET:-}"
+      ORBIT_BACKUP_SYNC_SSH_PORT: "${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +75,9 @@ services:
       - ./data/pg-archive:/archive
       - ./scripts/pg-backup.sh:/usr/local/bin/pg-backup.sh:ro
       - pg-socket:/var/run/postgresql
+      # Read-only: the key that reaches the mirror host, and the host keys to check it
+      # against. Only read when ORBIT_BACKUP_SYNC_TARGET is set.
+      - "${ORBIT_BACKUP_SSH_DIR:-/root/.ssh}:/ssh:ro"
 
   apiserver:
     build:

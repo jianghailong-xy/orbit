@@ -44,11 +44,31 @@ logs `ERROR: WAL archiving is failing` while that is the case. Note that `archiv
 set on the server's command line in `docker-compose.yml`, so `ALTER SYSTEM` cannot change it —
 edit compose and recreate the container.
 
+## The off-host mirror
+
 **The archive is on the same disk as the database.** It survives `DROP TABLE`, a bad migration
-and corruption; it does not survive losing the disk. Copy it somewhere else, e.g. from cron:
+and corruption; it does not survive losing the disk. Set a target and the sidecar mirrors the
+whole archive to another machine over ssh on every poll — within ~15 minutes of a segment being
+archived, not a base backup later:
 
 ```bash
-rsync -a --delete data/pg-archive/ backup-host:/orbit-archive/
+ORBIT_BACKUP_SYNC_TARGET="root@backup-host:/data/backup/orbit-pg-archive"
+ORBIT_BACKUP_SYNC_SSH_PORT=1522        # default 22
+ORBIT_BACKUP_SSH_DIR=/root/.ssh        # mounted read-only at /ssh; needs id_rsa + known_hosts
+```
+
+The mirror is `rsync -a --delete`, so it tracks retention instead of growing forever — **give it
+a directory of its own**, because anything else living there is deleted. Backups still being
+written (`.staging-*`) are excluded, host keys are checked against the mounted `known_hosts`, and
+a failure is logged (`ERROR: off-host sync … failed`) without interrupting local backups. The
+sidecar installs `rsync`/`openssh-client` at start, so it needs to reach an Alpine mirror once
+per container start; without that it says so and keeps backing up locally.
+
+Restoring from the mirror is the same runbook — copy a base backup directory and the WAL back
+(or point `restore_command` at a mount of the mirror):
+
+```bash
+rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
 ```
 
 ## Restore
