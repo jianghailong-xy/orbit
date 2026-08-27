@@ -7,7 +7,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import { QUIET_MS } from '../lib/projectAttention';
-import { PANORAMA_BUCKETS } from '../components/ProjectPanoramaHeader';
+import {
+  PANORAMA_BUCKETS,
+  type ProjectPanoramaBuckets,
+} from '../components/ProjectPanoramaHeader';
 import {
   EMPTY_NEW_TASK_DRAFT,
   NewProjectTaskForm,
@@ -25,9 +28,11 @@ import {
   scheduledStart,
   RUN_AT_IMPOSSIBLE,
   canCreateProjectTask,
+  matchesOpenProjectView,
   matchesProjectSearch,
   noMatchDescription,
   projectFilterFromStatusParam,
+  projectOpenViewFromParam,
   projectsEmptyKind,
   projectsPath,
   projectsQueryKey,
@@ -843,7 +848,7 @@ describe('ProjectsPage — sections', () => {
   });
 
   it('no longer renders the list as one flat run in the server’s order', () => {
-    expect(source).toContain('projectAttentionSections(matches, now)');
+    expect(source).toContain('projectAttentionSections(visibleMatches, now)');
     expect(source).not.toMatch(/note: 'Newest first'/);
     expect(source).not.toMatch(/projects: all\.filter\(\(p\) => p\.status/);
   });
@@ -857,7 +862,7 @@ describe('ProjectsPage — sections', () => {
 });
 
 describe('ProjectsPage — toolbar', () => {
-  it('builds one status-scoped list URL for each lifecycle segment', () => {
+  it('builds one status-scoped request URL for each lifecycle', () => {
     expect(projectsPath('OPEN')).toBe('/projects?status=OPEN');
     expect(projectsPath('DONE')).toBe('/projects?status=DONE');
     expect(projectsPath('CANCELLED')).toBe('/projects?status=CANCELLED');
@@ -873,16 +878,29 @@ describe('ProjectsPage — toolbar', () => {
     expect(statuses.map((status) => projectsQueryKey(status)[0])).toEqual(['projects', 'projects', 'projects']);
   });
 
-  it('keeps terminal lifecycle views in a refreshable URL and validates the detail return path', () => {
+  it('keeps operational and lifecycle views in refreshable, validated return URLs', () => {
     expect(projectFilterFromStatusParam(null)).toBe('OPEN');
     expect(projectFilterFromStatusParam('OPEN')).toBe('OPEN');
     expect(projectFilterFromStatusParam('DONE')).toBe('DONE');
     expect(projectFilterFromStatusParam('CANCELLED')).toBe('CANCELLED');
     expect(projectFilterFromStatusParam('not-a-status')).toBe('OPEN');
+    expect(projectOpenViewFromParam(null)).toBe('ALL');
+    expect(projectOpenViewFromParam('ALL')).toBe('ALL');
+    expect(projectOpenViewFromParam('RUNNING')).toBe('RUNNING');
+    expect(projectOpenViewFromParam('READY')).toBe('READY');
+    expect(projectOpenViewFromParam('not-a-view')).toBe('ALL');
 
     expect(projectsRoutePath('OPEN')).toBe('/projects');
+    expect(projectsRoutePath('OPEN', 'RUNNING')).toBe('/projects?view=RUNNING');
+    expect(projectsRoutePath('OPEN', 'READY')).toBe('/projects?view=READY');
     expect(projectsRoutePath('DONE')).toBe('/projects?status=DONE');
     expect(projectsRoutePath('CANCELLED')).toBe('/projects?status=CANCELLED');
+    expect(projectsReturnPath({ projectsReturnTo: '/projects?view=RUNNING' })).toBe(
+      '/projects?view=RUNNING',
+    );
+    expect(projectsReturnPath({ projectsReturnTo: '/projects?view=READY' })).toBe(
+      '/projects?view=READY',
+    );
     expect(projectsReturnPath({ projectsReturnTo: '/projects?status=DONE' })).toBe(
       '/projects?status=DONE',
     );
@@ -906,17 +924,47 @@ describe('ProjectsPage — toolbar', () => {
     expect(renderPage(qc)).toContain('Search projects');
   });
 
-  it('offers all three statuses and a way to make a project', () => {
+  it('separates Open work views from lifecycle history and offers project creation', () => {
     const qc = newClient();
     qc.setQueryData(['projects', 'OPEN'], []);
     const html = renderPage(qc);
     expect(html).toContain('Search projects');
-    expect(html).not.toContain('>All<');
-    expect(html).toContain('>Open<');
-    expect(html).toContain('>Completed<');
-    expect(html).toContain('>Cancelled<');
-    // Twice: once in the toolbar, once as the empty page's own call to action.
+    expect(html).toContain('Open projects');
+    expect(html).toContain('>All<');
+    expect(html).toContain('Running 0');
+    expect(html).toContain('Ready 0');
+    expect(html).toContain('>History<');
+    expect(html).not.toContain('>Completed<');
+    expect(html).not.toContain('>Cancelled<');
+    // Twice: once in the heading, once as the empty page's own call to action.
     expect(html.split('New project').length - 1).toBe(2);
+  });
+});
+
+describe('ProjectsPage — Open work views', () => {
+  const open = (buckets: Partial<ProjectPanoramaBuckets>) => ({
+    status: 'OPEN' as const,
+    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...buckets },
+  });
+
+  it('makes Running and Ready mutually exclusive, with Running taking priority', () => {
+    const mixed = open({ running: 1, ready: 5 });
+    expect(matchesOpenProjectView(mixed, 'ALL')).toBe(true);
+    expect(matchesOpenProjectView(mixed, 'RUNNING')).toBe(true);
+    expect(matchesOpenProjectView(mixed, 'READY')).toBe(false);
+
+    const ready = open({ ready: 2 });
+    expect(matchesOpenProjectView(ready, 'RUNNING')).toBe(false);
+    expect(matchesOpenProjectView(ready, 'READY')).toBe(true);
+  });
+
+  it('uses execution buckets rather than attention lanes and rejects terminal payloads', () => {
+    // Time and blocker ownership do not enter this predicate: quiet work may move to the Needs
+    // attention SECTION, but its execution fact must remain reachable from its top filter.
+    expect(matchesOpenProjectView(open({ running: 1 }), 'RUNNING')).toBe(true);
+    expect(matchesOpenProjectView(open({ ready: 1 }), 'READY')).toBe(true);
+    expect(matchesOpenProjectView(open({ blocked: 4 }), 'READY')).toBe(false);
+    expect(matchesOpenProjectView({ ...open({ running: 1 }), status: 'DONE' }, 'RUNNING')).toBe(false);
   });
 });
 
@@ -961,6 +1009,8 @@ describe('ProjectsPage — which empty state', () => {
     expect(projectsEmptyKind(0, 0, 'CANCELLED', '')).toBe('no-match');
     expect(projectsEmptyKind(0, 0, 'OPEN', 'zzz')).toBe('no-match');
     expect(projectsEmptyKind(3, 0, 'OPEN', 'zzz')).toBe('no-match');
+    // A non-empty Open response can still have no rows in its selected Running/Ready view.
+    expect(projectsEmptyKind(3, 0, 'OPEN', '')).toBe('no-match');
     // A search of nothing but spaces narrows nothing, so it cannot be the reason either.
     expect(projectsEmptyKind(0, 0, 'OPEN', '   ')).toBe('none');
   });
@@ -979,7 +1029,15 @@ describe('ProjectsPage — which empty state', () => {
     expect(noMatchDescription('CANCELLED', 'ledger')).toBe(
       'No cancelled projects match “ledger”',
     );
+    expect(noMatchDescription('OPEN', 'ledger', 'RUNNING')).toBe(
+      'No running projects match “ledger”',
+    );
+    expect(noMatchDescription('OPEN', 'ledger', 'READY')).toBe(
+      'No ready projects match “ledger”',
+    );
     expect(noMatchDescription('OPEN', '')).toBe('No open projects');
+    expect(noMatchDescription('OPEN', '', 'RUNNING')).toBe('No running projects');
+    expect(noMatchDescription('OPEN', '', 'READY')).toBe('No ready projects');
     expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
     expect(noMatchDescription('CANCELLED', '')).toBe('No cancelled projects');
   });

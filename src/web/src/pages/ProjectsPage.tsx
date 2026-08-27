@@ -32,6 +32,7 @@ import {
   PROJECTS_PHONE_QUERY,
   ProjectsToolbar,
   type ProjectFilter,
+  type OpenProjectView,
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -128,9 +129,9 @@ function excerpt(text: string | null | undefined, empty: string): string {
 /**
  * WHICH projects to ask for — the status filter goes on the wire, never over the loaded array.
  *
- * `?status=` has been the endpoint's own narrowing since it was written; filtering client-side
- * would mean fetching every project in order to hide most of them. Every view is one real status,
- * so completed history and cancelled work never reappear under the Open attention inbox.
+ * `?status=` has been the endpoint's own lifecycle narrowing since it was written; filtering that
+ * client-side would mean fetching every project in order to hide most of them. Running and Ready
+ * are task-rollup views of the one OPEN response, while terminal history remains server-scoped.
  */
 export function projectsPath(filter: ProjectFilter): string {
   return `/projects?status=${filter}`;
@@ -142,16 +143,49 @@ export function projectFilterFromStatusParam(value: string | null): ProjectFilte
   return value === 'DONE' || value === 'CANCELLED' ? value : 'OPEN';
 }
 
-/** Browser route for a lifecycle view. Open is the clean default; terminal views spell their
- *  status so they can be restored after navigation. */
-export function projectsRoutePath(filter: ProjectFilter): string {
-  return filter === 'OPEN' ? '/projects' : `/projects?status=${filter}`;
+/** The OPEN response has three client-side views. Unknown URL values fail to the inclusive one. */
+export function projectOpenViewFromParam(value: string | null): OpenProjectView {
+  return value === 'RUNNING' || value === 'READY' ? value : 'ALL';
+}
+
+/**
+ * Whether an OPEN project belongs in one of the operational views.
+ *
+ * This reads the task rollup, not the attention lane. A quiet run still IS running even though it
+ * moves into Needs attention, and must remain findable from Running. Running wins when a project
+ * also has ready tasks, keeping the two narrower views mutually exclusive.
+ */
+export function matchesOpenProjectView(
+  project: Pick<Project, 'status' | 'buckets'>,
+  view: OpenProjectView,
+): boolean {
+  if (project.status !== 'OPEN') return false;
+  if (view === 'RUNNING') return project.buckets.running > 0;
+  if (view === 'READY') return project.buckets.running === 0 && project.buckets.ready > 0;
+  return true;
+}
+
+/** Browser route for one visible collection. Open/All is the clean default; every narrowing is
+ *  explicit so refresh, shared links and a trip through project detail preserve it. */
+export function projectsRoutePath(
+  filter: ProjectFilter,
+  openView: OpenProjectView = 'ALL',
+): string {
+  if (filter !== 'OPEN') return `/projects?status=${filter}`;
+  return openView === 'ALL' ? '/projects' : `/projects?view=${openView}`;
 }
 
 /** Only list routes this page itself can have written are accepted from navigation state. */
 export function projectsReturnPath(state: unknown): string {
   const candidate = (state as { projectsReturnTo?: unknown } | null)?.projectsReturnTo;
-  return candidate === projectsRoutePath('DONE') || candidate === projectsRoutePath('CANCELLED')
+  const allowed = [
+    projectsRoutePath('OPEN'),
+    projectsRoutePath('OPEN', 'RUNNING'),
+    projectsRoutePath('OPEN', 'READY'),
+    projectsRoutePath('DONE'),
+    projectsRoutePath('CANCELLED'),
+  ];
+  return typeof candidate === 'string' && allowed.includes(candidate)
     ? candidate
     : projectsRoutePath('OPEN');
 }
@@ -189,28 +223,43 @@ export function matchesProjectSearch(
  * Which empty this is — or null, when the list has rows to show.
  *
  * The two are different situations and must not share an action. An empty default Open inbox still
- * offers creation. A search miss needs its query cleared, while an empty terminal-history view
- * needs a way back to current work. Since every request is status-scoped, none of these states may
- * claim that the account has no projects at all.
+ * offers creation. A search miss needs its query cleared, an empty operational view needs a way
+ * back to All, and an empty terminal-history view needs a way back to current work. Since lifecycle
+ * requests are status-scoped, none of these states may claim that the account has no projects at all.
  */
 export function projectsEmptyKind(
   loadedCount: number,
-  matchCount: number,
+  visibleCount: number,
   filter: ProjectFilter,
   search: string,
 ): 'none' | 'no-match' | null {
-  if (matchCount > 0) return null;
+  if (visibleCount > 0) return null;
   return loadedCount === 0 && filter === 'OPEN' && search.trim() === '' ? 'none' : 'no-match';
 }
 
 /** What the no-match empty says: whichever narrowing is responsible, named back to the reader. The
  *  search wins when both are on, because it is the one that was just typed. */
-export function noMatchDescription(filter: ProjectFilter, search: string): string {
+export function noMatchDescription(
+  filter: ProjectFilter,
+  search: string,
+  openView: OpenProjectView = 'ALL',
+): string {
   const term = search.trim();
-  const scope = filter === 'OPEN' ? 'open' : filter === 'DONE' ? 'completed' : 'cancelled';
+  const scope = filter === 'DONE'
+    ? 'completed'
+    : filter === 'CANCELLED'
+      ? 'cancelled'
+      : openView === 'RUNNING'
+        ? 'running'
+        : openView === 'READY'
+          ? 'ready'
+          : 'open';
   if (term) return `No ${scope} projects match “${term}”`;
-  if (filter === 'OPEN') return 'No open projects';
-  return filter === 'DONE' ? 'No completed projects' : 'No cancelled projects';
+  if (filter === 'DONE') return 'No completed projects';
+  if (filter === 'CANCELLED') return 'No cancelled projects';
+  if (openView === 'RUNNING') return 'No running projects';
+  if (openView === 'READY') return 'No ready projects';
+  return 'No open projects';
 }
 
 /** The age display and the server facts advance together while the index stays open. */
@@ -219,16 +268,32 @@ export const PROJECTS_REFRESH_MS = 60_000;
 /** Index of the signed-in user's projects. Open work is routed into next-action lanes; Completed
  *  and Cancelled are separate, flat history views ordered by latest activity. */
 export function ProjectsPage() {
-  // The selected lifecycle is navigation state, not ephemeral component state: terminal history
-  // must survive refresh and a visit to one of its project details. Open stays the clean URL.
+  // Both lifecycle and the OPEN operational view are navigation state: either selection must
+  // survive refresh and a visit to one of its project details. Open/All stays the clean URL.
   const [statusParams, setStatusParams] = useSearchParams();
   const filter = projectFilterFromStatusParam(statusParams.get('status'));
+  const openView = filter === 'OPEN'
+    ? projectOpenViewFromParam(statusParams.get('view'))
+    : 'ALL';
   const setFilter = (nextFilter: ProjectFilter) => {
     setStatusParams(
       (previous) => {
         const next = new URLSearchParams(previous);
+        next.delete('view');
         if (nextFilter === 'OPEN') next.delete('status');
         else next.set('status', nextFilter);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  const setOpenView = (nextView: OpenProjectView) => {
+    setStatusParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete('status');
+        if (nextView === 'ALL') next.delete('view');
+        else next.set('view', nextView);
         return next;
       },
       { replace: true },
@@ -249,6 +314,26 @@ export function ProjectsPage() {
     () => (projects.data ?? []).filter((p) => matchesProjectSearch(p, search)),
     [projects.data, search],
   );
+  // Stable scope tallies, independent of the search box and current tab. These are PROJECT
+  // counts, never task-bucket sums. The same raw predicate drives the tabs and the rows, so a
+  // project cannot advertise itself under a tab that will not show it.
+  const runningCount = useMemo(
+    () => (projects.data ?? []).filter((p) => matchesOpenProjectView(p, 'RUNNING')).length,
+    [projects.data],
+  );
+  const readyCount = useMemo(
+    () => (projects.data ?? []).filter((p) => matchesOpenProjectView(p, 'READY')).length,
+    [projects.data],
+  );
+  // Search first, then the operational scope, then attention routing. A quiet running project is
+  // still selected by Running, but projectAttentionSections can correctly put it under Needs
+  // attention inside that result instead of making its execution fact disappear.
+  const visibleMatches = useMemo(
+    () => filter === 'OPEN'
+      ? matches.filter((project) => matchesOpenProjectView(project, openView))
+      : matches,
+    [filter, matches, openView],
+  );
   // ONE instant for the whole render, rather than one clock read per row: badges and lane
   // classification cannot disagree at a day boundary. Advance it only AFTER a successful
   // projects refresh, so a network failure freezes the age instead of turning stale evidence
@@ -260,7 +345,7 @@ export function ProjectsPage() {
   // Classification and badges share the same instant. The lanes are deliberately recomputed on
   // every render: crossing the one-day quiet threshold changes not just a chip but WHERE the row
   // belongs, and memoising only on the payload would leave those two surfaces disagreeing.
-  const sections = projectAttentionSections(matches, now);
+  const sections = projectAttentionSections(visibleMatches, now);
   // Open is an attention router and keeps its five next-action lanes. Terminal filters already
   // name their lifecycle state in the toolbar, so they reuse the completed comparator but render
   // as one flat history list — no second "Completed" heading or fold beneath the selected tab.
@@ -281,7 +366,12 @@ export function ProjectsPage() {
   // same viewport. False under `renderToStaticMarkup`, which is the desktop answer — see
   // useMediaQuery.
   const phone = useMediaQuery(PROJECTS_PHONE_QUERY);
-  const empty = projectsEmptyKind(projects.data?.length ?? 0, matches.length, filter, search);
+  const empty = projectsEmptyKind(
+    projects.data?.length ?? 0,
+    visibleMatches.length,
+    filter,
+    search,
+  );
   const onNewProject = () => {
     // BootGate normally leaves both lists warm. If a direct render reaches this page before they
     // settle, hand the decision back to DefaultLanding, which waits and follows this same chain.
@@ -322,12 +412,6 @@ export function ProjectsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      {/* The same `h1.page-title` every other list page uses. It used to be a
-          `Typography.Title level={2}`, which renders as `h2.ant-typography` — a higher specificity
-          than `.page-title` from a stylesheet injected after index.css, so the 20px in that rule
-          was never what shipped and the heading was 30px here and 20px everywhere else. */}
-      <h1 className="page-title">Projects</h1>
-
       {/* Above the loading/error branches, not inside the loaded one: the search box and the
           filter are how a slow or failed read is retried differently, and a toolbar that appears
           only once rows do would take the controls away exactly when they are needed. */}
@@ -336,6 +420,10 @@ export function ProjectsPage() {
         onSearchChange={setSearch}
         filter={filter}
         onFilterChange={setFilter}
+        openView={openView}
+        onOpenViewChange={setOpenView}
+        runningCount={projects.data === undefined ? undefined : runningCount}
+        readyCount={projects.data === undefined ? undefined : readyCount}
         onNewProject={onNewProject}
       />
 
@@ -367,14 +455,22 @@ export function ProjectsPage() {
         // The projects exist; this view is hiding them. No create CTA here — a project is not what
         // this reader is missing — just the sentence naming what narrowed the list, and the way
         // back out of it.
-        <Empty description={noMatchDescription(filter, search)} style={{ marginTop: 48 }}>
+        <Empty description={noMatchDescription(filter, search, openView)} style={{ marginTop: 48 }}>
           <Button
             onClick={() => {
-              setSearch('');
-              if (!search.trim()) setFilter('OPEN');
+              if (search.trim()) {
+                setSearch('');
+                return;
+              }
+              if (filter !== 'OPEN') setFilter('OPEN');
+              else setOpenView('ALL');
             }}
           >
-            {search.trim() ? 'Clear search' : 'Show open projects'}
+            {search.trim()
+              ? 'Clear search'
+              : filter === 'OPEN'
+                ? 'Show all open projects'
+                : 'Show open projects'}
           </Button>
         </Empty>
       ) : (
@@ -402,7 +498,7 @@ export function ProjectsPage() {
                     every other link in the app is built with (see encodeId). */}
                 <Link
                   to={`/projects/${encodeURIComponent(encodeId(p.id))}`}
-                  state={{ projectsReturnTo: projectsRoutePath(filter) }}
+                  state={{ projectsReturnTo: projectsRoutePath(filter, openView) }}
                   className="project-row-link"
                 >
                   <div className="project-row-main">

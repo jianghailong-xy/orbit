@@ -39,6 +39,7 @@ const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
 const P4 = '0195c0de-0000-7000-8000-000000000004';
+const P5 = '0195c0de-0000-7000-8000-000000000005';
 const R1 = '0195c0de-0000-7000-8000-0000000000c1';
 const R2 = '0195c0de-0000-7000-8000-0000000000c2';
 const W_SHARED = '0195c0de-0000-7000-8000-0000000000d0';
@@ -81,9 +82,22 @@ const LEDGER = {
   goal: '## Plan\n\nMove the `ledger` to Postgres',
   createdAt: '2026-01-05T00:00:00Z',
   updatedAt: '2026-01-06T00:00:00Z',
-  _count: { tasks: 2 },
-  buckets: { running: 1, ready: 0, blocked: 0, done: 1, cancelled: 0 },
+  _count: { tasks: 6 },
+  // Both kinds of task exist, but the project belongs to Running: active execution wins over
+  // ready work so the two top filters stay mutually exclusive.
+  buckets: { running: 1, ready: 4, blocked: 0, done: 1, cancelled: 0 },
   lastActivityAt: '2026-01-06T00:00:00Z',
+};
+const READY = {
+  id: P5,
+  title: 'Ready Rollout',
+  status: 'OPEN',
+  goal: 'Start the unblocked rollout',
+  createdAt: '2026-01-09T00:00:00Z',
+  updatedAt: '2026-01-10T00:00:00Z',
+  _count: { tasks: 2 },
+  buckets: { running: 0, ready: 2, blocked: 0, done: 0, cancelled: 0 },
+  lastActivityAt: new Date().toISOString(),
 };
 const ABANDONED = {
   id: P4,
@@ -256,32 +270,76 @@ describe('ProjectsPage — status filter', () => {
 
     expect(landedOn).toBe('/projects?status=CANCELLED');
     expect(segment('Cancelled').checked).toBe(true);
+    expect(text()).toContain('Project history');
+    expect(text()).toContain('Open projects');
+    expect(
+      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+    ).toEqual(['Completed', 'Cancelled']);
     expect(reads()).toEqual(['/projects?status=CANCELLED']);
     expect(text()).toContain('Abandoned Prototype');
     expect(text()).not.toContain('Website Revamp');
   });
 
-  it('starts at Open and asks the server for each lifecycle status that was pressed', async () => {
+  it('filters All, Running and Ready over one Open response and preserves the view in the URL', async () => {
+    serve({ '/projects?status=OPEN': [REVAMP, LEDGER, READY] });
+    await mount();
+
+    expect(reads()).toEqual(['/projects?status=OPEN']);
+    expect(landedOn).toBe('/projects');
+    expect(segment('All').checked).toBe(true);
+    expect(text()).toContain('Open projects');
+    expect(button('History')).toBeTruthy();
+    expect(
+      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+    ).toEqual(['All', 'Running 2', 'Ready 1']);
+
+    await click(segment('Ready'));
+    expect(landedOn).toBe('/projects?view=READY');
+    expect(reads()).toEqual(['/projects?status=OPEN']);
+    expect(text()).toContain('Ready Rollout');
+    expect(text()).not.toContain('Website Revamp');
+    // Ledger has ready tasks too, but its active run gives Running priority.
+    expect(text()).not.toContain('Ledger Migration');
+
+    await click(segment('Running'));
+    expect(landedOn).toBe('/projects?view=RUNNING');
+    expect(reads()).toEqual(['/projects?status=OPEN']);
+    expect(text()).toContain('Website Revamp');
+    // This stale row is routed into Needs attention, but it remains in the Running VIEW because
+    // its execution bucket did not stop being running when its activity became quiet.
+    expect(text()).toContain('Ledger Migration');
+    expect(text()).not.toContain('Ready Rollout');
+
+    await click(segment('All'));
+    expect(landedOn).toBe('/projects');
+    expect(text()).toContain('Website Revamp');
+    expect(text()).toContain('Ledger Migration');
+    expect(text()).toContain('Ready Rollout');
+    expect(reads()).toEqual(['/projects?status=OPEN']);
+  });
+
+  it('opens History before offering Completed and Cancelled lifecycle filters', async () => {
     serve({
-      '/projects?status=OPEN': [REVAMP, LEDGER],
+      '/projects?status=OPEN': [REVAMP, LEDGER, READY],
       '/projects?status=DONE': [CLEANUP],
       '/projects?status=CANCELLED': [ABANDONED],
     });
     await mount();
-    expect(reads()).toEqual(['/projects?status=OPEN']);
-    expect(landedOn).toBe('/projects');
-    expect(segment('Open').checked).toBe(true);
-    expect(
-      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
-    ).toEqual(['Open', 'Completed', 'Cancelled']);
 
-    await click(segment('Completed'));
+    expect(
+      [...container.querySelectorAll('.ant-segmented-item')]
+        .some((el) => el.textContent?.trim() === 'Completed'),
+    ).toBe(false);
+    await click(button('History'));
     expect(reads()).toEqual(['/projects?status=OPEN', '/projects?status=DONE']);
     expect(landedOn).toBe('/projects?status=DONE');
     // The answer on screen is the one the server just gave, not a slice of the first read.
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
     expect(segment('Completed').checked).toBe(true);
+    expect(
+      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+    ).toEqual(['Completed', 'Cancelled']);
 
     // A terminal filter is already its own heading. The list is immediately readable, with no
     // second Completed title, expander, pills, or row-level DONE repetition beneath the segment.
@@ -325,7 +383,7 @@ describe('ProjectsPage — status filter', () => {
       },
     });
     await mount();
-    await click(segment('Completed'));
+    await click(button('History'));
 
     const row = container.querySelector('a.project-row-link') as HTMLAnchorElement;
     expect(row).toBeTruthy();
@@ -345,13 +403,44 @@ describe('ProjectsPage — status filter', () => {
     expect(text()).not.toContain('Website Revamp');
   });
 
+  it('returns from project detail to the same URL-owned Open work view', async () => {
+    const projectId = encodeId(P1);
+    serve({
+      '/projects?status=OPEN': [REVAMP, READY],
+      [`/projects/${projectId}`]: {
+        ...REVAMP,
+        acceptanceCriteria: null,
+        instructions: null,
+        tasksByStatus: { OPEN: 1 },
+      },
+    });
+    await mount('/projects?view=RUNNING');
+
+    expect(segment('Running').checked).toBe(true);
+    expect(text()).toContain('Website Revamp');
+    expect(text()).not.toContain('Ready Rollout');
+    await click(container.querySelector('a.project-row-link') as HTMLAnchorElement);
+    expect(landedOn).toBe(`/projects/${projectId}`);
+
+    const back = [...container.querySelectorAll('a')].find(
+      (candidate) => candidate.textContent?.trim() === '← Projects',
+    );
+    expect(back).toBeTruthy();
+    await click(back! as HTMLAnchorElement);
+
+    expect(landedOn).toBe('/projects?view=RUNNING');
+    expect(segment('Running').checked).toBe(true);
+    expect(text()).toContain('Website Revamp');
+    expect(text()).not.toContain('Ready Rollout');
+  });
+
   it('keeps each filter in its own cache entry, so switching back does not show the other one’s rows', async () => {
     serve({
       '/projects?status=OPEN': [REVAMP, LEDGER],
       '/projects?status=DONE': [CLEANUP],
     });
     await mount();
-    await click(segment('Completed'));
+    await click(button('History'));
 
     // The completed read replaced what is on screen rather than being merged into it: the open
     // projects are gone, which they could not be if both answers shared one entry.
@@ -393,7 +482,7 @@ describe('ProjectsPage — search', () => {
       '/projects?status=DONE': [CLEANUP],
     });
     await mount();
-    await click(segment('Completed'));
+    await click(button('History'));
     const before = reads().length;
 
     await type(searchBox(), 'retire the old admin');
@@ -410,6 +499,28 @@ describe('ProjectsPage — search', () => {
     expect(text()).not.toContain('Website Revamp');
     expect(reads().length).toBe(before);
   });
+
+  it('intersects search with an Open work view and clearing search preserves that view', async () => {
+    serve({ '/projects?status=OPEN': [REVAMP, READY] });
+    await mount();
+    await click(segment('Ready'));
+    const before = reads().length;
+
+    await type(searchBox(), 'revamp');
+    expect(text()).toContain('No ready projects match “revamp”');
+    // Counts describe the whole Open scope, so typing does not make the tabs jump around.
+    expect(
+      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+    ).toEqual(['All', 'Running 1', 'Ready 1']);
+
+    await click(button('Clear search'));
+    expect(searchBox().value).toBe('');
+    expect(segment('Ready').checked).toBe(true);
+    expect(landedOn).toBe('/projects?view=READY');
+    expect(text()).toContain('Ready Rollout');
+    expect(text()).not.toContain('Website Revamp');
+    expect(reads().length).toBe(before);
+  });
 });
 
 describe('ProjectsPage — empty states', () => {
@@ -422,9 +533,7 @@ describe('ProjectsPage — empty states', () => {
     // control it comes with (create a project) would be the one thing that does not help.
     expect(text()).toContain('No open projects match “zzzz”');
     expect(text()).not.toContain('No projects yet');
-    // And nothing of the list survives beside it — every section is a header that would be
-    // counting zero. ("Completed" is a segment as well as a section, which is why this asks the
-    // DOM rather than the page text.)
+    // And nothing of the list survives beside it — every section is a header counting zero.
     expect(container.querySelector('section')).toBeNull();
 
     // The way out is the search that caused it, not a new project.
@@ -437,15 +546,36 @@ describe('ProjectsPage — empty states', () => {
   it('names the filter when that is what emptied the list', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER], '/projects?status=DONE': [] });
     await mount();
-    await click(segment('Completed'));
+    await click(button('History'));
 
     expect(text()).toContain('No completed projects');
     expect(text()).not.toContain('No projects yet');
 
     // A terminal dead end returns to the actionable Open list.
     await click(button('Show open projects'));
-    expect(segment('Open').checked).toBe(true);
+    expect(segment('All').checked).toBe(true);
     expect(text()).toContain('Website Revamp');
+  });
+
+  it('names an empty Open work view and returns to All without offering project creation', async () => {
+    serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
+    await mount();
+    await click(segment('Ready'));
+
+    expect(text()).toContain('No ready projects');
+    expect(text()).not.toContain('No open projects');
+    const empty = container.querySelector('.ant-empty')!;
+    expect(button('Show all open projects', empty)).toBeTruthy();
+    expect(
+      [...empty.querySelectorAll('button')].some((candidate) =>
+        candidate.textContent?.trim() === 'New project'),
+    ).toBe(false);
+
+    await click(button('Show all open projects', empty));
+    expect(landedOn).toBe('/projects');
+    expect(segment('All').checked).toBe(true);
+    expect(text()).toContain('Website Revamp');
+    expect(text()).toContain('Ledger Migration');
   });
 
   it('offers a create CTA on an account with nothing in it', async () => {
