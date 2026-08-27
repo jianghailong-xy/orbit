@@ -16,7 +16,7 @@ const sidePanel = readFileSync(
 const projectsPage = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.meta.url)), 'utf8');
 
 describe('human judgment phone and accessibility contract', () => {
-  it('puts both acceptance viewports inside the one-column, full-width action breakpoint', () => {
+  it('puts both acceptance viewports inside the sticky, two-action phone breakpoint', () => {
     const breakpoint = 720;
     for (const viewport of [
       { width: 390, height: 844 },
@@ -27,8 +27,10 @@ describe('human judgment phone and accessibility contract', () => {
     }
     const narrow = css.slice(css.indexOf('@media (max-width: 720px)'), css.indexOf(':root[data-theme'));
     expect(narrow).toMatch(/\.judgment-inbox-list,[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(narrow).toMatch(/\.judgment-history summary[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(narrow).toMatch(/\.judgment-decision-actions[\s\S]*flex-direction: column/);
+    expect(narrow).toMatch(/\.judgment-identity-facts[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(narrow).toMatch(/\.judgment-decision-actions[\s\S]*position: sticky[\s\S]*bottom: -16px/);
+    expect(narrow).toMatch(/\.judgment-decision-actions[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(narrow).toMatch(/env\(safe-area-inset-bottom, 0px\)/);
     expect(narrow).toMatch(/\.judgment-decision-actions \.ant-btn[\s\S]*width: 100%[\s\S]*min-height: 44px/);
   });
 
@@ -36,8 +38,9 @@ describe('human judgment phone and accessibility contract', () => {
     expect(css).toMatch(/\.judgment-page,[\s\S]*\.judgment-summary \*[\s\S]*min-width: 0/);
     expect(css).toMatch(/\.judgment-page \{[\s\S]*width: 100%[\s\S]*overflow-wrap: anywhere/);
     expect(css).toMatch(/\.judgment-json \{[\s\S]*max-width: 100%[\s\S]*white-space: pre-wrap[\s\S]*word-break: break-word/);
-    expect(css).toMatch(/\.judgment-digest \{[\s\S]*word-break: break-all/);
     expect(css).toMatch(/\.judgment-decision textarea \{[\s\S]*width: 100%[\s\S]*max-width: 100%/);
+    expect(css).toMatch(/\.judgment-command-fact > code \{[\s\S]*overflow-wrap: anywhere[\s\S]*white-space: pre-wrap/);
+    expect(review).toContain('{open ? children : null}');
   });
 
   it('keeps focus, labels, loading, inline recovery and duplicate-submit guards explicit', () => {
@@ -48,6 +51,7 @@ describe('human judgment phone and accessibility contract', () => {
     expect(review).toContain('role="status"');
     expect(review).toContain('role="alert"');
     expect(review).toContain('<label htmlFor="judgment-decision-note">');
+    expect(review).toContain('aria-required="true"');
     expect(review).toContain('disabled={!actionable || !note.trim() || decide.isPending}');
     expect(review).toContain('loading={decide.isPending');
     expect(review).toContain('setInlineError(error.message)');

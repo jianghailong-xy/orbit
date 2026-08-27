@@ -201,6 +201,22 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.equal(initial.history.length, 1);
     assert.equal(initial.derived.signalOpen, true);
     assert.equal(initial.derived.blockerOpen, true);
+    assert.deepEqual(initial.approvalImpact, {
+      authority: 'SERVER',
+      action: 'PASS',
+      conditionalOn: {
+        requestId: firstRequest.id,
+        evidenceDigest: firstDigest,
+        requestStatus: 'OPEN',
+        evidenceIsCurrent: true,
+      },
+      task: { id: taskId, resultingStatus: 'DONE', basis: 'HUMAN_SIGNOFF' },
+      request: { id: firstRequest.id, resultingStatus: 'DECIDED', decision: 'PASS' },
+      signal: { resultingOpen: false },
+      blocker: { resultingOpen: false },
+    });
+    assert.equal('dependencyGraph' in (initial.approvalImpact as Record<string, unknown>), false,
+      'the server does not predict downstream readiness before signoff');
     assert.equal(JSON.stringify(initial).includes('COMMENT_MUST_NOT_BECOME_EVIDENCE'), false,
       'the review reads TaskCompletionEvidence, never TaskComment prose');
     const beforeTask = await db.task.findUniqueOrThrow({ where: { id: taskId } });
@@ -219,6 +235,7 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.equal(waiting.derived.taskStatus, TaskStatus.OPEN);
     assert.equal(waiting.derived.signalOpen, false);
     assert.equal(waiting.derived.blockerOpen, false);
+    assert.equal(waiting.approvalImpact, null);
     const afterMoreTask = await db.task.findUniqueOrThrow({ where: { id: taskId } });
     assert.equal(afterMoreTask.status, beforeTask.status);
     assert.equal(afterMoreTask.updatedAt.getTime(), beforeTask.updatedAt.getTime(),
@@ -271,6 +288,11 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.equal(revisedOld.currentEvidence.digest, secondDigest);
     assert.equal(revisedOld.currentEvidence.requestId, secondRequest.id);
     assert.equal(revisedOld.history.length, 2);
+    assert.equal(revisedOld.approvalImpact, null);
+
+    const currentSecond = await reviews.get(ownerId, secondRequest.id);
+    assert.equal(currentSecond.approvalImpact?.conditionalOn.requestId, secondRequest.id);
+    assert.equal(currentSecond.approvalImpact?.conditionalOn.evidenceDigest, secondDigest);
 
     const passPayload = {
       requestId: secondRequest.id,
@@ -286,6 +308,7 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.equal(approved.derived.openRequestId, null);
     assert.equal(approved.derived.signalOpen, false);
     assert.equal(approved.derived.blockerOpen, false);
+    assert.equal(approved.approvalImpact, null);
     const dependent = approved.derived.dependencyGraph.nodes.find((node) => node.id === dependentId);
     assert.ok(dependent);
     assert.notEqual(dependent.dependencyState, 'BLOCKED');

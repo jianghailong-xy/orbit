@@ -112,6 +112,33 @@ export interface JudgmentReview {
     digest: string;
     requestId: string | null;
   };
+  /**
+   * A conditional PASS preview authored by the server. The web must never manufacture this from
+   * task status, completionCriterion, the dependency graph, or submitter evidence. It is optional
+   * during rolling upgrades; absence means "show no predicted effects".
+   */
+  approvalImpact?: {
+    authority: 'SERVER';
+    action: 'PASS';
+    conditionalOn: {
+      requestId: string;
+      evidenceDigest: string;
+      requestStatus: 'OPEN';
+      evidenceIsCurrent: true;
+    };
+    task: {
+      id: string;
+      resultingStatus: 'DONE';
+      basis: 'HUMAN_SIGNOFF';
+    };
+    request: {
+      id: string;
+      resultingStatus: 'DECIDED';
+      decision: 'PASS';
+    };
+    signal: { resultingOpen: false };
+    blocker: { resultingOpen: false };
+  } | null;
   history: Array<{
     id: string;
     revision: string;

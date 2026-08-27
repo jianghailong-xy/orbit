@@ -337,6 +337,36 @@ export class TaskJudgmentReviewService {
         digest: currentEvidence.evidenceDigest,
         requestId: currentRequest?.id ?? null,
       },
+      // This is the only approval preview the web may render. It is authored here from the
+      // HUMAN_SIGNOFF write contract and bound to the exact still-open/current request fact. The
+      // dependency graph is deliberately absent: dependent readiness is re-read after the commit,
+      // never predicted before it.
+      approvalImpact: requestedRequest.status === 'OPEN'
+        && requestedEvidence.id === currentEvidence.id
+        && inbox.task.completionCriterion === 'HUMAN_SIGNOFF'
+        ? {
+            authority: 'SERVER' as const,
+            action: 'PASS' as const,
+            conditionalOn: {
+              requestId: requestedRequest.id,
+              evidenceDigest: requestedEvidence.evidenceDigest,
+              requestStatus: 'OPEN' as const,
+              evidenceIsCurrent: true as const,
+            },
+            task: {
+              id: inbox.task.id,
+              resultingStatus: 'DONE' as const,
+              basis: 'HUMAN_SIGNOFF' as const,
+            },
+            request: {
+              id: requestedRequest.id,
+              resultingStatus: 'DECIDED' as const,
+              decision: 'PASS' as const,
+            },
+            signal: { resultingOpen: false as const },
+            blocker: { resultingOpen: false as const },
+          }
+        : null,
       history: history.map((evidence) => ({
         id: evidence.id,
         revision: evidence.revision.toString(),
