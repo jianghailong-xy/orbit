@@ -237,6 +237,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
         acceptanceCommand: 'test -f result.json',
         acceptanceExpectedExitCode: 0,
         completionCriterion: 'EXECUTABLE',
+        completionCriterionOverrideReason: 'This command is only an audit aid.',
         unknown: 'drop me',
       },
       {
@@ -266,6 +267,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
     acceptanceCommand: 'test -f result.json',
     acceptanceExpectedExitCode: 0,
     completionCriterion: 'EXECUTABLE',
+    completionCriterionOverrideReason: 'This command is only an audit aid.',
   });
   assert.deepEqual(kept(1), {
     title: 'S1',

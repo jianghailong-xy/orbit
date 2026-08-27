@@ -1569,6 +1569,12 @@ export function ProjectTaskLevel({
 export interface NewProjectTaskDraft {
   title: string;
   description?: string;
+  acceptanceCriteria?: string;
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  acceptanceCommand?: string;
+  acceptanceExpectedExitCode?: number;
+  /** Filled only after the server questions the selected criterion. */
+  completionCriterionOverrideReason?: string;
   assigneeId?: string;
   provider?: string;
   model?: string;
@@ -1581,6 +1587,38 @@ export interface NewProjectTaskDraft {
 /** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
 export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
 
+export const TASK_CRITERION_SHAPE_ADVICE_CODE = 'TASK_CRITERION_SHAPE_ADVICE';
+
+export interface TaskCriterionShapeAdviceView {
+  declaredCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  suggestedCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  reason: string;
+}
+
+/** Read the server's soft question without reimplementing its keyword heuristic in the browser. */
+export function taskCriterionShapeAdviceFrom(
+  error: Error | null,
+): TaskCriterionShapeAdviceView | null {
+  if (!(error instanceof ApiError)
+    || error.status !== 409
+    || error.code !== TASK_CRITERION_SHAPE_ADVICE_CODE
+    || error.body?.advisory !== true) return null;
+  const declaredCriterion = error.body.declaredCriterion;
+  const suggestedCriterion = error.body.suggestedCriterion;
+  const reason = error.body.reason;
+  const criteria = new Set(['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF']);
+  if (typeof declaredCriterion !== 'string'
+    || typeof suggestedCriterion !== 'string'
+    || typeof reason !== 'string'
+    || !criteria.has(declaredCriterion)
+    || !criteria.has(suggestedCriterion)) return null;
+  return {
+    declaredCriterion: declaredCriterion as TaskCriterionShapeAdviceView['declaredCriterion'],
+    suggestedCriterion: suggestedCriterion as TaskCriterionShapeAdviceView['suggestedCriterion'],
+    reason,
+  };
+}
+
 /**
  * Whether the dialog's Create button may fire at all.
  *
@@ -1590,7 +1628,12 @@ export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
  * lives behind a portal that a static render produces no markup for.
  */
 export function canCreateProjectTask(draft: NewProjectTaskDraft): boolean {
-  return draft.title.trim().length > 0 && runAtProblem(draft.runAtLocal) === null;
+  if (draft.title.trim().length === 0 || runAtProblem(draft.runAtLocal) !== null) return false;
+  if (draft.completionCriterion === 'EXECUTABLE') {
+    return Boolean(draft.acceptanceCommand?.trim())
+      && Number.isInteger(draft.acceptanceExpectedExitCode);
+  }
+  return true;
 }
 
 /**
@@ -1617,10 +1660,30 @@ export function canCreateProjectTask(draft: NewProjectTaskDraft): boolean {
 export function newProjectTaskBody(
   projectId: string,
   draft: NewProjectTaskDraft,
-): Record<string, string> {
-  const body: Record<string, string> = { projectId, title: draft.title.trim() };
+): Record<string, string | number> {
+  const body: Record<string, string | number> = { projectId, title: draft.title.trim() };
   const description = draft.description?.trim();
   if (description) body.description = description;
+  const acceptanceCriteria = draft.acceptanceCriteria?.trim();
+  if (acceptanceCriteria) body.acceptanceCriteria = acceptanceCriteria;
+  if (draft.completionCriterion) {
+    body.completionCriterion = draft.completionCriterion;
+    if (draft.completionCriterion === 'EXECUTABLE') {
+      const command = draft.acceptanceCommand?.trim();
+      if (!command || !Number.isInteger(draft.acceptanceExpectedExitCode)) {
+        throw new Error(
+          'EXECUTABLE requires an acceptance command and integer expected exit code.',
+        );
+      }
+      body.acceptanceCommand = command;
+      body.acceptanceExpectedExitCode = draft.acceptanceExpectedExitCode!;
+    }
+    if (draft.completionCriterion === 'VERIFICATION') {
+      body.completionPolicy = 'VERIFICATION_PASSED';
+    }
+  }
+  const overrideReason = draft.completionCriterionOverrideReason?.trim();
+  if (overrideReason) body.completionCriterionOverrideReason = overrideReason;
   // Absent unless a time was actually chosen — an empty string here would be a 400, and a local
   // "9/1/2026, 9:00 AM" would be a schedule the server reads as no date at all. But a value that
   // is present and unusable is refused outright, never quietly dropped: see above.
@@ -1723,6 +1786,7 @@ export function NewProjectTaskForm({
   // Recomputed on every keystroke rather than held in state: it is a pure reading of the draft,
   // and a copy of it could go stale against the value the field is actually showing.
   const runAtIssue = runAtProblem(draft.runAtLocal);
+  const criterionAdvice = taskCriterionShapeAdviceFrom(error);
   // One id for the line under the control, whichever of the two it is currently showing. Generated
   // rather than written in, so mounting this form twice cannot put the same id in the document
   // twice — which would silently point both inputs at the first one's text.
@@ -1755,7 +1819,65 @@ export function NewProjectTaskForm({
           onChange={(e) => onChange({ ...draft, description: e.target.value })}
         />
       </FormRow>
-      {/* After the two fields that say WHAT the task is, before the three that say who and what
+      <FormRow label="Acceptance criteria">
+        <Input.TextArea
+          rows={4}
+          value={draft.acceptanceCriteria ?? ''}
+          placeholder="Optional observable checks that would settle this task"
+          disabled={pending}
+          onChange={(e) => onChange({ ...draft, acceptanceCriteria: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Completion criterion">
+        <Select
+          style={{ width: '100%' }}
+          value={draft.completionCriterion}
+          placeholder="Choose how completion is proved"
+          allowClear
+          disabled={pending}
+          options={[
+            { value: 'EXECUTABLE', label: 'EXECUTABLE — command / exit code' },
+            { value: 'VERIFICATION', label: 'VERIFICATION — independent judgment' },
+            { value: 'HUMAN_SIGNOFF', label: 'HUMAN_SIGNOFF — authority / tradeoff' },
+          ]}
+          onChange={(completionCriterion) => onChange({
+            ...draft,
+            completionCriterion,
+            acceptanceCommand:
+              completionCriterion === 'EXECUTABLE' ? draft.acceptanceCommand : undefined,
+            acceptanceExpectedExitCode:
+              completionCriterion === 'EXECUTABLE'
+                ? draft.acceptanceExpectedExitCode
+                : undefined,
+            completionCriterionOverrideReason: undefined,
+          })}
+        />
+      </FormRow>
+      {draft.completionCriterion === 'EXECUTABLE' ? (
+        <>
+          <FormRow label="Acceptance command">
+            <Input
+              value={draft.acceptanceCommand ?? ''}
+              placeholder="e.g. npm test"
+              disabled={pending}
+              onChange={(e) => onChange({ ...draft, acceptanceCommand: e.target.value })}
+            />
+          </FormRow>
+          <FormRow label="Expected exit code">
+            <Input
+              type="number"
+              value={draft.acceptanceExpectedExitCode ?? ''}
+              disabled={pending}
+              onChange={(e) => onChange({
+                ...draft,
+                acceptanceExpectedExitCode:
+                  e.target.value === '' ? undefined : e.target.valueAsNumber,
+              })}
+            />
+          </FormRow>
+        </>
+      ) : null}
+      {/* After the fields that say WHAT the task is and HOW it is proved, before who and what
           runs it: when it starts is a property of the task, not of the runtime picked for it. */}
       <FormRow label="Start at">
         <Input
@@ -1855,7 +1977,28 @@ export function NewProjectTaskForm({
           typed is still on screen beside it and the dialog's own Create button is still live —
           so the fix is to correct the field it names and press it again, with no second Retry
           control saying the same thing a few pixels away. */}
-      {error ? (
+      {criterionAdvice ? (
+        <>
+          <Alert
+            type="warning"
+            showIcon
+            message={`Consider ${criterionAdvice.suggestedCriterion}`}
+            description={criterionAdvice.reason}
+          />
+          <FormRow label={`Why keep ${criterionAdvice.declaredCriterion}?`}>
+            <Input.TextArea
+              rows={3}
+              value={draft.completionCriterionOverrideReason ?? ''}
+              placeholder="Required to override this advice; stored on the task"
+              disabled={pending}
+              onChange={(e) => onChange({
+                ...draft,
+                completionCriterionOverrideReason: e.target.value,
+              })}
+            />
+          </FormRow>
+        </>
+      ) : error ? (
         <Alert type="error" showIcon message="Task could not be created" description={error.message} />
       ) : null}
     </>

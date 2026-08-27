@@ -205,6 +205,12 @@ import {
   taskCompletionDeclarationError,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
+import {
+  MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
+  normaliseTaskCriterionOverrideReason,
+  taskCriterionShapeAdvice,
+  taskCriterionShapeAdviceBody,
+} from './task-criterion-shape-advice';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -325,6 +331,7 @@ type IdempotentTaskWrite = {
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
   completionCriterion?: TaskCompletionCriterionValue | null;
+  completionCriterionOverrideReason?: string | null;
 };
 
 export type IdempotentTaskOperation = 'CREATE_TASK';
@@ -592,6 +599,7 @@ export const TASK_LIST_SELECT = {
   acceptanceCommand: true,
   acceptanceExpectedExitCode: true,
   completionCriterion: true,
+  completionCriterionOverrideReason: true,
   labels: true,
   creatorSessionId: true,
   autoRunWhenReady: true,
@@ -2390,13 +2398,62 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     declaration: Parameters<typeof taskCompletionDeclarationError>[0],
   ): TaskCompletionCriterionValue {
     const error = taskCompletionDeclarationError(declaration);
-    if (error) throw new BadRequestException(error);
-    return resolveTaskCompletionCriterion(declaration);
+    if (error) {
+      throw new BadRequestException({
+        code: 'TASK_COMPLETION_DECLARATION_INVALID',
+        kind: 'REFUSAL',
+        message: error,
+        requiredAction: 'FIX_COMPLETION_DECLARATION',
+      });
+    }
+    const criterion = resolveTaskCompletionCriterion(declaration);
+    // N18 makes an omitted declaration return null. Its error above is the public refusal; this
+    // guard keeps the boundary total while this branch remains mergeable with that change.
+    if (criterion == null) {
+      throw new BadRequestException({
+        code: 'TASK_COMPLETION_DECLARATION_INVALID',
+        kind: 'REFUSAL',
+        message: 'completionCriterion is required',
+        requiredAction: 'FIX_COMPLETION_DECLARATION',
+      });
+    }
+    return criterion;
+  }
+
+  /**
+   * Ask about a plausible-but-not-certain criterion choice.
+   *
+   * This runs only after the deterministic declaration boundary above. A mismatch is a 409
+   * ADVISORY that names both choices and can be answered either by changing the criterion or by
+   * recording why this task is an exception. The reason is not interpreted; it is audit material.
+   */
+  private assertCriterionShape(
+    declaration: Pick<CreateTaskDto,
+      'acceptanceCriteria' | 'completionCriterion' | 'completionCriterionOverrideReason'>,
+    completionCriterion: TaskCompletionCriterionValue,
+  ): void {
+    const overrideReason = normaliseTaskCriterionOverrideReason(
+      declaration.completionCriterionOverrideReason,
+    );
+    if ((overrideReason?.length ?? 0) > MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS) {
+      throw new BadRequestException(
+        `completionCriterionOverrideReason must contain at most ` +
+        `${MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS} characters`,
+      );
+    }
+    const advice = taskCriterionShapeAdvice({
+      acceptanceCriteria: declaration.acceptanceCriteria,
+      completionCriterion,
+    });
+    if (advice && overrideReason == null) {
+      throw new ConflictException(taskCriterionShapeAdviceBody(advice));
+    }
   }
 
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
-    this.assertCompletionDeclaration(dto);
+    const completionCriterion = this.assertCompletionDeclaration(dto);
+    this.assertCriterionShape(dto, completionCriterion);
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
@@ -2421,6 +2478,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             acceptanceCommand: dto.acceptanceCommand,
             acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
             completionCriterion: dto.completionCriterion,
+            completionCriterionOverrideReason: dto.completionCriterionOverrideReason,
           }
         : undefined;
     const idempotencyKey = idempotentWrite ? this.taskIdempotencyKey(idempotentWrite) : undefined;
@@ -2798,7 +2856,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       acceptanceCriteria: dto.acceptanceCriteria,
       acceptanceCommand: dto.acceptanceCommand,
       acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
-      completionCriterion: resolveTaskCompletionCriterion(dto),
+      // Re-resolve at the shared write builder so the single and batch paths stay total when N18
+      // removes the legacy default. Both paths already ran this deterministic check before any
+      // ownership or transaction work; this cheap repeat protects future internal call sites too.
+      completionCriterion: this.assertCompletionDeclaration(dto),
+      completionCriterionOverrideReason:
+        normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -2843,10 +2906,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
     for (const item of items) {
-      this.assertCompletionDeclaration({
+      const completionCriterion = this.assertCompletionDeclaration({
         ...item,
         verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,
       });
+      this.assertCriterionShape(item, completionCriterion);
     }
 
     const positionByRef = new Map<string, number>();
@@ -3205,6 +3269,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             acceptanceCommand: item.acceptanceCommand,
             acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
             completionCriterion: item.completionCriterion,
+            completionCriterionOverrideReason: item.completionCriterionOverrideReason,
           }
         : undefined;
     const replayed = await Promise.all(validated.map(async (item) => {
@@ -4659,6 +4724,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       write.completionCriterion != null
       && existing.completionCriterion !== write.completionCriterion
     ) mismatch('different completion criterion');
+    if (
+      (existing.completionCriterionOverrideReason ?? null)
+        !== normaliseTaskCriterionOverrideReason(write.completionCriterionOverrideReason)
+    ) mismatch('different completion criterion override reason');
     // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
     // normalised payload — or it is not this write's earlier attempt.
     const rebuilt = this.taskIdempotencyKey({

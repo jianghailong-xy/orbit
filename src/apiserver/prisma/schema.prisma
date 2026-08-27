@@ -2904,6 +2904,10 @@ model Task {
   /// The declared completion fact for this task. HUMAN_SIGNOFF is a first-class criterion and the
   /// compatibility value for every row that predates this column, never an exceptional fallback.
   completionCriterion TaskCompletionCriterion @default(HUMAN_SIGNOFF) @map("completion_criterion")
+  /// Why the creator deliberately kept a completion criterion after Orbit questioned the shape of
+  /// the acceptance prose. NULL means no override was needed or recorded; the text is audit
+  /// evidence only and is never interpreted as completion evidence.
+  completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
   /// Free-text labels, written by whoever files the task (in practice the agent creating it).
   /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
   /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and

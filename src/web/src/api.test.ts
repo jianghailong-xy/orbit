@@ -109,6 +109,32 @@ describe('a database conflict answered by the server', () => {
   });
 });
 
+describe('a completion-criterion shape advisory answered by the server', () => {
+  it('preserves the suggested criterion and reason instead of flattening them into an error', async () => {
+    const body = {
+      code: 'TASK_CRITERION_SHAPE_ADVICE',
+      kind: 'ADVISORY',
+      advisory: true,
+      message: 'Use EXECUTABLE or explain the override.',
+      declaredCriterion: 'HUMAN_SIGNOFF',
+      suggestedCriterion: 'EXECUTABLE',
+      reason: 'The acceptance prose matched “spec 通过”.',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: async () => body,
+    }) as Response));
+
+    const error = await api('/tasks', { method: 'POST', body: {} }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe(body.code);
+    expect((error as ApiError).body).toEqual(body);
+  });
+});
+
 describe('the 401 refresh-and-retry', () => {
   // WHY THIS IS A RUN-TOKEN TEST. A Run Now names its press with a `triggerId` so that a repeat of
   // one press is one run (src/web/src/lib/runRequestToken.ts). The retry below is the resend the

@@ -200,6 +200,10 @@ const maxTaskLabels = 16
 // the cap the write would be rejected against, rather than letting a model discover it by 400.
 const maxTaskAcceptanceCriteriaChars = 4000
 
+// Audit explanation for deliberately keeping a criterion after the server questions its shape.
+// Mirrors MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS.
+const maxTaskCriterionOverrideReasonChars = 2000
+
 // Project criteria have the same total compatibility projection cap as the server and a bounded
 // number of structural items, so a malformed plan is rejected before the HTTP round-trip.
 const maxProjectAcceptanceCriteriaChars = 4000
@@ -552,7 +556,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -583,7 +587,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -1364,6 +1368,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"states what would settle itself, not what would settle its parent or its project. Up "+
 			"to %d characters.", maxTaskAcceptanceCriteriaChars),
 	}
+	criterionOverrideReasonProp := map[string]interface{}{
+		"type":      "string",
+		"minLength": 1,
+		"maxLength": maxTaskCriterionOverrideReasonChars,
+		"description": "Why this task deliberately keeps the declared completionCriterion after " +
+			"TASK_CRITERION_SHAPE_ADVICE questioned it. Omit on the first attempt. If the server " +
+			"suggests another criterion, either adopt that suggestion or retry with this non-blank " +
+			"audit explanation; Orbit stores it on the task and task_get reads it back.",
+	}
 	// Which of the PROJECT's stated acceptance criteria a new task serves. Required of a project's
 	// one-shot judgment session and of nobody else, so the description says who has to send it
 	// rather than marking it required — a person filing work has never had to justify it to a gate.
@@ -1469,6 +1482,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
 				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; HUMAN_SIGNOFF uses one human signoff. They are peer choices, not a fallback chain. Omission is HUMAN_SIGNOFF unless the legacy executable pair or VERIFICATION_PASSED policy is supplied.",
 			},
+			"completionCriterionOverrideReason": criterionOverrideReasonProp,
 			"acceptanceCommand": map[string]interface{}{
 				"type":        "string",
 				"minLength":   1,
@@ -1966,7 +1980,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
+			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
 			"inputSchema": obj(taskCreateProps(), "title"),
 		},
 		{

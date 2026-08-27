@@ -76,10 +76,13 @@ func (e *transportHTTPError) Error() string {
 }
 
 // refusal is the "code / what / do" block for a body that carries a code, and "" for one that does
-// not — a validation error listing field messages, an upstream 502, an HTML error page.
+// not — a validation error listing field messages, an upstream 502, an HTML error page. The name is
+// historical: an ADVISORY is deliberately labelled as advice, never as a hard refusal.
 func (e *transportHTTPError) refusal() string {
 	var body struct {
 		Code           string `json:"code"`
+		Kind           string `json:"kind"`
+		Advisory       bool   `json:"advisory"`
 		Message        any    `json:"message"`
 		RequiredAction string `json:"requiredAction"`
 		Owner          string `json:"owner"`
@@ -87,7 +90,11 @@ func (e *transportHTTPError) refusal() string {
 	if err := json.Unmarshal([]byte(e.body), &body); err != nil || body.Code == "" {
 		return ""
 	}
-	out := "  refused: " + body.Code + "\n"
+	label := "refused"
+	if body.Advisory || body.Kind == "ADVISORY" {
+		label = "advice"
+	}
+	out := "  " + label + ": " + body.Code + "\n"
 	if message, ok := body.Message.(string); ok && message != "" {
 		out += "  what:    " + message + "\n"
 	}
