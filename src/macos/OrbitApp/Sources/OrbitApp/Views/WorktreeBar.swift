@@ -524,7 +524,9 @@ struct DiffSheet: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
-        .task { await console.worktree.loadDiff() }
+        // Re-run when a heartbeat changes the file summary while this sheet stays open. The model's
+        // generation fence cancels stale polling and lets the newest file set own the refresh.
+        .task(id: files) { await console.worktree.loadDiff() }
         #if os(macOS)
         .frame(minWidth: 560, minHeight: 420)
         #endif
@@ -609,8 +611,10 @@ private struct DiffFileView: View {
                 .padding(12)
             } else if patch?.truncated == true {
                 placeholder("Diff too large to preview")
-            } else if console.worktree.busy {
+            } else if console.worktree.diffLoading {
                 placeholder("Loading diff…")
+            } else if console.worktree.diffRefreshing {
+                placeholder("Refreshing diff…")
             } else {
                 placeholder("No diff to preview")
             }

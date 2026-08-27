@@ -29,7 +29,17 @@ final class WorktreeModel {
     private(set) var detail: SessionDetail?
     /// Per-file unified diffs for the expandable diff sheet, fetched lazily when it opens.
     private(set) var diff: [FilePatch] = []
+    /// Diff loading has its own state: waiting for a live refresh must not disable Commit/Merge or
+    /// race their shared action flag back to false.
+    private(set) var diffLoading = false
+    private(set) var diffRefreshing = false
     private(set) var busy = false
+    @ObservationIgnored private var diffLoadGeneration = 0
+
+    /// Web uses the same two-second cadence and gives the runner eight chances to publish the
+    /// freshly recomputed snapshot (about 16 seconds total).
+    private static let diffRefreshPolls = 8
+    private static let diffRefreshInterval: UInt64 = 2_000_000_000
 
     init(sessionID: String, api: APIClient) {
         self.sessionID = sessionID
@@ -72,10 +82,70 @@ final class WorktreeModel {
     }
 
     func loadDiff() async {
-        busy = true
-        defer { busy = false }
-        do { diff = try await api.diff(sessionID: sessionID).patches }
-        catch { /* keep last */ }
+        guard !sessionID.isEmpty else { return }
+
+        // A sheet can be dismissed and reopened while URLSession is still completing the old GET.
+        // Only the newest invocation may publish data or clear the visible loading state.
+        diffLoadGeneration &+= 1
+        let generation = diffLoadGeneration
+        diffLoading = true
+        diffRefreshing = false
+        defer {
+            if generation == diffLoadGeneration {
+                diffLoading = false
+                diffRefreshing = false
+            }
+        }
+
+        do {
+            let patches = try await api.diff(sessionID: sessionID).patches
+            guard ownsDiffLoad(generation) else { return }
+            diff = patches
+        } catch {
+            return // keep the last good snapshot, as before
+        }
+
+        // Heartbeats can publish a changed-file row before the turn-boundary patch snapshot exists.
+        // For a live session, ask its runner for a consistent snapshot now and poll until it lands.
+        guard shouldRefreshDiff else { return }
+        diffLoading = false
+        diffRefreshing = true
+        // The POST can reach the server even if its response is lost. Match web by polling anyway;
+        // a failed/no-op refresh simply exhausts the same bounded window and falls back gracefully.
+        try? await api.refreshDiff(sessionID: sessionID)
+
+        for _ in 0..<Self.diffRefreshPolls {
+            do { try await Task.sleep(nanoseconds: Self.diffRefreshInterval) }
+            catch { return }
+            // Fetch once even if the session just became terminal: turn completion may have
+            // published the final committed patch while we were sleeping.
+            guard ownsDiffLoad(generation) else { return }
+            guard let patches = try? await api.diff(sessionID: sessionID).patches else { continue }
+            guard ownsDiffLoad(generation) else { return }
+            diff = patches
+            // The runner publishes changedFiles and patches together, but they live behind two
+            // client endpoints. Refresh the summary too so removed/renamed paths and a just-ended
+            // session are evaluated against the same recomputation.
+            await loadDetail()
+            guard ownsDiffLoad(generation) else { return }
+            if !shouldRefreshDiff { return }
+        }
+    }
+
+    private var canRefreshLiveDiff: Bool {
+        // `detail` is authoritative on a cold-opened session. Fall back to the console only for an
+        // older/slim server response that omitted status entirely.
+        if let status = detail?.effectiveRunStatus { return status.isLive }
+        return isSessionLive()
+    }
+
+    private var shouldRefreshDiff: Bool {
+        WorktreeBarLogic.shouldRefreshDiff(isLive: canRefreshLiveDiff,
+                                           changedFiles: detail?.changedFiles ?? [], patches: diff)
+    }
+
+    private func ownsDiffLoad(_ generation: Int) -> Bool {
+        generation == diffLoadGeneration && !Task.isCancelled
     }
 
     func commit() async {

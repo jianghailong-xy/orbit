@@ -98,6 +98,24 @@ public enum WorktreeBarLogic {
         return "git rebase \(target) \(branch) && git checkout \(target) && git merge --ff-only \(branch)"
     }
 
+    /// Whether the compact file list is ahead of the lazily stored per-file patches. Heartbeats
+    /// update `changedFiles` during a turn, while the full patches normally settle only at a turn
+    /// boundary; a live client can close that gap through `POST /diff/refresh`. Binary files never
+    /// have a text preview, and a `truncated` patch is already an intentional terminal result.
+    public static func shouldRefreshDiff(isLive: Bool, changedFiles: [SessionChangedFile],
+                                         patches: [FilePatch]) -> Bool {
+        guard isLive else { return false }
+        let readyPaths = Set(patches.compactMap { patch -> String? in
+            if patch.truncated == true { return patch.path }
+            guard let text = patch.patch, !text.isEmpty else { return nil }
+            return patch.path
+        })
+        return changedFiles.contains { file in
+            let binary = file.additions < 0 || file.deletions < 0
+            return !binary && !readyPaths.contains(file.path)
+        }
+    }
+
     /// Split an auto-generated `orbit/<slug>-<hash>` branch into its (prefix, slug, hash) parts so the
     /// view can dim the `orbit/` prefix and the `-<hash>` suffix and foreground the slug — matching
     /// web's `BranchLabel` (regex `^(orbit/)(.+)(-[0-9a-f]{6})$`). Returns nil for any other shape,

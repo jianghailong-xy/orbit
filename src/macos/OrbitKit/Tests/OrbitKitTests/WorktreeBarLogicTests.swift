@@ -140,6 +140,55 @@ final class WorktreeBarLogicTests: XCTestCase {
         )
     }
 
+    // MARK: diff refresh
+
+    func testDiffRefreshNeededWhenTextFileHasNoStoredPatch() {
+        let files = [SessionChangedFile(path: "src/app.swift", additions: 1, deletions: 0, status: "M")]
+
+        XCTAssertTrue(WorktreeBarLogic.shouldRefreshDiff(isLive: true, changedFiles: files, patches: []))
+        XCTAssertTrue(WorktreeBarLogic.shouldRefreshDiff(
+            isLive: true,
+            changedFiles: files,
+            patches: [FilePatch(path: "src/app.swift", patch: "", truncated: nil)]
+        ))
+    }
+
+    func testDiffRefreshNotRequestedForEndedSession() {
+        let files = [SessionChangedFile(path: "src/app.swift", additions: 1, deletions: 0, status: "M")]
+
+        XCTAssertFalse(WorktreeBarLogic.shouldRefreshDiff(isLive: false, changedFiles: files, patches: []))
+    }
+
+    func testDiffRefreshNotNeededWhenPatchIsReady() {
+        let files = [SessionChangedFile(path: "src/app.swift", additions: 1, deletions: 0, status: "M")]
+        let patches = [FilePatch(path: "src/app.swift", patch: "@@ -1 +1 @@\n-old\n+new", truncated: nil)]
+
+        XCTAssertFalse(WorktreeBarLogic.shouldRefreshDiff(
+            isLive: true, changedFiles: files, patches: patches))
+    }
+
+    func testDiffRefreshSkipsBinaryAndTruncatedFiles() {
+        let files = [
+            SessionChangedFile(path: "Assets/icon.png", additions: -1, deletions: -1, status: "M"),
+            SessionChangedFile(path: "generated.txt", additions: 8_000, deletions: 0, status: "A"),
+        ]
+        let patches = [FilePatch(path: "generated.txt", patch: nil, truncated: true)]
+
+        XCTAssertFalse(WorktreeBarLogic.shouldRefreshDiff(
+            isLive: true, changedFiles: files, patches: patches))
+    }
+
+    func testDiffRefreshNeededWhenAnyPreviewableFileIsMissing() {
+        let files = [
+            SessionChangedFile(path: "ready.swift", additions: 1, deletions: 1, status: "M"),
+            SessionChangedFile(path: "missing.swift", additions: 2, deletions: 0, status: "A"),
+        ]
+        let patches = [FilePatch(path: "ready.swift", patch: "@@ -1 +1 @@\n-a\n+b", truncated: nil)]
+
+        XCTAssertTrue(WorktreeBarLogic.shouldRefreshDiff(
+            isLive: true, changedFiles: files, patches: patches))
+    }
+
     // MARK: branch parts
 
     func testBranchPartsSplitsGeneratedBranch() {

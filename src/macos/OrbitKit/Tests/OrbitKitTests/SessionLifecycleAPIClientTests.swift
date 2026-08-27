@@ -128,6 +128,19 @@ final class SessionLifecycleAPIClientTests: XCTestCase {
         XCTAssertEqual(turns.first?.attachments?.first?.mimeType, "image/png")
     }
 
+    func testRefreshDiffPostsToLiveRefreshEndpoint() async throws {
+        let recorder = RequestPathRecorder()
+        SessionLifecycleURLProtocol.handler = { request in
+            recorder.append(request)
+            return (204, Data())
+        }
+
+        try await client().refreshDiff(sessionID: "session-1")
+
+        XCTAssertEqual(recorder.paths, ["/api/sessions/session-1/diff/refresh"])
+        XCTAssertEqual(recorder.methods, ["POST"])
+    }
+
     func testCompletedListFallsBackWhenOldServerTreatsUnknownViewAsOpen() async throws {
         let recorder = RequestPathRecorder()
         SessionLifecycleURLProtocol.handler = { request in
