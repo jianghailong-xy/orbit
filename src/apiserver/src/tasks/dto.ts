@@ -32,6 +32,7 @@ import {
   TASK_COMPLETION_CRITERIA,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
+import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from './task-criterion-shape-advice';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
@@ -261,6 +262,10 @@ export class CreateTaskDto {
   // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
   completionCriterion?: TaskCompletionCriterionValue;
+  // Audit material for deliberately keeping a criterion that the acceptance prose makes the
+  // server question. Optional on the first attempt; a mismatch without it returns an ADVISORY.
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
+  completionCriterionOverrideReason?: string;
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;

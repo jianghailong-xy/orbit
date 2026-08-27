@@ -13,6 +13,28 @@ priority order or an escalation chain:
 An unsatisfied criterion is a current view of missing evidence. It is not an exceptional signal
 that somebody must later clear.
 
+## Shape advice and deliberate overrides
+
+On task creation Orbit compares the literal wording of `acceptanceCriteria` with a small keyword
+table in `src/apiserver/src/tasks/task-criterion-shape-advice.ts`. It is deliberately a heuristic,
+not a validator and not NLP:
+
+- test/spec/command/exit-code wording tends toward `EXECUTABLE`;
+- correctness, intent, coverage, reasonableness, or independent-review wording tends toward
+  `VERIFICATION`;
+- authorization, irreversibility, release/deletion, or value-tradeoff wording tends toward
+  `HUMAN_SIGNOFF`.
+
+Only one unambiguous category produces a question. Unknown wording and wording that matches more
+than one category produce no advice. When the suggested criterion differs from the declaration,
+the create returns `409 TASK_CRITERION_SHAPE_ADVICE` with `kind: ADVISORY`, a
+`suggestedCriterion`, and a reason. This is separate from declaration consistency: an impossible
+declaration remains a hard `TASK_COMPLETION_DECLARATION_INVALID` refusal.
+
+The caller may adopt the suggestion, or retry with the original criterion and a non-blank
+`completionCriterionOverrideReason`. Orbit stores that explanation on the task and returns it from
+task reads. It is audit material for later readers, never evidence that satisfies the criterion.
+
 ## Status derivation and direct writes
 
 `DONE` is the optimistic projection of a satisfied criterion, not an editable task fact. A person,

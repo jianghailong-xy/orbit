@@ -181,11 +181,21 @@ export async function api<T = unknown>(
     signal: options.signal,
   });
   if (!res.ok) {
-    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as {
-      message?: string;
-      code?: string;
-    };
-    throw new ApiError(msg.message || res.statusText, res.status, msg.code);
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as Record<
+      string,
+      unknown
+    >;
+    let message = res.statusText;
+    if (typeof msg.message === 'string') message = msg.message;
+    else if (Array.isArray(msg.message) && msg.message.every((item) => typeof item === 'string')) {
+      message = msg.message.join('; ');
+    }
+    throw new ApiError(
+      message,
+      res.status,
+      typeof msg.code === 'string' ? msg.code : undefined,
+      msg,
+    );
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -204,6 +214,12 @@ export class ApiError extends Error {
      * Branching on the message instead would break the first time somebody reworded it.
      */
     public readonly code?: string,
+    /**
+     * The complete structured body. Advisory responses carry suggestedCriterion, reason and the
+     * override field here; keeping only `message` would turn a question into an opaque error the
+     * web form cannot answer. Ordinary callers may ignore it.
+     */
+    public readonly body?: Readonly<Record<string, unknown>>,
   ) {
     super(message);
     this.name = 'ApiError';

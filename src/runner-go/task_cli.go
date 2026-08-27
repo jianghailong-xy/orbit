@@ -148,6 +148,8 @@ Options:
                               optional for everybody else
   --completion-criterion EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF
                               The task's one normal completion criterion (default HUMAN_SIGNOFF)
+  --completion-criterion-override-reason TEXT
+                              Why this task keeps a criterion after the server questions its shape
   --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
   --acceptance-expected-exit-code N
                               Exit code that mechanically derives DONE; every other code is FAILED
@@ -203,6 +205,12 @@ verification task (with --completion-policy VERIFICATION_PASSED), and HUMAN_SIGN
 human signoff. Omitting it is HUMAN_SIGNOFF for compatibility, unless the legacy executable pair
 or VERIFICATION_PASSED policy makes the intended criterion explicit.
 
+Orbit conservatively compares acceptance-criteria wording with that choice. A mismatch returns
+TASK_CRITERION_SHAPE_ADVICE with a suggestedCriterion and reason; it creates nothing. Either retry
+with the suggested criterion, or deliberately keep the original one and pass a non-blank
+--completion-criterion-override-reason. That explanation is stored on the task and returned by
+task get; it is audit material, not completion evidence.
+
 For EXECUTABLE, --acceptance-command and --acceptance-expected-exit-code must be passed together.
 After the execution turn, that same task session runs the command once and records its untrimmed
 combined output and actual exit code. If one command is not enough, split the task instead of
@@ -216,7 +224,8 @@ Usage:
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId,
-parentTaskId, verifiesTaskId, acceptanceCriteria, completionCriterion, acceptanceCommand,
+parentTaskId, verifiesTaskId, acceptanceCriteria, completionCriterion,
+completionCriterionOverrideReason, acceptanceCommand,
 acceptanceExpectedExitCode, dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady,
 completionPolicy. Nothing is written unless every item is valid.
 
@@ -1151,6 +1160,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
 	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF)")
+	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
 	dueDate := fs.String("due-date", "", "ISO due date")
@@ -1278,6 +1288,12 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if flagWasSet(fs, "completion-criterion") {
 		body["completionCriterion"] = *completionCriterion
+	}
+	if flagWasSet(fs, "completion-criterion-override-reason") {
+		if strings.TrimSpace(*completionCriterionOverrideReason) == "" {
+			return fmt.Errorf("--completion-criterion-override-reason cannot be blank")
+		}
+		body["completionCriterionOverrideReason"] = strings.TrimSpace(*completionCriterionOverrideReason)
 	}
 	if commandSet {
 		body["acceptanceCommand"] = *acceptanceCommand
@@ -2197,6 +2213,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
 				"--completion-criterion <EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF> (the task's one normal completion criterion; peers, default HUMAN_SIGNOFF)",
+				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
 			)

@@ -4,7 +4,7 @@ import { MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/re
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import { QUIET_MS } from '../lib/projectAttention';
 import {
@@ -26,6 +26,7 @@ import {
   runAtIso,
   runAtProblem,
   scheduledStart,
+  taskCriterionShapeAdviceFrom,
   RUN_AT_IMPOSSIBLE,
   canCreateProjectTask,
   matchesOpenProjectView,
@@ -1791,6 +1792,48 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     const draftFields = source.match(/export interface NewProjectTaskDraft \{([^}]*)\}/)?.[1] ?? '';
     expect(draftFields).toContain('title: string;');
     expect(draftFields).not.toContain('parentTaskId');
+  });
+
+  it('renders criterion-shape advice as a question and sends the audited override on retry', () => {
+    const body = {
+      code: 'TASK_CRITERION_SHAPE_ADVICE',
+      kind: 'ADVISORY',
+      advisory: true,
+      declaredCriterion: 'HUMAN_SIGNOFF',
+      suggestedCriterion: 'EXECUTABLE',
+      reason: 'The acceptance prose matched “spec 通过”.',
+    } as const;
+    const error = new ApiError(
+      'Use EXECUTABLE or explain the override.',
+      409,
+      body.code,
+      body,
+    );
+
+    expect(taskCriterionShapeAdviceFrom(error)).toEqual({
+      declaredCriterion: 'HUMAN_SIGNOFF',
+      suggestedCriterion: 'EXECUTABLE',
+      reason: body.reason,
+    });
+    const rendered = renderForm({
+      title: 'N17',
+      acceptanceCriteria: 'spec 通过',
+      completionCriterion: 'HUMAN_SIGNOFF',
+    }, { error });
+    expect(rendered).toContain('Consider EXECUTABLE');
+    expect(rendered).toContain('Why keep HUMAN_SIGNOFF?');
+    expect(rendered).toContain('Required to override this advice; stored on the task');
+
+    expect(newProjectTaskBody(encodeId(P1), {
+      title: 'N17',
+      acceptanceCriteria: '  spec 通过  ',
+      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterionOverrideReason: '  L0 cannot safely judge its own execution path  ',
+    })).toMatchObject({
+      acceptanceCriteria: 'spec 通过',
+      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterionOverrideReason: 'L0 cannot safely judge its own execution path',
+    });
   });
 
   it('says "inherit" by leaving the field out, never by copying the assignee’s provider', () => {
