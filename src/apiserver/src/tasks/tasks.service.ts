@@ -6704,9 +6704,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.triggerDependents(ownerId, id).catch((e) =>
         this.logger.warn(`triggerDependents failed for signed task ${id}: ${e?.message ?? e}`),
       );
-      await this.fileVerification(ownerId, id).catch((e) =>
-        this.logger.warn(`verification dispatch for signed task ${id} failed: ${e?.message ?? e}`),
-      );
+      // HUMAN_SIGNOFF is one of the three peer completion criteria, not the legacy manual-DONE
+      // door that `fileVerification` shadows. The signed current request is already the declared
+      // judgment fact. Filing another verifier here silently changes the route to
+      // HUMAN_SIGNOFF-then-VERIFICATION and re-blocks dependencies after the person has decided —
+      // exactly the opposite of a criterion-derived terminal transition.
     }
     await this.recomputeAggregates(
       ownerId,

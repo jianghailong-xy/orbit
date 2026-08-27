@@ -14,6 +14,7 @@
 #   scripts/deadlock-barrier.sh evidence       # N10 completion evidence against real PostgreSQL
 #   scripts/deadlock-barrier.sh judgment       # N11/N12 request, signoff and delivery lifecycle
 #   scripts/deadlock-barrier.sh completion-input # N7 fact-driven completion-input routing
+#   scripts/deadlock-barrier.sh status-derived-e2e # N9's complete fact-driven protocol replay
 #   scripts/deadlock-barrier.sh reorder        # the reversed sidebar reorder, control and fix
 #   scripts/deadlock-barrier.sh all            # every gate above, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
@@ -49,8 +50,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|judgment|completion-input|all) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|judgment|completion-input|all] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|judgment|completion-input|status-derived-e2e|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|dispatch-epoch|reorder|evidence|judgment|completion-input|status-derived-e2e|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -65,9 +66,16 @@ trap cleanup EXIT
 
 echo "==> provisioning $CONTAINER ($IMAGE) on 127.0.0.1:$PORT"
 docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+STORAGE_ARGS=()
+# N9's acceptance command explicitly requires a one-shot tmpfs database. `all` includes N9 and
+# therefore takes the same storage contract; every other targeted lock fixture keeps its historical
+# anonymous-volume shape.
+if [ "$TARGET" = "status-derived-e2e" ] || [ "$TARGET" = "all" ]; then
+  STORAGE_ARGS=(--tmpfs /var/lib/postgresql/data:rw,size=1g)
+fi
 docker run -d --name "$CONTAINER" \
   -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e "POSTGRES_DB=postgres" \
-  -p "127.0.0.1:$PORT:5432" "$IMAGE" >/dev/null || exit 1
+  "${STORAGE_ARGS[@]}" -p "127.0.0.1:$PORT:5432" "$IMAGE" >/dev/null || exit 1
 # Over TCP, not the unix socket: initdb runs a temporary server that listens on the socket
 # only, and probing it there reports "ready" seconds before the real server exists.
 ready() { docker exec -e PGPASSWORD="$PASSWORD" "$CONTAINER" \
@@ -96,7 +104,7 @@ URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
 case "$TARGET" in
   # session-scope runs LAST because it rebuilds the pre-0133 trigger mid-test: an interrupted
   # run must never be able to leave a baseline executing against a schema it did not intend.
-  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry reorder dependency-revision dispatch-epoch evidence judgment completion-input session-scope) ;;
+  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry reorder dependency-revision dispatch-epoch evidence judgment completion-input status-derived-e2e session-scope) ;;
   *)   TARGETS=("$TARGET") ;;
 esac
 
@@ -147,6 +155,10 @@ run_target() {
       build/tasks/verification-epoch.pg.spec.js) ;;
     completion-input)
       CMD=("$NODE" --test --test-concurrency=1 build/projects/completion-input-routing.pg.spec.js) ;;
+    status-derived-e2e)
+      CMD=("$NODE" --test --test-concurrency=1 \
+        build/projects/project-acceptance-events.pg.spec.js \
+        build/tasks/task-status-derived-end-to-end.pg.spec.js) ;;
   esac
   echo "==> $1"
   # Every target here makes real deadlocks on purpose. This is how the counters in
