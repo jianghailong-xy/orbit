@@ -1,5 +1,9 @@
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 
+/** Durable task-timeline signal emitted when a reserved L0 turn cannot yield a comparison. */
+export const EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE =
+  'EXECUTABLE_ACCEPTANCE_UNAVAILABLE';
+
 // Sessions that could still be working a task: live (RUNNING/AWAITING_INPUT/
 // INTERRUPTED) or queued for a runner slot (PENDING). Mirrors the reaper's LIVE
 // set plus PENDING.
@@ -110,6 +114,46 @@ export async function postExecutableAcceptanceComment(
         `推导状态：${status}\n\n` +
         `原始输出（stdout/stderr 合并，未裁剪；PostgreSQL 不可存储的 NUL 除外）：\n` +
         rawOutput,
+    },
+  });
+}
+
+/**
+ * A reserved EXECUTABLE turn is a mechanical evaluator, so a transport/declaration mismatch is
+ * not a failing criterion result and must not be turned into TaskStatus.FAILED. It still needs a
+ * durable, human-readable exit: this append-only signal records the command that was owed, the
+ * expectation it was bound to, and why no comparable exit-code fact exists.
+ *
+ * The first conversation-turn ACK owns this write, so one unavailable turn produces one comment;
+ * a later attempt gets its own comment and a later comparable result closes the logical episode
+ * while these records remain audit evidence.
+ */
+export async function postExecutableAcceptanceUnavailableComment(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+  command: string,
+  expectedExitCode: number,
+  reason: string,
+): Promise<void> {
+  const task = await tx.task.findUnique({
+    where: { id: taskId },
+    select: { assigneeId: true, creatorType: true, creatorId: true },
+  });
+  if (!task) return;
+  await tx.taskComment.create({
+    data: {
+      taskId,
+      authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
+      authorId: task.assigneeId ?? task.creatorId,
+      body:
+        `<!-- orbit:${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE} -->\n` +
+        `**需要人工介入：EXECUTABLE 验收未能判定（系统自动记录）**\n\n` +
+        `任务声明的验收命令没有返回可与期望值比较的原始结果；系统没有猜测任务状态。\n\n` +
+        `命令：${command}\n\n` +
+        `期望退出码：${expectedExitCode}\n\n` +
+        `无法判定原因：\n${reason}\n\n` +
+        `请修复执行环境或声明后重新运行任务；若工作不再可继续，请由执行会话明确报告 FAILED。\n\n` +
+        `信号来源：${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE}`,
     },
   });
 }

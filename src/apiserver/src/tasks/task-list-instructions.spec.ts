@@ -259,8 +259,10 @@ test('an EXECUTABLE task delegates its terminal status to the one declared comma
     list: null,
   }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+  assert.match(step3, /系统会在本执行会话的工作区自动运行/);
   assert.match(step3, /唯一 EXECUTABLE 验收命令/);
   assert.match(step3, /期望退出码 0/);
+  assert.match(step3, /命令、原始输出和实际退出码写入任务评论/);
   assert.match(step3, /相等则推导 DONE，否则推导 FAILED/);
   assert.match(step3, /不要自行写 status/);
   assert.match(step3, /不要让 coordinator 审批/);

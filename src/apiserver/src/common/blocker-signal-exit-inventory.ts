@@ -196,4 +196,10 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     resolveWhen:
       'The bound task_judgment_request becomes DECIDED from its declared consumer or SUPERSEDED by a substantively new evidence revision; the request and old evidence remain auditable.',
   },
+  {
+    family: 'DURABLE_SIGNAL',
+    type: 'EXECUTABLE_ACCEPTANCE_UNAVAILABLE',
+    resolveWhen:
+      'A later reserved EXECUTABLE turn records a comparable command result, or the task is explicitly failed, cancelled, retired, or otherwise ceases to await this criterion; the timeline comment remains append-only audit evidence.',
+  },
 ] as const satisfies readonly BlockerSignalExitRegistration[];

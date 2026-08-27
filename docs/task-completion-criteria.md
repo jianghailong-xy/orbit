@@ -43,6 +43,15 @@ ordinary execution turn, with a two-minute timeout. A trailing `&` is passed to 
 text and never activates Orbit's detached-shell shortcut, because the runner must observe a final
 exit code.
 
+The ordinary execution turn does not first write `IN_PROGRESS`. A newly dispatched task remains
+`OPEN` until the reserved shell result is recorded; a retry of a prior failed attempt may already
+be `IN_PROGRESS`. Both are pending inputs to the evaluator. A matching actual exit code derives
+`DONE`, and a non-matching actual exit code derives `FAILED`, in the same transaction that stores
+the command, raw combined output, and actual exit code. If the reserved turn cannot return a
+comparable result (for example, an old runner omits the shell fields or the declaration changes
+while it runs), Orbit leaves the task's pending status untouched and appends an
+`EXECUTABLE_ACCEPTANCE_UNAVAILABLE` needs-human signal instead of silently parking it.
+
 The working directory is the session execution directory:
 
 1. When git worktree isolation is active, it is that session's worktree at the same relative

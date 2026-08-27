@@ -109,6 +109,7 @@ import { PushService } from '../push/push.service';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   postExecutableAcceptanceComment,
+  postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
@@ -214,6 +215,18 @@ export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
 // marks provenance and binds the expected exit code: one successful message mints one shell turn,
 // and its unique key makes a lost /turn-complete response unable to enqueue the command twice.
 const TASK_ACCEPTANCE_CLIENT_TURN_PREFIX = 'system:task-acceptance:v1:';
+
+// A normal task starts OPEN and stays there while its run does the work. IN_PROGRESS exists only
+// for the retry of a prior FAILED run. Neither is an assertion about completion, so both are valid
+// inputs to the same mechanical EXECUTABLE evaluator; no actor has to write an interim status.
+const EXECUTABLE_ACCEPTANCE_PENDING_STATUSES: readonly TaskStatus[] = [
+  TaskStatus.OPEN,
+  TaskStatus.IN_PROGRESS,
+];
+
+function awaitsExecutableAcceptance(status: TaskStatus): boolean {
+  return EXECUTABLE_ACCEPTANCE_PENDING_STATUSES.includes(status);
+}
 
 function taskAcceptanceClientTurnId(
   completedTurnId: string,
@@ -2411,7 +2424,7 @@ export class RunnerApiController {
         acceptanceExpectedExitCode: number | null;
         completionCriterion: TaskCompletionCriterionValue;
       } | null = null;
-      let acceptanceTaskStillInProgress = false;
+      let acceptanceTaskAwaitingResult = false;
       if (taskAcceptanceTurn && current.taskId) {
         // The first read only tells us which rank-40 project row to take. If the task moves while
         // we wait, the locked re-read below disagrees and this attempt stays unsettled for L2;
@@ -2442,7 +2455,8 @@ export class RunnerApiController {
           FROM "task"
           WHERE "id" = ${current.taskId}::uuid
           FOR UPDATE`;
-        acceptanceTaskStillInProgress = rows[0]?.status === TaskStatus.IN_PROGRESS;
+        acceptanceTaskAwaitingResult = rows[0] != null
+          && awaitsExecutableAcceptance(rows[0].status);
         if (rows[0]?.projectId === (taskProject?.projectId ?? null)) {
           lockedAcceptanceTask = rows[0] ?? null;
         }
@@ -2597,7 +2611,9 @@ export class RunnerApiController {
       let acceptanceFailureReason: string | null = null;
       if (
         taskAcceptanceTurn
-        && lockedAcceptanceTask?.status === TaskStatus.IN_PROGRESS
+        && lockedAcceptanceTask != null
+        && awaitsExecutableAcceptance(lockedAcceptanceTask.status)
+        && lockedAcceptanceTask.completionCriterion === 'EXECUTABLE'
         && lockedAcceptanceTask.acceptanceCommand != null
         && lockedAcceptanceTask.acceptanceExpectedExitCode != null
         && lockedAcceptanceTask.acceptanceExpectedExitCode === queuedAcceptanceExpectedExitCode
@@ -2670,14 +2686,14 @@ export class RunnerApiController {
             });
           }
         }
-        // The command, expectation and IN_PROGRESS state are repeated in the write even though
+        // The command, expectation and pending state are repeated in the write even though
         // their row is locked: they make the compare-and-set visible in SQL and fail closed if
         // this code is ever moved away from the lock without its guard.
         const changed = requestBelongsToThisEvaluator
           ? await tx.task.updateMany({
               where: {
                 id: lockedAcceptanceTask.id,
-                status: TaskStatus.IN_PROGRESS,
+                status: { in: [...EXECUTABLE_ACCEPTANCE_PENDING_STATUSES] },
                 acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
                 acceptanceExpectedExitCode: expectedExitCode,
                 completionCriterion: 'EXECUTABLE',
@@ -2704,14 +2720,24 @@ export class RunnerApiController {
         }
       }
       // A reserved turn whose evidence cannot be compared is a transport failure, not a criterion
-      // input. End the Session, but leave the Task IN_PROGRESS and its evidence-bound request open:
-      // no EXECUTABLE_RESULT_RECORDED fact exists to derive a judgment from. This includes an older
-      // runner omitting the fields and a declaration edited while its old command was running.
-      if (taskAcceptanceTurn && acceptanceTaskStillInProgress && !acceptanceTaskChanged) {
+      // input. End the Session, but leave the Task in its existing pending state and its
+      // evidence-bound request open: no EXECUTABLE_RESULT_RECORDED fact exists from which to derive
+      // a judgment. Persist the human-facing signal in this same first-ACK transaction so the
+      // failure can never become a silent OPEN task. This includes an older runner omitting the
+      // fields, a declaration edited while its old command was running, and a result delivered by
+      // a Session other than the request's named evaluator.
+      if (taskAcceptanceTurn && acceptanceTaskAwaitingResult && !acceptanceTaskChanged) {
         failSession = true;
         acceptanceFailureReason = dto.status === RunStatus.FAILED
           ? (dto.result || 'acceptance command did not return a comparable result')
           : 'acceptance command result no longer matches the current declaration';
+        await postExecutableAcceptanceUnavailableComment(
+          tx,
+          current.taskId!,
+          completedTurn?.content ?? lockedAcceptanceTask?.acceptanceCommand ?? '(unknown command)',
+          queuedAcceptanceExpectedExitCode!,
+          acceptanceFailureReason,
+        );
       }
       // A successful model turn on a task with L0 acceptance queues exactly one existing shell
       // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
@@ -2732,7 +2758,8 @@ export class RunnerApiController {
           },
         });
         if (
-          executable?.status === TaskStatus.IN_PROGRESS
+          executable != null
+          && awaitsExecutableAcceptance(executable.status)
           && executable.completionCriterion === 'EXECUTABLE'
           && executable.acceptanceCommand != null
           && executable.acceptanceExpectedExitCode != null

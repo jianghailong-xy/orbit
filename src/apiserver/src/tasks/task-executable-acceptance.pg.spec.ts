@@ -11,6 +11,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import {
@@ -34,6 +35,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
+import { EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE } from './reclaim-stalled-task';
 import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -131,7 +133,11 @@ async function fixture(
   const taskId = declared.id;
   assert.equal(declared.acceptanceCommand, acceptance?.command ?? null);
   assert.equal(declared.acceptanceExpectedExitCode, acceptance?.expectedExitCode ?? null);
-  await db.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS } });
+  assert.equal(
+    declared.status,
+    TaskStatus.OPEN,
+    'dispatch does not invent an interim status before the criterion has an input',
+  );
   await db.session.create({
     data: {
       id: sessionId,
@@ -219,7 +225,7 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
   await finishMessage(api, f);
 
   // The executor completed a turn and wrote no Task status. Only the L0 shell result may settle it.
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.IN_PROGRESS);
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.OPEN);
   const acceptance = await dequeueAcceptance(api, f);
   assert.equal(acceptance.content, command);
 
@@ -280,6 +286,49 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
     'L0 settled the task mechanically, so the missing-judgment-path signal must not exist',
   );
   assert.doesNotMatch(comment.body, /ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH/);
+  assert.doesNotMatch(comment.body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
+});
+
+suite('the real OPEN/no-evidence scenario runs true and stores its raw result', async (t) => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const sql = new Client({ connectionString: URL });
+  await sql.connect();
+  const db = prismaClientFor(URL!);
+  t.after(async () => {
+    await db.$disconnect();
+    await sql.end();
+  });
+  await empty(sql);
+
+  const f = await fixture(db, 'open-true', { command: 'true', expectedExitCode: 0 });
+  const api = controller(db);
+  assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 0);
+  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: f.taskId } }), 0);
+
+  await finishMessage(api, f);
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.OPEN);
+  const acceptance = await dequeueAcceptance(api, f);
+  assert.equal(acceptance.content, 'true');
+
+  // This is the same bash contract the runner uses. `true` is genuinely executed here; its empty
+  // stdout/stderr and numeric process status are then reported through the real runner endpoint.
+  const shell = spawnSync('bash', ['-lc', acceptance.content!], { encoding: 'utf8' });
+  assert.equal(shell.error, undefined);
+  assert.equal(shell.status, 0);
+  const rawOutput = `${shell.stdout}${shell.stderr}`;
+  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellExitCode: shell.status!,
+    shellOutput: rawOutput,
+  });
+
+  assert.deepEqual(result, { ok: true, status: RunStatus.AWAITING_INPUT });
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.DONE);
+  const comment = await db.taskComment.findFirstOrThrow({ where: { taskId: f.taskId } });
+  assert.match(comment.body, /命令：true[\s\S]*期望退出码：0[\s\S]*实际退出码：0/);
+  assert.ok(comment.body.endsWith(rawOutput), 'the empty raw output is stored without substitution');
 });
 
 suite('a different exit code derives FAILED, never OPEN', async (t) => {
@@ -313,10 +362,61 @@ suite('a different exit code derives FAILED, never OPEN', async (t) => {
   assert.equal(session.status, RunStatus.FAILED);
   assert.equal(
     await db.taskComment.count({
-      where: { taskId: f.taskId, body: { contains: 'ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH' } },
+      where: {
+        taskId: f.taskId,
+        body: { contains: EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE },
+      },
     }),
     0,
     'a declared L0 path remains the verdict owner even when its derived result is FAILED',
+  );
+});
+
+suite('an acceptance turn without a comparable shell result emits a needs-human signal', async (t) => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const sql = new Client({ connectionString: URL });
+  await sql.connect();
+  const db = prismaClientFor(URL!);
+  t.after(async () => {
+    await db.$disconnect();
+    await sql.end();
+  });
+  await empty(sql);
+
+  const f = await fixture(db, 'missing-shell-result', { command: 'true', expectedExitCode: 0 });
+  const api = controller(db);
+  await finishMessage(api, f);
+  const acceptance = await dequeueAcceptance(api, f);
+  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.FAILED,
+    subtype: 'shell',
+    result: 'runner did not return shellExitCode/shellOutput',
+  });
+
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.equal(
+    (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
+    TaskStatus.OPEN,
+    'a transport failure is not a criterion result and cannot guess Task FAILED',
+  );
+  const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
+  assert.equal(comments.length, 1);
+  assert.match(comments[0].body, /需要人工介入：EXECUTABLE 验收未能判定/);
+  assert.match(comments[0].body, /命令：true[\s\S]*期望退出码：0/);
+  assert.match(comments[0].body, /runner did not return shellExitCode\/shellOutput/);
+  assert.match(comments[0].body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
+
+  await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.FAILED,
+    subtype: 'shell',
+    result: 'runner did not return shellExitCode/shellOutput',
+  });
+  assert.equal(
+    await db.taskComment.count({ where: { taskId: f.taskId } }),
+    1,
+    'a retried turn-complete cannot duplicate the signal',
   );
 });
 
@@ -351,10 +451,12 @@ suite('an in-flight result cannot settle a declaration whose expected exit code 
   assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
   assert.equal(
     (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.IN_PROGRESS,
-    'no comparison means no guessed Task status; the terminal Session feeds L2 instead',
+    TaskStatus.OPEN,
+    'no comparison means no guessed Task status',
   );
-  assert.equal(await db.taskComment.count({ where: { taskId: f.taskId } }), 0);
+  const staleSignal = await db.taskComment.findFirstOrThrow({ where: { taskId: f.taskId } });
+  assert.match(staleSignal.body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
+  assert.match(staleSignal.body, /命令：printf stale[\s\S]*期望退出码：0/);
 });
 
 suite('an executable result from a different Session cannot consume the open request', async (t) => {
@@ -418,13 +520,19 @@ suite('an executable result from a different Session cannot consume the open req
 
   assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
   assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.IN_PROGRESS, 'the legacy L0 path cannot bypass an explicit request recipient');
+    TaskStatus.OPEN, 'the legacy L0 path cannot bypass an explicit request recipient');
   assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
     where: { id: evidence.judgmentRequest.id },
   })).status, 'OPEN');
   assert.equal(await db.taskExecutableJudgmentResult.count({
     where: { requestId: evidence.judgmentRequest.id },
   }), 0);
+  assert.equal(await db.taskComment.count({
+    where: {
+      taskId: f.taskId,
+      body: { contains: EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE },
+    },
+  }), 1, 'a wrong evaluator leaves an actionable signal instead of a silent OPEN request');
 });
 
 suite('a task with no command keeps the pre-T10 turn-complete behaviour', async (t) => {
@@ -449,5 +557,5 @@ suite('a task with no command keeps the pre-T10 turn-complete behaviour', async 
     await db.conversationTurn.count({ where: { sessionId: f.sessionId, kind: 'shell' } }),
     0,
   );
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.IN_PROGRESS);
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.OPEN);
 });
