@@ -1,5 +1,6 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Button, Input, Segmented } from 'antd';
+import { useId } from 'react';
 import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
@@ -16,79 +17,120 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  */
 export const PROJECTS_PHONE_QUERY = '(max-width: 640px)';
 
-/**
- * Which projects the list asks the server for.
- *
- * These are the API's three mutually exclusive lifecycle states. There is deliberately no All:
- * mixing terminal history into the attention inbox duplicated Completed both as a filter and as a
- * long section at the bottom, while also calling CANCELLED work completed.
- */
+/** The API's three mutually exclusive, persisted project lifecycle states. */
 export type ProjectFilter = 'OPEN' | 'DONE' | 'CANCELLED';
 
-const FILTER_OPTIONS: { label: string; value: ProjectFilter }[] = [
-  { label: 'Open', value: 'OPEN' },
+/** A local view over the one OPEN response. Running and Ready never become lifecycle states. */
+export type OpenProjectView = 'ALL' | 'RUNNING' | 'READY';
+
+const HISTORY_OPTIONS: { label: string; value: Exclude<ProjectFilter, 'OPEN'> }[] = [
   { label: 'Completed', value: 'DONE' },
   { label: 'Cancelled', value: 'CANCELLED' },
 ];
 
+function counted(label: string, count: number | undefined): string {
+  return count === undefined ? label : `${label} ${count.toLocaleString('en-US')}`;
+}
+
 /**
- * The row under the page title: find a project, narrow to a status, or start a new one.
+ * The Projects heading and its controls.
  *
- * Presentational — it holds no state and reads nothing. The page owns both the search text and the
- * filter, because the filter is half of the list's query key and the search is what the empty
- * state has to name; a toolbar that kept them to itself could not be asked what it is showing.
- *
- * The viewport is the one thing it does read, and that is not state either: below
- * PROJECTS_PHONE_QUERY the filter and a labelled create button want 378px of a 361px line on their
- * own, so the row wraps (see .projects-toolbar in index.css) and the button gives up its label —
- * 34px of icon leaves the filter the 229px it needs. Nothing else about the toolbar changes: same
- * control, same handler, same accessible name.
+ * Lifecycle and execution are deliberately not one segmented control. Open is the default page
+ * scope; All / Running / Ready narrow that scope locally. History is a separate destination and
+ * only then exposes Completed / Cancelled. This keeps the everyday surface to one selectable row
+ * without pretending Running is a sibling of Open.
  */
 export function ProjectsToolbar({
   search,
   onSearchChange,
   filter,
   onFilterChange,
+  openView,
+  onOpenViewChange,
+  runningCount,
+  readyCount,
   onNewProject,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
   filter: ProjectFilter;
   onFilterChange: (value: ProjectFilter) => void;
+  openView: OpenProjectView;
+  onOpenViewChange: (value: OpenProjectView) => void;
+  runningCount?: number;
+  readyCount?: number;
   onNewProject: () => void;
 }) {
   const phone = useMediaQuery(PROJECTS_PHONE_QUERY);
+  const scopeHeadingId = useId();
+  const open = filter === 'OPEN';
+  const openOptions: { label: string; value: OpenProjectView }[] = [
+    { label: 'All', value: 'ALL' },
+    { label: counted('Running', runningCount), value: 'RUNNING' },
+    { label: counted('Ready', readyCount), value: 'READY' },
+  ];
+
   return (
-    <div className="projects-toolbar">
-      <Input
-        className="projects-toolbar-search"
-        // Titles AND goals, said out loud: the goal is a paragraph the row only shows a line of,
-        // so a reader typing a word they remember from it has no other way to know it counts.
-        placeholder="Search projects and goals"
-        aria-label="Search projects"
-        prefix={<SearchOutlined style={{ color: 'var(--text-4)' }} />}
-        allowClear
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-      />
-      <Segmented<ProjectFilter>
-        className="projects-toolbar-filter"
-        aria-label="Filter projects by status"
-        value={filter}
-        onChange={onFilterChange}
-        options={FILTER_OPTIONS}
-      />
-      {/* The label goes, the accessible name does not: an icon-only button with nothing to read
-          out is a button nobody can name. `aria-label` only when there is no text, so a screen
-          reader is never given the same words twice. */}
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        onClick={onNewProject}
-        aria-label={phone ? 'New project' : undefined}
-      >
-        {phone ? null : 'New project'}
-      </Button>
-    </div>
+    <>
+      <div className="projects-title-row">
+        <h1 className="page-title">Projects</h1>
+        <div className="projects-title-actions">
+          <Button
+            type="text"
+            className="projects-scope-action"
+            onClick={() => onFilterChange(open ? 'DONE' : 'OPEN')}
+          >
+            {open ? 'History' : 'Open projects'}
+          </Button>
+          {/* The label goes on a phone, the accessible name does not. */}
+          <Button
+            className="projects-new-button"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={onNewProject}
+            aria-label={phone ? 'New project' : undefined}
+          >
+            {phone ? null : 'New project'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="projects-toolbar">
+        <Input
+          className="projects-toolbar-search"
+          // Titles AND goals, said out loud: the goal is a paragraph the row only shows a line of,
+          // so a reader typing a word they remember from it has no other way to know it counts.
+          placeholder="Search projects and goals"
+          aria-label="Search projects"
+          prefix={<SearchOutlined style={{ color: 'var(--text-4)' }} />}
+          allowClear
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+        />
+
+        <div className="projects-toolbar-scope">
+          <h2 id={scopeHeadingId} className="projects-toolbar-scope-label">
+            {open ? 'Open projects' : 'Project history'}
+          </h2>
+          {open ? (
+            <Segmented<OpenProjectView>
+              className="projects-toolbar-filter"
+              aria-labelledby={scopeHeadingId}
+              value={openView}
+              onChange={onOpenViewChange}
+              options={openOptions}
+            />
+          ) : (
+            <Segmented<Exclude<ProjectFilter, 'OPEN'>>
+              className="projects-toolbar-filter"
+              aria-labelledby={scopeHeadingId}
+              value={filter}
+              onChange={(value) => onFilterChange(value)}
+              options={HISTORY_OPTIONS}
+            />
+          )}
+        </div>
+      </div>
+    </>
   );
 }

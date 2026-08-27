@@ -166,6 +166,14 @@ async function click(element: HTMLElement): Promise<void> {
   await flush();
 }
 
+function button(label: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  expect(found, `button ${label}`).toBeTruthy();
+  return found! as HTMLButtonElement;
+}
+
 /** The tags inside project ROWS. Scoped to the row head so a status word appearing in a section
  *  header or a pill cannot answer for the badge this is about. */
 const rowTags = (): string[] =>
@@ -173,10 +181,8 @@ const rowTags = (): string[] =>
     (el.textContent ?? '').trim(),
   );
 
-/** A DIRECT child of the toolbar: antd 6 renders the search box's own clear affordance as a real
- *  `<button>` inside the Input, and a descendant selector finds that one first. */
 const createButton = (): HTMLButtonElement =>
-  container.querySelector('.projects-toolbar > button') as HTMLButtonElement;
+  container.querySelector('.projects-new-button') as HTMLButtonElement;
 
 describe('projects list on a phone', () => {
   it('drops the OPEN tag the section header already states', async () => {
@@ -201,6 +207,7 @@ describe('projects list on a phone', () => {
   it('shows completed history flat without repeating its lifecycle in a header or row tag', async () => {
     stubViewport(true);
     await mount();
+    await click(button('History'));
     await click(segment('Completed'));
 
     const terminal = container.querySelector('section[data-section="completed"]')!;
@@ -216,6 +223,7 @@ describe('projects list on a phone', () => {
   it('gives cancelled history the same flat, non-repeating phone treatment', async () => {
     stubViewport(true);
     await mount();
+    await click(button('History'));
     await click(segment('Cancelled'));
 
     const terminal = container.querySelector('section[data-section="cancelled"]')!;

@@ -10120,19 +10120,55 @@ html[data-theme='dark'] .session-tag-chip {
   }
 }
 
-/* The row under the page title: search, status filter, create. Was three inline styles on the
-   component, which a media query cannot reach — and this line is exactly the one that has to
-   change on a phone: the filter (229px) and a create button carrying its label (133px) want 378px
-   of a 361px line before the search box is counted at all, and that overflow surfaced as a
-   horizontal scrollbar with the button cut in half. */
-.projects-toolbar {
+/* Projects has one heading row and one filter row. Lifecycle history is an action beside the
+   heading; the segmented control below always narrows the CURRENT scope, so Open never pretends
+   to be a sibling of Running or Ready. */
+.projects-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* 16px above, because `.page-title` carries no bottom margin of its own. */
+  gap: 12px;
+}
+.projects-title-row .page-title {
+  flex: 1;
+  min-width: 0;
+}
+.projects-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.projects-scope-action {
+  color: var(--text-2);
+}
+.projects-new-button {
+  flex: none;
+}
+.projects-toolbar {
+  display: grid;
+  gap: 12px;
   margin: 16px 0 6px;
 }
 .projects-toolbar-search {
+  width: 100%;
+}
+.projects-toolbar-scope {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.projects-toolbar-scope-label {
+  flex: none;
+  min-width: 88px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.projects-toolbar-filter {
+  width: min(100%, 360px);
+}
+.projects-toolbar-filter .ant-segmented-item {
   flex: 1;
 }
 
@@ -10282,29 +10318,28 @@ html[data-theme='dark'] .session-tag-chip {
    the original layout fine, so it is deliberately left out. Kept identical to
    PROJECTS_PHONE_QUERY, which decides the same question for the two things CSS cannot do here. */
 @media (max-width: 640px) {
-  /* NO `overflow-x: hidden` on .app-view--doc, though that is the box the reported horizontal
-     scrollbar came from (it is `overflow: auto`, which is why `body { overflow-x: hidden }` further
-     up never reached it). That container is the whole app's document view — Tasks and every settings
-     page render into it — and clipping overflow there would make any page's too-wide content
-     unreachable rather than merely ugly. The bar was the toolbar's 378px of controls on a 361px
-     line, which the rule below fixes at the source; measured at 393px afterwards, the container's
-     scrollWidth equals its clientWidth. */
-
-  /* Search takes a line; the filter and the create button share the next. */
-  .projects-toolbar {
-    flex-wrap: wrap;
+  .projects-title-actions {
+    gap: 2px;
   }
-  .projects-toolbar-search {
-    flex: 1 0 100%;
+  .projects-scope-action {
+    padding-inline: 8px;
+  }
+  .projects-new-button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+  /* The plain label establishes the parent scope; the only selectable row stays below it and
+     uses three equal, phone-sized targets. */
+  .projects-toolbar-scope {
+    display: block;
+  }
+  .projects-toolbar-scope-label {
+    min-width: 0;
+    margin-bottom: 8px;
   }
   .projects-toolbar-filter {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  /* Three equal segments rather than three text-width ones: at this width they are being tapped,
-     and "Open" is otherwise a much smaller target than "Completed" or "Cancelled". */
-  .projects-toolbar-filter .ant-segmented-item {
-    flex: 1;
+    width: 100%;
   }
 
   /* The header's small print explains what the section is ordered by. Worth a line on a desktop,
