@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "ops:task-signoff-migration": "node dist/tasks/task-signoff-migration.cli.js",
+    "ops:task-judgment-repair": "node dist/tasks/task-judgment-repair.cli.js",
     "test": "tsc -p tsconfig.test.json && node --test build/*/*.spec.js"
   },
   "prisma": {

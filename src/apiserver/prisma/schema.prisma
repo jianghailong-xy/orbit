@@ -240,6 +240,15 @@ enum TaskJudgmentRequestStatus {
   @@map("task_judgment_request_status")
 }
 
+/// Why an OPEN judgment request stopped being actionable without being decided. Evidence
+/// revisions point at their successor; TASK_ALREADY_DONE is a terminal rule and has no successor.
+enum TaskJudgmentSupersessionRule {
+  EVIDENCE_REVISED
+  TASK_ALREADY_DONE
+
+  @@map("task_judgment_supersession_rule")
+}
+
 /// How a request entered the durable judgment ledger. BACKFILL is never a migration side effect:
 /// it always names the separately invoked, bounded batch row that selected it.
 enum TaskJudgmentRequestOrigin {
@@ -3385,6 +3394,12 @@ model TaskJudgmentRequest {
   supersededById String? @map("superseded_by_id") @db.Uuid
   supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)
   supersedes TaskJudgmentRequest[] @relation("JudgmentRequestSupersession")
+  /// Audit snapshots for the transition itself. `supersededById` names a successor request;
+  /// these fields name the principal and Session that caused the transition and the rule applied.
+  supersessionRule TaskJudgmentSupersessionRule? @map("supersession_rule")
+  supersededActorType CreatorType? @map("superseded_actor_type")
+  supersededActorId String? @map("superseded_actor_id") @db.Uuid
+  supersededSourceSessionId String? @map("superseded_source_session_id") @db.Uuid
 
   executableResult TaskExecutableJudgmentResult?
   humanSignoff TaskHumanSignoff?

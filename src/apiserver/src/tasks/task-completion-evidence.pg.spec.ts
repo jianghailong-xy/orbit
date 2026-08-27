@@ -2,7 +2,7 @@
  * N10's first-class evidence fact against real PostgreSQL.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable guarded database with
- * migration 0178 applied.
+ * current migrations applied.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -30,7 +30,7 @@ const suite = URL ? test : test.skip;
 async function empty(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
   await client.query(`
-    TRUNCATE "task", "session", "workspace", "runner", "user"
+    TRUNCATE "task", "session", "project", "workspace", "runner", "user"
     RESTART IDENTITY CASCADE
   `);
 }
@@ -39,6 +39,7 @@ async function fixture(db: PrismaClient) {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
+  const projectId = randomUUID();
   const taskId = randomUUID();
   const sessionId = randomUUID();
   await db.user.create({
@@ -50,10 +51,14 @@ async function fixture(db: PrismaClient) {
   await db.workspace.create({
     data: { id: workspaceId, ownerId, runnerId, name: 'n10-workspace', enabled: true },
   });
+  await db.project.create({
+    data: { id: projectId, ownerId, title: 'N24 terminal evidence request' },
+  });
   await db.task.create({
     data: {
       id: taskId,
       ownerId,
+      projectId,
       title: 'explicit evidence',
       creatorType: CreatorType.USER,
       creatorId: ownerId,
@@ -78,7 +83,7 @@ async function fixture(db: PrismaClient) {
       startsTaskWork: true,
     },
   });
-  return { ownerId, workspaceId, taskId, sessionId };
+  return { ownerId, workspaceId, projectId, taskId, sessionId };
 }
 
 suite('AWAITING_INPUT submits versioned evidence without changing either lifecycle', async (t) => {
@@ -173,6 +178,10 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(audit[0].id, replay.id);
   assert.equal(audit[0].judgmentRequest.status, 'SUPERSEDED');
   assert.equal(audit[0].judgmentRequest.supersededById, changed.judgmentRequest.id);
+  assert.equal(audit[0].judgmentRequest.supersessionRule, 'EVIDENCE_REVISED');
+  assert.equal(audit[0].judgmentRequest.supersededActorType, CreatorType.AGENT);
+  assert.equal(audit[0].judgmentRequest.supersededActorId, f.workspaceId);
+  assert.equal(audit[0].judgmentRequest.supersededSourceSessionId, f.sessionId);
   assert.equal(audit[1].judgmentRequest.status, 'OPEN');
   assert.equal(await db.taskJudgmentRequest.count({
     where: { taskId: f.taskId, status: 'OPEN' },
@@ -185,11 +194,88 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
     id: changed.judgmentRequest.id,
     evidence_digest: changed.evidenceDigest,
   }]);
+  assert.equal((await sql.query<{ n: number }>(`
+    SELECT count(*)::int AS n FROM "project_judgment_blocker"
+     WHERE "project_id" = '${f.projectId}'::uuid AND "task_id" = '${f.taskId}'::uuid
+  `)).rows[0].n, 1);
 
   const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
   const task = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
   assert.equal(session.status, RunStatus.AWAITING_INPUT);
   assert.equal(task.status, TaskStatus.IN_PROGRESS);
+
+  // N24: once the task's declared criterion is already satisfied, a later evidence revision is
+  // still retained but neither the old nor the new request remains actionable.
+  await db.task.update({ where: { id: f.taskId }, data: { status: TaskStatus.DONE } });
+  const terminalEvidence = await service.submit(f.ownerId, f.taskId, actor, {
+    sourceSessionId: f.sessionId,
+    idempotencyKey: 'turn-3-after-done',
+    evidence: { ...firstPayload, artifactSha256: 'b'.repeat(64), note: 'useful after DONE' },
+  });
+  assert.equal(terminalEvidence.revision, '3');
+  assert.equal(terminalEvidence.judgmentRequest.status, 'SUPERSEDED');
+  assert.equal(terminalEvidence.judgmentRequest.supersededById, null);
+  assert.equal(terminalEvidence.judgmentRequest.supersessionRule, 'TASK_ALREADY_DONE');
+  assert.equal(terminalEvidence.judgmentRequest.supersededActorType, CreatorType.AGENT);
+  assert.equal(terminalEvidence.judgmentRequest.supersededActorId, f.workspaceId);
+  assert.equal(terminalEvidence.judgmentRequest.supersededSourceSessionId, f.sessionId);
+  assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 3);
+  const terminalAudit = await service.list(f.ownerId, f.taskId);
+  assert.deepEqual(terminalAudit.map((row) => row.revision), ['1', '2', '3']);
+  assert.deepEqual(terminalAudit[2].evidence, terminalEvidence.evidence);
+  assert.equal(terminalAudit[1].judgmentRequest.status, 'SUPERSEDED');
+  assert.equal(terminalAudit[1].judgmentRequest.supersessionRule, 'TASK_ALREADY_DONE');
+  assert.equal(terminalAudit[2].judgmentRequest.status, 'SUPERSEDED');
+  assert.equal(await db.taskJudgmentRequest.count({
+    where: { taskId: f.taskId, status: 'OPEN' },
+  }), 0);
+  assert.equal((await sql.query<{ n: number }>(`
+    SELECT count(*)::int AS n FROM "task_judgment_signal" WHERE "task_id" = '${f.taskId}'::uuid
+  `)).rows[0].n, 0);
+  assert.equal((await sql.query<{ n: number }>(`
+    SELECT count(*)::int AS n FROM "project_judgment_blocker"
+     WHERE "project_id" = '${f.projectId}'::uuid AND "task_id" = '${f.taskId}'::uuid
+  `)).rows[0].n, 0);
+
+  // The explicit production-repair door is the same terminal-rule helper with a narrower target.
+  // It refuses an unfinished task and records the current Session/agent when the DONE predicate
+  // later makes the exact request eligible.
+  await db.task.update({ where: { id: f.taskId }, data: { status: TaskStatus.IN_PROGRESS } });
+  const repairCandidate = await service.submit(f.ownerId, f.taskId, actor, {
+    sourceSessionId: f.sessionId,
+    idempotencyKey: 'turn-4-repair-candidate',
+    evidence: { ...firstPayload, artifactSha256: 'c'.repeat(64) },
+  });
+  assert.equal(repairCandidate.judgmentRequest.status, 'OPEN');
+  await assert.rejects(
+    service.reconcileSatisfiedJudgmentRequest(f.ownerId, f.taskId, {
+      requestId: repairCandidate.judgmentRequest.id,
+      sourceSessionId: f.sessionId,
+    }),
+    /Only a Task whose completion criterion is already satisfied at DONE may use this repair/,
+  );
+  assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
+    where: { id: repairCandidate.judgmentRequest.id },
+  })).status, 'OPEN');
+  await db.task.update({ where: { id: f.taskId }, data: { status: TaskStatus.DONE } });
+  const repaired = await service.reconcileSatisfiedJudgmentRequest(f.ownerId, f.taskId, {
+    requestId: repairCandidate.judgmentRequest.id,
+    sourceSessionId: f.sessionId,
+  });
+  assert.equal(repaired.status, 'SUPERSEDED');
+  assert.equal(repaired.supersededById, null);
+  assert.equal(repaired.supersessionRule, 'TASK_ALREADY_DONE');
+  assert.equal(repaired.supersededActorType, CreatorType.AGENT);
+  assert.equal(repaired.supersededActorId, f.workspaceId);
+  assert.equal(repaired.supersededSourceSessionId, f.sessionId);
+  assert.equal(await db.taskJudgmentRequest.count({
+    where: { taskId: f.taskId, status: 'OPEN' },
+  }), 0);
+  const repairReplay = await service.reconcileSatisfiedJudgmentRequest(f.ownerId, f.taskId, {
+    requestId: repairCandidate.judgmentRequest.id,
+    sourceSessionId: f.sessionId,
+  });
+  assert.deepEqual(repairReplay, repaired);
 
   const requiredColumns = await sql.query<{ column_name: string; is_nullable: string }>(`
     SELECT column_name, is_nullable FROM information_schema.columns

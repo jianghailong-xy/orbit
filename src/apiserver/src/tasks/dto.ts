@@ -182,6 +182,14 @@ export class TaskJudgmentRequestDto {
   @IsOptional()
   @IsPublicId()
   supersededById!: string | null;
+  supersessionRule!: 'EVIDENCE_REVISED' | 'TASK_ALREADY_DONE' | null;
+  supersededActorType!: CreatorType | null;
+  @IsOptional()
+  @IsPublicId()
+  supersededActorId!: string | null;
+  @IsOptional()
+  @IsPublicId()
+  supersededSourceSessionId!: string | null;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { CreatorType, Prisma, TaskJudgmentRequestStatus } from '@prisma/client';
+import { CreatorType, Prisma, TaskJudgmentRequestStatus, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -70,6 +70,7 @@ interface RequestCreationOptions {
 interface LockedCriterionTask {
   title: string;
   projectId: string | null;
+  status: TaskStatus;
   completionCriterion: TaskCompletionCriterionValue;
   acceptanceCriteria: string | null;
   acceptanceCommand: string | null;
@@ -149,6 +150,16 @@ type EvidenceRow = Prisma.TaskCompletionEvidenceGetPayload<{ include: typeof evi
 type JudgmentRequestRow = Prisma.TaskJudgmentRequestGetPayload<Record<string, never>>;
 type BackfillBatchRow = Prisma.TaskJudgmentBackfillBatchGetPayload<Record<string, never>>;
 
+interface RequestFactResult {
+  request: JudgmentRequestRow;
+  superseded: JudgmentRequestRow[];
+}
+
+export interface ReconcileSatisfiedJudgmentRequestInput {
+  requestId: string;
+  sourceSessionId: string;
+}
+
 function backfillResponse(row: BackfillBatchRow): TaskJudgmentBackfillResult {
   if (!row.finishedAt || row.scannedCount === null || row.requestCount === null
     || row.inboxCount === null || row.pushSelectedCount === null
@@ -198,6 +209,10 @@ function requestResponse(row: JudgmentRequestRow): TaskJudgmentRequestDto {
     decisionNote: row.decisionNote,
     supersededAt: row.supersededAt,
     supersededById: row.supersededById,
+    supersessionRule: row.supersessionRule,
+    supersededActorType: row.supersededActorType,
+    supersededActorId: row.supersededActorId,
+    supersededSourceSessionId: row.supersededSourceSessionId,
   };
 }
 
@@ -278,7 +293,7 @@ export class TaskCompletionEvidenceService {
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // One Task mutex serialises revision allocation, stable-fact dedupe and retry-key binding.
       const [task] = await tx.$queryRaw<LockedCriterionTask[]>(Prisma.sql`
-        SELECT "title", "project_id" AS "projectId",
+        SELECT "title", "project_id" AS "projectId", "status",
                "completion_criterion"::text AS "completionCriterion",
                "acceptance_criteria" AS "acceptanceCriteria",
                "acceptance_command" AS "acceptanceCommand",
@@ -291,8 +306,10 @@ export class TaskCompletionEvidenceService {
       `);
       if (!task) throw new NotFoundException('task not found');
 
-      // No status appears in this read or any branch: RUNNING, AWAITING_INPUT and terminal source
-      // Sessions submit the same fact. The only requirement is that this Session executes Task.
+      // Source Session status never gates the fact: RUNNING, AWAITING_INPUT and terminal source
+      // Sessions submit the same evidence. Task.status is read only to decide whether the evidence
+      // still raises an actionable question; a DONE Task keeps the evidence and closes the request
+      // under an audited rule in this same transaction.
       const sourceSession = await tx.session.findFirst({
         where: { id: input.sourceSessionId, ownerId, taskId },
         select: { id: true },
@@ -316,10 +333,12 @@ export class TaskCompletionEvidenceService {
           if (!sameRequest) {
             throw new ConflictException('idempotencyKey is already bound to different completion evidence');
           }
-          const request = await this.requestForEvidenceFact(tx, taskId, replay.evidence, task);
-          const superseded = await tx.taskJudgmentRequest.findMany({
-            where: { supersededById: request.id },
-          });
+          const { request, superseded } = await this.requestForEvidenceFact(
+            tx,
+            taskId,
+            replay.evidence,
+            task,
+          );
           return {
             evidence: response(replay.evidence, request),
             evidenceRow: replay.evidence,
@@ -377,10 +396,12 @@ export class TaskCompletionEvidenceService {
           include: evidenceInclude,
         });
       }
-      const request = await this.requestForEvidenceFact(tx, taskId, evidence, task);
-      const superseded = await tx.taskJudgmentRequest.findMany({
-        where: { supersededById: request.id },
-      });
+      const { request, superseded } = await this.requestForEvidenceFact(
+        tx,
+        taskId,
+        evidence,
+        task,
+      );
       return {
         evidence: response(evidence, request),
         evidenceRow: evidence,
@@ -408,7 +429,8 @@ export class TaskCompletionEvidenceService {
       );
       // HUMAN_SIGNOFF is addressed to a person. These facts feed N12's inbox/delivery surface and
       // deliberately never call CoordinatorJudgmentService or SessionsService.
-      if (committed.request.kind === 'HUMAN_SIGNOFF') {
+      if (committed.request.kind === 'HUMAN_SIGNOFF'
+        && committed.request.status === TaskJudgmentRequestStatus.OPEN) {
         await this.completionInputs.route(
           humanSignoffRequestedFact({
             projectId: committed.projectId,
@@ -422,7 +444,9 @@ export class TaskCompletionEvidenceService {
         );
       }
       for (const request of committed.superseded) {
-        if (request.kind !== 'HUMAN_SIGNOFF') continue;
+        if (request.kind !== 'HUMAN_SIGNOFF'
+          || request.supersessionRule !== 'EVIDENCE_REVISED'
+          || !request.supersededById) continue;
         await this.completionInputs.route(
           humanSignoffRequestSupersededFact({
             projectId: committed.projectId,
@@ -511,7 +535,7 @@ export class TaskCompletionEvidenceService {
          WHERE "id" = ${ownerId}::uuid
          FOR KEY SHARE`;
       const [task] = await tx.$queryRaw<LockedCriterionTask[]>(Prisma.sql`
-        SELECT "title", "project_id" AS "projectId",
+        SELECT "title", "project_id" AS "projectId", "status",
                "completion_criterion"::text AS "completionCriterion",
                "acceptance_criteria" AS "acceptanceCriteria",
                "acceptance_command" AS "acceptanceCommand",
@@ -671,7 +695,7 @@ export class TaskCompletionEvidenceService {
         where: { id: evidence.id },
         include: evidenceInclude,
       });
-      const request = await this.requestForEvidenceFact(tx, taskId, evidence, task, {
+      const { request } = await this.requestForEvidenceFact(tx, taskId, evidence, task, {
         origin: 'LEGACY_IMPORT',
         devicePolicy,
       });
@@ -780,6 +804,7 @@ export class TaskCompletionEvidenceService {
                evidence."id" AS "evidenceId",
                task."title",
                task."project_id" AS "projectId",
+               task."status",
                task."completion_criterion"::text AS "completionCriterion",
                task."acceptance_criteria" AS "acceptanceCriteria",
                task."acceptance_command" AS "acceptanceCommand",
@@ -820,7 +845,7 @@ export class TaskCompletionEvidenceService {
           where: { id: candidate.evidenceId },
           include: evidenceInclude,
         });
-        const request = await this.requestForEvidenceFact(tx, candidate.id, evidence, candidate, {
+        const { request } = await this.requestForEvidenceFact(tx, candidate.id, evidence, candidate, {
           origin: 'BACKFILL',
           devicePolicy: pushSet.has(candidate.id) ? 'IMMEDIATE' : 'IN_APP_ONLY',
           backfillBatchId: batchId,
@@ -868,24 +893,13 @@ export class TaskCompletionEvidenceService {
     evidence: EvidenceRow,
     lockedTask?: LockedCriterionTask,
     options: RequestCreationOptions = {},
-  ): Promise<JudgmentRequestRow> {
-    const exact = await tx.taskJudgmentRequest.findFirst({
-      where: {
-        taskId,
-        criterionRevision: evidence.criterionRevision,
-        evidenceDigest: evidence.evidenceDigest,
-        kind: lockedTask?.completionCriterion,
-      },
-    });
-    // Replaying an older fact returns its terminal request. It must never reopen it or supersede
-    // the current request merely because delivery order ran backwards.
-    if (exact) return exact;
-
+  ): Promise<RequestFactResult> {
     const task = lockedTask ?? await tx.task.findUniqueOrThrow({
       where: { id: taskId },
       select: {
         title: true,
         projectId: true,
+        status: true,
         completionCriterion: true,
         acceptanceCriteria: true,
         acceptanceCommand: true,
@@ -894,6 +908,34 @@ export class TaskCompletionEvidenceService {
         verifiesTaskId: true,
       },
     });
+    const exact = await tx.taskJudgmentRequest.findFirst({
+      where: {
+        taskId,
+        criterionRevision: evidence.criterionRevision,
+        evidenceDigest: evidence.evidenceDigest,
+        kind: task.completionCriterion,
+      },
+    });
+    // Replaying an older fact returns its terminal request. It must never reopen it or supersede
+    // the current request merely because delivery order ran backwards. The one exception is an
+    // OPEN request whose Task is already DONE: replay converges that impossible state through the
+    // same audited terminal-rule helper used for a newly submitted evidence fact.
+    if (exact) {
+      if (task.status !== TaskStatus.DONE || exact.status !== TaskJudgmentRequestStatus.OPEN) {
+        return { request: exact, superseded: [] };
+      }
+      const superseded = await this.supersedeOpenRequests(tx, taskId, {
+        actorType: evidence.actorType,
+        actorId: evidence.actorId,
+        sourceSessionId: evidence.sourceSessionId,
+      }, 'TASK_ALREADY_DONE', new Date());
+      return {
+        request: superseded.find((request) => request.id === exact.id)
+          ?? await tx.taskJudgmentRequest.findUniqueOrThrow({ where: { id: exact.id } }),
+        superseded,
+      };
+    }
+
     const requestId = randomUUID();
     const route = routeTaskJudgment(task.completionCriterion as TaskCompletionCriterionValue, {
       ownerId: evidence.ownerId,
@@ -901,7 +943,7 @@ export class TaskCompletionEvidenceService {
       requestId,
     });
     const createdAt = new Date();
-    const request = await tx.taskJudgmentRequest.create({
+    let request = await tx.taskJudgmentRequest.create({
       data: {
         id: requestId,
         taskId,
@@ -919,16 +961,36 @@ export class TaskCompletionEvidenceService {
       },
     });
 
-    // A substantive new digest replaces every older open question for this task. Criterion kind
-    // changes do not leave the old consumer alive either: one evidence version has one owner.
-    await tx.taskJudgmentRequest.updateMany({
-      where: { taskId, id: { not: request.id }, status: TaskJudgmentRequestStatus.OPEN },
-      data: {
-        status: TaskJudgmentRequestStatus.SUPERSEDED,
-        supersededAt: createdAt,
-        supersededById: request.id,
-      },
-    });
+    const auditActor = {
+      actorType: evidence.actorType,
+      actorId: evidence.actorId,
+      sourceSessionId: evidence.sourceSessionId,
+    };
+    // DONE means the declared criterion has already been satisfied. Preserve the new request as
+    // an evidence-bound audit fact, but make neither it nor any older ghost request actionable.
+    // A non-DONE task follows the ordinary N10/N11 path: this request remains OPEN and replaces
+    // every older OPEN evidence version.
+    const superseded = task.status === TaskStatus.DONE
+      ? await this.supersedeOpenRequests(
+          tx,
+          taskId,
+          auditActor,
+          'TASK_ALREADY_DONE',
+          createdAt,
+        )
+      : await this.supersedeOpenRequests(
+          tx,
+          taskId,
+          auditActor,
+          'EVIDENCE_REVISED',
+          createdAt,
+          request.id,
+          [request.id],
+        );
+    if (task.status === TaskStatus.DONE) {
+      request = superseded.find((row) => row.id === request.id)
+        ?? await tx.taskJudgmentRequest.findUniqueOrThrow({ where: { id: request.id } });
+    }
 
     // Compatibility only. New HUMAN_SIGNOFF blockers/signals are SQL views of this request and
     // are therefore not inserted or independently maintained. Older rows raised by the parked-
@@ -945,7 +1007,109 @@ export class TaskCompletionEvidenceService {
         data: { resolvedAt: createdAt, resolvedBy: 'AUTO', updatedAt: createdAt },
       });
     }
-    return request;
+    return { request, superseded };
+  }
+
+  private async supersedeOpenRequests(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+    actor: { actorType: CreatorType; actorId: string; sourceSessionId: string },
+    rule: 'EVIDENCE_REVISED' | 'TASK_ALREADY_DONE',
+    supersededAt: Date,
+    successorRequestId?: string,
+    excludedRequestIds: string[] = [],
+    includedRequestIds?: string[],
+  ): Promise<JudgmentRequestRow[]> {
+    const candidates = await tx.taskJudgmentRequest.findMany({
+      where: {
+        taskId,
+        status: TaskJudgmentRequestStatus.OPEN,
+        ...(excludedRequestIds.length > 0 ? { id: { notIn: excludedRequestIds } } : {}),
+        ...(includedRequestIds ? { id: { in: includedRequestIds } } : {}),
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    if (candidates.length === 0) return [];
+    const candidateIds = candidates.map(({ id }) => id);
+    await tx.taskJudgmentRequest.updateMany({
+      where: { id: { in: candidateIds }, status: TaskJudgmentRequestStatus.OPEN },
+      data: {
+        status: TaskJudgmentRequestStatus.SUPERSEDED,
+        supersededAt,
+        supersededById: successorRequestId ?? null,
+        supersessionRule: rule,
+        supersededActorType: actor.actorType,
+        supersededActorId: actor.actorId,
+        supersededSourceSessionId: actor.sourceSessionId,
+      },
+    });
+    return tx.taskJudgmentRequest.findMany({
+      where: { id: { in: candidateIds } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  /**
+   * Explicit operator repair for an OPEN request whose Task already reached DONE.
+   *
+   * This is intentionally narrower than a request-status patch: the Task mutex, DONE predicate,
+   * exact request identity and source Session are all re-read here, and the mutation is delegated
+   * to `supersedeOpenRequests`, the same helper used by ordinary evidence submission.
+   */
+  async reconcileSatisfiedJudgmentRequest(
+    ownerId: string,
+    taskId: string,
+    input: ReconcileSatisfiedJudgmentRequestInput,
+  ): Promise<TaskJudgmentRequestDto> {
+    if (!UUID_RE.test(ownerId) || !UUID_RE.test(taskId) || !UUID_RE.test(input.requestId)
+      || !UUID_RE.test(input.sourceSessionId)) {
+      throw new BadRequestException('repair owner, task, request and sourceSessionId must be UUIDs');
+    }
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [task] = await tx.$queryRaw<Array<{ id: string; status: TaskStatus }>>(Prisma.sql`
+        SELECT "id", "status"
+          FROM "task"
+         WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR UPDATE
+      `);
+      if (!task) throw new NotFoundException('task not found');
+      if (task.status !== TaskStatus.DONE) {
+        throw new ConflictException({
+          code: 'TASK_JUDGMENT_REPAIR_REQUIRES_DONE',
+          requiredAction: 'DECIDE_THE_OPEN_REQUEST_NORMALLY',
+          message: 'Only a Task whose completion criterion is already satisfied at DONE may use this repair.',
+        });
+      }
+      const source = await tx.session.findFirst({
+        where: { id: input.sourceSessionId, ownerId },
+        select: { workspaceId: true },
+      });
+      if (!source?.workspaceId) {
+        throw new BadRequestException('repair source Session must identify an agent workspace');
+      }
+      const request = await tx.taskJudgmentRequest.findFirst({
+        where: { id: input.requestId, taskId, ownerId },
+      });
+      if (!request) throw new NotFoundException('judgment request not found');
+      if (request.status !== TaskJudgmentRequestStatus.OPEN) {
+        if (request.status === TaskJudgmentRequestStatus.SUPERSEDED
+          && request.supersessionRule === 'TASK_ALREADY_DONE') {
+          return requestResponse(request);
+        }
+        throw new ConflictException({
+          code: 'TASK_JUDGMENT_REPAIR_REQUEST_NOT_OPEN',
+          requiredAction: 'READ_THE_EXISTING_REQUEST_CONCLUSION',
+          message: 'The named judgment request already has a different terminal conclusion.',
+        });
+      }
+      const [resolved] = await this.supersedeOpenRequests(tx, taskId, {
+        actorType: CreatorType.AGENT,
+        actorId: source.workspaceId,
+        sourceSessionId: input.sourceSessionId,
+      }, 'TASK_ALREADY_DONE', new Date(), undefined, [], [request.id]);
+      if (!resolved) throw new ConflictException('judgment request changed before repair');
+      return requestResponse(resolved);
+    }, loggedRetry(this.logger, 'taskCompletionEvidence.reconcileSatisfiedJudgmentRequest'));
   }
 
   async list(ownerId: string, taskId: string) {
