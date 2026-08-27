@@ -1,11 +1,9 @@
 /**
- * §8.6 LO1/LO4 as pure functions, plus the one thing a pure function cannot check: that the three
- * places the acceptance-fact column set is written down still agree with each other.
+ * §8.6 LO1/LO4's compatibility pre-lock helpers, plus their historical database contract.
  *
- * The pg spec beside this one proves the ORDER holds against a real PostgreSQL. This one exists for
- * the half a database cannot answer — which PATCHes need the order at all, what a caller is told
- * when the retries are spent, and whether a column added to a trigger a year from now will be
- * noticed by anyone.
+ * Migration 0182 retires the task/acceptance triggers, so these helpers are no longer part of the
+ * DONE definition. They remain conservative application locking until that broader task-write
+ * machinery is simplified; the final test makes the semantic retirement explicit.
  */
 
 import assert from 'node:assert/strict';
@@ -62,6 +60,11 @@ const MIGRATION = readFileSync(
     '0136_task_acceptance_fact_lock_order', 'migration.sql'),
   'utf8',
 );
+const RETIREMENT = readFileSync(
+  join(__dirname, '..', '..', 'prisma', 'migrations',
+    '0182_project_done_gate_acceptance_only', 'migration.sql'),
+  'utf8',
+);
 
 /** The `AFTER UPDATE OF` / `BEFORE UPDATE OF` column list of one named trigger, as a sorted set. */
 function triggerColumns(sql: string, trigger: string): string[] {
@@ -108,6 +111,17 @@ test('the migration deliberately guards nothing on the dependency table', () => 
   assert.doesNotMatch(MIGRATION, /ON "task_dependency"/);
   // And the reason is written down where the next reader will look for it.
   assert.match(MIGRATION, /task_dependency_revision/);
+});
+
+test('0182 retires both task acceptance triggers and both historical pre-lock triggers', () => {
+  for (const trigger of [
+    'project_acceptance_task_fact',
+    'project_acceptance_task_fact_update',
+    'task_acceptance_fact_lock_order_insert_delete',
+    'task_acceptance_fact_lock_order_update',
+  ]) {
+    assert.match(RETIREMENT, new RegExp(`DROP TRIGGER IF EXISTS "${trigger}" ON "task"`));
+  }
 });
 
 test('every acquisition the migration adds on a row it already holds is NOWAIT', () => {

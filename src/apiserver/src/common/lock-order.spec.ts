@@ -13,6 +13,7 @@ const runnerApi = read('src/runner-api/runner-api.controller.ts');
 const workspacesService = read('src/workspaces/workspaces.service.ts');
 const dispatchBoundary = read('prisma/migrations/0122_project_dispatch_boundary/migration.sql');
 const acceptanceRun = read('prisma/migrations/0127_project_acceptance_run/migration.sql');
+const acceptanceOnly = read('prisma/migrations/0182_project_done_gate_acceptance_only/migration.sql');
 const dependencyRevision = read('prisma/migrations/0132_task_dependency_revision/migration.sql');
 
 /**
@@ -92,11 +93,27 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
+    method: 'signoff',
+    statements: ['task.update'],
+    holds: [
+      'await lockOwnerTaskGraph(tx, ownerId);',
+      'FOR NO KEY UPDATE`;',
+      'FOR UPDATE`;',
+    ],
+    note:
+      'Rank 10 serializes graph/project moves; rank 40 locks the task\'s project when present; ' +
+      'rank 50 locks the task before the rank-60 signoff/blocker children. The final status write ' +
+      'targets that already-held row and only advances its rank-70 dispatch epoch, so event, ' +
+      'blocker resolution and derived DONE commit as one descending unit.',
+  },
+  {
+    file: 'tasks.service.ts',
     method: 'update',
     statements: [
       'task.update',
       'UPDATE "task"',
       'task.update',
+      'task.updateMany',
       'taskDependency.deleteMany',
       'taskDependency.createMany',
     ],
@@ -111,7 +128,9 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'The only Task write that can need all four ranks, and each is conditional on the write ' +
       'actually reaching that relation: 10 when it restructures, 20 when it re-files, 30 when it ' +
       'writes the task row twice (a supersession, which is its own statement beside task.update), ' +
-      '40 when it names a column project_acceptance_task_fact_update is declared over.' +
+      '40 when it names a column project_acceptance_task_fact_update is declared over. The N11 ' +
+      'verdict path locks verifier and subject together at rank 50 before its final subject ' +
+      'task.updateMany, then writes only rank-60 judgment facts.' +
       ' Unit L3 adds one more taker at that same rank 40, in the same mode and the same UUID order: the effect-time scope fence, which re-locks and re-reads the project a coordinator write was admitted under so a rotation cannot commit inside the window between the decision and the row. Same rank, same mode, no new edge. An agent edit inside a project therefore takes the ' +
       'transaction branch it used to skip: a fence outside the transaction it fences is one the ' +
       'rotation can commit past.',
@@ -119,12 +138,12 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   {
     file: 'tasks.service.ts',
     method: 'fileVerification',
-    statements: ['task.create'],
+    statements: ['task.upsert', 'task.create'],
     holds: [],
     note:
-      'A bare INSERT with no creator Session and no links. Same argument as create\'s rank-40 case: ' +
-      'the row it holds is invisible to everyone else, so its trailing project lock cannot be half ' +
-      'of a cycle.',
+      'A bare legacy INSERT, or N11\'s deterministic-id upsert whose conflict branch changes no ' +
+      'columns. Neither has a creator Session or links. Same argument as create\'s rank-40 case: ' +
+      'the new row is invisible to everyone else; replay touches only the already-identical row.',
   },
   {
     file: 'tasks.service.ts',
@@ -386,10 +405,11 @@ test('the triggers the order is derived from are still declared the way it assum
   // and it is narrowed to the three columns that can move the live-claim set — which is what keeps
   // it out of a telemetry batch entirely.
   assert.match(dispatchBoundary, /CREATE TRIGGER "session_project_capacity_serialize_update"\s+BEFORE UPDATE OF "status", "task_id", "deleted_at" ON "session"/);
-  // Rank 40 is above `task` because THIS is what a status/verdict write takes, from an AFTER
-  // trigger, on the project of the task it just wrote.
-  assert.match(acceptanceRun, /FROM "project" p WHERE p\."id" = p_project FOR NO KEY UPDATE/);
-  assert.match(acceptanceRun, /CREATE TRIGGER project_acceptance_task_fact_update\s+AFTER UPDATE OF "status", "completion_policy", "project_id", "verdict", "verifies_task_id"/);
+  // 0127 used to put rank 40 after a task status/verdict write. 0178 removes that edge because
+  // task-list state is not a project-acceptance fact.
+  assert.match(acceptanceRun, /CREATE TRIGGER project_acceptance_task_fact_update/);
+  assert.match(acceptanceOnly, /DROP TRIGGER IF EXISTS "project_acceptance_task_fact_update" ON "task"/);
+  assert.match(acceptanceOnly, /DROP TRIGGER IF EXISTS "task_acceptance_fact_lock_order_update" ON "task"/);
 });
 
 test('orderedIds is the total order the pre-locks depend on', () => {

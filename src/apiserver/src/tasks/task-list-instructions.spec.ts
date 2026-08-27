@@ -76,9 +76,9 @@ const PROMPT_WITHOUT_INSTRUCTIONS =
   '请按以下步骤进行：\n' +
   '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
   '2. 执行任务。\n' +
-  '3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，' +
-  '并逐条说明你认为哪条验收标准因此被满足。不要写 status——DONE 是解锁下游任务的授权，' +
-  '由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n' +
+  '3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，' +
+  '以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，' +
+  '只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
   '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
   '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
   '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。';
@@ -109,9 +109,9 @@ test('instructions are spliced between the task description and the reporting pr
       '请按以下步骤进行：\n' +
       '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
       '2. 执行任务。\n' +
-      '3. 完成后，用 task_comment 在该任务下贴出证据：你跑过的命令、命令的原始输出、退出码，' +
-      '并逐条说明你认为哪条验收标准因此被满足。不要写 status——DONE 是解锁下游任务的授权，' +
-      '由验收方判定，不由执行者自陈；服务端会拒绝执行会话给自己的任务写 DONE。\n' +
+      '3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，' +
+      '以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，' +
+      '只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
       '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
       '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
       '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。',
@@ -227,7 +227,8 @@ test('step 3 asks for evidence and forbids writing status', async () => {
   // claim nobody could check.
   const text = await (await promptFor({ description: 'x', list: null }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-  assert.match(step3, /task_comment/);
+  assert.match(step3, /task_evidence_submit/);
+  assert.match(step3, /不要用 task_comment 代替证据提交/);
   assert.match(step3, /原始输出/);
   assert.match(step3, /退出码/);
   assert.match(step3, /不要写 status/);
@@ -250,7 +251,7 @@ test('step 4 says FAILED, and says it instead of IN_PROGRESS', async () => {
   assert.equal(/再将状态置为 IN_PROGRESS/.test(step4), false, step4);
 });
 
-test('an L0 task delegates its terminal status to the one declared command', async () => {
+test('an EXECUTABLE task delegates its terminal status to the one declared command', async () => {
   const text = await (await promptFor({
     description: 'x',
     acceptanceCommand: 'npm test',
@@ -258,7 +259,7 @@ test('an L0 task delegates its terminal status to the one declared command', asy
     list: null,
   }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-  assert.match(step3, /唯一 L0 验收命令/);
+  assert.match(step3, /唯一 EXECUTABLE 验收命令/);
   assert.match(step3, /期望退出码 0/);
   assert.match(step3, /相等则推导 DONE，否则推导 FAILED/);
   assert.match(step3, /不要自行写 status/);
@@ -266,18 +267,13 @@ test('an L0 task delegates its terminal status to the one declared command', asy
   assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
 });
 
-test('a system run is told to write its own DONE, because the server lets it', async () => {
-  // A foreman and a verifier are exempt from the self-DONE refusal — their own run IS the
-  // deliverable and nothing else completes either one (`task-self-done-boundary.spec.ts`). Given
-  // the ordinary step 3 they would carry two contradictory instructions in one prompt: this one
-  // saying not to write a status, their own brief saying to write DONE.
+test('foreman and verifier runs are told that their criterion, not their session, writes DONE', async () => {
   for (const task of [{ isForeman: true }, { verifiesTaskId: 'subject-task' }]) {
     const text = await (await promptFor({ description: 'x', list: null, ...task }))();
     const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-    assert.match(step3, /task_update 将本任务状态（status）置为 DONE/);
-    assert.equal(/不要写 status/.test(step3), false, step3);
-    // Step 4 does not branch: a system run that FAILED is as terminal as any other, and
-    // IN_PROGRESS would hide it downstream just the same.
+    assert.match(step3, /completionCriterion 求值产生/);
+    assert.match(step3, /不要写 status/);
+    assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
     const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
     assert.match(step4, /task_update 将状态（status）置为 FAILED/);
   }

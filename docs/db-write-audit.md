@@ -26,17 +26,18 @@ write appears, moves or changes shape without its entry moving with it.
 
 | | count | what it is |
 |---|---:|---|
-| `TRANSACTION_UNITS` | 55 | Owns a transaction. This is where the retry decision lives. |
-| `TRANSACTION_PARTICIPANTS` | 31 | Writes only through a transaction client its caller owns. |
-| `STATEMENT_UNITS` | 106 | Runs outside any transaction, in one of five classes. |
-| `TRIGGER_WRITE_SOURCES` | 77 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
+| `TRANSACTION_UNITS` | 66 | Owns a transaction. This is where the retry decision lives. |
+| `TRANSACTION_PARTICIPANTS` | 35 | Writes only through a transaction client its caller owns. |
+| `STATEMENT_UNITS` | 115 | Runs outside any transaction, in one of five classes. |
+| `TRIGGER_WRITE_SOURCES` | 81 | Derived by replaying every `CREATE`/`DROP TRIGGER` in migration order. |
 
 The trigger list is the half no scan of the TypeScript could find, and it is the half both
 production deadlocks turned on: in each of them at least one wait edge came from a lock no
 statement spelled. `takes` records what a trigger reaches for in *other* relations, following the
 functions it calls — which is what makes
-`project_acceptance_task_fact_update` visible as the reason a plain `status` write on a task is a
-two-lock operation and has to pre-lock the project.
+the cross-relation effects of every live trigger visible. Migration 0178 deliberately removes the
+four task/acceptance triggers: task-list writes are no longer acceptance writes and no longer reach
+a project through that path.
 
 ## What the audit found
 
@@ -53,8 +54,8 @@ one 40P01 with the two wait edges that close the ring, and the ordered sequence 
 orders, asserted to commit with the stored positions still a permutation belonging to one whole
 request.
 
-**Every transaction boundary is now retried.** All 55 are pure database work — the spec proves the
-"pure" half by scanning every closure for an external call — so all 52 re-run whole through
+**Every transaction boundary is now retried.** All 66 are pure database work — the spec proves the
+"pure" half by scanning every closure for an external call — so all 66 re-run whole through
 `withTransactionRetry`. Two cap themselves at 2 attempts rather than 4: `TaskListsService.remove`
 and `TasksService.deleteAndStopRuns` each carry a 60s per-attempt deadline for a cascade that can
 run through tens of thousands of rows, and a cascade that size should absorb one collision rather
@@ -65,11 +66,17 @@ statement has no transaction to re-run; wrapping one in `$transaction` purely so
 something to hold would change what the statement is. They are covered by the global boundary's
 typed 503 instead. The five classes and their exposure are in `STATEMENT_CLASSES`.
 
-**One residual is recorded rather than fixed.** `TasksService.clearFailedForRetry` writes `status`
-as a single statement, so an `AFTER` trigger takes the project `FOR NO KEY UPDATE` while the task
-row is held — the project/task inversion in [the lock order](postgres-lock-order.md) §6. It is not
-resolvable from that side, and wrapping four of the fifteen single-statement status writers in
-transactions would buy the appearance of coverage rather than the property.
+**N12's device delivery is an inventoried outbox, not an exception to that rule.** The request
+trigger writes the in-app item and push ledger inside the evidence transaction. The worker's three
+autocommit fences then (1) claim one due row with `FOR UPDATE SKIP LOCKED`, (2) record the APNs
+outcome only while that lease and OPEN request still match, and (3) retire a repeated worker-crash
+lease as DEAD. APNs is called between claim and receipt, never inside a retried transaction; the
+stable logical/collapse keys make replay one notification rather than a second business fact.
+
+**The former task-status residual is retired.** Migration 0178 removes the `AFTER` trigger that
+used to take a project lock from a task-status write. This is a semantic change, not merely a lock
+repair: [project completion](project-done-gate.md) no longer treats task-list state as an acceptance
+fact, so there is no project acceptance write for `clearFailedForRetry` to serialize.
 
 ## Running the evidence
 

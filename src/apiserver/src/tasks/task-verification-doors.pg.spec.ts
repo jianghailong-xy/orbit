@@ -103,7 +103,7 @@ async function emptyWorld(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
   published.length = 0;
   await client.query(`
-    TRUNCATE "project_event", "project_decision", "project_action", "project_runtime",
+    TRUNCATE "project_action", "project_runtime",
              "task", "session", "workspace", "runner", "project", "user"
     RESTART IDENTITY CASCADE
   `);
@@ -536,7 +536,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     assert.equal(published.length, 0, 'an aggregation that changed nothing is not an event');
   });
 
-  await t.test('a verdict written through the task door is what the project reads back', async () => {
+  await t.test('a task verdict does not change the project acceptance digest', async () => {
     await emptyWorld(client);
     const w = await world(db, 'acceptance');
     const tasks = tasksService(db);
@@ -561,13 +561,12 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       verifiesTaskId: phase.id,
     });
 
-    // AE1's acceptanceDigest over the four projections. Filing the check already moved it — the
-    // verdict tuple is one of them — and concluding moves it again, which is what makes an older
-    // acceptance run stop matching the world it judged (AE4).
+    // N4: task verdicts are evidence for task execution, not project acceptance criteria. Neither
+    // filing nor concluding this check may redefine whether the project achieved its stated goal.
     const beforeVerdict = await acceptance.digest(prisma, w.projectId);
     await tasks.update(w.ownerId, check.id, { status: TaskStatus.DONE, verdict: TaskVerdict.PASS });
     const afterVerdict = await acceptance.digest(prisma, w.projectId);
-    assert.notEqual(beforeVerdict, afterVerdict, 'a verdict is an acceptance fact, so it moves the digest');
+    assert.equal(beforeVerdict, afterVerdict, 'task state is outside the project acceptance digest');
   });
 
   await t.test('a check is counted for the phase it points at, not for the one it sits under', async () => {

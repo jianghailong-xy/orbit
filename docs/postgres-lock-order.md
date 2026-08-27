@@ -52,7 +52,7 @@ UPDATE "session" SET last_assistant_text = …          → 持有 session "user
 | 30 | `session` | `FOR UPDATE`（runner lease fence / inbox / lifecycle）· `FOR KEY SHARE`（`task.creator_session_id` 外键） | 见 I2、I3。也是 runner events 事务的**全部**锁集合。 |
 | 40 | `project` | `FOR NO KEY UPDATE`（容量 fence、verdict 门、acceptance reopen、reconcile）· `FOR KEY SHARE`（外键、outbox） | 在 `session` 之下：`session_project_capacity_serialize` 是 Session 写入的 BEFORE 触发器，那时 Session 行已经在手。在 `task` 之上：Project 授权适配器本来就是这个顺序（project `FOR NO KEY UPDATE` → task `FOR SHARE`）。 |
 | 50 | `task` | `FOR UPDATE`（删除）· `FOR NO KEY UPDATE`（更新）· `FOR SHARE`（session 派发守卫、授权适配器）· `FOR KEY SHARE`（边、`session.task_id` 外键） | 多行一律 `ORDER BY id`。 |
-| 60 | `task_dependency` / `conversation_turn` / `run_event` / `tool_call` / `attachment` / `project_event` / `project_action` / `project_acceptance_criterion_definition` | 只插入/更新/删除 | 子行：到这一步它们的外键父行都已经在手，不会引入新的等待边。Acceptance definition 的整组替换先锁 `project`(40)，再移动/删除/写入这些子行。 |
+| 60 | `task_dependency` / `task_comment` / `task_completion_evidence` / `task_completion_evidence_idempotency` / `conversation_turn` / `run_event` / `tool_call` / `attachment` / `project_event` / `project_action` / `project_acceptance_criterion_definition` | 只插入/更新/删除 | 子行：到这一步它们的外键父行都已经在手，不会引入新的等待边。完成证据先锁 `task`(50)，再追加 evidence 与幂等键子行；来源 Session/Attempt 是不取锁、无外键的审计快照。Acceptance definition 的整组替换先锁 `project`(40)，再移动/删除/写入这些子行。 |
 | 70 | `task_dependency_revision` | `FOR NO KEY UPDATE`（0132：边写之后推进）· `FOR SHARE`（dispatch 决策在它之下读边集） | 最后一把。在边（60）**之下**，因为写入方是"先改边再推进"，而决策也按同一方向取（前置 50 → 边 60 → revision 70），两边不可能反序。它让**空边集**可锁，这正是 0122 去 touch dependent Task 的全部理由。见 `docs/task-dependency-revision.md`。 |
 
 ### 三条让它可执行的不变量
@@ -97,22 +97,21 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 |---|---|---|---|---|---|
 | `TasksService.create` | 仅当有依赖/父/verifies | ✔ | ✔ | — | 单纯改名式的 create 不该排在别人的 DAG 重写后面 |
 | `TasksService.createMany` | ✔ 无条件 | ✔ | ✔ | — | 批量按 item 顺序写多行 `task`，别人无法共享这个顺序 |
-| `TasksService.update` | 仅当重构 | 仅当改 `listId` | 仅当会**两次**写该行（0132 起只剩 supersession；依赖替换不再算） | 仅当写 acceptance-fact 列 | 四个秩里唯一可能全都要的 |
-| `TasksService.fileVerification` | — | — | — | — | 裸 INSERT，见下方"为什么 INSERT 不需要 40" |
+| `TasksService.update` | 仅当重构 | 仅当改 `listId` | 仅当会**两次**写该行（0132 起只剩 supersession；依赖替换不再算） | 兼容性预锁或 scope fence | 0178 已删除 task → acceptance 触发器；现存预锁不参与 DONE 语义 |
+| `TasksService.fileVerification` | — | — | — | — | 裸 INSERT；0178 后不再触发 project acceptance 写 |
 | `TasksService.dispatchStalledListForemen` | — | — | — | — | 同上 |
 | `TasksService.applyDag` | ✔ | — | — | — | 0132 起只写边，一个 `task` 行都不写 ⇒ 没有第二次写、没有外键重查 |
 | `TasksService.addDependency` / `removeDependency` | ✔ | — | — | — | 同上；两侧推进同一个 revision 行（秩 70） |
 | `TasksService.deleteAndStopRuns` | ✔ | — | ✔（附着的 run） | ✔（这些 task 的 project） | 锁序**唯一声明的例外**，见 §5 |
 | `TasksService.consumeRunAt` | — | — | — | — | 单行单语句；`run_at` 不在任何触发器的列表里 |
-| `TasksService.clearFailedForRetry` | — | — | — | **残留** | 单语句写 `status` ⇒ 触发器随后取 project，见 §6 |
+| `TasksService.clearFailedForRetry` | — | — | — | — | 0178 后单行 `status` 写不再触发 project acceptance 写 |
 | `TasksService.batchAssign` | ✔ | — | — | — | 多行 `task` 写 ⇒ I1；`assignee_id` 不进任何触发器 |
 | `TaskListsService.writePolicy` | ✔ | ✔ | — | — | 先写列表行再写列表里每个 Task |
 | `TaskListsService.remove` | ✔ | — | — | — | 两次多行 `task` 写（disarm + `listId` SET NULL 级联），现在同一个事务 |
 
-**为什么 INSERT 不需要秩 40。** `project_acceptance_task_fact` 在 `task` INSERT 之后取 project 的
-`FOR NO KEY UPDATE`，也就是 50 → 40 的倒序。但一次 INSERT 在那一刻持有的唯一 `task` 行是**别人看不见
-的新行**，谁也不可能在等它——所以它可以是环里的"等待方"，永远不可能是"持有方"，构不成环。
-`update` / `delete` 就不同了：它们持有的是**已提交的**行，所以必须把 project 提到 task 之前。
+**0178 之后 INSERT 与验收锁无关。** `project_acceptance_task_fact` 及其预锁触发器已经删除；新增、删除、
+改状态或改 verdict 都不会因为任务清单变化而取 project acceptance 锁。原因不是优化，而是
+[DONE 的定义](project-done-gate.md)不再读取任务状态。
 
 ## 3. Runner / Session 侧
 
@@ -123,7 +122,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `POST /runner/sessions/:id/inbox`（dequeue） | `session`(30) → conversation_turn(60) | 不写 `session` 行 |
 | `QueueService.trySessionClaim` | advisory → `session`(30) → `project`(40，容量 fence) | 顺序合规 |
 | `SessionsService` 生命周期（cancel/end/complete/delete） | `session`(30) → `project`(40，容量 fence) | 每条分支都只写一次 `session` 行（分支互斥） |
-| `ProjectTaskDispatcherService.dispatchInTransaction`（0132 起） | `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | I4。`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。表里唯一的 40→10 倒序由 `applyDecisionAction` 先取 project 造成，与 0132 无关，属于 §6 那条未解的 `project ↔ task` 序 |
+| `ProjectTaskDispatcherService.dispatchInTransaction`（0132 起） | `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | I4。`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。这个适配器自身的 40→10 形状与 0178 删除的 task-acceptance 触发器无关。 |
 
 ## 4. 逐项审查：trigger / constraint trigger / fencing
 
@@ -138,8 +137,10 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `project_session_event_source` / `_update`（0117/0130） | `task`/`project` 的 `AccessShareLock` + `project_event` 插入 | **已在 0130 收窄，保持** | 见 `docs/session-event-trigger-scope.md`。telemetry 写既不查 `task` 也不查 `project`。 |
 | `project_task_event_source` / `project_task_dependency_event_source`（outbox） | `project` 行 `FOR KEY SHARE`（`project_event` 的外键） | **保留** | `FOR KEY SHARE` 只与 `FOR UPDATE` 冲突，而 project 上唯一的 `FOR UPDATE` 持有者（`ProjectAcceptanceService.lockProject('FOR UPDATE')`、`ProjectsService`）在持有期间不会去等任何 `task`/`session` 行——所以这条 50 → 40 的倒序没有对手，见 `LOCK_ORDER_EXCEPTIONS`。 |
 | `session_dispatch_authority_guard`（0122，BEFORE INSERT ON session） | 被派发 `task` 行 `FOR SHARE` | **保留** | 它是派发权限的插入时门。Session INSERT 因此是 50 → 30 的形状；但一次 Session INSERT 持有的 Session 行同样是别人看不见的新行，与 §2 的 INSERT 论证同构。 |
-| `project_acceptance_task_fact` / `_update`（0127） | 该 Task 的 `project` 行 `FOR NO KEY UPDATE` | **保留；它是 §6 那条倒序的来源** | 见 §6。 |
+| ~~`project_acceptance_task_fact` / `_update`（0127）~~ | — | **已删除（0178）** | 任务是手段，不是项目完成判据；同时移除了配套的两个 `task_acceptance_fact_lock_order` 预锁触发器。 |
 | `project_acceptance_criteria_fact`（0172） | 已持有 `project`(40) 后写当前 criterion definition 子行、acceptance audit/run 子行(60)；definition normalize 只改正在写入的同一行 | **结构化改造后保留** | 旧客户端的文本写在同一事务内同步成定义行；新客户端先写定义行再写兼容投影。两条路径都保持 40 → 60，不新增反向等待边。 |
+| `task_judgment_delivery_file` / `_stop`（0182） | 已持有 `task`(50) 后插入 request，并由 trigger 写 inbox/push 子行(60)；request 终结只更新它自己的 push 子行 | **新增** | 收件项/outbox 与 request 同事务，且 recipient 由 request 的 `owner_id` 快照约束，不另建 `user` FK，因而不会在 50 之后倒取 owner(10)。worker 的 APNs 调用在事务外，靠 delivery 行 lease/CAS fencing。 |
+| N8 legacy import / request backfill（0184） | import 先取 owner `FOR KEY SHARE`(10)，再锁单个 task(50)；backfill 的 batch owner FK 先取得同等锁，再按 UUID 以 `FOR UPDATE SKIP LOCKED` 锁有界 task 集(50)；两者最后写 evidence/request/inbox/delivery/audit 子行(60) | **新增** | import 的 reviewer FK 不会在 task 之后倒取 owner；backfill 在锁任何 task 前先创建审计 batch。schema migration 不扫描 task，批次默认把设备 ledger 终结为 `IN_APP_ONLY`，只有显式 allowlist 产生 due push。 |
 | `project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project） | 该 project 下**全部** `task` 行 | **保留** | 40 → 50，顺序内。只在协调开关翻转时发生。 |
 | `Task.updated_at` 作为版本边界 | — | **已取消（0132）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
 | `Session.inbox_lease_owner` / `inbox_lease_generation` fencing | 与 `SELECT … FOR UPDATE` 同一条语句 | **保留，未触碰** | 本次没有任何改动会改变 lease fencing 的语义：`lockSessionLeaseOwner` 一字未动，`runner-write-lease-owner.spec.ts` 与 `inbox-lease-generation.spec.ts` 全绿。 |
@@ -159,45 +160,14 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
    模式是 `FOR KEY SHARE`，只与 `FOR UPDATE` 冲突；project 上的 `FOR UPDATE` 持有者不会回过头去等
    `task`/`session`，所以这条倒序没有可以配对的另一半。
 
-## 6. 未解决：`project ↔ task` 的双向序（本次审计的发现）
+## 6. 已解决：任务状态造成的 `task → project` 验收边
 
-这是本任务查出来、但**不能从 Task 一侧单独解决**的一条真实倒序，写在这里而不是掩盖过去：
+0178 删除 `project_acceptance_task_fact` / `_update` 以及两个配套预锁触发器。任务 INSERT、DELETE、
+状态、完成策略或任务 verdict 的变化不再调用 `project_acceptance_reopen()`，因此这里原先记录的
+`task → project` 验收等待边已经不存在。
 
-* **`task → project`**：`project_acceptance_reopen()`（0127）在 `task` 的 INSERT / DELETE / `status`、
-  `completion_policy`、`project_id`、`verdict`、`verifies_task_id` 的 UPDATE 之后，从 **AFTER 触发器**里
-  取该 project 行的 `FOR NO KEY UPDATE`。**无条件取**——DONE 判断在取锁之后。
-* **`project → task`**：`ProjectAuthorizationService`（派发授权适配器）先取 project 的
-  `FOR NO KEY UPDATE`，再取 `task` 的 `FOR SHARE`。
-
-实测（两连接，`lock_timeout = 1500ms`，A 持有 project `FOR NO KEY UPDATE`）：
-
-```
-task status UPDATE while project FNKU held     -> 55P03   ← 会等
-task updated_at-only UPDATE                    -> committed
-task title UPDATE                              -> committed
-task INSERT into the project                   -> 55P03   ← 会等
-task DELETE from the project                   -> 55P03   ← 会等
-```
-
-**本次做到的**：把秩 40 提到秩 50 之前，并在**已经是显式事务**的两个 Task 写入来源里预锁 project
-（`TasksService.update` 的 acceptance-fact 写、`deleteAndStopRuns`），于是这两条路径被移出这条倒序。
-INSERT 类来源（`create`/`createMany`/`fileVerification`/foreman）由 §2 的论证覆盖。
-
-**未做到的**：仓库里还有若干**单语句**的 Task 状态写，它们持有 Task 行的同时由触发器去取 project：
-`TasksService.clearFailedForRetry`、`applyTaskAggregations`（`src/projects/task-aggregation-writer.ts`）、
-`reclaimStalledTask`（`src/tasks/reclaim-stalled-task.ts`，而且它跑在 runner finalize 事务里，那个事务
-必须先持有 Session，所以它连"把 project 提前"都做不到），以及 Project 协调器自身的 Task 写入。
-
-**为什么不顺手包一层事务**：把十几个单语句写入里的四个包进事务，买到的是"看起来覆盖了"，不是那条性质
-——这条环只要还有一个未处理的写入方就依然成立。真正的解法只有两个，都在 Project 协调子系统那边，
-不在本任务范围内（它有自己的 §8.6 LO 规则）：
-
-* **(a)** 让授权适配器先取 `task` 的 `FOR SHARE`、再取 project 的 `FOR NO KEY UPDATE`；或者
-* **(b)** 让 `project_acceptance_reopen()` 先做一次**不加锁**的 `status <> 'DONE'` 预检、只在可能真要
-  reopen 时才取行锁（绝大多数 project 不是 DONE，那把锁根本没必要）。
-
-(b) 更便宜也更局部，但它动的是 AE6-a 的不变量，必须由拥有那份契约的任务来判。建议交给
-`横向审计全部数据库写路径并接入公共重试`。
+这项锁图变化来自完成语义的修正：[项目 DONE 只由验收标准与显式 blocker 决定](project-done-gate.md)。
+与任务验收触发器无关的 project/task 锁边仍按各自条目审计，不能从本节的删除推导为全部消失。
 
 ## 7. 验证
 
@@ -236,8 +206,9 @@ INSERT 类来源（`create`/`createMany`/`fileVerification`/foreman）由 §2 �
 * `src/apiserver` 全量单测：**2442 / 2170 pass / 0 fail / 272 skipped**（修改前的同一棵树：
   2433 / 2162 / 0 / 271；新增 `lock-order.spec.ts` 的 7 个用例和 2 个 Task 用例，多出的 1 个 skip
   是无 `COORDINATOR_PG_URL` 时跳过的 `lock-order.pg.spec.ts`）。
-* `lock-order.spec.ts` 7/7：清单双向闭合、每条 `holds` 仍在源码里、runner 两个 Session 写入者的语句数、
-  秩严格递增、`workspace`/`runner` 的相容性论证仍然描述真代码、四个触发器的声明仍是锁序假设的样子。
+* `lock-order.spec.ts`：清单双向闭合、每条 `holds` 仍在源码里、runner 两个 Session 写入者的语句数、
+  秩严格递增、`workspace`/`runner` 的相容性论证仍然描述真代码；0178 的静态守卫另行确认四个已退休
+  task-acceptance 触发器不在 live inventory 中。
 
 ### 7.4 探针（本文件里引用的实测）
 
@@ -251,8 +222,8 @@ INSERT task_dependency(dependent, prerequisite)           → dependent.updated_
 # §4：0132 之后，它一行都不写（读 xmin，不读 updated_at——见 dependency-revision.pg.spec.ts）
 INSERT task_dependency(dependent, prerequisite)           → dependent.xmin 不变，revision +1
 
-# §6：project ↔ task
-（见 §6 的五行输出）
+# §6：task-acceptance 触发器已由 0178 删除
+task status/insert/delete 不再通过该路径取得 project lock
 ```
 
 ## 8. 上线与回滚
@@ -260,6 +231,10 @@ INSERT task_dependency(dependent, prerequisite)           → dependent.xmin 不
 > **0132 之后**：`用 dependency revision 取代无关 Task updated_at touch` 在本文件之上加了一个
 > migration（`0132_task_dependency_revision`）。它的上线、回滚与混版说明在
 > `docs/task-dependency-revision.md` §5，不在本节——本节说的仍然是锁序那次纯应用层改动。
+
+> **0178 之后**：本节下方的“没有 migration”仍只描述最初的锁序修复。N4 的语义修正有 migration：
+> 它删除四个 task/acceptance 触发器并把数据库 DONE 硬门升级到 digest v4。混版期间 v3/v4 不匹配会
+> fail closed，要求重新验收；回滚不能只换旧应用，必须同时恢复与旧 digest 版本相容的数据库函数和触发器。
 
 **没有 migration。** 本次改动全在应用层：预锁语句、写语句的合并、以及两处事务边界。数据库 schema、
 触发器、外键一个都没动。

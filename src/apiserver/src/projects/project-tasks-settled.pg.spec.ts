@@ -90,7 +90,7 @@ async function connect(): Promise<Stack> {
     producer,
     acceptance,
     projects: new ProjectsService(prisma, acceptance, sessions),
-    tasks: new TasksService(prisma, sessions, realtime, undefined, producer),
+    tasks: new TasksService(prisma, sessions, realtime),
   };
 }
 
@@ -288,6 +288,7 @@ test('empty merge evidence makes the judgment open merge work and stores no PASS
     try {
       const target = await fixture(stack, 't7-no-evidence', 1);
       await settleEveryProjectTask(stack, target);
+      await stack.producer.afterCommit([target.projectId]);
 
       const [session] = await judgmentSessions(stack, target);
       assert.ok(session, 'the terminal write must open its judgment session');

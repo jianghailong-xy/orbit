@@ -39,6 +39,7 @@ import {
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
+import { judgmentInboxPath, type JudgmentInboxPage } from '../lib/judgments';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -53,6 +54,19 @@ type ProjectsShortcutEvent = Pick<
   KeyboardEvent,
   'altKey' | 'ctrlKey' | 'key' | 'metaKey' | 'preventDefault' | 'shiftKey'
 >;
+
+type NavActivationEvent = Pick<KeyboardEvent, 'key' | 'preventDefault'>;
+
+/** A div-based legacy nav row still behaves like the link its ARIA role promises. */
+export function handleNavActivation(
+  event: NavActivationEvent,
+  open: () => void,
+): boolean {
+  if (event.key !== 'Enter') return false;
+  event.preventDefault();
+  open();
+  return true;
+}
 
 /** Framework-independent handler for the Projects keyboard contract. */
 export function handleProjectsShortcut(
@@ -83,6 +97,7 @@ interface TopNavItem {
 // Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
 // primary destinations in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
+  { key: 'judgments', icon: <InboxOutlined />, label: '待我判定' },
   {
     key: 'projects',
     icon: <ProjectOutlined />,
@@ -203,6 +218,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
+  const judgments = useQuery({
+    queryKey: ['judgments', 'open', 'nav-count'],
+    queryFn: () => api<JudgmentInboxPage>(judgmentInboxPath({ status: 'OPEN', limit: 1 })),
+    refetchInterval: 15_000,
+  });
+  const openJudgmentCount = judgments.data?.total ?? 0;
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =
@@ -243,13 +264,15 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : loc.pathname.startsWith('/runner')
-        ? 'runners'
-        : loc.pathname.startsWith('/projects/')
-          ? 'projects'
-          : loc.pathname.startsWith('/lists/')
-            ? loc.pathname.slice('/lists/'.length)
-            : loc.pathname.slice(1);
+      : loc.pathname.startsWith('/judgments')
+        ? 'judgments'
+        : loc.pathname.startsWith('/runner')
+          ? 'runners'
+          : loc.pathname.startsWith('/projects/')
+            ? 'projects'
+            : loc.pathname.startsWith('/lists/')
+              ? loc.pathname.slice('/lists/'.length)
+              : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
@@ -520,9 +543,18 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             key={t.key}
             className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
             onClick={() => openTopNav(t.key)}
+            onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key))}
+            role="link"
+            tabIndex={0}
+            aria-current={sel === t.key ? 'page' : undefined}
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
+            {t.key === 'judgments' && openJudgmentCount > 0 && (
+              <span className="tp-rail-badge needs-you" aria-label={`${openJudgmentCount} open judgments`}>
+                {openJudgmentCount > 99 ? '99+' : openJudgmentCount}
+              </span>
+            )}
           </div>
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
@@ -567,9 +599,18 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
               onClick={() => openTopNav(t.key)}
+              onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key))}
+              role="link"
+              tabIndex={0}
+              aria-current={sel === t.key ? 'page' : undefined}
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
+              {t.key === 'judgments' && openJudgmentCount > 0 && (
+                <span className="tp-count needs-you" aria-label={`${openJudgmentCount} open judgments`}>
+                  {openJudgmentCount}
+                </span>
+              )}
               {t.shortcut && (
                 <kbd
                   className="tp-count tp-nav-shortcut"

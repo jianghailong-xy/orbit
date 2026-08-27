@@ -82,6 +82,18 @@ export const COORDINATOR_WAKE_EVENTS = [
   'PROJECT_TASKS_SETTLED',
   /** The last task serving one acceptance criterion reached DONE. */
   'CRITERION_READY',
+  /** N10 appended a new immutable completion-evidence revision. */
+  'COMPLETION_EVIDENCE_REVISED',
+  /** The system evaluator recorded the immutable result of an EXECUTABLE request. */
+  'EXECUTABLE_RESULT_RECORDED',
+  /** An evidence-bound verifier recorded a new versioned verdict. */
+  'VERIFICATION_VERDICT_RECORDED',
+  /** N11 created the human-owned question for one evidence fact. */
+  'HUMAN_SIGNOFF_REQUESTED',
+  /** A person decided the exact human-owned question and evidence digest. */
+  'HUMAN_SIGNOFF_DECIDED',
+  /** New evidence replaced an older open human-owned question. */
+  'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -91,7 +103,7 @@ export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
  * the project's `acceptance_criteria` text, identified by `parseCriteria`'s content key — which is
  * why `subjectId` below is text rather than a uuid, exactly as `project_blocker.subject_id` is.
  */
-export type WakeSubjectType = 'TASK' | 'PROJECT' | 'CRITERION';
+export type WakeSubjectType = 'TASK' | 'PROJECT' | 'CRITERION' | 'JUDGMENT_REQUEST';
 
 export interface WakeFact {
   event: CoordinatorWakeEvent;

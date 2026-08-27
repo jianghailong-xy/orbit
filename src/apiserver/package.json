@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "ops:task-signoff-migration": "node dist/tasks/task-signoff-migration.cli.js",
     "test": "tsc -p tsconfig.test.json && node --test build/*/*.spec.js"
   },
   "prisma": {

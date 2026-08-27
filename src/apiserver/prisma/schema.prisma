@@ -217,6 +217,83 @@ enum TaskVerdict {
   @@map("task_verdict")
 }
 
+/// The one fact that is allowed to settle a task's own work.
+///
+/// These are peers, not a fallback chain. HUMAN_SIGNOFF is the ordinary compatibility default for
+/// tasks created before this distinction existed; it does not mean that executable or verification
+/// acceptance failed and escalated to a person.
+enum TaskCompletionCriterion {
+  EXECUTABLE
+  VERIFICATION
+  HUMAN_SIGNOFF
+
+  @@map("task_completion_criterion")
+}
+
+/// Lifecycle of one evidence-bound request for a criterion decision. It is monotonic: OPEN may
+/// become DECIDED or SUPERSEDED, and neither terminal fact is rewritten or reopened.
+enum TaskJudgmentRequestStatus {
+  OPEN
+  DECIDED
+  SUPERSEDED
+
+  @@map("task_judgment_request_status")
+}
+
+/// How a request entered the durable judgment ledger. BACKFILL is never a migration side effect:
+/// it always names the separately invoked, bounded batch row that selected it.
+enum TaskJudgmentRequestOrigin {
+  LIVE_EVIDENCE
+  LEGACY_IMPORT
+  BACKFILL
+
+  @@map("task_judgment_request_origin")
+}
+
+/// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
+/// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
+enum TaskJudgmentDevicePolicy {
+  IMMEDIATE
+  IN_APP_ONLY
+
+  @@map("task_judgment_device_policy")
+}
+
+/// The concrete principal that owns the next decision. These are peers selected from the task's
+/// declared criterion; no row moves from one recipient type to another as a fallback.
+enum TaskJudgmentRecipientType {
+  SYSTEM_EXECUTABLE_EVALUATOR
+  VERIFIER_TASK
+  ACCOUNT_OWNER
+
+  @@map("task_judgment_recipient_type")
+}
+
+/// A request conclusion. PASS is the only optimistic conclusion; the other two remain durable
+/// evidence without manufacturing Task.status DONE.
+enum TaskJudgmentDecision {
+  PASS
+  FAIL
+  INCONCLUSIVE
+
+  @@map("task_judgment_decision")
+}
+
+/// What happened to the retryable device projection of one durable in-app judgment item.
+/// PENDING/BLOCKED may be retried, DELIVERING is leased, and the remaining three values are
+/// terminal receipts. CANCELLED means the request was decided or superseded before delivery; it
+/// is deliberately different from DEAD, which means the delivery budget itself was exhausted.
+enum TaskJudgmentPushDeliveryStatus {
+  PENDING
+  DELIVERING
+  DELIVERED
+  BLOCKED
+  DEAD
+  CANCELLED
+
+  @@map("task_judgment_push_delivery_status")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -268,6 +345,12 @@ model User {
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
+
+  /// Human completion judgments authored by this person. The event carries its own signer rather
+  /// than borrowing Task.ownerId so the audit answers who actually signed.
+  taskHumanSignoffs TaskHumanSignoff[]
+  legacyEvidenceImports TaskLegacyEvidenceImport[]
+  judgmentBackfillBatches TaskJudgmentBackfillBatch[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -1918,9 +2001,8 @@ model ProjectCoordinatorWake {
   subjectVersion String @map("subject_version")
   idempotencyKey String @map("idempotency_key")
 
-  /// CLAIMED, SESSION_OPENED or REFUSED. A CHECK, for the reason `event` is one. SESSION_OPENED is
-  /// inside 0174's partial unique index — that is what stops one fact opening a second judgment
-  /// session (unit T3 adds the status in migration 0175).
+  /// CLAIMED, SESSION_OPENED, CONSUMED or REFUSED. Both successful terminal states remain inside
+  /// 0174's partial unique index: one fact opens/feeds one consumer at most once.
   status      String  @default("CLAIMED")
   /// Non-null exactly when `status` is REFUSED, enforced by a CHECK: a stop with no reason is the
   /// one shape this table exists to make impossible.
@@ -1928,6 +2010,11 @@ model ProjectCoordinatorWake {
   /// Display and diagnosis. Never an input to a decision and never part of the key (cf.
   /// `ProjectBlocker.occurrences`, BL7).
   detail      Json    @default("{}")
+
+  /// Non-session completion inputs name their durable consumer exactly when status is CONSUMED.
+  /// Human requests use HUMAN_INBOX; they never acquire a Session pointer.
+  consumerType String?   @map("consumer_type")
+  consumedAt   DateTime? @map("consumed_at")
 
   /// The one judgment session this wake opened (unit T3, migration 0175). Unique, so two wakes
   /// cannot name one session; nullable and `SetNull`, so deleting a session is never refused by
@@ -2284,13 +2371,12 @@ model ProjectAcceptanceRun {
   criteriaSnapshotV2 Json? @map("criteria_snapshot_v2")
   criteriaRevision String  @map("criteria_revision") @db.Char(64)
 
-  /// AE1's `acceptanceDigest` over the four projections, computed under the project row lock when
-  /// the run opened. The DONE gate recomputes it and compares; a mismatch is `ACCEPTANCE_EVIDENCE_STALE`.
+  /// The acceptance-only input digest (current criterion revision plus cited merge evidence),
+  /// computed under the project row lock when the run opened. Task status is deliberately absent:
+  /// the DONE gate recomputes this digest from the outcome being accepted, not the work backlog.
   /// Which reading of the world this evidence was taken under (`ACCEPTANCE_DIGEST_VERSION`).
-  /// Defaults to 1, so every pre-0130 row — and every write by a binary that predates the column —
-  /// reads as the older reading, which migration 0130's DONE gate refuses. Fail-closed on purpose:
-  /// evidence digested before §13.6 SU6's columns joined the facts cannot speak to whether the
-  /// tasks it counted had been replaced.
+  /// Defaults to 1, so a row produced by a binary that predates digest versioning fails closed.
+  /// Version 4 removed task rows and task-verification verdicts from this input shape.
   digestVersion   Int      @default(1) @map("digest_version")
   inputDigest String @map("input_digest") @db.Char(64)
   /// The digest of what this run CONCLUDED — the ordered per-criterion verdicts. Null until the run
@@ -2771,11 +2857,14 @@ model Task {
   /// What would settle that this task is actually done, as opposed to reported done. The task-level
   /// counterpart of `Project.acceptanceCriteria`; nothing assembles it into a prompt in this phase.
   acceptanceCriteria String?   @map("acceptance_criteria")
-  /// L0 acceptance: one shell command and the exit code that mechanically settles this task.
+  /// EXECUTABLE acceptance: one shell command and its expected exit code.
   /// The database constraint added with these columns requires both or neither; there is no
   /// command list, expression language, or separate acceptance entity behind them.
   acceptanceCommand          String? @map("acceptance_command")
   acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
+  /// The declared completion fact for this task. HUMAN_SIGNOFF is a first-class criterion and the
+  /// compatibility value for every row that predates this column, never an exceptional fallback.
+  completionCriterion TaskCompletionCriterion @default(HUMAN_SIGNOFF) @map("completion_criterion")
   /// Free-text labels, written by whoever files the task (in practice the agent creating it).
   /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
   /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and
@@ -2942,6 +3031,13 @@ model Task {
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
   comments     TaskComment[]
+  completionEvidence TaskCompletionEvidence[]
+  judgmentRequests TaskJudgmentRequest[]
+  legacyEvidenceImports TaskLegacyEvidenceImport[]
+  judgmentInboxItems TaskJudgmentInboxItem[]
+  /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
+  /// criterion, and retries return that same event rather than minting a second judgment.
+  humanSignoffs TaskHumanSignoff[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3029,6 +3125,287 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// An explicit, immutable claim that structured completion evidence was submitted for a Task.
+/// This is deliberately neither a Task status transition nor a TaskComment inference. Source ids
+/// are snapshots rather than relations so execution retention cannot erase accepted provenance.
+model TaskCompletionEvidence {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_completion_evidence_task_fkey")
+
+  actorType  CreatorType @map("actor_type")
+  actorId    String      @map("actor_id") @db.Uuid
+  submittedAt DateTime   @default(now()) @map("submitted_at")
+
+  sourceSessionId String  @map("source_session_id") @db.Uuid
+  sourceAttemptId String? @map("source_attempt_id") @db.Uuid
+
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  criterion         Json
+  evidence          Json
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  revision          BigInt
+
+  idempotencyKeys TaskCompletionEvidenceIdempotency[]
+  judgmentRequests TaskJudgmentRequest[]
+  legacyImport TaskLegacyEvidenceImport?
+
+  @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
+  @@unique([id, taskId, criterionRevision, evidenceDigest], map: "task_completion_evidence_bound_fact_key")
+  @@unique([taskId, revision], map: "task_completion_evidence_task_revision_key")
+  @@unique([taskId, actorType, actorId, sourceSessionId, criterionRevision, evidenceDigest], map: "task_completion_evidence_stable_fact_key")
+  @@index([taskId, submittedAt, id], map: "task_completion_evidence_task_submitted_idx")
+  @@map("task_completion_evidence")
+}
+
+/// Caller retry keys are separate rows so distinct keys for the same stable fact both replay it.
+model TaskCompletionEvidenceIdempotency {
+  id             String @id @default(uuid(7)) @db.Uuid
+  taskId         String @map("task_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  evidenceId     String @map("evidence_id") @db.Uuid
+  evidence       TaskCompletionEvidence @relation(fields: [evidenceId, taskId], references: [id, taskId], onDelete: Cascade, map: "task_completion_evidence_idempotency_evidence_fkey")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, idempotencyKey], map: "task_completion_evidence_idempotency_task_key")
+  @@index([evidenceId], map: "task_completion_evidence_idempotency_evidence_idx")
+  @@map("task_completion_evidence_idempotency")
+}
+
+/// The audit receipt for an explicit conversion of one historical TaskComment into one structured
+/// evidence revision. No comment producer writes this table; only the user-authenticated import
+/// path does, after the caller supplies the structured fact and a non-blank review note.
+model TaskLegacyEvidenceImport {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_legacy_evidence_import_task_fkey")
+
+  evidenceId String @map("evidence_id") @db.Uuid
+  evidence TaskCompletionEvidence @relation(fields: [evidenceId, taskId], references: [id, taskId], onDelete: Cascade, map: "task_legacy_evidence_import_evidence_fkey")
+
+  sourceCommentId String @map("source_comment_id") @db.Uuid
+  sourceComment TaskComment @relation(fields: [sourceCommentId, taskId], references: [id, taskId], onDelete: NoAction, map: "task_legacy_evidence_import_comment_fkey")
+  /// An immutable provenance snapshot, deliberately not an FK: Session retention must not erase
+  /// which execution the reviewer explicitly named as the source.
+  sourceSessionId String @map("source_session_id") @db.Uuid
+  sourceAuthorType CreatorType @map("source_author_type")
+  sourceAuthorId String @map("source_author_id") @db.Uuid
+  sourceCreatedAt DateTime @map("source_created_at")
+  sourceDigest String @map("source_digest") @db.Char(64)
+  structuredEvidenceDigest String @map("structured_evidence_digest") @db.Char(64)
+
+  importedById String @map("imported_by_id") @db.Uuid
+  importedBy User @relation(fields: [importedById], references: [id], onDelete: Restrict)
+  importedAt DateTime @default(now()) @map("imported_at")
+  idempotencyKey String @map("idempotency_key")
+  reviewNote String @map("review_note")
+  devicePolicy TaskJudgmentDevicePolicy @map("device_policy")
+
+  @@unique([evidenceId, taskId], map: "task_legacy_evidence_import_evidence_key")
+  @@unique([taskId, sourceCommentId], map: "task_legacy_evidence_import_source_key")
+  @@unique([taskId, idempotencyKey], map: "task_legacy_evidence_import_idempotency_key")
+  @@index([importedById, importedAt(sort: Desc)], map: "task_legacy_evidence_import_reviewer_idx")
+  @@index([sourceSessionId], map: "task_legacy_evidence_import_source_session_idx")
+  @@map("task_legacy_evidence_import")
+}
+
+/// One bounded operator invocation of the request backfill. The selection and push allowlist are
+/// immutable input facts; all counters are filled in the same transaction as its request rows.
+model TaskJudgmentBackfillBatch {
+  id      String @id @default(uuid(7)) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  actorType CreatorType @map("actor_type")
+  actorId String @map("actor_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  inputDigest String @map("input_digest") @db.Char(64)
+  batchSize Int @map("batch_size")
+  pushTaskIds String[] @default([]) @map("push_task_ids") @db.Uuid
+  selection Json
+  startedAt DateTime @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  scannedCount Int? @map("scanned_count")
+  requestCount Int? @map("request_count")
+  inboxCount Int? @map("inbox_count")
+  pushSelectedCount Int? @map("push_selected_count")
+  pushSuppressedCount Int? @map("push_suppressed_count")
+  durationMs BigInt? @map("duration_ms")
+
+  requests TaskJudgmentRequest[]
+
+  @@unique([ownerId, idempotencyKey], map: "task_judgment_backfill_batch_owner_key")
+  @@index([ownerId, startedAt(sort: Desc)], map: "task_judgment_backfill_batch_owner_started_idx")
+  @@map("task_judgment_backfill_batch")
+}
+
+/// A person's explicit judgment that the task's HUMAN_SIGNOFF criterion is satisfied.
+///
+/// This is an event, not a disguised status edit: signer, server timestamp and evidence are all
+/// non-null, and the service derives Task.status from its existence in the same transaction.
+model TaskHumanSignoff {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  taskId     String   @unique @map("task_id") @db.Uuid
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestId  String   @unique @map("request_id") @db.Uuid
+  request    TaskJudgmentRequest @relation(fields: [requestId, taskId, evidenceDigest], references: [id, taskId, evidenceDigest], onDelete: Restrict, map: "task_human_signoff_request_fact_fkey")
+  signedById String   @map("signed_by_id") @db.Uuid
+  signedBy   User     @relation(fields: [signedById], references: [id])
+  evidenceDigest String @map("evidence_digest") @db.Char(64)
+  evidence   String
+  signedAt   DateTime @default(now()) @map("signed_at")
+
+  @@unique([requestId, taskId, evidenceDigest], map: "task_human_signoff_request_fact_key")
+  @@index([signedById, signedAt(sort: Desc)])
+  @@map("task_human_signoff")
+}
+
+/// The durable question created for exactly one criterion snapshot and evidence digest.
+///
+/// `recipientId` is deliberately text: an account owner, Session and verifier Task are UUIDs
+/// today, but the discriminator is the authority boundary and callers must never infer one kind
+/// from another merely because their identifiers share a representation.
+model TaskJudgmentRequest {
+  id       String @id @default(uuid(7)) @db.Uuid
+  taskId   String @map("task_id") @db.Uuid
+  ownerId  String @map("owner_id") @db.Uuid
+  task     Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_judgment_request_task_fkey")
+
+  evidenceId       String @map("evidence_id") @db.Uuid
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  evidence           TaskCompletionEvidence @relation(fields: [evidenceId, taskId, criterionRevision, evidenceDigest], references: [id, taskId, criterionRevision, evidenceDigest], onDelete: Restrict, map: "task_judgment_request_evidence_fact_fkey")
+
+  kind          TaskCompletionCriterion
+  recipientType TaskJudgmentRecipientType @map("recipient_type")
+  recipientId   String @map("recipient_id")
+  status        TaskJudgmentRequestStatus @default(OPEN)
+  origin        TaskJudgmentRequestOrigin @default(LIVE_EVIDENCE)
+  devicePolicy  TaskJudgmentDevicePolicy @default(IMMEDIATE) @map("device_policy")
+  backfillBatchId String? @map("backfill_batch_id") @db.Uuid
+  backfillBatch TaskJudgmentBackfillBatch? @relation(fields: [backfillBatchId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedByType String? @map("decided_by_type")
+  decidedById String? @map("decided_by_id")
+  decision    TaskJudgmentDecision?
+  /// Human-readable audit for a human request conclusion. PASS keeps its richer review text on
+  /// TaskHumanSignoff; INCONCLUSIVE requires this field and means "wait for a new evidence
+  /// revision", never "change Task.status".
+  decisionNote String? @map("decision_note")
+  supersededAt DateTime? @map("superseded_at")
+  supersededById String? @map("superseded_by_id") @db.Uuid
+  supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)
+  supersedes TaskJudgmentRequest[] @relation("JudgmentRequestSupersession")
+
+  executableResult TaskExecutableJudgmentResult?
+  humanSignoff TaskHumanSignoff?
+  inboxItems TaskJudgmentInboxItem[]
+
+  @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
+  @@unique([taskId, criterionRevision, evidenceDigest, kind], map: "task_judgment_request_fact_key")
+  @@index([taskId, status, createdAt(sort: Desc)], map: "task_judgment_request_task_status_idx")
+  @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
+  @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
+  @@index([backfillBatchId], map: "task_judgment_request_backfill_batch_idx")
+  @@map("task_judgment_request")
+}
+
+/// The reliable, in-app delivery of one HUMAN_SIGNOFF request to one concrete person.
+///
+/// Migration 0182 files this row from an AFTER INSERT trigger on `TaskJudgmentRequest`, in the
+/// request's own transaction. `deliveredAt` is therefore the receipt for the reliable primary
+/// channel: if the request commits, this row has already committed; if either insert fails, both
+/// roll back. Titles, action and deep link are snapshots so the inbox remains an audit of what was
+/// put in front of the recipient even if the task/project is renamed later.
+model TaskJudgmentInboxItem {
+  id             String @id @default(uuid(7)) @db.Uuid
+  requestId      String @map("request_id") @db.Uuid
+  requestVersion Int    @default(1) @map("request_version")
+  request        TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  taskId         String @map("task_id") @db.Uuid
+  ownerId        String @map("owner_id") @db.Uuid
+  task           Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  recipientId    String @map("recipient_id") @db.Uuid
+
+  projectId     String? @map("project_id") @db.Uuid
+  projectTitle  String? @map("project_title")
+  taskTitle     String  @map("task_title")
+  requiredAction String @map("required_action")
+  deepLink       String @map("deep_link")
+  createdAt      DateTime @default(now()) @map("created_at")
+  deliveredAt    DateTime @default(now()) @map("delivered_at")
+
+  pushDelivery TaskJudgmentPushDelivery?
+
+  @@unique([requestId, requestVersion], map: "task_judgment_inbox_request_version_key")
+  @@unique([id, requestId, requestVersion], map: "task_judgment_inbox_delivery_fkey")
+  @@index([recipientId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_recipient_idx")
+  @@index([taskId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_task_idx")
+  @@map("task_judgment_inbox_item")
+}
+
+/// The retryable APNs projection of one in-app item.
+///
+/// There is one logical notification key per request/version. A worker lease prevents concurrent
+/// sends; a stable APNs collapse id makes the unavoidable "APNs accepted, process died before the
+/// receipt" replay replace the earlier banner rather than build a notification storm. `attempts`
+/// counts every transport pass, while `failures` alone spends the DEAD budget: no device or an
+/// unconfigured sender remains BLOCKED and can recover years later without losing the request.
+model TaskJudgmentPushDelivery {
+  id             String @id @default(uuid(7)) @db.Uuid
+  inboxItemId    String @unique @map("inbox_item_id") @db.Uuid
+  requestId      String @map("request_id") @db.Uuid
+  requestVersion Int    @map("request_version")
+  inboxItem      TaskJudgmentInboxItem @relation(fields: [inboxItemId, requestId, requestVersion], references: [id, requestId, requestVersion], onDelete: Cascade, map: "task_judgment_push_inbox_fkey")
+
+  logicalNotificationKey String @unique @map("logical_notification_key")
+  collapseId             String @map("collapse_id")
+  status                  TaskJudgmentPushDeliveryStatus @default(PENDING)
+  attempts                Int @default(0)
+  failures                Int @default(0)
+  /// Consecutive expired DELIVERING leases. Reset whenever a worker records an outcome.
+  claims                  Int @default(0)
+  nextAttemptAt           DateTime? @default(now()) @map("next_attempt_at")
+  leaseHolder             String? @map("lease_holder")
+  leaseExpiresAt          DateTime? @map("lease_expires_at")
+  lastAttemptAt           DateTime? @map("last_attempt_at")
+  errorCode               String? @map("error_code")
+  requiredAction          String? @map("required_action")
+  lastError               String? @map("last_error")
+  lastPayload             Json? @map("last_payload")
+  deliveredDevices        Int? @map("delivered_devices")
+  deliveredAt             DateTime? @map("delivered_at")
+  stoppedAt               DateTime? @map("stopped_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([nextAttemptAt, createdAt], map: "task_judgment_push_due_idx")
+  @@index([status, updatedAt], map: "task_judgment_push_status_idx")
+  @@unique([inboxItemId, requestId, requestVersion], map: "task_judgment_push_inbox_request_version_key")
+  @@unique([requestId, requestVersion], map: "task_judgment_push_request_version_key")
+  @@map("task_judgment_push_delivery")
+}
+
+/// The command observation that decides an EXECUTABLE request. A comment may render it, but this
+/// row—not prose—is the fact consumed by completion derivation.
+model TaskExecutableJudgmentResult {
+  id               String @id @default(uuid(7)) @db.Uuid
+  requestId        String @unique @map("request_id") @db.Uuid
+  request          TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  command          String
+  expectedExitCode Int @map("expected_exit_code")
+  actualExitCode   Int @map("actual_exit_code")
+  rawOutput        String @map("raw_output")
+  recordedById     String @map("recorded_by_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  @@index([recordedAt(sort: Desc)], map: "task_executable_judgment_result_recorded_idx")
+  @@map("task_executable_judgment_result")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).
@@ -3508,7 +3885,9 @@ model TaskComment {
   createdAt  DateTime    @default(now()) @map("created_at")
 
   deliveries TaskCommentMentionDelivery[]
+  legacyEvidenceImports TaskLegacyEvidenceImport[]
 
+  @@unique([id, taskId], map: "task_comment_id_task_id_key")
   @@index([taskId, createdAt])
   @@map("task_comment")
 }

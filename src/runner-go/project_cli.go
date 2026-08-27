@@ -34,11 +34,8 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 
 Usage:
   orbit project get PROJECT_ID [--json]
-  orbit project status PROJECT_ID [--json]
-  orbit project blockers PROJECT_ID [--history] [--json]
   orbit project crossings PROJECT_ID [--state STATE] [--json]
   orbit project reopen-impact PROJECT_ID [--json]
-  orbit project verifications PROJECT_ID [--json]
   orbit project acceptance PROJECT_ID [--json]
   orbit project acceptance-run PROJECT_ID [--json]
   orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]
@@ -339,6 +336,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	switch action {
+	case "get":
+		return cliProjectGet(args[1:], out)
 	case "create":
 		return cliProjectCreate(args[1:], in, out)
 	case "update":
@@ -358,7 +357,7 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 	case "merge-evidence":
 		return cliProjectMergeEvidence(args[1:], in, out)
 	default:
-		return cliProjectGet(args[1:], out)
+		return fmt.Errorf("project command %q has help but no dispatcher", action)
 	}
 }
 

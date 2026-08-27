@@ -101,7 +101,8 @@ import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../a
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
-import { AttemptEndedUnsettledProducer } from '../projects/attempt-ended-unsettled.producer';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { executableResultRecordedFact } from '../projects/completion-input';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -123,6 +124,10 @@ import { runtimeInitSessionId } from './runtime-init';
 import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
+import {
+  deriveTaskCompletionStatus,
+  type TaskCompletionCriterionValue,
+} from '../tasks/task-completion-criterion';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -345,12 +350,9 @@ export class RunnerApiController {
      * charged on a turn is re-derived from the same columns on the next one.
      */
     private readonly attemptBudgets?: AttemptBudgetMeterService,
-    /**
-     * T8: after the runner transaction has made a Session terminal, derive the committed
-     * ATTEMPT_ENDED_UNSETTLED fact and open its one-shot judgment. Optional only for direct unit
-     * fixtures; RunnerApiModule imports the production provider through ProjectsModule.
-     */
-    private readonly attemptEndedUnsettled?: AttemptEndedUnsettledProducer,
+    /** Criterion inputs are optional only for direct unit fixtures. Production resolves the
+     * shared, durable input router through ProjectsModule. */
+    private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2407,6 +2409,7 @@ export class RunnerApiController {
         projectId: string | null;
         acceptanceCommand: string | null;
         acceptanceExpectedExitCode: number | null;
+        completionCriterion: TaskCompletionCriterionValue;
       } | null = null;
       let acceptanceTaskStillInProgress = false;
       if (taskAcceptanceTurn && current.taskId) {
@@ -2429,11 +2432,13 @@ export class RunnerApiController {
           projectId: string | null;
           acceptanceCommand: string | null;
           acceptanceExpectedExitCode: number | null;
+          completionCriterion: TaskCompletionCriterionValue;
         }>>`
           SELECT "id", "status",
                  "project_id" AS "projectId",
                  "acceptance_command" AS "acceptanceCommand",
-                 "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode"
+                 "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
+                 "completion_criterion"::text AS "completionCriterion"
           FROM "task"
           WHERE "id" = ${current.taskId}::uuid
           FOR UPDATE`;
@@ -2603,21 +2608,83 @@ export class RunnerApiController {
       ) {
         const actualExitCode = dto.shellExitCode!;
         const expectedExitCode = lockedAcceptanceTask.acceptanceExpectedExitCode;
-        const derivedStatus = actualExitCode === expectedExitCode
-          ? TaskStatus.DONE
-          : TaskStatus.FAILED;
+        const completed = deriveTaskCompletionStatus({
+          completionCriterion: lockedAcceptanceTask.completionCriterion,
+          acceptanceExpectedExitCode: expectedExitCode,
+          executableExitCode: actualExitCode,
+        });
+        // FAILED remains the conservative L0 outcome when the declared command returns a
+        // comparable non-matching exit code. Only the optimistic branch is criterion-derived.
+        const derivedStatus = completed ?? TaskStatus.FAILED;
+        const request = await tx.taskJudgmentRequest.findFirst({
+          where: {
+            taskId: lockedAcceptanceTask.id,
+            kind: 'EXECUTABLE',
+            recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+            status: 'OPEN',
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+        // The request names the source Session as the one system evaluator allowed to consume
+        // this evidence version. Keep the no-request branch for rolling-upgrade/legacy L0 turns,
+        // but once an OPEN request exists it is authoritative: a result from another Session may
+        // neither attach a command-result fact nor use the legacy status path to bypass the
+        // recipient. The unsettled-attempt branch below then closes that wrong Session while the
+        // request and Task remain actionable by their named evaluator.
+        const requestBelongsToThisEvaluator = request == null || request.recipientId === sessionId;
+        const rawOutput = stripNul(dto.shellOutput);
+        if (request && requestBelongsToThisEvaluator) {
+          const decidedAt = new Date();
+          await tx.taskExecutableJudgmentResult.create({
+            data: {
+              id: randomUUID(),
+              requestId: request.id,
+              command: lockedAcceptanceTask.acceptanceCommand,
+              expectedExitCode,
+              actualExitCode,
+              rawOutput,
+              recordedById: runner.id,
+              recordedAt: decidedAt,
+            },
+          });
+          await tx.taskJudgmentRequest.update({
+            where: { id: request.id },
+            data: {
+              status: 'DECIDED',
+              decidedAt,
+              decidedByType: 'SYSTEM',
+              decidedById: runner.id,
+              decision: completed ? 'PASS' : 'FAIL',
+            },
+          });
+          if (lockedAcceptanceTask.projectId) {
+            await tx.projectBlocker.updateMany({
+              where: {
+                projectId: lockedAcceptanceTask.projectId,
+                kind: 'HUMAN_DECISION_REQUIRED',
+                subjectType: 'TASK',
+                subjectId: lockedAcceptanceTask.id,
+                resolvedAt: null,
+              },
+              data: { resolvedAt: decidedAt, resolvedBy: 'AUTO', updatedAt: decidedAt },
+            });
+          }
+        }
         // The command, expectation and IN_PROGRESS state are repeated in the write even though
         // their row is locked: they make the compare-and-set visible in SQL and fail closed if
         // this code is ever moved away from the lock without its guard.
-        const changed = await tx.task.updateMany({
-          where: {
-            id: lockedAcceptanceTask.id,
-            status: TaskStatus.IN_PROGRESS,
-            acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
-            acceptanceExpectedExitCode: expectedExitCode,
-          },
-          data: { status: derivedStatus },
-        });
+        const changed = requestBelongsToThisEvaluator
+          ? await tx.task.updateMany({
+              where: {
+                id: lockedAcceptanceTask.id,
+                status: TaskStatus.IN_PROGRESS,
+                acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
+                acceptanceExpectedExitCode: expectedExitCode,
+                completionCriterion: 'EXECUTABLE',
+              },
+              data: { status: derivedStatus },
+            })
+          : { count: 0 };
         if (changed.count > 0) {
           await postExecutableAcceptanceComment(
             tx,
@@ -2625,7 +2692,7 @@ export class RunnerApiController {
             lockedAcceptanceTask.acceptanceCommand,
             expectedExitCode,
             actualExitCode,
-            stripNul(dto.shellOutput),
+            rawOutput,
             derivedStatus,
           );
           acceptanceTaskChanged = true;
@@ -2636,11 +2703,10 @@ export class RunnerApiController {
           }
         }
       }
-      // A reserved turn whose Task still needs an answer but whose evidence cannot be compared is
-      // an unsettled attempt, not an idle conversation. End the Session so T2's
-      // ATTEMPT_ENDED_UNSETTLED fact can wake L2; leave the Task IN_PROGRESS because no exit-code
-      // judgement was actually possible. This includes an older runner omitting the new fields
-      // and a declaration edited while its old command was running.
+      // A reserved turn whose evidence cannot be compared is a transport failure, not a criterion
+      // input. End the Session, but leave the Task IN_PROGRESS and its evidence-bound request open:
+      // no EXECUTABLE_RESULT_RECORDED fact exists to derive a judgment from. This includes an older
+      // runner omitting the fields and a declaration edited while its old command was running.
       if (taskAcceptanceTurn && acceptanceTaskStillInProgress && !acceptanceTaskChanged) {
         failSession = true;
         acceptanceFailureReason = dto.status === RunStatus.FAILED
@@ -2662,10 +2728,12 @@ export class RunnerApiController {
             status: true,
             acceptanceCommand: true,
             acceptanceExpectedExitCode: true,
+            completionCriterion: true,
           },
         });
         if (
           executable?.status === TaskStatus.IN_PROGRESS
+          && executable.completionCriterion === 'EXECUTABLE'
           && executable.acceptanceCommand != null
           && executable.acceptanceExpectedExitCode != null
         ) {
@@ -2845,9 +2913,39 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
-      // T8: a failure may have ended the Session and left its Task FAILED. Re-read both committed
-      // rows; the producer itself rejects parked/retrying/settled attempts and de-duplicates facts.
-      await this.attemptEndedUnsettled?.afterCommitQuietly(sessionId);
+    }
+    // The command observation, not the Session's resulting lifecycle state, is the criterion
+    // input. Querying it on duplicate acknowledgements is intentional: a prior authorization
+    // refusal released the key, while an already-consumed result simply loses the same INSERT.
+    if (!finalized.steer && this.completionInputs) {
+      const request = await this.prisma.taskJudgmentRequest.findFirst({
+        where: {
+          kind: 'EXECUTABLE',
+          recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+          recipientId: sessionId,
+          status: 'DECIDED',
+          executableResult: { isNot: null },
+          task: { projectId: { not: null } },
+        },
+        orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
+        include: {
+          executableResult: true,
+          task: { select: { id: true, projectId: true } },
+        },
+      });
+      if (request?.executableResult && request.task.projectId) {
+        await this.completionInputs.route(
+          executableResultRecordedFact({
+            projectId: request.task.projectId,
+            taskId: request.task.id,
+            requestId: request.id,
+            resultId: request.executableResult.id,
+            evidenceDigest: request.evidenceDigest,
+            actualExitCode: request.executableResult.actualExitCode,
+          }),
+          'DERIVED_COMPLETION_EVALUATOR',
+        );
+      }
     }
     if (
       'taskReclaimed' in finalized

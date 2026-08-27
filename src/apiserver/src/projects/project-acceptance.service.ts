@@ -13,6 +13,7 @@ import {
   ACCEPTANCE_BLOCKED,
   ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_EVIDENCE_STALE,
+  ACCEPTANCE_FINDING_ROUTING,
   ACCEPTANCE_MISSING,
   AcceptanceFacts,
   AcceptanceRefusalCode,
@@ -126,15 +127,15 @@ type AuditKind =
  * project unfinishable: acceptance existed as prose. Somebody ran the suites, wrote the numbers in
  * a document, and a person read that document and set the project DONE. Nothing in the system
  * related the claim to the facts it was about, so "is this project's DONE still true" had no
- * mechanical answer, and re-opening one task could not invalidate anything.
+ * mechanical answer, and changing an acceptance condition could not invalidate anything.
  *
  * What is here instead is one row per attempt (`project_acceptance_run`), one row per stated
  * criterion (`project_acceptance_criterion`), a digest of the facts the attempt judged
  * (`inputDigest`, AE1), a digest of what it concluded (`resultDigest`), and a hard gate that
  * recomputes the first of those inside the transaction that writes DONE. Everything a caller can
- * do that would change the answer either moves the digest or supersedes the run — and the writes
- * that could do it behind the service's back are caught by migration 0127's triggers rather than by
- * a convention.
+ * do that would change the answer either moves the digest or supersedes the run — and the
+ * acceptance-fact writes that could do it behind the service's back are caught by database
+ * triggers rather than by a convention. Task-list state is deliberately outside that answer.
  */
 @Injectable()
 export class ProjectAcceptanceService {
@@ -181,7 +182,7 @@ export class ProjectAcceptanceService {
   // ------------------------------------------------------------------------------------------
 
   /**
-   * AE1's four projections, read from the current rows.
+   * The acceptance-only projections, read from the current rows.
    *
    * Deliberately takes a transaction client: every caller that matters has already taken the
    * project row lock, and reading these through a different connection would answer about a world
@@ -197,16 +198,6 @@ export class ProjectAcceptanceService {
       tx, projectId, project.acceptanceCriteria,
     );
 
-    const tasks = await tx.task.findMany({
-      where: { projectId },
-      select: {
-        id: true, status: true, completionPolicy: true, verifiesTaskId: true, verdict: true,
-        // §13.6 SU6. Part of AE1's facts because they change which tasks are unfinished, and both
-        // of them because they move independently; see `ACCEPTANCE_DIGEST_VERSION`.
-        terminalReason: true,
-        supersededByTaskId: true,
-      },
-    });
     // DISTINCT ON: only the newest generation of each (requirement, branch) pair is what the
     // project currently stands on. The older rows stay readable — that is the point of AE9's
     // append-only shape — but a superseded observation is not a fact about today.
@@ -223,12 +214,6 @@ export class ProjectAcceptanceService {
 
     return {
       criteriaRevision: criteriaSemanticRevision(criteria),
-      taskSet: tasks.map((t) => [
-        t.id, t.status, t.completionPolicy, t.terminalReason ?? '', t.supersededByTaskId ?? '',
-      ] as [string, string, string, string, string]),
-      verdicts: tasks
-        .filter((t) => t.verifiesTaskId !== null)
-        .map((t) => [t.id, t.verifiesTaskId!, t.verdict ?? 'PENDING'] as [string, string, string]),
       mergeEvidence: merges.map((m) => [
         m.requirementId, m.targetBranch, m.contentHash, String(m.refGeneration),
       ] as [string, string, string, string]),
@@ -674,7 +659,8 @@ export class ProjectAcceptanceService {
    * Returns the run the DONE will be bound to. Throws a typed 409 otherwise, and the reason is
    * always one a person can act on: there is no run, the run says something other than PASS, the
    * run's evidence is about a world that has since changed, or the project still has something
-   * unresolved in it.
+   * unresolved in it. Task counts and task statuses are intentionally absent: they are a process
+   * measure, while this gate decides whether the stated outcome was achieved.
    */
   async assertDoneAllowed(
     tx: Prisma.TransactionClient,
@@ -696,9 +682,19 @@ export class ProjectAcceptanceService {
     projectId: string,
     digest: string,
   ): Promise<{ runId: string; attempt: bigint; digest: string }> {
-    const openBlockers = await tx.projectBlocker.count({
-      where: { projectId, resolvedAt: null },
-    });
+    // HUMAN_SIGNOFF judgment blockers are projections of OPEN requests, not mutable
+    // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
+    // merely because there is intentionally no blocker row for somebody to close by hand.
+    const [{ count: openBlockers }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+      SELECT (
+        (SELECT count(*) FROM "project_blocker" blocker
+          WHERE blocker."project_id" = ${projectId}::uuid
+            AND blocker."resolved_at" IS NULL)
+        +
+        (SELECT count(*) FROM "project_judgment_blocker" judgment
+          WHERE judgment."project_id" = ${projectId}::uuid)
+      )::int AS "count"
+    `);
     // §13.6 SU6: a failure whose verifier or whose subject was REPLACED is a record, not a request
     // — nothing will ever run either of them again, so the later PASS that is the only thing which
     // resolves this row can never arrive. Counting it would make a project that re-ran a failed
@@ -730,24 +726,61 @@ export class ProjectAcceptanceService {
     const live = await tx.projectAcceptanceRun.findFirst({
       where: { projectId, supersededAt: null },
       orderBy: { attempt: 'desc' },
+      include: { criteria: { orderBy: { ordinal: 'asc' } } },
     });
     if (!live || live.verdict === null) {
+      const undecided = live?.criteria
+        .filter((criterion) => criterion.verdict === null)
+        .map((criterion) => `#${criterion.ordinal} ${JSON.stringify(criterion.criterionText)}`)
+        .join('; ');
       throw new AcceptanceRefusal(
         ACCEPTANCE_MISSING,
         live === null
-          ? 'no project acceptance has been run — DONE is a claim about evidence, and there is none'
-          : `acceptance run ${uuidToBase62(live.id)} has not concluded yet`,
+          ? 'no project acceptance has been run — DONE is a claim about evidence, and there is ' +
+            'none. ' + ACCEPTANCE_FINDING_ROUTING
+          : `acceptance run ${uuidToBase62(live.id)} has not concluded; non-PASS criteria: ` +
+            `${undecided || 'the run has no undecided criterion row to explain its open summary'}. ` +
+            ACCEPTANCE_FINDING_ROUTING,
         {
-          requiredAction: 'run project acceptance and record a conclusion for every criterion',
+          requiredAction: (live === null
+            ? 'run project acceptance and record a conclusion for every criterion. '
+            : 'record a conclusion for every criterion. ') + ACCEPTANCE_FINDING_ROUTING,
           acceptanceDigest: digest,
         },
       );
     }
-    // §13.4 AE2 step 2 asks for a record whose `decidedBy` is COORDINATOR_AGENT, because clause 2
-    // makes acceptance something a coordinator EXECUTES rather than something anyone asserts. A run
-    // recorded by a person is kept — it is a real record of a real check — but it does not open
-    // this gate on its own, and the refusal says which half is missing rather than reading as "no
-    // acceptance exists" when one plainly does.
+    if (live.verdict !== ProjectAcceptanceVerdict.PASS) {
+      const unmet = live.criteria
+        .filter((criterion) => criterion.verdict !== ProjectAcceptanceVerdict.PASS)
+        .map((criterion) => ({
+          ordinal: criterion.ordinal,
+          criterionKey: criterion.criterionKey,
+          criterionText: criterion.criterionText,
+          verdict: criterion.verdict ?? 'UNDECIDED',
+        }));
+      const named = unmet
+        .map((criterion) =>
+          `#${criterion.ordinal} ${JSON.stringify(criterion.criterionText)} (${criterion.verdict})`)
+        .join('; ');
+      throw new AcceptanceRefusal(
+        ACCEPTANCE_MISSING,
+        `the latest project acceptance did not PASS these criteria: ` +
+          `${named || `the run summary is ${live.verdict}, but no non-PASS criterion row was found`}. ` +
+          ACCEPTANCE_FINDING_ROUTING,
+        {
+          requiredAction: 'fix or re-scope the named criteria, then run a new acceptance. ' +
+            ACCEPTANCE_FINDING_ROUTING,
+          runId: live.id,
+          verdict: live.verdict,
+          unmetCriteria: unmet,
+          acceptanceDigest: digest,
+        },
+      );
+    }
+    // §13.4 AE2 step 2 asks for a PASS whose `decidedBy` is COORDINATOR_AGENT, because clause 2
+    // makes acceptance something a coordinator EXECUTES rather than something anyone asserts. A
+    // non-PASS conclusion is rejected above for the more useful reason — the named unmet criteria
+    // — regardless of who recorded it. Attribution matters only once the outcome could grant DONE.
     if (live.decidedBy !== 'COORDINATOR_AGENT') {
       throw new AcceptanceRefusal(
         ACCEPTANCE_MISSING,
@@ -762,18 +795,6 @@ export class ProjectAcceptanceService {
         },
       );
     }
-    if (live.verdict !== ProjectAcceptanceVerdict.PASS) {
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_MISSING,
-        `the latest project acceptance concluded ${live.verdict}, not PASS`,
-        {
-          requiredAction: 'fix what the acceptance found, then run a new acceptance',
-          runId: live.id,
-          verdict: live.verdict,
-          acceptanceDigest: digest,
-        },
-      );
-    }
     // Unit L2's epoch (migration 0150). `superseded_at` says the same thing along the paths that
     // remember to write it — `ProjectsService.update`'s DONE → OPEN branch, and 0127's fact-change
     // reopen — and says nothing along the ones that do not: a DONE → CANCELLED → OPEN route (that
@@ -782,8 +803,8 @@ export class ProjectAcceptanceService {
     // where the flag does not.
     //
     // Checked BEFORE the digest because it is the more specific answer AND the one the digest
-    // cannot give: a reopen on its own moves none of the four projections, so a project reopened
-    // and left otherwise untouched has a PASS whose digest still matches perfectly.
+    // cannot give: a reopen on its own moves none of the acceptance projections, so a project
+    // reopened and left otherwise untouched has a PASS whose digest still matches perfectly.
     //
     // `ACCEPTANCE_EVIDENCE_STALE` rather than a new code: PAC §12 E2 forbids a synonym, and "your
     // evidence is about a world that is no longer this one" is what that code already means. The
@@ -810,10 +831,12 @@ export class ProjectAcceptanceService {
     if (live.inputDigest !== digest) {
       throw new AcceptanceRefusal(
         ACCEPTANCE_EVIDENCE_STALE,
-        `acceptance run ${uuidToBase62(live.id)} passed against a different set of facts — a ` +
-          'task, a verdict, the acceptance criteria or the merge evidence has changed since it ran',
+        `acceptance run ${uuidToBase62(live.id)} passed against different acceptance facts — ` +
+          'the acceptance criteria or their merge evidence changed since it ran. ' +
+          ACCEPTANCE_FINDING_ROUTING,
         {
-          requiredAction: 'run acceptance again against the current facts',
+          requiredAction: 'run acceptance again against the current criteria and evidence. ' +
+            ACCEPTANCE_FINDING_ROUTING,
           runId: live.id,
           evidenceDigest: live.inputDigest,
           acceptanceDigest: digest,
@@ -1000,7 +1023,7 @@ export class ProjectAcceptanceService {
    * Same decision `assertDoneAllowed` makes and the same code path, so a client cannot be told one
    * thing and refused another. It holds no lock and grants nothing — the gate that DECIDES runs
    * inside the transaction that writes DONE, under `FOR UPDATE` (§13.4 AE7). One transaction all
-   * the same: a digest assembled from four separately-timed reads describes no world at all.
+   * the same: a digest assembled from separately-timed reads describes no world at all.
    */
   async evaluateGate(projectId: string): Promise<{
     digest: string;
@@ -1009,8 +1032,8 @@ export class ProjectAcceptanceService {
     code: AcceptanceRefusalCode | null;
     reason: string | null;
   }> {
-    // Retried whole: the gate reads the project and its tasks under the project lock and decides
-    // from that read alone.
+    // Retried whole: the gate reads the project acceptance standing under the project lock and
+    // decides from that read alone. Task status is not an input.
     return withTransactionRetry(this.prisma, async (tx) => {
       const digest = await this.digest(tx, projectId);
       try {

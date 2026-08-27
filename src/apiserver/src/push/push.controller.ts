@@ -1,13 +1,17 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Optional, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDeviceTokenDto, UnregisterDeviceTokenDto } from './dto';
+import { JudgmentDeliveryService } from './judgment-delivery.service';
 
 /** Device-token registration for APNs push. The sender lives in PushService (see push.service). */
 @Controller('push')
 export class PushController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly judgments?: JudgmentDeliveryService,
+  ) {}
 
   /**
    * Register (or refresh) this device's APNs token for the current user. Upsert by the unique
@@ -27,6 +31,9 @@ export class PushController {
       create: { userId: user.userId, token: dto.token, ...data },
       update: { userId: user.userId, ...data },
     });
+    // A NO_DEVICES ledger row already has its durable retry instant. Nudge the worker so any due
+    // work is picked up now and its next persisted wake is recalculated after this registration.
+    this.judgments?.kick();
     return { ok: true };
   }
 

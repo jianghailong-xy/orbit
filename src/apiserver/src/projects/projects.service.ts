@@ -145,6 +145,7 @@ export const PROJECT_TASK_TREE_SELECT = {
   // page a plan is read through, and "which of these rows completes itself", "which of them is a
   // check" and "of what, concluding what" are the three questions a phase is judged by. Without
   // them a coordinator looking at its own project cannot tell a verification from a subtask.
+  completionCriterion: true,
   completionPolicy: true,
   verdict: true,
   verifiesTaskId: true,
@@ -1776,7 +1777,7 @@ export class ProjectsService {
         // The reverse door, and the reason a stale PASS cannot be reused: reopening a project
         // retires every acceptance run it has. AE4 says old evidence does not need invalidating
         // because the digest stops matching — true for a fact change, and NOT true here, since a
-        // reopen on its own changes none of the four projections. So this is the one invalidation
+        // reopen on its own changes none of the acceptance projections. So this is the one invalidation
         // that has to be written rather than derived.
         if (dto.status === ProjectStatus.OPEN && state.status === ProjectStatus.DONE) {
           const retired = await tx.projectAcceptanceRun.updateMany({

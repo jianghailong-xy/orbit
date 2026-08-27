@@ -501,17 +501,18 @@ test('the installed triggers are the ones the inventory describes', () => {
   );
 });
 
-test('the trigger that makes a task status write a two-lock operation is still declared that way', () => {
-  // The single most load-bearing entry in the trigger list: it is why a plain `status` PATCH has
-  // to pre-lock the project, and why `clearFailedForRetry` is recorded as a residual rather than
-  // as safe. Named explicitly so a migration that narrows it cannot pass by updating the list.
-  const fact = TRIGGER_WRITE_SOURCES.find((t) => t.trigger === 'project_acceptance_task_fact_update');
-  assert.ok(fact, 'project_acceptance_task_fact_update is gone');
-  assert.equal(fact.table, 'task');
-  assert.ok(fact.takes.includes('project LOCK'), 'it no longer takes the project row');
-  for (const column of ['status', 'completion_policy', 'project_id', 'verdict', 'verifies_task_id']) {
-    assert.ok(fact.event.includes(`"${column}"`), `it no longer fires on ${column}`);
-  }
+test('task-list writes are absent from the live acceptance-trigger inventory', () => {
+  const retired = new Set([
+    'project_acceptance_task_fact',
+    'project_acceptance_task_fact_update',
+    'task_acceptance_fact_lock_order_insert_delete',
+    'task_acceptance_fact_lock_order_update',
+  ]);
+  assert.deepEqual(
+    TRIGGER_WRITE_SOURCES.filter((entry) => retired.has(entry.trigger)),
+    [],
+    'task state has re-entered project acceptance through a database trigger',
+  );
 });
 
 test('every excluded source still exists and every class is still used', () => {

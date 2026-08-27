@@ -158,4 +158,17 @@ export class CoordinatorWakeService {
       data: { status: 'REFUSED', refusalCode },
     });
   }
+
+  /**
+   * Bind a won fact to its non-session consumer. CONSUMED remains in the partial unique index, so
+   * replay cannot consume the same immutable input twice.
+   */
+  async consume(wakeId: string, consumerType: string): Promise<boolean> {
+    const consumedAt = new Date();
+    const result = await this.prisma.projectCoordinatorWake.updateMany({
+      where: { id: wakeId, status: 'CLAIMED' },
+      data: { status: 'CONSUMED', consumerType, consumedAt },
+    });
+    return result.count === 1;
+  }
 }

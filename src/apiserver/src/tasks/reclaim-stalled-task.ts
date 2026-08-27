@@ -78,7 +78,7 @@ export async function postRunFailureComment(
 }
 
 /**
- * Durable evidence for the one L0 command a Task declared. `rawOutput` is appended last and
+ * Durable evidence for the one EXECUTABLE command a Task declared. `rawOutput` is appended last and
  * unchanged, so everything after the labelled boundary is exactly the runner's combined
  * stdout/stderr (including an empty string or a missing trailing newline). The status is a
  * server-side comparison result, never prose supplied by the executing session.
@@ -103,7 +103,7 @@ export async function postExecutableAcceptanceComment(
       authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
       authorId: task.assigneeId ?? task.creatorId,
       body:
-        `**L0 验收命令（系统自动执行）**\n\n` +
+        `**EXECUTABLE 验收命令（系统自动执行）**\n\n` +
         `命令：${command}\n\n` +
         `期望退出码：${expectedExitCode}\n` +
         `实际退出码：${actualExitCode}\n` +

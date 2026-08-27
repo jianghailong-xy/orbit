@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JudgmentDeliveryService } from './judgment-delivery.service';
 import { PushController } from './push.controller';
 import { PushService } from './push.service';
 
@@ -6,7 +7,7 @@ import { PushService } from './push.service';
  *  modules (runner-api) import to notify a session owner when an approval is created. */
 @Module({
   controllers: [PushController],
-  providers: [PushService],
-  exports: [PushService],
+  providers: [PushService, JudgmentDeliveryService],
+  exports: [PushService, JudgmentDeliveryService],
 })
 export class PushModule {}

@@ -245,6 +245,37 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_evidence_list":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.listTaskEvidence(id)
+		if err != nil {
+			return toolResult("list task evidence failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "task_evidence_submit":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("task_evidence_submit requires an Orbit task Session", true)
+		}
+		evidence, ok := args["evidence"].(map[string]interface{})
+		if !ok || evidence == nil {
+			return toolResult("evidence must be one JSON object", true)
+		}
+		body := map[string]interface{}{"evidence": evidence}
+		copyIfPresent(body, args, "idempotencyKey")
+		raw, err := s.t.submitTaskEvidence(id, s.agentID, s.sessionID, body)
+		if err != nil {
+			return toolResult("submit task evidence failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_get":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -507,7 +538,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -538,7 +569,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -564,7 +595,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1235,6 +1266,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"supersededByTaskId in ONE call when a later attempt took over, so the attempt keeps " +
 			"how it ended and gains what replaced it.",
 	}
+	taskUpdateStatus := map[string]interface{}{
+		"type": "string",
+		"enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "FAILED"},
+		"description": "Direct DONE is refused for every person, coordinator, and execution " +
+			"session; satisfy the task's declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF " +
+			"criterion instead. FAILED remains writable as a run's conservative self-report.",
+	}
 	providerProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to start where the assignee's project last started, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
@@ -1397,10 +1435,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
 			"criterionKey":       criterionKeyProp,
+			"completionCriterion": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
+				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; HUMAN_SIGNOFF uses one human signoff. They are peer choices, not a fallback chain. Omission is HUMAN_SIGNOFF unless the legacy executable pair or VERIFICATION_PASSED policy is supplied.",
+			},
 			"acceptanceCommand": map[string]interface{}{
 				"type":        "string",
 				"minLength":   1,
-				"description": "The one L0 shell acceptance command. Set it together with acceptanceExpectedExitCode; after the execution turn, the existing task session runs it and the server derives DONE/FAILED from the exit code without an LLM judgement. If one command is not enough, split the task.",
+				"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; after the execution turn, the existing task session runs it and the server derives DONE/FAILED from the exit code without an LLM judgement. If one command is not enough, split the task.",
 			},
 			"acceptanceExpectedExitCode": map[string]interface{}{
 				"type":        "integer",
@@ -1421,7 +1464,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
-				"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks.",
+				"description": "How this task rolls up subtasks. MANUAL (default) performs no child aggregation; the declared completionCriterion decides DONE. ALL_CHILDREN_DONE derives completion when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED uses independent PASS verdict evidence. Direct status DONE is never a completion mechanism.",
 			},
 			"verifiesTaskId": map[string]interface{}{
 				"type":        "string",
@@ -1499,6 +1542,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_get",
 			"description": "Get one task with its comments and linked sessions.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name":        "task_evidence_list",
+			"description": "List the task's explicit structured completion-evidence revisions in stable task-local order. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name":        "task_evidence_submit",
+			"description": "Submit structured completion evidence as a first-class immutable fact from the current task Session. A retry key and canonical evidence digest replay the same revision; substantively changed evidence appends one. This does not write task.status, change Session state, add a comment or send a notification.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"evidence": map[string]interface{}{
+					"type":        "object",
+					"description": "Structured facts supporting completion, such as commands, raw outputs, exit codes and artifact hashes. Object-key order is not significant; array order and string whitespace are.",
+				},
+				"idempotencyKey": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"maxLength":   200,
+					"description": "Stable identity reused for every transport retry of this submission.",
+				},
+			}, "evidence"),
 		},
 		{
 			"name":        "task_attribution",
@@ -1892,12 +1957,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF path. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
 				"description":        taskDescriptionProp,
-				"status":             status,
+				"status":             taskUpdateStatus,
 				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 				"parentTaskId":       updateParentTaskIDProp,
@@ -1905,9 +1970,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"provider":           providerProp,
 				"model":              modelProp,
 				"acceptanceCriteria": updateAcceptanceCriteriaProp,
+				"completionCriterion": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
+					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and HUMAN_SIGNOFF are peers, not an escalation order.",
+				},
 				"acceptanceCommand": map[string]interface{}{
 					"type":        []string{"string", "null"},
-					"description": "The one L0 shell acceptance command. Set it together with acceptanceExpectedExitCode; null/null clears executable acceptance. Omit both to preserve them. One command only — split the task if that is insufficient.",
+					"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; null/null clears executable acceptance. Omit both to preserve them. One command only — split the task if that is insufficient.",
 				},
 				"acceptanceExpectedExitCode": map[string]interface{}{
 					"type":        []string{"integer", "null"},
@@ -1925,7 +1995,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"completionPolicy": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
-					"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks. Switching back to MANUAL stops the recomputation without undoing what it last concluded.",
+					"description": "How this task rolls up subtasks. MANUAL (default) performs no child aggregation; the declared completionCriterion decides DONE. ALL_CHILDREN_DONE derives completion when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails. VERIFICATION_PASSED uses independent PASS verdict evidence. Direct status DONE is never a completion mechanism. Switching back to MANUAL stops child recomputation without undoing what it last concluded.",
 				},
 				"verifiesTaskId": map[string]interface{}{
 					"type":        []string{"string", "null"},

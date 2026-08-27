@@ -27,6 +27,7 @@
  */
 
 import { uuidToBase62 } from '@orbit/shared';
+import { ACCEPTANCE_FINDING_ROUTING } from './project-acceptance';
 import {
   projectScopeToken,
   type ScopeOperation,
@@ -211,7 +212,7 @@ const REFUSAL_PROSE: Readonly<Record<string, string>> = {
     'Somebody has to say which project owns this work; a coordinator may not pick one for it.',
   REOPEN_PROJECT_FIRST:
     'That project is settled. It has to be reopened — which starts a new acceptance epoch — '
-    + 'before it can take new work.',
+    + 'before it can take new work. ' + ACCEPTANCE_FINDING_ROUTING,
   AWAIT_HANDOFF_APPROVAL: 'Wait for the user to answer the declared crossing.',
 };
 

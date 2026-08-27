@@ -20,6 +20,10 @@ import {
   taskIsObsolete,
   type TaskRetirement,
 } from '../tasks/task-supersession';
+import {
+  deriveTaskCompletionStatus,
+  type TaskCompletionCriterionValue,
+} from '../tasks/task-completion-criterion';
 
 export const TASK_COMPLETION_POLICIES = [
   'MANUAL',
@@ -46,6 +50,8 @@ export interface AggregationTaskFact {
   status: AggregationTaskStatus;
   parentTaskId: string | null;
   completionPolicy: TaskCompletionPolicyValue;
+  /** Present on stored rows since N1. Optional keeps older pure-function callers readable. */
+  completionCriterion?: TaskCompletionCriterionValue | null;
   verifiesTaskId: string | null;
   verdict: TaskVerdictValue | null;
   /**
@@ -75,7 +81,7 @@ export interface AggregationTaskFact {
  * The two clauses, and why each is exactly where the line falls:
  *
  *  - **A direct child exists.** This is AG4 read forwards. A policy on a childless task is inert
- *    (`recompute` returns null for it), so nothing but a status write can ever complete it — it is
+ *    (`recompute` returns null for it), so only its declared completion criterion can complete it — it is
  *    an ordinary leaf that happens to carry a policy for the children it will have later, and
  *    refusing to run it would strand it. The two rules therefore share one predicate: aggregation
  *    is what completes this task **iff** the loop must not dispatch it.
@@ -88,15 +94,14 @@ export interface AggregationTaskFact {
  *    — that half holds — but the shape has no next step in it, so the gap is REPORTED (§11's
  *    `AGGREGATE_PARENT_UNSATISFIABLE` / `VERIFICATION_REQUIRED`) rather than resolved by weakening
  *    this predicate. Weakening it would dispatch the roll-up, which is the incident AG6 exists for.
- *  - **The policy is not `MANUAL`.** A MANUAL parent is completed by an explicit status write and
- *    by nothing else (AG1's table, first row), so a person or an agent is expected to act on it.
- *    That is the pre-§13.1 contract for every parent task in the product, and it stays.
+ *  - **The policy is not `MANUAL`.** A MANUAL parent does not roll up its children; its declared
+ *    completion criterion decides DONE and aggregation never second-guesses it.
  *
  * What is deliberately NOT a third clause: `task.isForeman`. An explicit Foreman is a task somebody
  * filed as the coordinating RUN for a list's work, so exempting it here reads as the obvious kindness
  * — and it is incoherent. `recompute` above does not exempt it: a Foreman with children and a
  * non-MANUAL policy is still recomputed FROM those children, so exempting it at the dispatch gate
- * produces a task with TWO completion owners — a Worker that runs it and writes DONE, and an
+ * produces a task with TWO completion owners — its declared criterion, and an
  * aggregation that writes DONE or drags it back OPEN from the children. They race, and AG3's
  * reopen makes the loser permanent.
  *
@@ -511,6 +516,16 @@ function recompute(
   // to give a replaced attempt a subtask is a request addressed to no one.
   if (obsolete.has(task.id)) return NOTHING;
   if (task.completionPolicy === 'MANUAL') return NOTHING;
+  // N1 made VERIFICATION an explicit ordinary criterion. A stored row that declares another
+  // criterion must not be completed merely because a legacy completionPolicy still says
+  // VERIFICATION_PASSED. Omitted means a pre-N1 pure-function fixture and retains that fixture's
+  // historical aggregate semantics; database reads always supply the column.
+  const explicitVerificationCriterion = task.completionCriterion === 'VERIFICATION';
+  if (
+    task.completionPolicy === 'VERIFICATION_PASSED'
+    && task.completionCriterion != null
+    && !explicitVerificationCriterion
+  ) return NOTHING;
   // `[K5]`: aggregation may not COMPLETE a check that has concluded nothing.
   //
   // §13.2 V1 gives a check two carriers — its terminal status and its structured result — and
@@ -525,7 +540,7 @@ function recompute(
   // AG4. A policy on a childless task is inert, and stays inert rather than becoming inert-until-
   // someone-adds-a-child: nothing here writes when there is nothing to aggregate over. It is not a
   // gap either — AG6 does not refuse to dispatch it, so an ordinary leaf is exactly what it is.
-  if (childTasks.length === 0) return NOTHING;
+  if (childTasks.length === 0 && !explicitVerificationCriterion) return NOTHING;
 
   let done = 0;
   let cancelled = 0;
@@ -593,7 +608,10 @@ function recompute(
     else if (status === 'CANCELLED' || replacedWithin) cancelled += 1;
     else outstanding += 1;
   }
-  const childrenSettled = outstanding === 0 && done > 0;
+  // An explicit VERIFICATION criterion is satisfied by its independent PASS, exactly as N1's
+  // evaluator states; it is not a hidden conjunction with the legacy parent roll-up. Older
+  // aggregation fixtures (criterion omitted) retain the children condition they are testing.
+  const childrenSettled = explicitVerificationCriterion || (outstanding === 0 && done > 0);
 
   let passed = 0;
   let verificationsOutstanding = 0;
@@ -608,7 +626,14 @@ function recompute(
     // is precisely the shape this project's own 04R / 04R2 / 04R3 history has.
     const status = effective.get(verifier.id) ?? verifier.status;
     if (!verificationIsLive({ status, retired: obsolete.has(verifier.id) })) continue;
-    if (status === 'DONE' && verifier.verdict === 'PASS') passed += 1;
+    // Under N2 a coordinator/verifier records the independent verdict but may not write DONE.
+    // For an explicitly declared VERIFICATION criterion, PASS is therefore the terminal evidence
+    // itself; requiring the verifier row to be DONE would make the criterion unreachable. Legacy
+    // aggregation callers (criterion omitted) keep the old two-carrier status+verdict rule.
+    if (
+      verifier.verdict === 'PASS'
+      && (explicitVerificationCriterion || status === 'DONE')
+    ) passed += 1;
     else {
       verificationsOutstanding += 1;
       if (status === 'DONE' && verifier.verdict == null) verificationsUnconcludable += 1;
@@ -620,7 +645,15 @@ function recompute(
     ? verificationsOutstanding === 0 && passed > 0
     : true;
 
-  const satisfied = childrenSettled && verified;
+  const verificationStatus = explicitVerificationCriterion
+    ? deriveTaskCompletionStatus({
+        completionCriterion: 'VERIFICATION',
+        verificationVerdict: verified ? 'PASS' : null,
+      })
+    : null;
+  const satisfied = explicitVerificationCriterion
+    ? verificationStatus === 'DONE'
+    : childrenSettled && verified;
   const counts: TaskChildCounts = { done, outstanding, unresolvable };
   const evidence = {
     children: { total: childTasks.length, done, cancelled, outstanding },

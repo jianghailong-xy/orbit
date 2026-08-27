@@ -26,16 +26,14 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { AttemptEndedUnsettledProducer } from '../projects/attempt-ended-unsettled.producer';
-import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
-import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { SessionsService } from '../sessions/sessions.service';
+import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -61,13 +59,7 @@ function controller(db: PrismaClient): RunnerApiController {
     waitForInbox: async () => undefined,
   } as unknown as RealtimeService;
   const prisma = db as unknown as PrismaService;
-  const sessions = new SessionsService(prisma, queue, realtime);
-  const convergence = new CoordinatorConvergenceService(prisma);
-  const attemptEnded = new AttemptEndedUnsettledProducer(
-    prisma,
-    new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
-    convergence,
-  );
+  const completionInputs = new CompletionInputRouter(new CoordinatorWakeService(prisma));
   return new RunnerApiController(
     prisma,
     queue,
@@ -77,7 +69,7 @@ function controller(db: PrismaClient): RunnerApiController {
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
     undefined,
-    attemptEnded,
+    completionInputs,
   );
 }
 
@@ -211,6 +203,19 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
     /acceptanceCommand and acceptanceExpectedExitCode must be set or cleared together/,
   );
   const api = controller(db);
+  const evidence = await new TaskCompletionEvidenceService(db as unknown as PrismaService).submit(
+    f.ownerId,
+    f.taskId,
+    { type: 'AGENT', id: f.workspaceId },
+    {
+      sourceSessionId: f.sessionId,
+      idempotencyKey: 'executable-fact',
+      evidence: { command, artifact: 'package.json', observedBeforeAcceptance: true },
+    },
+  );
+  assert.equal(evidence.judgmentRequest.kind, 'EXECUTABLE');
+  assert.equal(evidence.judgmentRequest.recipientType, 'SYSTEM_EXECUTABLE_EVALUATOR');
+  assert.equal(evidence.judgmentRequest.recipientId, f.sessionId);
   await finishMessage(api, f);
 
   // The executor completed a turn and wrote no Task status. Only the L0 shell result may settle it.
@@ -228,6 +233,41 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
   });
   assert.deepEqual(result, { ok: true, status: RunStatus.AWAITING_INPUT });
   assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.DONE);
+  const [request, commandResult] = await Promise.all([
+    db.taskJudgmentRequest.findUniqueOrThrow({ where: { id: evidence.judgmentRequest.id } }),
+    db.taskExecutableJudgmentResult.findUniqueOrThrow({
+      where: { requestId: evidence.judgmentRequest.id },
+    }),
+  ]);
+  assert.equal(request.status, 'DECIDED');
+  assert.equal(request.decision, 'PASS');
+  assert.equal(request.decidedByType, 'SYSTEM');
+  assert.equal(request.decidedById, f.runnerId);
+  assert.equal(commandResult.command, command);
+  assert.equal(commandResult.expectedExitCode, 0);
+  assert.equal(commandResult.actualExitCode, 0);
+  assert.equal(commandResult.rawOutput, rawOutput);
+  assert.equal(commandResult.recordedById, f.runnerId);
+  const inputWake = await db.projectCoordinatorWake.findFirstOrThrow({
+    where: { event: 'EXECUTABLE_RESULT_RECORDED', subjectId: request.id },
+  });
+  assert.equal(inputWake.status, 'CONSUMED');
+  assert.equal(inputWake.consumerType, 'DERIVED_COMPLETION_EVALUATOR');
+  assert.match(inputWake.subjectVersion, new RegExp(`^${commandResult.id}:`));
+  await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellExitCode: 0,
+    shellOutput: rawOutput,
+  });
+  assert.equal(
+    await db.projectCoordinatorWake.count({
+      where: { event: 'EXECUTABLE_RESULT_RECORDED', subjectId: request.id },
+    }),
+    1,
+    'an unchanged command result is consumed once',
+  );
   const comment = await db.taskComment.findFirstOrThrow({
     where: { taskId: f.taskId },
     orderBy: { createdAt: 'desc' },
@@ -315,6 +355,76 @@ suite('an in-flight result cannot settle a declaration whose expected exit code 
     'no comparison means no guessed Task status; the terminal Session feeds L2 instead',
   );
   assert.equal(await db.taskComment.count({ where: { taskId: f.taskId } }), 0);
+});
+
+suite('an executable result from a different Session cannot consume the open request', async (t) => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const sql = new Client({ connectionString: URL });
+  await sql.connect();
+  const db = prismaClientFor(URL!);
+  t.after(async () => {
+    await db.$disconnect();
+    await sql.end();
+  });
+  await empty(sql);
+
+  const command = 'printf recipient-bound';
+  const f = await fixture(db, 'wrong-evaluator', { command, expectedExitCode: 0 });
+  const namedEvaluatorId = randomUUID();
+  await db.session.create({
+    data: {
+      id: namedEvaluatorId,
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId: f.taskId,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId,
+      title: 'the evidence-bound evaluator',
+      prompt: 'owns this judgment request',
+      provider: 'claude',
+      // A prior, terminal task Session may still be the source named by an evidence revision
+      // while a recovered live Session is executing the command. Terminal keeps the fixture on
+      // the legal side of the one-live-execution-claim invariant.
+      status: RunStatus.SUCCEEDED,
+      finishedAt: new Date(),
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: false,
+    },
+  });
+  const evidence = await new TaskCompletionEvidenceService(
+    db as unknown as PrismaService,
+  ).submit(
+    f.ownerId,
+    f.taskId,
+    { type: 'AGENT', id: f.workspaceId },
+    {
+      sourceSessionId: namedEvaluatorId,
+      idempotencyKey: 'recipient-bound-executable-fact',
+      evidence: { command, artifact: 'recipient-bound.txt' },
+    },
+  );
+  assert.equal(evidence.judgmentRequest.recipientId, namedEvaluatorId);
+
+  const api = controller(db);
+  await finishMessage(api, f);
+  const acceptance = await dequeueAcceptance(api, f);
+  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellExitCode: 0,
+    shellOutput: 'recipient-bound',
+  });
+
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
+    TaskStatus.IN_PROGRESS, 'the legacy L0 path cannot bypass an explicit request recipient');
+  assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
+    where: { id: evidence.judgmentRequest.id },
+  })).status, 'OPEN');
+  assert.equal(await db.taskExecutableJudgmentResult.count({
+    where: { requestId: evidence.judgmentRequest.id },
+  }), 0);
 });
 
 suite('a task with no command keeps the pre-T10 turn-complete behaviour', async (t) => {

@@ -94,6 +94,7 @@ export interface HandoffPlan {
   acceptanceCriteria?: string | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  completionCriterion?: string | null;
   labels?: readonly string[] | null;
   /** WHO — the workspace that would execute it. */
   assigneeId?: string | null;
@@ -158,12 +159,14 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
   const source = identity.source;
   // Preserve every pre-T10 approval byte-for-byte when it authorises no executable acceptance.
   // A task that does carry the new pair gets a new digest version and binds both fields, so an old
-  // approval can never be stretched to authorise a command it did not show.
+  // approval can never be stretched to authorise a command it did not show. An explicitly typed
+  // N1 criterion advances to v4 and binds that type; omission keeps the rolling-client identity.
   const executableAcceptance =
     plan.acceptanceCommand != null || plan.acceptanceExpectedExitCode != null;
+  const typedCompletion = plan.completionCriterion != null;
   return createHash('sha256')
     .update(canonicalJson({
-      v: executableAcceptance ? 3 : 2,
+      v: typedCompletion ? 4 : executableAcceptance ? 3 : 2,
       plan: {
         title: plan.title,
         description: plan.description ?? null,
@@ -174,6 +177,7 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
               acceptanceExpectedExitCode: plan.acceptanceExpectedExitCode ?? null,
             }
           : {}),
+        ...(typedCompletion ? { completionCriterion: plan.completionCriterion } : {}),
         // Order-insensitive: `normalizeTaskLabels` dedupes but preserves the caller's order, and
         // two orderings of one label set are the same task to every reader of it.
         labels: [...(plan.labels ?? [])].sort(),
