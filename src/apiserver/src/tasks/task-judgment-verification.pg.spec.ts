@@ -101,6 +101,7 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
     const evidenceService = new TaskCompletionEvidenceService(
       db as unknown as PrismaService,
       tasks,
+      undefined,
       router,
     );
     const evidence = await evidenceService.submit(

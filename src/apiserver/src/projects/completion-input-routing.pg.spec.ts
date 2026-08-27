@@ -119,7 +119,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
 
     const prisma = db as unknown as PrismaService;
     const router = new CompletionInputRouter(new CoordinatorWakeService(prisma));
-    const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, router);
+    const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, undefined, router);
     const actor = { type: CreatorType.USER, id: ownerId };
     const first = await evidenceService.submit(ownerId, taskId, actor, {
       sourceSessionId,
