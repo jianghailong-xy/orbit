@@ -11,18 +11,19 @@ export function coordinatorSessionTitle(projectTitle: string): string {
 /**
  * The message a coordination session opens on.
  *
- * A coordinator is driven by the person talking to it. The control loop that used to open turns on
- * its own is gone, so this says what the project is, where to read its real state, and which tools
- * are in reach — and deliberately says nothing about an automation policy, because nothing acts on
- * one any more. Promising a stance no code enforces is worse than promising nothing.
+ * A coordinator is driven by the user interaction that opened it. The control loop that used to
+ * open turns on its own is gone, so this says what the project is, where to read its real state,
+ * and which tools are in reach — and deliberately says nothing about an automation policy,
+ * because nothing acts on one any more. The authenticated channel is useful provenance, but is
+ * not by itself proof that a human rather than a credential holder is present.
  *
  * Unit T6 took two claims out of it. This used to say `project_update` was for the acceptance
- * criteria and for recording `status = DONE`, and both of those are a person's: the criteria are
- * the exam this project is judged against, and DONE is the statement that its goal was met. The
- * person driving this conversation can still write either — they are the one signed in, and
- * `coordinator-authority.ts` restricts only the one-shot judgment session — but a coordinator told
- * they are its tools is a coordinator that will offer to do them rather than ask, which is the
- * shape of every irreversible write nobody meant to authorise. So the opening names who decides.
+ * criteria and for recording `status = DONE`, and both are routed to owner review: the criteria
+ * are the exam this project is judged against, and DONE is the statement that its goal was met.
+ * The owner-authenticated channel can still write either, while `coordinator-authority.ts`
+ * restricts only the one-shot judgment session. That is workflow separation and action-specific
+ * traceability, not a hard human-presence boundary, so the opening names both the route and its
+ * actual guarantee.
  */
 export function buildCoordinatorOpening(title: string, projectId: string): string {
   return (
@@ -36,7 +37,8 @@ export function buildCoordinatorOpening(title: string, projectId: string): strin
     + '有两件事不是你来定：改这个项目的验收标准，和把它记成 DONE。'
     + '验收标准是判定这个项目做没做完的那把尺子，改尺子的人可以让任何结论成立；'
     + 'DONE 是「目标达成了」这句话本身，说错了没有下游会再问一遍。'
-    + '这两件都由人来写——你把该改什么、还差什么说清楚，让屏幕这边的人决定。\n\n'
+    + '这两件都由账号所有者通道记录——你把该改什么、还差什么说清楚，让屏幕这边的账号所有者决定。'
+    + '这里的 HUMAN_ONLY 是角色隔离和按动作留痕，不是服务器对“真人在场”的密码学证明。\n\n'
     + '没给你的工具就别去找：列出或删除项目、另开一个协调会话、直接指挥 runner，都不在你手上。'
   );
 }

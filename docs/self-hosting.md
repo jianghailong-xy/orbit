@@ -40,6 +40,13 @@ openssl rand -base64 32
 required by the Compose service definition. Losing either secret can invalidate credentials or make stored
 provider keys unreadable, so include the values in a protected secret backup. Do not commit `.env`.
 
+Anyone who can read `JWT_SECRET` can mint an owner JWT. Consequently, an agent with host/container control
+cannot be distinguished from a person merely by checking that JWT; Orbit's project `HUMAN_ONLY` actions are
+then workflow boundaries with action-specific traceability, not proof of human presence. Keep runners and
+agents away from the apiserver environment and Docker control socket when that distinction matters. See
+[HUMAN_ONLY authority and credential trust](human-only-authority.md) for the exact guarantee and stronger
+deployment options.
+
 `PUBLIC_ORIGIN` is baked into the web image and runner install instructions. Set it before building and
 rebuild the web image whenever it changes.
 

@@ -15,7 +15,8 @@
  *
  *   AUTOMATIC           deterministic, cheap to get wrong, and no LLM is in the loop at all.
  *   COORDINATOR_BOUNDED a judgment session may, inside a stated bound it cannot widen.
- *   HUMAN_ONLY          a person, through the door a person signs in to.
+ *   HUMAN_ONLY          owner review through an owner-authenticated channel, with action-specific
+ *                       traceability.
  *
  * The column stays. What changed is that nothing here reads it: every function below is total over
  * (principal, action) and takes no policy, so the same write is refused at MANUAL, at GUARDED_AUTO
@@ -24,21 +25,23 @@
  *
  * §1 — WHO IS RESTRICTED
  * ======================
- * Exactly one principal: the one-shot JUDGMENT session unit T3 opens from a committed fact
+ * Exactly one session role: the one-shot JUDGMENT session unit T3 opens from a committed fact
  * (`CoordinatorJudgmentService`), identified by `session.dispatch_origin = 'PROJECT_COORDINATOR'`.
  *
- * Everybody else is USER here, and the word is doing the same work it does in §4 R1 of the scope
- * contract: a person in the web app or the CLI, a task's own execution run, and the long-lived
- * coordination conversation a person opens with `POST /projects/:id/coordinator` — which takes the
- * `USER` dispatch origin precisely because a person opened it and is driving it turn by turn. A
- * write that arrives with no acting session at all is a person's by construction and pays nothing:
- * none of these gates costs it a query.
+ * Everything else is NON_JUDGMENT here: the owner-authenticated web/API door, a task execution
+ * run, a long-lived coordination conversation, and a write with no acting session. The last case
+ * deliberately preserves headless CLI, internal/cron and user-API callers; changing `undefined`
+ * into a refusal would turn a role restriction into a new authentication requirement.
  *
- * That leaves the boundary keyed on a column the writer does not control. `dispatch_origin` is
- * written by `sessions.create` from the door the session came through, and the acting session id
- * arrives in the `X-Orbit-Session-Id` header the runner injects — never in a body field. An agent
- * that could name its own principal would be an agent that could grant itself whatever it was
- * refused.
+ * NON_JUDGMENT does NOT mean "the server proved a person was present". This module classifies one
+ * session role, not humans. `dispatch_origin` is written by `sessions.create`, and the acting
+ * session id arrives in the runner-injected `X-Orbit-Session-Id` header rather than a body field,
+ * so the one-shot judgment session cannot opt out while it uses its ordinary credential. A caller
+ * that omits the header, borrows an owner credential, or can mint an owner JWT may still arrive as
+ * NON_JUDGMENT. Tenancy and scope checks decide what that credential may reach; this table adds
+ * workflow separation and action-specific evidence, not a hard human-presence boundary. PASS
+ * conclusions retain an actor; criteria and DONE retain the facts they changed or bound, but not
+ * a durable requester identity. See `docs/human-only-authority.md` for that exact audit matrix.
  *
  * §2 — WHY THE SERVER AND NOT THE PROMPT
  * ======================================
@@ -60,8 +63,8 @@
  */
 export const JUDGMENT_DISPATCH_ORIGIN = 'PROJECT_COORDINATOR';
 
-/** §1's two answers. `USER` is every writer this contract does not restrict. */
-export const AUTHORITY_PRINCIPALS = ['USER', 'JUDGMENT'] as const;
+/** §1's two answers. `NON_JUDGMENT` is a negative role classification, not a human identity. */
+export const AUTHORITY_PRINCIPALS = ['NON_JUDGMENT', 'JUDGMENT'] as const;
 export type AuthorityPrincipal = (typeof AUTHORITY_PRINCIPALS)[number];
 
 export const AUTHORITY_TIERS = ['AUTOMATIC', 'COORDINATOR_BOUNDED', 'HUMAN_ONLY'] as const;
@@ -88,7 +91,9 @@ export type CoordinatorAction = (typeof COORDINATOR_ACTIONS)[number];
 /**
  * §0's table. One tier per action, and the argument for each is the cost of being wrong.
  *
- * The three HUMAN_ONLY rows are the irreversible ones, and they are irreversible in the same way:
+ * The three HUMAN_ONLY rows are the irreversible ones, and they are irreversible in the same way.
+ * HUMAN_ONLY is retained as the stable policy/API label for "route this to owner review"; it does
+ * not claim that the credentialed owner channel is cryptographic proof of human presence:
  * each turns "not finished" into "finished" for a reader who will never ask again. A task's DONE
  * unlocks its successors; a verification's PASS completes the subject it checks
  * (`task-aggregation.ts` counts `status DONE && verdict PASS` and nothing else); an acceptance
@@ -133,7 +138,7 @@ export type AuthorityRefusalCode = (typeof AUTHORITY_REFUSAL_CODES)[number];
  * refusal whose required action is "something" is a refusal nobody can act on.
  */
 export const AUTHORITY_REQUIRED_ACTIONS = [
-  /** Stop and report. This is not a decision a judgment session gets to make at all. */
+  /** Stop and request owner review. This is workflow guidance, not a human-authentication fact. */
   'ASK_A_PERSON',
   /** Say which of the project's stated acceptance criteria this new work serves, and retry. */
   'NAME_THE_CRITERION_THIS_SERVES',
@@ -162,18 +167,19 @@ export interface AuthorityRefusal {
 /**
  * §1's derivation, from the acting session's own `dispatch_origin`.
  *
- * `undefined` — no acting session — is USER, and so is a session this owner does not have. That is
- * deliberately the opposite of the scope contract's fail-closed treatment of an unresolvable id,
- * and the two are answering different questions: a scope is an authority a session CLAIMS, so an
- * unreadable claim must grant nothing, while this is a restriction placed on one specific kind of
- * session, and a session that is not that kind is not restricted by it. Nothing is granted here
- * either way — every caller that reaches these gates has already been authorised by the tenancy
- * checks and by the scope contract.
+ * `undefined` — no acting session — is NON_JUDGMENT, as is an unresolvable session. This is
+ * deliberately different from the scope contract's fail-closed treatment of a claimed scope, and
+ * the two answer different questions: scope is positive authority, while this helper only asks
+ * whether the request is attributable to the one restricted judgment role. Nothing is granted by
+ * this answer — tenancy and scope authorization have already run — and NON_JUDGMENT is expressly
+ * not evidence that a human held the authenticated credential.
  */
 export function authorityPrincipal(
   actingSessionDispatchOrigin: string | null | undefined,
 ): AuthorityPrincipal {
-  return actingSessionDispatchOrigin === JUDGMENT_DISPATCH_ORIGIN ? 'JUDGMENT' : 'USER';
+  return actingSessionDispatchOrigin === JUDGMENT_DISPATCH_ORIGIN
+    ? 'JUDGMENT'
+    : 'NON_JUDGMENT';
 }
 
 const HUMAN_ONLY_REFUSALS: Readonly<
@@ -185,22 +191,26 @@ const HUMAN_ONLY_REFUSALS: Readonly<
     message:
       'A judgment session cannot change a project’s acceptance criteria. They are the exam this '
       + 'project is judged against, and a coordinator that may rewrite the exam can make any '
-      + 'verdict come out right — including its own. Report what you think should change and let a '
-      + 'person write it, from the Orbit web app or the user API.',
+      + 'verdict come out right — including its own. Report what should change and request an '
+      + 'owner review through an owner-authenticated channel. Orbit freezes the resulting criteria '
+      + 'and digest in an evidence version, but this write does not persist the requester’s identity '
+      + 'and the channel does not prove who held the credential.',
   },
   CONCLUDE_VERDICT_PASS: {
     code: 'VERDICT_PASS_HUMAN_ONLY',
     message:
       'A judgment session cannot write PASS. A PASS completes work for every reader downstream and '
       + 'nothing asks again, so it is not a coordinator’s to record. FAIL and INCONCLUSIVE are '
-      + 'allowed from here: a conservative conclusion releases nothing and asks for a person.',
+      + 'allowed from here: a conservative conclusion releases nothing. Escalate the evidence for '
+      + 'an owner-channel decision; that attribution is an audit fact, not proof of human presence.',
   },
   SETTLE_PROJECT_DONE: {
     code: 'PROJECT_DONE_HUMAN_ONLY',
     message:
       'A judgment session cannot record a project DONE. That is the final statement that the goal '
-      + 'was reached, and it is a person’s to make. Say what you found and what is left; the '
-      + 'evidence you record is what they will read.',
+      + 'was reached. Say what you found and what is left, then request an owner-channel review. '
+      + 'Orbit records the accepted evidence run, digest and time, but not the requester identity; '
+      + 'the route does not attest that a human rather than a credential holder made the request.',
   },
 };
 
@@ -248,12 +258,12 @@ export interface TaskOpeningFacts {
  * The failure being bounded is task inflation — a coordinator that answers every difficulty by
  * filing more work, each item locally reasonable, until the project is a queue of its own
  * deliberation. A count would bound it arbitrarily. Naming the criterion pins it to a fact instead:
- * a project's acceptance criteria are FINITE and a person wrote them, so work that serves none of
+ * a project's acceptance criteria are FINITE and the owner channel recorded them, so work that serves none of
  * them is work the project was not asked for, and that is a sentence somebody can check.
  *
  * The key must name a criterion that is stated TODAY. A project with none stated refuses every
  * coordinator-opened task, which is the correct answer rather than an edge case: there is nothing
- * for the work to serve yet, and the person who states the criteria is the person to ask.
+ * for the work to serve yet, and the owner who states the criteria is the reviewer to ask.
  *
  * What this does NOT cover, considered and left out: MOVING an existing task into the project.
  * That is not opening work — the task exists, somebody already decided it was worth doing — and
@@ -298,7 +308,7 @@ export function refuseTaskOpening(
         `criterionKey ${declared} does not name any acceptance criterion this project states `
         + `today (it states ${facts.statedCriterionKeys.length}). Re-read them with project_get: `
         + 'editing a criterion changes its key, and a project that states none has nothing for new '
-        + 'work to serve until a person writes them.',
+        + 'work to serve until an owner-authenticated channel records them.',
     };
   }
   // Read as a whole-plan question. A batch that would take the project past its allowance is

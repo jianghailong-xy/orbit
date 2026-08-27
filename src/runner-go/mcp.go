@@ -1747,7 +1747,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"comment. Put real evidence in each entry's `evidence`: the command, its exit " +
 				"code, the key output, the SHA, the environment. Only a PASS recorded here lets " +
 				"the project be set DONE. Every event records who concluded, when, and the evidence " +
-				"version it was based on; only a person may record PASS.",
+				"version it was based on. A judgment-session or machine-attributed call may refute; " +
+				"PASS must use the owner-attributed channel. That is workflow and audit provenance, " +
+				"not proof of human presence.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -1868,10 +1870,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"fields — say so when the work actually lands rather " +
 				"than leaving a finished project OPEN. TWO EXCEPTIONS, and the server enforces " +
 				"them rather than trusting this sentence: a project's one-shot JUDGMENT session " +
-				"(the one a committed fact opens, not the conversation a person is in) cannot " +
+				"(the one a committed fact opens, not the user-origin conversation) cannot " +
 				"write acceptanceCriteria and cannot write status DONE. Those are the exam the " +
 				"project is judged against and the statement that its goal was met; report what " +
-				"should change and let a person write it. Only the fields you pass are sent, so " +
+				"should change and request owner-channel review. That route supplies workflow " +
+				"separation and action-specific traceability, not proof of human presence. Criteria " +
+				"snapshots and DONE bindings do not persist a requester identity. Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +
 				"untouched, pass a string to replace it, pass null to clear it. status DONE means " +
 				"the goal was reached and CANCELLED that it will not be; neither is a way to file " +

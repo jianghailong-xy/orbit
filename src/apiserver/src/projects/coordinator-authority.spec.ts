@@ -81,13 +81,13 @@ test('no rule in this contract reads the project automation policy', () => {
 
 test('only a PROJECT_COORDINATOR session is the judgment principal', () => {
   assert.equal(authorityPrincipal(SessionDispatchOrigin.PROJECT_COORDINATOR), 'JUDGMENT');
-  // The conversation a person opens with POST /projects/:id/coordinator takes the USER origin, so
-  // the coordinator a person is driving is not restricted by any of this.
-  assert.equal(authorityPrincipal(SessionDispatchOrigin.USER), 'USER');
-  assert.equal(authorityPrincipal(SessionDispatchOrigin.LEGACY_SWEEP), 'USER');
-  // No acting session at all — the user door, or a CLI acting for the owner.
-  assert.equal(authorityPrincipal(undefined), 'USER');
-  assert.equal(authorityPrincipal(null), 'USER');
+  // These are negative role classifications, not assertions that a human is present.
+  assert.equal(authorityPrincipal(SessionDispatchOrigin.USER), 'NON_JUDGMENT');
+  assert.equal(authorityPrincipal(SessionDispatchOrigin.LEGACY_SWEEP), 'NON_JUDGMENT');
+  // No acting session at all — the user door, headless CLI, or a trusted internal caller. Keeping
+  // this path is the compatibility decision; calling it NON_JUDGMENT is the honesty decision.
+  assert.equal(authorityPrincipal(undefined), 'NON_JUDGMENT');
+  assert.equal(authorityPrincipal(null), 'NON_JUDGMENT');
 });
 
 // ── The three HUMAN_ONLY rows ──────────────────────────────────────────────────────────────────
@@ -110,10 +110,12 @@ for (const [action, code] of HUMAN_ONLY) {
     assert.equal(refusal.requiredAction, 'ASK_A_PERSON');
     assert.ok(AUTHORITY_REFUSAL_CODES.includes(refusal.code));
     assert.ok(AUTHORITY_REQUIRED_ACTIONS.includes(refusal.requiredAction));
+    assert.match(refusal.message, /owner/);
+    assert.match(refusal.message, /does not prove|not proof|does not attest/);
   });
 
-  test(`${action} is untouched for a USER principal`, () => {
-    assert.equal(refuseHumanOnlyAction('USER', action), null);
+  test(`${action} is untouched for a NON_JUDGMENT principal`, () => {
+    assert.equal(refuseHumanOnlyAction('NON_JUDGMENT', action), null);
   });
 }
 
@@ -146,7 +148,7 @@ test('a judgment session opening a task must name the criterion it serves', () =
 });
 
 // The bound is "this project asked for it", not "the caller filled the field in". A key the
-// project does not state today buys nothing — which is also what happens after a person rewrites
+// project does not state today buys nothing — which is also what happens after the owner rewrites
 // a criterion, since editing the text changes its key.
 test('a criterion key the project does not state is refused, separately from naming none', () => {
   const refusal = refuseTaskOpening('JUDGMENT', {
@@ -202,9 +204,9 @@ test('naming no criterion is reported ahead of the budget', () => {
   assert.equal(refusal?.code, 'TASK_CRITERION_UNDECLARED');
 });
 
-test('a USER principal opens tasks with no criterion and no budget', () => {
+test('a NON_JUDGMENT principal opens tasks with no criterion and no budget', () => {
   assert.equal(
-    refuseTaskOpening('USER', {
+    refuseTaskOpening('NON_JUDGMENT', {
       ...OPENING,
       declaredCriterionKey: undefined,
       openedInWindow: 9_999,

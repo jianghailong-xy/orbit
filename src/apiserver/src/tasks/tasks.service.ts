@@ -2106,7 +2106,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * Validate a workspace belongs to the owner and return it as a task/comment creator.
    * Used by the runner MCP path to attribute work to the acting workspace. Returns
-   * undefined when no workspace id is supplied so callers fall back to USER attribution.
+   * undefined when no workspace id is supplied so callers fall back to USER-channel attribution;
+   * that label does not prove a human held the runner credential.
    */
   async resolveAgentCreator(ownerId: string, workspaceId?: string): Promise<Creator | undefined> {
     if (!workspaceId) return undefined;
@@ -7129,8 +7130,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // against it — is exactly the one where nobody is watching.
     //
     // Scoped to the one relation that makes it wrong: the acting session's own task IS the
-    // subject. A person concluding from no session, a coordinator concluding from its own, and
-    // the verifier's own run concluding about the subject are all left alone.
+    // subject. A no-session owner/internal caller, a coordinator concluding from its own, and the
+    // verifier's own run concluding about the subject are all left alone. No-session is a channel
+    // contract here, not proof of human presence.
     if (concludesVerdict && actingSessionId && verifiesTaskId) {
       const actingSession = await this.prisma.session.findFirst({
         where: { id: actingSessionId, ownerId },
@@ -7148,10 +7150,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // VERIFICATION criterion, `task-aggregation.ts` feeds that PASS to the completion evaluator and
     // finishes the subject for every reader downstream. A judgment session is not the independent
     // check that earns that; it is the thing that decides what to do next. FAIL and INCONCLUSIVE
-    // stay open to it: the conservative conclusion releases nothing and asks for a person.
+    // stay open to it: the conservative conclusion releases nothing and requests owner review.
     //
     // Only a write that MOVES the verdict to PASS, and read off the acting session's own row —
-    // never off this request, which carries no principal a caller could name.
+    // never off this request. This prevents the judgment role from self-selecting out of the gate;
+    // it is not a human-presence guarantee for a caller that holds another valid credential.
     if (concludesVerdict && dto.verdict === 'PASS' && actingSessionId) {
       const acting = await this.prisma.session.findFirst({
         where: { id: actingSessionId, ownerId },
@@ -10856,10 +10859,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
     }
     // §13.6 SU6, BEFORE anything with an effect. Run Now used to reach the Session insert — which
-    // 0130's guard deliberately allows, because the origin is USER and a person may open a run on a
-    // replaced attempt — and only then reach `clearFailedForRetry`, whose `FAILED → IN_PROGRESS` a
-    // retired row cannot legally take. The caller got a 500 with a Session already started against
-    // it: the worst outcome available, since it is a half-success that looks like a failure.
+    // 0130's guard deliberately allows, because the origin is USER and an owner-channel caller may
+    // open a run on a replaced attempt — and only then reach `clearFailedForRetry`, whose
+    // `FAILED → IN_PROGRESS` a retired row cannot legally take. The caller got a 500 with a Session
+    // already started against it: the worst outcome available, since it is a half-success that
+    // looks like a failure.
     //
     // The exception this does NOT close is the deliberate one: an explicit session_create against a
     // retired task still works. Reading a replaced attempt or salvaging something from it is a

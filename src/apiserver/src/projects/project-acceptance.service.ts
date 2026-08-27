@@ -555,14 +555,17 @@ export class ProjectAcceptanceService {
   /**
    * Unit T6 §1, read off the acting session's own row.
    *
-   * Only asked when the write in hand actually reaches a PASS, so an acceptance concluded by a
-   * person — or one that concludes nothing but failures — pays no query for a boundary that does
-   * not apply to it.
+   * Only asked when the write in hand actually reaches a PASS, so an owner-channel conclusion —
+   * or one that concludes nothing but failures — pays no query for a boundary that does not apply
+   * to it. `decidedBy = USER` records credential/channel provenance; it is not a human-presence
+   * attestation (see `docs/human-only-authority.md`).
    */
   private static assertMayConcludePass(actor: {
     decidedBy: 'USER' | 'COORDINATOR_AGENT';
   }): void {
-    const principal: AuthorityPrincipal = actor.decidedBy === 'USER' ? 'USER' : 'JUDGMENT';
+    const principal: AuthorityPrincipal = actor.decidedBy === 'USER'
+      ? 'NON_JUDGMENT'
+      : 'JUDGMENT';
     const refusal = refuseHumanOnlyAction(principal, 'CONCLUDE_VERDICT_PASS');
     if (refusal) throw new ForbiddenException(refusal);
   }
@@ -629,8 +632,9 @@ export class ProjectAcceptanceService {
     // acceptance is concluded. A judgment session may open a run and may answer FAIL or
     // INCONCLUSIVE on every criterion — reporting that the goal is not met is exactly what a
     // coordinator is for — but a PASS here is what `assertDoneAllowed` binds a project's DONE to,
-    // so it is not a coordinator's to record. Refused before the transaction: nothing written, no
-    // lock taken, and the run stays open for whoever does conclude it.
+    // so the judgment role cannot record it. Refused before the transaction: nothing written, no
+    // lock taken, and the run stays open for an owner-authenticated channel. That channel produces
+    // an attributable audit actor; it does not prove a human held the credential.
     const eventSchema = ProjectAcceptanceService.conclusionDelegate(
       this.prisma as unknown as Prisma.TransactionClient,
     ) !== null;

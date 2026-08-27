@@ -43,8 +43,11 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  *
  * An agent may state what a body of work is for and settle where it stands, which is why create
  * and update are here: a coordinator handed "plan this out" had nowhere to put the goal it worked
- * out, and a project whose work is finished could not be marked DONE by the thing that finished
- * it. The fields are not owner-only prose any more.
+ * out, and the headless CLI is also an intentional owner-operated path. A missing acting-session
+ * header therefore means NON_JUDGMENT, not "the server proved this is a person". The three
+ * HUMAN_ONLY labels add judgment-role separation and action-specific traceability; they are not a
+ * hard human boundary when the credential can be borrowed or minted. Criteria/PASS/DONE persist
+ * different provenance fields; see `docs/human-only-authority.md` for the exact matrix.
  *
  * Listing and opening a coordinator are still not here. Deletion mirrors the user door and keeps
  * its destructive guard: `ProjectsService.remove` only removes an empty project. The project's
@@ -137,8 +140,9 @@ export class RunnerProjectsController {
     @Param('id', PublicIdPipe) id: string,
     @Param('runId', PublicIdPipe) runId: string,
     // Same header, same reason as the PATCH below: a PASS recorded here is what a project's DONE
-    // is bound to, and unit T6 makes that one a person's. A judgment session may still open a run
-    // and conclude FAIL or INCONCLUSIVE on every criterion.
+    // is bound to. A judgment session may still open a run and conclude FAIL or INCONCLUSIVE on
+    // every criterion. Headless calls retain runner provenance through the fallback machine id;
+    // owner-channel provenance is an audit fact, not proof of human presence.
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: FinalizeAcceptanceRunDto,
   ) {
@@ -224,8 +228,8 @@ export class RunnerProjectsController {
     @Param('id', PublicIdPipe) id: string,
     // The session this edit is being made from, read for one decision: unit T6's two HUMAN_ONLY
     // rows on this DTO — the acceptance criteria, and `status = DONE`. A header rather than a body
-    // field because it is the caller's identity, not part of the edit, and because a principal an
-    // agent could name is a principal an agent could grant itself.
+    // field keeps the one-shot judgment role from naming itself out of the restriction. Omitting
+    // it preserves the intentional headless path; it does not establish that the caller is human.
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateProjectDto,
   ) {
@@ -250,8 +254,9 @@ export class RunnerProjectsController {
    * Everything else on this DTO is a statement about the work, which an agent may make. These are
    * statements about the agent's own authority — how far it may act, how much it may spend, and
    * which identity gets to decide — and an agent that could write them would be granting itself
-   * whatever it was refused. Those stay with the account owner, through the door a person signs in
-   * to.
+   * whatever it was refused. Those stay with the account-owner channel. That channel is a tenancy
+   * and audit boundary, not a human-presence attestation when its credential is accessible to an
+   * agent.
    *
    * Refused rather than dropped. A silently ignored field reads to the caller as a write that
    * happened, and the caller here is a model that will go on to act as though it did.

@@ -2394,8 +2394,8 @@ model ProjectAcceptanceRun {
   coordinatorAgentId   String? @map("coordinator_agent_id") @db.Uuid
   coordinatorSessionId String? @map("coordinator_session_id") @db.Uuid
 
-  /// Ledger lineage, when this run was produced by a pass rather than by a person. Optional: a
-  /// user may run acceptance directly.
+  /// Ledger lineage, when this run was produced by a pass rather than by a direct owner-channel
+  /// request. Optional: that channel may run acceptance directly.
   projectActionId  String?          @map("project_action_id") @db.Uuid
 
   /// Why this is no longer the current evidence version. Set — never cleared — when facts advance.
@@ -2420,7 +2420,7 @@ model ProjectAcceptanceRun {
 /// One append-only conclusion about one criterion, made against one durable evidence version.
 ///
 /// A run is the immutable version of the evidence set. Conclusions are events over those versions:
-/// adding merge evidence advances the version but does not rewrite or invalidate an earlier human
+/// adding merge evidence advances the version but does not rewrite or invalidate an earlier
 /// conclusion. The current standing is derived by taking the highest-version conclusion for the
 /// current definition revision. This is why actor, time and evidence version are all mandatory.
 model ProjectAcceptanceConclusion {
@@ -2448,7 +2448,8 @@ model ProjectAcceptanceConclusion {
 
   /// USER or COORDINATOR_AGENT. PASS is additionally constrained to USER by migration 0179.
   decidedBy String @map("decided_by")
-  /// The durable principal identity: owner id for a person, acting Session id for a judgment agent.
+  /// The durable credentialed principal: owner id for a USER-attributed channel, acting Session id
+  /// for a judgment agent. The former does not prove that a human held the owner credential.
   decidedById String @map("decided_by_id") @db.Uuid
   actingSessionId String? @map("acting_session_id") @db.Uuid
   decidedAt DateTime @default(now()) @map("decided_at")

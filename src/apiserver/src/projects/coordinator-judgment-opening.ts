@@ -7,8 +7,8 @@ import { WakeFact } from './coordinator-wake';
  *
  * WHY THIS IS NOT `coordinator-opening.ts`
  * ========================================
- * That one is the opening of a conversation a PERSON opened, and it is written for a reader who
- * will answer it: it says "推进靠的是跟人对话" and "没有任何自动的环会替你决定什么时候动". Both are
+ * That one is the opening of a user-origin conversation, and it is written for a reader who will
+ * answer it: it says "推进靠的是跟人对话" and "没有任何自动的环会替你决定什么时候动". Both are
  * true there and false here. This session was decided on by something automatic — a fact
  * `CoordinatorWakeService` claimed — and there is nobody on the other end of it. Reusing that
  * opening would open every judgment by telling it two things that are not so, which is the mistake
@@ -96,9 +96,11 @@ export function settledAcceptanceProtocol(projectId: string): string {
     + '这个调用是幂等的，并发判断会拿到同一个版本。随后按清单逐条检查，并用 project_acceptance_verdict '
     + '提交每一条标准的结论事件和可复查证据，'
     + '不能漏项。\n'
-    + '5. 服务端的人机边界仍然有效：这次判断可以完整提交全为 FAIL/INCONCLUSIVE 的 verdict；只要任何一条应为 '
+    + '5. 服务端的判断会话角色边界仍然有效：这次判断可以完整提交全为 FAIL/INCONCLUSIVE 的 verdict；只要任何一条应为 '
     + 'PASS，就不得用假的 INCONCLUSIVE 绕过，也不能自己写 PASS。把每条候选 PASS 的证据写入相关 task_comment 并升级给人，'
-    + '由人提交 PASS。无论 verdict 如何，project_update 的 status=DONE 都由人写。\n\n'
+    + '由账号所有者通道提交 PASS。无论 verdict 如何，project_update 的 status=DONE 都由账号所有者通道写。'
+    + 'PASS 事件会留下 actor、时间和证据；DONE 会留下绑定的 run、digest 和时间但不记请求者。'
+    + '这些记录都不证明持有凭据的一定是真人。\n\n'
     + '验收顺序再确认一次：合并到 main → project_merge_evidence → project_acceptance_run（幂等求值）→ '
     + 'project_acceptance_verdict；缺主干或缺 mergeEvidence 时停在开任务/升级。'
   );
@@ -128,9 +130,10 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + '写的时候有三条边界，服务端会照着拒（不是建议）：'
     + '① 开新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
     + '并受这个项目每天能开多少个任务的预算限制；'
-    + '② 验收标准你改不了，PASS 你也写不了——判定「做完了」的那把尺子和那个结论都归人；'
+    + '② 验收标准你改不了，PASS 你也写不了——判定「做完了」的那把尺子和那个结论都归账号所有者通道；'
     + '③ 项目的 status=DONE 不由你写。'
-    + '这三条挡住的都是「把没做完记成做完了」；把发现和还差什么写进 task_comment，人会读到。\n\n'
+    + '这三条是判断会话的角色隔离和按动作留痕，不是对“真人在场”的密码学证明；'
+    + '把发现和还差什么写进 task_comment，账号所有者会读到。\n\n'
     + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'
     + (fact.event === 'PROJECT_TASKS_SETTLED' ? settledAcceptanceProtocol(projectId) : '')
     + '\n\n'

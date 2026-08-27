@@ -62,6 +62,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   lock set, and how the deferred commit-boundary check keeps a mixed-version rollout safe.
 - [Task completion criteria](task-completion-criteria.md) — the three peer completion facts and the exact
   cwd, environment, timeout, and PostgreSQL contract for executable acceptance.
+- [HUMAN_ONLY authority and credential trust](human-only-authority.md) — why the project-level
+  owner-review actions are judgment-role boundaries with action-specific traceability rather than
+  proof of human presence, including the same-host threat model and stronger alternatives.
 
 Design notes capture the reasoning and implementation state at the time they were written. When a design note
 conflicts with current code or a current operator guide, the code and operator guide are authoritative. Notes

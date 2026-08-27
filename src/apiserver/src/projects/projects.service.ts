@@ -620,7 +620,7 @@ export class ProjectsService {
   }
 
   /**
-   * Unit T6: the two acts on this DTO that are a person's, refused for a judgment session.
+   * Unit T6: the two acts on this DTO routed to owner review, refused for a judgment session.
    *
    * `EDIT_ACCEPTANCE_CRITERIA` covers both authoring shapes, because they write the same fact —
    * gating only the structured one would leave the legacy text as an unguarded way to rewrite the
@@ -628,8 +628,9 @@ export class ProjectsService {
    * and a coordinator that noticed a project should be abandoned is not claiming its goal was met.
    *
    * Both are checked BEFORE the update's own transaction, so a refusal writes nothing. The session
-   * is read once and only when the request actually asks for one of them, so an ordinary edit —
-   * and every write from the user door, which carries no acting session — pays nothing for it.
+   * is read once and only when the request actually asks for one of them. A no-session request is
+   * NON_JUDGMENT by this role contract, so the user API and headless/internal paths keep their
+   * existing behavior; that negative classification is not proof a person held the credential.
    */
   private async assertHumanOnlyProjectWrites(
     ownerId: string,

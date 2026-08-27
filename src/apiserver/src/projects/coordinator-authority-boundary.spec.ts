@@ -1,14 +1,25 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { ForbiddenException } from '@nestjs/common';
-import { ProjectAutomationPolicy, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt';
+import {
+  ProjectAutomationPolicy,
+  SessionDispatchOrigin,
+  TaskStatus,
+  type Runner,
+} from '@prisma/client';
 
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
+import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { TasksService } from '../tasks/tasks.service';
 import { buildCoordinatorOpening } from './coordinator-opening';
 import { buildJudgmentOpening } from './coordinator-judgment-opening';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { sha256 } from './project-acceptance';
 
@@ -16,11 +27,11 @@ import { sha256 } from './project-acceptance';
  * Unit T6, where it actually bites: the SERVICE.
  *
  * `coordinator-authority.spec.ts` says what the rules are. This file says they are a boundary and
- * not advice, and every scenario in it calls the service directly — no controller, no HTTP, no
- * prompt. That is the whole point: the openings that used to tell a coordinator `project_update`
- * was its tool for the acceptance criteria and for `status = DONE` are fixed in this same unit,
- * and fixing them changes nothing about what is possible. A model can be talked out of a prompt.
- * It cannot be talked out of this.
+ * not advice. The role cases call the service directly; N21's credential cases first pass an
+ * opaque runner token or a minted owner JWT through the real auth guard and controller, then hit
+ * that same service gate. No case relies on a prompt. A model can be talked out of a prompt; it
+ * cannot be talked out of the service, while a credential the service accepts is deliberately
+ * shown to be a different trust question.
  *
  * The negative control runs beside every refusal rather than once at the end: a gate that refuses
  * everybody is indistinguishable from a gate that works, right up until somebody notices the
@@ -35,7 +46,7 @@ const SESSION = '00000000-0000-7000-8000-0000000000d5';
 const RUN = '00000000-0000-7000-8000-0000000000d6';
 const CREATED = '00000000-0000-7000-8000-0000000000d7';
 
-/** Two criteria a person wrote, and the content keys `project_get` hands back for them. */
+/** Two criteria the owner channel recorded, and the content keys `project_get` hands back. */
 const CRITERION_TEXT = ['the dispatcher starts a ready task', 'the boundary is server-side'];
 const CRITERION_KEYS = CRITERION_TEXT.map((text) => sha256(text).slice(0, 32));
 
@@ -60,6 +71,67 @@ async function refusalOf(run: () => Promise<unknown>): Promise<Record<string, un
 async function reachesTheWrite(run: () => Promise<unknown>): Promise<void> {
   await assert.rejects(run, (error: unknown) =>
     error instanceof Error && error.message === PAST_THE_GATE);
+}
+
+function httpContext(request: Record<string, unknown>) {
+  return {
+    switchToHttp: () => ({ getRequest: () => request }),
+    getHandler: () => undefined,
+    getClass: () => undefined,
+  } as never;
+}
+
+/** N21's credential-minting scenario: use the real JWT guard, but never expose the token. */
+async function ownerFromMintedCredential() {
+  const jwt = new JwtService({
+    secret: 'n21-owner-signing-secret-used-only-inside-this-test',
+    signOptions: { expiresIn: '1h' },
+  });
+  const credential = await jwt.signAsync({ sub: OWNER, email: 'owner@example.test' });
+  const request: Record<string, unknown> = {
+    headers: { authorization: `Bearer ${credential}` },
+    query: {},
+  };
+  await new JwtAuthGuard(jwt, {} as never).canActivate(httpContext(request));
+  assert.deepEqual(request.user, { userId: OWNER, email: 'owner@example.test' });
+  return request.user as { userId: string; email: string };
+}
+
+/** The ordinary opaque runner credential an agent already holds, through the real runner guard. */
+async function runnerFromAgentCredential(): Promise<Runner> {
+  const credential = 'n21-agent-held-runner-credential';
+  const expectedHash = createHash('sha256').update(credential).digest('hex');
+  const guard = new RunnerAuthGuard({
+    runner: {
+      findFirst: async ({ where }: { where: { tokenHash: string } }) => {
+        assert.equal(where.tokenHash, expectedHash);
+        return { id: RUN, ownerId: OWNER };
+      },
+    },
+  } as never);
+  const request: Record<string, unknown> = {
+    headers: { authorization: `Bearer ${credential}` },
+  };
+  await guard.canActivate(httpContext(request));
+  return request.runner as Runner;
+}
+
+function ownerController() {
+  return new ProjectsController(
+    projectFixture() as never,
+    acceptanceFixture() as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+}
+
+function runnerController() {
+  return new RunnerProjectsController(
+    projectFixture() as never,
+    acceptanceFixture() as never,
+    {} as never,
+  );
 }
 
 // ═══ project_update: the acceptance criteria, and status = DONE ═══════════════════════════════
@@ -105,12 +177,11 @@ for (const [what, dto, code] of PROJECT_WRITES) {
     assert.equal(body.requiredAction, 'ASK_A_PERSON');
   });
 
-  test(`a person writes ${what} exactly as before`, async () => {
-    // The user door carries no acting session at all, so it never reaches the lookup.
+  test(`a no-session owner/internal caller and a USER-origin session write ${what}`, async () => {
+    // The user/internal door carries no acting session at all, so it never reaches the lookup.
     await reachesTheWrite(() => projectFixture().update(OWNER, PROJECT, dto as never));
-    // And the long-lived coordination conversation a person opened is a USER session: it is driven
-    // turn by turn by somebody who is signed in, and this unit restricts only the one-shot
-    // judgment session a committed fact opens.
+    // The long-lived coordination conversation has USER origin. Neither case proves human
+    // presence; both are simply outside the one-shot judgment role this contract restricts.
     await reachesTheWrite(() => projectFixture().update(OWNER, PROJECT, dto as never, RUN));
   });
 }
@@ -164,7 +235,7 @@ test('dispatch_origin=judgment cannot conclude an acceptance criterion PASS', as
   assert.equal(body.requiredAction, 'ASK_A_PERSON');
 });
 
-test('a headless runner cannot become USER merely by omitting the acting session header', async () => {
+test('a headless runner keeps machine attribution when it omits the acting session header', async () => {
   const body = await refusalOf(() => acceptanceFixture().finalizeRun(
     OWNER,
     PROJECT,
@@ -189,7 +260,7 @@ test('one PASS among failures is still a PASS being written', async () => {
 
 test('a judgment session may report that acceptance did NOT pass', async () => {
   // The asymmetry this unit shares with the self-DONE boundary: the conservative conclusion
-  // releases nothing and asks for a person, so there is no reason to refuse it.
+  // releases nothing and requests owner review, so there is no reason to refuse it.
   await reachesTheWrite(() => acceptanceFixture().finalizeRun(
     OWNER, PROJECT, 'run-1',
     [{ ordinal: 1, verdict: 'FAIL' as never }, { ordinal: 2, verdict: 'INCONCLUSIVE' as never }],
@@ -197,12 +268,85 @@ test('a judgment session may report that acceptance did NOT pass', async () => {
   ));
 });
 
-test('a person concludes a PASS exactly as before', async () => {
+test('a no-session owner/internal caller and a USER-origin session conclude PASS', async () => {
   await reachesTheWrite(() => acceptanceFixture().finalizeRun(
     OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }],
   ));
   await reachesTheWrite(() => acceptanceFixture().finalizeRun(
     OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }], RUN,
+  ));
+});
+
+// ═══ N21: credential possession is not human presence ═════════════════════════════════════════
+
+test('an agent-held runner credential with no acting session can edit acceptanceCriteria', async () => {
+  const runner = await runnerFromAgentCredential();
+  await reachesTheWrite(() => runnerController().updateProject(
+    runner,
+    PROJECT,
+    undefined,
+    { acceptanceCriteria: 'replacement exam' } as never,
+  ));
+});
+
+test('an agent-held runner credential with no acting session cannot record acceptance PASS', async () => {
+  const runner = await runnerFromAgentCredential();
+  const body = await refusalOf(() => runnerController().finalizeAcceptanceRun(
+    runner,
+    PROJECT,
+    'run-1',
+    undefined,
+    { criteria: [{ ordinal: 1, verdict: 'PASS' }] } as never,
+  ));
+  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
+});
+
+test('an agent-held runner credential with no acting session can write project.status=DONE', async () => {
+  const runner = await runnerFromAgentCredential();
+  await reachesTheWrite(() => runnerController().updateProject(
+    runner,
+    PROJECT,
+    undefined,
+    { status: 'DONE' } as never,
+  ));
+});
+
+test('a headless runner can still record a conservative acceptance conclusion', async () => {
+  const runner = await runnerFromAgentCredential();
+  await reachesTheWrite(() => runnerController().finalizeAcceptanceRun(
+    runner,
+    PROJECT,
+    'run-1',
+    undefined,
+    { criteria: [{ ordinal: 1, verdict: 'INCONCLUSIVE' }] } as never,
+  ));
+});
+
+test('an owner JWT minted with the shared secret can edit acceptanceCriteria without a session', async () => {
+  const user = await ownerFromMintedCredential();
+  await reachesTheWrite(() => ownerController().update(
+    user,
+    PROJECT,
+    { acceptanceCriteria: 'replacement exam' } as never,
+  ));
+});
+
+test('an owner JWT minted with the shared secret can record PASS without a session', async () => {
+  const user = await ownerFromMintedCredential();
+  await reachesTheWrite(() => ownerController().finalizeAcceptanceRun(
+    user,
+    PROJECT,
+    'run-1',
+    { criteria: [{ ordinal: 1, verdict: 'PASS' }] } as never,
+  ));
+});
+
+test('an owner JWT minted with the shared secret can write project.status=DONE without a session', async () => {
+  const user = await ownerFromMintedCredential();
+  await reachesTheWrite(() => ownerController().update(
+    user,
+    PROJECT,
+    { status: 'DONE' } as never,
   ));
 });
 
@@ -274,6 +418,7 @@ function taskUpdateFixture(dispatchOrigin: SessionDispatchOrigin) {
     publishForUser() {}, publishTaskChanged() {},
   } as never);
   return {
+    service,
     writes,
     conclude: (verdict: string) =>
       service.update(OWNER, TASK, { verdict } as never, SESSION),
@@ -302,10 +447,21 @@ test('a judgment session may conclude FAIL or INCONCLUSIVE', async () => {
   }
 });
 
-test('the same PASS from a session a person is driving is written', async () => {
+test('the same PASS from a USER-origin session is written', async () => {
   const f = taskUpdateFixture(SessionDispatchOrigin.USER);
 
   await f.conclude('PASS');
+
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.writes[0].verdict, 'PASS');
+});
+
+test('an agent-held runner credential with no acting session can write task verdict=PASS', async () => {
+  const runner = await runnerFromAgentCredential();
+  const f = taskUpdateFixture(SessionDispatchOrigin.USER);
+  const controller = new RunnerTasksController(f.service, {} as never, {} as never);
+
+  await controller.updateTask(runner, TASK, undefined, { verdict: 'PASS' } as never);
 
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].verdict, 'PASS');
@@ -353,7 +509,7 @@ function createFixture(options: {
         taskId: null,
         task: null,
         coordinatorForProject: null,
-        // What makes this a judgment session rather than the conversation a person opened: it is
+        // What makes this a judgment session rather than a USER-origin conversation: it is
         // bound to the wake it was opened for, and to nothing else.
         judgmentForWake: { projectId: PROJECT },
         dispatchOrigin: options.dispatchOrigin ?? SessionDispatchOrigin.PROJECT_COORDINATOR,
@@ -443,9 +599,9 @@ test('a project that states no acceptance criteria has nothing for it to serve',
   assert.equal(body.code, 'TASK_CRITERION_UNKNOWN');
 });
 
-test('a session a person drives opens tasks with no criterion and no budget', async () => {
+test('a USER-origin session opens tasks with no criterion and no budget', async () => {
   // The negative control for the whole of `OPEN_TASK`: the same call, the same project, the same
-  // empty declaration, from a session whose dispatch origin says a person opened it.
+  // empty declaration, from a session outside the one-shot judgment role.
   const f = createFixture({
     dispatchOrigin: SessionDispatchOrigin.USER,
     budgetPerDay: 1,
@@ -482,7 +638,8 @@ test('the conversational opening no longer offers the criteria or DONE as its ow
   // is told nothing goes looking, which is the same wasted turn by another route.
   assert.match(opening, /验收标准/);
   assert.match(opening, /DONE/);
-  assert.match(opening, /由人来写/);
+  assert.match(opening, /账号所有者通道记录/);
+  assert.match(opening, /不是服务器对“真人在场”的密码学证明/);
 });
 
 test('the judgment opening states the three boundaries the server enforces', () => {
@@ -504,4 +661,5 @@ test('the judgment opening states the three boundaries the server enforces', () 
   assert.match(opening, /验收标准/);
   assert.match(opening, /PASS/);
   assert.match(opening, /status=DONE/);
+  assert.match(opening, /不是对“真人在场”的密码学证明/);
 });
