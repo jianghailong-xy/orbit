@@ -1,0 +1,55 @@
+ status | completion_criterion | count
+--------+----------------------+--------
+ OPEN   | EXECUTABLE           | 109872
+ OPEN   | HUMAN_SIGNOFF        |      1
+(2 rows)
+
+   status    | count
+-------------+--------
+ OPEN        | 110116
+ IN_PROGRESS |      2
+ DONE        |    884
+ CANCELLED   |     30
+ FAILED      |      3
+(5 rows)
+
+                  id                  |  status  | batch_size | batch_count | migrated_count | source_task_count | candidate_count | unclassified_count |                                     class_counts                                      | pre_status_counts | post_status_counts |          started_at           |          finished_at          | receipt_elapsed_ms
+--------------------------------------+----------+------------+-------------+----------------+-------------------+-----------------+--------------------+---------------------------------------------------------------------------------------+-------------------+--------------------+-------------------------------+-------------------------------+--------------------
+ 4d9b150c-2218-41e1-9a8e-104b5ee7e30e | FINISHED |        250 |         440 |         109872 |            109873 |          109872 |                  1 | {"WARC": 27468, "MERGE": 27468, "VERIFY": 27468, "FINEWEB": 27468, "UNCLASSIFIED": 1} | {"OPEN": 109873}  | {"OPEN": 109873}   | 2026-08-27 08:54:30.591436+00 | 2026-08-27 08:59:58.303556+00 |             327712
+(1 row)
+
+ task_class | migrated_rows |       first_migrated_at       |       last_migrated_at
+------------+---------------+-------------------------------+-------------------------------
+ FINEWEB    |         27468 | 2026-08-27 08:54:46.126623+00 | 2026-08-27 08:59:57.760376+00
+ MERGE      |         27468 | 2026-08-27 08:54:46.164577+00 | 2026-08-27 08:59:57.77014+00
+ VERIFY     |         27468 | 2026-08-27 08:54:46.172833+00 | 2026-08-27 08:59:57.771664+00
+ WARC       |         27468 | 2026-08-27 08:54:46.162887+00 | 2026-08-27 08:59:57.765107+00
+(4 rows)
+
+                  id                  |    title     | status | completion_criterion | acceptance_command | acceptance_expected_exit_code |                           reason
+--------------------------------------+--------------+--------+----------------------+--------------------+-------------------------------+------------------------------------------------------------
+ 01a02dad-03b7-7709-ba0c-74e76be2acfa | _v+ project0 | OPEN   | HUMAN_SIGNOFF        |                    |                               | no recognized title prefix and acceptance_criteria is NULL
+(1 row)
+
+ audited_rows | non_open | non_executable | wrong_exit | command_mismatch | class_mismatch | ledger_digest_mismatch
+--------------+----------+----------------+------------+------------------+----------------+------------------------
+       109872 |        0 |              0 |          0 |                0 |              0 |                      0
+(1 row)
+
+                  id                  |                     title                      | status | completion_criterion | acceptance_expected_exit_code |                                                                                                                                                                                                    acceptance_criteria                                                                                                                                                                                                    | task_class | command_exact_match | command_chars |                          command_sha256                          |                                                                                                                   command_head
+--------------------------------------+------------------------------------------------+--------+----------------------+-------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------------+---------------+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 01a02d86-d39e-70fe-9f09-b2a6c8a3abb5 | [FineWeb][CC-MAIN-2013-20] 000_00000.parquet   | OPEN   | EXECUTABLE           |                             0 | /data/tmp/fineweb/data/CC-MAIN-2013-20/000_00000.parquet 存在且字节数等于任务声明的预期大小，Parquet footer/schema 可读；/data/wikova/common-crawl/.fineweb-warc-tasks/manifests/CC-MAIN-2013-20__000_00000.json 存在、可解析、warcs[] 已按路径去重且每项带 size_bytes 与 etag。未下载任何 WARC 内容，未修改其他 Parquet。                                                                                                | FINEWEB    | t                   |          1822 | 50a46a9ef35a9036bb8d0967222e70111bd3afc89b413215426f409ee6c28ae2 | set -eu ↵ python3 - 'CC-MAIN-2013-20' '000_00000' '2147531358' <<'PY' ↵ import json ↵ import sys ↵ from pathlib import Path ↵ from pyarrow.parquet import ParquetFile ↵  ↵ dump, shard, expected_text = sys.argv[1:] ↵ expected = int(expected_t
+ 01a02d86-db2f-70cb-ad32-7342f38e7143 | [WARC][CC-MAIN-2013-20] 000_00000 的 WARC 依赖 | OPEN   | EXECUTABLE           |                             0 | warc_inventory.py --dump CC-MAIN-2013-20 --shard 000_00000 报告状态为「齐全，可直接 merge」：清单内每个 WARC 都能在 warc_roots 之一找到且字节数等于 size_bytes，截断数为 0。没有下载清单外的对象，没有删除任何既有文件。                                                                                                                                                                                                  | WARC       | t                   |          2327 | 886b0aae5c981c9ca739299abd6ee4b8a59b00089d022ef2cd14640f1907e1a0 | set -eu ↵ python3 - 'CC-MAIN-2013-20' '000_00000' <<'PY' ↵ import json ↵ import subprocess ↵ import sys ↵ from pathlib import Path ↵  ↵ dump, shard = sys.argv[1:] ↵ manifest = Path(f"/data/wikova/common-crawl/.fineweb-warc-tasks/manifests/{
+ 01a02d86-e0df-72bb-b428-01b1082bf220 | [Merge][CC-MAIN-2013-20] 000_00000 → RocksDB   | OPEN   | EXECUTABLE           |                             0 | /data/wikova/corpus/data/CC-MAIN-2013-20/000_00000.rocksdb/ 存在且能用 rocksdict 打开，含四个 CF；构建目录与 .incoming 都已不存在；/data/wikova/corpus/.merge-tasks/status/CC-MAIN-2013-20__000_00000.json 已写且 missing_rate ≤ 0.05；随机抽 20 条能从三个主 CF 取回且 text 与 Parquet 原值逐字节一致；warc_index 非空。                                                                                                 | MERGE      | t                   |          3838 | a3b8382302034124dddb701443157b8fc8b237f265a456f445e3a5a6d73c55ee | set -eu ↵ python3 - 'CC-MAIN-2013-20' '000_00000' <<'PY' ↵ import json ↵ import random ↵ import re ↵ import sys ↵ from pathlib import Path ↵ from pyarrow.parquet import ParquetFile ↵ from rocksdict import AccessType, Rdict ↵ from surt impor
+ 01a02d86-e5c1-7668-ac6d-a7db042c4011 | [校验][CC-MAIN-2013-20] 000_00000.rocksdb      | OPEN   | EXECUTABLE           |                             0 | 四项校验都有明确数字写进任务结果（条目数差值与缺失率、200 条回读、20 条字段比对、体积与 SST 数）；warc_index 抽 5 条按 (w,o,l) 做 Range 读能解析出完整 response 且 URL 与 key 相符；Parquet 已在 /data/wikova/fineweb/data/CC-MAIN-2013-20/000_00000.parquet；warc_reclaim.py 已执行并报告删除数与释放字节。校验不通过时必须说明未归位、未回收，且 /data/wikova/corpus/data/CC-MAIN-2013-20/000_00000.rocksdb/ 保持原样。 | VERIFY     | t                   |          8908 | 322ff166eda665661e59d44486ff99ea7862906d1c3fa4eb03de17b8fb8d0642 | set -eu ↵ python3 - 'CC-MAIN-2013-20' '000_00000' <<'PY' ↵ import io ↵ import json ↵ import math ↵ import random ↵ import re ↵ import subprocess ↵ import sys ↵ import urllib.request ↵ from html.parser import HTMLParser ↵ from pathlib import
+(4 rows)
+
+               batch_id               | batch_number | rows_migrated | total_migrated | finished | duration_ms
+--------------------------------------+--------------+---------------+----------------+----------+-------------
+ 4d9b150c-2218-41e1-9a8e-104b5ee7e30e |          440 |             0 |         109872 | t        |           0
+(1 row)
+
+           replay_batch_id
+--------------------------------------
+ 4d9b150c-2218-41e1-9a8e-104b5ee7e30e
+(1 row)
