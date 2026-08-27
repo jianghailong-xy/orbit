@@ -154,7 +154,7 @@ function acceptanceFixture() {
   return new ProjectAcceptanceService(prisma as never);
 }
 
-test('a judgment session cannot conclude an acceptance criterion PASS', async () => {
+test('dispatch_origin=judgment cannot conclude an acceptance criterion PASS', async () => {
   const body = await refusalOf(() => acceptanceFixture().finalizeRun(
     OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }], SESSION,
   ));

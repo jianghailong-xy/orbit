@@ -106,6 +106,7 @@ interface AcceptanceRunCriterionRow {
   ordinal: number;
   criterionKey: string;
   criterionText: string;
+  verificationMethod?: string | null;
   definitionId?: string | null;
   definitionRevision?: number | null;
   verdict: ProjectAcceptanceVerdict | null;
@@ -190,6 +191,7 @@ export class ProjectAcceptanceService {
           id: string;
           ordinal: number;
           text: string;
+          verificationMethod: string;
           revision: number;
           contentHash: string;
         }>>;
@@ -203,6 +205,7 @@ export class ProjectAcceptanceService {
         id: true,
         ordinal: true,
         text: true,
+        verificationMethod: true,
         revision: true,
         contentHash: true,
       },
@@ -458,6 +461,9 @@ export class ProjectAcceptanceService {
           revision: criterion.definitionRevision,
           ordinal: criterion.ordinal,
           text: criterion.text,
+          ...(criterion.verificationMethod
+            ? { verificationMethod: criterion.verificationMethod }
+            : {}),
           contentHash: criterion.contentHash,
         })) as Prisma.InputJsonValue,
         criteriaRevision: facts.criteriaRevision,
@@ -1204,7 +1210,16 @@ export class ProjectAcceptanceService {
   private async readRun(tx: Prisma.TransactionClient, runId: string) {
     const run = await tx.projectAcceptanceRun.findUniqueOrThrow({
       where: { id: runId },
-      include: { criteria: { orderBy: { ordinal: 'asc' } } },
+      include: {
+        criteria: { orderBy: { ordinal: 'asc' } },
+        project: {
+          select: {
+            acceptanceCriterionDefinitions: {
+              select: { id: true, revision: true, verificationMethod: true },
+            },
+          },
+        },
+      },
     });
     const events = ProjectAcceptanceService.conclusionDelegate(tx)
       ? await ProjectAcceptanceService.conclusionEvents(tx, run.projectId, run.attempt)
@@ -1222,6 +1237,13 @@ export class ProjectAcceptanceService {
     supersededAt: Date | null; supersededReason: string | null;
     startedAt: Date; completedAt: Date | null;
     criteria?: AcceptanceRunCriterionRow[];
+    project?: {
+      acceptanceCriterionDefinitions: Array<{
+        id: string;
+        revision: number;
+        verificationMethod: string;
+      }>;
+    };
   }, events?: AcceptanceConclusionEventRow[]) {
     const criteria = events === undefined
       ? (run.criteria ?? [])
@@ -1234,6 +1256,34 @@ export class ProjectAcceptanceService {
       : criteria.length > 0 && criteria.every((criterion) => criterion.decidedAt !== null)
         ? new Date(Math.max(...criteria.map((criterion) => criterion.decidedAt!.getTime())))
         : null;
+    const definitionMethods = new Map(
+      (run.project?.acceptanceCriterionDefinitions ?? []).map((definition) => [
+        `${definition.id}:${definition.revision}`,
+        definition.verificationMethod,
+      ]),
+    );
+    const snapshotMethods = new Map<string, string>();
+    if (Array.isArray(run.criteriaSnapshotV2)) {
+      for (const value of run.criteriaSnapshotV2) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+        const snapshot = value as Record<string, unknown>;
+        if (typeof snapshot.verificationMethod !== 'string' || !snapshot.verificationMethod.trim()) {
+          continue;
+        }
+        if (typeof snapshot.ordinal === 'number') {
+          snapshotMethods.set(`ordinal:${snapshot.ordinal}`, snapshot.verificationMethod);
+        }
+        if (
+          typeof snapshot.id === 'string'
+          && (typeof snapshot.revision === 'number' || typeof snapshot.revision === 'string')
+        ) {
+          snapshotMethods.set(
+            `${snapshot.id}:${snapshot.revision}`,
+            snapshot.verificationMethod,
+          );
+        }
+      }
+    }
     return {
       id: run.id,
       projectId: run.projectId,
@@ -1264,6 +1314,14 @@ export class ProjectAcceptanceService {
         criterionId: c.definitionId ?? null,
         definitionRevision: c.definitionRevision ?? null,
         criterionText: c.criterionText,
+        verificationMethod:
+          c.verificationMethod
+          ?? (c.definitionId && c.definitionRevision !== null && c.definitionRevision !== undefined
+            ? snapshotMethods.get(`${c.definitionId}:${c.definitionRevision}`)
+              ?? definitionMethods.get(`${c.definitionId}:${c.definitionRevision}`)
+            : undefined)
+          ?? snapshotMethods.get(`ordinal:${c.ordinal}`)
+          ?? null,
         verdict: c.verdict,
         summary: c.summary,
         evidence: c.evidence,
@@ -1284,6 +1342,90 @@ export class ProjectAcceptanceService {
         decidedById: event.decidedById,
         actingSessionId: event.actingSessionId,
         decidedAt: event.decidedAt,
+      })),
+    };
+  }
+
+  /**
+   * Current evidence versions that still need a person to answer at least one criterion.
+   *
+   * This is the project-level half of the web's shared "待我判定" inbox. It is a bounded summary,
+   * not a second acceptance evaluator: the correlated EXISTS uses the same carry-forward identity
+   * as `projectedCriteria` (definition id + revision, or the legacy content key). The detail page
+   * still reads `overview`, and the write still goes through `finalizeRun`.
+   */
+  async pendingInbox(ownerId: string, limit = 100) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException('limit must be an integer between 1 and 100');
+    }
+    const rows = await this.prisma.$queryRaw<Array<{
+      runId: string;
+      projectId: string;
+      projectTitle: string;
+      projectStatus: string;
+      attempt: bigint;
+      startedAt: Date;
+      criterionCount: number;
+      unansweredCount: number;
+      total: number;
+    }>>(Prisma.sql`
+      WITH standing AS (
+        SELECT r."id" AS "runId",
+               p."id" AS "projectId",
+               p."title" AS "projectTitle",
+               p."status"::text AS "projectStatus",
+               r."attempt",
+               r."started_at" AS "startedAt",
+               count(c."id")::int AS "criterionCount",
+               count(c."id") FILTER (
+                 WHERE c."verdict" IS NULL
+                   AND NOT EXISTS (
+                   SELECT 1
+                     FROM "project_acceptance_conclusion" e
+                    WHERE e."project_id" = r."project_id"
+                      AND e."evidence_version" <= r."attempt"
+                      AND (
+                        (
+                          c."definition_id" IS NOT NULL
+                          AND e."definition_id" = c."definition_id"
+                          AND e."definition_revision" = c."definition_revision"
+                        )
+                        OR (
+                          c."definition_id" IS NULL
+                          AND e."definition_id" IS NULL
+                          AND e."criterion_key" = c."criterion_key"
+                        )
+                      )
+                 )
+               )::int AS "unansweredCount"
+          FROM "project_acceptance_run" r
+          JOIN "project" p ON p."id" = r."project_id"
+          JOIN "project_acceptance_criterion" c ON c."run_id" = r."id"
+         WHERE p."owner_id" = ${ownerId}::uuid
+           AND p."status"::text <> 'CANCELLED'
+           AND r."superseded_at" IS NULL
+         GROUP BY r."id", p."id", p."title", p."status", r."attempt", r."started_at"
+      ), pending AS (
+        SELECT * FROM standing WHERE "unansweredCount" > 0
+      )
+      SELECT pending.*, count(*) OVER ()::int AS "total"
+        FROM pending
+       ORDER BY "startedAt" DESC, "runId" DESC
+       LIMIT ${limit}
+    `);
+    return {
+      total: rows[0]?.total ?? 0,
+      items: rows.map((row) => ({
+        runId: row.runId,
+        projectId: row.projectId,
+        projectTitle: row.projectTitle,
+        projectStatus: row.projectStatus,
+        attempt: String(row.attempt),
+        startedAt: row.startedAt,
+        criterionCount: row.criterionCount,
+        answeredCount: row.criterionCount - row.unansweredCount,
+        unansweredCount: row.unansweredCount,
+        currentVerdict: ACCEPTANCE_UNDECIDED,
       })),
     };
   }
@@ -1327,7 +1469,10 @@ export class ProjectAcceptanceService {
     const project = await this.prisma.project.findUniqueOrThrow({
       where: { id: projectId },
       select: {
-        status: true, acceptanceCriteria: true, acceptedRunId: true, legacyAcceptedAt: true,
+        title: true, status: true, acceptanceCriteria: true, acceptedRunId: true, legacyAcceptedAt: true,
+        acceptanceCriterionDefinitions: {
+          select: { id: true, revision: true, verificationMethod: true },
+        },
       },
     });
     const merges = await this.prisma.$queryRaw<Array<{
@@ -1368,12 +1513,14 @@ export class ProjectAcceptanceService {
     );
     return {
       projectId,
+      projectTitle: project.title,
       status: project.status,
       criteria: criteria.map((c) => ({
         ordinal: c.ordinal,
         criterionId: c.definitionId,
         criterionKey: c.key,
         criterionText: c.text,
+        verificationMethod: c.verificationMethod,
       })),
       criteriaEmptyReason: criteria.length > 0 ? null : 'NO_ACCEPTANCE_CRITERIA',
       acceptanceDigest: evaluated.digest,
@@ -1387,7 +1534,12 @@ export class ProjectAcceptanceService {
         reason: evaluated.reason,
       },
       runs: runs.map((run) => ProjectAcceptanceService.runRow(
-        run,
+        {
+          ...run,
+          project: {
+            acceptanceCriterionDefinitions: project.acceptanceCriterionDefinitions,
+          },
+        },
         conclusionEvents?.filter((event) => event.evidenceVersion <= run.attempt),
       )),
       runsEmptyReason: runs.length > 0 ? null : 'ACCEPTANCE_NOT_ATTEMPTED',

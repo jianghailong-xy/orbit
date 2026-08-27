@@ -120,6 +120,8 @@ export interface AcceptanceCriterionDefinitionLike {
   id: string;
   ordinal: number;
   text: string;
+  /** The procedure a person follows to decide this assertion. Absent only for legacy/test rows. */
+  verificationMethod?: string | null;
   revision: number;
   contentHash?: string;
 }
@@ -130,6 +132,7 @@ export interface AcceptanceCriterionDefinitionLike {
 export interface StatedAcceptanceCriterion extends ParsedCriterion {
   definitionId: string | null;
   definitionRevision: number | null;
+  verificationMethod: string | null;
   contentHash: string;
 }
 
@@ -182,6 +185,10 @@ export function criteriaFromDefinitions(
         text,
         definitionId: definition.id,
         definitionRevision: definition.revision,
+        verificationMethod:
+          typeof definition.verificationMethod === 'string' && definition.verificationMethod.trim()
+            ? definition.verificationMethod.trim()
+            : null,
         contentHash,
       };
     });
@@ -197,6 +204,7 @@ export function criteriaFromLegacy(
       ...criterion,
       definitionId: null,
       definitionRevision: null,
+      verificationMethod: null,
       contentHash,
     };
   });

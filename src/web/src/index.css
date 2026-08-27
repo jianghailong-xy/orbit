@@ -825,6 +825,193 @@
   margin-top: 5px;
 }
 
+/* Project acceptance is the project-level peer in the same human-decision inbox. Its criterion
+   cards reuse the evidence-review surface above, while the controls add one explicit answer and
+   evidence bundle per immutable criterion snapshot. */
+.judgment-inbox-card .ant-tag {
+  margin: 0 0 10px;
+}
+
+.project-acceptance-current-verdict {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.project-acceptance-current-verdict .ant-tag {
+  margin: 0;
+}
+
+.project-acceptance-method {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--brand-tint);
+}
+
+.project-acceptance-method strong {
+  color: var(--brand-strong);
+  font-size: 12px;
+}
+
+.project-acceptance-method p {
+  margin: 5px 0 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.project-acceptance-existing-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 14px 0 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-subtle);
+}
+
+.project-acceptance-existing-evidence dt {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.project-acceptance-existing-evidence dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.project-acceptance-verdict-field {
+  min-width: 0;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.project-acceptance-verdict-field legend {
+  margin-bottom: 7px;
+  font-weight: 650;
+}
+
+.project-acceptance-verdict-field legend span {
+  color: var(--error);
+  font-size: 11px;
+}
+
+.project-acceptance-verdict-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-acceptance-verdict-option {
+  min-height: 44px;
+  padding: 8px;
+  color: var(--text-2);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-acceptance-verdict-option:hover,
+.project-acceptance-verdict-option:focus-visible {
+  border-color: var(--brand);
+  outline: 2px solid var(--brand-tint-hover);
+  outline-offset: 1px;
+}
+
+.project-acceptance-verdict-option.is-selected.is-pass {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.project-acceptance-verdict-option.is-selected.is-fail {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+
+.project-acceptance-verdict-option.is-selected.is-inconclusive {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.project-acceptance-evidence-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.project-acceptance-evidence-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.project-acceptance-evidence-form input,
+.project-acceptance-evidence-form textarea {
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 9px 10px;
+  color: var(--text-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+}
+
+.project-acceptance-evidence-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.project-acceptance-evidence-form input:focus-visible,
+.project-acceptance-evidence-form textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.project-acceptance-evidence-form input:disabled,
+.project-acceptance-evidence-form textarea:disabled,
+.project-acceptance-verdict-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.project-acceptance-command-input,
+.project-acceptance-summary-input {
+  grid-column: 1 / -1;
+}
+
+.project-acceptance-submit > p {
+  margin: 12px 0 14px;
+}
+
+.project-acceptance-submit-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.project-acceptance-audit .judgment-audit-content {
+  padding-top: 14px;
+}
+
 @media (max-width: 720px) {
   .judgment-page-head {
     align-items: flex-start;
@@ -884,6 +1071,24 @@
     padding: 14px;
   }
 
+  .project-acceptance-existing-evidence,
+  .project-acceptance-evidence-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-acceptance-command-input,
+  .project-acceptance-summary-input {
+    grid-column: auto;
+  }
+
+  .project-acceptance-verdict-options {
+    gap: 6px;
+  }
+
+  .project-acceptance-submit-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .judgment-criterion-head {
     grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
     gap: 8px;
@@ -930,6 +1135,10 @@
   .judgment-decision-actions .ant-btn {
     width: 100%;
     min-height: 44px;
+  }
+
+  .judgment-decision-actions.project-acceptance-submit-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .judgment-decision textarea {

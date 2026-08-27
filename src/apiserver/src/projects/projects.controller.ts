@@ -58,6 +58,18 @@ export class ProjectsController {
     return this.projects.list(user.userId, this.parseStatus(status));
   }
 
+  /** Project-level acceptance evidence versions awaiting a complete, criterion-by-criterion answer. */
+  @Get('acceptance/pending')
+  pendingAcceptance(
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limit?: string,
+  ) {
+    return this.acceptance.pendingInbox(
+      user.userId,
+      limit === undefined ? 100 : Number(limit),
+    );
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(user.userId, id);

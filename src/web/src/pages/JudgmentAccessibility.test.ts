@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
 const review = readFileSync(fileURLToPath(new URL('./JudgmentReviewPage.tsx', import.meta.url)), 'utf8');
+const projectAcceptanceReview = readFileSync(
+  fileURLToPath(new URL('./ProjectAcceptanceReviewPage.tsx', import.meta.url)),
+  'utf8',
+);
 const taskPanel = readFileSync(
   fileURLToPath(new URL('../components/TaskDetailPanel.tsx', import.meta.url)),
   'utf8',
@@ -32,6 +36,7 @@ describe('human judgment phone and accessibility contract', () => {
     expect(narrow).toMatch(/\.judgment-decision-actions[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
     expect(narrow).toMatch(/env\(safe-area-inset-bottom, 0px\)/);
     expect(narrow).toMatch(/\.judgment-decision-actions \.ant-btn[\s\S]*width: 100%[\s\S]*min-height: 44px/);
+    expect(css).toMatch(/\.project-acceptance-verdict-option \{[\s\S]*min-height: 44px/);
   });
 
   it('contains long digests, JSON, errors and controls without widening the page', () => {
@@ -63,6 +68,10 @@ describe('human judgment phone and accessibility contract', () => {
     expect(taskPanel).not.toContain('Mark done');
     expect(taskPanel).not.toMatch(/status\s*:\s*['"]DONE['"]/);
     expect(review).toContain('await review.refetch()');
+    expect(projectAcceptanceReview).not.toMatch(/status\s*:\s*['"]DONE['"]/);
+    expect(projectAcceptanceReview).toContain('projectAcceptanceVerdictPath(projectId, runId)');
+    expect(projectAcceptanceReview).toContain('body: { criteria }');
+    expect(projectAcceptanceReview).toContain('await review.refetch()');
     expect(taskList).toContain("searchParams.get('judgmentRequest')");
     expect(taskList).toContain('navigate(judgmentReviewPath(linkedJudgmentRequest), { replace: true })');
   });
@@ -71,6 +80,7 @@ describe('human judgment phone and accessibility contract', () => {
     expect(sidePanel).toContain("{ key: 'judgments'");
     expect(sidePanel).toContain("label: '待我判定'");
     expect(sidePanel).toContain('openJudgmentCount');
+    expect(sidePanel).toContain("['project-acceptance', 'pending', 'nav-count']");
     expect(projectsPage).toContain('<JudgmentRequestSummary projectId={id}');
     expect(taskPanel).toContain('<JudgmentRequestSummary taskId={taskId}');
   });

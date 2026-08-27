@@ -40,6 +40,10 @@ import {
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { judgmentInboxPath, type JudgmentInboxPage } from '../lib/judgments';
+import {
+  projectAcceptanceInboxPath,
+  type ProjectAcceptanceInboxPage,
+} from '../lib/projectAcceptance';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -223,7 +227,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     queryFn: () => api<JudgmentInboxPage>(judgmentInboxPath({ status: 'OPEN', limit: 1 })),
     refetchInterval: 15_000,
   });
-  const openJudgmentCount = judgments.data?.total ?? 0;
+  const projectAcceptance = useQuery({
+    queryKey: ['project-acceptance', 'pending', 'nav-count'],
+    queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(1)),
+    refetchInterval: 15_000,
+  });
+  const openJudgmentCount = (judgments.data?.total ?? 0) + (projectAcceptance.data?.total ?? 0);
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =

@@ -16,7 +16,14 @@ const CRITERION_A_ID = '00000000-0000-7000-8000-000000000301';
 const CRITERION_B_ID = '00000000-0000-7000-8000-000000000302';
 
 function definition(id: string, ordinal: number, text: string, revision = 1) {
-  return { id, ordinal, text, revision, contentHash: sha256(text) };
+  return {
+    id,
+    ordinal,
+    text,
+    verificationMethod: `Verify exactly: ${text}`,
+    revision,
+    contentHash: sha256(text),
+  };
 }
 
 test('acceptance facts have no task delegate and read only criteria plus merge evidence', async () => {
@@ -292,10 +299,12 @@ test('openRun freezes definition identity, revision and text into both snapshot 
   assert.deepEqual(createdRun.criteriaSnapshotV2, [
     {
       id: CRITERION_A_ID, revision: 2, ordinal: 1, text: 'Build succeeds',
+      verificationMethod: 'Verify exactly: Build succeeds',
       contentHash: sha256('Build succeeds'),
     },
     {
       id: CRITERION_B_ID, revision: 1, ordinal: 2, text: 'Image boots',
+      verificationMethod: 'Verify exactly: Image boots',
       contentHash: sha256('Image boots'),
     },
   ]);
@@ -308,10 +317,95 @@ test('openRun freezes definition identity, revision and text into both snapshot 
   assert.deepEqual(opened.criteria.map((criterion: any) => ({
     criterionId: criterion.criterionId,
     definitionRevision: criterion.definitionRevision,
+    verificationMethod: criterion.verificationMethod,
   })), [
-    { criterionId: CRITERION_A_ID, definitionRevision: 2 },
-    { criterionId: CRITERION_B_ID, definitionRevision: 1 },
+    {
+      criterionId: CRITERION_A_ID,
+      definitionRevision: 2,
+      verificationMethod: 'Verify exactly: Build succeeds',
+    },
+    {
+      criterionId: CRITERION_B_ID,
+      definitionRevision: 1,
+      verificationMethod: 'Verify exactly: Image boots',
+    },
   ]);
+});
+
+test('pendingInbox returns current project acceptance beside task judgments without deriving a verdict', async () => {
+  const startedAt = new Date('2026-08-27T08:00:00.000Z');
+  let sql = '';
+  const prisma = {
+    $queryRaw: async (query: { strings?: readonly string[] }) => {
+      sql = query.strings?.join('?') ?? '';
+      return [{
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        projectTitle: 'Project acceptance needs a person',
+        projectStatus: 'OPEN',
+        attempt: 4n,
+        startedAt,
+        criterionCount: 10,
+        unansweredCount: 10,
+        total: 1,
+      }];
+    },
+  };
+
+  const inbox = await new ProjectAcceptanceService(prisma as never).pendingInbox(OWNER_ID, 25);
+
+  assert.deepEqual(inbox, {
+    total: 1,
+    items: [{
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      projectTitle: 'Project acceptance needs a person',
+      projectStatus: 'OPEN',
+      attempt: '4',
+      startedAt,
+      criterionCount: 10,
+      answeredCount: 0,
+      unansweredCount: 10,
+      currentVerdict: 'UNDECIDED',
+    }],
+  });
+  assert.match(sql, /project_acceptance_conclusion/);
+  assert.match(sql, /evidence_version/);
+  assert.match(sql, /definition_revision/);
+});
+
+test('finalizeRun rejects a partial checklist and names every missing ordinal', async () => {
+  const prisma: any = {
+    $queryRaw: async () => [{
+      id: PROJECT_ID,
+      status: 'OPEN',
+      acceptedRunId: null,
+      legacyAcceptedAt: null,
+      acceptanceCriteria: '1. Build succeeds\n2. Image boots',
+    }],
+    projectAcceptanceRun: {
+      findFirst: async () => ({
+        id: RUN_ID,
+        projectId: PROJECT_ID,
+        verdict: null,
+        criteria: [
+          { ordinal: 1, criterionKey: 'build', criterionText: 'Build succeeds' },
+          { ordinal: 2, criterionKey: 'boot', criterionText: 'Image boots' },
+        ],
+      }),
+    },
+  };
+  prisma.$transaction = async (work: (tx: any) => unknown) => work(prisma);
+
+  await assert.rejects(
+    () => new ProjectAcceptanceService(prisma).finalizeRun(
+      OWNER_ID,
+      PROJECT_ID,
+      RUN_ID,
+      [{ ordinal: 1, verdict: ProjectAcceptanceVerdict.INCONCLUSIVE }],
+    ),
+    /criteria 2 have no conclusion — every stated criterion must be judged/,
+  );
 });
 
 test('evaluateGate digests a large project once and gives that read explicit scale headroom', async () => {
