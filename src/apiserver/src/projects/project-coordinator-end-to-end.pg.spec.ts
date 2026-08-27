@@ -359,7 +359,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       'the settled-task wake must also pass through the same durable T4 brake',
     );
 
-    await stack.acceptance.recordMergeEvidence(ownerId, project.id, {
+    const merged = await stack.acceptance.recordMergeEvidence(ownerId, project.id, {
       requirementId: 'T8_INTEGRATED_REPLAY',
       targetBranch: 'main',
       contentHash: '8'.repeat(64),
@@ -370,7 +370,8 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       decidedBy: 'COORDINATOR_AGENT',
       coordinatorSessionId: settledWake.sessionId,
     });
-    assert.equal(run.coordinatorSessionId, settledWake.sessionId);
+    assert.equal(run.id, merged.acceptanceRunId);
+    assert.equal(run.coordinatorSessionId, null, 'the evaluator does not own the evidence version');
     assert.equal(run.criteria.length, 2);
     assert.equal(
       await db.projectAcceptanceRun.count({ where: { projectId: project.id } }),

@@ -34,6 +34,7 @@ export const MAX_PROJECT_INSTRUCTIONS_CHARS = 10_000;
 export const MAX_PROJECT_GOAL_CHARS = 4_000;
 export const MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS = 4_000;
 export const MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS = 100;
+export const MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS = 4_000;
 
 /**
  * Bounds on the two budgets.
@@ -88,6 +89,15 @@ export class CreateProjectAcceptanceCriterionDto {
   @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS)
   @Matches(/^[^\r\n]+$/u, { message: 'criterion text must be one line' })
   text!: string;
+
+  /** How a reader can decide whether this assertion holds. Required independently of the
+   * assertion so a code comment, rationale or introductory sentence cannot masquerade as the
+   * evidence needed to judge it. */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS)
+  @Matches(/\S/u, { message: 'criterion verificationMethod must not be blank' })
+  verificationMethod!: string;
 }
 
 /** Stable ids are accepted only on update. Omit one to add a new criterion; retain one returned by

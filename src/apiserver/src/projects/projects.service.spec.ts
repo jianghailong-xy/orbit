@@ -21,9 +21,12 @@ function deferred<T>() {
 
 // The acceptance service is stubbed to the empty standing: `get` reads a criteria summary beside
 // the task tally, and no test in this file is about what that summary contains.
-function serviceWith(prisma: unknown): ProjectsService {
+function serviceWith(prisma: unknown, criteriaSummary: () => Promise<any> = async () => ({
+  total: 0, passed: 0, lastRunAt: null, criteria: [],
+})): ProjectsService {
   const acceptance = {
-    criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }),
+    criteriaSummary,
+    ensureCurrentEvidenceVersion: async () => undefined,
   };
   return new ProjectsService(prisma as never, acceptance as never);
 }
@@ -55,27 +58,70 @@ test('create files the project against the caller and stores blank prose as null
   assert.equal(created.instructions, undefined);
 });
 
-test('create accepts explicit criterion boundaries and writes a legacy projection beside them', async () => {
+test('create stores explicit assertions and required methods with a legacy projection', async () => {
   let created: any;
-  const service = serviceWith({
+  const definitions: any[] = [];
+  const prisma: any = {
     project: {
       create: async (args: any) => {
         created = args.data;
-        return { id: PROJECT_ID, ...args.data, members: [], runtime: { coordinatorGeneration: 0n } };
+        return {
+          id: PROJECT_ID, ...args.data, acceptanceCriterionDefinitions: [],
+          members: [], runtime: { coordinatorGeneration: 0n },
+        };
       },
+      update: async (args: any) => ({
+        id: PROJECT_ID,
+        ...created,
+        ...args.data,
+        acceptanceCriterionDefinitions: definitions,
+        members: [],
+        runtime: { coordinatorGeneration: 0n },
+      }),
     },
-  });
+    projectAcceptanceCriterionDefinition: {
+      findMany: async () => [],
+      updateMany: async () => undefined,
+      deleteMany: async () => undefined,
+      create: async ({ data }: any) => { definitions.push(data); },
+    },
+  };
+  prisma.$transaction = async (fn: any) => fn(prisma);
+  const service = serviceWith(prisma);
 
-  await service.create(OWNER_ID, {
+  const project: any = await service.create(OWNER_ID, {
     title: 'Structured',
     acceptanceCriteriaItems: [
-      { text: '  the image boots  ' },
-      { text: 'the full suite passes' },
+      { text: '  the image boots  ', verificationMethod: ' Run the image smoke test ' },
+      { text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0' },
     ],
   } as never);
 
   assert.equal(created.acceptanceCriteriaFormat, 'STRUCTURED');
   assert.equal(created.acceptanceCriteria, '1. the image boots\n2. the full suite passes');
+  assert.deepEqual(definitions.map(({ id: _id, projectId: _projectId, contentHash: _hash, ...row }) => row), [
+    { ordinal: 1, text: 'the image boots', verificationMethod: 'Run the image smoke test', revision: 1 },
+    { ordinal: 2, text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0', revision: 1 },
+  ]);
+  assert.deepEqual(project.acceptanceCriteriaItems.map((item: any) => ({
+    text: item.text,
+    verificationMethod: item.verificationMethod,
+    currentStatus: item.currentStatus,
+  })), [
+    { text: 'the image boots', verificationMethod: 'Run the image smoke test', currentStatus: 'UNDECIDED' },
+    { text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0', currentStatus: 'UNDECIDED' },
+  ]);
+});
+
+test('the service refuses structured input with no verification method before writing', async () => {
+  const service = serviceWith({ project: { create: async () => assert.fail('must not insert') } });
+  await assert.rejects(
+    () => service.create(OWNER_ID, {
+      title: 'Incomplete',
+      acceptanceCriteriaItems: [{ text: 'the suite passes' }],
+    } as never),
+    /requires a verificationMethod/,
+  );
 });
 
 test('create refuses two competing acceptance authoring shapes', async () => {
@@ -312,6 +358,7 @@ test('the detail read marks an ambiguous one-line legacy backfill for review', a
           id: CRITERION_A_ID,
           ordinal: 1,
           text,
+          verificationMethod: 'Human review against direct evidence for this migrated criterion',
           revision: 1,
           contentHash: 'a'.repeat(64),
         }],
@@ -330,6 +377,43 @@ test('the detail read marks an ambiguous one-line legacy backfill for review', a
     source: 'LEGACY_TEXT',
     needsReview: true,
     reason: 'AMBIGUOUS_SINGLE_LINE_ENUMERATION',
+  });
+});
+
+test('the detail item projects its current status from acceptance instead of storing it', async () => {
+  const definition = {
+    id: CRITERION_A_ID,
+    ordinal: 1,
+    text: 'the suite passes',
+    verificationMethod: 'Run npm test and require exit code 0',
+    revision: 2,
+    contentHash: 'a'.repeat(64),
+  };
+  const service = serviceWith({
+    project: {
+      findFirst: async () => ({
+        id: PROJECT_ID,
+        acceptanceCriteria: '1. the suite passes',
+        acceptanceCriteriaFormat: 'STRUCTURED',
+        acceptanceCriterionDefinitions: [definition],
+        _count: { tasks: 0 },
+        members: [],
+        runtime: { coordinatorGeneration: 0n },
+      }),
+    },
+    task: { groupBy: async () => [] },
+  }, async () => ({
+    total: 1,
+    passed: 1,
+    lastRunAt: new Date('2026-08-26T00:00:00.000Z'),
+    criteria: [{ id: CRITERION_A_ID, verdict: 'PASS' }],
+  }));
+
+  const project: any = await service.get(OWNER_ID, PROJECT_ID);
+
+  assert.deepEqual(project.acceptanceCriteriaItems[0], {
+    ...definition,
+    currentStatus: 'PASS',
   });
 });
 
@@ -385,8 +469,8 @@ test('a structured update preserves ids and revisions across reorder, and increm
   const definitionWrites: any[] = [];
   const projectWrites: any[] = [];
   const finalDefinitions = [
-    { id: CRITERION_B_ID, ordinal: 1, text: 'Image boots', revision: 1, contentHash: 'b'.repeat(64) },
-    { id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', revision: 3, contentHash: 'a'.repeat(64) },
+    { id: CRITERION_B_ID, ordinal: 1, text: 'Image boots', verificationMethod: 'Smoke the image', revision: 1, contentHash: 'b'.repeat(64) },
+    { id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', verificationMethod: 'Run npm test', revision: 3, contentHash: 'a'.repeat(64) },
   ];
   const prisma: any = {
     project: {
@@ -412,8 +496,8 @@ test('a structured update preserves ids and revisions across reorder, and increm
     },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [
-        { id: CRITERION_A_ID, text: 'Build succeeds', revision: 2 },
-        { id: CRITERION_B_ID, text: 'Image boots', revision: 1 },
+        { id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'Run npm test', revision: 2 },
+        { id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image', revision: 1 },
       ],
       updateMany: async (args: any) => definitionWrites.push(['vacate', args.data]),
       deleteMany: async (args: any) => definitionWrites.push(['delete', args.where]),
@@ -433,8 +517,8 @@ test('a structured update preserves ids and revisions across reorder, and increm
 
   const updated: any = await serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
     acceptanceCriteriaItems: [
-      { id: CRITERION_B_ID, text: 'Image boots' },
-      { id: CRITERION_A_ID, text: 'Build with docs' },
+      { id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image' },
+      { id: CRITERION_A_ID, text: 'Build with docs', verificationMethod: 'Run npm test' },
     ],
   } as never);
 
@@ -446,18 +530,24 @@ test('a structured update preserves ids and revisions across reorder, and increm
   assert.deepEqual(definitionWrites[2], ['update', CRITERION_B_ID, {
     ordinal: 1,
     text: 'Image boots',
+    verificationMethod: 'Smoke the image',
     contentHash: definitionWrites[2][2].contentHash,
     revision: 1,
   }]);
   assert.deepEqual(definitionWrites[3], ['update', CRITERION_A_ID, {
     ordinal: 2,
     text: 'Build with docs',
+    verificationMethod: 'Run npm test',
     contentHash: definitionWrites[3][2].contentHash,
     revision: 3,
   }]);
   assert.deepEqual(updated.acceptanceCriteriaItems.map((item: any) => ({
-    id: item.id, ordinal: item.ordinal, text: item.text, revision: item.revision,
-  })), finalDefinitions.map(({ contentHash: _contentHash, ...item }) => item));
+    id: item.id, ordinal: item.ordinal, text: item.text,
+    verificationMethod: item.verificationMethod, currentStatus: item.currentStatus,
+    revision: item.revision,
+  })), finalDefinitions.map(({ contentHash: _contentHash, ...item }) => ({
+    ...item, currentStatus: 'UNDECIDED',
+  })));
 });
 
 test('a structured update refuses an id from another project before moving any definition', async () => {
@@ -467,7 +557,9 @@ test('a structured update refuses an id from another project before moving any d
       findFirst: async () => ({ id: PROJECT_ID, coordinatorEnabled: false }),
     },
     projectAcceptanceCriterionDefinition: {
-      findMany: async () => [{ id: CRITERION_A_ID, text: 'Build succeeds', revision: 1 }],
+      findMany: async () => [{
+        id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'Run npm test', revision: 1,
+      }],
       updateMany: async () => { mutated = true; },
       deleteMany: async () => { mutated = true; },
       update: async () => { mutated = true; },
@@ -486,7 +578,9 @@ test('a structured update refuses an id from another project before moving any d
 
   await assert.rejects(
     () => serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
-      acceptanceCriteriaItems: [{ id: CRITERION_B_ID, text: 'Not ours' }],
+      acceptanceCriteriaItems: [{
+        id: CRITERION_B_ID, text: 'Not ours', verificationMethod: 'Run npm test',
+      }],
     } as never),
     /does not belong to this project's current definitions/,
   );

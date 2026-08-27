@@ -1765,6 +1765,7 @@ model Project {
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
   acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
+  acceptanceConclusions ProjectAcceptanceConclusion[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
   acceptanceAudit ProjectAcceptanceAudit[]
   mergeEvidence   ProjectMergeEvidence[]
@@ -1807,7 +1808,11 @@ model ProjectAcceptanceCriterionDefinition {
   /// One atomic condition. Inline Markdown is allowed; item boundaries are structural rather than
   /// inferred from punctuation or list markers.
   text String
-  /// Monotonic for this stable id. Editing text increments it; reordering leaves it alone.
+  /// The required procedure/evidence by which a reader decides whether `text` holds. Legacy prose
+  /// rows receive an explicit manual-review method during migration rather than an invented test.
+  verificationMethod String @map("verification_method")
+  /// Monotonic for this stable id. Editing the assertion or its method increments it; reordering
+  /// leaves it alone.
   revision Int @default(1)
   /// sha256 of the exact normalized text. Used to reconcile legacy text writes without guessing
   /// identity from list position.
@@ -2335,17 +2340,12 @@ enum ProjectAcceptanceVerdict {
   @@map("project_acceptance_verdict")
 }
 
-/// One attempt at project-level acceptance (contract §13.4 AE1/AE2, §13.5).
+/// One immutable version of the project-level acceptance evidence set.
 ///
-/// This is the row that replaces "somebody wrote PASS in a task comment". A `DONE` is only ever
-/// allowed against a run in this table, and only while the run's `inputDigest` still equals the
-/// digest recomputed from the project's CURRENT facts — so the evidence is bound to the world it
-/// was gathered in rather than merely existing somewhere in the history.
-///
-/// Terminal rows are immutable: `project_acceptance_run_immutable_guard` (migration 0127) refuses
-/// every UPDATE of a run that already carries a verdict except the two lifecycle stamps
-/// (`supersededAt`, `supersededReason`). The audit is therefore append-only in the way §8.2 GE1
-/// means it — a conclusion cannot be rewritten after the fact, only superseded by a newer run.
+/// The historical API/table name is retained for compatibility. Since migration 0179 this is not a
+/// human-driven attempt and does not own a verdict: merge/criteria facts advance it automatically,
+/// idempotent evaluators share one current row, and ProjectAcceptanceConclusion events supply the
+/// derived standing. Legacy terminal columns remain readable and immutable.
 model ProjectAcceptanceRun {
   id        String  @id @default(uuid(7)) @db.Uuid
   projectId String  @map("project_id") @db.Uuid
@@ -2353,7 +2353,7 @@ model ProjectAcceptanceRun {
 
   /// The epoch this run was claimed at — `project_runtime.acceptance_attempt` as read when the run
   /// opened, with the `+1` committed in the same transaction (§13.4 AE11). Monotonic and never
-  /// reused, which is what makes `(projectId, attempt)` a permanent name for one attempt.
+  /// reused, which makes `(projectId, attempt)` a permanent evidence-version name.
   attempt BigInt
 
   /// The project's `acceptanceEpoch` when this run was opened (migration 0150), stamped by the
@@ -2379,17 +2379,14 @@ model ProjectAcceptanceRun {
   /// Version 4 removed task rows and task-verification verdicts from this input shape.
   digestVersion   Int      @default(1) @map("digest_version")
   inputDigest String @map("input_digest") @db.Char(64)
-  /// The digest of what this run CONCLUDED — the ordered per-criterion verdicts. Null until the run
-  /// is finalized. Kept separate from `inputDigest` for the reason §7.4 EC2-b keeps the action's two
-  /// digests apart: what was judged and what the judgement was are two different questions.
+  /// Legacy pre-0179 terminal projection. New conclusions live only in the event table.
   resultDigest String? @map("result_digest") @db.Char(64)
 
-  /// Null while the run is open; a value makes the run terminal and immutable.
+  /// Legacy pre-0179 terminal projection; new evidence versions leave it null.
   verdict ProjectAcceptanceVerdict?
 
-  /// COORDINATOR_AGENT or USER — the same closed pair `project_decision.decided_by` carries, and
-  /// the reason it is recorded here too: §13.4 clause 3 requires the acceptance record itself to
-  /// say who concluded, not only which pass produced it.
+  /// Who caused this evidence version to be materialized. Conclusion authorship is recorded on
+  /// every ProjectAcceptanceConclusion event instead.
   decidedBy String @map("decided_by")
 
   /// Historical attribution, deliberately without foreign keys (the reason `project_decision`'s
@@ -2401,9 +2398,7 @@ model ProjectAcceptanceRun {
   /// user may run acceptance directly.
   projectActionId  String?          @map("project_action_id") @db.Uuid
 
-  /// Why this run no longer counts. Set — never cleared — when a newer run opens, or when any
-  /// acceptance fact changed after a DONE (§13.4 AE8). Superseding rather than deleting is what
-  /// keeps "what did we think last week, and what ended it" answerable.
+  /// Why this is no longer the current evidence version. Set — never cleared — when facts advance.
   supersededAt     DateTime? @map("superseded_at")
   supersededReason String?   @map("superseded_reason")
 
@@ -2412,6 +2407,7 @@ model ProjectAcceptanceRun {
   createdAt   DateTime  @default(now()) @map("created_at")
 
   criteria ProjectAcceptanceCriterion[]
+  conclusions ProjectAcceptanceConclusion[]
 
   @@unique([projectId, attempt])
   @@index([projectId, createdAt])
@@ -2419,6 +2415,48 @@ model ProjectAcceptanceRun {
   /// face both make once a project has been reopened at least once.
   @@index([projectId, acceptanceEpoch], map: "project_acceptance_run_epoch_idx")
   @@map("project_acceptance_run")
+}
+
+/// One append-only conclusion about one criterion, made against one durable evidence version.
+///
+/// A run is the immutable version of the evidence set. Conclusions are events over those versions:
+/// adding merge evidence advances the version but does not rewrite or invalidate an earlier human
+/// conclusion. The current standing is derived by taking the highest-version conclusion for the
+/// current definition revision. This is why actor, time and evidence version are all mandatory.
+model ProjectAcceptanceConclusion {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  evidenceRunId  String               @map("evidence_run_id") @db.Uuid
+  evidenceRun    ProjectAcceptanceRun @relation(fields: [evidenceRunId], references: [id], onDelete: Cascade)
+  evidenceVersion BigInt              @map("evidence_version")
+
+  ordinal       Int
+  criterionKey  String @map("criterion_key")
+  criterionText String @map("criterion_text")
+  /// Historical definition identity. Null only on backfilled pre-0172 conclusions, whose original
+  /// rows deliberately did not claim an identity that did not yet exist.
+  definitionId       String? @map("definition_id") @db.Uuid
+  definitionRevision Int?    @map("definition_revision")
+
+  verdict ProjectAcceptanceVerdict
+  summary String?
+  evidence Json @default("{}")
+  evidenceTaskId    String? @map("evidence_task_id") @db.Uuid
+  evidenceSessionId String? @map("evidence_session_id") @db.Uuid
+
+  /// USER or COORDINATOR_AGENT. PASS is additionally constrained to USER by migration 0179.
+  decidedBy String @map("decided_by")
+  /// The durable principal identity: owner id for a person, acting Session id for a judgment agent.
+  decidedById String @map("decided_by_id") @db.Uuid
+  actingSessionId String? @map("acting_session_id") @db.Uuid
+  decidedAt DateTime @default(now()) @map("decided_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, definitionId, definitionRevision, evidenceVersion(sort: Desc), decidedAt(sort: Desc), id(sort: Desc)], map: "project_acceptance_conclusion_standing_idx")
+  @@index([evidenceRunId], map: "project_acceptance_conclusion_run_idx")
+  @@map("project_acceptance_conclusion")
 }
 
 /// One stated criterion, and what this run concluded about it (contract §13.4 clause 3).

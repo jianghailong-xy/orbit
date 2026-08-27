@@ -322,6 +322,35 @@ test('openAcceptanceRun attributes the run to the calling judgment session, not 
   assert.equal(seen.input?.coordinatorSessionId, SESSION_ID);
 });
 
+test('finalizeAcceptanceRun identifies a headless runner as a machine principal', async () => {
+  let received: unknown[] = [];
+  const criteria = [{ ordinal: 1, verdict: 'FAIL' }];
+  const acceptance = {
+    finalizeRun: async (...args: unknown[]) => {
+      received = args;
+      return { verdict: 'FAIL' };
+    },
+  } as never;
+  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
+
+  await controller.finalizeAcceptanceRun(
+    RUNNER,
+    'project-1',
+    'run-1',
+    undefined,
+    { criteria } as never,
+  );
+
+  assert.deepEqual(received, [
+    'owner-1',
+    'project-1',
+    'run-1',
+    criteria,
+    undefined,
+    'runner-1',
+  ]);
+});
+
 test('updateProject writes into the runner owner, with the id and body untouched', async () => {
   const seen: { ownerId?: string; projectId?: string; dto?: UpdateProjectDto } = {};
   const updated = { id: 'project-1', title: 'Crawl the archive' };

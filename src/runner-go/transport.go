@@ -979,12 +979,12 @@ func (t *Transport) getProjectReopenImpact(id string) (json.RawMessage, error) {
 
 // getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
 // as the server decomposes them, the digest of the facts a DONE would be checked against, every
-// attempt with its per-criterion conclusions and evidence, the newest merge observation per
+// evidence version with its projected per-criterion conclusions, the newest merge observation per
 // requirement, the append-only audit, and doneGate — whether a DONE would be allowed right now and,
 // if not, the code and the sentence the write path would refuse with.
 //
 // The read to make BEFORE claiming a project is finished. "The tests passed" written in a comment
-// is not evidence the server can check; a run in this table is.
+// is not evidence the server can check; a durable conclusion event in this record is.
 func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
@@ -994,8 +994,8 @@ func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
 	return out, err
 }
 
-// openProjectAcceptanceRun starts an acceptance attempt: the criteria are frozen with their digest
-// and one empty row per stated criterion is created — the checklist the verdict has to fill.
+// openProjectAcceptanceRun evaluates the current evidence set. It is idempotent: callers observing
+// the same criteria and merge facts receive the same immutable evidence-version row.
 //
 // Who concluded is the server's to decide from this credential (COORDINATOR_AGENT), not this
 // process's to claim.
@@ -1008,9 +1008,9 @@ func (t *Transport) openProjectAcceptanceRun(id string, body map[string]interfac
 	return out, err
 }
 
-// finalizeProjectAcceptanceRun concludes an attempt: one verdict per stated criterion, with the
-// evidence for it. The run's own verdict is derived from those and cannot be supplied — all PASS is
-// PASS, any FAIL is FAIL, anything else is INCONCLUSIVE.
+// finalizeProjectAcceptanceRun appends one conclusion event per stated criterion, with the evidence
+// for it. The current verdict is derived from events and cannot be supplied — all PASS is PASS, any
+// FAIL is FAIL, anything else is INCONCLUSIVE.
 func (t *Transport) finalizeProjectAcceptanceRun(id, runID string, body map[string]interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

@@ -137,6 +137,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'criterionId',
   'evidenceTaskId',
   'evidenceSessionId',
+  'evidenceRunId',
+  'decidedById',
+  'actingSessionId',
   // Unit L2's provenance columns on `task` (migration 0150): where a piece of work was NOTICED, as
   // distinct from `projectId`, which says whose goal it counts towards. Addresses a reader follows
   // — "show me the project that filed this", "open the session it came out of" — so they are

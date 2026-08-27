@@ -34,7 +34,6 @@ import {
 } from './coordinator-convergence';
 import { WakeFact } from './coordinator-wake';
 import { WakeAuthorization, WakeAuthorizer, WakeClaim } from './coordinator-wake.service';
-import { parseCriteria } from './project-acceptance';
 
 /**
  * `[T4]`: the durable half — the progress ledger, and the stop.
@@ -214,22 +213,31 @@ export class CoordinatorConvergenceService {
   ): Promise<DerivedProgress> {
 
     // 1. Acceptance. The stated criteria are the denominator whether or not anybody has judged them
-    //    (`parseCriteria` is the one place that decides what "one criterion" is); the live run's
-    //    per-criterion verdicts are the numerator. A criterion nobody has judged is not closed,
-    //    which is the correct reading of "no evidence" — never "assume passing".
+    //    The current definition rows are the denominator; the append-only conclusion projection is
+    //    the numerator. A criterion nobody has judged is not closed, which is the correct reading
+    //    of "no evidence" — never "assume passing".
     const verdicts = await tx.$queryRaw<Array<{ criterionKey: string; verdict: string | null }>>(Prisma.sql`
-      SELECT c."criterion_key" AS "criterionKey", c."verdict"::text AS "verdict"
-        FROM "project_acceptance_criterion" c
-        JOIN "project_acceptance_run" r ON r."id" = c."run_id"
-       WHERE r."project_id" = ${projectId}::uuid AND r."superseded_at" IS NULL
+      WITH current_version AS (
+        SELECT r."attempt"
+          FROM "project_acceptance_run" r
+         WHERE r."project_id" = ${projectId}::uuid AND r."superseded_at" IS NULL
+         ORDER BY r."attempt" DESC
+         LIMIT 1
+      ), standing AS (
+        SELECT s.*
+          FROM current_version v
+          CROSS JOIN LATERAL project_acceptance_standing(${projectId}::uuid, v."attempt") s
+      )
+      SELECT d."id"::text AS "criterionKey", s."verdict"::text AS "verdict"
+        FROM "project_acceptance_criterion_definition" d
+        LEFT JOIN standing s ON s."definition_id" = d."id"
+       WHERE d."project_id" = ${projectId}::uuid
+       ORDER BY d."ordinal"
     `);
-    const passed = new Set(
-      verdicts.filter((row) => row.verdict === 'PASS').map((row) => row.criterionKey),
-    );
-    const acceptance: AcceptanceEvidence[] = parseCriteria(project.acceptanceCriteria)
+    const acceptance: AcceptanceEvidence[] = verdicts
       .map((criterion) => ({
-        id: criterion.key,
-        closed: passed.has(criterion.key),
+        id: criterion.criterionKey,
+        closed: criterion.verdict === 'PASS',
         observedAt: asOf,
       }));
 

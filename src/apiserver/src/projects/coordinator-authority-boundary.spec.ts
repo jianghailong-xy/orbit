@@ -164,6 +164,20 @@ test('a judgment session cannot conclude an acceptance criterion PASS', async ()
   assert.equal(body.requiredAction, 'ASK_A_PERSON');
 });
 
+test('a headless runner cannot become USER merely by omitting the acting session header', async () => {
+  const body = await refusalOf(() => acceptanceFixture().finalizeRun(
+    OWNER,
+    PROJECT,
+    'run-1',
+    [{ ordinal: 1, verdict: 'PASS' as never }],
+    undefined,
+    RUN,
+  ));
+
+  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
+  assert.equal(body.action, 'CONCLUDE_VERDICT_PASS');
+});
+
 test('one PASS among failures is still a PASS being written', async () => {
   const body = await refusalOf(() => acceptanceFixture().finalizeRun(
     OWNER, PROJECT, 'run-1',

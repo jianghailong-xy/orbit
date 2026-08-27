@@ -476,14 +476,16 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"create", "--title", "LFS", "--acceptance-criteria-items",
-		`[{"text":" Build succeeds "},{"text":"Image boots"}]`, "--json",
+		`[{"text":" Build succeeds ","verificationMethod":" Run npm test "},{"text":"Image boots","verificationMethod":"Smoke the image"}]`, "--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatalf("structured project create: %v", err)
 	}
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["text"] != "Build succeeds" ||
-		items[1].(map[string]interface{})["text"] != "Image boots" {
+		items[0].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
+		items[1].(map[string]interface{})["text"] != "Image boots" ||
+		items[1].(map[string]interface{})["verificationMethod"] != "Smoke the image" {
 		t.Fatalf("structured project create body = %#v", body)
 	}
 	if _, legacy := body["acceptanceCriteria"]; legacy {
@@ -502,6 +504,8 @@ func TestProjectCreateRejectsAmbiguousAcceptanceAuthoring(t *testing.T) {
 		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"id":"not-allowed","text":"Build"}]`},
 		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"text":"   "}]`},
 		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"text":"Build\nBoot"}]`},
+		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"text":"Build"}]`},
+		{"create", "--title", "LFS", "--acceptance-criteria-items", `[{"text":"Build","verificationMethod":"   "}]`},
 	} {
 		var out bytes.Buffer
 		if err := cmdProjectCLI(args, strings.NewReader(""), &out); err == nil {
@@ -669,7 +673,7 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"update", "proj-1", "--acceptance-criteria-items",
-		`[{"id":"criterion-2","text":"Image boots"},{"id":"criterion-1","text":"Build succeeds"}]`,
+		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test"}]`,
 		"--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
@@ -677,7 +681,9 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	}
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["id"] != "criterion-2" ||
-		items[1].(map[string]interface{})["id"] != "criterion-1" {
+		items[0].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
+		items[1].(map[string]interface{})["id"] != "criterion-1" ||
+		items[1].(map[string]interface{})["verificationMethod"] != "Run npm test" {
 		t.Fatalf("structured project update body = %#v", body)
 	}
 	if len(body) != 1 {

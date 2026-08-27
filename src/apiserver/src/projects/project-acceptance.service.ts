@@ -12,7 +12,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   ACCEPTANCE_BLOCKED,
   ACCEPTANCE_DIGEST_VERSION,
-  ACCEPTANCE_EVIDENCE_STALE,
   ACCEPTANCE_FINDING_ROUTING,
   ACCEPTANCE_MISSING,
   AcceptanceFacts,
@@ -59,7 +58,7 @@ export interface AcceptanceCriterionOutcomeInput {
  *  conclusion, and it is never written to a column. */
 export const ACCEPTANCE_UNDECIDED = 'UNDECIDED' as const;
 
-/** One stated criterion and what the latest attempt currently says about it. */
+/** One stated criterion and what the current conclusion-event projection says about it. */
 export interface AcceptanceCriterionStanding {
   id: string;
   key: string;
@@ -78,6 +77,43 @@ export interface ProjectAcceptanceCriteriaSummary {
   passed: number;
   lastRunAt: Date | null;
   criteria: AcceptanceCriterionStanding[];
+}
+
+interface AcceptanceConclusionEventRow {
+  id: string;
+  projectId: string;
+  evidenceRunId: string;
+  evidenceVersion: bigint;
+  ordinal: number;
+  criterionKey: string;
+  criterionText: string;
+  definitionId: string | null;
+  definitionRevision: number | null;
+  verdict: ProjectAcceptanceVerdict;
+  summary: string | null;
+  evidence: unknown;
+  evidenceTaskId: string | null;
+  evidenceSessionId: string | null;
+  decidedBy: string;
+  decidedById: string;
+  actingSessionId: string | null;
+  decidedAt: Date;
+  createdAt: Date;
+}
+
+interface AcceptanceRunCriterionRow {
+  id: string;
+  ordinal: number;
+  criterionKey: string;
+  criterionText: string;
+  definitionId?: string | null;
+  definitionRevision?: number | null;
+  verdict: ProjectAcceptanceVerdict | null;
+  summary: string | null;
+  evidence: unknown;
+  evidenceTaskId: string | null;
+  evidenceSessionId: string | null;
+  decidedAt: Date | null;
 }
 
 export interface RecordMergeEvidenceInput {
@@ -129,13 +165,10 @@ type AuditKind =
  * related the claim to the facts it was about, so "is this project's DONE still true" had no
  * mechanical answer, and changing an acceptance condition could not invalidate anything.
  *
- * What is here instead is one row per attempt (`project_acceptance_run`), one row per stated
- * criterion (`project_acceptance_criterion`), a digest of the facts the attempt judged
- * (`inputDigest`, AE1), a digest of what it concluded (`resultDigest`), and a hard gate that
- * recomputes the first of those inside the transaction that writes DONE. Everything a caller can
- * do that would change the answer either moves the digest or supersedes the run — and the
- * acceptance-fact writes that could do it behind the service's back are caught by database
- * triggers rather than by a convention. Task-list state is deliberately outside that answer.
+ * A run is now one immutable EVIDENCE VERSION, not a person's acceptance attempt. Conclusions are
+ * append-only events naming actor, time and evidence version. PASS/DONE are projections over those
+ * events: new merge evidence advances the version automatically, while a newer FAIL changes the
+ * current projection and exits DONE. Task-list state is deliberately outside that answer.
  */
 @Injectable()
 export class ProjectAcceptanceService {
@@ -288,17 +321,200 @@ export class ProjectAcceptanceService {
     });
   }
 
+  /** Rolling-upgrade seam: migrations install the append-only ledger before every process is
+   * guaranteed to have regenerated Prisma. Unit-test doubles that intentionally model the old
+   * schema also omit this delegate and continue to exercise the legacy projection. */
+  private static conclusionDelegate(tx: Prisma.TransactionClient): {
+    findMany(args: unknown): Promise<AcceptanceConclusionEventRow[]>;
+    createMany(args: unknown): Promise<{ count: number }>;
+  } | null {
+    return ((tx as unknown as {
+      projectAcceptanceConclusion?: {
+        findMany(args: unknown): Promise<AcceptanceConclusionEventRow[]>;
+        createMany(args: unknown): Promise<{ count: number }>;
+      };
+    }).projectAcceptanceConclusion) ?? null;
+  }
+
+  private static async conclusionEvents(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    throughVersion: bigint,
+  ): Promise<AcceptanceConclusionEventRow[]> {
+    const delegate = ProjectAcceptanceService.conclusionDelegate(tx);
+    if (!delegate) return [];
+    return delegate.findMany({
+      where: { projectId, evidenceVersion: { lte: throughVersion } },
+      orderBy: [
+        { evidenceVersion: 'desc' },
+        { decidedAt: 'desc' },
+        { id: 'desc' },
+      ],
+    });
+  }
+
+  /** Project the append-only ledger onto one evidence version. An event for vN carries forward to
+   * vN+1 while its criterion definition revision is unchanged; an event written later against an
+   * older version never outranks one based on newer evidence. */
+  private static projectedCriteria(
+    criteria: AcceptanceRunCriterionRow[],
+    events: AcceptanceConclusionEventRow[],
+  ): AcceptanceRunCriterionRow[] {
+    const byDefinition = new Map<string, AcceptanceConclusionEventRow>();
+    const byLegacyKey = new Map<string, AcceptanceConclusionEventRow>();
+    for (const event of events) {
+      if (event.definitionId !== null && event.definitionRevision !== null) {
+        const key = `${event.definitionId}:${event.definitionRevision}`;
+        if (!byDefinition.has(key)) byDefinition.set(key, event);
+      } else if (!byLegacyKey.has(event.criterionKey)) {
+        byLegacyKey.set(event.criterionKey, event);
+      }
+    }
+    return criteria.map((criterion) => {
+      const event = criterion.definitionId && criterion.definitionRevision
+        ? byDefinition.get(`${criterion.definitionId}:${criterion.definitionRevision}`)
+        : byLegacyKey.get(criterion.criterionKey);
+      if (!event) return { ...criterion, verdict: null, summary: null, decidedAt: null };
+      return {
+        ...criterion,
+        verdict: event.verdict,
+        summary: event.summary,
+        evidence: event.evidence,
+        evidenceTaskId: event.evidenceTaskId,
+        evidenceSessionId: event.evidenceSessionId,
+        decidedAt: event.decidedAt,
+      };
+    });
+  }
+
+  private static projectedVerdict(
+    criteria: AcceptanceRunCriterionRow[],
+  ): ProjectAcceptanceVerdict | null {
+    if (criteria.length === 0 || criteria.some((criterion) => criterion.verdict === null)) return null;
+    if (criteria.every((criterion) => criterion.verdict === ProjectAcceptanceVerdict.PASS)) {
+      return ProjectAcceptanceVerdict.PASS;
+    }
+    if (criteria.some((criterion) => criterion.verdict === ProjectAcceptanceVerdict.FAIL)) {
+      return ProjectAcceptanceVerdict.FAIL;
+    }
+    return ProjectAcceptanceVerdict.INCONCLUSIVE;
+  }
+
+  /** Ensure the one current evidence-set version. The project lock is held by every caller, and a
+   * partial unique index is the database backstop, so two evaluators of the same facts return the
+   * same row instead of opening adjacent attempts. */
+  private async ensureEvidenceVersionTx(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    criteria: StatedAcceptanceCriterion[],
+    input: OpenAcceptanceRunInput,
+  ) {
+    const facts = await this.facts(tx, projectId);
+    const inputDigest = acceptanceDigest(projectId, facts);
+    const runDelegate = tx.projectAcceptanceRun as unknown as {
+      findFirst?: (args: unknown) => Promise<{ id: string; inputDigest: string; criteriaRevision: string;
+        digestVersion: number; supersededAt: Date | null }>;
+    };
+    const current = runDelegate.findFirst
+      ? await runDelegate.findFirst({
+          where: { projectId, supersededAt: null },
+          orderBy: { attempt: 'desc' },
+          select: {
+            id: true, inputDigest: true, criteriaRevision: true,
+            digestVersion: true, supersededAt: true,
+          },
+        })
+      : null;
+    if (
+      current && current.digestVersion === ACCEPTANCE_DIGEST_VERSION &&
+      current.criteriaRevision === facts.criteriaRevision && current.inputDigest === inputDigest
+    ) {
+      return this.readRun(tx, current.id);
+    }
+
+    const runtime = await tx.projectRuntime.upsert({
+      where: { projectId },
+      create: { projectId },
+      update: {},
+      select: { acceptanceAttempt: true },
+    });
+    const evidenceVersion = runtime.acceptanceAttempt;
+    await tx.projectRuntime.update({
+      where: { projectId },
+      data: { acceptanceAttempt: { increment: 1 } },
+    });
+
+    await tx.projectAcceptanceRun.updateMany({
+      where: { projectId, supersededAt: null },
+      data: { supersededAt: new Date(), supersededReason: 'evidence_set_advanced' },
+    });
+    const run = await tx.projectAcceptanceRun.create({
+      data: {
+        projectId,
+        attempt: evidenceVersion,
+        criteriaSnapshot: criteriaLegacyProjection(criteria) ?? '',
+        criteriaSnapshotV2: criteria.map((criterion) => ({
+          id: criterion.definitionId,
+          revision: criterion.definitionRevision,
+          ordinal: criterion.ordinal,
+          text: criterion.text,
+          contentHash: criterion.contentHash,
+        })) as Prisma.InputJsonValue,
+        criteriaRevision: facts.criteriaRevision,
+        inputDigest,
+        digestVersion: ACCEPTANCE_DIGEST_VERSION,
+        decidedBy: input.decidedBy,
+        coordinatorAgentId: input.coordinatorAgentId ?? null,
+        coordinatorSessionId: input.coordinatorSessionId ?? null,
+        projectActionId: input.projectActionId ?? null,
+      },
+    });
+    await tx.projectAcceptanceCriterion.createMany({
+      data: criteria.map((criterion) => ({
+        runId: run.id,
+        projectId,
+        ordinal: criterion.ordinal,
+        criterionKey: criterion.key,
+        criterionText: criterion.text,
+        definitionId: criterion.definitionId,
+        definitionRevision: criterion.definitionRevision,
+      })),
+    });
+    await ProjectAcceptanceService.writeAudit(
+      tx, projectId, 'run_opened', `evidence version ${evidenceVersion}`,
+      { evidenceVersion: String(evidenceVersion), inputDigest, criteria: criteria.length }, run.id,
+    );
+    return this.readRun(tx, run.id);
+  }
+
+  /** Transaction participant for an acceptance-fact writer that already holds the project row.
+   * It advances the evidence version automatically; no caller opens an acceptance attempt. */
+  async ensureCurrentEvidenceVersion(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    input: OpenAcceptanceRunInput = { decidedBy: 'USER' },
+  ) {
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { acceptanceCriteria: true },
+    });
+    const criteria = await ProjectAcceptanceService.statedCriteria(
+      tx, projectId, project.acceptanceCriteria,
+    );
+    if (criteria.length === 0) return null;
+    return this.ensureEvidenceVersionTx(tx, projectId, criteria, input);
+  }
+
   // ------------------------------------------------------------------------------------------
   // Running an acceptance
   // ------------------------------------------------------------------------------------------
 
   /**
-   * Open an attempt (§13.4 clause 1–3).
+   * Evaluate (and, only when the facts changed, create) the current evidence version.
    *
-   * Three things happen together or not at all: the epoch is claimed and incremented (AE11), the
-   * criteria are frozen with their digest, and one row per stated criterion is created empty. The
-   * empty criterion rows are the point — they are the checklist the finalize call has to fill, so
-   * "we forgot to check number 7" is a refusal rather than a silent PASS.
+   * When the facts changed, three things happen together or not at all: the evidence-version
+   * counter advances, the criteria are frozen with their digest, and one snapshot row per stated
+   * criterion is created. When the facts did not change, the existing version is returned.
    *
    * A project with no acceptance criteria is refused here rather than allowed to pass vacuously:
    * §13.4 clause 2 is about checking a stated condition, and there is nothing to check.
@@ -307,8 +523,8 @@ export class ProjectAcceptanceService {
     if (input.decidedBy !== 'COORDINATOR_AGENT' && input.decidedBy !== 'USER') {
       throw new BadRequestException('decidedBy must be COORDINATOR_AGENT or USER');
     }
-    // Retried whole. The run is opened against the project row this closure locks and re-reads, so
-    // a re-run opens against the state the winner left. A victim opened no run.
+    // Retried whole. The evidence version is evaluated against the project row this closure locks
+    // and re-reads, so a retry sees and returns the version the winner left.
     return withTransactionRetry(this.prisma, async (tx) => {
       const locked = await ProjectAcceptanceService.lockProject(
         tx, projectId, ownerId, 'FOR NO KEY UPDATE',
@@ -326,71 +542,7 @@ export class ProjectAcceptanceService {
         );
       }
 
-      // AE11: the key is the value READ, `+1` commits with the row. A retry of the same pass finds
-      // the epoch already spent and lands on `project_acceptance_run_attempt_idx` instead of
-      // opening a second attempt for one decision.
-      const runtime = await tx.projectRuntime.upsert({
-        where: { projectId },
-        create: { projectId },
-        update: {},
-        select: { acceptanceAttempt: true },
-      });
-      const attempt = runtime.acceptanceAttempt;
-      await tx.projectRuntime.update({
-        where: { projectId },
-        data: { acceptanceAttempt: { increment: 1 } },
-      });
-
-      const facts = await this.facts(tx, projectId);
-      const inputDigest = acceptanceDigest(projectId, facts);
-
-      // A newer attempt retires the older ones: two live runs would let a caller pick the one that
-      // says what they want.
-      await tx.projectAcceptanceRun.updateMany({
-        where: { projectId, supersededAt: null },
-        data: { supersededAt: new Date(), supersededReason: 'superseded_by_newer_attempt' },
-      });
-
-      const run = await tx.projectAcceptanceRun.create({
-        data: {
-          projectId,
-          attempt,
-          criteriaSnapshot: criteriaLegacyProjection(criteria) ?? '',
-          criteriaSnapshotV2: criteria.map((criterion) => ({
-            id: criterion.definitionId,
-            revision: criterion.definitionRevision,
-            ordinal: criterion.ordinal,
-            text: criterion.text,
-            contentHash: criterion.contentHash,
-          })) as Prisma.InputJsonValue,
-          criteriaRevision: facts.criteriaRevision,
-          inputDigest,
-          // Which reading of the world this evidence is about. Written explicitly, not defaulted:
-          // the column's DEFAULT of 1 exists so an OLDER binary's run is fail-closed at 0130's DONE
-          // gate, and only a writer that knows about §13.6 SU6's facts may claim the current one.
-          digestVersion: ACCEPTANCE_DIGEST_VERSION,
-          decidedBy: input.decidedBy,
-          coordinatorAgentId: input.coordinatorAgentId ?? null,
-          coordinatorSessionId: input.coordinatorSessionId ?? null,
-          projectActionId: input.projectActionId ?? null,
-        },
-      });
-      await tx.projectAcceptanceCriterion.createMany({
-        data: criteria.map((c) => ({
-          runId: run.id,
-          projectId,
-          ordinal: c.ordinal,
-          criterionKey: c.key,
-          criterionText: c.text,
-          definitionId: c.definitionId,
-          definitionRevision: c.definitionRevision,
-        })),
-      });
-      await ProjectAcceptanceService.writeAudit(
-        tx, projectId, 'run_opened', `attempt ${attempt}`,
-        { attempt: String(attempt), inputDigest, criteria: criteria.length }, run.id,
-      );
-      return this.readRun(tx, run.id);
+      return this.ensureEvidenceVersionTx(tx, projectId, criteria, input);
     }, loggedRetry(this.logger, 'projectAcceptance.openRun'));
   }
 
@@ -401,31 +553,60 @@ export class ProjectAcceptanceService {
    * person — or one that concludes nothing but failures — pays no query for a boundary that does
    * not apply to it.
    */
-  private async assertMayConcludePass(
-    ownerId: string,
-    actingSessionId: string | undefined,
-  ): Promise<void> {
-    if (!actingSessionId) return;
-    const acting = await this.prisma.session.findFirst({
-      where: { id: actingSessionId, ownerId },
-      select: { dispatchOrigin: true },
-    });
-    const principal: AuthorityPrincipal = authorityPrincipal(acting?.dispatchOrigin);
+  private static assertMayConcludePass(actor: {
+    decidedBy: 'USER' | 'COORDINATOR_AGENT';
+  }): void {
+    const principal: AuthorityPrincipal = actor.decidedBy === 'USER' ? 'USER' : 'JUDGMENT';
     const refusal = refuseHumanOnlyAction(principal, 'CONCLUDE_VERDICT_PASS');
     if (refusal) throw new ForbiddenException(refusal);
   }
 
+  private async conclusionActor(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    fallbackMachineId: string | undefined,
+  ): Promise<{
+    decidedBy: 'USER' | 'COORDINATOR_AGENT';
+    decidedById: string;
+    actingSessionId: string | null;
+  }> {
+    const acting = actingSessionId
+      ? await this.prisma.session.findFirst({
+          where: { id: actingSessionId, ownerId },
+          select: { id: true, dispatchOrigin: true },
+        })
+      : null;
+    if (authorityPrincipal(acting?.dispatchOrigin) === 'JUDGMENT' && acting) {
+      return {
+        decidedBy: 'COORDINATOR_AGENT',
+        decidedById: acting.id,
+        actingSessionId: acting.id,
+      };
+    }
+    if (!acting && fallbackMachineId) {
+      return {
+        decidedBy: 'COORDINATOR_AGENT',
+        decidedById: fallbackMachineId,
+        actingSessionId: null,
+      };
+    }
+    return {
+      decidedBy: 'USER',
+      decidedById: ownerId,
+      actingSessionId: acting?.id ?? null,
+    };
+  }
+
   /**
-   * Conclude an attempt (§13.4 clause 3–4).
+   * Append a complete set of criterion-conclusion events for an evidence version.
    *
-   * Every criterion in the snapshot must be answered — by ordinal or by content key — and the run's
-   * verdict is DERIVED from the answers rather than supplied: all PASS is PASS, any FAIL is FAIL,
+   * Every criterion in the snapshot must be answered — by ordinal or by content key — and the
+   * current verdict is DERIVED from events rather than supplied: all PASS is PASS, any FAIL is FAIL,
    * otherwise INCONCLUSIVE. A caller cannot hand in a PASS over a checklist that says otherwise,
    * which is the whole difference between this and a task comment.
    *
-   * The run is re-digested against the world as it is NOW, and a run whose facts moved while it was
-   * being judged concludes against those facts rather than the ones it opened on — otherwise a
-   * finalize could bless a world nobody looked at.
+   * Each event explicitly names the immutable evidence version the actor actually evaluated. A
+   * newer-version event outranks it; the historical conclusion itself is never rewritten.
    */
   async finalizeRun(
     ownerId: string,
@@ -433,6 +614,7 @@ export class ProjectAcceptanceService {
     runId: string,
     outcomes: AcceptanceCriterionOutcomeInput[],
     actingSessionId?: string,
+    fallbackMachineId?: string,
   ) {
     if (!Array.isArray(outcomes) || outcomes.length === 0) {
       throw new BadRequestException('a verdict must state a conclusion for every criterion');
@@ -443,9 +625,14 @@ export class ProjectAcceptanceService {
     // coordinator is for — but a PASS here is what `assertDoneAllowed` binds a project's DONE to,
     // so it is not a coordinator's to record. Refused before the transaction: nothing written, no
     // lock taken, and the run stays open for whoever does conclude it.
-    if (outcomes.some((outcome) => outcome?.verdict === 'PASS')) {
-      await this.assertMayConcludePass(ownerId, actingSessionId);
-    }
+    const eventSchema = ProjectAcceptanceService.conclusionDelegate(
+      this.prisma as unknown as Prisma.TransactionClient,
+    ) !== null;
+    const containsPass = outcomes.some((outcome) => outcome?.verdict === 'PASS');
+    const eventActor = eventSchema || containsPass
+      ? await this.conclusionActor(ownerId, actingSessionId, fallbackMachineId)
+      : null;
+    if (containsPass && eventActor) ProjectAcceptanceService.assertMayConcludePass(eventActor);
     // Retried whole: the verdict is computed inside the closure from facts read under the project
     // lock, so a re-run recomputes rather than replaying a verdict from a discarded snapshot.
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -455,7 +642,8 @@ export class ProjectAcceptanceService {
         include: { criteria: { orderBy: { ordinal: 'asc' } } },
       });
       if (!run) throw new NotFoundException('acceptance run not found');
-      if (run.verdict !== null) {
+      const conclusionDelegate = ProjectAcceptanceService.conclusionDelegate(tx);
+      if (!conclusionDelegate && run.verdict !== null) {
         throw new ConflictException(
           `acceptance run ${uuidToBase62(runId)} already concluded ${run.verdict} — open a new ` +
             'attempt instead',
@@ -508,6 +696,65 @@ export class ProjectAcceptanceService {
       }
 
       const decidedAt = new Date();
+      if (conclusionDelegate && eventActor) {
+        await conclusionDelegate.createMany({
+          data: run.criteria.map((criterion) => {
+            const outcome = answered.get(criterion.ordinal)!;
+            return {
+              projectId,
+              evidenceRunId: run.id,
+              evidenceVersion: run.attempt,
+              ordinal: criterion.ordinal,
+              criterionKey: criterion.criterionKey,
+              criterionText: criterion.criterionText,
+              definitionId: criterion.definitionId,
+              definitionRevision: criterion.definitionRevision,
+              verdict: outcome.verdict,
+              summary: outcome.summary ?? null,
+              evidence: (outcome.evidence ?? {}) as Prisma.InputJsonValue,
+              evidenceTaskId: outcome.evidenceTaskId ?? null,
+              evidenceSessionId: outcome.evidenceSessionId ?? null,
+              decidedBy: eventActor.decidedBy,
+              decidedById: eventActor.decidedById,
+              actingSessionId: eventActor.actingSessionId,
+              decidedAt,
+            };
+          }),
+        });
+
+        const verdicts = run.criteria.map((criterion) => answered.get(criterion.ordinal)!.verdict);
+        const verdict = verdicts.every((value) => value === ProjectAcceptanceVerdict.PASS)
+          ? ProjectAcceptanceVerdict.PASS
+          : verdicts.some((value) => value === ProjectAcceptanceVerdict.FAIL)
+            ? ProjectAcceptanceVerdict.FAIL
+            : ProjectAcceptanceVerdict.INCONCLUSIVE;
+        const resultDigest = acceptanceResultDigest(
+          run.id,
+          run.criteria.map((criterion) => ({
+            ordinal: criterion.ordinal,
+            criterionKey: criterion.criterionKey,
+            verdict: answered.get(criterion.ordinal)!.verdict,
+          })),
+        );
+        await ProjectAcceptanceService.writeAudit(
+          tx, projectId, 'run_finalized', verdict,
+          {
+            evidenceVersion: String(run.attempt),
+            verdict,
+            resultDigest,
+            decidedBy: eventActor.decidedBy,
+            decidedById: eventActor.decidedById,
+            decidedAt: decidedAt.toISOString(),
+            criteria: run.criteria.map((criterion) => ({
+              ordinal: criterion.ordinal,
+              verdict: answered.get(criterion.ordinal)!.verdict,
+            })),
+          },
+          run.id,
+        );
+        return this.readRun(tx, run.id);
+      }
+
       for (const criterion of run.criteria) {
         const outcome = answered.get(criterion.ordinal)!;
         await tx.projectAcceptanceCriterion.update({
@@ -580,8 +827,8 @@ export class ProjectAcceptanceService {
    * moves. Different content ⇒ a NEW row at `refGeneration + 1`, which is what makes "the branch
    * changed and changed back" visible to a database that cannot lock a git ref (AE9-a).
    *
-   * The reopen that AE9-c requires when this lands on a DONE project is migration 0127's trigger,
-   * not code here: an observation arriving through a future webhook path must reopen too.
+   * The new observation advances the evidence version in this transaction. Existing conclusions
+   * are then projected over the new version; an unchanged PASS stays PASS without a reopen.
    */
   async recordMergeEvidence(ownerId: string, projectId: string, input: RecordMergeEvidenceInput) {
     const requirementId = (input.requirementId ?? '').trim();
@@ -599,7 +846,9 @@ export class ProjectAcceptanceService {
     // Retried whole. The evidence row is keyed by the merge it records, so a re-run writes the same
     // row rather than a second one.
     return withTransactionRetry(this.prisma, async (tx) => {
-      await ProjectAcceptanceService.lockProject(tx, projectId, ownerId, 'FOR NO KEY UPDATE');
+      const locked = await ProjectAcceptanceService.lockProject(
+        tx, projectId, ownerId, 'FOR NO KEY UPDATE',
+      );
       const [latest] = await tx.$queryRaw<Array<{
         id: string; contentHash: string; refGeneration: bigint;
       }>>(Prisma.sql`
@@ -616,7 +865,12 @@ export class ProjectAcceptanceService {
           where: { id: latest.id },
           data: { lastSeenAt: new Date() },
         });
-        return { ...ProjectAcceptanceService.mergeRow(row), changed: false };
+        return {
+          ...ProjectAcceptanceService.mergeRow(row),
+          changed: false,
+          evidenceVersion: null,
+          acceptanceRunId: null,
+        };
       }
 
       const row = await tx.projectMergeEvidence.create({
@@ -641,7 +895,30 @@ export class ProjectAcceptanceService {
           previousContentHash: latest?.contentHash ?? null,
         },
       );
-      return { ...ProjectAcceptanceService.mergeRow(row), changed: true };
+      const criteria = await ProjectAcceptanceService.statedCriteria(
+        tx, projectId, locked.acceptanceCriteria,
+      );
+      const evidenceVersion = criteria.length > 0
+        ? await this.ensureEvidenceVersionTx(tx, projectId, criteria, { decidedBy: 'USER' })
+        : null;
+
+      // Leaving DONE is automatic when a conclusion event refutes a criterion; merely observing a
+      // larger evidence set does not manufacture a refutation. If the carried-forward projection is
+      // still PASS, atomically move the DONE binding to the new current evidence version.
+      if (
+        locked.status === ProjectStatus.DONE && evidenceVersion?.verdict === ProjectAcceptanceVerdict.PASS
+      ) {
+        await tx.project.update({
+          where: { id: projectId },
+          data: { acceptedRunId: evidenceVersion.id },
+        });
+      }
+      return {
+        ...ProjectAcceptanceService.mergeRow(row),
+        changed: true,
+        evidenceVersion: evidenceVersion?.evidenceVersion ?? null,
+        acceptanceRunId: evidenceVersion?.id ?? null,
+      };
     }, loggedRetry(this.logger, 'projectAcceptance.recordMergeEvidence'));
   }
 
@@ -658,8 +935,8 @@ export class ProjectAcceptanceService {
    *
    * Returns the run the DONE will be bound to. Throws a typed 409 otherwise, and the reason is
    * always one a person can act on: there is no run, the run says something other than PASS, the
-   * run's evidence is about a world that has since changed, or the project still has something
-   * unresolved in it. Task counts and task statuses are intentionally absent: they are a process
+   * current conclusion projection is non-PASS, or the project still has something unresolved in
+   * it. Task counts and task statuses are intentionally absent: they are a process
    * measure, while this gate decides whether the stated outcome was achieved.
    */
   async assertDoneAllowed(
@@ -721,6 +998,82 @@ export class ProjectAcceptanceService {
           unresolvedVerificationFailures: unresolvedFailures,
         },
       );
+    }
+
+    if (ProjectAcceptanceService.conclusionDelegate(tx)) {
+      const liveVersion = await tx.projectAcceptanceRun.findFirst({
+        where: { projectId, supersededAt: null },
+        orderBy: { attempt: 'desc' },
+      });
+      if (!liveVersion) {
+        throw new AcceptanceRefusal(
+          ACCEPTANCE_MISSING,
+          'this project has no current evidence version — evaluate the current evidence set once ' +
+            'before recording DONE. ' + ACCEPTANCE_FINDING_ROUTING,
+          {
+            requiredAction: 'evaluate the current evidence set and record criterion conclusions. ' +
+              ACCEPTANCE_FINDING_ROUTING,
+            acceptanceDigest: digest,
+          },
+        );
+      }
+      const project = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        select: { acceptanceCriteria: true },
+      });
+      const definitions = await ProjectAcceptanceService.statedCriteria(
+        tx, projectId, project.acceptanceCriteria,
+      );
+      const events = await ProjectAcceptanceService.conclusionEvents(
+        tx, projectId, liveVersion.attempt,
+      );
+      const standing = ProjectAcceptanceService.projectedCriteria(
+        definitions.map((definition) => ({
+          id: definition.definitionId ?? `legacy:${definition.ordinal}`,
+          ordinal: definition.ordinal,
+          criterionKey: definition.key,
+          criterionText: definition.text,
+          definitionId: definition.definitionId,
+          definitionRevision: definition.definitionRevision,
+          verdict: null,
+          summary: null,
+          evidence: {},
+          evidenceTaskId: null,
+          evidenceSessionId: null,
+          decidedAt: null,
+        })),
+        events,
+      );
+      const unmet = standing
+        .filter((criterion) => criterion.verdict !== ProjectAcceptanceVerdict.PASS)
+        .map((criterion) => ({
+          ordinal: criterion.ordinal,
+          criterionKey: criterion.criterionKey,
+          criterionText: criterion.criterionText,
+          verdict: criterion.verdict ?? ACCEPTANCE_UNDECIDED,
+        }));
+      if (definitions.length === 0 || unmet.length > 0) {
+        const named = unmet
+          .map((criterion) =>
+            `#${criterion.ordinal} ${JSON.stringify(criterion.criterionText)} (${criterion.verdict})`)
+          .join('; ');
+        throw new AcceptanceRefusal(
+          ACCEPTANCE_MISSING,
+          definitions.length === 0
+            ? 'this project states no acceptance criteria — DONE cannot pass vacuously'
+            : `the current acceptance evaluation has non-PASS criteria: ${named}. ` +
+                ACCEPTANCE_FINDING_ROUTING,
+          {
+            requiredAction: 'record new evidence-backed conclusions for the named criteria. ' +
+              ACCEPTANCE_FINDING_ROUTING,
+            runId: liveVersion.id,
+            evidenceVersion: String(liveVersion.attempt),
+            unmetCriteria: unmet,
+            acceptanceDigest: digest,
+          },
+        );
+      }
+      return { runId: liveVersion.id, attempt: liveVersion.attempt, digest };
     }
 
     const live = await tx.projectAcceptanceRun.findFirst({
@@ -806,22 +1159,20 @@ export class ProjectAcceptanceService {
     // cannot give: a reopen on its own moves none of the acceptance projections, so a project
     // reopened and left otherwise untouched has a PASS whose digest still matches perfectly.
     //
-    // `ACCEPTANCE_EVIDENCE_STALE` rather than a new code: PAC §12 E2 forbids a synonym, and "your
-    // evidence is about a world that is no longer this one" is what that code already means. The
-    // run itself is not touched — a historical conclusion stops being current by being read, not
-    // by being rewritten (§13.4's audit is append-only).
+    // Legacy-schema compatibility only. Schema 0179 evaluates append-only conclusion events above
+    // and never reaches an epoch/freshness refusal.
     const { acceptanceEpoch } = await tx.project.findUniqueOrThrow({
       where: { id: projectId },
       select: { acceptanceEpoch: true },
     });
     if (live.acceptanceEpoch !== acceptanceEpoch) {
       throw new AcceptanceRefusal(
-        ACCEPTANCE_EVIDENCE_STALE,
+        ACCEPTANCE_MISSING,
         `acceptance run ${uuidToBase62(live.id)} passed in acceptance epoch ` +
           `${live.acceptanceEpoch}, and this project is now in epoch ${acceptanceEpoch} — it was ` +
           'reopened after that run, so what it concluded is history rather than a claim about now',
         {
-          requiredAction: 'run acceptance again in the current epoch',
+          requiredAction: 'evaluate the current evidence set',
           runId: live.id,
           evidenceEpoch: String(live.acceptanceEpoch),
           acceptanceEpoch: String(acceptanceEpoch),
@@ -830,12 +1181,12 @@ export class ProjectAcceptanceService {
     }
     if (live.inputDigest !== digest) {
       throw new AcceptanceRefusal(
-        ACCEPTANCE_EVIDENCE_STALE,
+        ACCEPTANCE_MISSING,
         `acceptance run ${uuidToBase62(live.id)} passed against different acceptance facts — ` +
           'the acceptance criteria or their merge evidence changed since it ran. ' +
           ACCEPTANCE_FINDING_ROUTING,
         {
-          requiredAction: 'run acceptance again against the current criteria and evidence. ' +
+          requiredAction: 'evaluate the current criteria and evidence. ' +
             ACCEPTANCE_FINDING_ROUTING,
           runId: live.id,
           evidenceDigest: live.inputDigest,
@@ -855,7 +1206,10 @@ export class ProjectAcceptanceService {
       where: { id: runId },
       include: { criteria: { orderBy: { ordinal: 'asc' } } },
     });
-    return ProjectAcceptanceService.runRow(run);
+    const events = ProjectAcceptanceService.conclusionDelegate(tx)
+      ? await ProjectAcceptanceService.conclusionEvents(tx, run.projectId, run.attempt)
+      : undefined;
+    return ProjectAcceptanceService.runRow(run, events);
   }
 
   static runRow(run: {
@@ -867,22 +1221,29 @@ export class ProjectAcceptanceService {
     projectActionId: string | null;
     supersededAt: Date | null; supersededReason: string | null;
     startedAt: Date; completedAt: Date | null;
-    criteria?: Array<{
-      id: string; ordinal: number; criterionKey: string; criterionText: string;
-      definitionId?: string | null; definitionRevision?: number | null;
-      verdict: ProjectAcceptanceVerdict | null; summary: string | null; evidence: unknown;
-      evidenceTaskId: string | null; evidenceSessionId: string | null; decidedAt: Date | null;
-    }>;
-  }) {
+    criteria?: AcceptanceRunCriterionRow[];
+  }, events?: AcceptanceConclusionEventRow[]) {
+    const criteria = events === undefined
+      ? (run.criteria ?? [])
+      : ProjectAcceptanceService.projectedCriteria(run.criteria ?? [], events);
+    const verdict = events === undefined
+      ? run.verdict
+      : ProjectAcceptanceService.projectedVerdict(criteria);
+    const completedAt = events === undefined
+      ? run.completedAt
+      : criteria.length > 0 && criteria.every((criterion) => criterion.decidedAt !== null)
+        ? new Date(Math.max(...criteria.map((criterion) => criterion.decidedAt!.getTime())))
+        : null;
     return {
       id: run.id,
       projectId: run.projectId,
       attempt: String(run.attempt),
+      evidenceVersion: String(run.attempt),
       // Which acceptance this run belongs to (migration 0150). String, like `attempt` beside it:
       // a BigInt has no JSON spelling, and a reader comparing it against the project's own epoch
       // needs the two rendered the same way.
       acceptanceEpoch: String(run.acceptanceEpoch),
-      verdict: run.verdict,
+      verdict,
       decidedBy: run.decidedBy,
       criteriaSnapshot: run.criteriaSnapshot,
       criteriaSnapshotV2: run.criteriaSnapshotV2 ?? null,
@@ -895,8 +1256,8 @@ export class ProjectAcceptanceService {
       supersededAt: run.supersededAt,
       supersededReason: run.supersededReason,
       startedAt: run.startedAt,
-      completedAt: run.completedAt,
-      criteria: (run.criteria ?? []).map((c) => ({
+      completedAt,
+      criteria: criteria.map((c) => ({
         id: c.id,
         ordinal: c.ordinal,
         criterionKey: c.criterionKey,
@@ -909,6 +1270,20 @@ export class ProjectAcceptanceService {
         evidenceTaskId: c.evidenceTaskId,
         evidenceSessionId: c.evidenceSessionId,
         decidedAt: c.decidedAt,
+      })),
+      conclusions: (events ?? []).map((event) => ({
+        id: event.id,
+        criterionId: event.definitionId,
+        definitionRevision: event.definitionRevision,
+        ordinal: event.ordinal,
+        verdict: event.verdict,
+        summary: event.summary,
+        evidenceVersion: String(event.evidenceVersion),
+        evidenceRunId: event.evidenceRunId,
+        decidedBy: event.decidedBy,
+        decidedById: event.decidedById,
+        actingSessionId: event.actingSessionId,
+        decidedAt: event.decidedAt,
       })),
     };
   }
@@ -974,6 +1349,15 @@ export class ProjectAcceptanceService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 50,
     });
+    const conclusionEvents = runs.length > 0 && ProjectAcceptanceService.conclusionDelegate(
+      this.prisma as unknown as Prisma.TransactionClient,
+    )
+      ? await ProjectAcceptanceService.conclusionEvents(
+          this.prisma as unknown as Prisma.TransactionClient,
+          projectId,
+          runs[0]!.attempt,
+        )
+      : undefined;
 
     const evaluated = await this.evaluateGate(projectId);
 
@@ -1002,7 +1386,10 @@ export class ProjectAcceptanceService {
         refusalCode: evaluated.code,
         reason: evaluated.reason,
       },
-      runs: runs.map((r) => ProjectAcceptanceService.runRow(r)),
+      runs: runs.map((run) => ProjectAcceptanceService.runRow(
+        run,
+        conclusionEvents?.filter((event) => event.evidenceVersion <= run.attempt),
+      )),
       runsEmptyReason: runs.length > 0 ? null : 'ACCEPTANCE_NOT_ATTEMPTED',
       mergeEvidence: merges.map((m) => ProjectAcceptanceService.mergeRow(m)),
       mergeEvidenceEmptyReason: merges.length > 0 ? null : 'NO_MERGE_EVIDENCE',
@@ -1118,6 +1505,56 @@ export class ProjectAcceptanceService {
       include: { criteria: { orderBy: { ordinal: 'asc' } } },
     });
     if (latest === null) return unjudged();
+    if (ProjectAcceptanceService.conclusionDelegate(
+      this.prisma as unknown as Prisma.TransactionClient,
+    )) {
+      const events = await ProjectAcceptanceService.conclusionEvents(
+        this.prisma as unknown as Prisma.TransactionClient,
+        projectId,
+        latest.attempt,
+      );
+      const projected = ProjectAcceptanceService.projectedCriteria(
+        stated.map((definition) => ({
+          id: definition.definitionId ?? `legacy:${definition.ordinal}:${definition.key}`,
+          ordinal: definition.ordinal,
+          criterionKey: definition.key,
+          criterionText: definition.text,
+          definitionId: definition.definitionId,
+          definitionRevision: definition.definitionRevision,
+          verdict: null,
+          summary: null,
+          evidence: {},
+          evidenceTaskId: null,
+          evidenceSessionId: null,
+          decidedAt: null,
+        })),
+        events,
+      );
+      const lastConclusionAt = projected.reduce<Date | null>(
+        (latestDate, criterion) => criterion.decidedAt &&
+          (latestDate === null || criterion.decidedAt > latestDate)
+          ? criterion.decidedAt
+          : latestDate,
+        null,
+      );
+      return {
+        total: projected.length,
+        passed: projected.filter(
+          (criterion) => criterion.verdict === ProjectAcceptanceVerdict.PASS,
+        ).length,
+        lastRunAt: lastConclusionAt ?? latest.startedAt,
+        criteria: projected.map((criterion) => ({
+          id: criterion.definitionId ?? criterion.id,
+          key: criterion.criterionKey,
+          text: criterion.criterionText,
+          ordinal: criterion.ordinal,
+          verdict: criterion.verdict ?? ACCEPTANCE_UNDECIDED,
+          summary: criterion.summary,
+          decidedAt: criterion.decidedAt,
+          evidenceTaskId: criterion.evidenceTaskId,
+        })),
+      };
+    }
     const latestSemanticRevision = latest.digestVersion === ACCEPTANCE_DIGEST_VERSION
       ? latest.criteriaRevision
       : latest.digestVersion < ACCEPTANCE_DIGEST_VERSION
