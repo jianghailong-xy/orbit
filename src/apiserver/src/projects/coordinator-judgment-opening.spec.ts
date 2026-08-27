@@ -144,7 +144,8 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence-run order and the no-evid
   assert.match(opening, /task_create.*criterionKey/);
   assert.match(opening, /task_comment 中升级给人/);
   assert.match(opening, /不得开 acceptance run，更不得写 PASS/);
-  assert.match(opening, /status=DONE 都由账号所有者通道写/);
+  assert.match(opening, /任何主体都不能.*直接写 status=DONE/);
+  assert.match(opening, /服务端自动产生 DONE/);
   assert.match(opening, /不证明持有凭据的一定是真人/);
   assert.match(opening, /不会被标成 stale/);
   assert.match(opening, /幂等/);

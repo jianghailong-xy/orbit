@@ -1610,9 +1610,10 @@ model Project {
   /// and read it. A database trigger keeps the two representations in step, including writes from
   /// an older binary during a rolling upgrade.
   acceptanceCriteria String? @map("acceptance_criteria")
-  /// Database-maintained sha256 of the unordered multiset of current criterion content hashes.
-  /// This, rather than the compatibility text, is the acceptance fact: reordering a conjunction
-  /// changes presentation without invalidating evidence.
+  /// Database-maintained sha256 of the current criteria's stable ids, monotone revisions, and
+  /// semantic content hashes. This, rather than the compatibility text, is the acceptance fact:
+  /// reordering a conjunction changes presentation without invalidating evidence, while an edit
+  /// followed by restoring the same words still advances the revision and requires confirmation.
   acceptanceCriteriaDigest String @default("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") @map("acceptance_criteria_digest") @db.Char(64)
   /// LEGACY_TEXT while current definitions came through/backfilled from the compatibility field;
   /// STRUCTURED after a caller explicitly submitted item boundaries and stable ids.
@@ -1767,6 +1768,7 @@ model Project {
   acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
   acceptanceConclusions ProjectAcceptanceConclusion[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
+  acceptanceCriteriaConfirmations ProjectAcceptanceCriteriaConfirmation[]
   acceptanceAudit ProjectAcceptanceAudit[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
@@ -1811,11 +1813,23 @@ model ProjectAcceptanceCriterionDefinition {
   /// The required procedure/evidence by which a reader decides whether `text` holds. Legacy prose
   /// rows receive an explicit manual-review method during migration rather than an invented test.
   verificationMethod String @map("verification_method")
-  /// Monotonic for this stable id. Editing the assertion or its method increments it; reordering
-  /// leaves it alone.
+  /// The same peer criterion family used by Task. There is intentionally no project-specific
+  /// enum and no fallback order between these values.
+  completionCriterion TaskCompletionCriterion @map("completion_criterion")
+  /// EXECUTABLE declarations name the exact command/result pair to consume. They are null for the
+  /// two peer criteria rather than acting as an implicit executable declaration.
+  acceptanceCommand          String? @map("acceptance_command")
+  acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
+  /// EXECUTABLE: the Task whose recorded command result is evidence. VERIFICATION: the independent
+  /// verifier Task whose current verdict is evidence. Historical pointer; deliberately no FK.
+  evidenceTaskId String? @map("evidence_task_id") @db.Uuid
+  /// N23's advisory override audit, using the same field and keyword table as Task declarations.
+  completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
+  /// Monotonic for this stable id. Editing the assertion, method, criterion kind, or mechanical
+  /// input increments it; reordering and advisory-override prose leave it alone.
   revision Int @default(1)
-  /// sha256 of the exact normalized text. Used to reconcile legacy text writes without guessing
-  /// identity from list position.
+  /// sha256 of the normalized assertion, reader-facing method, criterion kind, and mechanical
+  /// inputs. Legacy reconciliation separately hashes text when matching old lines to stable ids.
   contentHash String @map("content_hash") @db.Char(64)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1824,6 +1838,27 @@ model ProjectAcceptanceCriterionDefinition {
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
+}
+
+/// One confirmation that the complete standard set represented by `criteriaDigest` is a valid
+/// expression of the project's goal. It is append-only and set-scoped: there is no criterion id.
+/// A later definition edit advances the digest and therefore makes this row historical without
+/// rewriting it. Actor provenance is audit visibility, not proof a human held the credential.
+model ProjectAcceptanceCriteriaConfirmation {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  criteriaDigest  String @map("criteria_digest") @db.Char(64)
+  confirmedByType String @map("confirmed_by_type")
+  confirmedById   String @map("confirmed_by_id") @db.Uuid
+  actingSessionId String? @map("acting_session_id") @db.Uuid
+  confirmedAt     DateTime @default(now()) @map("confirmed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, criteriaDigest], map: "project_acceptance_confirmation_digest_key")
+  @@index([projectId, confirmedAt(sort: Desc)], map: "project_acceptance_confirmation_project_idx")
+  @@map("project_acceptance_criteria_confirmation")
 }
 
 /// One agent's membership of one project's team, and the only place a project's COORDINATOR is
@@ -2482,6 +2517,12 @@ model ProjectAcceptanceCriterion {
   /// definition must never rewrite or prevent deletion of the run snapshot that judged it.
   definitionId       String? @map("definition_id") @db.Uuid
   definitionRevision Int?    @map("definition_revision")
+
+  /// Frozen declaration shape. Historical rows are migrated honestly to HUMAN_SIGNOFF; current
+  /// rows copy the definition so the review page never guesses a criterion from mutable state.
+  completionCriterion TaskCompletionCriterion @map("completion_criterion")
+  acceptanceCommand          String? @map("acceptance_command")
+  acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
 
   verdict ProjectAcceptanceVerdict?
   summary String?

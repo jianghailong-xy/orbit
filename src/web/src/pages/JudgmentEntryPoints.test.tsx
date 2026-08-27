@@ -62,8 +62,11 @@ const projectItem: ProjectAcceptanceInboxItem = {
   attempt: '4',
   startedAt: '2026-08-26T08:01:00.000Z',
   criterionCount: 10,
+  humanCriterionCount: 2,
   answeredCount: 0,
-  unansweredCount: 10,
+  unansweredCount: 2,
+  criteriaConfirmed: false,
+  confirmationRequired: true,
   currentVerdict: 'UNDECIDED',
 };
 
@@ -87,16 +90,16 @@ describe('human judgment entry points', () => {
       </QueryClientProvider>,
     );
     expect(html).toContain('待我判定');
-    expect(html).toContain('任务级 HUMAN_SIGNOFF 与项目级验收共用一个收件箱');
+    expect(html).toContain('任务级 HUMAN_SIGNOFF、项目标准集确认与少数项目级 HUMAN_SIGNOFF 共用一个收件箱');
     expect(html).toContain('Review this exact accessible build');
     expect(html).toContain('Evidence</dt><dd>r7');
     expect(html).toContain('Implementation workspace');
     expect(html).toContain('0123456789abcdef');
     expect(html).toContain(`href="${judgmentReviewPath(REQUEST)}"`);
     expect(html).toContain('N20 project acceptance');
-    expect(html).toContain('项目级验收');
+    expect(html).toContain('确认项目标准集');
     expect(html).toContain('attempt 4');
-    expect(html).toContain('0/10 answered');
+    expect(html).toContain('0/2 answered');
     expect(html).toContain(`href="${projectAcceptanceReviewPath(PROJECT, RUN)}"`);
   });
 

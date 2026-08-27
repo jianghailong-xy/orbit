@@ -1,6 +1,7 @@
 import { encodeId } from './idCodec';
 
 export type ProjectAcceptanceVerdict = 'PASS' | 'FAIL' | 'INCONCLUSIVE';
+export type ProjectCompletionCriterion = 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
 
 export interface ProjectAcceptanceInboxItem {
   runId: string;
@@ -10,9 +11,12 @@ export interface ProjectAcceptanceInboxItem {
   attempt: string;
   startedAt: string;
   criterionCount: number;
+  humanCriterionCount: number;
   answeredCount: number;
   unansweredCount: number;
   currentVerdict: 'UNDECIDED';
+  criteriaConfirmed: boolean;
+  confirmationRequired: boolean;
 }
 
 export interface ProjectAcceptanceInboxPage {
@@ -28,6 +32,9 @@ export interface ProjectAcceptanceCriterion {
   definitionRevision: number | null;
   criterionText: string;
   verificationMethod: string | null;
+  completionCriterion: ProjectCompletionCriterion;
+  acceptanceCommand: string | null;
+  acceptanceExpectedExitCode: number | null;
   verdict: ProjectAcceptanceVerdict | null;
   summary: string | null;
   evidence: unknown;
@@ -64,8 +71,26 @@ export interface ProjectAcceptanceOverview {
     criterionKey: string;
     criterionText: string;
     verificationMethod: string | null;
+    completionCriterion: ProjectCompletionCriterion;
+    acceptanceCommand: string | null;
+    acceptanceExpectedExitCode: number | null;
+    evidenceTaskId: string | null;
+    completionCriterionOverrideReason: string | null;
   }>;
   acceptanceDigest: string;
+  criteriaDigest: string;
+  criteriaConfirmation: {
+    confirmed: boolean;
+    criteriaDigest: string;
+    confirmation: null | {
+      id: string;
+      criteriaDigest: string;
+      confirmedByType: 'USER' | 'RUNNER';
+      confirmedById: string;
+      actingSessionId: string | null;
+      confirmedAt: string;
+    };
+  };
   runs: ProjectAcceptanceRun[];
   runsEmptyReason: string | null;
   audit: unknown[];
@@ -99,4 +124,8 @@ export function projectAcceptanceOverviewPath(projectId: string): string {
 
 export function projectAcceptanceVerdictPath(projectId: string, runId: string): string {
   return `/projects/${encodeURIComponent(encodeId(projectId))}/acceptance/runs/${encodeURIComponent(encodeId(runId))}/verdict`;
+}
+
+export function projectAcceptanceConfirmationPath(projectId: string): string {
+  return `/projects/${encodeURIComponent(encodeId(projectId))}/acceptance/criteria-confirmation`;
 }

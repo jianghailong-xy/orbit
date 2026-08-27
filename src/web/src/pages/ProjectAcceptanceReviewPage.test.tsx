@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import {
+  projectAcceptanceConfirmationPath,
   projectAcceptanceOverviewPath,
   projectAcceptanceReviewPath,
   projectAcceptanceVerdictPath,
@@ -54,9 +55,12 @@ const run: ProjectAcceptanceRun = {
       definitionRevision: 2,
       criterionText: '自动派发确实发生',
       verificationMethod: '运行 coordinator pg spec，并要求退出码为 0。',
-      verdict: null,
-      summary: null,
-      evidence: { command: 'npm test -w @orbit/apiserver', exitCode: 0 },
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'npm test -w @orbit/apiserver',
+      acceptanceExpectedExitCode: 0,
+      verdict: 'PASS',
+      summary: 'Command exited 0; expected 0',
+      evidence: { command: 'npm test -w @orbit/apiserver', actualExitCode: 0 },
       evidenceTaskId: TASK,
       evidenceSessionId: SESSION,
       decidedAt: null,
@@ -69,6 +73,9 @@ const run: ProjectAcceptanceRun = {
       definitionRevision: 1,
       criterionText: '没有新增定时器',
       verificationMethod: '运行 grep 断言与对应 spec。',
+      completionCriterion: 'HUMAN_SIGNOFF',
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
       verdict: null,
       summary: null,
       evidence: {},
@@ -89,8 +96,26 @@ const overview: ProjectAcceptanceOverview = {
     criterionKey: criterion.criterionKey,
     criterionText: criterion.criterionText,
     verificationMethod: criterion.verificationMethod,
+    completionCriterion: criterion.completionCriterion,
+    acceptanceCommand: criterion.acceptanceCommand,
+    acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
+    evidenceTaskId: criterion.evidenceTaskId,
+    completionCriterionOverrideReason: null,
   })),
   acceptanceDigest: 'b'.repeat(64),
+  criteriaDigest: 'c'.repeat(64),
+  criteriaConfirmation: {
+    confirmed: true,
+    criteriaDigest: 'c'.repeat(64),
+    confirmation: {
+      id: encodeId('019fcda0-d021-72a2-a914-2f4de38f4909'),
+      criteriaDigest: 'c'.repeat(64),
+      confirmedByType: 'USER',
+      confirmedById: encodeId('019fcda0-d021-72a2-a914-2f4de38f4910'),
+      actingSessionId: null,
+      confirmedAt: '2026-08-27T07:59:00.000Z',
+    },
+  },
   runs: [run],
   runsEmptyReason: null,
   audit: [],
@@ -131,7 +156,7 @@ async function mount(): Promise<void> {
 
 function submitButton(): HTMLButtonElement {
   const found = [...container.querySelectorAll('button')].find((candidate) =>
-    candidate.textContent?.includes('提交 2 条判定'),
+    candidate.textContent?.includes('提交 1 条人工判定'),
   );
   expect(found).toBeTruthy();
   return found as HTMLButtonElement;
@@ -190,23 +215,22 @@ describe('project acceptance review', () => {
     expect(container.querySelector('.project-acceptance-audit')?.hasAttribute('open')).toBe(false);
   });
 
-  it('makes EVERY criterion visibly required and cannot submit a partial checklist', async () => {
+  it('requires only HUMAN_SIGNOFF and leaves automatic criteria read-only', async () => {
     apiMock.mockResolvedValue(overview);
     await mount();
 
-    expect(container.textContent).toContain('已回答 0/2；尚有 2 条');
-    expect(container.textContent).toContain('还需回答判据：1、2');
-    expect(submitButton().disabled).toBe(true);
-
-    await choose(0, 'INCONCLUSIVE');
-    expect(container.textContent).toContain('已回答 1/2；尚有 1 条');
+    expect(container.textContent).toContain('人工标准已回答 0/1；尚有 1 条');
     expect(container.textContent).toContain('还需回答判据：2');
+    expect(container.textContent).toContain('EXECUTABLE 由服务端自动求值');
+    expect(container.querySelectorAll('.project-acceptance-criterion-card')[0]
+      .querySelectorAll('.project-acceptance-verdict-option')).toHaveLength(0);
     expect(submitButton().disabled).toBe(true);
-    expect(apiMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
 
     await choose(1, 'FAIL');
+    expect(container.textContent).toContain('人工标准已回答 1/1；尚有 0 条');
     expect(container.textContent).toContain('全部判据已回答');
     expect(submitButton().disabled).toBe(false);
+    expect(apiMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
   });
 
   it('POSTs the exact run with all criterion verdicts and evidence, then re-reads server truth', async () => {
@@ -215,11 +239,13 @@ describe('project acceptance review', () => {
       ...run,
       verdict: 'INCONCLUSIVE',
       completedAt: '2026-08-27T08:10:00.000Z',
-      criteria: run.criteria.map((criterion) => ({
-        ...criterion,
-        verdict: 'INCONCLUSIVE',
-        decidedAt: '2026-08-27T08:10:00.000Z',
-      })),
+      criteria: run.criteria.map((criterion) => criterion.completionCriterion === 'HUMAN_SIGNOFF'
+        ? {
+            ...criterion,
+            verdict: 'INCONCLUSIVE',
+            decidedAt: '2026-08-27T08:10:00.000Z',
+          }
+        : criterion),
     };
     apiMock.mockImplementation((path: string, options?: { method?: string }) => {
       if (options?.method === 'POST') {
@@ -232,7 +258,6 @@ describe('project acceptance review', () => {
       return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
     });
     await mount();
-    await choose(0, 'INCONCLUSIVE');
     await choose(1, 'INCONCLUSIVE');
     await typeInput(`#project-acceptance-criterion-2-task`, TASK);
     await typeInput(`#project-acceptance-criterion-2-session`, SESSION);
@@ -247,17 +272,8 @@ describe('project acceptance review', () => {
     const post = apiMock.mock.calls.find(([, options]) => options?.method === 'POST')!;
     expect(post[0]).toBe(projectAcceptanceVerdictPath(PROJECT, RUN));
     const body = post[1]?.body as { criteria: Array<Record<string, unknown>> };
-    expect(body.criteria).toHaveLength(2);
-    expect(body.criteria[0]).toMatchObject({
-      ordinal: 1,
-      criterionId: DEFINITION_A,
-      criterionKey: 'criterion-a',
-      verdict: 'INCONCLUSIVE',
-      evidenceTaskId: TASK,
-      evidenceSessionId: SESSION,
-      evidence: { command: 'npm test -w @orbit/apiserver', exitCode: 0 },
-    });
-    expect(body.criteria[1]).toEqual({
+    expect(body.criteria).toHaveLength(1);
+    expect(body.criteria[0]).toEqual({
       ordinal: 2,
       criterionId: DEFINITION_B,
       criterionKey: 'criterion-b',
@@ -268,8 +284,43 @@ describe('project acceptance review', () => {
       evidenceSessionId: SESSION,
     });
     expect(container.textContent).toContain('此项目验收已由服务端推导为 INCONCLUSIVE');
-    expect(submitButton().disabled).toBe(true);
+    expect(submitButton().disabled).toBe(false, 'append-only human conclusions may be revised');
     expect(apiMock.mock.calls.filter(([path, options]) =>
       path === projectAcceptanceOverviewPath(PROJECT) && !options?.method).length).toBeGreaterThan(1);
+  });
+
+  it('confirms the standard set once before enabling human criteria', async () => {
+    let current: ProjectAcceptanceOverview = {
+      ...overview,
+      criteriaConfirmation: {
+        confirmed: false,
+        criteriaDigest: overview.criteriaDigest,
+        confirmation: null,
+      },
+    };
+    apiMock.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === projectAcceptanceConfirmationPath(PROJECT) && options?.method === 'POST') {
+        current = { ...overview };
+        return Promise.resolve({ current: true }) as Promise<never>;
+      }
+      if (path === projectAcceptanceOverviewPath(PROJECT)) {
+        return Promise.resolve(current) as Promise<never>;
+      }
+      return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
+    });
+    await mount();
+
+    expect(container.textContent).toContain('先确认这套标准算数');
+    expect(submitButton().disabled).toBe(true);
+    const confirmation = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('确认当前标准集')) as HTMLButtonElement;
+    await act(async () => confirmation.click());
+    await flush();
+    await flush();
+
+    expect(apiMock).toHaveBeenCalledWith(projectAcceptanceConfirmationPath(PROJECT), {
+      method: 'POST',
+    });
+    expect(container.textContent).toContain('当前标准集已确认');
   });
 });

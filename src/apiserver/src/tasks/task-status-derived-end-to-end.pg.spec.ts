@@ -315,14 +315,17 @@ suite(
         {
           text: 'The executable declaration has a recorded matching exit code',
           verificationMethod: 'Inspect the request-bound raw command result and require exit code 0',
+          completionCriterion: 'HUMAN_SIGNOFF',
         },
         {
           text: 'An independent verifier concludes PASS on the submitted revision',
           verificationMethod: 'Inspect the verifier task, its independent session, verdict and request audit',
+          completionCriterion: 'HUMAN_SIGNOFF',
         },
         {
           text: 'A person signs the current evidence revision after reliable delivery',
           verificationMethod: 'Open the current inbox revision and inspect the human signature and delivery ledger',
+          completionCriterion: 'HUMAN_SIGNOFF',
         },
       ],
     });
@@ -870,6 +873,10 @@ suite(
     // N3/N4/N5: structured criteria are concluded from the four durable facts. The source and
     // verifier Sessions are still AWAITING_INPUT, and two ordinary project tasks remain OPEN.
     const acceptanceRun = await acceptance.openRun(ownerId, project.id, { decidedBy: 'USER' });
+    await acceptance.confirmCriteriaSet(ownerId, project.id, {
+      actorType: 'USER',
+      actorId: ownerId,
+    });
     const passedRun = await acceptance.finalizeRun(
       ownerId,
       project.id,
@@ -958,14 +965,9 @@ suite(
       where: { projectId: project.id, status: TaskStatus.OPEN },
     }), 2, 'downstream and optional work stay OPEN; all-tasks-terminal is not a doneGate input');
 
-    const settled = await projects.update(
-      ownerId,
-      project.id,
-      { status: ProjectStatus.DONE } as never,
-    );
-    assert.equal(settled.status, ProjectStatus.DONE);
     const storedProject = await db.project.findUniqueOrThrow({ where: { id: project.id } });
-    assert.equal(storedProject.status, ProjectStatus.DONE);
+    assert.equal(storedProject.status, ProjectStatus.DONE,
+      'the confirmed all-PASS conjunction automatically projects project DONE');
     assert.equal(storedProject.acceptedRunId, acceptanceRun.id);
     assert.equal(await db.taskComment.count({
       where: { body: commentMarker },

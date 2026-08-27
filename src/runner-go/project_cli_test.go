@@ -166,7 +166,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"acceptance", "acceptance-run", "acceptance-verdict", "merge-evidence",
+		"acceptance", "criteria-confirm", "acceptance-run", "acceptance-verdict", "merge-evidence",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -198,7 +198,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. Unit L7's two reads are here — what has been
 	// asked about work crossing this project's line, and what reopening it would cost. Neither has
 	// a companion that WRITES, and that absence is the point.
-	if len(specs) != 10 {
+	if len(specs) != 11 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -230,7 +230,8 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
-		"project_acceptance_run", "project_acceptance_verdict", "project_merge_evidence",
+		"project_criteria_confirm", "project_acceptance_run", "project_acceptance_verdict",
+		"project_merge_evidence",
 	} {
 		write, ok := specs[tool]
 		if !ok {
@@ -308,13 +309,38 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	}
 }
 
+func TestProjectCriteriaConfirmPostsDigestActionWithSessionContext(t *testing.T) {
+	var method, path, session string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_, _ = w.Write([]byte(`{"current":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "judgment-session-1")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{
+		"criteria-confirm", "proj-1", "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project criteria-confirm: %v", err)
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/proj-1/acceptance/criteria-confirmation" {
+		t.Fatalf("project criteria-confirm hit %s %s", method, path)
+	}
+	if session != "judgment-session-1" {
+		t.Fatalf("project criteria-confirm session = %q", session)
+	}
+}
+
 // The command capabilities advertises must also be pre-approved, or the agent hits a permission
 // prompt for something the document just told it to run.
 func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	rules := strings.Join(orbitCLIAllowedTools("/usr/local/bin/orbit", false), "\n")
 	// Every verb capabilities advertises, individually. A write the document names but that is not
 	// pre-approved stalls on a permission prompt the agent cannot answer headless.
-	for _, action := range []string{"get", "create", "update", "delete"} {
+	for _, action := range []string{"get", "criteria-confirm", "create", "update", "delete"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}
@@ -476,7 +502,7 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"create", "--title", "LFS", "--acceptance-criteria-items",
-		`[{"text":" Build succeeds ","verificationMethod":" Run npm test "},{"text":"Image boots","verificationMethod":"Smoke the image"}]`, "--json",
+		`[{"text":" Build succeeds ","verificationMethod":" Run npm test ","completionCriterion":"HUMAN_SIGNOFF"},{"text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"HUMAN_SIGNOFF"}]`, "--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatalf("structured project create: %v", err)
@@ -484,8 +510,10 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["text"] != "Build succeeds" ||
 		items[0].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
+		items[0].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" ||
 		items[1].(map[string]interface{})["text"] != "Image boots" ||
-		items[1].(map[string]interface{})["verificationMethod"] != "Smoke the image" {
+		items[1].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
+		items[1].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" {
 		t.Fatalf("structured project create body = %#v", body)
 	}
 	if _, legacy := body["acceptanceCriteria"]; legacy {
@@ -624,7 +652,7 @@ func TestProjectUpdatePatchesTheRunnerProjectRoute(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"update", "343dlzsYWKo5z8l2M8tsB", "--title", "Crawl the archive",
-		"--goal", "Index every shard", "--status", "DONE", "--json",
+		"--goal", "Index every shard", "--status", "CANCELLED", "--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatalf("project update: %v", err)
@@ -634,7 +662,7 @@ func TestProjectUpdatePatchesTheRunnerProjectRoute(t *testing.T) {
 	if method != http.MethodPatch || path != "/api/runner/projects/343dlzsYWKo5z8l2M8tsB" {
 		t.Fatalf("project update hit %s %s", method, path)
 	}
-	want := map[string]interface{}{"title": "Crawl the archive", "goal": "Index every shard", "status": "DONE"}
+	want := map[string]interface{}{"title": "Crawl the archive", "goal": "Index every shard", "status": "CANCELLED"}
 	if fmt.Sprintf("%v", body) != fmt.Sprintf("%v", want) {
 		t.Fatalf("project update body = %#v", body)
 	}
@@ -673,7 +701,7 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"update", "proj-1", "--acceptance-criteria-items",
-		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test"}]`,
+		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"HUMAN_SIGNOFF"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test","completionCriterion":"HUMAN_SIGNOFF"}]`,
 		"--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
@@ -682,8 +710,10 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["id"] != "criterion-2" ||
 		items[0].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
+		items[0].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" ||
 		items[1].(map[string]interface{})["id"] != "criterion-1" ||
-		items[1].(map[string]interface{})["verificationMethod"] != "Run npm test" {
+		items[1].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
+		items[1].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" {
 		t.Fatalf("structured project update body = %#v", body)
 	}
 	if len(body) != 1 {
@@ -812,11 +842,11 @@ func TestProjectUpdateValidatesIDAndStatus(t *testing.T) {
 	}
 	// An id that could address another route never leaves the process.
 	out.Reset()
-	if err := cmdProjectCLI([]string{"update", "../tasks/x", "--status", "DONE"}, strings.NewReader(""), &out); err == nil {
+	if err := cmdProjectCLI([]string{"update", "../tasks/x", "--status", "CANCELLED"}, strings.NewReader(""), &out); err == nil {
 		t.Fatal("an unsafe project id was accepted")
 	}
 	// A status the server would reject is named here, with the alternatives.
-	for _, status := range []string{"IN_PROGRESS", "done", ""} {
+	for _, status := range []string{"DONE", "IN_PROGRESS", "done", ""} {
 		out.Reset()
 		err := cmdProjectCLI([]string{"update", "proj-1", "--status", status}, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "--status must be one of") {
@@ -844,7 +874,7 @@ func TestProjectUpdatePropagatesTheServerError(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	err := cmdProjectCLI([]string{"update", "someone-elses-project", "--status", "DONE", "--json"}, strings.NewReader(""), &out)
+	err := cmdProjectCLI([]string{"update", "someone-elses-project", "--status", "CANCELLED", "--json"}, strings.NewReader(""), &out)
 	if err == nil {
 		t.Fatal("a 404 project update reported success")
 	}
@@ -955,7 +985,7 @@ func TestProjectReadUpdateAndDeleteCarryNoSession(t *testing.T) {
 		argv []string
 	}{
 		{"get", []string{"get", "proj-1", "--json"}},
-		{"update", []string{"update", "proj-1", "--status", "DONE", "--json"}},
+		{"update", []string{"update", "proj-1", "--status", "CANCELLED", "--json"}},
 		{"delete", []string{"delete", "proj-1", "--json"}},
 	} {
 		sawSessionHeader := true

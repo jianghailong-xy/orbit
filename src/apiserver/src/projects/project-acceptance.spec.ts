@@ -5,6 +5,7 @@ import {
   ACCEPTANCE_BLOCKED,
   ACCEPTANCE_MISSING,
   ACCEPTANCE_DIGEST_VERSION,
+  CRITERIA_CONFIRMATION_REQUIRED,
   AcceptanceFacts,
   acceptanceDigest,
   acceptanceResultDigest,
@@ -73,10 +74,10 @@ test('the digest names the project and its own version', () => {
   const other = '00000000-0000-7000-8000-0000000025ff';
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
-  // match a new reading of the same world. It moved to 4 when task state left the completion
-  // definition. Schema 0179 treats this digest as an evidence-version identity, not a freshness
-  // gate: conclusions are evaluated across versions rather than rejected as stale.
-  assert.equal(ACCEPTANCE_DIGEST_VERSION, 4);
+  // match a new reading of the same world. It moved to 5 when revision-bearing criterion
+  // declarations became part of the confirmed standard set. Schema 0179 treats this digest as an
+  // evidence-version identity, not a freshness gate: conclusions are evaluated across versions.
+  assert.equal(ACCEPTANCE_DIGEST_VERSION, 5);
 });
 
 test('the result digest is about the conclusions, not the world', () => {
@@ -173,8 +174,12 @@ test('structured criteria preserve identity while semantic revision ignores pres
 
 test('acceptance refusals distinguish missing conclusions from known blockers', () => {
   assert.deepEqual(
-    [...new Set([ACCEPTANCE_MISSING, ACCEPTANCE_BLOCKED])].sort(),
-    ['ACCEPTANCE_BLOCKED', 'ACCEPTANCE_MISSING'],
+    [...new Set([
+      ACCEPTANCE_MISSING,
+      ACCEPTANCE_BLOCKED,
+      CRITERIA_CONFIRMATION_REQUIRED,
+    ])].sort(),
+    ['ACCEPTANCE_BLOCKED', 'ACCEPTANCE_MISSING', 'CRITERIA_CONFIRMATION_REQUIRED'],
   );
 });
 

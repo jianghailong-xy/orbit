@@ -23,8 +23,13 @@ import { createHash } from 'node:crypto';
  * Merge evidence remains because it is evidence cited by a criterion, not a tally of work left.
  * Open blockers are deliberately outside the digest and are checked explicitly by the gate: they
  * mean "known unfinished fact", not "there are tasks left".
+ *
+ * Version 5: every criterion freezes the shared EXECUTABLE / VERIFICATION / HUMAN_SIGNOFF
+ * declaration. The criteria revision is the unordered set of stable definition id, monotone
+ * revision, and semantic content hash, so an edit — including edit-then-revert — cannot continue
+ * using a confirmation issued for the former standard set.
  */
-export const ACCEPTANCE_DIGEST_VERSION = 4;
+export const ACCEPTANCE_DIGEST_VERSION = 5;
 
 /** The routing rule shared by DONE refusals and settled-project write refusals. */
 export const ACCEPTANCE_FINDING_ROUTING =
@@ -35,15 +40,19 @@ export const ACCEPTANCE_FINDING_ROUTING =
  * still prevents settlement. Evidence changes are evaluated and never form a third stale state. */
 export const ACCEPTANCE_MISSING = 'ACCEPTANCE_MISSING';
 export const ACCEPTANCE_BLOCKED = 'ACCEPTANCE_BLOCKED';
+export const CRITERIA_CONFIRMATION_REQUIRED = 'CRITERIA_CONFIRMATION_REQUIRED';
 
 export type AcceptanceRefusalCode =
   | typeof ACCEPTANCE_MISSING
-  | typeof ACCEPTANCE_BLOCKED;
+  | typeof ACCEPTANCE_BLOCKED
+  | typeof CRITERIA_CONFIRMATION_REQUIRED;
+
+export type ProjectCriterionKind = 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
 
 /** The acceptance projections, already sorted and stringified. Tuples rather than objects because
  * a tuple has no key order to disagree about between two writers of this file. */
 export interface AcceptanceFacts {
-  /** sha256 of the unordered multiset of current criterion content hashes. */
+  /** sha256 of the unordered set of current definition id/revision/content-hash facts. */
   criteriaRevision: string;
   /** (requirementId, targetBranch, contentHash, refGeneration) — §13.4 AE9's authoritative row. */
   mergeEvidence: Array<[string, string, string, string]>;
@@ -122,6 +131,11 @@ export interface AcceptanceCriterionDefinitionLike {
   text: string;
   /** The procedure a person follows to decide this assertion. Absent only for legacy/test rows. */
   verificationMethod?: string | null;
+  completionCriterion?: ProjectCriterionKind | null;
+  acceptanceCommand?: string | null;
+  acceptanceExpectedExitCode?: number | null;
+  evidenceTaskId?: string | null;
+  completionCriterionOverrideReason?: string | null;
   revision: number;
   contentHash?: string;
 }
@@ -133,6 +147,11 @@ export interface StatedAcceptanceCriterion extends ParsedCriterion {
   definitionId: string | null;
   definitionRevision: number | null;
   verificationMethod: string | null;
+  completionCriterion: ProjectCriterionKind;
+  acceptanceCommand: string | null;
+  acceptanceExpectedExitCode: number | null;
+  evidenceTaskId: string | null;
+  completionCriterionOverrideReason: string | null;
   contentHash: string;
 }
 
@@ -178,7 +197,7 @@ export function criteriaFromDefinitions(
     .sort((a, b) => a.ordinal - b.ordinal)
     .map((definition, index) => {
       const text = definition.text.trim();
-      const contentHash = sha256(text);
+      const contentHash = definition.contentHash ?? sha256(text);
       return {
         ordinal: index + 1,
         key: contentHash.slice(0, 32),
@@ -189,6 +208,12 @@ export function criteriaFromDefinitions(
           typeof definition.verificationMethod === 'string' && definition.verificationMethod.trim()
             ? definition.verificationMethod.trim()
             : null,
+        completionCriterion: definition.completionCriterion ?? 'HUMAN_SIGNOFF',
+        acceptanceCommand: definition.acceptanceCommand?.trim() || null,
+        acceptanceExpectedExitCode: definition.acceptanceExpectedExitCode ?? null,
+        evidenceTaskId: definition.evidenceTaskId ?? null,
+        completionCriterionOverrideReason:
+          definition.completionCriterionOverrideReason?.trim() || null,
         contentHash,
       };
     });
@@ -205,6 +230,11 @@ export function criteriaFromLegacy(
       definitionId: null,
       definitionRevision: null,
       verificationMethod: null,
+      completionCriterion: 'HUMAN_SIGNOFF',
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+      evidenceTaskId: null,
+      completionCriterionOverrideReason: null,
       contentHash,
     };
   });
@@ -239,8 +269,24 @@ export function criteriaLegacyProjection(
  * conjunction of its criteria; moving a row in the UI changes presentation, not the proposition
  * being judged. Full content hashes keep duplicates countable and make the comma join unambiguous. */
 export function criteriaSemanticRevision(
-  criteria: Array<{ text: string }>,
+  criteria: Array<{
+    text: string;
+    contentHash?: string;
+    id?: string | null;
+    definitionId?: string | null;
+    revision?: number | null;
+    definitionRevision?: number | null;
+  }>,
 ): string {
-  const hashes = criteria.map((criterion) => sha256(criterion.text.trim())).sort();
+  const hashes = criteria
+    .map((criterion) => {
+      const contentHash = criterion.contentHash ?? sha256(criterion.text.trim());
+      const definitionId = criterion.definitionId ?? criterion.id;
+      const definitionRevision = criterion.definitionRevision ?? criterion.revision;
+      return definitionId && definitionRevision != null
+        ? `${definitionId}:${definitionRevision}:${contentHash}`
+        : contentHash;
+    })
+    .sort();
   return sha256(hashes.join(','));
 }

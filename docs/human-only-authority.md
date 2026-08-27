@@ -1,10 +1,14 @@
 # HUMAN_ONLY authority and credential trust
 
-This document defines what Orbit's three project-level `HUMAN_ONLY` actions guarantee:
+This document defines what Orbit's project-level `HUMAN_ONLY` actions guarantee:
 
 - edit project acceptance criteria;
+- confirm that the complete project acceptance standard set expresses the goal;
 - record a `PASS` conclusion;
-- settle a project as `DONE`.
+
+Project `DONE` is no longer a `HUMAN_ONLY` write in N22. It is an automatic projection of a
+confirmed standard set whose three peer criteria are all satisfied; every direct `status=DONE`
+request is refused.
 
 It is deliberately limited to those actions. It does not redesign authentication.
 
@@ -35,13 +39,21 @@ requester identity.
 The distinction is intentionally about route and role, not biological identity. Current behavior
 must be read per authenticated door:
 
-| Request path | No acting Session | Acceptance criteria | Task verdict `PASS` | Project acceptance `PASS` | Project `DONE` |
-| --- | --- | --- | --- | --- | --- |
-| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed | allowed | allowed |
-| Headless CLI/MCP with the runner credential | no judgment role | allowed | allowed | refused because that endpoint separately retains machine attribution | allowed |
-| One-shot judgment Session | `JUDGMENT` | refused | refused | refused | refused |
-| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed | allowed unless it explicitly supplies machine attribution | allowed |
-| Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed | allowed | allowed |
+| Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project HUMAN_SIGNOFF `PASS` | Project `DONE` |
+| --- | --- | --- | --- | --- | --- | --- |
+| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; owner credential is recorded | allowed | allowed | direct write refused; evaluator only |
+| Headless CLI/MCP with the runner credential | no judgment role | allowed | allowed; runner credential is recorded | allowed | refused because that endpoint retains machine attribution | direct write refused; evaluator only |
+| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | refused | refused | direct write refused |
+| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed when it names its credentialed actor | allowed | allowed unless it explicitly supplies machine attribution | direct write refused; evaluator only |
+| Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | direct write refused; evaluator only |
+
+The project standard-set confirmation row is the N22 addition. Its refusal is real for an
+attributed `dispatch_origin = PROJECT_COORDINATOR` Session. For a runner call that omits the acting
+Session header, or a caller that can mint/borrow an owner JWT, the row provides **audit visibility
+only** (`confirmedByType`, `confirmedById`, optional acting Session, time, digest). It is not a hard
+human boundary and must not be described as one. The identity-independent protection is elsewhere:
+the confirmation names the exact, revision-bearing standard-set digest, so any semantic edit makes
+it non-current and the database refuses DONE until that new digest is confirmed.
 
 There is currently no production cron job that writes these three facts. The no-Session service
 default remains available for trusted internal/cron composition; adding such a writer must still
@@ -58,7 +70,8 @@ Tests lock this matrix in `coordinator-authority-boundary.spec.ts`:
 - `an agent-held runner credential with no acting session can edit acceptanceCriteria`;
 - `an agent-held runner credential with no acting session can write task verdict=PASS`;
 - `an agent-held runner credential with no acting session cannot record acceptance PASS`;
-- `an agent-held runner credential with no acting session can write project.status=DONE`;
+- `a no-acting-session runner edit changes the digest and immediately invalidates the prior set confirmation`;
+- `a PROJECT_COORDINATOR judgment session is refused when it tries to confirm the criteria set`;
 - `a headless runner can still record a conservative acceptance conclusion`;
 - the generated `a no-session owner/internal caller ...` controls for project updates and PASS;
 - the three `an owner JWT minted with the shared secret ...` cases for the owner REST API.
@@ -91,7 +104,7 @@ In a deployment where agents cannot obtain owner credentials, the rules are a us
 privilege boundary. In the co-located/shared-secret deployment described above, they still provide:
 
 1. **Judgment-role separation.** The ordinary one-shot judgment Session cannot rewrite its exam,
-   declare PASS, or settle the project through its attributed path. This prevents accidental
+   declare PASS, or confirm the standard set through its attributed path. This prevents accidental
    self-grading and makes the expected escalation explicit.
 2. **Action-specific traceability, not one uniform actor audit.** The current records are:
    - an acceptance-criteria edit freezes the resulting criteria, revision/digest, evidence version,
@@ -103,8 +116,12 @@ privilege boundary. In the co-located/shared-secret deployment described above, 
    - a project-acceptance conclusion is append-only and records `decidedBy`, `decidedById`, acting
      Session id, decision time, evidence version, and submitted evidence. This is credential/channel
      attribution, and a minted owner JWT produces the same `USER`/owner-id record as owner login;
-   - `DONE` records a `done_bound` audit row with the accepted run, criteria digest, and time. It
-     does not store the requester identity.
+   - a standard-set confirmation is append-only and records the complete set digest,
+     `confirmedByType`, `confirmedById`, optional acting Session, and time. A headless runner or
+     minted owner JWT can still produce it, exactly as the matrix says;
+   - automatic `DONE` records a `done_bound` audit row with source
+     `AUTOMATIC_CRITERIA_EVALUATOR`, the accepted run, criteria digest, and time. No requester
+     identity exists because no requester supplies the status transition.
    These records let reviewers reconstruct the standards, evidence, and settlement binding. Only
    the conclusion event answers which credentialed principal submitted the decision.
 3. **Tenancy and scope enforcement.** A valid credential remains limited to its account and the
@@ -163,14 +180,12 @@ or host, do not expose the Docker socket or apiserver environment, use a secret 
 sign-only policy, and restrict database access. Without this isolation, credential refinements are
 primarily defense in depth.
 
-## Consequence for N22
+## N22 result
 
-Under the current deployment assumptions, N22 can guarantee that an **owner-attributed channel**
-confirmed one exact digest only if its new record explicitly retains the digest, credentialed actor
-id, and time. Even with those fields, it cannot guarantee that a human personally performed the
-confirmation.
-
-If N22 only needs workflow separation and audit visibility, it should bind the confirmation to the
-standard-set digest and use the existing owner-channel model while stating this limitation. If it
-needs a hard human guarantee, its confirmation must require one of the isolated, action-bound
-step-up or external-signature designs above; another ordinary JWT or second click is insufficient.
+N22 binds each confirmation to the exact revision-bearing standard-set digest and retains the
+credentialed actor id and time. This mechanically guarantees that a later criterion text,
+criterion kind, command, expected exit code, evidence Task, or verification method edit requires a
+new confirmation before DONE. It guarantees workflow separation for an attributed judgment
+Session and audit visibility for other credentials. It does **not** guarantee that a human
+personally performed the confirmation; that still requires one of the isolated, action-bound
+step-up or external-signature designs above.

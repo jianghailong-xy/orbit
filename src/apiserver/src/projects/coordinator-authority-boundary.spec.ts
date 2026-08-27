@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   ProjectAutomationPolicy,
@@ -165,7 +165,6 @@ const PROJECT_WRITES = [
   // text as an unguarded way to rewrite the exam.
   ['acceptanceCriteriaItems', { acceptanceCriteriaItems: [{ text: 'anything I like' }] },
     'ACCEPTANCE_CRITERIA_HUMAN_ONLY'],
-  ['status=DONE', { status: 'DONE' }, 'PROJECT_DONE_HUMAN_ONLY'],
 ] as const;
 
 for (const [what, dto, code] of PROJECT_WRITES) {
@@ -186,15 +185,56 @@ for (const [what, dto, code] of PROJECT_WRITES) {
   });
 }
 
+test('a judgment session cannot write status=DONE on a project', async () => {
+  await assert.rejects(
+    () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal((error.getResponse() as Record<string, unknown>).code,
+        'PROJECT_DONE_AUTOMATIC_ONLY');
+      return true;
+    },
+  );
+});
+
+test('all non-judgment callers are also refused a direct DONE because it is derived', async () => {
+  for (const actingSessionId of [undefined, RUN]) {
+    await assert.rejects(
+      () => projectFixture().update(
+        OWNER,
+        PROJECT,
+        { status: 'DONE' } as never,
+        actingSessionId,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException);
+        assert.equal((error.getResponse() as Record<string, unknown>).code,
+          'PROJECT_DONE_AUTOMATIC_ONLY');
+        return true;
+      },
+    );
+  }
+});
+
 // §0's replacement claim, end to end. The three-level dial used to be the answer to "how far may
 // this coordinator go"; if any of it still were, the same write would come out differently at the
 // three levels.
 test('the refusal does not depend on the project automation policy', async () => {
   for (const policy of Object.values(ProjectAutomationPolicy)) {
-    const body = await refusalOf(
-      () => projectFixture(policy).update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION),
+    await assert.rejects(
+      () => projectFixture(policy).update(
+        OWNER,
+        PROJECT,
+        { status: 'DONE' } as never,
+        SESSION,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException);
+        assert.equal((error.getResponse() as Record<string, unknown>).code,
+          'PROJECT_DONE_AUTOMATIC_ONLY', `refused at ${policy}`);
+        return true;
+      },
     );
-    assert.equal(body.code, 'PROJECT_DONE_HUMAN_ONLY', `refused at ${policy}`);
   }
 });
 
@@ -301,14 +341,22 @@ test('an agent-held runner credential with no acting session cannot record accep
   assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
 });
 
-test('an agent-held runner credential with no acting session can write project.status=DONE', async () => {
+test('an agent-held runner credential with no acting session cannot directly write project.status=DONE', async () => {
   const runner = await runnerFromAgentCredential();
-  await reachesTheWrite(() => runnerController().updateProject(
-    runner,
-    PROJECT,
-    undefined,
-    { status: 'DONE' } as never,
-  ));
+  await assert.rejects(
+    () => runnerController().updateProject(
+      runner,
+      PROJECT,
+      undefined,
+      { status: 'DONE' } as never,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal((error.getResponse() as Record<string, unknown>).code,
+        'PROJECT_DONE_AUTOMATIC_ONLY');
+      return true;
+    },
+  );
 });
 
 test('a headless runner can still record a conservative acceptance conclusion', async () => {
@@ -341,13 +389,21 @@ test('an owner JWT minted with the shared secret can record PASS without a sessi
   ));
 });
 
-test('an owner JWT minted with the shared secret can write project.status=DONE without a session', async () => {
+test('an owner JWT minted with the shared secret cannot directly write project.status=DONE', async () => {
   const user = await ownerFromMintedCredential();
-  await reachesTheWrite(() => ownerController().update(
-    user,
-    PROJECT,
-    { status: 'DONE' } as never,
-  ));
+  await assert.rejects(
+    () => ownerController().update(
+      user,
+      PROJECT,
+      { status: 'DONE' } as never,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal((error.getResponse() as Record<string, unknown>).code,
+        'PROJECT_DONE_AUTOMATIC_ONLY');
+      return true;
+    },
+  );
 });
 
 // ═══ task_update: a verification's PASS completes the task it checks ══════════════════════════

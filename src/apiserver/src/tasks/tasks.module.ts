@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.module';
+import { ProjectAcceptanceModule } from '../projects/project-acceptance.module';
 import { ProjectAttributionModule } from '../projects/project-attribution.module';
 import { ProjectHandoffModule } from '../projects/project-handoff.module';
 import { SessionsModule } from '../sessions/sessions.module';
@@ -19,6 +20,7 @@ import { TaskJudgmentReviewService } from './task-judgment-review.service';
     ProjectHandoffModule,
     ProjectAttributionModule,
     CoordinatorJudgmentModule,
+    ProjectAcceptanceModule,
     PushModule,
   ],
   controllers: [

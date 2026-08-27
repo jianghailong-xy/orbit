@@ -11,7 +11,7 @@ async function validationErrors(cls: DtoConstructor, body: object) {
   return validate(plainToInstance(cls, body));
 }
 
-test('structured acceptance input requires a verification method on every assertion', async () => {
+test('structured acceptance input requires a verification method and criterion on every assertion', async () => {
   for (const { Dto, body } of [
     { Dto: CreateProjectDto as DtoConstructor,
       body: { title: 'N3', acceptanceCriteriaItems: [{ text: 'the suite passes' }] } },
@@ -32,6 +32,7 @@ test('structured acceptance input requires a verification method on every assert
       acceptanceCriteriaItems: [{
         text: 'the suite passes',
         verificationMethod: 'Run npm test and require exit code 0',
+        completionCriterion: 'HUMAN_SIGNOFF',
       }],
     });
     assert.deepEqual(valid, []);

@@ -1,0 +1,361 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+
+import {
+  CreatorType,
+  PrismaClient,
+  ProjectAcceptanceVerdict,
+  ProjectStatus,
+  TaskCompletionCriterion,
+  TaskJudgmentDecision,
+  TaskJudgmentRecipientType,
+  TaskJudgmentRequestStatus,
+  TaskStatus,
+  TaskVerdict,
+} from '@prisma/client';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { Client } from 'pg';
+
+import { prismaClientFor } from '../prisma/prisma-client';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  assertCoordinatorPgUrlIsIsolated,
+  verifyCoordinatorPgIdentity,
+} from './coordinator-pg-test-safety';
+import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectsService } from './projects.service';
+
+const URL = process.env.COORDINATOR_PG_URL;
+const skip = !URL;
+
+let safety: Promise<void> | undefined;
+async function verifyDisposableDatabase(): Promise<void> {
+  if (safety) return safety;
+  safety = (async () => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const client = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+    await client.connect();
+    try {
+      await verifyCoordinatorPgIdentity(client);
+    } finally {
+      await client.end();
+    }
+  })();
+  return safety;
+}
+
+async function connect() {
+  await verifyDisposableDatabase();
+  const db = prismaClientFor(URL!);
+  const acceptance = new ProjectAcceptanceService(db as unknown as PrismaService);
+  return {
+    db,
+    acceptance,
+    projects: new ProjectsService(db as unknown as PrismaService, acceptance),
+  };
+}
+
+async function base(db: PrismaClient, label: string) {
+  const ownerId = randomUUID();
+  const projectId = randomUUID();
+  await db.user.create({
+    data: {
+      id: ownerId,
+      email: `${label}-${ownerId}@project-criterion.invalid`,
+      name: label,
+      passwordHash: 'x',
+    },
+  });
+  await db.project.create({ data: { id: projectId, ownerId, title: `${label} project` } });
+  return { ownerId, projectId };
+}
+
+async function task(
+  db: PrismaClient,
+  target: { ownerId: string; projectId: string },
+  title: string,
+  data: Record<string, unknown> = {},
+) {
+  return db.task.create({
+    data: {
+      id: randomUUID(),
+      ownerId: target.ownerId,
+      projectId: target.projectId,
+      title,
+      creatorType: CreatorType.USER,
+      creatorId: target.ownerId,
+      status: TaskStatus.OPEN,
+      ...data,
+    },
+  });
+}
+
+async function recordExecutableResult(
+  db: PrismaClient,
+  target: { ownerId: string },
+  taskId: string,
+  command: string,
+  expectedExitCode: number,
+  actualExitCode: number,
+  sequence: number,
+) {
+  const sourceSessionId = randomUUID();
+  const evidence = await db.taskCompletionEvidence.create({
+    data: {
+      id: randomUUID(),
+      taskId,
+      ownerId: target.ownerId,
+      actorType: CreatorType.USER,
+      actorId: target.ownerId,
+      sourceSessionId,
+      criterionRevision: sequence.toString(16).padStart(64, 'a').slice(-64),
+      criterion: {
+        schemaVersion: 1,
+        completionCriterion: TaskCompletionCriterion.EXECUTABLE,
+        acceptanceCommand: command,
+        acceptanceExpectedExitCode: expectedExitCode,
+      },
+      evidence: { command, actualExitCode },
+      evidenceDigest: sequence.toString(16).padStart(64, 'b').slice(-64),
+      revision: BigInt(sequence),
+      submittedAt: new Date(`2026-08-27T10:00:0${sequence}.000Z`),
+    },
+  });
+  const decidedAt = new Date(`2026-08-27T10:00:1${sequence}.000Z`);
+  const request = await db.taskJudgmentRequest.create({
+    data: {
+      id: randomUUID(),
+      taskId,
+      ownerId: target.ownerId,
+      evidenceId: evidence.id,
+      criterionRevision: evidence.criterionRevision,
+      evidenceDigest: evidence.evidenceDigest,
+      kind: TaskCompletionCriterion.EXECUTABLE,
+      recipientType: TaskJudgmentRecipientType.SYSTEM_EXECUTABLE_EVALUATOR,
+      recipientId: sourceSessionId,
+      status: TaskJudgmentRequestStatus.OPEN,
+      createdAt: new Date(`2026-08-27T10:00:0${sequence}.500Z`),
+    },
+  });
+  const result = await db.taskExecutableJudgmentResult.create({
+    data: {
+      id: randomUUID(),
+      requestId: request.id,
+      command,
+      expectedExitCode,
+      actualExitCode,
+      rawOutput: `raw output ${sequence}: exit ${actualExitCode}`,
+      recordedById: randomUUID(),
+      recordedAt: decidedAt,
+    },
+  });
+  await db.taskJudgmentRequest.update({
+    where: { id: request.id },
+    data: {
+      status: TaskJudgmentRequestStatus.DECIDED,
+      decidedAt,
+      decidedByType: 'SYSTEM',
+      decidedById: randomUUID(),
+      decision: actualExitCode === expectedExitCode
+        ? TaskJudgmentDecision.PASS
+        : TaskJudgmentDecision.FAIL,
+    },
+  });
+  return result;
+}
+
+async function declare(
+  projects: ProjectsService,
+  target: { ownerId: string; projectId: string },
+  item: Record<string, unknown>,
+) {
+  return projects.update(target.ownerId, target.projectId, {
+    acceptanceCriteriaItems: [item],
+  } as never);
+}
+
+test('EXECUTABLE is declared explicitly and follows the matching command exit code', { skip }, async () => {
+  const { db, acceptance, projects } = await connect();
+  try {
+    const target = await base(db, 'executable');
+    const source = await task(db, target, 'run the release command', {
+      completionCriterion: TaskCompletionCriterion.EXECUTABLE,
+      acceptanceCommand: 'npm test',
+      acceptanceExpectedExitCode: 0,
+    });
+    await declare(projects, target, {
+      text: '验收命令退出码与预期一致',
+      verificationMethod: 'Read the exact durable command result and raw output',
+      completionCriterion: TaskCompletionCriterion.EXECUTABLE,
+      acceptanceCommand: 'npm test',
+      acceptanceExpectedExitCode: 0,
+      evidenceTaskId: source.id,
+    });
+    await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
+      actorType: 'USER', actorId: target.ownerId,
+    });
+
+    const run = await acceptance.openRun(
+      target.ownerId,
+      target.projectId,
+      { decidedBy: 'USER' },
+    );
+    await assert.rejects(
+      acceptance.finalizeRun(target.ownerId, target.projectId, run.id, [{
+        criterionId: run.criteria[0]!.criterionId!,
+        verdict: ProjectAcceptanceVerdict.PASS,
+      }]),
+      (error: unknown) => {
+        assert.ok(error instanceof BadRequestException);
+        assert.match(error.message, /evaluated automatically.*cannot submit a fallback human verdict/);
+        return true;
+      },
+      'EXECUTABLE has no HUMAN_SIGNOFF fallback path',
+    );
+
+    await recordExecutableResult(db, target, source.id, 'npm test', 0, 7, 1);
+    const failed = await acceptance.reconcileForEvidenceTask(source.id);
+    assert.equal(failed, undefined);
+    let overview = await acceptance.overview(target.ownerId, target.projectId);
+    assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.FAIL);
+    assert.equal((overview.runs[0]?.criteria[0]?.evidence as { actualExitCode: number }).actualExitCode, 7);
+    assert.equal(overview.status, ProjectStatus.OPEN);
+
+    await recordExecutableResult(db, target, source.id, 'npm test', 0, 0, 2);
+    await acceptance.reconcileForEvidenceTask(source.id);
+    overview = await acceptance.overview(target.ownerId, target.projectId);
+    assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.PASS);
+    assert.equal(overview.status, ProjectStatus.DONE);
+    const doneAudit = overview.audit.find((entry) => entry.kind === 'done_bound');
+    assert.equal((doneAudit?.detail as { source?: string }).source, 'AUTOMATIC_CRITERIA_EVALUATOR');
+    assert.equal((doneAudit?.detail as { actorStatusWrite?: boolean }).actorStatusWrite, false);
+
+    await assert.rejects(
+      projects.update(
+        target.ownerId,
+        target.projectId,
+        { status: ProjectStatus.DONE } as never,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException);
+        assert.equal(
+          (error.getResponse() as { code?: string }).code,
+          'PROJECT_DONE_AUTOMATIC_ONLY',
+        );
+        return true;
+      },
+      'a credentialed subject cannot supply project.status=DONE',
+    );
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('VERIFICATION follows only the independent verifier Task verdict', { skip }, async () => {
+  const { db, acceptance, projects } = await connect();
+  try {
+    const target = await base(db, 'verification');
+    const subject = await task(db, target, 'implementation under review');
+    const verifier = await task(db, target, 'independent review', {
+      verifiesTaskId: subject.id,
+      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+    });
+    await declare(projects, target, {
+      text: '独立复核确认实现符合意图',
+      verificationMethod: 'Consume the independent verifier Task verdict',
+      completionCriterion: TaskCompletionCriterion.VERIFICATION,
+      evidenceTaskId: verifier.id,
+    });
+    await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
+      actorType: 'USER', actorId: target.ownerId,
+    });
+    let overview = await acceptance.overview(target.ownerId, target.projectId);
+    assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.INCONCLUSIVE);
+    assert.equal(overview.status, ProjectStatus.OPEN);
+
+    await db.task.update({ where: { id: verifier.id }, data: { verdict: TaskVerdict.FAIL } });
+    await acceptance.reconcileForEvidenceTask(verifier.id);
+    overview = await acceptance.overview(target.ownerId, target.projectId);
+    assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.FAIL);
+    assert.equal(overview.status, ProjectStatus.OPEN);
+
+    await db.task.update({ where: { id: verifier.id }, data: { verdict: TaskVerdict.PASS } });
+    await acceptance.reconcileForEvidenceTask(verifier.id);
+    overview = await acceptance.overview(target.ownerId, target.projectId);
+    assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.PASS);
+    assert.equal(overview.status, ProjectStatus.DONE);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('HUMAN_SIGNOFF waits for the human criterion conclusion after one set confirmation', { skip }, async () => {
+  const { db, acceptance, projects } = await connect();
+  try {
+    const target = await base(db, 'human');
+    await declare(projects, target, {
+      text: '由 owner 判断发布取舍是否值得',
+      verificationMethod: 'Owner reviews the release tradeoff',
+      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+    });
+    const confirmation = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
+      actorType: 'USER', actorId: target.ownerId,
+    });
+    const row = await db.projectAcceptanceCriteriaConfirmation.findUniqueOrThrow({
+      where: { id: confirmation.id },
+    });
+    assert.equal(row.criteriaDigest, confirmation.criteriaDigest);
+    assert.equal(
+      await db.projectAcceptanceCriteriaConfirmation.count({
+        where: { projectId: target.projectId },
+      }),
+      1,
+      'one standard-set confirmation, not one confirmation per criterion',
+    );
+    assert.equal(
+      await db.project.findUniqueOrThrow({ where: { id: target.projectId } }).then((p) => p.status),
+      ProjectStatus.OPEN,
+    );
+
+    const run = await acceptance.openRun(target.ownerId, target.projectId, { decidedBy: 'USER' });
+    await acceptance.finalizeRun(target.ownerId, target.projectId, run.id, [{
+      criterionId: run.criteria[0]!.criterionId!,
+      verdict: ProjectAcceptanceVerdict.PASS,
+      summary: 'Owner accepts this release tradeoff',
+      evidence: { reviewedDigest: confirmation.criteriaDigest },
+    }]);
+    assert.equal(
+      await db.project.findUniqueOrThrow({ where: { id: target.projectId } }).then((p) => p.status),
+      ProjectStatus.DONE,
+    );
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('structured project criteria reject a missing declaration instead of defaulting', { skip }, async () => {
+  const { db, projects } = await connect();
+  try {
+    const target = await base(db, 'missing-declaration');
+    await assert.rejects(
+      declare(projects, target, {
+        text: 'A declaration is mandatory',
+        verificationMethod: 'No implicit fallback is allowed',
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof BadRequestException);
+        assert.match(error.message, /requires completionCriterion/);
+        return true;
+      },
+    );
+    assert.equal(
+      await db.projectAcceptanceCriterionDefinition.count({ where: { projectId: target.projectId } }),
+      0,
+    );
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('the PostgreSQL target is a disposable database', { skip }, verifyDisposableDatabase);

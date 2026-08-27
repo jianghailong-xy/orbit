@@ -6,7 +6,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProjectAcceptanceVerdict, ProjectStatus } from '@prisma/client';
+import {
+  Prisma,
+  ProjectAcceptanceVerdict,
+  ProjectStatus,
+  TaskCompletionCriterion,
+  TaskVerdict,
+} from '@prisma/client';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -14,6 +20,7 @@ import {
   ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_FINDING_ROUTING,
   ACCEPTANCE_MISSING,
+  CRITERIA_CONFIRMATION_REQUIRED,
   AcceptanceFacts,
   AcceptanceRefusalCode,
   StatedAcceptanceCriterion,
@@ -68,6 +75,7 @@ export interface AcceptanceCriterionStanding {
   summary: string | null;
   decidedAt: Date | null;
   evidenceTaskId: string | null;
+  completionCriterion: TaskCompletionCriterion;
 }
 
 /** The acceptance tally a project detail read embeds: the outcome measure next to the task tally's
@@ -109,6 +117,9 @@ interface AcceptanceRunCriterionRow {
   verificationMethod?: string | null;
   definitionId?: string | null;
   definitionRevision?: number | null;
+  completionCriterion?: TaskCompletionCriterion;
+  acceptanceCommand?: string | null;
+  acceptanceExpectedExitCode?: number | null;
   verdict: ProjectAcceptanceVerdict | null;
   summary: string | null;
   evidence: unknown;
@@ -123,6 +134,13 @@ export interface RecordMergeEvidenceInput {
   contentHash: string;
   source?: string;
   detail?: Record<string, unknown>;
+}
+
+export interface CriteriaConfirmationActor {
+  /** Credential/channel provenance only. Neither value is a human-presence attestation. */
+  actorType: 'USER' | 'RUNNER';
+  actorId: string;
+  actingSessionId?: string;
 }
 
 /** A DONE that was refused, with the code the caller switches on. Thrown as a 409 because it is a
@@ -192,6 +210,11 @@ export class ProjectAcceptanceService {
           ordinal: number;
           text: string;
           verificationMethod: string;
+          completionCriterion: TaskCompletionCriterion;
+          acceptanceCommand: string | null;
+          acceptanceExpectedExitCode: number | null;
+          evidenceTaskId: string | null;
+          completionCriterionOverrideReason: string | null;
           revision: number;
           contentHash: string;
         }>>;
@@ -206,6 +229,11 @@ export class ProjectAcceptanceService {
         ordinal: true,
         text: true,
         verificationMethod: true,
+        completionCriterion: true,
+        acceptanceCommand: true,
+        acceptanceExpectedExitCode: true,
+        evidenceTaskId: true,
+        completionCriterionOverrideReason: true,
         revision: true,
         contentHash: true,
       },
@@ -280,25 +308,29 @@ export class ProjectAcceptanceService {
   ): Promise<{
     id: string; status: ProjectStatus; acceptedRunId: string | null;
     legacyAcceptedAt: Date | null; acceptanceCriteria: string | null;
+    acceptanceCriteriaDigest: string;
   }> {
     const sql = mode === 'FOR UPDATE'
       ? Prisma.sql`
           SELECT p."id", p."status"::text AS "status", p."accepted_run_id" AS "acceptedRunId",
                  p."legacy_accepted_at" AS "legacyAcceptedAt",
-                 p."acceptance_criteria" AS "acceptanceCriteria"
+                 p."acceptance_criteria" AS "acceptanceCriteria",
+                 p."acceptance_criteria_digest" AS "acceptanceCriteriaDigest"
             FROM "project" p
            WHERE p."id" = ${projectId}::uuid AND p."owner_id" = ${ownerId}::uuid
            FOR UPDATE`
       : Prisma.sql`
           SELECT p."id", p."status"::text AS "status", p."accepted_run_id" AS "acceptedRunId",
                  p."legacy_accepted_at" AS "legacyAcceptedAt",
-                 p."acceptance_criteria" AS "acceptanceCriteria"
+                 p."acceptance_criteria" AS "acceptanceCriteria",
+                 p."acceptance_criteria_digest" AS "acceptanceCriteriaDigest"
             FROM "project" p
            WHERE p."id" = ${projectId}::uuid AND p."owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`;
     const [row] = await tx.$queryRaw<Array<{
       id: string; status: string; acceptedRunId: string | null;
       legacyAcceptedAt: Date | null; acceptanceCriteria: string | null;
+      acceptanceCriteriaDigest: string;
     }>>(sql);
     if (!row) throw new NotFoundException('project not found');
     return { ...row, status: row.status as ProjectStatus };
@@ -309,6 +341,90 @@ export class ProjectAcceptanceService {
       where: { id: projectId, ownerId }, select: { id: true },
     });
     if (!found) throw new NotFoundException('project not found');
+  }
+
+  /** Read whether one append-only confirmation names the exact current standard-set digest. */
+  async criteriaConfirmation(ownerId: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { acceptanceCriteriaDigest: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const confirmation = await this.prisma.projectAcceptanceCriteriaConfirmation.findUnique({
+      where: {
+        projectId_criteriaDigest: {
+          projectId,
+          criteriaDigest: project.acceptanceCriteriaDigest,
+        },
+      },
+    });
+    return {
+      confirmed: confirmation !== null,
+      criteriaDigest: project.acceptanceCriteriaDigest,
+      confirmation,
+    };
+  }
+
+  /**
+   * Confirm the complete standard set once. The one-shot judgment role is genuinely refused; a
+   * headless runner or owner credential is admitted and recorded honestly as credential
+   * provenance. Safety against later edits comes from the digest comparison, not that label.
+   */
+  async confirmCriteriaSet(
+    ownerId: string,
+    projectId: string,
+    actor: CriteriaConfirmationActor,
+  ) {
+    if (actor.actorType !== 'USER' && actor.actorType !== 'RUNNER') {
+      throw new BadRequestException('actorType must be USER or RUNNER');
+    }
+    let acting: { dispatchOrigin: string } | null = null;
+    if (actor.actingSessionId) {
+      acting = await this.prisma.session.findFirst({
+        where: { id: actor.actingSessionId, ownerId },
+        select: { dispatchOrigin: true },
+      });
+    }
+    const refusal = refuseHumanOnlyAction(
+      authorityPrincipal(acting?.dispatchOrigin),
+      'CONFIRM_ACCEPTANCE_CRITERIA',
+    );
+    if (refusal) throw new ForbiddenException(refusal);
+
+    const confirmation = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await ProjectAcceptanceService.lockProject(
+        tx, projectId, ownerId, 'FOR NO KEY UPDATE',
+      );
+      const criteriaCount = await tx.projectAcceptanceCriterionDefinition.count({
+        where: { projectId },
+      });
+      if (criteriaCount === 0) {
+        throw new BadRequestException(
+          'this project states no acceptance criteria — an empty standard set cannot be confirmed',
+        );
+      }
+      const existing = await tx.projectAcceptanceCriteriaConfirmation.findUnique({
+        where: {
+          projectId_criteriaDigest: {
+            projectId,
+            criteriaDigest: locked.acceptanceCriteriaDigest,
+          },
+        },
+      });
+      if (existing) return existing;
+      return tx.projectAcceptanceCriteriaConfirmation.create({
+        data: {
+          projectId,
+          criteriaDigest: locked.acceptanceCriteriaDigest,
+          confirmedByType: actor.actorType,
+          confirmedById: actor.actorId,
+          actingSessionId: actor.actingSessionId ?? null,
+        },
+      });
+    }, loggedRetry(this.logger, 'projectAcceptance.confirmCriteriaSet'));
+
+    await this.reconcile(ownerId, projectId);
+    return { ...confirmation, current: true };
   }
 
   static async writeAudit(
@@ -464,6 +580,10 @@ export class ProjectAcceptanceService {
           ...(criterion.verificationMethod
             ? { verificationMethod: criterion.verificationMethod }
             : {}),
+          completionCriterion: criterion.completionCriterion,
+          acceptanceCommand: criterion.acceptanceCommand,
+          acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
+          evidenceTaskId: criterion.evidenceTaskId,
           contentHash: criterion.contentHash,
         })) as Prisma.InputJsonValue,
         criteriaRevision: facts.criteriaRevision,
@@ -484,6 +604,9 @@ export class ProjectAcceptanceService {
         criterionText: criterion.text,
         definitionId: criterion.definitionId,
         definitionRevision: criterion.definitionRevision,
+        completionCriterion: criterion.completionCriterion,
+        acceptanceCommand: criterion.acceptanceCommand,
+        acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
       })),
     });
     await ProjectAcceptanceService.writeAudit(
@@ -550,6 +673,249 @@ export class ProjectAcceptanceService {
 
       return this.ensureEvidenceVersionTx(tx, projectId, criteria, input);
     }, loggedRetry(this.logger, 'projectAcceptance.openRun'));
+  }
+
+  /** Derive one automatic criterion strictly from its declared durable input. */
+  private static async automaticCriterionOutcome(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    criterion: StatedAcceptanceCriterion,
+  ): Promise<{
+    verdict: ProjectAcceptanceVerdict;
+    summary: string;
+    evidence: Prisma.InputJsonValue;
+    evidenceTaskId: string | null;
+    evidenceSessionId: string | null;
+  } | null> {
+    if (criterion.completionCriterion === TaskCompletionCriterion.HUMAN_SIGNOFF) return null;
+
+    if (criterion.completionCriterion === TaskCompletionCriterion.EXECUTABLE) {
+      const result = criterion.evidenceTaskId
+        ? await tx.taskExecutableJudgmentResult.findFirst({
+            where: {
+              command: criterion.acceptanceCommand ?? undefined,
+              expectedExitCode: criterion.acceptanceExpectedExitCode ?? undefined,
+              request: {
+                taskId: criterion.evidenceTaskId,
+                kind: TaskCompletionCriterion.EXECUTABLE,
+              },
+            },
+            orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }],
+            select: {
+              id: true,
+              command: true,
+              expectedExitCode: true,
+              actualExitCode: true,
+              rawOutput: true,
+              recordedById: true,
+              recordedAt: true,
+              request: { select: { recipientId: true } },
+            },
+          })
+        : null;
+      if (!result) {
+        return {
+          verdict: ProjectAcceptanceVerdict.INCONCLUSIVE,
+          summary: 'No matching recorded command result exists yet',
+          evidence: {
+            kind: 'EXECUTABLE_RESULT',
+            command: criterion.acceptanceCommand,
+            expectedExitCode: criterion.acceptanceExpectedExitCode,
+            resultId: null,
+          },
+          evidenceTaskId: criterion.evidenceTaskId,
+          evidenceSessionId: null,
+        };
+      }
+      const verdict = result.actualExitCode === result.expectedExitCode
+        ? ProjectAcceptanceVerdict.PASS
+        : ProjectAcceptanceVerdict.FAIL;
+      return {
+        verdict,
+        summary:
+          `Command exited ${result.actualExitCode}; expected ${result.expectedExitCode}`,
+        evidence: {
+          kind: 'EXECUTABLE_RESULT',
+          resultId: result.id,
+          command: result.command,
+          expectedExitCode: result.expectedExitCode,
+          actualExitCode: result.actualExitCode,
+          rawOutput: result.rawOutput,
+          recordedById: result.recordedById,
+          recordedAt: result.recordedAt.toISOString(),
+        },
+        evidenceTaskId: criterion.evidenceTaskId,
+        evidenceSessionId: result.request.recipientId,
+      };
+    }
+
+    const verifier = criterion.evidenceTaskId
+      ? await tx.task.findFirst({
+          where: {
+            id: criterion.evidenceTaskId,
+            projectId,
+            verifiesTaskId: { not: null },
+          },
+          select: {
+            id: true,
+            verdict: true,
+            verdictRevision: true,
+            verifiesTaskId: true,
+            status: true,
+          },
+        })
+      : null;
+    const verdict = verifier?.verdict === TaskVerdict.PASS
+      ? ProjectAcceptanceVerdict.PASS
+      : verifier?.verdict === TaskVerdict.FAIL
+        ? ProjectAcceptanceVerdict.FAIL
+        : ProjectAcceptanceVerdict.INCONCLUSIVE;
+    return {
+      verdict,
+      summary: verifier
+        ? `Independent verifier verdict is ${verifier.verdict ?? 'UNDECIDED'}`
+        : 'The declared independent verifier task is unavailable',
+      evidence: {
+        kind: 'VERIFICATION_VERDICT',
+        verifierTaskId: criterion.evidenceTaskId,
+        subjectTaskId: verifier?.verifiesTaskId ?? null,
+        verdict: verifier?.verdict ?? null,
+        verdictRevision: verifier ? String(verifier.verdictRevision) : null,
+        taskStatus: verifier?.status ?? null,
+      },
+      evidenceTaskId: criterion.evidenceTaskId,
+      evidenceSessionId: null,
+    };
+  }
+
+  /**
+   * Reconcile automatic conclusions and, when the confirmed conjunction is PASS, produce DONE.
+   * No caller supplies a verdict or status to this method; both are derived under the project row
+   * lock from the declarations and their durable evidence.
+   */
+  async reconcile(ownerId: string, projectId: string): Promise<{
+    done: boolean;
+    runId: string | null;
+    code: AcceptanceRefusalCode | null;
+  }> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await ProjectAcceptanceService.lockProject(
+        tx, projectId, ownerId, 'FOR UPDATE',
+      );
+      if (locked.status === ProjectStatus.CANCELLED) {
+        return { done: false, runId: null, code: ACCEPTANCE_MISSING };
+      }
+      const criteria = await ProjectAcceptanceService.statedCriteria(
+        tx, projectId, locked.acceptanceCriteria,
+      );
+      if (criteria.length === 0) {
+        return { done: false, runId: null, code: ACCEPTANCE_MISSING };
+      }
+      const materialized = await this.ensureEvidenceVersionTx(
+        tx,
+        projectId,
+        criteria,
+        { decidedBy: 'USER' },
+      );
+      const run = await tx.projectAcceptanceRun.findUniqueOrThrow({
+        where: { id: materialized.id },
+        include: { criteria: { orderBy: { ordinal: 'asc' } } },
+      });
+      const events = await ProjectAcceptanceService.conclusionEvents(tx, projectId, run.attempt);
+      const standing = ProjectAcceptanceService.projectedCriteria(run.criteria, events);
+      const standingByDefinition = new Map(standing.flatMap((criterion) =>
+        criterion.definitionId
+          ? [[criterion.definitionId, criterion] as const]
+          : []));
+      const runByDefinition = new Map(run.criteria.flatMap((criterion) =>
+        criterion.definitionId
+          ? [[criterion.definitionId, criterion] as const]
+          : []));
+      const automaticEvents: Prisma.ProjectAcceptanceConclusionCreateManyInput[] = [];
+      for (const criterion of criteria) {
+        if (!criterion.definitionId) continue;
+        const outcome = await ProjectAcceptanceService.automaticCriterionOutcome(
+          tx, projectId, criterion,
+        );
+        if (!outcome) continue;
+        const snapshot = runByDefinition.get(criterion.definitionId);
+        if (!snapshot || snapshot.definitionRevision !== criterion.definitionRevision) continue;
+        const current = standingByDefinition.get(criterion.definitionId);
+        const currentEvidence = current?.evidence && typeof current.evidence === 'object'
+          ? current.evidence as Record<string, unknown>
+          : {};
+        const nextEvidence = outcome.evidence as Record<string, unknown>;
+        const sameSource = currentEvidence.resultId === nextEvidence.resultId
+          && currentEvidence.verdictRevision === nextEvidence.verdictRevision
+          && currentEvidence.verdict === nextEvidence.verdict;
+        if (current?.verdict === outcome.verdict && sameSource) continue;
+        automaticEvents.push({
+          projectId,
+          evidenceRunId: run.id,
+          evidenceVersion: run.attempt,
+          ordinal: snapshot.ordinal,
+          criterionKey: snapshot.criterionKey,
+          criterionText: snapshot.criterionText,
+          definitionId: snapshot.definitionId,
+          definitionRevision: snapshot.definitionRevision,
+          verdict: outcome.verdict,
+          summary: outcome.summary,
+          evidence: outcome.evidence,
+          evidenceTaskId: outcome.evidenceTaskId,
+          evidenceSessionId: outcome.evidenceSessionId,
+          decidedBy: 'SYSTEM',
+          decidedById: ownerId,
+          actingSessionId: null,
+          decidedAt: new Date(),
+        });
+      }
+      if (automaticEvents.length > 0) {
+        await tx.projectAcceptanceConclusion.createMany({ data: automaticEvents });
+      }
+
+      try {
+        const gate = await this.assertDoneAllowed(tx, projectId);
+        if (locked.status !== ProjectStatus.DONE) {
+          await tx.project.update({
+            where: { id: projectId },
+            data: { status: ProjectStatus.DONE, acceptedRunId: gate.runId },
+          });
+          await ProjectAcceptanceService.writeAudit(
+            tx,
+            projectId,
+            'done_bound',
+            `automatically satisfied confirmed criteria at evidence version ${gate.attempt}`,
+            {
+              source: 'AUTOMATIC_CRITERIA_EVALUATOR',
+              actorStatusWrite: false,
+              criteriaDigest: locked.acceptanceCriteriaDigest,
+              acceptanceDigest: gate.digest,
+              evidenceVersion: String(gate.attempt),
+            },
+            gate.runId,
+          );
+        }
+        return { done: true, runId: gate.runId, code: null };
+      } catch (error) {
+        if (error instanceof AcceptanceRefusal) {
+          const body = error.getResponse() as { code: AcceptanceRefusalCode };
+          return { done: false, runId: run.id, code: body.code };
+        }
+        throw error;
+      }
+    }, loggedRetry(this.logger, 'projectAcceptance.reconcile'));
+  }
+
+  /** Re-evaluate every project criterion whose mechanical source is this Task. */
+  async reconcileForEvidenceTask(taskId: string): Promise<void> {
+    const projects = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+      where: { evidenceTaskId: taskId },
+      select: { projectId: true, project: { select: { ownerId: true } } },
+      distinct: ['projectId'],
+    });
+    for (const project of projects) {
+      await this.reconcile(project.project.ownerId, project.projectId);
+    }
   }
 
   /**
@@ -645,8 +1011,29 @@ export class ProjectAcceptanceService {
     if (containsPass && eventActor) ProjectAcceptanceService.assertMayConcludePass(eventActor);
     // Retried whole: the verdict is computed inside the closure from facts read under the project
     // lock, so a re-run recomputes rather than replaying a verdict from a discarded snapshot.
-    return withTransactionRetry(this.prisma, async (tx) => {
-      await ProjectAcceptanceService.lockProject(tx, projectId, ownerId, 'FOR NO KEY UPDATE');
+    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await ProjectAcceptanceService.lockProject(
+        tx, projectId, ownerId, 'FOR NO KEY UPDATE',
+      );
+      const confirmation = await tx.projectAcceptanceCriteriaConfirmation.findUnique({
+        where: {
+          projectId_criteriaDigest: {
+            projectId,
+            criteriaDigest: locked.acceptanceCriteriaDigest,
+          },
+        },
+        select: { id: true },
+      });
+      if (!confirmation) {
+        throw new AcceptanceRefusal(
+          CRITERIA_CONFIRMATION_REQUIRED,
+          'confirm the current project acceptance standard set before concluding its human criteria',
+          {
+            requiredAction: 'confirm the current project acceptance standard set',
+            criteriaDigest: locked.acceptanceCriteriaDigest,
+          },
+        );
+      }
       const run = await tx.projectAcceptanceRun.findFirst({
         where: { id: runId, projectId },
         include: { criteria: { orderBy: { ordinal: 'asc' } } },
@@ -664,6 +1051,10 @@ export class ProjectAcceptanceService {
       const byKey = new Map(run.criteria.map((c) => [c.criterionKey, c]));
       const byDefinitionId = new Map(
         run.criteria.flatMap((c) => c.definitionId ? [[c.definitionId, c] as const] : []),
+      );
+      const humanCriteria = run.criteria.filter(
+        (criterion) =>
+          criterion.completionCriterion === TaskCompletionCriterion.HUMAN_SIGNOFF,
       );
       const answered = new Map<number, AcceptanceCriterionOutcomeInput>();
       for (const outcome of outcomes) {
@@ -687,6 +1078,12 @@ export class ProjectAcceptanceService {
             `no criterion ${outcome.ordinal ?? outcome.criterionKey ?? outcome.criterionId} in this run's snapshot`,
           );
         }
+        if (criterion.completionCriterion !== TaskCompletionCriterion.HUMAN_SIGNOFF) {
+          throw new BadRequestException(
+            `criterion ${criterion.ordinal} is ${criterion.completionCriterion} and is evaluated ` +
+            'automatically; a caller cannot submit a fallback human verdict for it',
+          );
+        }
         if (!Object.values(ProjectAcceptanceVerdict).includes(outcome.verdict)) {
           throw new BadRequestException(
             `criterion ${criterion.ordinal}: verdict must be one of ` +
@@ -695,7 +1092,7 @@ export class ProjectAcceptanceService {
         }
         answered.set(criterion.ordinal, outcome);
       }
-      const missing = run.criteria
+      const missing = humanCriteria
         .filter((c) => !answered.has(c.ordinal))
         .map((c) => c.ordinal);
       if (missing.length > 0) {
@@ -708,7 +1105,7 @@ export class ProjectAcceptanceService {
       const decidedAt = new Date();
       if (conclusionDelegate && eventActor) {
         await conclusionDelegate.createMany({
-          data: run.criteria.map((criterion) => {
+          data: humanCriteria.map((criterion) => {
             const outcome = answered.get(criterion.ordinal)!;
             return {
               projectId,
@@ -732,7 +1129,9 @@ export class ProjectAcceptanceService {
           }),
         });
 
-        const verdicts = run.criteria.map((criterion) => answered.get(criterion.ordinal)!.verdict);
+        const verdicts = humanCriteria.map(
+          (criterion) => answered.get(criterion.ordinal)!.verdict,
+        );
         const verdict = verdicts.every((value) => value === ProjectAcceptanceVerdict.PASS)
           ? ProjectAcceptanceVerdict.PASS
           : verdicts.some((value) => value === ProjectAcceptanceVerdict.FAIL)
@@ -740,7 +1139,7 @@ export class ProjectAcceptanceService {
             : ProjectAcceptanceVerdict.INCONCLUSIVE;
         const resultDigest = acceptanceResultDigest(
           run.id,
-          run.criteria.map((criterion) => ({
+          humanCriteria.map((criterion) => ({
             ordinal: criterion.ordinal,
             criterionKey: criterion.criterionKey,
             verdict: answered.get(criterion.ordinal)!.verdict,
@@ -755,7 +1154,7 @@ export class ProjectAcceptanceService {
             decidedBy: eventActor.decidedBy,
             decidedById: eventActor.decidedById,
             decidedAt: decidedAt.toISOString(),
-            criteria: run.criteria.map((criterion) => ({
+            criteria: humanCriteria.map((criterion) => ({
               ordinal: criterion.ordinal,
               verdict: answered.get(criterion.ordinal)!.verdict,
             })),
@@ -765,7 +1164,7 @@ export class ProjectAcceptanceService {
         return this.readRun(tx, run.id);
       }
 
-      for (const criterion of run.criteria) {
+      for (const criterion of humanCriteria) {
         const outcome = answered.get(criterion.ordinal)!;
         await tx.projectAcceptanceCriterion.update({
           where: { id: criterion.id },
@@ -780,7 +1179,7 @@ export class ProjectAcceptanceService {
         });
       }
 
-      const verdicts = run.criteria.map((c) => answered.get(c.ordinal)!.verdict);
+      const verdicts = humanCriteria.map((c) => answered.get(c.ordinal)!.verdict);
       const verdict = verdicts.every((v) => v === ProjectAcceptanceVerdict.PASS)
         ? ProjectAcceptanceVerdict.PASS
         : verdicts.some((v) => v === ProjectAcceptanceVerdict.FAIL)
@@ -793,7 +1192,7 @@ export class ProjectAcceptanceService {
       const inputDigest = await this.digest(tx, projectId);
       const resultDigest = acceptanceResultDigest(
         run.id,
-        run.criteria.map((c) => ({
+        humanCriteria.map((c) => ({
           ordinal: c.ordinal,
           criterionKey: c.criterionKey,
           verdict: answered.get(c.ordinal)!.verdict,
@@ -815,7 +1214,7 @@ export class ProjectAcceptanceService {
           verdict,
           inputDigest,
           resultDigest,
-          criteria: run.criteria.map((c) => ({
+          criteria: humanCriteria.map((c) => ({
             ordinal: c.ordinal,
             verdict: answered.get(c.ordinal)!.verdict,
           })),
@@ -824,6 +1223,11 @@ export class ProjectAcceptanceService {
       );
       return this.readRun(tx, run.id);
     }, loggedRetry(this.logger, 'projectAcceptance.finalizeRun'));
+    await this.reconcile(ownerId, projectId);
+    return this.readRun(
+      this.prisma as unknown as Prisma.TransactionClient,
+      finalized.id,
+    );
   }
 
   // ------------------------------------------------------------------------------------------
@@ -969,6 +1373,31 @@ export class ProjectAcceptanceService {
     projectId: string,
     digest: string,
   ): Promise<{ runId: string; attempt: bigint; digest: string }> {
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { acceptanceCriteriaDigest: true },
+    });
+    const confirmation = await tx.projectAcceptanceCriteriaConfirmation.findUnique({
+      where: {
+        projectId_criteriaDigest: {
+          projectId,
+          criteriaDigest: project.acceptanceCriteriaDigest,
+        },
+      },
+      select: { id: true },
+    });
+    if (!confirmation) {
+      throw new AcceptanceRefusal(
+        CRITERIA_CONFIRMATION_REQUIRED,
+        'the current project acceptance standard set has not been confirmed — confirm the ' +
+          'complete set once; any later text or criterion edit advances its digest and requires ' +
+          'a new confirmation',
+        {
+          requiredAction: 'confirm the current project acceptance standard set',
+          criteriaDigest: project.acceptanceCriteriaDigest,
+        },
+      );
+    }
     // HUMAN_SIGNOFF judgment blockers are projections of OPEN requests, not mutable
     // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
     // merely because there is intentionally no blocker row for somebody to close by hand.
@@ -1219,7 +1648,15 @@ export class ProjectAcceptanceService {
         project: {
           select: {
             acceptanceCriterionDefinitions: {
-              select: { id: true, revision: true, verificationMethod: true },
+              select: {
+                id: true,
+                revision: true,
+                verificationMethod: true,
+                completionCriterion: true,
+                acceptanceCommand: true,
+                acceptanceExpectedExitCode: true,
+                evidenceTaskId: true,
+              },
             },
           },
         },
@@ -1246,6 +1683,10 @@ export class ProjectAcceptanceService {
         id: string;
         revision: number;
         verificationMethod: string;
+        completionCriterion: TaskCompletionCriterion;
+        acceptanceCommand: string | null;
+        acceptanceExpectedExitCode: number | null;
+        evidenceTaskId: string | null;
       }>;
     };
   }, events?: AcceptanceConclusionEventRow[]) {
@@ -1326,6 +1767,9 @@ export class ProjectAcceptanceService {
             : undefined)
           ?? snapshotMethods.get(`ordinal:${c.ordinal}`)
           ?? null,
+        completionCriterion: c.completionCriterion ?? TaskCompletionCriterion.HUMAN_SIGNOFF,
+        acceptanceCommand: c.acceptanceCommand ?? null,
+        acceptanceExpectedExitCode: c.acceptanceExpectedExitCode ?? null,
         verdict: c.verdict,
         summary: c.summary,
         evidence: c.evidence,
@@ -1370,7 +1814,9 @@ export class ProjectAcceptanceService {
       attempt: bigint;
       startedAt: Date;
       criterionCount: number;
+      humanCriterionCount: number;
       unansweredCount: number;
+      criteriaConfirmed: boolean;
       total: number;
     }>>(Prisma.sql`
       WITH standing AS (
@@ -1382,7 +1828,11 @@ export class ProjectAcceptanceService {
                r."started_at" AS "startedAt",
                count(c."id")::int AS "criterionCount",
                count(c."id") FILTER (
-                 WHERE c."verdict" IS NULL
+                 WHERE c."completion_criterion" = 'HUMAN_SIGNOFF'::"task_completion_criterion"
+               )::int AS "humanCriterionCount",
+               count(c."id") FILTER (
+                 WHERE c."completion_criterion" = 'HUMAN_SIGNOFF'::"task_completion_criterion"
+                   AND c."verdict" IS NULL
                    AND NOT EXISTS (
                    SELECT 1
                      FROM "project_acceptance_conclusion" e
@@ -1401,7 +1851,12 @@ export class ProjectAcceptanceService {
                         )
                       )
                  )
-               )::int AS "unansweredCount"
+               )::int AS "unansweredCount",
+               EXISTS (
+                 SELECT 1 FROM "project_acceptance_criteria_confirmation" confirmation
+                  WHERE confirmation."project_id" = p."id"
+                    AND confirmation."criteria_digest" = p."acceptance_criteria_digest"
+               ) AS "criteriaConfirmed"
           FROM "project_acceptance_run" r
           JOIN "project" p ON p."id" = r."project_id"
           JOIN "project_acceptance_criterion" c ON c."run_id" = r."id"
@@ -1410,7 +1865,8 @@ export class ProjectAcceptanceService {
            AND r."superseded_at" IS NULL
          GROUP BY r."id", p."id", p."title", p."status", r."attempt", r."started_at"
       ), pending AS (
-        SELECT * FROM standing WHERE "unansweredCount" > 0
+        SELECT * FROM standing
+         WHERE "unansweredCount" > 0 OR NOT "criteriaConfirmed"
       )
       SELECT pending.*, count(*) OVER ()::int AS "total"
         FROM pending
@@ -1427,8 +1883,11 @@ export class ProjectAcceptanceService {
         attempt: String(row.attempt),
         startedAt: row.startedAt,
         criterionCount: row.criterionCount,
-        answeredCount: row.criterionCount - row.unansweredCount,
+        humanCriterionCount: row.humanCriterionCount,
+        answeredCount: row.humanCriterionCount - row.unansweredCount,
         unansweredCount: row.unansweredCount,
+        criteriaConfirmed: row.criteriaConfirmed,
+        confirmationRequired: !row.criteriaConfirmed,
         currentVerdict: ACCEPTANCE_UNDECIDED,
       })),
     };
@@ -1475,7 +1934,15 @@ export class ProjectAcceptanceService {
       select: {
         title: true, status: true, acceptanceCriteria: true, acceptedRunId: true, legacyAcceptedAt: true,
         acceptanceCriterionDefinitions: {
-          select: { id: true, revision: true, verificationMethod: true },
+          select: {
+            id: true,
+            revision: true,
+            verificationMethod: true,
+            completionCriterion: true,
+            acceptanceCommand: true,
+            acceptanceExpectedExitCode: true,
+            evidenceTaskId: true,
+          },
         },
       },
     });
@@ -1509,6 +1976,7 @@ export class ProjectAcceptanceService {
       : undefined;
 
     const evaluated = await this.evaluateGate(projectId);
+    const criteriaConfirmation = await this.criteriaConfirmation(ownerId, projectId);
 
     const criteria = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
@@ -1525,9 +1993,16 @@ export class ProjectAcceptanceService {
         criterionKey: c.key,
         criterionText: c.text,
         verificationMethod: c.verificationMethod,
+        completionCriterion: c.completionCriterion,
+        acceptanceCommand: c.acceptanceCommand,
+        acceptanceExpectedExitCode: c.acceptanceExpectedExitCode,
+        evidenceTaskId: c.evidenceTaskId,
+        completionCriterionOverrideReason: c.completionCriterionOverrideReason,
       })),
       criteriaEmptyReason: criteria.length > 0 ? null : 'NO_ACCEPTANCE_CRITERIA',
       acceptanceDigest: evaluated.digest,
+      criteriaDigest: criteriaConfirmation.criteriaDigest,
+      criteriaConfirmation,
       acceptedRunId: project.acceptedRunId,
       legacyAcceptedAt: project.legacyAcceptedAt,
       legacyEvidence: project.legacyAcceptedAt !== null && project.acceptedRunId === null,
@@ -1653,6 +2128,7 @@ export class ProjectAcceptanceService {
         summary: null,
         decidedAt: null,
         evidenceTaskId: null,
+        completionCriterion: criterion.completionCriterion,
       })),
     });
     const latest = await this.prisma.projectAcceptanceRun.findFirst({
@@ -1681,6 +2157,7 @@ export class ProjectAcceptanceService {
           summary: null,
           evidence: {},
           evidenceTaskId: null,
+          completionCriterion: definition.completionCriterion,
           evidenceSessionId: null,
           decidedAt: null,
         })),
@@ -1708,17 +2185,23 @@ export class ProjectAcceptanceService {
           summary: criterion.summary,
           decidedAt: criterion.decidedAt,
           evidenceTaskId: criterion.evidenceTaskId,
+          completionCriterion:
+            criterion.completionCriterion ?? TaskCompletionCriterion.HUMAN_SIGNOFF,
         })),
       };
     }
-    const latestSemanticRevision = latest.digestVersion === ACCEPTANCE_DIGEST_VERSION
+    const isCurrentDigestShape = latest.digestVersion === ACCEPTANCE_DIGEST_VERSION;
+    const latestSemanticRevision = isCurrentDigestShape
       ? latest.criteriaRevision
       : latest.digestVersion < ACCEPTANCE_DIGEST_VERSION
         ? criteriaSemanticRevision(latest.criteria.map((criterion) => ({
             text: criterion.criterionText,
           })))
         : null;
-    if (latestSemanticRevision !== criteriaSemanticRevision(stated)) {
+    const currentSemanticRevision = isCurrentDigestShape
+      ? criteriaSemanticRevision(stated)
+      : criteriaSemanticRevision(stated.map((criterion) => ({ text: criterion.text })));
+    if (latestSemanticRevision !== currentSemanticRevision) {
       return unjudged(latest.completedAt ?? latest.startedAt);
     }
 
@@ -1751,6 +2234,7 @@ export class ProjectAcceptanceService {
         summary: judged?.summary ?? null,
         decidedAt: judged?.decidedAt ?? null,
         evidenceTaskId: judged?.evidenceTaskId ?? null,
+        completionCriterion: definition.completionCriterion,
       };
     });
     return {

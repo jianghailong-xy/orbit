@@ -18,6 +18,11 @@ import {
 } from 'class-validator';
 import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
+import {
+  TASK_COMPLETION_CRITERIA,
+  type TaskCompletionCriterionValue,
+} from '../tasks/task-completion-criterion';
+import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
 const PROJECT_AUTOMATION_POLICIES = Object.values(ProjectAutomationPolicy);
@@ -98,6 +103,19 @@ export class CreateProjectAcceptanceCriterionDto {
   @MaxLength(MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS)
   @Matches(/\S/u, { message: 'criterion verificationMethod must not be blank' })
   verificationMethod!: string;
+
+  /** Required for structured project criteria. These are Task's three peer criterion values, not
+   * a project-specific enum and not an ordered fallback chain. */
+  @IsIn(TASK_COMPLETION_CRITERIA)
+  completionCriterion!: TaskCompletionCriterionValue;
+
+  @IsOptional() @IsString() acceptanceCommand?: string;
+  @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
+  @IsOptional() @IsPublicId() evidenceTaskId?: string;
+
+  /** Same advisory escape hatch as a Task declaration, evaluated from the same keyword table. */
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
+  completionCriterionOverrideReason?: string;
 }
 
 /** Stable ids are accepted only on update. Omit one to add a new criterion; retain one returned by
@@ -152,9 +170,9 @@ export class UpdateProjectDto {
   @IsString()
   @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS)
   instructions?: string | null;
-  /** Where the work stands: OPEN, DONE (the goal was reached) or CANCELLED (it will not be). Not
-   *  a filing state — moving a project out of somebody's way is a separate concern that must not
-   *  be spelled by overwriting what happened to the work. */
+  /** Where the work stands. OPEN and CANCELLED remain request values; DONE is accepted by the DTO
+   * vocabulary only so old clients receive the service's explicit automatic-only refusal rather
+   * than a generic validation error. The evaluator alone writes it. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
   // ── What the project's coordinator is allowed to do ────────────────────────────────────────

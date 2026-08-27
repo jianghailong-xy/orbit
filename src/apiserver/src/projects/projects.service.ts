@@ -69,6 +69,16 @@ import {
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  TASK_COMPLETION_CRITERIA,
+  type TaskCompletionCriterionValue,
+} from '../tasks/task-completion-criterion';
+import {
+  MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
+  normaliseTaskCriterionOverrideReason,
+  taskCriterionShapeAdvice,
+  taskCriterionShapeAdviceBody,
+} from '../tasks/task-criterion-shape-advice';
 
 /**
  * "This project's coordinator belongs in a workspace that will not have it."
@@ -257,6 +267,11 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     ordinal: true,
     text: true,
     verificationMethod: true,
+    completionCriterion: true,
+    acceptanceCommand: true,
+    acceptanceExpectedExitCode: true,
+    evidenceTaskId: true,
+    completionCriterionOverrideReason: true,
     revision: true,
     contentHash: true,
   },
@@ -304,6 +319,11 @@ type WithAcceptanceDefinitions = {
     ordinal: number;
     text: string;
     verificationMethod: string;
+    completionCriterion: TaskCompletionCriterionValue;
+    acceptanceCommand: string | null;
+    acceptanceExpectedExitCode: number | null;
+    evidenceTaskId: string | null;
+    completionCriterionOverrideReason: string | null;
     revision: number;
     contentHash: string;
   }>;
@@ -335,6 +355,11 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       ordinal: criterion.ordinal,
       text: criterion.text,
       verificationMethod: criterion.verificationMethod,
+      completionCriterion: criterion.completionCriterion ?? 'HUMAN_SIGNOFF',
+      acceptanceCommand: criterion.acceptanceCommand ?? null,
+      acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode ?? null,
+      evidenceTaskId: criterion.evidenceTaskId ?? null,
+      completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
       // A view over the latest applicable acceptance run, never another authored/stored field.
       currentStatus: currentStatus.get(criterion.id) ?? 'UNDECIDED',
       revision: criterion.revision,
@@ -602,6 +627,22 @@ export class ProjectsService {
     return value?.trim() ? value : null;
   }
 
+  /** DONE is now the criterion evaluator's projection, never a request field's value. Kept in a
+   * helper so later code remains typed over the complete DTO while this runtime boundary refuses
+   * the one disallowed member. */
+  private static refuseDirectDone(status: ProjectStatus | undefined): void {
+    if (status !== ProjectStatus.DONE) return;
+    throw new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'PROJECT_DONE_AUTOMATIC_ONLY',
+      message:
+        'project.status DONE is derived automatically when every criterion in the confirmed ' +
+        'standard set is PASS; no user, runner, or judgment session may write it directly',
+      requiredAction: 'confirm the current standard set and satisfy its declared criteria',
+    });
+  }
+
   /** Validate the invariant decorators cannot express across two optional properties. */
   private static assertOneAcceptanceAuthoringShape(dto: {
     acceptanceCriteria?: string | null;
@@ -620,12 +661,10 @@ export class ProjectsService {
   }
 
   /**
-   * Unit T6: the two acts on this DTO routed to owner review, refused for a judgment session.
-   *
-   * `EDIT_ACCEPTANCE_CRITERIA` covers both authoring shapes, because they write the same fact —
-   * gating only the structured one would leave the legacy text as an unguarded way to rewrite the
-   * exam. `SETTLE_PROJECT_DONE` is only `status = DONE`: OPEN and CANCELLED are not this boundary,
-   * and a coordinator that noticed a project should be abandoned is not claiming its goal was met.
+   * Unit T6: the acceptance-authoring act on this DTO is routed to owner review and refused for a
+   * judgment session. `EDIT_ACCEPTANCE_CRITERIA` covers both authoring shapes, because they write
+   * the same fact — gating only the structured one would leave the legacy text as an unguarded way
+   * to rewrite the exam. DONE is handled separately as an automatic-only projection for everyone.
    *
    * Both are checked BEFORE the update's own transaction, so a refusal writes nothing. The session
    * is read once and only when the request actually asks for one of them. A no-session request is
@@ -638,29 +677,38 @@ export class ProjectsService {
     actingSessionId: string | undefined,
   ): Promise<void> {
     if (!actingSessionId) return;
-    const asked: Array<'EDIT_ACCEPTANCE_CRITERIA' | 'SETTLE_PROJECT_DONE'> = [];
-    if (dto.acceptanceCriteria !== undefined || dto.acceptanceCriteriaItems !== undefined) {
-      asked.push('EDIT_ACCEPTANCE_CRITERIA');
-    }
-    if (dto.status === ProjectStatus.DONE) asked.push('SETTLE_PROJECT_DONE');
-    if (asked.length === 0) return;
+    if (dto.acceptanceCriteria === undefined && dto.acceptanceCriteriaItems === undefined) return;
     const acting = await this.prisma.session.findFirst({
       where: { id: actingSessionId, ownerId },
       select: { dispatchOrigin: true },
     });
     const principal = authorityPrincipal(acting?.dispatchOrigin);
-    for (const action of asked) {
-      const refusal = refuseHumanOnlyAction(principal, action);
-      if (refusal) throw new ForbiddenException(refusal);
-    }
+    const refusal = refuseHumanOnlyAction(principal, 'EDIT_ACCEPTANCE_CRITERIA');
+    if (refusal) throw new ForbiddenException(refusal);
   }
 
   /** Normalize structurally bounded item text and keep the compatibility projection inside the
    * same total size older clients already enforce. This is repeated in the service because runner
    * tests and internal callers invoke it directly without Nest's validation pipe. */
   private static normalizeAcceptanceItems(
-    items: Array<{ text: string; verificationMethod: string }>,
-  ): Array<{ text: string; verificationMethod: string }> {
+    items: Array<{
+      text: string;
+      verificationMethod: string;
+      completionCriterion: TaskCompletionCriterionValue;
+      acceptanceCommand?: string | null;
+      acceptanceExpectedExitCode?: number | null;
+      evidenceTaskId?: string | null;
+      completionCriterionOverrideReason?: string | null;
+    }>,
+  ): Array<{
+    text: string;
+    verificationMethod: string;
+    completionCriterion: TaskCompletionCriterionValue;
+    acceptanceCommand: string | null;
+    acceptanceExpectedExitCode: number | null;
+    evidenceTaskId: string | null;
+    completionCriterionOverrideReason: string | null;
+  }> {
     if (!Array.isArray(items)) {
       throw new BadRequestException('acceptanceCriteriaItems must be an array');
     }
@@ -674,6 +722,15 @@ export class ProjectsService {
       const verificationMethod = typeof item?.verificationMethod === 'string'
         ? item.verificationMethod.trim()
         : '';
+      const completionCriterion = item?.completionCriterion;
+      const acceptanceCommand = typeof item?.acceptanceCommand === 'string'
+        ? item.acceptanceCommand.trim()
+        : null;
+      const acceptanceExpectedExitCode = item?.acceptanceExpectedExitCode ?? null;
+      const evidenceTaskId = item?.evidenceTaskId ?? null;
+      const completionCriterionOverrideReason = normaliseTaskCriterionOverrideReason(
+        item?.completionCriterionOverrideReason,
+      );
       if (text === '') {
         throw new BadRequestException(`acceptance criterion ${index + 1} must not be blank`);
       }
@@ -692,7 +749,74 @@ export class ProjectsService {
           `acceptance criterion ${index + 1} verificationMethod must contain at most ${MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS} characters`,
         );
       }
-      return { text, verificationMethod };
+      if (!TASK_COMPLETION_CRITERIA.includes(completionCriterion)) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} requires completionCriterion ` +
+          `(${TASK_COMPLETION_CRITERIA.join(', ')})`,
+        );
+      }
+      if (
+        completionCriterionOverrideReason !== null
+        && completionCriterionOverrideReason.length > MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS
+      ) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} completionCriterionOverrideReason must contain at ` +
+          `most ${MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS} characters`,
+        );
+      }
+      if (
+        acceptanceExpectedExitCode !== null
+        && !Number.isInteger(acceptanceExpectedExitCode)
+      ) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} acceptanceExpectedExitCode must be an integer`,
+        );
+      }
+      switch (completionCriterion) {
+        case 'EXECUTABLE':
+          if (!acceptanceCommand || acceptanceExpectedExitCode === null || !evidenceTaskId) {
+            throw new BadRequestException(
+              `acceptance criterion ${index + 1}: EXECUTABLE requires acceptanceCommand, ` +
+              'acceptanceExpectedExitCode, and evidenceTaskId',
+            );
+          }
+          break;
+        case 'VERIFICATION':
+          if (acceptanceCommand !== null || acceptanceExpectedExitCode !== null || !evidenceTaskId) {
+            throw new BadRequestException(
+              `acceptance criterion ${index + 1}: VERIFICATION requires evidenceTaskId and ` +
+              'cannot declare an executable command',
+            );
+          }
+          break;
+        case 'HUMAN_SIGNOFF':
+          if (acceptanceCommand !== null || acceptanceExpectedExitCode !== null || evidenceTaskId) {
+            throw new BadRequestException(
+              `acceptance criterion ${index + 1}: HUMAN_SIGNOFF cannot declare a command or ` +
+              'evidenceTaskId',
+            );
+          }
+          break;
+      }
+      const advice = taskCriterionShapeAdvice({
+        acceptanceCriteria: text,
+        completionCriterion,
+      });
+      if (advice && completionCriterionOverrideReason === null) {
+        throw new ConflictException({
+          ...taskCriterionShapeAdviceBody(advice),
+          criterionOrdinal: index + 1,
+        });
+      }
+      return {
+        text,
+        verificationMethod,
+        completionCriterion,
+        acceptanceCommand,
+        acceptanceExpectedExitCode,
+        evidenceTaskId,
+        completionCriterionOverrideReason,
+      };
     });
     const projection = criteriaLegacyProjection(normalized) ?? '';
     if (projection.length > MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS) {
@@ -715,7 +839,17 @@ export class ProjectsService {
     const existing = await tx.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId },
       orderBy: { ordinal: 'asc' },
-      select: { id: true, text: true, verificationMethod: true, revision: true },
+      select: {
+        id: true,
+        text: true,
+        verificationMethod: true,
+        completionCriterion: true,
+        acceptanceCommand: true,
+        acceptanceExpectedExitCode: true,
+        evidenceTaskId: true,
+        completionCriterionOverrideReason: true,
+        revision: true,
+      },
     });
     const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
     const used = new Set<string>();
@@ -740,8 +874,62 @@ export class ProjectsService {
         throw new BadRequestException(`acceptance criterion id ${supplied ?? id} is repeated`);
       }
       used.add(id);
-      return { ...criterion, id, ordinal: index + 1 };
+      let evidenceTaskId: string | null = null;
+      if (criterion.evidenceTaskId) {
+        try {
+          evidenceTaskId = toUuid(criterion.evidenceTaskId);
+        } catch {
+          throw new BadRequestException(
+            `acceptance criterion ${index + 1} has an invalid evidenceTaskId`,
+          );
+        }
+      }
+      return { ...criterion, evidenceTaskId, id, ordinal: index + 1 };
     });
+
+    const evidenceIds = [...new Set(desired.flatMap((criterion) =>
+      criterion.evidenceTaskId ? [criterion.evidenceTaskId] : []))];
+    const evidenceTasks = evidenceIds.length === 0
+      ? []
+      : await tx.task.findMany({
+          where: { projectId, id: { in: evidenceIds } },
+          select: {
+            id: true,
+            completionCriterion: true,
+            acceptanceCommand: true,
+            acceptanceExpectedExitCode: true,
+            verifiesTaskId: true,
+          },
+        });
+    const evidenceById = new Map(evidenceTasks.map((task) => [task.id, task]));
+    for (const criterion of desired) {
+      if (!criterion.evidenceTaskId) continue;
+      const task = evidenceById.get(criterion.evidenceTaskId);
+      if (!task) {
+        throw new BadRequestException(
+          `acceptance criterion ${criterion.ordinal} evidenceTaskId must name a task in this project`,
+        );
+      }
+      if (
+        criterion.completionCriterion === 'EXECUTABLE'
+        && (
+          task.completionCriterion !== 'EXECUTABLE'
+          || task.acceptanceCommand !== criterion.acceptanceCommand
+          || task.acceptanceExpectedExitCode !== criterion.acceptanceExpectedExitCode
+        )
+      ) {
+        throw new BadRequestException(
+          `acceptance criterion ${criterion.ordinal} EXECUTABLE evidenceTaskId must name an ` +
+          'EXECUTABLE task with the same command and expected exit code',
+        );
+      }
+      if (criterion.completionCriterion === 'VERIFICATION' && task.verifiesTaskId === null) {
+        throw new BadRequestException(
+          `acceptance criterion ${criterion.ordinal} VERIFICATION evidenceTaskId must name an ` +
+          'independent verifier task',
+        );
+      }
+    }
 
     if (existing.length > 0) {
       await tx.projectAcceptanceCriterionDefinition.updateMany({
@@ -762,10 +950,19 @@ export class ProjectsService {
             ordinal: criterion.ordinal,
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
+            completionCriterion: criterion.completionCriterion,
+            acceptanceCommand: criterion.acceptanceCommand,
+            acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
+            evidenceTaskId: criterion.evidenceTaskId,
+            completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
             contentHash,
             revision:
-              previous.text === criterion.text &&
-              previous.verificationMethod === criterion.verificationMethod
+              previous.text === criterion.text
+              && previous.verificationMethod === criterion.verificationMethod
+              && previous.completionCriterion === criterion.completionCriterion
+              && previous.acceptanceCommand === criterion.acceptanceCommand
+              && previous.acceptanceExpectedExitCode === criterion.acceptanceExpectedExitCode
+              && previous.evidenceTaskId === criterion.evidenceTaskId
                 ? previous.revision
                 : previous.revision + 1,
           },
@@ -778,6 +975,11 @@ export class ProjectsService {
             ordinal: criterion.ordinal,
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
+            completionCriterion: criterion.completionCriterion,
+            acceptanceCommand: criterion.acceptanceCommand,
+            acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
+            evidenceTaskId: criterion.evidenceTaskId,
+            completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
             revision: 1,
             contentHash,
           },
@@ -1610,10 +1812,10 @@ export class ProjectsService {
    * operation for an explicit request, not part of ordinary coordination.
    */
 
-  /** Each field is written only when the caller sent it, so closing a project cannot blank the goal
-   *  that says what it was for, and a rename cannot reopen it. Settling `status` changes nothing
-   *  about the project's tasks, which keep running or not running exactly as before — this phase
-   *  adds no rule that a DONE project finishes its work, or that unfinished work reopens it. */
+  /** Each field is written only when the caller sent it, so cancelling a project cannot blank the
+   * goal that says what it was for, and a rename cannot reopen it. A requested status change alters
+   * nothing about the project's tasks; DONE is not a request here at all, but the evaluator's
+   * acceptance projection. */
   async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
@@ -1621,9 +1823,9 @@ export class ProjectsService {
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
-    // Unit T6: the two HUMAN_ONLY rows this door carries. Here rather than at the controller,
-    // because a boundary enforced at one of the two doors leaves the service as the other one —
-    // and before anything else, so a refusal writes nothing and takes no lock.
+    // DONE is a projection for every principal, so this uniform refusal precedes the role-specific
+    // criteria-authoring check and cannot vary with an acting Session.
+    ProjectsService.refuseDirectDone(dto.status);
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
@@ -1663,12 +1865,9 @@ export class ProjectsService {
       ...(authorizationWrites.length > 0 ? { configRevision: { increment: 1 } } : {}),
     };
 
-    // §13.4 AE7: a write that settles the project takes the EXCLUSIVE lock, and takes it as the
-    // transaction's first statement. Everything that could change the acceptance facts holds
-    // `FOR NO KEY UPDATE` on the same row, and the two conflict — which is what makes "the fact
-    // changed" and "the project was accepted" two orderings rather than an interleaving. §8.6 LO3
-    // forbids starting weak and upgrading, so the strength is chosen here, before the first read.
-    const settling = dto.status === ProjectStatus.DONE;
+    // Direct DONE has already been refused. This transaction authors ordinary project facts or a
+    // reopen/cancellation; automatic settlement owns its own FOR UPDATE transaction in
+    // ProjectAcceptanceService.reconcile.
     // What the reopen below did, for the caller that asked for it. Declared outside the retry
     // closure and overwritten by each attempt, so a retried transaction reports what the attempt
     // that COMMITTED found rather than what an aborted one saw.
@@ -1709,9 +1908,7 @@ export class ProjectsService {
           accepted_run_id: string | null;
           legacy_accepted_at: Date | null;
           acceptance_epoch: bigint;
-        }>>(settling
-          ? Prisma.sql`${select} FOR UPDATE`
-          : Prisma.sql`${select} FOR NO KEY UPDATE`);
+        }>>(Prisma.sql`${select} FOR NO KEY UPDATE`);
         if (!locked) throw new NotFoundException('project not found');
         if (
           dto.title !== undefined &&
@@ -1727,11 +1924,9 @@ export class ProjectsService {
         // this project off is exactly the case the check has to see.
         ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
 
-        // Criteria are applied BEFORE a simultaneous DONE is gated. The old single-write ordering
-        // checked the previous criteria and then replaced them in the statement that wrote DONE —
-        // a project could therefore be bound to evidence about the exam it had just discarded.
-        // Under this already-held project lock, definitions and their compatibility projection are
-        // changed first; the gate below consequently reads the exact world it is about to settle.
+        // Definitions and their compatibility projection change under the already-held project
+        // lock. The evaluator can only settle in its own later FOR UPDATE transaction, against the
+        // resulting digest and a confirmation naming that exact standard set.
         if (dto.acceptanceCriteriaItems !== undefined) {
           const projection = await ProjectsService.replaceAcceptanceDefinitions(
             tx, id, dto.acceptanceCriteriaItems,
@@ -1776,22 +1971,6 @@ export class ProjectsService {
               legacyAcceptedAt: locked.legacy_accepted_at,
               acceptanceEpoch: locked.acceptance_epoch,
             };
-
-        // §13.4 AE2, in the transaction that writes DONE and after the lock that orders it. AE5:
-        // this is the one place `project.status = DONE` is decided, so a user in the web app, the
-        // CLI, MCP `project_update` and a coordinator inside a turn all meet the same check.
-        //
-        // Idempotent by re-reading the LOCKED row rather than by trusting the caller: a project
-        // that is already DONE is not re-gated and not re-bound, so pressing the button twice
-        // produces one binding and one audit row.
-        if (settling && state.status !== ProjectStatus.DONE) {
-          const gate = await this.acceptance.assertDoneAllowed(tx, id);
-          data.acceptedRunId = gate.runId;
-          await ProjectAcceptanceService.writeAudit(
-            tx, id, 'done_bound', `bound to acceptance attempt ${gate.attempt}`,
-            { attempt: String(gate.attempt), acceptanceDigest: gate.digest }, gate.runId,
-          );
-        }
 
         // Unit L7: the second confirmation, evaluated HERE and not at the door that asked for it.
         // A reopen starts a new acceptance epoch, and the number a person was shown when they

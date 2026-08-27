@@ -48,7 +48,7 @@ export function JudgmentInboxPage() {
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>任务级 HUMAN_SIGNOFF 与项目级验收共用一个收件箱；请审阅当前证据后作出决定。</p>
+          <p>任务级 HUMAN_SIGNOFF、项目标准集确认与少数项目级 HUMAN_SIGNOFF 共用一个收件箱；机械标准只展示结果。</p>
         </div>
         {taskInbox.data && projectInbox.data
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>
@@ -100,16 +100,19 @@ export function JudgmentInboxPage() {
           ) : (
             <li key={`project:${entry.item.runId}`} className="judgment-inbox-card project-acceptance-inbox-card">
               <Link to={projectAcceptanceReviewPath(entry.item.projectId, entry.item.runId)}>
-                <Tag color="gold">项目级验收</Tag>
+                <Tag color="gold">
+                  {entry.item.confirmationRequired ? '确认项目标准集' : '项目人工验收'}
+                </Tag>
                 <div className="judgment-inbox-title">{entry.item.projectTitle}</div>
                 <div className="judgment-inbox-project">Project {entry.item.projectStatus}</div>
                 <dl className="judgment-inbox-facts">
                   <div><dt>Evidence version</dt><dd>attempt {entry.item.attempt}</dd></div>
                   <div><dt>Current verdict</dt><dd>{entry.item.currentVerdict}</dd></div>
-                  <div><dt>Criteria</dt><dd>{entry.item.answeredCount}/{entry.item.criterionCount} answered</dd></div>
+                  <div><dt>标准集</dt><dd>{entry.item.criteriaConfirmed ? '已确认' : '待确认'}</dd></div>
+                  <div><dt>人工标准</dt><dd>{entry.item.answeredCount}/{entry.item.humanCriterionCount} answered</dd></div>
                   <div><dt>Opened</dt><dd>{when(entry.item.startedAt)}</dd></div>
                 </dl>
-                <span className="judgment-inbox-open">Review every criterion →</span>
+                <span className="judgment-inbox-open">确认标准集并处理人工标准 →</span>
               </Link>
             </li>
           ))}

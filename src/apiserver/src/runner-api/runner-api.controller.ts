@@ -102,6 +102,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { executableResultRecordedFact } from '../projects/completion-input';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -366,6 +367,8 @@ export class RunnerApiController {
     /** Criterion inputs are optional only for direct unit fixtures. Production resolves the
      * shared, durable input router through ProjectsModule. */
     private readonly completionInputs?: CompletionInputRouter,
+    /** Project EXECUTABLE criteria consume the same durable command-result row as Task L0. */
+    private readonly projectAcceptance?: ProjectAcceptanceService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2971,6 +2974,12 @@ export class RunnerApiController {
             actualExitCode: request.executableResult.actualExitCode,
           }),
           'DERIVED_COMPLETION_EVALUATOR',
+        );
+        await this.projectAcceptance?.reconcileForEvidenceTask(request.task.id).catch((error) =>
+          this.logger.warn(
+            `project acceptance reconciliation after executable result ${request.executableResult!.id} ` +
+            `failed: ${error?.message ?? error}`,
+          ),
         );
       }
     }

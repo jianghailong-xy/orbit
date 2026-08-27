@@ -14,6 +14,7 @@ import { RunnerProjectsController } from './runner-projects.controller';
 function acceptanceDouble(): never {
   return {
     overview: async () => assert.fail('this scenario does not read acceptance'),
+    confirmCriteriaSet: async () => assert.fail('this scenario does not confirm criteria'),
     openRun: async () => assert.fail('this scenario does not open an acceptance run'),
     finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
     recordMergeEvidence: async () => assert.fail('this scenario does not record merge evidence'),
@@ -78,7 +79,12 @@ test('getProject is exposed as GET projects/:id', () => {
 // the param has to decode before it reaches a `@db.Uuid` column — the same gate the user-facing
 // ProjectsController puts on the same id. Both id-bearing routes, not just the read: a write that
 // skipped it would hand Prisma a base62 string and answer a legitimate id with a 500.
-for (const method of ['getProject', 'updateProject', 'removeProject'] as const) {
+for (const method of [
+  'getProject',
+  'updateProject',
+  'confirmAcceptanceCriteria',
+  'removeProject',
+] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown; pipes?: unknown[] }>
@@ -277,10 +283,15 @@ for (const method of ['getProject', 'removeProject'] as const) {
 // SEEDING — a route that quietly derives a default from whichever session happened to call it —
 // and that rule still holds here: nothing about the update is defaulted from the session. What the
 // header buys is the opposite, an authorization boundary that has to know WHO is writing, since
-// two fields on this DTO (the acceptance criteria, and `status = DONE`) are a person's rather than
-// a judgment session's. Asserted rather than left implicit because a typo in the header name is
+// acceptance criteria and their set confirmation are a person's rather than a judgment session's.
+// Asserted rather than left implicit because a typo in the header name is
 // silent: the parameter would be `undefined` on every request and the boundary would never bite.
-for (const method of ['updateProject', 'openAcceptanceRun', 'finalizeAcceptanceRun'] as const) {
+for (const method of [
+  'updateProject',
+  'confirmAcceptanceCriteria',
+  'openAcceptanceRun',
+  'finalizeAcceptanceRun',
+] as const) {
   test(`${method} reads the acting session from x-orbit-session-id`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown }>
@@ -291,6 +302,25 @@ for (const method of ['updateProject', 'openAcceptanceRun', 'finalizeAcceptanceR
     assert.deepEqual(headers, ['x-orbit-session-id']);
   });
 }
+
+test('confirmAcceptanceCriteria records runner provenance and the acting session', async () => {
+  let received: unknown[] = [];
+  const acceptance = {
+    confirmCriteriaSet: async (...args: unknown[]) => {
+      received = args;
+      return { current: true };
+    },
+  } as never;
+  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
+
+  await controller.confirmAcceptanceCriteria(RUNNER, 'project-1', SESSION_ID);
+
+  assert.deepEqual(received, [
+    'owner-1',
+    'project-1',
+    { actorType: 'RUNNER', actorId: 'runner-1', actingSessionId: SESSION_ID },
+  ]);
+});
 
 test('openAcceptanceRun attributes the run to the calling judgment session, not the body', async () => {
   const seen: {
@@ -460,6 +490,7 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // §11's blocker read, through the machine door (unit 25C). A read, and the one a headless
     // auditor needs most: an open blocker is a dispatch precondition rather than a status anybody
     // rewrote, so a project stopped by one looks entirely ordinary from every other endpoint.
+    'confirmAcceptanceCriteria',
     'createProject',
     // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
     // three writes are here. Listing, opening a coordinator and the manual trigger are still
@@ -486,6 +517,7 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     ]),
   );
   assert.deepEqual(verbs, {
+    confirmAcceptanceCriteria: RequestMethod.POST,
     createProject: RequestMethod.POST,
     finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,

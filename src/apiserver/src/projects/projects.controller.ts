@@ -271,6 +271,18 @@ export class ProjectsController {
     );
   }
 
+  /** Confirm once that the complete current standard set expresses the project goal. */
+  @Post(':id/acceptance/criteria-confirmation')
+  confirmAcceptanceCriteria(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.confirmCriteriaSet(user.userId, id, {
+      actorType: 'USER',
+      actorId: user.userId,
+    });
+  }
+
   /**
    * Evaluate the current acceptance evidence version. The project lock plus a partial unique index
    * makes this idempotent: concurrent evaluators of the same facts receive the same row.

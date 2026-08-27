@@ -139,6 +139,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'evidenceSessionId',
   'evidenceRunId',
   'decidedById',
+  // The user or authenticated runner principal recorded on a project criterion-set confirmation.
+  // It is returned as audit provenance and is therefore an address just like `decidedById`.
+  'confirmedById',
   'actingSessionId',
   // Unit L2's provenance columns on `task` (migration 0150): where a piece of work was NOTICED, as
   // distinct from `projectId`, which says whose goal it counts towards. Addresses a reader follows

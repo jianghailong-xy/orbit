@@ -75,6 +75,7 @@ import {
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
   humanSignoffDecidedFact,
   verificationVerdictRecordedFact,
@@ -1295,13 +1296,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     handoffs?: ProjectHandoffService,
     completionInputs?: CompletionInputRouter,
+    projectAcceptance?: ProjectAcceptanceService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.completionInputs = completionInputs;
+    this.projectAcceptance = projectAcceptance;
   }
 
   private readonly handoffs: ProjectHandoffService;
   private readonly completionInputs?: CompletionInputRouter;
+  private readonly projectAcceptance?: ProjectAcceptanceService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -7807,6 +7811,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'DERIVED_COMPLETION_EVALUATOR',
         );
       }
+    }
+    // A project-level VERIFICATION criterion consumes this verifier Task's current verdict.
+    // Reconciliation is post-commit: it takes the Project lock in its own transaction and derives
+    // both the conclusion and any resulting DONE; this Task write never supplies either value.
+    if (dto.verdict !== undefined && this.projectAcceptance) {
+      await this.projectAcceptance.reconcileForEvidenceTask(id).catch((error) =>
+        this.logger.warn(
+          `project acceptance reconciliation after verifier ${id} failed: ` +
+          `${error?.message ?? error}`,
+        ),
+      );
     }
     // A PASS on an evidence-bound verifier may have derived the SUBJECT's DONE inside the
     // transaction above. Release that subject's dependents now; keying this on the verifier id

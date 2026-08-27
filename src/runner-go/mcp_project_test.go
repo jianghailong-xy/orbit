@@ -108,6 +108,31 @@ func TestMCPProjectGetReportsTheServerError(t *testing.T) {
 	}
 }
 
+func TestMCPProjectCriteriaConfirmCarriesTheJudgmentSession(t *testing.T) {
+	var method, path, session string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_, _ = w.Write([]byte(`{"current":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{
+		t:         NewTransport(srv.URL, "tok"),
+		sessionID: "judgment-session-1",
+	}
+	res := mcp.callTool("project_criteria_confirm", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] == true {
+		t.Fatalf("project_criteria_confirm returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/proj-1/acceptance/criteria-confirmation" {
+		t.Fatalf("project_criteria_confirm hit %s %s", method, path)
+	}
+	if session != "judgment-session-1" {
+		t.Fatalf("project_criteria_confirm session = %q", session)
+	}
+}
+
 func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
 	for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
@@ -122,14 +147,14 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	}
 }
 
-// The project surface is closed over these eleven tools. Listing projects, opening a coordinator
+// The project surface is closed over this explicit tool list. Listing projects, opening a coordinator
 // and triggering a coordination run stay the human's door, so another tool appearing here is a
 // decision somebody makes rather than something a refactor adds.
 //
 // project_status joined in unit 20 (contract AC10) and is a READ. The manual trigger that shipped
 // beside it deliberately did not: enqueuing a signal attributed to USER is how a person drives a
 // MANUAL project, so an agent able to do it would be driving its own coordinator.
-func TestMCPExposesExactlyTheThirteenProjectTools(t *testing.T) {
+func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
@@ -148,7 +173,8 @@ func TestMCPExposesExactlyTheThirteenProjectTools(t *testing.T) {
 			// than behind the orchestration gate for the reason project_create is — the session
 			// that most needs to run a project's acceptance is a coordinator, which has no
 			// session_* tools at all.
-			"project_acceptance", "project_acceptance_run", "project_acceptance_verdict",
+			"project_acceptance", "project_criteria_confirm", "project_acceptance_run",
+			"project_acceptance_verdict",
 			"project_merge_evidence",
 			// Unit L7: two READS and no third write. A coordinator refused
 			// CROSS_PROJECT_APPROVAL_REQUIRED or PROJECT_REOPEN_REQUIRED is entitled to know what
@@ -187,10 +213,11 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	createItem, _ := createItems["items"].(map[string]interface{})
 	createItemProps, _ := createItem["properties"].(map[string]interface{})
-	if len(createItemProps) != 2 || createItemProps["text"] == nil || createItemProps["verificationMethod"] == nil {
+	if len(createItemProps) != 7 || createItemProps["text"] == nil ||
+		createItemProps["verificationMethod"] == nil || createItemProps["completionCriterion"] == nil {
 		t.Fatalf("project_create criterion item = %#v", createItem)
 	}
-	if required, _ := createItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod" {
+	if required, _ := createItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod,completionCriterion" {
 		t.Fatalf("project_create criterion required = %#v", createItem["required"])
 	}
 	if len(createProps) != 5 {
@@ -225,16 +252,17 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	updateItem, _ := updateItems["items"].(map[string]interface{})
 	updateItemProps, _ := updateItem["properties"].(map[string]interface{})
-	if len(updateItemProps) != 3 || updateItemProps["id"] == nil || updateItemProps["text"] == nil || updateItemProps["verificationMethod"] == nil {
+	if len(updateItemProps) != 8 || updateItemProps["id"] == nil || updateItemProps["text"] == nil ||
+		updateItemProps["verificationMethod"] == nil || updateItemProps["completionCriterion"] == nil {
 		t.Fatalf("project_update criterion item = %#v", updateItem)
 	}
-	if required, _ := updateItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod" {
+	if required, _ := updateItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod,completionCriterion" {
 		t.Fatalf("project_update criterion required = %#v", updateItem["required"])
 	}
-	// status is a closed set, and the three the server's DTO validates against.
+	// status is a closed request set; DONE is a derived server projection.
 	statusProp, _ := updateProps["status"].(map[string]interface{})
 	statusEnum, _ := statusProp["enum"].([]string)
-	if strings.Join(statusEnum, ",") != "OPEN,DONE,CANCELLED" {
+	if strings.Join(statusEnum, ",") != "OPEN,CANCELLED" {
 		t.Fatalf("project_update status enum = %#v", statusProp["enum"])
 	}
 	if got := mcpToolRequired(t, tools, "project_update"); len(got) != 1 || got[0] != "projectId" {
@@ -382,8 +410,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 	createItems := []interface{}{
-		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test"},
-		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image"},
+		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "HUMAN_SIGNOFF"},
+		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "HUMAN_SIGNOFF"},
 	}
 	if res := mcp.callTool("project_create", map[string]interface{}{
 		"title": "LFS", "acceptanceCriteriaItems": createItems,
@@ -391,8 +419,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 		t.Fatalf("structured project_create returned an error: %#v", res["content"])
 	}
 	updateItems := []interface{}{
-		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image"},
-		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test"},
+		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "HUMAN_SIGNOFF"},
+		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "HUMAN_SIGNOFF"},
 	}
 	if res := mcp.callTool("project_update", map[string]interface{}{
 		"projectId": "proj-1", "acceptanceCriteriaItems": updateItems,
@@ -552,7 +580,7 @@ func TestMCPProjectUpdateDistinguishesOmittedFromNull(t *testing.T) {
 	res := mcp.callTool("project_update", map[string]interface{}{
 		"projectId": "proj-1",
 		"goal":      nil,
-		"status":    "DONE",
+		"status":    "CANCELLED",
 	})
 	if res["isError"] == true {
 		t.Fatalf("project_update returned an error: %#v", res["content"])
@@ -564,7 +592,7 @@ func TestMCPProjectUpdateDistinguishesOmittedFromNull(t *testing.T) {
 	if !present || value != nil {
 		t.Fatalf("project_update dropped the null goal clear: %s", raw)
 	}
-	if body["status"] != "DONE" {
+	if body["status"] != "CANCELLED" {
 		t.Fatalf("project_update status = %#v", body["status"])
 	}
 	// acceptanceCriteria and instructions were never mentioned, so they must not appear at all —
@@ -587,7 +615,7 @@ func TestMCPProjectUpdateRequiresAnIDAndAField(t *testing.T) {
 	defer srv.Close()
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
-	res := mcp.callTool("project_update", map[string]interface{}{"status": "DONE"})
+	res := mcp.callTool("project_update", map[string]interface{}{"status": "CANCELLED"})
 	if res["isError"] != true {
 		t.Fatalf("project_update without an id isError = %#v", res["isError"])
 	}
@@ -611,6 +639,30 @@ func TestMCPProjectUpdateRequiresAnIDAndAField(t *testing.T) {
 	}
 }
 
+func TestMCPProjectUpdateRejectsDirectDoneLocally(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1",
+		"status":    "DONE",
+	})
+	if res["isError"] != true {
+		t.Fatalf("direct DONE isError = %#v", res["isError"])
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "DONE is derived") {
+		t.Fatalf("direct DONE result = %#v", res)
+	}
+	if hit {
+		t.Fatal("direct DONE reached the server")
+	}
+}
+
 // A failed write is reported as a failure and attempted exactly once: a tool that retried on its
 // own could create a second project, or apply an edit twice, on the strength of one call.
 func TestMCPProjectWriteFailuresDoNotRetry(t *testing.T) {
@@ -621,7 +673,7 @@ func TestMCPProjectWriteFailuresDoNotRetry(t *testing.T) {
 		want   string
 	}{
 		{"project_create", map[string]interface{}{"title": "Crawl"}, http.StatusBadRequest, "create project failed"},
-		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "DONE"}, http.StatusNotFound, "update project failed"},
+		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "CANCELLED"}, http.StatusNotFound, "update project failed"},
 		{"project_delete", map[string]interface{}{"projectId": "proj-1"}, http.StatusConflict, "delete project failed"},
 	} {
 		calls := 0
@@ -652,7 +704,7 @@ func TestMCPProjectWriteFailuresDoNotRetry(t *testing.T) {
 func TestMCPProjectUpdateIDCannotEscapeTheProjectRoute(t *testing.T) {
 	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
 	for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
-		res := mcp.callTool("project_update", map[string]interface{}{"projectId": id, "status": "DONE"})
+		res := mcp.callTool("project_update", map[string]interface{}{"projectId": id, "status": "CANCELLED"})
 		if res["isError"] != true {
 			t.Fatalf("project_update(%q) isError = %#v", id, res["isError"])
 		}
@@ -726,7 +778,7 @@ func TestMCPProjectReadAndUpdateCarryNoSession(t *testing.T) {
 		args map[string]interface{}
 	}{
 		{"project_get", map[string]interface{}{"projectId": "proj-1"}},
-		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "DONE"}},
+		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "CANCELLED"}},
 	} {
 		sawSessionHeader := true
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

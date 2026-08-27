@@ -7,6 +7,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
+  projectAcceptanceConfirmationPath,
   projectAcceptanceOverviewPath,
   projectAcceptanceVerdictPath,
   type ProjectAcceptanceCriterion,
@@ -47,8 +48,9 @@ function asEvidence(value: unknown): { command: string; exitCode: string } {
   const evidence = value as Record<string, unknown>;
   return {
     command: typeof evidence.command === 'string' ? evidence.command : '',
-    exitCode: typeof evidence.exitCode === 'number' && Number.isInteger(evidence.exitCode)
-      ? String(evidence.exitCode)
+    exitCode: typeof (evidence.exitCode ?? evidence.actualExitCode) === 'number'
+      && Number.isInteger(evidence.exitCode ?? evidence.actualExitCode)
+      ? String(evidence.exitCode ?? evidence.actualExitCode)
       : '',
   };
 }
@@ -131,6 +133,7 @@ function CriterionDecisionCard({
   onChange: (next: CriterionDraft) => void;
 }) {
   const current = criterion.verdict ?? 'UNDECIDED';
+  const automatic = criterion.completionCriterion !== 'HUMAN_SIGNOFF';
   const prefix = `project-acceptance-criterion-${criterion.ordinal}`;
   const set = <K extends keyof CriterionDraft>(key: K, value: CriterionDraft[K]) => {
     onChange({ ...draft, [key]: value });
@@ -145,6 +148,7 @@ function CriterionDecisionCard({
           </Markdown>
         </h3>
         <div className="project-acceptance-current-verdict">
+          <Tag>{criterion.completionCriterion}</Tag>
           <span>当前 verdict</span>
           <Tag color={VERDICT_COLOR[current]}>{current}</Tag>
         </div>
@@ -156,6 +160,16 @@ function CriterionDecisionCard({
       </section>
 
       <ExistingEvidence criterion={criterion} />
+
+      {automatic ? (
+        <Alert
+          type={current === 'FAIL' ? 'error' : current === 'PASS' ? 'success' : 'info'}
+          showIcon
+          title={`${criterion.completionCriterion} 由服务端自动求值`}
+          description={criterion.summary ?? '等待声明的机械证据；这里没有人工降级 verdict。'}
+        />
+      ) : (
+        <>
 
       <fieldset className="project-acceptance-verdict-field" disabled={disabled}>
         <legend>本次 verdict <span>必答</span></legend>
@@ -230,6 +244,8 @@ function CriterionDecisionCard({
           />
         </label>
       </div>
+        </>
+      )}
     </li>
   );
 }
@@ -238,7 +254,7 @@ function stateCopy(run: ProjectAcceptanceRun): { type: 'info' | 'success' | 'war
   if (run.supersededAt) return { type: 'warning', title: '此 evidence version 已被替代，只能审计查看。' };
   if (run.verdict === 'PASS') return { type: 'success', title: '此项目验收已由服务端推导为 PASS。' };
   if (run.verdict) return { type: 'warning', title: `此项目验收已由服务端推导为 ${run.verdict}。` };
-  return { type: 'info', title: '逐条阅读证据并回答；全部判据答满后才能提交。' };
+  return { type: 'info', title: '查看自动求值结果，并只回答需要人的 HUMAN_SIGNOFF 标准。' };
 }
 
 export function ProjectAcceptanceReviewPage() {
@@ -259,6 +275,10 @@ export function ProjectAcceptanceReviewPage() {
     () => review.data?.runs.find((candidate) => routeId(candidate.id) === runId) ?? null,
     [review.data?.runs, runId],
   );
+  const humanCriteria = useMemo(
+    () => run?.criteria.filter((criterion) => criterion.completionCriterion === 'HUMAN_SIGNOFF') ?? [],
+    [run],
+  );
 
   useEffect(() => {
     if (!run || initializedRun.current === run.id) return;
@@ -270,21 +290,44 @@ export function ProjectAcceptanceReviewPage() {
     if (inlineError) errorRef.current?.focus();
   }, [inlineError]);
 
-  const actionable = Boolean(run && !run.supersededAt && run.verdict === null);
-  const unanswered = run?.criteria.filter((criterion) => !drafts[criterion.id]?.verdict) ?? [];
-  const invalidExitCodes = run?.criteria.filter((criterion) => {
+  const criteriaConfirmed = review.data?.criteriaConfirmation.confirmed ?? false;
+  const actionable = Boolean(
+    run && !run.supersededAt && review.data?.status !== 'DONE' && criteriaConfirmed,
+  );
+  const unanswered = humanCriteria.filter((criterion) => !drafts[criterion.id]?.verdict);
+  const invalidExitCodes = humanCriteria.filter((criterion) => {
     const value = drafts[criterion.id]?.exitCode.trim() ?? '';
     return value !== '' && !Number.isInteger(Number(value));
   }) ?? [];
-  const answeredCount = (run?.criteria.length ?? 0) - unanswered.length;
+  const answeredCount = humanCriteria.length - unanswered.length;
+
+  const confirm = useMutation({
+    mutationFn: () => {
+      if (!projectId) throw new Error('项目验收尚未准备好。');
+      return api(projectAcceptanceConfirmationPath(projectId), { method: 'POST' });
+    },
+    onMutate: () => setInlineError(null),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['project-acceptance'] }),
+        qc.invalidateQueries({ queryKey: ['judgments'] }),
+        qc.invalidateQueries({ queryKey: ['project', projectId] }),
+      ]);
+      await review.refetch();
+    },
+    onError: (error: Error) => setInlineError(error.message),
+  });
 
   const submit = useMutation({
     mutationFn: () => {
       if (!projectId || !runId || !run) throw new Error('项目验收尚未准备好。');
+      if (!criteriaConfirmed) throw new Error('请先确认当前标准集。');
       if (unanswered.length > 0) {
         throw new Error(`每条判据都要回答；尚未回答：${unanswered.map((item) => item.ordinal).join('、')}。`);
       }
-      const criteria = run.criteria.map((criterion) => decisionFrom(criterion, drafts[criterion.id]!));
+      const criteria = humanCriteria.map(
+        (criterion) => decisionFrom(criterion, drafts[criterion.id]!),
+      );
       return api<ProjectAcceptanceRun>(projectAcceptanceVerdictPath(projectId, runId), {
         method: 'POST',
         body: { criteria },
@@ -326,6 +369,7 @@ export function ProjectAcceptanceReviewPage() {
 
   const state = stateCopy(run);
   const submitDisabled = !actionable
+    || humanCriteria.length === 0
     || unanswered.length > 0
     || invalidExitCodes.length > 0
     || submit.isPending;
@@ -353,12 +397,32 @@ export function ProjectAcceptanceReviewPage() {
       </header>
 
       <Alert
+        className="judgment-state-alert project-criteria-confirmation"
+        type={criteriaConfirmed ? 'success' : 'warning'}
+        showIcon
+        title={criteriaConfirmed ? '当前标准集已确认' : '先确认这套标准算数'}
+        description={criteriaConfirmed
+          ? `确认绑定标准集 digest ${review.data.criteriaDigest}；任何语义修改都会立即失效。`
+          : '这是对整套标准的一次价值判断，不是逐条代替机器判绿。确认绑定当前 digest；标准文本或判据改变后必须重新确认。'}
+        action={criteriaConfirmed ? undefined : (
+          <Button
+            type="primary"
+            loading={confirm.isPending}
+            disabled={confirm.isPending}
+            onClick={() => confirm.mutate()}
+          >
+            确认当前标准集
+          </Button>
+        )}
+      />
+
+      <Alert
         className="judgment-state-alert"
         type={state.type}
         showIcon
         title={state.title}
         description={actionable
-          ? `已回答 ${answeredCount}/${run.criteria.length}；尚有 ${unanswered.length} 条。服务端同样会拒绝任何未答满的提交。`
+          ? `人工标准已回答 ${answeredCount}/${humanCriteria.length}；尚有 ${unanswered.length} 条。其余 ${run.criteria.length - humanCriteria.length} 条由声明的机械判据自动求值。`
           : undefined}
       />
 
@@ -389,11 +453,11 @@ export function ProjectAcceptanceReviewPage() {
 
       <section className="judgment-criteria project-acceptance-criteria" aria-labelledby="project-acceptance-criteria-heading">
         <div className="judgment-section-title-row">
-          <h2 id="project-acceptance-criteria-heading">逐条判定</h2>
-          <span className="judgment-claim-count">{answeredCount}/{run.criteria.length} 已回答</span>
+          <h2 id="project-acceptance-criteria-heading">标准求值</h2>
+          <span className="judgment-claim-count">{answeredCount}/{humanCriteria.length} 条人工标准已回答</span>
         </div>
         <p className="judgment-criteria-notice">
-          断言、verificationMethod 与已有证据来自服务端；本页提交 exact run 的完整结论数组。
+          EXECUTABLE 与 VERIFICATION 只展示自动结果；仅 HUMAN_SIGNOFF 接受人的结论。
         </p>
         <ol className="judgment-criterion-list">
           {run.criteria.map((criterion) => (
@@ -401,22 +465,25 @@ export function ProjectAcceptanceReviewPage() {
               key={criterion.id}
               criterion={criterion}
               draft={drafts[criterion.id] ?? draftFrom(criterion)}
-              disabled={!actionable || submit.isPending}
+              disabled={!actionable || submit.isPending || criterion.completionCriterion !== 'HUMAN_SIGNOFF'}
               onChange={(next) => setDrafts((current) => ({ ...current, [criterion.id]: next }))}
             />
           ))}
         </ol>
       </section>
 
+      {humanCriteria.length > 0 ? (
       <section className="judgment-decision project-acceptance-submit" aria-labelledby="project-acceptance-submit-heading">
         <div className="judgment-decision-title">
           <h2 id="project-acceptance-submit-heading">提交完整项目验收</h2>
-          <span>每条必答</span>
+          <span>仅 HUMAN_SIGNOFF 必答</span>
         </div>
         <p id="project-acceptance-submit-help">
           {unanswered.length > 0
             ? `还需回答判据：${unanswered.map((criterion) => criterion.ordinal).join('、')}。`
-            : invalidExitCodes.length > 0
+            : !criteriaConfirmed
+              ? '先确认当前标准集，再提交人工判定。'
+              : invalidExitCodes.length > 0
               ? `退出码必须是整数：判据 ${invalidExitCodes.map((criterion) => criterion.ordinal).join('、')}。`
               : '全部判据已回答。最终 run verdict 由服务端根据逐条结论推导。'}
         </p>
@@ -428,10 +495,18 @@ export function ProjectAcceptanceReviewPage() {
             aria-describedby="project-acceptance-submit-help"
             onClick={() => submit.mutate()}
           >
-            提交 {run.criteria.length} 条判定
+            提交 {humanCriteria.length} 条人工判定
           </Button>
         </div>
       </section>
+      ) : (
+        <Alert
+          type="info"
+          showIcon
+          title="没有需要人工逐条判定的标准"
+          description="确认标准集后，EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE。"
+        />
+      )}
 
       <details className="judgment-review-disclosure project-acceptance-audit">
         <summary>

@@ -20,6 +20,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 
 /**
  * N22's two locks, deliberately landed before the automatic evaluator.
@@ -74,6 +75,7 @@ async function connect() {
     db,
     acceptance: acceptance as ProjectAcceptanceService & ConfirmationApi,
     projects,
+    runnerProjects: new RunnerProjectsController(projects, acceptance, {} as never),
   };
 }
 
@@ -89,7 +91,7 @@ async function fixture(db: PrismaClient, label: string) {
       passwordHash: 'x',
     },
   });
-  await db.runner.create({
+  const runner = await db.runner.create({
     data: {
       id: runnerId,
       ownerId,
@@ -112,30 +114,35 @@ async function fixture(db: PrismaClient, label: string) {
     where: { projectId },
     orderBy: { ordinal: 'asc' },
   });
-  return { ownerId, runnerId, projectId, definition };
+  return { ownerId, runnerId, runner, projectId, definition };
 }
 
 test('a no-acting-session runner edit changes the digest and immediately invalidates the prior set confirmation',
   { skip }, async () => {
-    const { db, acceptance, projects } = await connect();
+    const { db, acceptance, runnerProjects } = await connect();
     try {
       const target = await fixture(db, 'digest-lock');
       const confirmed = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-        actorType: 'RUNNER',
-        actorId: target.runnerId,
+        actorType: 'USER',
+        actorId: target.ownerId,
       });
       assert.equal(confirmed.current, true);
 
       // This is the runner credential's intentional headless path: no acting-session id is sent.
       // The system cannot call it human. The digest lock must therefore do all of the safety work.
-      await projects.update(target.ownerId, target.projectId, {
-        acceptanceCriteriaItems: [{
-          id: target.definition.id,
-          text: 'The edited standard set is fit for its goal',
-          verificationMethod: target.definition.verificationMethod,
-          completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
-        }],
-      } as never, undefined);
+      await runnerProjects.updateProject(
+        target.runner,
+        target.projectId,
+        undefined,
+        {
+          acceptanceCriteriaItems: [{
+            id: target.definition.id,
+            text: 'The edited standard set is fit for its goal',
+            verificationMethod: target.definition.verificationMethod,
+            completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+          }],
+        } as never,
+      );
 
       const state = await acceptance.criteriaConfirmation(target.ownerId, target.projectId);
       assert.equal(state.confirmed, false);
@@ -148,6 +155,10 @@ test('a no-acting-session runner edit changes the digest and immediately invalid
       });
       assert.equal(project.status, ProjectStatus.OPEN,
         'an edit cannot carry the project into DONE on a stale confirmation');
+      const gated = await acceptance.reconcile(target.ownerId, target.projectId);
+      assert.equal(gated.done, false);
+      assert.equal(gated.code, 'CRITERIA_CONFIRMATION_REQUIRED',
+        'the evaluator must stop on the identity-independent digest lock before DONE');
 
       const reconfirmed = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
         actorType: 'RUNNER',

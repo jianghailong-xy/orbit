@@ -374,6 +374,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_criteria_confirm":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.confirmProjectAcceptanceCriteria(id, s.sessionID)
+		if err != nil {
+			return toolResult("confirm project acceptance standard set failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_acceptance_run":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -463,6 +474,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
 		if legacyCriteria && structuredCriteria {
 			return toolResult("acceptanceCriteria and acceptanceCriteriaItems cannot be used together", true)
+		}
+		if status, present := args["status"]; present {
+			statusText, ok := status.(string)
+			if !ok || (statusText != "OPEN" && statusText != "CANCELLED") {
+				return toolResult("status must be OPEN or CANCELLED; DONE is derived automatically", true)
+			}
 		}
 		body := map[string]interface{}{}
 		// The same present-only copy task_update uses, and it is what gives each prose field all
@@ -1440,30 +1457,44 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"assertion holds (for example a command plus expected exit code, a named spec, or a " +
 			"human review against identified direct evidence). A code comment is not a method.",
 	}
+	projectCriterionKindProp := map[string]interface{}{
+		"type": "string",
+		"enum": []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
+		"description": "Required peer criterion, using the same enum as Task. EXECUTABLE consumes " +
+			"the declared evidence Task's exact command exit code; VERIFICATION consumes an " +
+			"independent verifier Task verdict; HUMAN_SIGNOFF waits for a person. No fallback chain.",
+	}
+	projectCriterionProps := func(allowID bool) map[string]interface{} {
+		props := map[string]interface{}{
+			"text":                              projectCriterionTextProp,
+			"verificationMethod":                projectCriterionMethodProp,
+			"completionCriterion":               projectCriterionKindProp,
+			"acceptanceCommand":                 map[string]interface{}{"type": "string", "description": "Required only for EXECUTABLE."},
+			"acceptanceExpectedExitCode":        map[string]interface{}{"type": "integer", "description": "Required only for EXECUTABLE."},
+			"evidenceTaskId":                    map[string]interface{}{"type": "string", "description": "EXECUTABLE source Task or independent VERIFICATION Task."},
+			"completionCriterionOverrideReason": map[string]interface{}{"type": "string", "maxLength": 2000, "description": "Why a caller kept a declaration questioned by the shared N23 advisory."},
+		}
+		if allowID {
+			props["id"] = map[string]interface{}{"type": "string"}
+		}
+		return props
+	}
 	projectCriteriaCreateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "The project's acceptance criteria as explicit assertion + judgment-method " +
-			"items. Use this instead of acceptanceCriteria; every item requires text and " +
-			"verificationMethod, and the two top-level fields are mutually exclusive.",
-		"items": obj(map[string]interface{}{
-			"text":               projectCriterionTextProp,
-			"verificationMethod": projectCriterionMethodProp,
-		}, "text", "verificationMethod"),
+		"description": "The project's acceptance criteria as explicit assertion + method + peer " +
+			"criterion items. Use this instead of acceptanceCriteria; all three fields are required.",
+		"items": obj(projectCriterionProps(false), "text", "verificationMethod", "completionCriterion"),
 	}
 	projectCriteriaUpdateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "Whole structured replacement; text and verificationMethod are required. " +
+		"description": "Whole structured replacement; text, verificationMethod and completionCriterion are required. " +
 			"Preserve an item's id from project_get to " +
 			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
 			"currentStatus is derived and is not an input. Mutually exclusive with the legacy " +
 			"acceptanceCriteria field.",
-		"items": obj(map[string]interface{}{
-			"id":                 map[string]interface{}{"type": "string"},
-			"text":               projectCriterionTextProp,
-			"verificationMethod": projectCriterionMethodProp,
-		}, "text", "verificationMethod"),
+		"items": obj(projectCriterionProps(true), "text", "verificationMethod", "completionCriterion"),
 	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
@@ -1721,14 +1752,31 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"per-criterion projection and its append-only conclusion events; what each target " +
 				"branch was last observed to CONTAIN and at which " +
 				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
-				"and refused, and every reopen with the fact that caused it; and doneGate — " +
+				"and refused, and every reopen with the fact that caused it; the current " +
+				"revision-bearing criteriaDigest and its set-level confirmation; and doneGate — " +
 				"allowed, or the code and sentence the write would be refused with " +
-				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker or " +
-				"an unresolved verification failure is still open).",
+				"(CRITERIA_CONFIRMATION_REQUIRED when this exact set was not confirmed, " +
+				"ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker " +
+				"or unresolved verification failure is still open).",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_criteria_confirm",
+			"description": "Confirm once that the complete current acceptance-standard set expresses " +
+				"the project's goal. The append-only record is bound to the set's revision-bearing " +
+				"digest; editing any assertion or declared criterion invalidates it mechanically. A " +
+				"PROJECT_COORDINATOR one-shot judgment Session is refused. A headless runner call is " +
+				"admitted and recorded as RUNNER provenance, which provides audit visibility rather " +
+				"than proof that a human was present.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project whose complete current standard set is being confirmed.",
 				},
 			}, "projectId"),
 		},
@@ -1750,17 +1798,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "project_acceptance_verdict",
-			"description": "Append evidence-backed conclusion events for a project acceptance version, one per stated " +
-				"criterion. Address each criterion by criterionId (its stable structured identity), " +
+			"description": "Append evidence-backed conclusion events for the HUMAN_SIGNOFF criteria " +
+				"in a project acceptance version. EXECUTABLE and VERIFICATION are evaluated only from " +
+				"their declared durable inputs and reject a fallback human verdict. Address each human " +
+				"criterion by criterionId (its stable structured identity), " +
 				"ordinal (its position in the snapshot), or criterionKey (legacy content identity). " +
-				"EVERY criterion must be answered: a missing one is " +
+				"Every HUMAN_SIGNOFF criterion must be answered: a missing one is " +
 				"refused, because a project-level PASS is the conjunction of them and one nobody " +
 				"checked is not a pass. The current verdict is DERIVED and cannot be " +
 				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
 				"which is the whole difference between this and writing 'all green' in a task " +
-				"comment. Put real evidence in each entry's `evidence`: the command, its exit " +
-				"code, the key output, the SHA, the environment. Only a PASS recorded here lets " +
-				"the project be set DONE. Every event records who concluded, when, and the evidence " +
+				"comment. Put real evidence in each entry's `evidence`: the observation, output, " +
+				"artifact hash, and environment. Every event records who concluded, when, and the evidence " +
 				"version it was based on. A judgment-session or machine-attributed call may refute; " +
 				"PASS must use the owner-attributed channel. That is workflow and audit provenance, " +
 				"not proof of human presence.",
@@ -1775,7 +1824,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"criteria": map[string]interface{}{
 					"type": "array",
-					"description": "One entry per stated criterion: {criterionId, ordinal or criterionKey, " +
+					"description": "One entry per HUMAN_SIGNOFF criterion: {criterionId, ordinal or criterionKey, " +
 						"verdict: PASS|FAIL|INCONCLUSIVE, summary, evidence, evidenceTaskId, " +
 						"evidenceSessionId}.",
 					"items": map[string]interface{}{"type": "object"},
@@ -1879,21 +1928,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name": "project_update",
 			"description": "Update a project in the account this runner belongs to: rename it, " +
 				"revise what it is trying to achieve (goal), what would settle that the goal was " +
-				"reached (acceptanceCriteria) or how the work is to be done (instructions), and " +
-				"record where the work stands (status). You have the authority to write these " +
-				"fields — say so when the work actually lands rather " +
-				"than leaving a finished project OPEN. TWO EXCEPTIONS, and the server enforces " +
-				"them rather than trusting this sentence: a project's one-shot JUDGMENT session " +
+				"reached (acceptanceCriteriaItems) or how the work is to be done (instructions), and " +
+				"cancel or reopen work. You have authority to write these configuration fields. A " +
+				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
-				"write acceptanceCriteria and cannot write status DONE. Those are the exam the " +
-				"project is judged against and the statement that its goal was met; report what " +
-				"should change and request owner-channel review. That route supplies workflow " +
-				"separation and action-specific traceability, not proof of human presence. Criteria " +
-				"snapshots and DONE bindings do not persist a requester identity. Only the fields you pass are sent, so " +
+				"write acceptance criteria. Direct status DONE is refused for every actor: it is " +
+				"produced automatically only when the exact confirmed standard set has PASS for " +
+				"every peer criterion. Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +
-				"untouched, pass a string to replace it, pass null to clear it. status DONE means " +
-				"the goal was reached and CANCELLED that it will not be; neither is a way to file " +
-				"a project out of sight. Read project_get first when the current context is not " +
+				"untouched, pass a string to replace it, pass null to clear it. CANCELLED says the " +
+				"goal will not be pursued; OPEN reopens it. Read project_get first when the current context is not " +
 				"already known — each prose field is a whole-field replacement, not an append.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
@@ -1918,8 +1962,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"status": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
-					"description": "Where the work stands: OPEN, DONE (the goal was reached) or CANCELLED (it will not be).",
+					"enum":        []string{"OPEN", "CANCELLED"},
+					"description": "OPEN reopens work; CANCELLED abandons it. DONE is derived and cannot be supplied.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",

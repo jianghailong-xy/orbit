@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ProjectAcceptanceVerdict } from '@prisma/client';
+import { ProjectAcceptanceVerdict, TaskCompletionCriterion } from '@prisma/client';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import {
   ACCEPTANCE_FINDING_ROUTING,
+  ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_MISSING,
+  criteriaFromDefinitions,
   criteriaSemanticRevision,
   sha256,
 } from './project-acceptance';
@@ -21,6 +23,11 @@ function definition(id: string, ordinal: number, text: string, revision = 1) {
     ordinal,
     text,
     verificationMethod: `Verify exactly: ${text}`,
+    completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+    evidenceTaskId: null,
+    completionCriterionOverrideReason: null,
     revision,
     contentHash: sha256(text),
   };
@@ -56,7 +63,7 @@ test('a non-PASS gate refusal names the exact acceptance criterion and routing r
   ];
   let rawRead = 0;
   const prisma = {
-    project: { findUnique: async () => ({ acceptanceCriteria: 'legacy' }) },
+    projectAcceptanceCriteriaConfirmation: { findUnique: async () => ({ id: 'confirmed' }) },
     projectAcceptanceCriterionDefinition: { findMany: async () => definitions },
     projectBlocker: { count: async () => 0 },
     $queryRaw: async () => {
@@ -80,6 +87,10 @@ test('a non-PASS gate refusal names the exact acceptance criterion and routing r
           },
         ],
       }),
+    },
+    project: {
+      findUnique: async () => ({ acceptanceCriteria: 'legacy' }),
+      findUniqueOrThrow: async () => ({ acceptanceCriteriaDigest: 'd'.repeat(64) }),
     },
     // Intentionally no `task` delegate: task completion cannot make this refusal disappear.
   };
@@ -110,8 +121,8 @@ test('criteriaSummary remaps a matching run by stable id after a pure reorder', 
   ];
   const lookedAt = new Date('2026-08-24T12:00:00.000Z');
   const latest = {
-    digestVersion: 4,
-    criteriaRevision: criteriaSemanticRevision(current),
+    digestVersion: ACCEPTANCE_DIGEST_VERSION,
+    criteriaRevision: criteriaSemanticRevision(criteriaFromDefinitions(current)),
     completedAt: lookedAt,
     startedAt: new Date('2026-08-24T11:00:00.000Z'),
     criteria: [
@@ -155,8 +166,10 @@ test('criteriaSummary does not reuse verdicts after the criterion proposition ch
     projectAcceptanceCriterionDefinition: { findMany: async () => current },
     projectAcceptanceRun: {
       findFirst: async () => ({
-        digestVersion: 4,
-        criteriaRevision: criteriaSemanticRevision([{ text: 'Build succeeds' }]),
+        digestVersion: ACCEPTANCE_DIGEST_VERSION,
+        criteriaRevision: criteriaSemanticRevision(criteriaFromDefinitions([
+          definition(CRITERION_A_ID, 1, 'Build succeeds'),
+        ])),
         completedAt: lookedAt,
         startedAt: new Date('2026-08-24T11:00:00.000Z'),
         criteria: [{
@@ -300,11 +313,19 @@ test('openRun freezes definition identity, revision and text into both snapshot 
     {
       id: CRITERION_A_ID, revision: 2, ordinal: 1, text: 'Build succeeds',
       verificationMethod: 'Verify exactly: Build succeeds',
+      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+      evidenceTaskId: null,
       contentHash: sha256('Build succeeds'),
     },
     {
       id: CRITERION_B_ID, revision: 1, ordinal: 2, text: 'Image boots',
       verificationMethod: 'Verify exactly: Image boots',
+      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+      evidenceTaskId: null,
       contentHash: sha256('Image boots'),
     },
   ]);
@@ -345,8 +366,10 @@ test('pendingInbox returns current project acceptance beside task judgments with
         projectStatus: 'OPEN',
         attempt: 4n,
         startedAt,
-        criterionCount: 10,
-        unansweredCount: 10,
+      criterionCount: 10,
+      humanCriterionCount: 10,
+      unansweredCount: 10,
+      criteriaConfirmed: true,
         total: 1,
       }];
     },
@@ -364,8 +387,11 @@ test('pendingInbox returns current project acceptance beside task judgments with
       attempt: '4',
       startedAt,
       criterionCount: 10,
+      humanCriterionCount: 10,
       answeredCount: 0,
       unansweredCount: 10,
+      criteriaConfirmed: true,
+      confirmationRequired: false,
       currentVerdict: 'UNDECIDED',
     }],
   });
@@ -389,11 +415,18 @@ test('finalizeRun rejects a partial checklist and names every missing ordinal', 
         projectId: PROJECT_ID,
         verdict: null,
         criteria: [
-          { ordinal: 1, criterionKey: 'build', criterionText: 'Build succeeds' },
-          { ordinal: 2, criterionKey: 'boot', criterionText: 'Image boots' },
+          {
+            ordinal: 1, criterionKey: 'build', criterionText: 'Build succeeds',
+            completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+          },
+          {
+            ordinal: 2, criterionKey: 'boot', criterionText: 'Image boots',
+            completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+          },
         ],
       }),
     },
+    projectAcceptanceCriteriaConfirmation: { findUnique: async () => ({ id: 'confirmed' }) },
   };
   prisma.$transaction = async (work: (tx: any) => unknown) => work(prisma);
 
@@ -412,6 +445,8 @@ test('evaluateGate digests a large project once and gives that read explicit sca
   let digestReads = 0;
   let transactionOptions: unknown;
   const tx = {
+    project: { findUniqueOrThrow: async () => ({ acceptanceCriteriaDigest: 'd'.repeat(64) }) },
+    projectAcceptanceCriteriaConfirmation: { findUnique: async () => ({ id: 'confirmed' }) },
     projectBlocker: { count: async () => 0 },
     projectAcceptanceRun: { findFirst: async () => null },
     $queryRaw: async () => [{ count: 0 }],

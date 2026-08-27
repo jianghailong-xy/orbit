@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
@@ -270,10 +270,10 @@ test('last terminal task wakes once, then the judgment reuses and concludes one 
           sessions[0].id,
         ),
         (error: unknown) => {
-          if (!(error instanceof ForbiddenException)) return false;
-          return (error.getResponse() as { code?: string }).code === 'PROJECT_DONE_HUMAN_ONLY';
+          if (!(error instanceof ConflictException)) return false;
+          return (error.getResponse() as { code?: string }).code === 'PROJECT_DONE_AUTOMATIC_ONLY';
         },
-        'the judgment must meet T6’s existing status=DONE boundary before the done gate',
+        'the judgment meets the same automatic-only status=DONE boundary as every other caller',
       );
       assert.equal(
         (await stack.db.project.findUniqueOrThrow({ where: { id: target.projectId } })).status,

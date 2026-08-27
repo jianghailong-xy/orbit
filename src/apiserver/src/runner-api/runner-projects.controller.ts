@@ -41,13 +41,14 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * canonical ones, forwarded untouched — so the two can never disagree about what a project is,
  * who may see it, or what a valid write looks like.
  *
- * An agent may state what a body of work is for and settle where it stands, which is why create
- * and update are here: a coordinator handed "plan this out" had nowhere to put the goal it worked
- * out, and the headless CLI is also an intentional owner-operated path. A missing acting-session
- * header therefore means NON_JUDGMENT, not "the server proved this is a person". The three
- * HUMAN_ONLY labels add judgment-role separation and action-specific traceability; they are not a
- * hard human boundary when the credential can be borrowed or minted. Criteria/PASS/DONE persist
- * different provenance fields; see `docs/human-only-authority.md` for the exact matrix.
+ * An agent may state what a body of work is for and cancel/reopen it, which is why create and
+ * update are here: a coordinator handed "plan this out" had nowhere to put the goal it worked out,
+ * and the headless CLI is also an intentional owner-operated path. A missing acting-session header
+ * therefore means NON_JUDGMENT, not "the server proved this is a person". The HUMAN_ONLY labels add
+ * judgment-role separation and action-specific traceability; they are not a hard human boundary
+ * when the credential can be borrowed or minted. DONE is evaluator-derived; criteria,
+ * confirmations, conclusions, and automatic settlement retain different provenance fields. See
+ * `docs/human-only-authority.md` for the exact matrix.
  *
  * Listing and opening a coordinator are still not here. Deletion mirrors the user door and keeps
  * its destructive guard: `ProjectsService.remove` only removes an empty project. The project's
@@ -103,6 +104,25 @@ export class RunnerProjectsController {
   @Get('projects/:id/acceptance')
   projectAcceptance(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.acceptance.overview(runner.ownerId, id);
+  }
+
+  /**
+   * Confirm the current standard-set digest. Session-aware clients forward the acting Session as
+   * transport context, and an attributed PROJECT_COORDINATOR judgment Session is genuinely
+   * refused. A caller that omits it is indistinguishable from the admitted headless-runner path and
+   * is recorded as machine provenance rather than mislabeled as human.
+   */
+  @Post('projects/:id/acceptance/criteria-confirmation')
+  confirmAcceptanceCriteria(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+  ) {
+    return this.acceptance.confirmCriteriaSet(runner.ownerId, id, {
+      actorType: 'RUNNER',
+      actorId: runner.id,
+      actingSessionId: sessionId?.trim() || undefined,
+    });
   }
 
   /**
@@ -226,10 +246,10 @@ export class RunnerProjectsController {
   updateProject(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
-    // The session this edit is being made from, read for one decision: unit T6's two HUMAN_ONLY
-    // rows on this DTO — the acceptance criteria, and `status = DONE`. A header rather than a body
-    // field keeps the one-shot judgment role from naming itself out of the restriction. Omitting
-    // it preserves the intentional headless path; it does not establish that the caller is human.
+    // The session this edit is being made from, read for the acceptance-criteria HUMAN_ONLY
+    // decision. DONE is uniformly automatic-only before this role check. A header rather than a
+    // body field makes the ordinary session-aware path attributable; omitting it preserves the
+    // intentional headless path and does not establish that the caller is human.
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateProjectDto,
   ) {

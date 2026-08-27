@@ -5,7 +5,7 @@ import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentModule } from './coordinator-judgment.module';
 import { SessionAttemptService } from './session-attempt.service';
-import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectAcceptanceModule } from './project-acceptance.module';
 import { ProjectAttributionModule } from './project-attribution.module';
 import { ProjectHandoffModule } from './project-handoff.module';
 import { TaskCheckpointService } from './task-checkpoint.service';
@@ -21,6 +21,7 @@ import { ProjectsService } from './projects.service';
     ProjectHandoffModule,
     ProjectAttributionModule,
     CoordinatorJudgmentModule,
+    ProjectAcceptanceModule,
   ],
   controllers: [ProjectsController],
   providers: [
@@ -28,7 +29,6 @@ import { ProjectsService } from './projects.service';
     ConvergenceLedgerService,
     SessionAttemptService,
     AttemptBudgetMeterService,
-    ProjectAcceptanceService,
     TaskCheckpointService,
   ],
   exports: [
@@ -45,7 +45,7 @@ import { ProjectsService } from './projects.service';
     // Exported for the same reason: unit T5 charges the budget where the spend is COMMITTED, which
     // is the runner's turn-complete, and that door is in another module.
     AttemptBudgetMeterService,
-    ProjectAcceptanceService,
+    ProjectAcceptanceModule,
     TaskCheckpointService,
   ],
 })

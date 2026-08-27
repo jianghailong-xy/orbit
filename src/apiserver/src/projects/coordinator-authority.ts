@@ -40,8 +40,9 @@
  * that omits the header, borrows an owner credential, or can mint an owner JWT may still arrive as
  * NON_JUDGMENT. Tenancy and scope checks decide what that credential may reach; this table adds
  * workflow separation and action-specific evidence, not a hard human-presence boundary. PASS
- * conclusions retain an actor; criteria and DONE retain the facts they changed or bound, but not
- * a durable requester identity. See `docs/human-only-authority.md` for that exact audit matrix.
+ * conclusions and standard-set confirmations retain an actor; criteria retain the facts they
+ * changed, while DONE is now a requester-free automatic projection. See
+ * `docs/human-only-authority.md` for that exact audit matrix.
  *
  * §2 — WHY THE SERVER AND NOT THE PROMPT
  * ======================================
@@ -83,6 +84,7 @@ export const COORDINATOR_ACTIONS = [
   'RETRY_TRANSIENT_FAILURE',
   'OPEN_TASK',
   'EDIT_ACCEPTANCE_CRITERIA',
+  'CONFIRM_ACCEPTANCE_CRITERIA',
   'CONCLUDE_VERDICT_PASS',
   'SETTLE_PROJECT_DONE',
 ] as const;
@@ -91,16 +93,13 @@ export type CoordinatorAction = (typeof COORDINATOR_ACTIONS)[number];
 /**
  * §0's table. One tier per action, and the argument for each is the cost of being wrong.
  *
- * The three HUMAN_ONLY rows are the irreversible ones, and they are irreversible in the same way.
+ * The three HUMAN_ONLY rows are the owner-review decisions. Project settlement is AUTOMATIC now:
+ * no principal writes it, and the confirmed conjunction projects it when all peer criteria pass.
  * HUMAN_ONLY is retained as the stable policy/API label for "route this to owner review"; it does
  * not claim that the credentialed owner channel is cryptographic proof of human presence:
- * each turns "not finished" into "finished" for a reader who will never ask again. A task's DONE
- * unlocks its successors; a verification's PASS completes the subject it checks
- * (`task-aggregation.ts` counts `status DONE && verdict PASS` and nothing else); an acceptance
- * run's PASS is what a project's own DONE is bound to. Editing the acceptance criteria is the
- * worst of the three even though it settles nothing by itself: it is the move that makes every
- * other judgment come out right, which is why it is a coordinator's road out of any bound this
- * table puts on it.
+ * editing defines the exam, confirming says the complete exam expresses the goal, and a human
+ * PASS settles the few criteria that cannot be mechanically decided. The evaluator, not any of
+ * those actors, binds project DONE once their conjunction is true.
  */
 export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, AuthorityTier>> = {
   // Deterministic: prerequisites all DONE, an assignee, under the concurrency cap. No LLM decides
@@ -114,8 +113,9 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   // the two rules in `refuseTaskOpening` below.
   OPEN_TASK: 'COORDINATOR_BOUNDED',
   EDIT_ACCEPTANCE_CRITERIA: 'HUMAN_ONLY',
+  CONFIRM_ACCEPTANCE_CRITERIA: 'HUMAN_ONLY',
   CONCLUDE_VERDICT_PASS: 'HUMAN_ONLY',
-  SETTLE_PROJECT_DONE: 'HUMAN_ONLY',
+  SETTLE_PROJECT_DONE: 'AUTOMATIC',
 };
 
 /**
@@ -125,8 +125,8 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
  */
 export const AUTHORITY_REFUSAL_CODES = [
   'ACCEPTANCE_CRITERIA_HUMAN_ONLY',
+  'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY',
   'VERDICT_PASS_HUMAN_ONLY',
-  'PROJECT_DONE_HUMAN_ONLY',
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
@@ -183,7 +183,8 @@ export function authorityPrincipal(
 }
 
 const HUMAN_ONLY_REFUSALS: Readonly<
-  Record<'EDIT_ACCEPTANCE_CRITERIA' | 'CONCLUDE_VERDICT_PASS' | 'SETTLE_PROJECT_DONE',
+  Record<'EDIT_ACCEPTANCE_CRITERIA' | 'CONFIRM_ACCEPTANCE_CRITERIA' |
+    'CONCLUDE_VERDICT_PASS',
     { code: AuthorityRefusalCode; message: string }>
 > = {
   EDIT_ACCEPTANCE_CRITERIA: {
@@ -196,6 +197,14 @@ const HUMAN_ONLY_REFUSALS: Readonly<
       + 'and digest in an evidence version, but this write does not persist the requester’s identity '
       + 'and the channel does not prove who held the credential.',
   },
+  CONFIRM_ACCEPTANCE_CRITERIA: {
+    code: 'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY',
+    message:
+      'A one-shot project judgment session cannot confirm the project acceptance standard set. ' +
+      'Confirmation is the owner-review workflow for deciding whether the complete, digest-bound ' +
+      'set expresses the goal. Use an owner channel or a headless runner path; Orbit records the ' +
+      'credentialed actor, which is audit visibility and not proof that a human held it.',
+  },
   CONCLUDE_VERDICT_PASS: {
     code: 'VERDICT_PASS_HUMAN_ONLY',
     message:
@@ -203,14 +212,6 @@ const HUMAN_ONLY_REFUSALS: Readonly<
       + 'nothing asks again, so it is not a coordinator’s to record. FAIL and INCONCLUSIVE are '
       + 'allowed from here: a conservative conclusion releases nothing. Escalate the evidence for '
       + 'an owner-channel decision; that attribution is an audit fact, not proof of human presence.',
-  },
-  SETTLE_PROJECT_DONE: {
-    code: 'PROJECT_DONE_HUMAN_ONLY',
-    message:
-      'A judgment session cannot record a project DONE. That is the final statement that the goal '
-      + 'was reached. Say what you found and what is left, then request an owner-channel review. '
-      + 'Orbit records the accepted evidence run, digest and time, but not the requester identity; '
-      + 'the route does not attest that a human rather than a credential holder made the request.',
   },
 };
 

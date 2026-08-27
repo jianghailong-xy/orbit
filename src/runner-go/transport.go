@@ -1001,6 +1001,21 @@ func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// confirmProjectAcceptanceCriteria records one confirmation for the exact current standard-set
+// digest. The transport's session header is attribution, not a body field: the ordinary
+// session-aware client forwards it so an attributed judgment Session is refused. An omitted header
+// is indistinguishable from the admitted headless-runner path and remains machine-attributed.
+func (t *Transport) confirmProjectAcceptanceCriteria(id, sessionID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/acceptance/criteria-confirmation",
+		map[string]interface{}{}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // openProjectAcceptanceRun evaluates the current evidence set. It is idempotent: callers observing
 // the same criteria and merge facts receive the same immutable evidence-version row.
 //

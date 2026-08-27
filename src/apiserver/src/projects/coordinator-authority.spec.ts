@@ -59,8 +59,9 @@ test('the table separates the cheap acts from the irreversible ones', () => {
   assert.equal(COORDINATOR_AUTHORITY.RETRY_TRANSIENT_FAILURE, 'AUTOMATIC');
   assert.equal(COORDINATOR_AUTHORITY.OPEN_TASK, 'COORDINATOR_BOUNDED');
   assert.equal(COORDINATOR_AUTHORITY.EDIT_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY');
+  assert.equal(COORDINATOR_AUTHORITY.CONFIRM_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY');
   assert.equal(COORDINATOR_AUTHORITY.CONCLUDE_VERDICT_PASS, 'HUMAN_ONLY');
-  assert.equal(COORDINATOR_AUTHORITY.SETTLE_PROJECT_DONE, 'HUMAN_ONLY');
+  assert.equal(COORDINATOR_AUTHORITY.SETTLE_PROJECT_DONE, 'AUTOMATIC');
 });
 
 // §0's replacement claim, as a property of the source rather than of one call: the rules cannot
@@ -94,8 +95,8 @@ test('only a PROJECT_COORDINATOR session is the judgment principal', () => {
 
 const HUMAN_ONLY = [
   ['EDIT_ACCEPTANCE_CRITERIA', 'ACCEPTANCE_CRITERIA_HUMAN_ONLY'],
+  ['CONFIRM_ACCEPTANCE_CRITERIA', 'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY'],
   ['CONCLUDE_VERDICT_PASS', 'VERDICT_PASS_HUMAN_ONLY'],
-  ['SETTLE_PROJECT_DONE', 'PROJECT_DONE_HUMAN_ONLY'],
 ] as const;
 
 for (const [action, code] of HUMAN_ONLY) {

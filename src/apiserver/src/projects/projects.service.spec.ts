@@ -92,16 +92,46 @@ test('create stores explicit assertions and required methods with a legacy proje
   const project: any = await service.create(OWNER_ID, {
     title: 'Structured',
     acceptanceCriteriaItems: [
-      { text: '  the image boots  ', verificationMethod: ' Run the image smoke test ' },
-      { text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0' },
+      {
+        text: '  the image boots  ',
+        verificationMethod: ' Run the image smoke test ',
+        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+      },
+      {
+        text: 'the full suite passes',
+        verificationMethod: 'Run npm test; require exit code 0',
+        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+      },
     ],
   } as never);
 
   assert.equal(created.acceptanceCriteriaFormat, 'STRUCTURED');
   assert.equal(created.acceptanceCriteria, '1. the image boots\n2. the full suite passes');
   assert.deepEqual(definitions.map(({ id: _id, projectId: _projectId, contentHash: _hash, ...row }) => row), [
-    { ordinal: 1, text: 'the image boots', verificationMethod: 'Run the image smoke test', revision: 1 },
-    { ordinal: 2, text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0', revision: 1 },
+    {
+      ordinal: 1,
+      text: 'the image boots',
+      verificationMethod: 'Run the image smoke test',
+      completionCriterion: 'HUMAN_SIGNOFF',
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+      evidenceTaskId: null,
+      completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+      revision: 1,
+    },
+    {
+      ordinal: 2,
+      text: 'the full suite passes',
+      verificationMethod: 'Run npm test; require exit code 0',
+      completionCriterion: 'HUMAN_SIGNOFF',
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+      evidenceTaskId: null,
+      completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+      revision: 1,
+    },
   ]);
   assert.deepEqual(project.acceptanceCriteriaItems.map((item: any) => ({
     text: item.text,
@@ -386,6 +416,11 @@ test('the detail item projects its current status from acceptance instead of sto
     ordinal: 1,
     text: 'the suite passes',
     verificationMethod: 'Run npm test and require exit code 0',
+    completionCriterion: 'HUMAN_SIGNOFF',
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+    evidenceTaskId: null,
+    completionCriterionOverrideReason: null,
     revision: 2,
     contentHash: 'a'.repeat(64),
   };
@@ -469,8 +504,20 @@ test('a structured update preserves ids and revisions across reorder, and increm
   const definitionWrites: any[] = [];
   const projectWrites: any[] = [];
   const finalDefinitions = [
-    { id: CRITERION_B_ID, ordinal: 1, text: 'Image boots', verificationMethod: 'Smoke the image', revision: 1, contentHash: 'b'.repeat(64) },
-    { id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', verificationMethod: 'Run npm test', revision: 3, contentHash: 'a'.repeat(64) },
+    {
+      id: CRITERION_B_ID, ordinal: 1, text: 'Image boots', verificationMethod: 'Smoke the image',
+      completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+      acceptanceExpectedExitCode: null, evidenceTaskId: null,
+      completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+      revision: 1, contentHash: 'b'.repeat(64),
+    },
+    {
+      id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', verificationMethod: 'Run npm test',
+      completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+      acceptanceExpectedExitCode: null, evidenceTaskId: null,
+      completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+      revision: 3, contentHash: 'a'.repeat(64),
+    },
   ];
   const prisma: any = {
     project: {
@@ -496,8 +543,20 @@ test('a structured update preserves ids and revisions across reorder, and increm
     },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [
-        { id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'Run npm test', revision: 2 },
-        { id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image', revision: 1 },
+        {
+          id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'Run npm test',
+          completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+          acceptanceExpectedExitCode: null, evidenceTaskId: null,
+          completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+          revision: 2,
+        },
+        {
+          id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image',
+          completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+          acceptanceExpectedExitCode: null, evidenceTaskId: null,
+          completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+          revision: 1,
+        },
       ],
       updateMany: async (args: any) => definitionWrites.push(['vacate', args.data]),
       deleteMany: async (args: any) => definitionWrites.push(['delete', args.where]),
@@ -517,8 +576,16 @@ test('a structured update preserves ids and revisions across reorder, and increm
 
   const updated: any = await serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
     acceptanceCriteriaItems: [
-      { id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image' },
-      { id: CRITERION_A_ID, text: 'Build with docs', verificationMethod: 'Run npm test' },
+      {
+        id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image',
+        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+      },
+      {
+        id: CRITERION_A_ID, text: 'Build with docs', verificationMethod: 'Run npm test',
+        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+      },
     ],
   } as never);
 
@@ -531,6 +598,11 @@ test('a structured update preserves ids and revisions across reorder, and increm
     ordinal: 1,
     text: 'Image boots',
     verificationMethod: 'Smoke the image',
+    completionCriterion: 'HUMAN_SIGNOFF',
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+    evidenceTaskId: null,
+    completionCriterionOverrideReason: 'A person judges the visible product behaviour',
     contentHash: definitionWrites[2][2].contentHash,
     revision: 1,
   }]);
@@ -538,12 +610,23 @@ test('a structured update preserves ids and revisions across reorder, and increm
     ordinal: 2,
     text: 'Build with docs',
     verificationMethod: 'Run npm test',
+    completionCriterion: 'HUMAN_SIGNOFF',
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+    evidenceTaskId: null,
+    completionCriterionOverrideReason: 'This fixture exercises structured persistence',
     contentHash: definitionWrites[3][2].contentHash,
     revision: 3,
   }]);
   assert.deepEqual(updated.acceptanceCriteriaItems.map((item: any) => ({
     id: item.id, ordinal: item.ordinal, text: item.text,
-    verificationMethod: item.verificationMethod, currentStatus: item.currentStatus,
+    verificationMethod: item.verificationMethod,
+    completionCriterion: item.completionCriterion,
+    acceptanceCommand: item.acceptanceCommand,
+    acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
+    evidenceTaskId: item.evidenceTaskId,
+    completionCriterionOverrideReason: item.completionCriterionOverrideReason,
+    currentStatus: item.currentStatus,
     revision: item.revision,
   })), finalDefinitions.map(({ contentHash: _contentHash, ...item }) => ({
     ...item, currentStatus: 'UNDECIDED',
@@ -580,6 +663,7 @@ test('a structured update refuses an id from another project before moving any d
     () => serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
       acceptanceCriteriaItems: [{
         id: CRITERION_B_ID, text: 'Not ours', verificationMethod: 'Run npm test',
+        completionCriterion: 'HUMAN_SIGNOFF',
       }],
     } as never),
     /does not belong to this project's current definitions/,
