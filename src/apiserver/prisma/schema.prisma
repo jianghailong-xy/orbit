@@ -4345,3 +4345,92 @@ model OutcomeEvaluationProjection {
   @@id([tenantId, projectId, subjectType, subjectId])
   @@map("outcome_evaluation_projection")
 }
+
+/// Immutable output of the pure evaluator for one exact binding/cut/evaluator tuple. A unique
+/// input tuple may have only one semantic digest; a disagreeing replay is rejected in PostgreSQL.
+model OutcomeEvaluatorResult {
+  evaluationId            String   @id @map("evaluation_id") @db.Uuid
+  tenantId                String   @map("tenant_id") @db.Uuid
+  projectId               String   @map("project_id") @db.Uuid
+  subjectType             String   @map("subject_type")
+  subjectId               String   @map("subject_id")
+  bindingDigest           String   @map("binding_digest") @db.Char(64)
+  cutId                   String   @map("cut_id") @db.Uuid
+  watermarkLogicalTime    BigInt   @map("watermark_logical_time")
+  evaluatorVersion        String   @map("evaluator_version")
+  evaluatorDigest         String   @map("evaluator_digest") @db.Char(64)
+  evaluationDigest        String   @map("evaluation_digest") @db.Char(64)
+  proofDigest             String   @map("proof_digest") @db.Char(64)
+  resultDigest            String   @map("result_digest") @db.Char(64)
+  isClosed                Boolean  @map("is_closed")
+  result                  Json
+  committedAt             DateTime @default(now()) @map("committed_at")
+
+  @@unique([tenantId, projectId, bindingDigest, watermarkLogicalTime, evaluatorDigest], map: "outcome_evaluator_result_input_key")
+  @@unique([tenantId, projectId, evaluationDigest], map: "outcome_evaluator_result_digest_key")
+  @@index([tenantId, projectId, subjectType, subjectId, watermarkLogicalTime(sort: Desc), committedAt(sort: Desc)], map: "outcome_evaluator_result_subject_idx")
+  @@map("outcome_evaluator_result")
+}
+
+/// Immutable definition of one stable obligation revision. Binding, authority and protocol edits
+/// advance obligationRevision without churning obligationId.
+model OutcomeObligationRevision {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  obligationId      String   @map("obligation_id") @db.Char(64)
+  obligationRevision String  @map("obligation_revision") @db.Char(64)
+  bindingDigest     String   @map("binding_digest") @db.Char(64)
+  goalId            String   @map("goal_id")
+  goalRevision      BigInt   @map("goal_revision")
+  kind              String
+  mandatory         Boolean
+  obligation        Json
+  obligationDigest  String   @map("obligation_digest") @db.Char(64)
+  firstEvaluationId String   @map("first_evaluation_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@id([tenantId, projectId, obligationRevision])
+  @@unique([tenantId, projectId, obligationId, obligationRevision], map: "outcome_obligation_revision_identity_key")
+  @@map("outcome_obligation_revision")
+}
+
+/// Append-only state transitions. The current projection can be deleted/rebuilt; these events are
+/// the durable proof that an ACTIVE obligation was resolved, superseded or otherwise terminated.
+model OutcomeObligationEvent {
+  eventId                       BigInt   @id @default(autoincrement()) @map("event_id")
+  tenantId                      String   @map("tenant_id") @db.Uuid
+  projectId                     String   @map("project_id") @db.Uuid
+  obligationId                  String   @map("obligation_id") @db.Char(64)
+  obligationRevision            String   @map("obligation_revision") @db.Char(64)
+  fromState                     String?  @map("from_state")
+  toState                       String   @map("to_state")
+  evaluationId                  String   @map("evaluation_id") @db.Uuid
+  evaluatedThroughLogicalTime   BigInt   @map("evaluated_through_logical_time")
+  reasonCode                    String   @map("reason_code")
+  recordedAt                    DateTime @default(now()) @map("recorded_at")
+
+  @@index([tenantId, projectId, obligationId, eventId], map: "outcome_obligation_event_identity_idx")
+  @@map("outcome_obligation_event")
+}
+
+/// Disposable current active set. outcome_commit_evaluation is its only writer; the evaluator
+/// itself never reads it, preserving canonical-cut purity.
+model OutcomeActiveObligation {
+  tenantId                    String   @map("tenant_id") @db.Uuid
+  projectId                   String   @map("project_id") @db.Uuid
+  obligationId                String   @map("obligation_id") @db.Char(64)
+  obligationRevision          String   @map("obligation_revision") @db.Char(64)
+  bindingDigest               String   @map("binding_digest") @db.Char(64)
+  goalId                      String   @map("goal_id")
+  goalRevision                BigInt   @map("goal_revision")
+  kind                        String
+  evaluationId                String   @map("evaluation_id") @db.Uuid
+  evaluatedThroughLogicalTime BigInt   @map("evaluated_through_logical_time")
+  obligation                  Json
+  updatedAt                   DateTime @default(now()) @map("updated_at")
+
+  @@id([tenantId, projectId, obligationId])
+  @@unique([tenantId, projectId, obligationRevision], map: "outcome_active_obligation_revision_key")
+  @@index([tenantId, projectId, goalId, goalRevision, kind], map: "outcome_active_obligation_goal_kind_idx")
+  @@map("outcome_active_obligation")
+}
