@@ -22,6 +22,7 @@ import { SharedModule } from './shared/shared.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
 import { OutcomeReconcilerModule } from './outcome-reconciler/outcome-reconciler.module';
+import { OutcomeWatchdogModule } from './outcome-watchdog/outcome-watchdog.module';
 
 @Module({
   imports: [
@@ -46,6 +47,9 @@ import { OutcomeReconcilerModule } from './outcome-reconciler/outcome-reconciler
     PushModule,
     ProvidersModule,
     OutcomeReconcilerModule,
+    // API adapters may inject the storage boundary, but the poller is intentionally absent. The
+    // standalone outcome-watchdog/main process owns collection and survives a reconciler stop.
+    OutcomeWatchdogModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

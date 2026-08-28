@@ -47,6 +47,7 @@ COPY --from=build /app/src/apiserver/package.json ./src/apiserver/package.json
 COPY --from=build /app/src/apiserver/prisma.config.ts ./src/apiserver/prisma.config.ts
 COPY --from=build /app/src/apiserver/dist ./src/apiserver/dist
 COPY --from=build /app/src/apiserver/prisma ./src/apiserver/prisma
+COPY contracts ./contracts
 
 EXPOSE 3000
 # Apply migrations, then start the API. Prisma 7 takes the connection URL from prisma.config.ts
