@@ -28,6 +28,7 @@ import {
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
+import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -65,6 +66,7 @@ import { ProvidersModule } from '../providers/providers.module';
   providers: [
     RunnerAuthGuard,
     RunnerSessionAuthGuard,
+    RunnerWriteProtocolInterceptor,
     {
       provide: RUNNER_ORCHESTRATION_JWT,
       inject: [ConfigService],

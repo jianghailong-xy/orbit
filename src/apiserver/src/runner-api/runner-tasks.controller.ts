@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,6 +9,7 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { Runner } from '@prisma/client';
@@ -29,6 +29,10 @@ import { ProjectAttributionService } from '../projects/project-attribution.servi
 import { TasksService } from '../tasks/tasks.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import {
+  RunnerWriteProtocolInterceptor,
+  translateLegacyRunnerCompletionDeclaration,
+} from './runner-write-protocol';
 
 /**
  * The acting workspace, from either spelling of the header.
@@ -53,6 +57,7 @@ function actingWorkspaceId(
  * to that owner. Mirrors TasksController but swaps JWT/user for runner-token/owner.
  */
 @UseGuards(RunnerAuthGuard)
+@UseInterceptors(RunnerWriteProtocolInterceptor)
 @Controller('runner')
 export class RunnerTasksController {
   constructor(
@@ -366,16 +371,12 @@ export class RunnerTasksController {
    */
   private static refuseImplicitHumanSignoff(dto: {
     completionCriterion?: string | null;
+    acceptanceCommand?: string | null;
+    acceptanceExpectedExitCode?: number | null;
+    completionPolicy?: string | null;
+    verifiesTaskId?: string | null;
   }, itemIndex?: number): void {
-    if (dto.completionCriterion != null) return;
-
-    const subject = itemIndex == null ? 'task' : `tasks[${itemIndex}]`;
-    throw new BadRequestException(
-      `${subject}.completionCriterion is required for runner task creation because omission ` +
-        'would implicitly create HUMAN_SIGNOFF. Set EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF ' +
-        'explicitly. Related command, policy, and verifier fields do not replace that declaration. ' +
-        'The user/JWT API retains legacy omission compatibility.',
-    );
+    translateLegacyRunnerCompletionDeclaration(dto, itemIndex);
   }
 
   private static refuseImplicitHumanSignoffBatch(dto: CreateTasksBatchDto): void {

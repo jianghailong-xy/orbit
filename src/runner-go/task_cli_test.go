@@ -44,8 +44,17 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// about your own work, not a power over somebody else's session. Unit L7's three READS are
 	// here too — task_attribution, project_crossings and project_reopen_impact — all answering
 	// questions an agent could previously only learn by being refused, and none of them writing.
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 35 {
+	if doc.SchemaVersion != runnerWriteSchemaRevision || doc.CapabilityRevision != runnerWriteCapabilityRevision {
 		t.Fatalf("capabilities = %#v", doc)
+	}
+	// The count is a projection of the same descriptor-backed slice emitted below. It is not a
+	// second contract that needs a numeric literal changed whenever a command is added.
+	if doc.CapabilityCount != len(doc.Capabilities) || doc.CapabilityCount == 0 {
+		t.Fatalf("capabilityCount=%d capabilities=%d", doc.CapabilityCount, len(doc.Capabilities))
+	}
+	if doc.ServerCapabilityRevision != runnerWriteCapabilityRevision ||
+		doc.ServerSchemaRevision != runnerWriteSchemaRevision || doc.ContractDigest != runnerWriteContractDigest {
+		t.Fatalf("protocol contract = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
 	// could only replace a task's whole prerequisite set, never edit one edge. tasklist_get /
