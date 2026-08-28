@@ -35,6 +35,14 @@ mkdir -p "$BUILD"
 echo "==> executable-runtime: generate/build protocol sources"
 ( cd "$REPO" && npm run prisma:generate -w @orbit/apiserver >/dev/null )
 ( cd "$REPO" && npm run build -w @orbit/shared >/dev/null )
+# Worktree acceptance may borrow the installed checkout's node_modules. npm's workspace link for
+# @orbit/shared then resolves to that checkout, not this worktree, so refresh the exact package
+# TypeScript will read before compiling the API. A normal checkout resolves to the first path and
+# pays no second build.
+RESOLVED_SHARED_PACKAGE="$(cd "$REPO" && node -p "require.resolve('@orbit/shared/package.json')")"
+if [ "$RESOLVED_SHARED_PACKAGE" != "$REPO/src/shared/package.json" ]; then
+  ( cd "$(dirname "$RESOLVED_SHARED_PACKAGE")" && "$REPO/node_modules/.bin/tsc" -p tsconfig.json )
+fi
 ( cd "$REPO" && npm run build -w @orbit/apiserver >/dev/null )
 
 echo "==> executable-runtime: run short-process runner integration"

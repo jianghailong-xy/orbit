@@ -631,6 +631,8 @@ export const TASK_LIST_SELECT = {
       requestedTimeoutSeconds: true,
       effectiveTimeoutSeconds: true,
       effectiveDeadline: true,
+      runnerSchemaRevision: true,
+      runnerCapabilityRevision: true,
       runnerHardMaxSeconds: true,
       runnerSha: true,
       spawnCount: true,

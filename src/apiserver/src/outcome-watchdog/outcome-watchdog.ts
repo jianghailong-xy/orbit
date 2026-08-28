@@ -84,6 +84,7 @@ export interface WatchdogContract {
     maximumCompletionAckEvidenceBytes: number;
     maximumCompletionAckActiveActions: number;
     requiredIndexes: string[];
+    runtimeSchemaIndexes: string[];
   };
 }
 
@@ -295,7 +296,7 @@ export function validateWatchdogContract(value: unknown): asserts value is Watch
       || contract.capacity.maximumCompletionAckEvidenceBytes !== 16_384
       || contract.capacity.maximumCompletionAckActiveActions !== 16
       || !['completion_ack_fact_turn_idx', 'completion_ack_event_latest_idx']
-        .every((name) => contract.capacity.requiredIndexes.includes(name))) {
+        .every((name) => contract.capacity.runtimeSchemaIndexes?.includes(name))) {
     throw new Error('WATCHDOG_CAPACITY_CONTRACT_INVALID');
   }
 }

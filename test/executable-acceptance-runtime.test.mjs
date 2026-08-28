@@ -44,6 +44,7 @@ const evidence = {
   sourceSha,
   negotiation: {},
   typedTerminations: [],
+  persistedTypedAttempts: [],
   supersessionSurfaces: {},
   watchdog: {},
   completionAck: {},
@@ -556,15 +557,43 @@ test('real API admission is exact and the idempotent start boundary spends one a
     { id: fixture.runnerId }, fixture.sessionId, delivery.acceptancePlan.admissionId,
   );
   assert.equal(repeated.attemptId, started.attemptId);
-  const [admission, task] = await Promise.all([
+  const [admission, task, detail] = await Promise.all([
     db.taskExecutableAdmission.findUniqueOrThrow({ where: { id: delivery.acceptancePlan.admissionId } }),
     db.task.findUniqueOrThrow({ where: { id: fixture.taskId } }),
+    tasks().get(fixture.ownerId, fixture.taskId),
   ]);
   assert.equal(admission.decision, 'ADMITTED');
   assert.equal(admission.effectiveTimeoutSeconds, admission.requestedTimeoutSeconds);
   assert.equal(admission.spawnCount, 1);
   assert.equal(task.executionAttemptCount, 1);
   assert.equal(await db.taskExecutableAttempt.count(), 1);
+  const readback = detail.executableAcceptanceAdmissions[0];
+  assert.deepEqual({
+    requestedTimeoutSeconds: readback.requestedTimeoutSeconds,
+    effectiveTimeoutSeconds: readback.effectiveTimeoutSeconds,
+    runnerSchemaRevision: readback.runnerSchemaRevision,
+    runnerCapabilityRevision: readback.runnerCapabilityRevision,
+    runnerHardMaxSeconds: readback.runnerHardMaxSeconds,
+    runnerSha: readback.runnerSha,
+    spawnCount: readback.spawnCount,
+  }, {
+    requestedTimeoutSeconds: 1200,
+    effectiveTimeoutSeconds: 1200,
+    runnerSchemaRevision: 2,
+    runnerCapabilityRevision: 2,
+    runnerHardMaxSeconds: 3600,
+    runnerSha: sourceSha,
+    spawnCount: 1,
+  });
+  evidence.negotiation.liveReadback = {
+    requestedTimeoutSeconds: readback.requestedTimeoutSeconds,
+    effectiveTimeoutSeconds: readback.effectiveTimeoutSeconds,
+    runnerSchemaRevision: readback.runnerSchemaRevision,
+    runnerCapabilityRevision: readback.runnerCapabilityRevision,
+    runnerHardMaxSeconds: readback.runnerHardMaxSeconds,
+    runnerSha: readback.runnerSha,
+    spawnCount: readback.spawnCount,
+  };
 });
 
 test('typed timeout/cancel/signal/start-failure/infrastructure-loss keep real tasks actionable', async () => {
@@ -587,6 +616,13 @@ test('typed timeout/cancel/signal/start-failure/infrastructure-loss keep real ta
     assert.equal(attempt.actualExitCode, null);
     assert.equal(continuation.goalActionable, true);
     assert.ok(['RETRY', 'DIAGNOSIS', 'SUCCESSOR'].includes(continuation.kind));
+    evidence.persistedTypedAttempts.push({
+      kind,
+      factPersisted: true,
+      actualExitCode: attempt.actualExitCode,
+      goalActionable: continuation.goalActionable,
+      continuation: continuation.kind,
+    });
   }
 });
 
@@ -2841,7 +2877,7 @@ test('REST/CLI/MCP/shared wire sources expose v2 fields while retaining an expli
   Object.assign(evidence.compatibility, { rest: true, cli: true, mcp: true, sharedWire: true });
 });
 
-test('successor watchdog task is atomically bound to 1200/current revision by migration source', () => {
+test('successor watchdog task is atomically bound to 1200/current revision by migration source', async () => {
   const migration = readFileSync(path.join(
     repo, 'src/apiserver/prisma/migrations/0200_executable_acceptance_runtime_contract/migration.sql',
   ), 'utf8');
@@ -2849,4 +2885,18 @@ test('successor watchdog task is atomically bound to 1200/current revision by mi
   assert.match(migration, /"acceptance_timeout_seconds" = 1200/);
   assert.match(migration, /"acceptance_capability_revision" = 2/);
   assert.match(migration, /task_executable_plan_bind/);
+  const contract = JSON.parse(readFileSync(path.join(
+    repo, 'contracts/outcome-reconciler-v2-watchdog-slo.json',
+  ), 'utf8'));
+  const rows = await pool.query(`
+    SELECT indexname FROM pg_indexes
+     WHERE schemaname IN ('public', 'outcome_projection', 'outcome_watchdog')
+       AND indexname = ANY($1::text[])
+     ORDER BY indexname
+  `, [contract.capacity.runtimeSchemaIndexes]);
+  assert.deepEqual(
+    rows.rows.map((row) => row.indexname),
+    [...contract.capacity.runtimeSchemaIndexes].sort(),
+  );
+  evidence.compatibility.runtimeSchemaIndexesPresent = true;
 });

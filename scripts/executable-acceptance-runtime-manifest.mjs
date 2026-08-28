@@ -44,6 +44,20 @@ assert.equal(evidence.suite, 'executable-acceptance-runtime-v2');
 assert.equal(evidence.negotiation.rejected.decision, 'REJECTED');
 assert.equal(evidence.negotiation.rejected.spawnCount, 0);
 assert.equal(evidence.negotiation.admitted.effectiveTimeoutSeconds, 1200);
+assert.deepEqual(evidence.negotiation.liveReadback, {
+  requestedTimeoutSeconds: 1200,
+  effectiveTimeoutSeconds: 1200,
+  runnerSchemaRevision: 2,
+  runnerCapabilityRevision: 2,
+  runnerHardMaxSeconds: 3600,
+  runnerSha: evidence.sourceSha,
+  spawnCount: 1,
+});
+const persistedTimeout = evidence.persistedTypedAttempts.find(({ kind }) => kind === 'TIMED_OUT');
+assert.deepEqual(persistedTimeout, {
+  kind: 'TIMED_OUT', factPersisted: true, actualExitCode: null,
+  goalActionable: true, continuation: 'RETRY',
+});
 assert.equal(evidence.legacy.legacyTermination, 'UNTYPED');
 assert.equal(evidence.legacy.legacyExitCode, -1);
 assert.equal(evidence.legacy.diagnosis, 'TIMEOUT');
@@ -79,6 +93,7 @@ assert.equal(evidence.compatibility.crossed0193And0200, true);
 assert.equal(evidence.compatibility.stagedPre0201TerminalEvent, true);
 assert.equal(evidence.compatibility.historicalEventReceivedFullDetectionDelta, true);
 assert.equal(evidence.compatibility.stagedObligationAutoClosed, true);
+assert.equal(evidence.compatibility.runtimeSchemaIndexesPresent, true);
 for (const key of [
   'permanent500Detected',
   'deduplicatedActiveObligation',

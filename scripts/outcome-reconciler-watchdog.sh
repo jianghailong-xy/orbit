@@ -17,6 +17,8 @@ TAP="$BUILD/outcome-reconciler-v2-watchdog.tap"
 EVIDENCE="$BUILD/outcome-reconciler-v2-watchdog-evidence.json"
 MANIFEST="$BUILD/outcome-reconciler-v2-watchdog-manifest.json"
 CAPACITY_MANIFEST="$BUILD/outcome-reconciler-v2-watchdog-capacity-manifest.json"
+RUNTIME_EVIDENCE="$BUILD/executable-acceptance-runtime-evidence.json"
+RUNTIME_MANIFEST="$BUILD/executable-acceptance-runtime-manifest.json"
 CONTRACT="$REPO/contracts/outcome-reconciler-v2-watchdog-slo.json"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 COLLECTOR_SHA="${OUTCOME_WATCHDOG_COLLECTOR_SHA:-$(git -C "$REPO" rev-parse HEAD)}"
@@ -65,6 +67,16 @@ if [ ! -e "$API/node_modules" ] && [ ! -L "$API/node_modules" ]; then
 fi
 
 mkdir -p "$BUILD" "$COMPILED"
+if [ "${OUTCOME_WATCHDOG_RUNTIME_CLOSURE:-required}" = "required" ]; then
+  echo "==> outcome-watchdog: proving typed-attempt, supersession and external dead-man closure"
+  bash "$REPO/scripts/executable-acceptance-runtime.sh"
+else
+  [ -s "$RUNTIME_EVIDENCE" ] && [ -s "$RUNTIME_MANIFEST" ] || {
+    echo '!! reusable runtime closure evidence is unavailable' >&2
+    exit 1
+  }
+fi
+
 echo "==> outcome-watchdog: compiling independent worker, security policy and production evaluator"
 "$TSC" \
   "$API/src/outcome-watchdog/outcome-watchdog.ts" \
@@ -125,7 +137,18 @@ if [ "$TEST_RC" -ne 0 ]; then
   exit "$TEST_RC"
 fi
 
+echo "==> outcome-watchdog: removing disposable PostgreSQL before publishing evidence"
+docker rm -fv "$CONTAINER" >/dev/null
+if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+  echo '!! disposable PostgreSQL fixture survived cleanup' >&2
+  exit 1
+fi
+
 echo "==> outcome-watchdog: validating zero-skip evidence and writing manifests"
-OUTCOME_WATCHDOG_STARTED_AT="$STARTED_AT" node \
+OUTCOME_WATCHDOG_STARTED_AT="$STARTED_AT" \
+OUTCOME_WATCHDOG_DEADLINE_SECONDS="$TIMEOUT_SECONDS" \
+OUTCOME_WATCHDOG_FIXTURE_CLEANED=true \
+node \
   "$REPO/scripts/outcome-reconciler-watchdog-manifest.mjs" \
-  "$TAP" "$EVIDENCE" "$CONTRACT" "$MANIFEST" "$CAPACITY_MANIFEST"
+  "$TAP" "$EVIDENCE" "$CONTRACT" "$MANIFEST" "$CAPACITY_MANIFEST" \
+  "$RUNTIME_EVIDENCE" "$RUNTIME_MANIFEST"
