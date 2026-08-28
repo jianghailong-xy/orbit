@@ -34,8 +34,9 @@ COPY scripts ./scripts
 # Bake this deployment's public origin into the runner binary's defaultServer (see
 # build-binaries.sh) so a self-hosted runner's `orbit register` needs no --server.
 ARG PUBLIC_ORIGIN
+ARG ORBIT_SOURCE_SHA
 ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
-RUN bash scripts/build-binaries.sh dist-bin
+RUN ORBIT_SOURCE_SHA="$ORBIT_SOURCE_SHA" bash scripts/build-binaries.sh dist-bin
 
 # ──────────────────────────────── runtime ────────────────────────────────
 FROM nginx:alpine AS runtime
