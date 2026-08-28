@@ -40,10 +40,15 @@ export function ProjectTasksGraph({ projectId }: { projectId: string }) {
       {/* The legend belongs here, at a size a reader can read. It used to be a 10.5px chip pinned
           into the bottom corner of the canvas, permanently, for a fact that is learned once. */}
       <div className="pdg-section-head">
-        <Typography.Title level={4} style={{ margin: 0 }}>
+        <Typography.Title className="pdg-section-title" level={4} style={{ margin: 0 }}>
           Task graph
         </Typography.Title>
-        <span className="pdg-legend">Prerequisite → dependent · boxes are parent tasks</span>
+        <span
+          className="pdg-legend"
+          title="Prerequisite → dependent · boxes are parent tasks"
+        >
+          Prerequisite → dependent · boxes are parent tasks
+        </span>
       </div>
 
       <Suspense

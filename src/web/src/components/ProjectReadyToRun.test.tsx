@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ReactElement } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -12,6 +14,13 @@ import {
   resumePausedListMutationOptions,
   runReadyTaskMutationOptions,
 } from './ProjectReadyToRun';
+
+const stylesPath = [
+  resolve(process.cwd(), 'src/index.css'),
+  resolve(process.cwd(), 'src/web/src/index.css'),
+].find(existsSync);
+if (!stylesPath) throw new Error('index.css not found from the test working directory');
+const styles = readFileSync(stylesPath, 'utf8');
 
 vi.mock('../api', () => ({ api: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn() };
@@ -164,6 +173,30 @@ describe('ProjectReadyToRun', () => {
     expect(container.querySelector('table')).toBeNull();
     expect(container.querySelector('[data-testid="blocking-bar"]')).toBeNull();
     expect(apiMock).toHaveBeenCalledWith('/projects/p1/panorama/ready?limit=5');
+
+    // The summary can be longer than a phone's content width. Keep the heading on one line and
+    // make only that secondary copy shrink; its full value remains readable to assistive tech and
+    // through the native title even when the painted line ends in an ellipsis.
+    expect(container.querySelector('.project-ready-heading-label')?.textContent).toBe('Run queue');
+    const summary = container.querySelector<HTMLElement>('.project-ready-summary');
+    expect(summary?.textContent).toContain('7 ready · sorted by work unblocked');
+    expect(summary?.title).toBe('7 ready · sorted by work unblocked');
+
+    const headingRule =
+      styles.match(/\.project-ready-heading\.ant-typography\s*\{([^}]*)\}/)?.[1] ?? '';
+    const labelRule = styles.match(/\.project-ready-heading-label\s*\{([^}]*)\}/)?.[1] ?? '';
+    const summaryRule =
+      styles.match(/\.project-ready-summary\.ant-typography\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(headingRule).toContain('display: flex');
+    expect(headingRule).toContain('align-items: baseline');
+    expect(headingRule).toContain('min-width: 0');
+    expect(labelRule).toContain('flex: none');
+    expect(labelRule).toContain('white-space: nowrap');
+    expect(summaryRule).toContain('flex: 0 1 auto');
+    expect(summaryRule).toContain('min-width: 0');
+    expect(summaryRule).toContain('overflow: hidden');
+    expect(summaryRule).toContain('text-overflow: ellipsis');
+    expect(summaryRule).toContain('white-space: nowrap');
   });
 
   it('keeps active tasks in the queue and opens their work Sessions', async () => {

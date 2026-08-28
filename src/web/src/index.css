@@ -8813,10 +8813,18 @@ html[data-theme='dark'] .session-tag-chip {
   gap: 16px;
   margin-bottom: 10px;
 }
-.pdg-legend {
+.pdg-section-title.ant-typography {
   flex: none;
+  white-space: nowrap;
+}
+.pdg-legend {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-3);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Everything not on a path through the mark under the pointer. */
 .pdg-canvas .react-flow__node.is-faded,
@@ -10789,6 +10797,23 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .project-command-center > * {
   min-width: 0;
+}
+.project-ready-heading.ant-typography {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.project-ready-heading-label {
+  flex: none;
+  white-space: nowrap;
+}
+.project-ready-summary.ant-typography {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-ready-row {
   grid-template-columns: minmax(260px, 1fr) minmax(120px, auto) auto;

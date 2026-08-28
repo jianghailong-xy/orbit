@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ReactElement } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -7,6 +9,13 @@ import {
   layoutProjectDependencyGraph,
   type ProjectDependencyGraphResponse,
 } from '../lib/projectDependencyGraph';
+
+const stylesPath = [
+  resolve(process.cwd(), 'src/index.css'),
+  resolve(process.cwd(), 'src/web/src/index.css'),
+].find(existsSync);
+if (!stylesPath) throw new Error('index.css not found from the test working directory');
+const styles = readFileSync(stylesPath, 'utf8');
 
 // The rest of the web suite renders with `react-dom/server`, which never resolves a `lazy()`
 // import — and what this section is FOR is what appears once one does, so this file mounts into a
@@ -80,8 +89,24 @@ describe('ProjectTasksGraph', { timeout: 20_000 }, () => {
     expect(testid('project-dependency-graph')).not.toBeNull();
     // Named: an unlabelled canvas under the panorama header does not say what it is a picture of.
     expect(container.textContent).toContain('Task graph');
-  });
 
+    // jsdom has no layout engine, so assert the narrow-screen flex contract directly: the section
+    // name keeps its line while the lower-priority legend is the one item allowed to shrink.
+    expect(container.querySelector('.pdg-section-title')?.textContent).toBe('Task graph');
+    const legend = container.querySelector<HTMLElement>('.pdg-legend');
+    expect(legend?.title).toBe('Prerequisite → dependent · boxes are parent tasks');
+
+    const titleRule =
+      styles.match(/\.pdg-section-title\.ant-typography\s*\{([^}]*)\}/)?.[1] ?? '';
+    const legendRule = styles.match(/\.pdg-legend\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(titleRule).toContain('flex: none');
+    expect(titleRule).toContain('white-space: nowrap');
+    expect(legendRule).toContain('flex: 0 1 auto');
+    expect(legendRule).toContain('min-width: 0');
+    expect(legendRule).toContain('overflow: hidden');
+    expect(legendRule).toContain('text-overflow: ellipsis');
+    expect(legendRule).toContain('white-space: nowrap');
+  });
 });
 
 /**

@@ -113,24 +113,34 @@ export function ProjectReadyToRun({
   const message = useToast();
   const resumeList = useMutation(resumePausedListMutationOptions(qc, message, projectId));
   const resumingListId = resumeList.isPending ? (resumeList.variables?.listId ?? null) : null;
+  const summary = data
+    ? queueSummary(
+        data.readyCount,
+        queuedCount,
+        runningCount,
+        pausedCount,
+        data.impactTruncated != null,
+      )
+    : null;
 
   return (
     <section aria-labelledby="project-ready-to-run-heading" style={{ marginBottom: 24 }}>
       <Typography.Title
+        className="project-ready-heading"
         id="project-ready-to-run-heading"
         level={4}
         style={{ marginBottom: 8 }}
       >
-        Run queue{' '}
-        {data ? (
-          <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
-            {queueSummary(
-              data.readyCount,
-              queuedCount,
-              runningCount,
-              pausedCount,
-              data.impactTruncated != null,
-            )}
+        <span className="project-ready-heading-label">Run queue</span>
+        {summary ? (
+          <Typography.Text
+            className="project-ready-summary"
+            type="secondary"
+            style={{ fontSize: 12, fontWeight: 400 }}
+            title={summary}
+          >
+            {' '}
+            {summary}
           </Typography.Text>
         ) : null}
       </Typography.Title>
