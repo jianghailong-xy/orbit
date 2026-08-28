@@ -3616,8 +3616,12 @@ export class SessionsService {
 
   /** The session's user turns that do not have a transcript event yet, oldest first. `active` is
    *  an explicit web-client opt-in: it includes the accepted executable across dequeue → first
-   *  event as well as queued successors. The default preserves the installed native contract by
-   *  returning only rows it can truthfully render as queued/on-the-way without understanding
+   *  event as well as queued successors. In that view, once a listed turn's durable `user` event
+   *  exists it is omitted again, even if a tail-paged client has not loaded that older event:
+   *  otherwise a long IN_FLIGHT turn reopens with its opening message synthesized at the end of
+   *  the transcript.
+   *  The default preserves the installed native contract by returning only rows it can truthfully
+   *  render as queued/on-the-way without understanding
    *  placement — PENDING queued successors and steers, never the accepted head or IN_FLIGHT rows.
    *  `!cmd` shell turns queue and cross that handoff like messages do, so they're classified too.
    *
@@ -3693,17 +3697,37 @@ export class SessionsService {
           })),
         }));
     }
-    return classified.map(({ turn, placement }) => ({
-      turnId: turn.id,
-      kind: turn.kind,
-      placement,
-      content: turn.content ?? '',
-      createdAt: turn.createdAt.toISOString(),
-      attachments: turn.attachments.map((attachment) => ({
-        id: attachment.id,
-        mimeType: attachment.mimeType,
-      })),
-    }));
+    // `run_event` is append-only, so probing after the active-turn snapshot is monotone in the safe
+    // direction: an event that committed meanwhile suppresses a fallback that is no longer needed;
+    // one that commits after this query is the live event that replaces the short-lived fallback.
+    // Do this only after placement is computed over ALL active turns. Filtering the announced head
+    // first would promote its genuinely queued successor to `accepted`.
+    const announced = turns.length === 0
+      ? []
+      : await this.prisma.runEvent.findMany({
+          where: {
+            sessionId: id,
+            type: RunEventType.USER,
+            turnId: { in: turns.map((turn) => turn.id) },
+          },
+          select: { turnId: true },
+        });
+    const announcedTurnIds = new Set(
+      announced.flatMap((event) => (event.turnId ? [event.turnId] : [])),
+    );
+    return classified
+      .filter(({ turn }) => !announcedTurnIds.has(turn.id))
+      .map(({ turn, placement }) => ({
+        turnId: turn.id,
+        kind: turn.kind,
+        placement,
+        content: turn.content ?? '',
+        createdAt: turn.createdAt.toISOString(),
+        attachments: turn.attachments.map((attachment) => ({
+          id: attachment.id,
+          mimeType: attachment.mimeType,
+        })),
+      }));
   }
 
   /** Withdraw a queued user message or `!cmd` shell turn. Only a still-PENDING one can be

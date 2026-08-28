@@ -196,7 +196,10 @@ import { useDelayedFlag } from '../lib/useDelayedFlag';
 import {
   acceptedUserTurnEvent,
   acceptedUserTurnLanded,
+  clearAcceptedUserTurnsForSession,
+  clearAcceptedUserTurnsForTurn,
   queuedTurnsOutsideTranscript,
+  reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
@@ -1159,6 +1162,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Keep that acknowledged message visible in the gap; queued/steered follow-ups stay in `queued`
   // above because their status + Cancel affordance are meaningful rather than transport noise.
   const [acceptedUserTurns, setAcceptedUserTurns] = useState<AcceptedUserTurn[]>([]);
+  const acceptedUserTurnsRef = useRef<AcceptedUserTurn[]>(acceptedUserTurns);
+  acceptedUserTurnsRef.current = acceptedUserTurns;
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
   // The apiserver's authoritative background-shell list (all launches + output recovered from the
   // workspace's Read polls). The loaded event window only holds recent launches, so the tray merges
@@ -2384,42 +2389,41 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const refreshQueued = (): void => {
       const generation = ++queuedRefreshGeneration;
       const knownBefore = new Set(queuedRef.current.map((turn) => turn.turnId));
+      const knownAcceptedBefore = new Set(
+        acceptedUserTurnsRef.current
+          .filter((turn) => turn.sessionId === selectedId)
+          .map((turn) => turn.key),
+      );
       listQueuedTurns(selectedId)
         .then((rows) => {
           if (closed || generation !== queuedRefreshGeneration) return;
           const acceptedRows = rows.filter(
             (row) => turnPlacementOf(row, false) === 'accepted' && row.kind !== 'shell',
           );
-          if (acceptedRows.length > 0) {
-            setAcceptedUserTurns((current) => {
-              const landedTurnIds = new Set(
-                accRef.current.flatMap((event) =>
-                  event.type === 'user' && typeof event.turnId === 'string'
-                    ? [event.turnId]
-                    : [],
-                ),
-              );
-              const accepted = acceptedRows
-                .filter((row) => !landedTurnIds.has(row.turnId))
-                .map((row): AcceptedUserTurn => ({
-                  key: row.turnId,
-                  sessionId: selectedId,
-                  turnId: row.turnId,
-                  text: row.content,
-                  acceptedAt: row.createdAt ?? new Date().toISOString(),
-                  attachments: (row.attachments ?? []).map((attachment) => ({
-                    id: attachment.id,
-                    mime: attachment.mimeType || 'application/octet-stream',
-                  })),
-                }));
-              if (accepted.length === 0) return current;
-              const acceptedIds = new Set(accepted.map((turn) => turn.turnId));
-              return [
-                ...current.filter((turn) => !acceptedIds.has(turn.turnId)),
-                ...accepted,
-              ].slice(-32);
-            });
-          }
+          const accepted = acceptedRows
+            .map((row): AcceptedUserTurn => ({
+              key: row.turnId,
+              sessionId: selectedId,
+              source: 'activeSnapshot',
+              turnId: row.turnId,
+              text: row.content,
+              acceptedAt: row.createdAt ?? new Date().toISOString(),
+              attachments: (row.attachments ?? []).map((attachment) => ({
+                id: attachment.id,
+                mime: attachment.mimeType || 'application/octet-stream',
+              })),
+            }))
+            .filter(
+              (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
+            );
+          setAcceptedUserTurns((current) =>
+            reconcileAcceptedUserTurnSnapshot(
+              accepted,
+              current,
+              selectedId,
+              knownAcceptedBefore,
+            ),
+          );
           const serverQueued = rows.flatMap((row) => {
             const placement = turnPlacementOf(row, false);
             return placement === 'accepted'
@@ -2579,6 +2583,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           setStreamingText('');
           setStreamingThink('');
           streamAnchorRef.current = null;
+          // A snapshot started before this terminal signal must not resurrect an accepted/queued
+          // fallback after the terminal cleanup below.
+          queuedRefreshGeneration += 1;
+          setAcceptedUserTurns((current) =>
+            clearAcceptedUserTurnsForSession(current, selectedId),
+          );
           return;
         }
         // Streaming increment: append to the in-progress assistant bubble. Don't
@@ -2655,6 +2665,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // ends, rather than waiting for the 4s session poll.
         if (ev.type === 'turn_end') {
           setIdle(true);
+          setAcceptedUserTurns((current) =>
+            clearAcceptedUserTurnsForTurn(current, selectedId, ev.turnId),
+          );
+          // The terminal boundary is persisted and replayable; use it to refresh the active
+          // snapshot too, so an accepted placeholder also clears when an older runner omitted the
+          // turn id or a queued successor moved into the executable head at the same boundary.
+          refreshQueued();
           // Refresh the worktree status bar: the runner reports this turn's diff +
           // isolation on /turn-complete. Delay a touch so that POST (which persists
           // changed_files) lands before we refetch the detail, rather than racing the
@@ -3206,6 +3223,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {
                 key,
                 sessionId: id,
+                source: 'local' as const,
                 turnId,
                 text: vars.content,
                 acceptedAt: new Date().toISOString(),

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   acceptedUserTurnEvent,
   acceptedUserTurnLanded,
+  clearAcceptedUserTurnsForSession,
+  clearAcceptedUserTurnsForTurn,
   queuedTurnsOutsideTranscript,
+  reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
   type AcceptedUserTurn,
 } from './acceptedUserTurn';
@@ -10,6 +13,7 @@ import {
 const accepted = (over: Partial<AcceptedUserTurn> = {}): AcceptedUserTurn => ({
   key: 'turn-local',
   sessionId: 'session-a',
+  source: 'local',
   turnId: 'turn-a',
   text: 'ship it',
   acceptedAt: '2026-08-26T16:00:00.000Z',
@@ -66,6 +70,21 @@ describe('an accepted user turn before its transcript event arrives', () => {
     expect(
       acceptedUserTurnLanded(turn, 'session-a', [
         { seq: 4, type: 'user', turnId: 'turn-a', payload: { text: 'ship it' } },
+      ]),
+    ).toBe(true);
+  });
+
+  it('does not let a same-turn non-user event retire the optimistic user bubble', () => {
+    const turn = accepted();
+
+    expect(
+      acceptedUserTurnLanded(turn, 'session-a', [
+        { seq: 900, type: 'background', turnId: 'turn-a', payload: { text: 'still running' } },
+      ]),
+    ).toBe(false);
+    expect(
+      acceptedUserTurnLanded(turn, 'session-a', [
+        { seq: 901, type: 'user', turnId: 'turn-a', payload: { text: 'ship it' } },
       ]),
     ).toBe(true);
   });
@@ -138,5 +157,107 @@ describe('an accepted user turn before its transcript event arrives', () => {
         },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('accepted active-snapshot reconciliation', () => {
+  const recovered = (over: Partial<AcceptedUserTurn> = {}): AcceptedUserTurn =>
+    accepted({
+      key: 'turn-recovered',
+      turnId: 'turn-recovered',
+      source: 'activeSnapshot',
+      text: 'old active head',
+      ...over,
+    });
+
+  it('prunes a recovered accepted row once the authoritative active snapshot becomes empty', () => {
+    const ghost = recovered();
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([], [ghost], 'session-a', new Set([ghost.key])),
+    ).toEqual([]);
+  });
+
+  it('does not let an old empty response erase a local POST accepted after the request began', () => {
+    const old = recovered({ key: 'turn-old', turnId: 'turn-old' });
+    const late = accepted({ key: 'turn-late', turnId: 'turn-late', text: 'new local send' });
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot(
+        [],
+        [old, late],
+        'session-a',
+        new Set([old.key]),
+      ),
+    ).toEqual([late]);
+  });
+
+  it('keeps a local acknowledgement when REST sees the user event before this tab does', () => {
+    const local = accepted();
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([], [local], 'session-a', new Set([local.key])),
+    ).toEqual([local]);
+  });
+
+  it('keeps the local copy when the same turn is also present in the server snapshot', () => {
+    const local = accepted({ text: 'local body' });
+    const server = recovered({ key: local.key, turnId: local.turnId, text: 'server body' });
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([server], [local], 'session-a', new Set([local.key])),
+    ).toEqual([local]);
+  });
+
+  it('preserves an initial opening prompt because active snapshots deliberately omit it', () => {
+    const opening = accepted({
+      key: 'initial:session-a',
+      turnId: undefined,
+      text: 'start the session',
+    });
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([], [opening], 'session-a', new Set([opening.key])),
+    ).toEqual([opening]);
+  });
+
+  it('reconciles only the selected session', () => {
+    const other = recovered({
+      key: 'turn-other-session',
+      turnId: 'turn-other-session',
+      sessionId: 'session-b',
+    });
+    const selected = recovered();
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot(
+        [],
+        [other, selected],
+        'session-a',
+        new Set([selected.key]),
+      ),
+    ).toEqual([other]);
+  });
+});
+
+describe('accepted terminal cleanup', () => {
+  it('turn_end removes only the matching turn in the matching session', () => {
+    const ended = accepted();
+    const successor = accepted({ key: 'turn-next', turnId: 'turn-next' });
+    const other = accepted({ key: 'turn-other', turnId: 'turn-a', sessionId: 'session-b' });
+
+    expect(
+      clearAcceptedUserTurnsForTurn([ended, successor, other], 'session-a', 'turn-a'),
+    ).toEqual([successor, other]);
+  });
+
+  it('final removes every accepted placeholder for that session and no other session', () => {
+    const opening = accepted({ key: 'initial:session-a', turnId: undefined });
+    const continued = accepted();
+    const other = accepted({ key: 'turn-other', sessionId: 'session-b' });
+
+    expect(
+      clearAcceptedUserTurnsForSession([opening, continued, other], 'session-a'),
+    ).toEqual([other]);
   });
 });

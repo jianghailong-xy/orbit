@@ -21,9 +21,13 @@ import { SessionsService } from './sessions.service';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 
-function makeService(rows: Array<Record<string, unknown>>) {
+function makeService(
+  rows: Array<Record<string, unknown>>,
+  announcedTurnIds: string[] = [],
+) {
   const filters: Record<string, unknown>[] = [];
   const orderings: Record<string, unknown>[] = [];
+  const eventFilters: Record<string, unknown>[] = [];
   const deleteFilters: Record<string, unknown>[] = [];
   const session = {
     id: SESSION_ID,
@@ -62,6 +66,15 @@ function makeService(rows: Array<Record<string, unknown>>) {
         return rows;
       },
     },
+    runEvent: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        eventFilters.push(where);
+        const requested = new Set((where.turnId as { in: string[] }).in);
+        return announcedTurnIds
+          .filter((turnId) => requested.has(turnId))
+          .map((turnId) => ({ turnId }));
+      },
+    },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(
@@ -69,7 +82,7 @@ function makeService(rows: Array<Record<string, unknown>>) {
     { notifySessionQueued: () => undefined } as never,
     { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined } as never,
   );
-  return { service, filters, orderings, deleteFilters };
+  return { service, filters, orderings, eventFilters, deleteFilters };
 }
 
 const CREATED_AT = new Date('2026-08-26T12:34:56.000Z');
@@ -122,6 +135,7 @@ test('one ordered snapshot asks for every active row needed to classify the queu
     'the initial prompt must remain visible to head classification',
   );
   assert.deepEqual(h.orderings, [{ seq: 'asc' }]);
+  assert.deepEqual(h.eventFilters, [], 'an empty active set needs no announcement probe');
 });
 
 test('a head message is accepted while later executables queue and steers stay distinct', async () => {
@@ -160,6 +174,34 @@ test('the hidden initial prompt remains the head and makes a follow-up queued', 
   );
 });
 
+test('an announced hidden initial prompt remains the head and makes a follow-up queued', async () => {
+  const h = makeService(
+    [
+      row('initial', 'message', 'opening prompt', {
+        seq: 1,
+        status: 'IN_FLIGHT',
+        clientTurnId: SessionsService.initialTurnClientId(SESSION_ID),
+      }),
+      row('follow-up', 'message', 'one more thing', { seq: 2 }),
+    ],
+    ['initial'],
+  );
+
+  const listed = await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active');
+
+  assert.deepEqual(
+    listed.map((turn) => ({ id: turn.turnId, placement: turn.placement })),
+    [{ id: 'follow-up', placement: 'queued' }],
+  );
+  assert.deepEqual(h.eventFilters, [
+    {
+      sessionId: SESSION_ID,
+      type: 'user',
+      turnId: { in: ['initial', 'follow-up'] },
+    },
+  ]);
+});
+
 test('active returns the accepted IN_FLIGHT head, steer, and queued successor', async () => {
   const h = makeService([
     row('running', 'message', 'working now', { seq: 1, status: 'IN_FLIGHT' }),
@@ -177,6 +219,31 @@ test('active returns the accepted IN_FLIGHT head, steer, and queued successor', 
       { id: 'next', placement: 'queued' },
     ],
   );
+});
+
+test('an announced IN_FLIGHT head is omitted without promoting its queued successor', async () => {
+  const h = makeService(
+    [
+      row('running', 'message', '改', { seq: 9, status: 'IN_FLIGHT' }),
+      row('steer', 'steer', 'adjust it', { seq: 10, status: 'IN_FLIGHT' }),
+      row('next', 'message', 'follow up', { seq: 11 }),
+    ],
+    ['running', 'steer'],
+  );
+
+  const listed = await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active');
+
+  assert.deepEqual(
+    listed.map((turn) => ({ id: turn.turnId, placement: turn.placement })),
+    [{ id: 'next', placement: 'queued' }],
+  );
+  assert.deepEqual(h.eventFilters, [
+    {
+      sessionId: SESSION_ID,
+      type: 'user',
+      turnId: { in: ['running', 'steer', 'next'] },
+    },
+  ]);
 });
 
 test('the default view excludes a PENDING accepted head old clients would mislabel as queued', async () => {
