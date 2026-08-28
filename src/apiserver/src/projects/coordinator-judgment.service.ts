@@ -83,7 +83,14 @@ export const JUDGMENT_PROJECT_GONE = 'JUDGMENT_PROJECT_GONE';
 
 export type JudgmentOutcome =
   /** This delivery opened the one judgment session this fact gets. */
-  | { outcome: 'OPENED'; wakeId: string; idempotencyKey: string; sessionId: string }
+  | {
+      outcome: 'OPENED';
+      wakeId: string;
+      idempotencyKey: string;
+      sessionId: string;
+      /** A pre-planned delivery recovered the same durable Session after a process crash. */
+      replayed?: boolean;
+    }
   /** Somebody else holds the fact. `CoordinatorWakeService.claim`'s answer, passed through. */
   | { outcome: 'ALREADY_AWAKE'; idempotencyKey: string }
   /**
@@ -122,6 +129,67 @@ export class CoordinatorJudgmentService {
   }
 
   /**
+   * Deliver a persistent-coordinator attempt whose target Session id was committed before the
+   * effect began.
+   *
+   * The ordinary fact path above intentionally never reads back a lost claim. This path has a
+   * stronger input: PostgreSQL has already bound `plannedSessionId` to the fenced 0198 lease and
+   * to this exact wake identity. Reading the standing wake is therefore crash recovery, not an
+   * unlocked attempt to choose a winner. It closes both process-death windows around Session
+   * creation: before the insert we retry the same id; after the insert but before the wake CAS we
+   * adopt and bind that exact row.
+   */
+  async wakePlanned(
+    fact: WakeFact,
+    authorize: WakeAuthorizer,
+    plannedSessionId: string,
+  ): Promise<JudgmentOutcome> {
+    const claimed = await this.wakes.claim(fact, authorize);
+    if (claimed.outcome === 'WOKEN') {
+      return this.open(
+        fact,
+        claimed.wakeId,
+        claimed.idempotencyKey,
+        plannedSessionId,
+      );
+    }
+    if (claimed.outcome !== 'ALREADY_AWAKE') return claimed;
+
+    const standing = await this.prisma.projectCoordinatorWake.findFirst({
+      where: {
+        projectId: fact.projectId,
+        idempotencyKey: claimed.idempotencyKey,
+        event: fact.event,
+        subjectType: fact.subjectType,
+        subjectId: fact.subjectId,
+        subjectVersion: fact.subjectVersion,
+        status: { not: 'REFUSED' },
+      },
+      select: { id: true, status: true, sessionId: true },
+    });
+    if (!standing) return claimed;
+    if (standing.status === 'SESSION_OPENED') {
+      if (standing.sessionId !== plannedSessionId) {
+        throw new Error('COMPLETION_ACK_DELIVERY_SESSION_ID_CONFLICT');
+      }
+      return {
+        outcome: 'OPENED',
+        wakeId: standing.id,
+        idempotencyKey: claimed.idempotencyKey,
+        sessionId: plannedSessionId,
+        replayed: true,
+      };
+    }
+    if (standing.status !== 'CLAIMED' || standing.sessionId !== null) return claimed;
+    return this.open(
+      fact,
+      standing.id,
+      claimed.idempotencyKey,
+      plannedSessionId,
+    );
+  }
+
+  /**
    * Open the session, then bind it — in that order, and the order is the house pattern.
    *
    * `ProjectsService.coordinator` creates its session and then compare-and-swaps the pointer,
@@ -141,6 +209,7 @@ export class CoordinatorJudgmentService {
     fact: WakeFact,
     wakeId: string,
     idempotencyKey: string,
+    plannedSessionId?: string,
   ): Promise<JudgmentOutcome> {
     const project = await this.prisma.project.findUnique({
       where: { id: fact.projectId },
@@ -159,6 +228,7 @@ export class CoordinatorJudgmentService {
     }
 
     let session: { id: string };
+    let createdHere = false;
     try {
       session = await this.sessions.create(
         project.ownerId,
@@ -172,9 +242,35 @@ export class CoordinatorJudgmentService {
           // person, and the pair 0122 always wrote together.
           dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
           runSource: SessionRunSource.PROJECT_COORDINATOR,
+          ...(plannedSessionId ? { id: plannedSessionId } : {}),
         },
       );
+      createdHere = true;
     } catch (e) {
+      // A planned id is a provider-enforced idempotency key. A prior process may have committed
+      // the Session and died before binding the wake. Adopt only an exact row; a UUID collision
+      // with different provenance remains a hard error and can never acquire this obligation.
+      if (plannedSessionId) {
+        const existing = await this.prisma.session.findFirst({
+          where: {
+            id: plannedSessionId,
+            ownerId: project.ownerId,
+            workspaceId: project.coordinatorWorkspaceId,
+            dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
+            runSource: SessionRunSource.PROJECT_COORDINATOR,
+            deletedAt: null,
+          },
+          select: { id: true, title: true, prompt: true },
+        });
+        if (existing
+          && existing.title === judgmentSessionTitle(project.title)
+          && existing.prompt === buildJudgmentOpening(fact, project.title)) {
+          session = existing;
+        } else {
+          await this.wakes.release(wakeId, JUDGMENT_LANDING_UNAVAILABLE);
+          throw e;
+        }
+      } else {
       // §3. The key goes back BEFORE anything is decided about the error, so that every path out
       // of here — translated or re-thrown — has already released it.
       await this.wakes.release(wakeId, JUDGMENT_LANDING_UNAVAILABLE);
@@ -186,6 +282,7 @@ export class CoordinatorJudgmentService {
         return { outcome: 'REFUSED', wakeId, idempotencyKey, refusalCode: JUDGMENT_LANDING_UNAVAILABLE };
       }
       throw e;
+      }
     }
 
     // §2 rule 2. One statement: the row lock and the write, with the status this call read as the
@@ -196,14 +293,35 @@ export class CoordinatorJudgmentService {
       data: { status: 'SESSION_OPENED', sessionId: session.id },
     });
     if (bound.count === 0) {
+      const standing = plannedSessionId
+        ? await this.prisma.projectCoordinatorWake.findUnique({
+            where: { id: wakeId },
+            select: { status: true, sessionId: true },
+          })
+        : null;
+      if (standing?.status === 'SESSION_OPENED' && standing.sessionId === session.id) {
+        return {
+          outcome: 'OPENED',
+          wakeId,
+          idempotencyKey,
+          sessionId: session.id,
+          replayed: true,
+        };
+      }
       // Somebody else bound this wake first. Discard ours before returning, for the reason
       // `ProjectsService.discardLoser` gives: a live session no ledger row points at is litter that
       // looks exactly like a real judgment. `remove` rather than `end` — it ends the session on its
       // way out, so this is strictly more cleanup, and it is restorable from Trash.
-      await this.discard(project.ownerId, session.id);
+      if (createdHere) await this.discard(project.ownerId, session.id);
       return { outcome: 'ALREADY_OPEN', wakeId, idempotencyKey };
     }
-    return { outcome: 'OPENED', wakeId, idempotencyKey, sessionId: session.id };
+    return {
+      outcome: 'OPENED',
+      wakeId,
+      idempotencyKey,
+      sessionId: session.id,
+      ...(createdHere ? {} : { replayed: true }),
+    };
   }
 
   private async refuse(

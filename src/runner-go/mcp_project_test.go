@@ -133,6 +133,71 @@ func TestMCPProjectCriteriaConfirmCarriesTheJudgmentSession(t *testing.T) {
 	}
 }
 
+func TestMCPProjectOwnerDecisionRequestIsStructuredAndBoundToCurrentSession(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	props := mcpToolProps(tools, "project_owner_decision_request")
+	reason, _ := props["reason"].(map[string]interface{})
+	reasons, _ := reason["enum"].([]string)
+	if strings.Join(reasons, ",") != "NEW_AUTHORIZATION,RISK_ACCEPTANCE,GOAL_DECISION,EXTERNAL_IDENTITY" {
+		t.Fatalf("owner decision reasons = %#v", reason["enum"])
+	}
+	request, _ := props["request"].(map[string]interface{})
+	required, _ := request["required"].([]string)
+	for _, field := range []string{"whyNotAgent", "options", "impacts", "recommendation", "noActionConsequence", "cost", "deadline", "resumeBehavior", "idempotencyKey"} {
+		if !containsString(required, field) {
+			t.Fatalf("owner decision request does not require %s: %#v", field, required)
+		}
+	}
+
+	var method, path, session string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path, session = r.Method, r.URL.Path, r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"requestId":"request-1","status":"OPEN"}`))
+	}))
+	defer srv.Close()
+	payload := map[string]interface{}{
+		"whyNotAgent": "only the owner can grant this credential",
+		"options":     []interface{}{"grant", "decline"}, "impacts": []interface{}{"resume", "remain paused"},
+		"recommendation": "grant", "noActionConsequence": "repair remains paused", "cost": "none",
+		"deadline": "2026-08-29T00:00:00Z", "resumeBehavior": "resume same coordination",
+		"idempotencyKey": "credential-choice-v1",
+	}
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "coordinator-session-1"}
+	result := mcp.callTool("project_owner_decision_request", map[string]interface{}{
+		"projectId": "proj-1", "obligationId": strings.Repeat("a", 64),
+		"obligationRevision": strings.Repeat("b", 64), "reason": "EXTERNAL_IDENTITY",
+		"request": payload,
+	})
+	if result["isError"] == true {
+		t.Fatalf("project_owner_decision_request returned an error: %#v", result)
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/proj-1/completion-ack/owner-decisions" || session != "coordinator-session-1" {
+		t.Fatalf("owner decision hit %s %s with session %q", method, path, session)
+	}
+	if body["reason"] != "EXTERNAL_IDENTITY" {
+		t.Fatalf("owner decision body = %#v", body)
+	}
+
+	bad := mcp.callTool("project_owner_decision_request", map[string]interface{}{
+		"projectId": "proj-1", "obligationId": strings.Repeat("a", 64),
+		"obligationRevision": strings.Repeat("b", 64), "reason": "CODE_FIX", "request": payload,
+	})
+	if bad["isError"] != true {
+		t.Fatalf("invalid owner decision reason was accepted: %#v", bad)
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
 	for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
@@ -173,7 +238,7 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// than behind the orchestration gate for the reason project_create is — the session
 			// that most needs to run a project's acceptance is a coordinator, which has no
 			// session_* tools at all.
-			"project_acceptance", "project_criteria_confirm", "project_acceptance_run",
+			"project_acceptance", "project_owner_decision_request", "project_criteria_confirm", "project_acceptance_run",
 			"project_acceptance_verdict",
 			"project_merge_evidence",
 			// Unit L7: two READS and no third write. A coordinator refused

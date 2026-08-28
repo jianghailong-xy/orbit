@@ -111,14 +111,17 @@ export async function readProjectPanorama(
   // OPEN task is promoted: a re-run opened against a task that is already DONE must not take it
   // back out of `done`, which is what the chain strip counts progress with.
   const [row] = await prisma.$queryRaw<PanoramaRow[]>(Prisma.sql`
-    SELECT (count(*) FILTER (WHERE f."status" = 'IN_PROGRESS'
-                                OR (f."status" = 'OPEN' AND live.task_id IS NOT NULL)))::int AS "running",
+    SELECT (count(*) FILTER (WHERE (f."status" = 'IN_PROGRESS'
+                                OR (f."status" = 'OPEN' AND live.task_id IS NOT NULL))
+                               AND completion_ack.task_id IS NULL))::int AS "running",
            (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
                                AND f."unmetCount" = 0
-                               AND f."abandonedCount" = 0))::int AS "ready",
-           (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
-                               AND (f."unmetCount" > 0
-                                 OR f."abandonedCount" > 0)))::int AS "blocked",
+                               AND f."abandonedCount" = 0
+                               AND completion_ack.task_id IS NULL))::int AS "ready",
+           (count(*) FILTER (WHERE f."status" = 'OPEN'
+                               AND ((live.task_id IS NULL
+                                 AND (f."unmetCount" > 0 OR f."abandonedCount" > 0))
+                                 OR completion_ack.task_id IS NOT NULL)))::int AS "blocked",
            (count(*) FILTER (WHERE f."status" = 'DONE'))::int AS "done",
            (count(*) FILTER (WHERE f."status" = 'CANCELLED'))::int AS "cancelled",
            count(*)::int AS "taskCount",
@@ -131,7 +134,13 @@ export async function readProjectPanorama(
          WHERE s.owner_id = ${ownerId}::uuid
            AND s.status IN ('PENDING', 'RUNNING')
            AND s.task_id IS NOT NULL
-      ) live ON live.task_id = f."taskId"`);
+      ) live ON live.task_id = f."taskId"
+      LEFT JOIN (
+        SELECT DISTINCT active.task_id
+          FROM completion_ack_active_obligation active
+         WHERE active.tenant_id = ${ownerId}::uuid
+           AND active.project_id = ${projectId}::uuid
+      ) completion_ack ON completion_ack.task_id = f."taskId"`);
 
   const taskCount = row?.taskCount ?? 0;
   const edgeCount = row?.edgeCount ?? 0;

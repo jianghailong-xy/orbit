@@ -113,6 +113,12 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
+import {
+  COMPLETION_ACK_RETRYING_LINE,
+  COMPLETION_ACK_RETRYING_STATUS,
+  CompletionAckObligationBanner,
+  controlPlaneObligationsOf,
+} from './CompletionAckObligationBanner';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import {
   currentProviderChoice,
@@ -675,6 +681,11 @@ const sentLine = (text: string): SessionLine => ({
 });
 
 export const sessionLine = (s: any, live: boolean): SessionLine => {
+  // A finished command whose acknowledgement cannot commit is no longer ordinary agent work.
+  // This canonical repair obligation outranks every ephemeral live hint (starting, approvals,
+  // tools and previews), otherwise the exact incident collapses back to an unexplained Running.
+  if (controlPlaneObligationsOf(s).length > 0)
+    return { text: COMPLETION_ACK_RETRYING_LINE, tone: 'approval' };
   const state = sessionRunStateOf(s);
   // Outranks the generating preview below, which would otherwise echo the message back as
   // though it had been read. It has not: the runtime is still being built (see
@@ -809,6 +820,7 @@ export function SessionTagChips({
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
 export function statusLabel(session: any): string {
+  if (controlPlaneObligationsOf(session).length > 0) return COMPLETION_ACK_RETRYING_STATUS;
   const state = sessionRunStateOf(session);
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (sessionIsStarting(session)) return STARTING_LABEL;
@@ -834,6 +846,12 @@ export function statusLabel(session: any): string {
 export function StatusIcon({ session }: { session: any }) {
   const state = sessionRunStateOf(session);
   const fontSize = 16;
+  if (controlPlaneObligationsOf(session).length > 0)
+    return (
+      <Tooltip title={COMPLETION_ACK_RETRYING_STATUS}>
+        <LoadingOutlined spin style={{ color: 'var(--warning-solid)', fontSize }} />
+      </Tooltip>
+    );
   if (state === 'SUCCEEDED')
     return (
       <Tooltip title="Succeeded">
@@ -1520,6 +1538,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ? {
         ...selected,
         ...(detailForSelected ?? {}),
+        // Detail is authoritative when it carries the projection; an older detail endpoint that
+        // omits it must not erase the identity already present on the compact list row.
+        controlPlaneObligations:
+          detailForSelected?.controlPlaneObligations ?? selected.controlPlaneObligations,
         capabilities:
           selected.capabilities || detailForSelected?.capabilities
             ? { ...selected.capabilities, ...detailForSelected?.capabilities }
@@ -4755,7 +4777,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // Open and Completed rows open their transcript; only
                 // Trash rows stay closed.
                 const openable = view !== 'trash';
-                const line = sessionLine(s, openable);
+                // The selected row may have a fresher detail payload than the list poll. Use the
+                // merged row for both status surfaces so the banner and its list warning point at
+                // the same canonical obligation during that refresh gap.
+                const line = sessionLine(actionSession, openable);
                 const swiped = swipeOpenId === s.id;
                 const dragging = swipeDragId === s.id;
                 const swipeTx = dragging ? swipeDx : swiped ? -swipeReveal : 0;
@@ -4784,7 +4809,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={s} />
+                        <StatusIcon session={actionSession} />
                       </span>
                       <div className="session-main">
                         <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
@@ -5150,6 +5175,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             onClose={() => setShareOpen(false)}
             sessionId={selected.id}
             initialToken={detailForSelected?.shareToken ?? null}
+          />
+        )}
+
+        {selectedSession && !selectedTrashed && !composing && (
+          <CompletionAckObligationBanner
+            obligations={selectedSession.controlPlaneObligations}
           />
         )}
 

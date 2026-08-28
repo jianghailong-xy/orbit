@@ -130,6 +130,7 @@ export const AUTHORITY_REFUSAL_CODES = [
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
+  'CANONICAL_REMEDIATION_HUMAN_SIGNOFF_FORBIDDEN',
 ] as const;
 export type AuthorityRefusalCode = (typeof AUTHORITY_REFUSAL_CODES)[number];
 
@@ -144,6 +145,8 @@ export const AUTHORITY_REQUIRED_ACTIONS = [
   'NAME_THE_CRITERION_THIS_SERVES',
   /** The day's allowance is spent. Nothing to fix in the request; it can be made again later. */
   'WAIT_FOR_THE_BUDGET_WINDOW',
+  /** Use the typed owner-decision protocol, with one of its four irreducible reason classes. */
+  'USE_STRUCTURED_OWNER_DECISION_PROTOCOL',
 ] as const;
 export type AuthorityRequiredAction = (typeof AUTHORITY_REQUIRED_ACTIONS)[number];
 
@@ -238,6 +241,14 @@ export function refuseHumanOnlyAction(
 
 /** What `refuseTaskOpening` is decided over. Every field is server-read except the declared key. */
 export interface TaskOpeningFacts {
+  /**
+   * Server-derived proof that this Session is delivering one exact ACTIVE canonical remediation
+   * obligation for this project. It is the orthogonal scope reason for work that blocks project
+   * closure without changing an acceptance criterion; callers cannot declare it themselves.
+   */
+  canonicalRemediation: boolean;
+  /** The already-validated declaration on the Task this call would open. */
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF' | null;
   /** The criterion the caller says this work serves — `CreateTaskDto.criterionKey`, verbatim. */
   declaredCriterionKey: string | null | undefined;
   /** The keys of the project's currently stated criteria (`ProjectAcceptanceService`'s `key`). */
@@ -286,6 +297,29 @@ export function refuseTaskOpening(
   facts: TaskOpeningFacts,
 ): AuthorityRefusal | null {
   if (principal !== 'JUDGMENT') return null;
+  // A control-plane repair is in scope because the canonical obligation says project closure is
+  // blocked, not because it can be made to fit one acceptance sentence. It has its own database
+  // cap per obligation revision; applying the ordinary criterion/day budget here would either
+  // force a false criterion declaration or make an incident wait 24 hours for capacity.
+  if (facts.canonicalRemediation) {
+    // A repair Task is executable work owned by the coordinator. Turning it into HUMAN_SIGNOFF
+    // would silently hand that ownership back to a person without naming why. Irreducibly human
+    // input has a different, typed protocol and exactly four admitted reasons; it is not a Task
+    // completion criterion chosen as an escape hatch.
+    if (facts.completionCriterion === 'HUMAN_SIGNOFF') {
+      return {
+        code: 'CANONICAL_REMEDIATION_HUMAN_SIGNOFF_FORBIDDEN',
+        action: 'OPEN_TASK',
+        tier: COORDINATOR_AUTHORITY.OPEN_TASK,
+        requiredAction: 'USE_STRUCTURED_OWNER_DECISION_PROTOCOL',
+        message:
+          'A canonical control-plane remediation task cannot use HUMAN_SIGNOFF. Continue with '
+          + 'EXECUTABLE or VERIFICATION work, or use the structured owner-decision protocol only '
+          + 'for NEW_AUTHORIZATION, RISK_ACCEPTANCE, GOAL_DECISION, or EXTERNAL_IDENTITY.',
+      };
+    }
+    return null;
+  }
   const declared = facts.declaredCriterionKey?.trim();
   if (!declared) {
     return {

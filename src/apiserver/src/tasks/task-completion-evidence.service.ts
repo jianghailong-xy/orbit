@@ -67,7 +67,7 @@ interface RequestCreationOptions {
   backfillBatchId?: string;
 }
 
-interface LockedCriterionTask {
+export interface CompletionCriterionSnapshotInput {
   title: string;
   projectId: string | null;
   status: TaskStatus;
@@ -78,6 +78,8 @@ interface LockedCriterionTask {
   completionPolicy: string;
   verifiesTaskId: string | null;
 }
+
+interface LockedCriterionTask extends CompletionCriterionSnapshotInput {}
 
 interface BackfillCandidate extends LockedCriterionTask {
   id: string;
@@ -121,7 +123,7 @@ export function completionDigest(value: unknown): string {
   return createHash('sha256').update(canonicalCompletionJson(value)).digest('hex');
 }
 
-function criterionSnapshot(task: LockedCriterionTask): JsonObject {
+export function completionCriterionSnapshot(task: CompletionCriterionSnapshotInput): JsonObject {
   return normalizeCompletionEvidence({
     schemaVersion: 1,
     completionCriterion: task.completionCriterion,
@@ -385,7 +387,7 @@ export class TaskCompletionEvidenceService {
         }
       }
 
-      const criterion = criterionSnapshot(task);
+      const criterion = completionCriterionSnapshot(task);
       const criterionRevision = completionDigest(criterion);
       let evidence = await tx.taskCompletionEvidence.findFirst({
         where: {
@@ -707,7 +709,7 @@ export class TaskCompletionEvidenceService {
         throw new ConflictException('idempotencyKey is already bound to different completion evidence');
       }
 
-      const criterion = criterionSnapshot(task);
+      const criterion = completionCriterionSnapshot(task);
       const criterionRevision = completionDigest(criterion);
       const duplicateFact = await tx.taskCompletionEvidence.findFirst({
         where: {

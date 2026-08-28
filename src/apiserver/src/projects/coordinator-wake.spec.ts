@@ -203,11 +203,11 @@ test('a criterion is ready only when every task serving it is DONE', () => {
 
 test('the events this unit knows about are exactly those the latest migration accepts', () => {
   const sql = readFileSync(
-    path.resolve(__dirname, '../../prisma/migrations/0183_completion_input_wake/migration.sql'),
+    path.resolve(__dirname, '../../prisma/migrations/0201_completion_ack_canonical_obligation/migration.sql'),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0183 no longer constrains the event column');
+  assert.ok(check, 'migration 0201 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,
@@ -217,15 +217,14 @@ test('the events this unit knows about are exactly those the latest migration ac
 });
 
 /**
- * Project acceptance criterion 3, as a grep: the wake path is not allowed to have a clock.
+ * Project acceptance criterion 3, as a grep: the fact reducer is not allowed to own a clock.
  *
  * "Wake the coordinator periodically so it can have a think" is the loop this whole unit replaces,
  * and it comes back because it is convenient. The subject is the two production files this unit
- * adds, checked verbatim and not with comments stripped — they name no timer even in prose, so
- * `grep -n 'setInterval\|@Interval\|@Cron' src/projects/coordinator-wake*.ts` (minus this spec,
- * which has to spell what it forbids) is empty on a plain read.
+ * adds. A separately supervised courier may call it from a durable retry schedule; these files
+ * must remain deterministic and cannot invent their own interval or scheduler.
  */
-test('nothing on the wake path is reachable from a timer', () => {
+test('the wake fact reducer owns no timer', () => {
   const HERE = path.resolve(__dirname, '../..', 'src/projects');
   for (const file of ['coordinator-wake.ts', 'coordinator-wake.service.ts']) {
     const source = readFileSync(path.join(HERE, file), 'utf8');
@@ -233,7 +232,7 @@ test('nothing on the wake path is reachable from a timer', () => {
       assert.equal(
         source.includes(forbidden),
         false,
-        `${file} reaches for ${forbidden} — a wake is a committed fact, never a clock`,
+        `${file} owns ${forbidden} — a wake is a committed fact, not a clock`,
       );
     }
   }

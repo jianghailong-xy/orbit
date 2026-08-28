@@ -6,6 +6,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsDefined,
   IsIn,
   IsInt,
   IsObject,
@@ -72,6 +73,73 @@ export const CONFIG_REVISION_PATTERN = /^\d{1,20}$/;
  */
 export const ACCEPTANCE_EPOCH_PATTERN = /^\d{1,20}$/;
 export const SHA256_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+
+export const COMPLETION_ACK_OWNER_DECISION_REASONS = [
+  'NEW_AUTHORIZATION',
+  'RISK_ACCEPTANCE',
+  'GOAL_DECISION',
+  'EXTERNAL_IDENTITY',
+] as const;
+
+/**
+ * The complete question an autonomous completion-ACK remediation is allowed to put to the owner.
+ * Unknown value shapes are intentional for the five decision-domain fields: a credential choice,
+ * a risk envelope and a goal fork do not share a useful DTO. Presence is still mandatory, while
+ * PostgreSQL binds the exact JSON digest to the one current delivery Session.
+ */
+export class CompletionAckOwnerDecisionPayloadDto {
+  @IsString() @MinLength(1) @MaxLength(4_000)
+  whyNotAgent!: string;
+
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(16)
+  options!: unknown[];
+
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(16)
+  impacts!: unknown[];
+
+  @IsDefined()
+  recommendation!: unknown;
+
+  @IsDefined()
+  noActionConsequence!: unknown;
+
+  @IsDefined()
+  cost!: unknown;
+
+  @IsDefined()
+  deadline!: unknown;
+
+  @IsDefined()
+  resumeBehavior!: unknown;
+
+  @IsString() @MinLength(1) @MaxLength(200)
+  idempotencyKey!: string;
+}
+
+export class RequestCompletionAckOwnerDecisionDto {
+  @IsString() @Matches(SHA256_DIGEST_PATTERN)
+  obligationId!: string;
+
+  @IsString() @Matches(SHA256_DIGEST_PATTERN)
+  obligationRevision!: string;
+
+  @IsIn(COMPLETION_ACK_OWNER_DECISION_REASONS)
+  reason!: (typeof COMPLETION_ACK_OWNER_DECISION_REASONS)[number];
+
+  @IsDefined() @ValidateNested() @Type(() => CompletionAckOwnerDecisionPayloadDto)
+  request!: CompletionAckOwnerDecisionPayloadDto;
+}
+
+export class DecideCompletionAckOwnerDecisionDto {
+  @IsString() @Matches(SHA256_DIGEST_PATTERN)
+  obligationRevision!: string;
+
+  @IsString() @MinLength(1) @MaxLength(200)
+  idempotencyKey!: string;
+
+  @IsObject()
+  decision!: Record<string, unknown>;
+}
 
 /**
  * Validate this field when the caller SENT it — including when what they sent was `null`.

@@ -81,6 +81,8 @@ export interface WatchdogContract {
     checksumSampleLimit: number;
     maximumQueryP99Milliseconds: number;
     maximumStorageBytesPerTask: number;
+    maximumCompletionAckEvidenceBytes: number;
+    maximumCompletionAckActiveActions: number;
     requiredIndexes: string[];
   };
 }
@@ -289,7 +291,11 @@ export function validateWatchdogContract(value: unknown): asserts value is Watch
   }
   if (contract.capacity.taskScale < 100_000
       || contract.capacity.queryRowLimit !== contract.collector.maximumRowsPerProbe
-      || contract.capacity.checksumSampleLimit !== contract.collector.checksumSubjectsPerProbe) {
+      || contract.capacity.checksumSampleLimit !== contract.collector.checksumSubjectsPerProbe
+      || contract.capacity.maximumCompletionAckEvidenceBytes !== 16_384
+      || contract.capacity.maximumCompletionAckActiveActions !== 16
+      || !['completion_ack_fact_turn_idx', 'completion_ack_event_latest_idx']
+        .every((name) => contract.capacity.requiredIndexes.includes(name))) {
     throw new Error('WATCHDOG_CAPACITY_CONTRACT_INVALID');
   }
 }

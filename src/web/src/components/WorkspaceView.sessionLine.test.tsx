@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sessionLine } from './WorkspaceView';
+import { sessionLine, statusLabel } from './WorkspaceView';
 
 /**
  * The session row's second line. Kept in step with the native port
@@ -7,6 +7,37 @@ import { sessionLine } from './WorkspaceView';
  * cases are asserted on both sides.
  */
 describe('sessionLine', () => {
+  it('prioritizes a canonical completion-receipt obligation over every Running hint', () => {
+    const session = {
+      status: 'RUNNING',
+      engineStartedAt: null,
+      pendingApprovals: 2,
+      lastToolUse: 'Bash',
+      lastUserText: 'rerun it',
+      controlPlaneObligations: [
+        {
+          obligationId: 'obl-ack-1',
+          obligationRevision: 3,
+          reason: 'The successful completion receipt has not committed.',
+          owner: 'PROJECT_COORDINATOR',
+          requiredAction: 'Repair the compatibility writer and recover the original callback.',
+          actionProtocol: ['diagnose', 'repair', 'deploy', 'verify'],
+          firstFailureAt: '2026-08-28T13:45:50.000Z',
+          latestFailureAt: '2026-08-28T13:50:00.000Z',
+          observationCount: 126,
+          factKind: 'CONTROL_PLANE_COMMIT_REJECTED',
+          errorFingerprint: 'P0001:TASK_DONE_CANONICAL_FACT_REQUIRED',
+        },
+      ],
+    };
+
+    expect(sessionLine(session, true)).toEqual({
+      text: 'Command finished · completion receipt retrying',
+      tone: 'approval',
+    });
+    expect(statusLabel(session)).toBe('Completion receipt retrying');
+  });
+
   it('surfaces live state before any reply preview', () => {
     expect(sessionLine({ status: 'RUNNING', pendingApprovals: 2 }, true)).toEqual({
       text: 'Waiting for approval',

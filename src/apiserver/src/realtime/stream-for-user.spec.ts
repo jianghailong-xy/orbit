@@ -42,9 +42,17 @@ type Row = {
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
 // the mock ignores `select` and returns the whole row, which satisfies both selects),
 // approval.count, and the $executeRawUnsafe that publish() fires for the cross-replica NOTIFY.
-function fakePrisma(rows: Record<string, Row>, pendingApprovals = 0): PrismaService {
+function fakePrisma(
+  rows: Record<string, Row>,
+  pendingApprovals = 0,
+  completionAckRows: Array<Record<string, unknown>> = [],
+): PrismaService {
   return {
     $executeRawUnsafe: async () => 0,
+    // Both raw-query methods identify a complete Prisma surface to the canonical obligation
+    // reader; most service unit doubles intentionally omit one and therefore exercise no SQL.
+    $queryRaw: async () => completionAckRows,
+    $queryRawUnsafe: async () => completionAckRows,
     session: { findUnique: async ({ where }: { where: { id: string } }) => rows[where.id] ?? null },
     approval: { count: async () => pendingApprovals },
   } as unknown as PrismaService;
@@ -74,10 +82,14 @@ const rowA: Row = {
 
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
 // sets up the in-memory hub, which is all these tests exercise.
-function svcWith(rows: Record<string, Row>, pending = 0): RealtimeService {
+function svcWith(
+  rows: Record<string, Row>,
+  pending = 0,
+  completionAckRows: Array<Record<string, unknown>> = [],
+): RealtimeService {
   // These tests exercise streamForUser only; a no-op push stub satisfies the new constructor dep.
   const push = { scheduleBadgeSync: () => undefined } as unknown as PushService;
-  return new RealtimeService(fakePrisma(rows, pending), push);
+  return new RealtimeService(fakePrisma(rows, pending, completionAckRows), push);
 }
 
 test('a STATUS event reaches the owner as session.updated with a full summary', async () => {
@@ -434,6 +446,62 @@ test('publishSessionUpdated surfaces as session.updated with the current summary
   assert.equal(got.length, 1);
   assert.equal(got[0].type, 'session.updated');
   assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
+});
+
+test('session.updated carries and clears the same canonical completion-ACK obligation', async () => {
+  const completionAckRows: Array<Record<string, unknown>> = [{
+    tenantId: 'userA',
+    projectId: 'projectA',
+    taskId: 'taskA',
+    sessionId: 'sessA',
+    turnId: 'turnA',
+    errorFingerprint: 'f'.repeat(64),
+    obligationId: 'a'.repeat(64),
+    obligationRevision: 'b'.repeat(64),
+    obligation: {
+      factKind: 'CONTROL_PLANE_COMMIT_REJECTED',
+      reasonCode: 'CONTROL_PLANE_COMMIT_REJECTED',
+      reason: 'The canonical completion commit was rejected.',
+      owner: 'PROJECT_COORDINATOR',
+      requiredAction: 'RETRY_CANONICAL_COMPLETION_COMMIT',
+      actionProtocol: { name: 'completion-ack-recovery', version: 1 },
+      attemptedActions: [],
+    },
+    firstFailureAt: new Date('2026-08-28T12:00:00.000Z'),
+    latestFailureAt: new Date('2026-08-28T12:00:05.000Z'),
+    observationCount: 2,
+  }];
+  const svc = svcWith({ sessA: rowA }, 0, completionAckRows);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((event) => got.push(event));
+
+  svc.publishSessionUpdated('sessA');
+  await delay(30);
+  const active = got[0].data.controlPlaneObligations as Array<Record<string, unknown>>;
+  assert.equal(active.length, 1);
+  assert.deepEqual([
+    active[0].obligationId,
+    active[0].obligationRevision,
+    active[0].bindingDigest,
+    active[0].capability,
+    active[0].reason,
+    active[0].requiredAction,
+  ], [
+    'a'.repeat(64),
+    'b'.repeat(64),
+    'b'.repeat(64),
+    'completion-ack.recover',
+    'The canonical completion commit was rejected.',
+    'RETRY_CANONICAL_COMPLETION_COMMIT',
+  ]);
+
+  // Recovery removes the active view row; the next full summary carries [] rather than omitting
+  // the key, so a client upsert cannot retain a stale blocker from the first notification.
+  completionAckRows.splice(0);
+  svc.publishSessionUpdated('sessA');
+  await delay(30);
+  sub.unsubscribe();
+  assert.deepEqual(got[1].data.controlPlaneObligations, []);
 });
 
 test('session.updated explicitly clears project relation metadata for an ordinary session', async () => {

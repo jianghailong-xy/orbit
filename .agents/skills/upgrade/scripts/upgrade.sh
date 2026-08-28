@@ -8,10 +8,12 @@ NO_CACHE=0
 PRUNE=0
 PULL_BASE=0
 ALLOW_DIRTY=0
+OBSERVERS_ONLY=0
 
 usage() {
   cat <<'EOF'
 Usage: upgrade.sh [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
+                  [--observers-only]
 
   --pull       git pull --ff-only before building
   --pull-base  refresh postgres and gateway base images; may restart postgres
@@ -20,6 +22,11 @@ Usage: upgrade.sh [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
   --allow-dirty
                build anyway when the checkout has uncommitted changes (they are
                baked into the image and exist in no commit)
+  --observers-only
+               stop after migrations, runtime-generation registration, and the
+               independent watchdog/coordinator/dead-man stage; leave the old
+               apiserver/web/gateway serving until an operator verifies the new
+               observers, then recreate those three services explicitly
   -h, --help   show this help
 EOF
 }
@@ -31,6 +38,7 @@ while [ $# -gt 0 ]; do
     --no-cache) NO_CACHE=1 ;;
     --prune) PRUNE=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --observers-only) OBSERVERS_ONLY=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -102,8 +110,43 @@ fi
 DEPLOY_SHA="$(git rev-parse HEAD)"
 export OUTCOME_WATCHDOG_COLLECTOR_SHA="${OUTCOME_WATCHDOG_COLLECTOR_SHA:-$DEPLOY_SHA}"
 export OUTCOME_WATCHDOG_TARGET_SHA="${OUTCOME_WATCHDOG_TARGET_SHA:-$DEPLOY_SHA}"
+export OUTCOME_COORDINATOR_SOURCE_SHA="${OUTCOME_COORDINATOR_SOURCE_SHA:-$DEPLOY_SHA}"
+export OUTCOME_COORDINATOR_TARGET_SHA="${OUTCOME_COORDINATOR_TARGET_SHA:-$DEPLOY_SHA}"
 export EXECUTABLE_DEAD_MAN_SOURCE_SHA="${EXECUTABLE_DEAD_MAN_SOURCE_SHA:-$DEPLOY_SHA}"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
+
+# A deployment declares each independently monitored process before starting it. The external
+# dead-man can therefore distinguish "healthy", "stale", and "never started". A caller may pin
+# these values when retrying the same rollout; otherwise each invocation is a new generation.
+new_runtime_generation() {
+  node -e "process.stdout.write(require('node:crypto').randomUUID())"
+}
+export OUTCOME_WATCHDOG_EXPECTATION_GENERATION="${OUTCOME_WATCHDOG_EXPECTATION_GENERATION:-$(new_runtime_generation)}"
+export COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION="${COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION:-$(new_runtime_generation)}"
+export OUTCOME_COORDINATOR_EXPECTATION_GENERATION="${OUTCOME_COORDINATOR_EXPECTATION_GENERATION:-$(new_runtime_generation)}"
+export OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION="${OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION:-$(new_runtime_generation)}"
+for generation in \
+  "$OUTCOME_WATCHDOG_EXPECTATION_GENERATION" \
+  "$COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION" \
+  "$OUTCOME_COORDINATOR_EXPECTATION_GENERATION" \
+  "$OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION"; do
+  if [[ ! "$generation" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+    echo "error: runtime expectation generation is not a UUID: $generation" >&2
+    exit 1
+  fi
+done
+if [ "$OUTCOME_WATCHDOG_EXPECTATION_GENERATION" = "$COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION" ] \
+   || [ "$OUTCOME_WATCHDOG_EXPECTATION_GENERATION" = "$OUTCOME_COORDINATOR_EXPECTATION_GENERATION" ] \
+   || [ "$OUTCOME_WATCHDOG_EXPECTATION_GENERATION" = "$OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION" ] \
+   || [ "$COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION" = "$OUTCOME_COORDINATOR_EXPECTATION_GENERATION" ] \
+   || [ "$COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION" = "$OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION" ] \
+   || [ "$OUTCOME_COORDINATOR_EXPECTATION_GENERATION" = "$OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION" ]; then
+  echo "error: runtime expectation generations must be distinct" >&2
+  exit 1
+fi
+
+WATCHDOG_MODULE_GRAPH_DIGEST="0b37ae35a4c04c94a2b0cc6683c04be3b5a4c3bc394d9b6725ec391d439ba4a7"
+COORDINATOR_MODULE_GRAPH_DIGEST="cb34a9176d5135170d5591248f88d9c1fb88953cca69318d4433d272aee5d643"
 
 echo "==> Building images from source (apiserver, web)"
 if [ "$NO_CACHE" -eq 1 ]; then
@@ -112,18 +155,68 @@ else
   $DC build apiserver web
 fi
 
+echo "==> Applying migrations before declaring runtime expectations"
+$DC run --rm --no-deps apiserver /bin/sh -c \
+  'cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy'
+
+register_runtime_expectation() {
+  component="$1"
+  instance="$2"
+  generation="$3"
+  module_digest="$4"
+  $DC run --rm --no-deps executable-dead-man node \
+    /app/scripts/executable-acceptance-dead-man.mjs \
+    --register-expectation \
+    --component "$component" \
+    --instance-id "$instance" \
+    --generation "$generation" \
+    --expected-source-sha "$DEPLOY_SHA" \
+    --module-graph-digest "$module_digest" \
+    --startup-grace-seconds 60 \
+    --source-sha "$DEPLOY_SHA"
+}
+
+echo "==> Declaring independently monitored runtime generations"
+register_runtime_expectation \
+  outcome-watchdog compose:outcome-watchdog \
+  "$OUTCOME_WATCHDOG_EXPECTATION_GENERATION" "$WATCHDOG_MODULE_GRAPH_DIGEST"
+register_runtime_expectation \
+  completion-ack-watchdog compose:outcome-watchdog \
+  "$COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION" "$WATCHDOG_MODULE_GRAPH_DIGEST"
+register_runtime_expectation \
+  outcome-coordinator compose:outcome-coordinator \
+  "$OUTCOME_COORDINATOR_EXPECTATION_GENERATION" "$COORDINATOR_MODULE_GRAPH_DIGEST"
+register_runtime_expectation \
+  outcome-coordinator compose:outcome-coordinator-secondary \
+  "$OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION" "$COORDINATOR_MODULE_GRAPH_DIGEST"
+
 if [ "$PULL_BASE" -eq 1 ]; then
   echo "==> Refreshing base images (postgres, gateway)"
   $DC pull postgres gateway
-  echo "==> Recreating the stack (apiserver applies DB migrations on boot)"
-  $DC up -d --wait
-else
-  echo "==> Recreating changed services (apiserver applies DB migrations on boot)"
-  # All four app-layer services are named explicitly, so dependency traversal is unnecessary.
-  # Suppress it to keep Compose from recreating postgres when this checkout's relative bind-mount
-  # path differs from the deployment checkout (for example, when upgrading from a git worktree).
-  $DC up -d --wait --no-deps apiserver watchdog executable-dead-man web gateway
+  echo "==> Recreating refreshed database services"
+  $DC up -d --wait postgres pgbackup
 fi
+
+# Bring up the observers and couriers before replacing the transaction they observe. This is a
+# rolling-upgrade invariant, not merely incident choreography: a compatibility failure in the new
+# apiserver must already have an independent detector and a durable delivery path when its first
+# callback arrives. --no-deps is deliberate in both stages: the old apiserver remains live during
+# stage one, and an upgrade launched from a worktree must not recreate postgres because its
+# relative bind-mount path differs from the installed checkout.
+echo "==> Stage 1/2: starting independent watchdog, coordinator peers, and dead-man"
+$DC up -d --wait --no-deps watchdog outcome-coordinator \
+  outcome-coordinator-secondary executable-dead-man
+
+if [ "$OBSERVERS_ONLY" -eq 1 ]; then
+  echo "==> Observer stage complete; apiserver/web/gateway intentionally left unchanged"
+  $DC ps
+  echo "✓ Independent observer stage is running. Verify its canonical obligations, then run:"
+  echo "  $DC up -d --wait --no-deps apiserver web gateway"
+  exit 0
+fi
+
+echo "==> Stage 2/2: recreating apiserver and presentation services"
+$DC up -d --wait --no-deps apiserver web gateway
 
 echo "==> Stack status"
 $DC ps

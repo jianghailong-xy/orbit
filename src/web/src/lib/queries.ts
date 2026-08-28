@@ -1,6 +1,12 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { EventSearchResponse, SessionSearchResponse } from '@orbit/shared';
-import { api, getSession, getSessionDiff, type WorkspacePermissionRuleInfo } from '../api';
+import {
+  api,
+  getSession,
+  getSessionDiff,
+  type SessionListItem,
+  type WorkspacePermissionRuleInfo,
+} from '../api';
 import {
   sessionLifecycleStateOf,
   type SessionLifecycleView,
@@ -153,7 +159,7 @@ async function fetchSessions(
   view: SessionListView | null,
   tagId: string | null,
   limit: number | null,
-): Promise<any[]> {
+): Promise<SessionListItem[]> {
   const path = (requestedView: string | null): string => {
     const qs = new URLSearchParams();
     if (runnerId) qs.set('runnerId', runnerId);
@@ -164,7 +170,7 @@ async function fetchSessions(
     const suffix = qs.toString();
     return `/sessions${suffix ? `?${suffix}` : ''}`;
   };
-  const rows = await api<any[]>(path(view));
+  const rows = await api<SessionListItem[]>(path(view));
   if (!view || view === 'open') return rows;
   const expected = view === 'completed' ? 'COMPLETED' : 'TRASH';
   // Older APIs silently interpret unknown view values as Open rather than returning 4xx.
@@ -173,7 +179,7 @@ async function fetchSessions(
   if (rows.length > 0 && rows.every((row) => sessionLifecycleStateOf(row) === expected)) {
     return rows;
   }
-  return api<any[]>(path(LEGACY_SESSION_VIEW[view]));
+  return api<SessionListItem[]>(path(LEGACY_SESSION_VIEW[view]));
 }
 
 export const sessionsQuery = (

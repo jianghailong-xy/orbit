@@ -266,9 +266,14 @@ export class RunnerTasksController {
   executeTask(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
+    // When a project coordinator starts or reuses repair work, this identity is the durable link
+    // between the canonical obligation delivery and the Task action. It is attribution, not an
+    // authority claim: the service validates the Session and PostgreSQL validates the exact
+    // obligation/revision before accepting an action receipt.
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: RunTaskDto,
   ) {
-    return this.tasks.execute(runner.ownerId, id, undefined, dto?.triggerId);
+    return this.tasks.execute(runner.ownerId, id, undefined, dto?.triggerId, sessionId);
   }
 
   @Post('tasks/:id/dependencies')
@@ -294,11 +299,12 @@ export class RunnerTasksController {
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-workspace-id') workspaceId: string | undefined,
     @Headers('x-orbit-agent-id') legacyAgentId: string | undefined,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: CreateTaskCommentDto,
   ) {
     const author = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
-    return this.tasks.addComment(runner.ownerId, id, dto, author);
+    return this.tasks.addComment(runner.ownerId, id, dto, author, sessionId);
   }
 
   @Get('task-lists')

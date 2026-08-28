@@ -20,6 +20,8 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
   private collectorSha!: string;
   private targetSha!: string;
   private instanceId!: string;
+  private watchdogExpectationGeneration!: string;
+  private completionAckExpectationGeneration!: string;
   private readonly moduleGraphDigest = createHash('sha256').update([
     'outcome-watchdog/main',
     'outcome-watchdog/worker-module',
@@ -44,6 +46,12 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
     assertFullGitSha(this.targetSha, 'TARGET');
     this.instanceId = this.config.get<string>('OUTCOME_WATCHDOG_INSTANCE_ID')
       ?? `${hostname()}:${process.pid}`;
+    this.watchdogExpectationGeneration = this.requiredGeneration(
+      'OUTCOME_WATCHDOG_EXPECTATION_GENERATION',
+    );
+    this.completionAckExpectationGeneration = this.requiredGeneration(
+      'COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION',
+    );
     await this.runOnce();
     this.timer = setInterval(
       () => void this.runOnce(),
@@ -64,29 +72,60 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
     this.running = true;
     try {
       const observedAt = new Date();
-      const heartbeat = await this.watchdog.appendRuntimeHeartbeat({
-        component: 'outcome-watchdog',
+      const staleAttempts = await this.watchdog.markStaleExecutableAttempts(observedAt);
+      const completionAcks = await this.watchdog.reconcileStaleCompletionAcks(
+        observedAt,
+        this.contract.collector.maximumDetectionDeltaSeconds,
+      );
+      const completionAckDeliveries = await this.watchdog.reconcileStaleCompletionAckDeliveries(
+        observedAt,
+        this.contract.collector.maximumDetectionDeltaSeconds,
+      );
+      // A detector may only claim health after its bounded scan and reducer committed. Writing the
+      // heartbeat first is the self-monitoring failure this component exists to avoid: an
+      // undefined SQL function or a wedged reducer would leave a fresh "healthy" row behind.
+      const completedAt = new Date();
+      const heartbeatInput = {
         instanceId: this.instanceId,
         sourceSha: this.collectorSha,
         moduleGraphDigest: this.moduleGraphDigest,
-        observedAt,
+        observedAt: completedAt,
         deadlineAt: new Date(
-          observedAt.getTime() + this.contract.collector.maximumDetectionDeltaSeconds * 1_000,
+          completedAt.getTime() + this.contract.collector.maximumDetectionDeltaSeconds * 1_000,
         ),
+      };
+      const completionHeartbeat = await this.watchdog.appendRuntimeHeartbeat({
+        ...heartbeatInput,
+        component: 'completion-ack-watchdog',
+        expectationGeneration: this.completionAckExpectationGeneration,
+        payload: {
+          schemaVersion: 1,
+          targetSha: this.targetSha,
+          pollIntervalSeconds: this.contract.collector.pollIntervalSeconds,
+          completionAcks,
+          completionAckDeliveries,
+        },
+      });
+      const heartbeat = await this.watchdog.appendRuntimeHeartbeat({
+        ...heartbeatInput,
+        component: 'outcome-watchdog',
+        expectationGeneration: this.watchdogExpectationGeneration,
         payload: {
           schemaVersion: 1,
           targetSha: this.targetSha,
           pollIntervalSeconds: this.contract.collector.pollIntervalSeconds,
         },
       });
-      const staleAttempts = await this.watchdog.markStaleExecutableAttempts(observedAt);
       this.logger.log(JSON.stringify({
         event: 'OUTCOME_WATCHDOG_HEARTBEAT',
         instanceId: this.instanceId,
         sequence: heartbeat.sequence.toString(),
         heartbeatDigest: heartbeat.heartbeatDigest,
+        completionHeartbeatDigest: completionHeartbeat.heartbeatDigest,
         sourceSha: this.collectorSha,
         staleAttempts,
+        completionAcks,
+        completionAckDeliveries,
       }));
       const tenantIds = await this.watchdog.tenantIds();
       for (const tenantId of tenantIds) {
@@ -121,5 +160,13 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
     } finally {
       this.running = false;
     }
+  }
+
+  private requiredGeneration(name: string): string {
+    const value = this.config.get<string>(name) ?? '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+      throw new Error(`${name}_INVALID`);
+    }
+    return value;
   }
 }

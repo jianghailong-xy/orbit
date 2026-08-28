@@ -44,6 +44,10 @@ import {
 } from '../common/transaction-retry';
 import { SingleFlight } from '../common/single-flight';
 import {
+  completionAckObligationsBy,
+  readCompletionAckObligations,
+} from '../common/completion-ack-obligation';
+import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
   lastProviderByWorkspace,
@@ -453,6 +457,7 @@ export type TaskRunAnswer =
       skipped:
         | 'superseded'
         | 'aggregate-parent'
+        | 'completion-ack-reconciliation'
         /**
          * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
          * that produced this delivery. Terminal, and the one automatic stand-down that is — the
@@ -2641,7 +2646,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Unit T6: a single create is one item of a plan, judged by the same bound a fifty-item one is.
     await this.assertTaskOpeningAuthorized(
-      ownerId, creatorSessionId, [{ projectId: scopedProjectId, criterionKey: dto.criterionKey }],
+      ownerId,
+      creatorSessionId,
+      [{
+        projectId: scopedProjectId,
+        criterionKey: dto.criterionKey,
+        completionCriterion,
+      }],
     );
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
@@ -4022,8 +4033,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * Unit T6's `OPEN_TASK` bound, over the items this call would actually write.
    *
-   * Two rules, both in `refuseTaskOpening`: the work has to name a criterion the project states
-   * today, and the project's daily allowance has to cover it. Neither is a rule about WHERE the
+   * Two ordinary rules, both in `refuseTaskOpening`: the work has to name a criterion the project
+   * states today, and the project's daily allowance has to cover it. A server-bound ACTIVE
+   * completion-ACK remediation obligation is the one orthogonal scope reason: it blocks closure
+   * without necessarily changing a criterion and is bounded by its own per-revision database cap.
+   * Neither is a rule about WHERE the
    * work lands — that is unit L3's scope contract, which has already decided the project every
    * item below is bound to — and neither applies to anybody but a judgment session.
    *
@@ -4036,10 +4050,63 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the attempt that wrote it, and re-charging it to today's budget would make a lost response
    * cost the allowance twice.
    */
+  private async currentCompletionAckRemediationProjectId(
+    ownerId: string,
+    actingSessionId: string | undefined,
+  ): Promise<string | null> {
+    if (!actingSessionId) return null;
+    try {
+      const [remediation] = await this.prisma.$queryRaw<Array<{ projectId: string }>>(Prisma.sql`
+        SELECT current_delivery.project_id AS "projectId"
+          FROM completion_ack_current_coordinator_delivery current_delivery
+         WHERE current_delivery.tenant_id = ${ownerId}::uuid
+           AND current_delivery.session_id = ${actingSessionId}::uuid
+         LIMIT 1
+      `);
+      return remediation?.projectId ?? null;
+    } catch (error) {
+      // During a rolling upgrade an old schema cannot yet have a 0202 delivery. Do not infer
+      // canonical authority from a Session title/prompt; the ordinary criterion/scope gate remains.
+      this.logger.warn(
+        `canonical remediation scope lookup failed for session ${actingSessionId}: `
+        + `${error instanceof Error ? error.message : 'UNKNOWN'}`,
+      );
+      return null;
+    }
+  }
+
+  private async assertCanonicalRemediationCompletionCriterion(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    projectId: string | null | undefined,
+    completionCriterion: TaskCompletionCriterionValue,
+  ): Promise<void> {
+    if (!actingSessionId || !projectId || completionCriterion !== 'HUMAN_SIGNOFF') return;
+    const canonicalProjectId = await this.currentCompletionAckRemediationProjectId(
+      ownerId,
+      actingSessionId,
+    );
+    if (canonicalProjectId !== projectId) return;
+    const refusal = refuseTaskOpening('JUDGMENT', {
+      canonicalRemediation: true,
+      completionCriterion,
+      declaredCriterionKey: undefined,
+      statedCriterionKeys: [],
+      openedInWindow: 0,
+      opening: 1,
+      budgetPerDay: 0,
+    });
+    if (refusal) throw new ForbiddenException(refusal);
+  }
+
   private async assertTaskOpeningAuthorized(
     ownerId: string,
     actingSessionId: string | undefined,
-    items: ReadonlyArray<{ projectId?: string | null; criterionKey?: string }>,
+    items: ReadonlyArray<{
+      projectId?: string | null;
+      criterionKey?: string;
+      completionCriterion?: TaskCompletionCriterionValue | null;
+    }>,
   ): Promise<void> {
     if (!actingSessionId || items.length === 0) return;
     const acting = await this.prisma.session.findFirst({
@@ -4048,7 +4115,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     const principal = authorityPrincipal(acting?.dispatchOrigin);
     if (principal !== 'JUDGMENT') return;
-    const byProject = new Map<string, Array<{ criterionKey?: string }>>();
+    const canonicalRemediationProjectId = await this.currentCompletionAckRemediationProjectId(
+      ownerId,
+      actingSessionId,
+    );
+    const byProject = new Map<string, Array<{
+      criterionKey?: string;
+      completionCriterion?: TaskCompletionCriterionValue | null;
+    }>>();
     for (const item of items) {
       // An item bound to no project is not on this bound: there is no goal for it to serve and no
       // budget it spends. It does not reach here in practice — a judgment session holds a scope,
@@ -4091,6 +4165,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
       for (const item of group) {
         const refusal = refuseTaskOpening(principal, {
+          canonicalRemediation: canonicalRemediationProjectId === projectId,
+          completionCriterion: item.completionCriterion,
           declaredCriterionKey: item.criterionKey,
           statedCriterionKeys,
           openedInWindow,
@@ -5067,13 +5143,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         _count: { select: { comments: true } },
       },
     });
-    const withRun = await this.withRunning(ownerId, tasks);
-    const states = await this.dependencyStatesFor(ownerId, tasks.map((t) => t.id));
+    const [withRun, states, activeObligations] = await Promise.all([
+      this.withRunning(ownerId, tasks),
+      this.dependencyStatesFor(ownerId, tasks.map((t) => t.id)),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        taskIds: tasks.map((task) => task.id),
+      }),
+    ]);
+    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
     return withRun.map((t) => {
       const dependencyState = states.get(t.id) ?? 'NONE';
-      // `blocked` drives the list's lock indicator; canRun is the single source of truth
-      // shared with the execute/batch gates so the UI never offers a run the API rejects.
-      return { ...t, dependencyState, blocked: !canRun(dependencyState) };
+      const controlPlaneObligations = obligationsByTask.get(t.id) ?? [];
+      // `blocked` drives the list's lock indicator. Dependency readiness and the canonical
+      // completion-ACK obligation are the same two predicates used by execute/batch dispatch.
+      return {
+        ...t,
+        dependencyState,
+        blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
+        controlPlaneObligations,
+      };
     });
   }
 
@@ -5095,17 +5184,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     if (!task) throw new NotFoundException('task not found');
 
-    const [withRun, states, runnable] = await Promise.all([
+    const [withRun, states, runnable, activeObligations] = await Promise.all([
       this.withRunning(ownerId, [task], true),
       this.dependencyStatesFor(ownerId, [id]),
       this.runnableTask(ownerId, id),
+      readCompletionAckObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
     ]);
     const dependencyState = states.get(id) ?? 'NONE';
     return {
       ...withRun[0],
       dependencyState,
-      blocked: !canRun(dependencyState),
+      blocked: !canRun(dependencyState) || activeObligations.length > 0,
       runnable,
+      controlPlaneObligations: activeObligations,
     };
   }
 
@@ -5265,13 +5356,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const hasMore = rows.length > limit;
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
-    const [withRun, states] = await Promise.all([
+    const [withRun, states, activeObligations] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        taskIds: pageTasks.map((task) => task.id),
+      }),
     ]);
+    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
-      return { ...task, dependencyState, blocked: !canRun(dependencyState) };
+      const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
+      return {
+        ...task,
+        dependencyState,
+        blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
+        controlPlaneObligations,
+      };
     });
     const nextCursor =
       hasMore && items.length ? encodeTaskPageCursor(items[items.length - 1]) : null;
@@ -5406,13 +5508,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.prisma.task.count({ where }),
     ]);
 
-    const [withRun, states] = await Promise.all([
+    const [withRun, states, activeObligations] = await Promise.all([
       this.withRunning(ownerId, rows, true),
       this.dependencyStatesFor(ownerId, rows.map((task) => task.id)),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        taskIds: rows.map((task) => task.id),
+      }),
     ]);
+    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
-      return { ...task, dependencyState, blocked: !canRun(dependencyState) };
+      const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
+      return {
+        ...task,
+        dependencyState,
+        blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
+        controlPlaneObligations,
+      };
     });
     return { items, total, truncated: total > items.length };
   }
@@ -6548,17 +6661,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Read the same successor-tail facts as task_list, Run Now, both automatic starters and the
     // commit gate. The relation above intentionally remains the stored audit edge (W); readiness
     // is answered by the current work holder at the trusted chain tail (S).
-    const dependencyState = computeDependencyState(
-      (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [],
-    );
-    const supersession = await this.supersession(ownerId, task);
+    const [dependencyFacts, supersession, controlPlaneObligations] = await Promise.all([
+      this.dependencyFactsFor(ownerId, [id]),
+      this.supersession(ownerId, task),
+      readCompletionAckObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
+    ]);
+    const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => withSessionState(session)),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
+      blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
       ...supersession,
+      controlPlaneObligations,
     };
   }
 
@@ -7225,6 +7342,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
     if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
+    // Creation is not the only way a repair Task can acquire a human criterion. An explicit update,
+    // changing completionPolicy, or merely clearing the executable command can all derive the same
+    // final HUMAN_SIGNOFF value above. Judge that final value against the current delivery, not the
+    // DTO field the caller happened to send. The database trigger repeats this for raw SQL writers.
+    await this.assertCanonicalRemediationCompletionCriterion(
+      ownerId,
+      actingSessionId,
+      dto.projectId === undefined ? before.projectId : dto.projectId,
+      completionCriterion,
+    );
     // Unit L3 §4. An update never re-files a task on its own — a write that does not mention the
     // project leaves it exactly where it is — so this binds nothing and only refuses: it is what
     // stops a coordinator editing work inside another project's goal (R6), moving work across the
@@ -8122,6 +8249,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       changesDependencyFacts
         ? [id, before.verifiesTaskId, verifiesTaskId]
         : [],
+    );
+    const changedFields = Object.keys(dto).sort();
+    const updateIdentity = createHash('sha256')
+      .update(JSON.stringify(changedFields.map((field) => [
+        field,
+        (dto as unknown as Record<string, unknown>)[field],
+      ])))
+      .digest('hex');
+    await this.recordCompletionAckRemediationTaskAction(
+      ownerId,
+      actingSessionId,
+      id,
+      'TASK_UPDATED',
+      `task-update:${updateIdentity}`,
+      { source: 'TASK_UPDATE', changedFields },
     );
     return updated;
   }
@@ -9670,7 +9812,48 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return { deleted, survivingLinks, projectIds };
   }
 
-  async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
+  /**
+   * Append a narrow, evidence-only link from a coordinator delivery to an effect that already
+   * committed. This must never become a second transaction owner: returning 500 after a Task
+   * update/start/comment succeeded would invite the runner to repeat the effect. PostgreSQL
+   * validates tenant/project/session/obligation scope and the persistent coordinator notices a
+   * missing receipt on its next pass.
+   */
+  private async recordCompletionAckRemediationTaskAction(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    taskId: string,
+    actionKind: 'TASK_UPDATED' | 'TASK_EXECUTE_REQUESTED' | 'TASK_COMMENTED',
+    actionKey: string,
+    evidence: Record<string, unknown>,
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    try {
+      await this.prisma.$queryRaw(Prisma.sql`
+        SELECT completion_ack_record_session_task_action(
+          ${ownerId}::uuid,
+          ${actingSessionId}::uuid,
+          ${taskId}::uuid,
+          ${actionKind},
+          ${actionKey},
+          ${JSON.stringify(evidence)}::jsonb
+        )
+      `);
+    } catch (error) {
+      this.logger.warn(
+        `completion-ACK remediation action receipt failed for task ${taskId} `
+        + `(${actionKind}): ${error instanceof Error ? error.message : 'UNKNOWN'}`,
+      );
+    }
+  }
+
+  async addComment(
+    ownerId: string,
+    id: string,
+    dto: CreateTaskCommentDto,
+    author?: Creator,
+    actingSessionId?: string,
+  ) {
     await this.loadDetail(ownerId, id);
     if (!dto.body) throw new BadRequestException('body is required');
     // Every mentioned id has to resolve, and one that does not is REFUSED rather than dropped.
@@ -9725,6 +9908,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // between an optimisation and a mechanism.
     void this.deliverMentions().catch((e) =>
       this.logger.warn(`mention delivery kick after comment ${comment.id} failed: ${e?.message ?? e}`),
+    );
+    await this.recordCompletionAckRemediationTaskAction(
+      ownerId,
+      actingSessionId,
+      id,
+      'TASK_COMMENTED',
+      `task-comment:${comment.id}`,
+      { source: 'TASK_COMMENT_INSERT', commentId: comment.id },
     );
     return comment;
   }
@@ -11055,6 +11246,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * send again, so a repeat of it is a new request and is treated as one.
      */
     requestToken?: string,
+    /** The Session making an agent-side request; used only for canonical remediation evidence. */
+    actingSessionId?: string,
   ) {
     // THE RECEIPT, BEFORE EVERYTHING.
     //
@@ -11066,12 +11259,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // never named. Stable artifact ids cannot fix that, because the door refuses before it reaches
     // them. So a request that has already been answered is answered from its answer.
     const runRequestToken = requestToken ?? randomUUID();
+    const recordAnswer = async (answer: TaskRunAnswer): Promise<TaskRunAnswer> => {
+      await this.recordCompletionAckRemediationTaskAction(
+        ownerId,
+        actingSessionId,
+        id,
+        'TASK_EXECUTE_REQUESTED',
+        `task-execute:${runRequestToken}`,
+        answer.ok
+          ? { source: 'TASK_EXECUTE', ok: true, sessionId: answer.sessionId ?? null }
+          : { source: 'TASK_EXECUTE', ok: false, skipped: answer.skipped },
+      );
+      return answer;
+    };
     const lease = await this.leaseRunRequest(
       ownerId, TASK_RUN_ACTION.execute, runRequestToken, taskRunFingerprint.execute(id),
     );
-    if (!lease.held) return lease.result as TaskRunAnswer;
+    if (!lease.held) return recordAnswer(lease.result as TaskRunAnswer);
     try {
-      return await this.executeLeased(ownerId, id, auto, runRequestToken, lease);
+      return recordAnswer(await this.executeLeased(ownerId, id, auto, runRequestToken, lease));
     } catch (e) {
       // A refused request is not a frozen one. Nothing about "prerequisites are not complete" or
       // "this list is paused" is an answer the caller should be given again after they have fixed
@@ -11222,9 +11428,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!task) throw new NotFoundException('task not found');
-    // THE MOMENT FENCE, and it is first because it decides whether this delivery has any business
-    // evaluating the gates below at all. Only automatic triggers pass `auto`; an explicit Run Now is
-    // a person deciding to start the work now, and there is no moment for it to be stale against.
+    const [completionAckObligation] = await readCompletionAckObligations(this.prisma, {
+      tenantId: ownerId,
+      taskIds: [task.id],
+    });
+    if (completionAckObligation) {
+      // The command already finished. Starting task work again would destroy the very distinction
+      // this obligation preserves: retry the original control-plane receipt, not the workload.
+      // Automatic deliveries release their request so the same durable fact can be reconsidered
+      // after recovery; a person receives the canonical identity they can follow in every read UI.
+      if (auto) {
+        return this.standDownReleasing(lease, {
+          ok: false as const,
+          skipped: 'completion-ack-reconciliation' as const,
+        });
+      }
+      throw new ConflictException({
+        code: 'COMPLETION_ACK_RECONCILIATION_REQUIRED',
+        obligationId: completionAckObligation.obligationId,
+        obligationRevision: completionAckObligation.obligationRevision,
+        requiredAction: completionAckObligation.requiredAction,
+        message: 'The command already finished; reconcile its original completion receipt before starting task work again.',
+      });
+    }
+    // THE MOMENT FENCE. It is first among the ordinary dispatch gates because it decides whether
+    // this delivery has any business evaluating them at all; only the completion-ACK safety gate
+    // precedes it, since that says the workload already ran and must not be repeated. Only
+    // automatic triggers pass `auto`; an explicit Run Now is a person deciding to start the work
+    // now, and there is no moment for it to be stale against.
     //
     // An automatic door names its request `<kind>:<task>:<epoch>` and carries the epoch its own
     // candidate scan read. If the row has moved to a later one, everything that scan concluded is
@@ -11695,7 +11926,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    const batchFacts = await this.dependencyFactsFor(ownerId, tasks.map((t) => t.id));
+    const [batchFacts, completionAckObligations] = await Promise.all([
+      this.dependencyFactsFor(ownerId, tasks.map((t) => t.id)),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        taskIds: tasks.map((task) => task.id),
+      }),
+    ]);
+    const completionAckByTask = completionAckObligationsBy(
+      completionAckObligations,
+      'taskId',
+    );
     const states = new Map([...batchFacts]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
@@ -11754,7 +11995,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // effect, and its dispatch is going to be refused by the database anyway. Classified rather
       // than dropped, so a person who selected fifty tasks is told which of them were already
       // re-done and by what.
-      if (workRefusal) {
+      const [completionAckObligation] = completionAckByTask.get(t.id) ?? [];
+      if (completionAckObligation) {
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: `Completion receipt reconciliation required (obligation ${completionAckObligation.obligationId}, revision ${completionAckObligation.obligationRevision})`,
+        });
+      } else if (workRefusal) {
         skipped.push({
           id: t.id,
           title: t.title,

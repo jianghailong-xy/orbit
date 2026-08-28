@@ -24,6 +24,10 @@ import {
 } from '@orbit/shared';
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
+import {
+  completionAckObligationsBy,
+  readCompletionAckObligations,
+} from '../common/completion-ack-obligation';
 import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
@@ -36,10 +40,12 @@ import {
 import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
 import {
   CreateProjectDto,
+  DecideCompletionAckOwnerDecisionDto,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
   ReopenProjectDto,
+  RequestCompletionAckOwnerDecisionDto,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
@@ -1361,10 +1367,15 @@ export class ProjectsService {
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    const [rollups, attention] = await Promise.all([
+    const [rollups, attention, activeObligations] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        projectIds: projects.map((project) => project.id),
+      }),
     ]);
+    const obligationsByProject = completionAckObligationsBy(activeObligations, 'projectId');
     return projects.map((project) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, five zero
       // buckets and no activity rather than making every client handle two shapes.
@@ -1379,6 +1390,7 @@ export class ProjectsService {
         // The same total shape for a project with no open blockers: clients never have to infer
         // whether an absent field means "none" or "this server did not compute attention".
         attention: attention.get(project.id) ?? emptyProjectListAttention(),
+        controlPlaneObligations: obligationsByProject.get(project.id) ?? [],
       };
     });
   }
@@ -1405,17 +1417,130 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const byStatus = await this.prisma.task.groupBy({
-      by: ['status'],
-      where: { projectId: id },
-      _count: { _all: true },
-    });
-    const acceptance = await this.acceptance.criteriaSummary(id, project.acceptanceCriteria);
+    const [byStatus, acceptance, controlPlaneObligations] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['status'],
+        where: { projectId: id },
+        _count: { _all: true },
+      }),
+      this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
+      readCompletionAckObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
+    ]);
     return withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
       acceptance,
+      controlPlaneObligations,
     });
+  }
+
+  /**
+   * Pause one completion-ACK remediation for a typed owner input without transferring ownership
+   * of the incident. The runner token supplies tenant + machine identity; the session header is
+   * normalized here and PostgreSQL proves that all four identities name the current, non-revoked
+   * delivery for the exact ACTIVE obligation revision.
+   */
+  async requestCompletionAckOwnerDecision(
+    ownerId: string,
+    projectId: string,
+    runnerId: string,
+    coordinatorSessionId: string | undefined,
+    dto: RequestCompletionAckOwnerDecisionDto,
+  ): Promise<Record<string, unknown>> {
+    const suppliedSessionId = coordinatorSessionId?.trim();
+    if (!suppliedSessionId) {
+      throw new ForbiddenException({
+        code: 'COMPLETION_ACK_OWNER_DECISION_SESSION_REQUIRED',
+        message: 'x-orbit-session-id must name the current completion-ACK coordinator delivery',
+      });
+    }
+    let sessionId: string;
+    try {
+      sessionId = toUuid(suppliedSessionId);
+    } catch {
+      throw new BadRequestException({
+        code: 'COMPLETION_ACK_OWNER_DECISION_SESSION_INVALID',
+        message: 'x-orbit-session-id must be an Orbit session id',
+      });
+    }
+    await this.assertOwned(ownerId, projectId);
+    try {
+      const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+        SELECT completion_ack_request_owner_decision(
+          ${ownerId}::uuid,
+          ${projectId}::uuid,
+          ${runnerId}::uuid,
+          ${sessionId}::uuid,
+          ${dto.obligationId},
+          ${dto.obligationRevision},
+          ${dto.reason},
+          ${JSON.stringify(dto.request)}::jsonb
+        ) AS result
+      `);
+      if (!row) throw new Error('COMPLETION_ACK_OWNER_DECISION_RESULT_MISSING');
+      return row.result as unknown as Record<string, unknown>;
+    } catch (error) {
+      ProjectsService.rethrowCompletionAckOwnerDecisionError(error);
+    }
+  }
+
+  /** Owner/JWT callback for the child request. It resumes the same AGENT-owned coordination; the
+   * canonical 0201 obligation remains ACTIVE until the original completion callback commits. */
+  async decideCompletionAckOwnerDecision(
+    ownerId: string,
+    projectId: string,
+    requestId: string,
+    dto: DecideCompletionAckOwnerDecisionDto,
+  ): Promise<Record<string, unknown>> {
+    await this.assertOwned(ownerId, projectId);
+    try {
+      const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+        SELECT completion_ack_decide_owner_decision(
+          ${ownerId}::uuid,
+          ${projectId}::uuid,
+          ${requestId}::uuid,
+          ${dto.obligationRevision},
+          ${dto.idempotencyKey},
+          ${JSON.stringify(dto.decision)}::jsonb
+        ) AS result
+      `);
+      if (!row) throw new Error('COMPLETION_ACK_OWNER_DECISION_RESULT_MISSING');
+      return row.result as unknown as Record<string, unknown>;
+    } catch (error) {
+      ProjectsService.rethrowCompletionAckOwnerDecisionError(error);
+    }
+  }
+
+  private static rethrowCompletionAckOwnerDecisionError(error: unknown): never {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = [
+      'COMPLETION_ACK_OWNER_DECISION_PAYLOAD_INCOMPLETE',
+      'COMPLETION_ACK_OWNER_DECISION_PROTOCOL_INVALID',
+      'COMPLETION_ACK_OWNER_DECISION_ARGUMENT_INVALID',
+      'COMPLETION_ACK_OWNER_DECISION_CALLBACK_INVALID',
+    ].find((candidate) => message.includes(candidate));
+    if (code) throw new BadRequestException({ code, message: code });
+    if (message.includes('COMPLETION_ACK_OWNER_DECISION_CURRENT_DELIVERY_REQUIRED')) {
+      throw new ForbiddenException({
+        code: 'COMPLETION_ACK_OWNER_DECISION_CURRENT_DELIVERY_REQUIRED',
+        message: 'only the exact current non-revoked coordinator delivery session may ask',
+      });
+    }
+    if (message.includes('COMPLETION_ACK_OWNER_DECISION_REQUEST_NOT_FOUND')) {
+      throw new NotFoundException({
+        code: 'COMPLETION_ACK_OWNER_DECISION_REQUEST_NOT_FOUND',
+        message: 'completion-ACK owner decision request not found',
+      });
+    }
+    const conflict = [
+      'COMPLETION_ACK_OWNER_DECISION_OBLIGATION_NOT_ACTIVE',
+      'COMPLETION_ACK_OWNER_DECISION_IDEMPOTENCY_CONFLICT',
+      'COMPLETION_ACK_OWNER_DECISION_ALREADY_OPEN',
+      'COMPLETION_ACK_OWNER_DECISION_CALLBACK_CONFLICT',
+      'COMPLETION_ACK_OWNER_DECISION_REQUEST_STALE',
+    ].find((candidate) => message.includes(candidate));
+    if (conflict) throw new ConflictException({ code: conflict, message: conflict });
+    throw error;
   }
 
   /**
@@ -1557,19 +1682,33 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const dependencies = await this.taskDependencyFields(
-      ownerId,
-      projectId,
-      page.map((task) => task.id),
-    );
-    const items = page.map(({ _count, ...task }) => ({
-      ...task,
-      childCount: _count.children,
-      // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
-      // carries all four keys, because an absent key reads to a client as "this endpoint does not
-      // report dependencies" rather than as "this task has none".
-      ...(dependencies.get(task.id) ?? UNCONNECTED_TASK),
-    }));
+    const [dependencies, activeObligations] = await Promise.all([
+      this.taskDependencyFields(
+        ownerId,
+        projectId,
+        page.map((task) => task.id),
+      ),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        projectIds: [projectId],
+        taskIds: page.map((task) => task.id),
+      }),
+    ]);
+    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
+    const items = page.map(({ _count, ...task }) => {
+      const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
+      const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
+      return {
+        ...task,
+        childCount: _count.children,
+        // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
+        // carries all four keys, because an absent key reads to a client as "this endpoint does not
+        // report dependencies" rather than as "this task has none".
+        ...dependency,
+        blocked: dependency.dependencyState !== 'READY' || controlPlaneObligations.length > 0,
+        controlPlaneObligations,
+      };
+    });
     return {
       items,
       nextCursor: hasMore && page.length ? encodeTaskPageCursor(page[page.length - 1]) : null,
