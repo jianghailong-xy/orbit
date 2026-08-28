@@ -74,8 +74,8 @@ interface RollupRow {
  * the list and `ready` on the project page is worse than either number alone:
  *
  *   - `running`  = IN_PROGRESS, or OPEN with a live session on it
- *   - `ready`    = OPEN, no live session, no unmet prerequisite
- *   - `blocked`  = OPEN, no live session, at least one unmet prerequisite
+ *   - `ready`    = OPEN, no live session, no unmet prerequisite or completion-ACK repair
+ *   - `blocked`  = OPEN, no live session, at least one unmet prerequisite or ACK repair
  *   - FAILED is in no bucket: neither work in flight nor work settled.
  *
  * The live-session half is not decoration: dispatch opens a Session and leaves `Task.status` at
@@ -131,7 +131,15 @@ export async function readProjectListRollups(
                    AND t.status = 'OPEN'
         JOIN project proj ON proj.id = t.project_id
                          AND proj.owner_id = ${ownerId}::uuid
+        LEFT JOIN completion_ack_active_obligation completion_ack
+          ON completion_ack.task_id = t.id
+         AND completion_ack.tenant_id = ${ownerId}::uuid
+         AND completion_ack.project_id = t.project_id
        WHERE true ${narrowed}
+         -- A live execution session normally means RUNNING. Once that same turn has completed
+         -- successfully but its ACK cannot commit, the canonical obligation is the stronger
+         -- operational fact: this task is BLOCKED, not still doing useful work.
+         AND completion_ack.task_id IS NULL
        GROUP BY t.project_id
     ),
     blocked_task AS MATERIALIZED (
@@ -140,15 +148,21 @@ export async function readProjectListRollups(
         JOIN task dependent ON dependent.owner_id = ${ownerId}::uuid
                            AND dependent.project_id = proj.id
                            AND dependent.status = 'OPEN'
-        JOIN task_dependency d ON d.task_id = dependent.id
+        LEFT JOIN task_dependency d ON d.task_id = dependent.id
         -- A prerequisite in another project still blocks this task. Do not narrow pre by project:
         -- project filing is organisation, while dependency execution is owner-wide.
-        JOIN task pre ON pre.id = d.depends_on_task_id
-                     AND pre.status IN ('OPEN', 'IN_PROGRESS')
-        -- A task already held by a live session is running even if a dependency was added later.
+        LEFT JOIN task pre ON pre.id = d.depends_on_task_id
+                          AND pre.status IN ('OPEN', 'IN_PROGRESS')
+        LEFT JOIN completion_ack_active_obligation completion_ack
+          ON completion_ack.task_id = dependent.id
+         AND completion_ack.tenant_id = ${ownerId}::uuid
+        -- A normal task held by a live session is running even if a dependency was added later.
+        -- A completion-ACK obligation overrides that display rule: the execution is over and the
+        -- control plane is blocked, so retaining the live session must not hide the obligation.
         LEFT JOIN active a ON a.task_id = dependent.id
        WHERE proj.owner_id = ${ownerId}::uuid ${narrowed}
-         AND a.task_id IS NULL
+         AND (a.task_id IS NULL OR completion_ack.task_id IS NOT NULL)
+         AND (pre.id IS NOT NULL OR completion_ack.task_id IS NOT NULL)
        GROUP BY dependent.project_id, dependent.id
     ),
     blocked AS MATERIALIZED (

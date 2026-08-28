@@ -145,6 +145,64 @@ services:
       # upgrade.sh supplies the checked-out commit. Empty values fail closed in the worker.
       OUTCOME_WATCHDOG_COLLECTOR_SHA: "${OUTCOME_WATCHDOG_COLLECTOR_SHA:-}"
       OUTCOME_WATCHDOG_TARGET_SHA: "${OUTCOME_WATCHDOG_TARGET_SHA:-}"
+      # Deployment-owned generations are registered in PostgreSQL before this process starts.
+      # A missing first heartbeat is therefore observable by the external dead-man.
+      OUTCOME_WATCHDOG_EXPECTATION_GENERATION: "${OUTCOME_WATCHDOG_EXPECTATION_GENERATION:-}"
+      COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION: "${COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION:-}"
+      # Stable deployment identity lets the external dead-man detect a cold start with no first
+      # heartbeat; a container hostname/pid exists only after the process has already started.
+      OUTCOME_WATCHDOG_INSTANCE_ID: "compose:outcome-watchdog"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Persistent delivery worker for canonical remediation obligations. It is deliberately a
+  # separate process from apiserver (the failing commit path) and watchdog (the detector). It may
+  # lease and re-deliver an existing fact, but only the original ACK can close the obligation.
+  outcome-coordinator:
+    image: orbit-apiserver:local
+    container_name: orbit-outcome-coordinator
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - 'cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy && cd /app && exec node src/apiserver/dist/outcome-coordinator/main.js'
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      OUTCOME_COORDINATOR_SOURCE_SHA: "${OUTCOME_COORDINATOR_SOURCE_SHA:-}"
+      OUTCOME_COORDINATOR_TARGET_SHA: "${OUTCOME_COORDINATOR_TARGET_SHA:-}"
+      OUTCOME_COORDINATOR_EXPECTATION_GENERATION: "${OUTCOME_COORDINATOR_EXPECTATION_GENERATION:-}"
+      OUTCOME_COORDINATOR_INSTANCE_ID: "compose:outcome-coordinator"
+      # Session delivery can notify the owner through the same optional channel as apiserver.
+      APNS_KEY: "${APNS_KEY:-}"
+      APNS_KEY_ID: "${APNS_KEY_ID:-}"
+      APNS_TEAM_ID: "${APNS_TEAM_ID:-}"
+      APNS_BUNDLE_ID: "${APNS_BUNDLE_ID:-io.orbitd.app}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Hot peer for the durable courier above. PostgreSQL leases and pre-planned Session ids make
+  # concurrent polling safe; the second process is what lets an expired lease move again when the
+  # first Node process is alive-but-wedged. Each peer has its own externally observed generation.
+  outcome-coordinator-secondary:
+    image: orbit-apiserver:local
+    container_name: orbit-outcome-coordinator-secondary
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - 'cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy && cd /app && exec node src/apiserver/dist/outcome-coordinator/main.js'
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      OUTCOME_COORDINATOR_SOURCE_SHA: "${OUTCOME_COORDINATOR_SOURCE_SHA:-}"
+      OUTCOME_COORDINATOR_TARGET_SHA: "${OUTCOME_COORDINATOR_TARGET_SHA:-}"
+      OUTCOME_COORDINATOR_EXPECTATION_GENERATION: "${OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION:-}"
+      OUTCOME_COORDINATOR_INSTANCE_ID: "compose:outcome-coordinator-secondary"
+      APNS_KEY: "${APNS_KEY:-}"
+      APNS_KEY_ID: "${APNS_KEY_ID:-}"
+      APNS_TEAM_ID: "${APNS_TEAM_ID:-}"
+      APNS_BUNDLE_ID: "${APNS_BUNDLE_ID:-io.orbitd.app}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -158,10 +216,14 @@ services:
     command:
       - /bin/sh
       - -c
-      - 'while true; do node /app/scripts/executable-acceptance-dead-man.mjs; sleep 10; done'
+      - 'while true; do node /app/scripts/executable-acceptance-dead-man.mjs --component outcome-watchdog --instance-id compose:outcome-watchdog --generation "$${OUTCOME_WATCHDOG_EXPECTATION_GENERATION}"; node /app/scripts/executable-acceptance-dead-man.mjs --component completion-ack-watchdog --instance-id compose:outcome-watchdog --generation "$${COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION}"; node /app/scripts/executable-acceptance-dead-man.mjs --component outcome-coordinator --instance-id compose:outcome-coordinator --generation "$${OUTCOME_COORDINATOR_EXPECTATION_GENERATION}"; node /app/scripts/executable-acceptance-dead-man.mjs --component outcome-coordinator --instance-id compose:outcome-coordinator-secondary --generation "$${OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION}"; sleep 10; done'
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       EXECUTABLE_DEAD_MAN_SOURCE_SHA: "${EXECUTABLE_DEAD_MAN_SOURCE_SHA:-}"
+      OUTCOME_WATCHDOG_EXPECTATION_GENERATION: "${OUTCOME_WATCHDOG_EXPECTATION_GENERATION:-}"
+      COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION: "${COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION:-}"
+      OUTCOME_COORDINATOR_EXPECTATION_GENERATION: "${OUTCOME_COORDINATOR_EXPECTATION_GENERATION:-}"
+      OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION: "${OUTCOME_COORDINATOR_SECONDARY_EXPECTATION_GENERATION:-}"
     depends_on:
       postgres:
         condition: service_healthy

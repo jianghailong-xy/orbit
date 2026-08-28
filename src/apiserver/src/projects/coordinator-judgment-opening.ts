@@ -70,9 +70,51 @@ export function describeWakeFact(fact: WakeFact): string {
         `服务验收标准 ${String(detail.criterionKey ?? fact.subjectId)} 的 ` +
         `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了。`
       );
+    case 'COMPLETION_ACK_STALE':
+      {
+        const binding = detail.binding && typeof detail.binding === 'object'
+          && !Array.isArray(detail.binding)
+          ? detail.binding as Record<string, unknown>
+          : {};
+        const structuredReason = detail.reason && typeof detail.reason === 'object'
+          && !Array.isArray(detail.reason)
+          ? detail.reason as Record<string, unknown>
+          : null;
+        const reason = typeof detail.reason === 'string'
+          ? detail.reason
+          : String(structuredReason?.message ?? 'completion ACK stale');
+      return (
+        `任务 ${uuidToBase62(fact.subjectId)} 的完成结果已经持久化，但控制面仍未确认 turn `
+        + `${String(binding.turnId ?? detail.turnId ?? '未知')}；canonical obligation `
+        + `${String(detail.obligationId ?? '未知')} / revision `
+        + `${String(detail.obligationRevision ?? detail.bindingDigest ?? '未知')} `
+        + `由项目 coordinator 负责，原因是 ${reason}。`
+      );
+      }
     default:
       return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
   }
+}
+
+/** A code/control-plane defect is ordinary autonomous engineering work, not a human judgment. */
+export function completionAckRemediationProtocol(): string {
+  return (
+    '\n\n这条 COMPLETION_ACK_STALE 是 mandatory remediation obligation。你要自动闭合它，不要等待人发消息：\n'
+    + '1. 先读取 project_get、task_get 和 session_get；以其中同一个 obligationId/revision 为事实身份，'
+    + '不得把聊天文本当作故障事实。\n'
+    + '2. 保护原始结果：不得取消或重跑已完成命令，不得直接写 Task.status，不得放宽 writer fence，'
+    + '不得把 legacy v1 伪造成 typed attempt。\n'
+    + '3. 自动安排诊断、代码兼容修复、直接 PostgreSQL 回归、部署、原 callback 恢复和现场核验；'
+    + '重复 delivery 必须复用当前义务与已有修复任务。创建确有必要的修复任务时不要伪造 criterionKey：'
+    + '当前 active obligation revision 是服务端验证的正交范围理由，并受独立的 active-action 容量上限约束。\n'
+    + '4. ACK 成功后确认义务从 active 读面自动消失、append-only incident/repair history 仍存在，'
+    + '再恢复依赖 successor。\n'
+    + '5. 只有确实需要 NEW_AUTHORIZATION、RISK_ACCEPTANCE、GOAL_DECISION 或 EXTERNAL_IDENTITY 时才升级给人；'
+    + '此时必须调用 project_owner_decision_request，传当前 projectId、obligationId、obligationRevision、reason，'
+    + '并完整填写 whyNotAgent、options、impacts、recommendation、noActionConsequence、cost、deadline、'
+    + 'resumeBehavior、idempotencyKey。不得用 task_comment、聊天文本或 HUMAN_SIGNOFF 代替这个结构化协议。'
+    + '代码兼容缺陷、测试、部署和验证不属于这四类。'
+  );
 }
 
 /**
@@ -130,14 +172,16 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + '写——task_create、task_update、task_comment、task_start、project_update、project_merge_evidence、'
     + 'project_acceptance_run、project_acceptance_verdict、project_criteria_confirm。\n\n'
     + '写的时候有三条边界，服务端会照着拒（不是建议）：'
-    + '① 开新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
-    + '并受这个项目每天能开多少个任务的预算限制；'
+    + '① 普通新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
+    + '并受这个项目每天能开多少个任务的预算限制；只有服务端已将本会话绑定到 ACTIVE canonical remediation '
+    + 'obligation 时，该 revision 才能作为不伪造 criterionKey 的正交范围理由，并走独立容量上限；'
     + '② 验收标准你改不了、标准集确认不了，人工标准的 PASS 也写不了——尺子、尺子是否算数和人工结论都归账号所有者通道；'
     + '③ 项目的 status=DONE 不由任何主体直接写，它只由全部已确认判据满足后自动产生。'
     + '这三条是判断会话的角色隔离和按动作留痕，不是对“真人在场”的密码学证明；'
     + '把发现和还差什么写进 task_comment，账号所有者会读到。\n\n'
     + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'
     + (fact.event === 'PROJECT_TASKS_SETTLED' ? settledAcceptanceProtocol(projectId) : '')
+    + (fact.event === 'COMPLETION_ACK_STALE' ? completionAckRemediationProtocol() : '')
     + '\n\n'
     + '同一个项目还有一条人点开的协调会话，长期开着、由人驱动。它和这次判断读库里同一份事实，不共享上下文；'
     + '这次判断不会动它，它也不会动这次判断。'

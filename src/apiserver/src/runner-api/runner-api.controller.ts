@@ -7,6 +7,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  HttpException,
   Logger,
   NotFoundException,
   Param,
@@ -26,7 +27,7 @@ import {
   reportedLandingAuthority,
 } from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import {
   AgentProvider,
@@ -134,6 +135,12 @@ import {
   type TaskCompletionCriterionValue,
 } from '../tasks/task-completion-criterion';
 import {
+  completionCriterionSnapshot,
+  completionDigest,
+  normalizeCompletionEvidence,
+  type CompletionCriterionSnapshotInput,
+} from '../tasks/task-completion-evidence.service';
+import {
   ATTEMPT_TERMINATION_KINDS,
   continuationAfterExecutableAttempt,
   evaluateExecutableAttempt,
@@ -169,6 +176,7 @@ import {
   runnerAdvertisesProvider,
 } from './runner-provider-support';
 import { sessionExecRuntime } from '../providers/custom-provider';
+import { OutcomeWatchdogService } from '../outcome-watchdog/outcome-watchdog.service';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -294,6 +302,187 @@ function taskAcceptanceExpectedExitCode(
 
 function isTaskAcceptanceClientTurnId(clientTurnId: string | null | undefined): boolean {
   return taskAcceptanceTurnIdentity(clientTurnId) != null;
+}
+
+interface LegacyExecutableBridgeTask extends CompletionCriterionSnapshotInput {
+  id: string;
+  ownerId: string;
+}
+
+/**
+ * Rolling-upgrade bridge for a v1 shell turn that was dispatched before evidence-bound judgment
+ * requests became mandatory. This function deliberately receives the caller's TransactionClient:
+ * its evidence, request, result (written by the caller), Task projection, turn ACK and Session
+ * park must either all commit or all disappear. It creates no v2 admission or typed attempt.
+ */
+async function ensureLegacyExecutableJudgmentRequest(
+  tx: Prisma.TransactionClient,
+  input: {
+    task: LegacyExecutableBridgeTask;
+    sessionId: string;
+    creatorId: string;
+    workspaceId: string | null;
+    assignedRunnerId: string | null;
+    runnerId: string;
+    turnId: string;
+    turnClientId: string;
+    turnLeaseGeneration: string | null;
+    command: string;
+    expectedExitCode: number;
+    actualExitCode: number;
+    rawOutput: string;
+  },
+) {
+  const criterion = completionCriterionSnapshot(input.task);
+  const criterionRevision = completionDigest(criterion);
+  // The legacy identity stays explicit. In particular, this is not an EXITED typed-attempt fact:
+  // it is a canonical observation of the original v1 callback and its exact persisted turn.
+  const evidence = normalizeCompletionEvidence({
+    schemaVersion: 1,
+    source: 'LEGACY_V1_TURN_COMPLETE',
+    protocol: {
+      name: 'legacy-executable-acceptance',
+      version: 1,
+      typedAttempt: false,
+    },
+    binding: {
+      tenantId: input.task.ownerId,
+      projectId: input.task.projectId,
+      taskId: input.task.id,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      turnClientId: input.turnClientId,
+      turnLeaseGeneration: input.turnLeaseGeneration,
+      runnerId: input.runnerId,
+      assignedRunnerId: input.assignedRunnerId,
+      workspaceId: input.workspaceId,
+    },
+    observation: {
+      command: input.command,
+      commandDigest: sha256(input.command),
+      expectedExitCode: input.expectedExitCode,
+      actualExitCode: input.actualExitCode,
+      rawOutputDigest: sha256(input.rawOutput),
+      rawOutputBytes: Buffer.byteLength(input.rawOutput, 'utf8'),
+      evidenceSource: 'RUNNER_TURN_COMPLETE_CALLBACK',
+    },
+  }) as Prisma.InputJsonObject;
+  const evidenceDigest = completionDigest(evidence);
+  const idempotencyKey = `legacy-v1-turn-complete:${input.turnId}:${evidenceDigest}`;
+  const actorType = input.workspaceId ? CreatorType.AGENT : CreatorType.USER;
+  const actorId = input.workspaceId ?? input.creatorId;
+
+  const replay = await tx.taskCompletionEvidenceIdempotency.findUnique({
+    where: { taskId_idempotencyKey: { taskId: input.task.id, idempotencyKey } },
+    include: { evidence: true },
+  });
+  if (replay && (
+    replay.evidence.ownerId !== input.task.ownerId
+    || replay.evidence.actorType !== actorType
+    || replay.evidence.actorId !== actorId
+    || replay.evidence.sourceSessionId !== input.sessionId
+    || replay.evidence.criterionRevision !== criterionRevision
+    || replay.evidence.evidenceDigest !== evidenceDigest
+  )) {
+    throw new ConflictException('legacy v1 completion idempotency key is bound to another fact');
+  }
+
+  let evidenceRow = replay?.evidence ?? await tx.taskCompletionEvidence.findFirst({
+    where: {
+      taskId: input.task.id,
+      actorType,
+      actorId,
+      sourceSessionId: input.sessionId,
+      criterionRevision,
+      evidenceDigest,
+    },
+  });
+  if (!evidenceRow) {
+    const [sourceAttempt, latest] = await Promise.all([
+      tx.taskAttempt.findUnique({ where: { sessionId: input.sessionId }, select: { id: true } }),
+      tx.taskCompletionEvidence.aggregate({
+        where: { taskId: input.task.id },
+        _max: { revision: true },
+      }),
+    ]);
+    evidenceRow = await tx.taskCompletionEvidence.create({
+      data: {
+        id: randomUUID(),
+        taskId: input.task.id,
+        ownerId: input.task.ownerId,
+        actorType,
+        actorId,
+        sourceSessionId: input.sessionId,
+        sourceAttemptId: sourceAttempt?.id,
+        criterionRevision,
+        criterion: criterion as Prisma.InputJsonObject,
+        evidence,
+        evidenceDigest,
+        revision: (latest._max.revision ?? 0n) + 1n,
+      },
+    });
+  }
+  if (!replay) {
+    await tx.taskCompletionEvidenceIdempotency.create({
+      data: {
+        id: randomUUID(),
+        taskId: input.task.id,
+        idempotencyKey,
+        evidenceId: evidenceRow.id,
+      },
+    });
+  }
+
+  const existing = await tx.taskJudgmentRequest.findFirst({
+    where: {
+      taskId: input.task.id,
+      criterionRevision,
+      evidenceDigest,
+      kind: 'EXECUTABLE',
+    },
+    include: { executableResult: true },
+  });
+  if (existing) {
+    if (existing.recipientType !== 'SYSTEM_EXECUTABLE_EVALUATOR'
+      || existing.recipientId !== input.sessionId) {
+      throw new ConflictException('legacy v1 judgment request belongs to another evaluator');
+    }
+    if (existing.status === 'DECIDED') {
+      const expectedDecision = input.actualExitCode === input.expectedExitCode ? 'PASS' : 'FAIL';
+      const result = existing.executableResult;
+      if (!result
+        || existing.decision !== expectedDecision
+        || result.command !== input.command
+        || result.expectedExitCode !== input.expectedExitCode
+        || result.actualExitCode !== input.actualExitCode
+        || result.rawOutput !== input.rawOutput
+        || result.recordedById !== input.runnerId) {
+        throw new ConflictException('legacy v1 decided judgment does not match the callback');
+      }
+      return existing;
+    }
+    if (existing.status !== 'OPEN') {
+      throw new ConflictException('legacy v1 judgment request is no longer actionable');
+    }
+    return existing;
+  }
+  return tx.taskJudgmentRequest.create({
+    data: {
+      id: randomUUID(),
+      taskId: input.task.id,
+      ownerId: input.task.ownerId,
+      evidenceId: evidenceRow.id,
+      criterionRevision,
+      evidenceDigest,
+      kind: 'EXECUTABLE',
+      recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+      recipientId: input.sessionId,
+      origin: 'LIVE_EVIDENCE',
+      // This request is consumed in the same transaction and never belongs in a human channel.
+      devicePolicy: 'IN_APP_ONLY',
+    },
+    include: { executableResult: true },
+  });
 }
 
 function executableAcceptanceCapability(
@@ -428,6 +617,45 @@ function sameIds(next: readonly string[], stored: readonly string[]): boolean {
   return next.length === stored.length && next.every((v, i) => v === stored[i]);
 }
 
+function completionAckFailureEvidence(error: unknown): {
+  fingerprint: string;
+  detail: Record<string, unknown>;
+} | null {
+  if (error instanceof HttpException && error.getStatus() < 500) return null;
+  const candidate = error && typeof error === 'object'
+    ? error as Record<string, unknown>
+    : {};
+  const meta = candidate.meta && typeof candidate.meta === 'object'
+    ? candidate.meta as Record<string, unknown>
+    : {};
+  const database = meta.database_error && typeof meta.database_error === 'object'
+    ? meta.database_error as Record<string, unknown>
+    : {};
+  const message = String(database.message ?? candidate.message ?? error ?? 'UNKNOWN');
+  const symbols = message.match(/\b[A-Z][A-Z0-9_]{4,}\b/g) ?? [];
+  const invariant = symbols.find((value) => value.includes('_')) ?? 'UNCLASSIFIED_SERVER_FAILURE';
+  const material = {
+    endpoint: 'runner.turn-complete',
+    prismaCode: typeof candidate.code === 'string' ? candidate.code : null,
+    sqlstate: typeof database.code === 'string'
+      ? database.code
+      : (typeof meta.code === 'string' ? meta.code : null),
+    invariant,
+  };
+  return {
+    fingerprint: sha256(JSON.stringify(material)),
+    detail: {
+      ...material,
+      // The immutable incident ledger must never become a second copy of a driver/SQL error.
+      // Such messages can contain query values, paths or credentials and cannot be redacted
+      // after append.  The allow-listed classification above is enough to route the incident;
+      // retain only a digest for forensic correlation with the ephemeral server log.
+      messageDigest: sha256(message),
+      source: 'RUNNER_API_TURN_COMPLETE_CATCH',
+    },
+  };
+}
+
 @MachineProtocol()
 @Controller('runner')
 export class RunnerApiController {
@@ -455,6 +683,8 @@ export class RunnerApiController {
     private readonly completionInputs?: CompletionInputRouter,
     /** Project EXECUTABLE criteria consume the same durable command-result row as Task L0. */
     private readonly projectAcceptance?: ProjectAcceptanceService,
+    /** Separate-transaction completion-ACK observations. Optional only in direct controller specs. */
+    private readonly completionAckMonitor?: OutcomeWatchdogService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2680,7 +2910,9 @@ export class RunnerApiController {
     // billing accrual — is taken from the Session row read under its own lock inside the closure,
     // so a re-run cannot accrue against a turn the winner already closed. `dto` and its usage are
     // outside, so a retry books the same numbers and not a second set.
-    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
+    const finalized = await (async () => {
+      try {
+        return await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
@@ -2691,6 +2923,10 @@ export class RunnerApiController {
         select: {
           status: true,
           taskId: true,
+          ownerId: true,
+          creatorId: true,
+          workspaceId: true,
+          assignedRunnerId: true,
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -2705,7 +2941,13 @@ export class RunnerApiController {
       // conversation-turn ACK — and later applies the derived outcome only if that ACK wins.
       const completedTurn = await tx.conversationTurn.findFirst({
         where: { id: dto.turnId, sessionId },
-        select: { id: true, kind: true, clientTurnId: true, content: true },
+        select: {
+          id: true,
+          kind: true,
+          clientTurnId: true,
+          content: true,
+          leaseGeneration: true,
+        },
       });
       const queuedAcceptanceIdentity = taskAcceptanceTurnIdentity(completedTurn?.clientTurnId);
       const taskAcceptanceTurn =
@@ -2713,12 +2955,17 @@ export class RunnerApiController {
         && queuedAcceptanceIdentity != null;
       let lockedAcceptanceTask: {
         id: string;
+        ownerId: string;
+        title: string;
         status: TaskStatus;
         projectId: string | null;
+        acceptanceCriteria: string | null;
         acceptanceCommand: string | null;
         acceptanceExpectedExitCode: number | null;
         acceptanceEvaluationPlanDigest: string | null;
         completionCriterion: TaskCompletionCriterionValue;
+        completionPolicy: string;
+        verifiesTaskId: string | null;
       } | null = null;
       let acceptanceTaskAwaitingResult = false;
       if (taskAcceptanceTurn && current.taskId) {
@@ -2737,24 +2984,35 @@ export class RunnerApiController {
         }
         const rows = await tx.$queryRaw<Array<{
           id: string;
+          ownerId: string;
+          title: string;
           status: TaskStatus;
           projectId: string | null;
+          acceptanceCriteria: string | null;
           acceptanceCommand: string | null;
           acceptanceExpectedExitCode: number | null;
           acceptanceEvaluationPlanDigest: string | null;
           completionCriterion: TaskCompletionCriterionValue;
+          completionPolicy: string;
+          verifiesTaskId: string | null;
         }>>`
-          SELECT "id", "status",
+          SELECT "id", "owner_id" AS "ownerId", "title", "status",
                  "project_id" AS "projectId",
+                 "acceptance_criteria" AS "acceptanceCriteria",
                  "acceptance_command" AS "acceptanceCommand",
                  "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
                  "acceptance_evaluation_plan_digest" AS "acceptanceEvaluationPlanDigest",
-                 "completion_criterion"::text AS "completionCriterion"
+                 "completion_criterion"::text AS "completionCriterion",
+                 "completion_policy"::text AS "completionPolicy",
+                 "verifies_task_id" AS "verifiesTaskId"
           FROM "task"
           WHERE "id" = ${current.taskId}::uuid
           FOR UPDATE`;
         acceptanceTaskAwaitingResult = rows[0] != null
           && awaitsExecutableAcceptance(rows[0].status);
+        if (rows[0] && rows[0].ownerId !== current.ownerId) {
+          throw new ConflictException('acceptance task and session belong to different tenants');
+        }
         if (rows[0]?.projectId === (taskProject?.projectId ?? null)) {
           lockedAcceptanceTask = rows[0] ?? null;
         }
@@ -3072,15 +3330,37 @@ export class RunnerApiController {
         // FAILED remains the conservative L0 outcome when the declared command returns a
         // comparable non-matching exit code. Only the optimistic branch is criterion-derived.
         const derivedStatus = completed ?? TaskStatus.FAILED;
-        const request = await tx.taskJudgmentRequest.findFirst({
-          where: {
-            taskId: lockedAcceptanceTask.id,
-            kind: 'EXECUTABLE',
-            recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-            status: 'OPEN',
-          },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        });
+        const rawOutput = stripNul(dto.shellOutput);
+        // A v1 callback has no admission/request identity in its wire payload. Resolve it from the
+        // exact persisted turn and exact evidence digest before considering any request: taking
+        // "the latest OPEN executable request" would let a stale evidence version consume this
+        // callback. v2 already carries its plan identity and follows the standing typed request.
+        let request = queuedAcceptanceIdentity.version === 1
+          ? await ensureLegacyExecutableJudgmentRequest(tx, {
+            task: lockedAcceptanceTask,
+            sessionId,
+            creatorId: current.creatorId,
+            workspaceId: current.workspaceId,
+            assignedRunnerId: current.assignedRunnerId,
+            runnerId: runner.id,
+            turnId: completedTurn.id,
+            turnClientId: completedTurn.clientTurnId,
+            turnLeaseGeneration: completedTurn.leaseGeneration,
+            command: lockedAcceptanceTask.acceptanceCommand,
+            expectedExitCode,
+            actualExitCode,
+            rawOutput,
+          })
+          : await tx.taskJudgmentRequest.findFirst({
+            where: {
+              taskId: lockedAcceptanceTask.id,
+              kind: 'EXECUTABLE',
+              recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+              status: 'OPEN',
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            include: { executableResult: true },
+          });
         // The request names the source Session as the one system evaluator allowed to consume
         // this evidence version. Keep the no-request branch for rolling-upgrade/legacy L0 turns,
         // but once an OPEN request exists it is authoritative: a result from another Session may
@@ -3088,21 +3368,30 @@ export class RunnerApiController {
         // recipient. The unsettled-attempt branch below then closes that wrong Session while the
         // request and Task remain actionable by their named evaluator.
         const requestBelongsToThisEvaluator = request == null || request.recipientId === sessionId;
-        const rawOutput = stripNul(dto.shellOutput);
-        if (request && requestBelongsToThisEvaluator) {
+        if (request && requestBelongsToThisEvaluator && request.status === 'OPEN') {
           const decidedAt = new Date();
-          await tx.taskExecutableJudgmentResult.create({
-            data: {
-              id: randomUUID(),
-              requestId: request.id,
-              command: lockedAcceptanceTask.acceptanceCommand,
-              expectedExitCode,
-              actualExitCode,
-              rawOutput,
-              recordedById: runner.id,
-              recordedAt: decidedAt,
-            },
-          });
+          if (request.executableResult) {
+            if (request.executableResult.command !== lockedAcceptanceTask.acceptanceCommand
+              || request.executableResult.expectedExitCode !== expectedExitCode
+              || request.executableResult.actualExitCode !== actualExitCode
+              || request.executableResult.rawOutput !== rawOutput
+              || request.executableResult.recordedById !== runner.id) {
+              throw new ConflictException('standing executable result does not match callback');
+            }
+          } else {
+            await tx.taskExecutableJudgmentResult.create({
+              data: {
+                id: randomUUID(),
+                requestId: request.id,
+                command: lockedAcceptanceTask.acceptanceCommand,
+                expectedExitCode,
+                actualExitCode,
+                rawOutput,
+                recordedById: runner.id,
+                recordedAt: decidedAt,
+              },
+            });
+          }
           await tx.taskJudgmentRequest.update({
             where: { id: request.id },
             data: {
@@ -3272,6 +3561,7 @@ export class RunnerApiController {
         },
         data: {
           status: nextStatus,
+          engineTurnActive: false,
           // On a failed turn claude is still alive (the turn errored, the process didn't
           // exit), so finalizing FAILED here would leak its runner concurrency slot — the
           // process lingers, holding a slot, until the runner restarts. Set
@@ -3372,6 +3662,26 @@ export class RunnerApiController {
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
+      if (taskAcceptanceTurn && completedTurn) {
+        // The completion receipt is part of the ACK commit, not a best-effort epilogue. If this
+        // append cannot be proven against the exact ingested shell event, the callback rolls back
+        // and the runner retries the same receipt. That removes the process-crash gap between
+        // turn=ANSWERED and closing an already ACTIVE completion-ACK obligation.
+        await tx.$queryRaw(Prisma.sql`
+          SELECT completion_ack_record_recovery(
+            ${sessionId}::uuid,
+            ${completedTurn.id}::uuid,
+            statement_timestamp(),
+            ${JSON.stringify({
+              source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
+              runnerId: runner.id,
+              callbackStatus: dto.status,
+              callbackSubtype: dto.subtype ?? null,
+              applied: true,
+            })}::jsonb
+          )
+        `);
+      }
       return {
         applied: true,
         steer: false,
@@ -3382,7 +3692,51 @@ export class RunnerApiController {
         taskReclaimed,
         taskId: current.taskId,
       };
-    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+        }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+      } catch (error) {
+        const failure = completionAckFailureEvidence(error);
+        if (failure && this.completionAckMonitor) {
+          try {
+            await this.completionAckMonitor.recordCompletionAckFailure({
+              sessionId,
+              turnId: dto.turnId,
+              leaseGeneration: leaseOwner,
+              errorFingerprint: failure.fingerprint,
+              observedAt: new Date(),
+              evidenceSource: {
+                ...failure.detail,
+                runnerId: runner.id,
+                callbackStatus: dto.status,
+                callbackSubtype: dto.subtype ?? null,
+              },
+            });
+          } catch (monitorError) {
+            this.logger.error(
+              `completion ACK failure fact could not be appended for ${sessionId}/${dto.turnId}: `
+              + `${monitorError instanceof Error ? monitorError.message : monitorError}`,
+            );
+          }
+        }
+        throw error;
+      }
+    })();
+    // This is outside the monitored transaction: recovery history must not make a successful ACK
+    // fail, and the independent watchdog will converge it if this best-effort edge write misses.
+    if (!finalized.steer && this.completionAckMonitor) {
+      await this.completionAckMonitor.recordCompletionAckRecovery({
+        sessionId,
+        turnId: dto.turnId,
+        observedAt: new Date(),
+        evidenceSource: {
+          source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
+          runnerId: runner.id,
+          applied: finalized.applied,
+        },
+      }).catch((error) => this.logger.error(
+        `completion ACK recovery fact could not be appended for ${sessionId}/${dto.turnId}: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
+    }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
@@ -3561,6 +3915,8 @@ export class RunnerApiController {
             payload: e.payload as Prisma.InputJsonValue,
             turnId: e.turnId ?? null,
             createdAt: new Date(e.ts),
+            ingestedByRunnerId: runner.id,
+            ingestedUnderLeaseGeneration: leaseOwner,
           })),
           skipDuplicates: true,
         });

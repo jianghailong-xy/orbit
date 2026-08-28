@@ -4,9 +4,10 @@ import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader
 /**
  * The projects index is an execution-and-attention router, not a second activity feed.
  *
- * A row first answers whether work is actively running. When it is not, the row answers who must
- * act next. Time then decides where it sits among rows that need the same kind of action. This
- * keeps three different signals in their own jobs:
+ * A row first answers whether a canonical obligation requires intervention, then whether work is
+ * actively running. When neither applies, the row answers who must act next. Time then decides
+ * where it sits among rows that need the same kind of action. This keeps three different signals
+ * in their own jobs:
  *
  *   - counts describe scale;
  *   - time describes how long a condition has existed;
@@ -49,6 +50,7 @@ export type AttentionSectionKey =
 
 export type AttentionReason =
   | 'needs-user'
+  | 'auto-remediation'
   | 'failed'
   | 'no-activity-running'
   | 'no-activity-ready'
@@ -63,7 +65,8 @@ const SECTIONS: ReadonlyArray<{
   {
     key: 'attention',
     title: 'Needs attention',
-    note: 'Needs you, failures, quiet work, or closure · reason/severity first, then oldest signal',
+    note:
+      'Needs you, auto-remediation, failures, quiet work, or closure · reason/severity first, then oldest signal',
   },
   {
     key: 'running',
@@ -125,6 +128,13 @@ function byId(a: AttentionProject, b: AttentionProject): number {
   return a.id.localeCompare(b.id);
 }
 
+function autoRemediationBlockerCount(project: AttentionProject): number {
+  return (
+    (project.attention?.coordinatorBlockers ?? 0) +
+    (project.attention?.systemBlockers ?? 0)
+  );
+}
+
 /**
  * FAILED is deliberately absent from the five panorama buckets. `_count.tasks` is the complete
  * task count, so the remainder is exactly the FAILED count under the current closed TaskStatus
@@ -146,13 +156,14 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
 /**
  * Why an OPEN project needs a visible attention signal.
  *
- * The order is intentional and is also the order inside Needs attention: a durable USER-owned
- * blocker leads because nobody else can clear it; an observed failure is stronger evidence than
- * silence; closing settled work is useful but not an operational fault. Fresh running work keeps
- * its execution lane while this reason remains visible on the row as a chip.
+ * A coordinator/system blocker is checked first because its automatic repair must stay visible
+ * even when the same project also carries a user decision. Between projects, the rank below still
+ * puts purely USER-owned decisions first because nobody else can clear them. An observed failure
+ * is stronger evidence than silence; closing settled work is useful but not an operational fault.
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
+  if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
   if (failedTaskCount(project) > 0) return 'failed';
 
@@ -168,17 +179,23 @@ export function attentionReasonOf(project: AttentionProject, now: number): Atten
 }
 
 /**
- * Every project lands in exactly one lane. Fresh execution is the strongest fact; attention takes
- * priority once a run has gone quiet or no work is actively running.
+ * Every project lands in exactly one lane. A routed control-plane repair is stronger than fresh
+ * execution; otherwise attention takes priority once a run has gone quiet or no work is active.
  */
 export function attentionSectionOf(project: AttentionProject, now: number): AttentionSectionKey {
   if (project.status !== 'OPEN') return 'completed';
+  const reason = attentionReasonOf(project, now);
+
+  // These blockers are not passive metadata: they are canonical work Orbit has already routed to
+  // its coordinator/system. Keeping the row in Running would hide the broken control loop behind
+  // unrelated fresh activity in the same project.
+  if (reason === 'auto-remediation') return 'attention';
 
   const quietRunning = project.buckets.running > 0
     && quietDays(project.lastActivityAt, now) !== null;
   if (project.buckets.running > 0 && !quietRunning) return 'running';
 
-  if (attentionReasonOf(project, now)) return 'attention';
+  if (reason) return 'attention';
   if (project._count.tasks === 0) return 'definition';
   if (project.buckets.ready > 0) return 'ready';
   if (project.buckets.blocked > 0) return 'waiting';
@@ -191,10 +208,11 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
 
 const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
   'needs-user': 0,
-  failed: 1,
-  'no-activity-running': 2,
-  'no-activity-ready': 3,
-  'ready-to-close': 4,
+  'auto-remediation': 1,
+  failed: 2,
+  'no-activity-running': 3,
+  'no-activity-ready': 4,
+  'ready-to-close': 5,
 };
 
 const ATTENTION_SEVERITY_RANK: Record<NonNullable<ProjectAttentionSummary['maxSeverity']>, number> = {
@@ -230,7 +248,10 @@ export function orderWithinSection<T extends AttentionProject>(
       const byReason = (left ? ATTENTION_REASON_RANK[left] : Number.MAX_SAFE_INTEGER)
         - (right ? ATTENTION_REASON_RANK[right] : Number.MAX_SAFE_INTEGER);
       if (byReason) return byReason;
-      if (left === 'needs-user' && right === 'needs-user') {
+      if (
+        (left === 'needs-user' && right === 'needs-user') ||
+        (left === 'auto-remediation' && right === 'auto-remediation')
+      ) {
         const leftSeverity = a.attention?.maxSeverity;
         const rightSeverity = b.attention?.maxSeverity;
         const bySeverity = (leftSeverity ? ATTENTION_SEVERITY_RANK[leftSeverity] : Number.MAX_SAFE_INTEGER)
@@ -292,6 +313,24 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
         severity ? ATTENTION_SEVERITY_LABEL[severity] : null,
         age,
         `${blockers} blocker${blockers === 1 ? '' : 's'}`,
+      ].filter(Boolean).join(' · '),
+    };
+  }
+
+  if (reason === 'auto-remediation') {
+    const blockers = autoRemediationBlockerCount(project);
+    const userBlockers = project.attention?.userBlockers ?? 0;
+    const severity = project.attention?.maxSeverity;
+    const age = elapsedDayLabel(project.attention?.attentionSinceAt, now);
+    return {
+      tone: 'warning',
+      text: [
+        'Auto-remediation',
+        'Coordinator-owned',
+        severity ? ATTENTION_SEVERITY_LABEL[severity] : null,
+        age,
+        `${blockers} blocker${blockers === 1 ? '' : 's'}`,
+        userBlockers > 0 ? `${userBlockers} need you` : null,
       ].filter(Boolean).join(' · '),
     };
   }

@@ -1506,6 +1506,14 @@ model RunEvent {
   // No FK: high-volume append-only log (cf. Activity); both cascade-delete via session.
   turnId    String?  @map("turn_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
+  /// PostgreSQL receive time. Unlike createdAt, this is never supplied by the runner and is the
+  /// only event clock an operational SLO may use. Historical rows remain null during the online
+  /// rollout and use the migration's DB-owned rollout epoch. They are not rewritten or backfilled.
+  ingestedAt DateTime? @default(now()) @map("ingested_at")
+  /// Exact HTTP-authenticated provenance for post-0201 rows; null means a historical row whose
+  /// current Session assignment must never be presented as exact historical identity.
+  ingestedByRunnerId String? @map("ingested_by_runner_id") @db.Uuid
+  ingestedUnderLeaseGeneration String? @map("ingested_under_lease_generation") @db.Uuid
 
   @@unique([sessionId, seq])
   @@index([sessionId, seq])
@@ -3872,6 +3880,8 @@ model ExecutableRuntimeHeartbeat {
   payloadDigest String @map("payload_digest") @db.Char(64)
   previousDigest String? @map("previous_digest") @db.Char(64)
   heartbeatDigest String @unique @map("heartbeat_digest") @db.Char(64)
+  expectationGeneration String? @map("expectation_generation") @db.Uuid
+  ingestedAt DateTime @default(now()) @map("ingested_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([component, instanceId, sequence], map: "executable_runtime_heartbeat_sequence_key")
@@ -3891,10 +3901,51 @@ model ExecutableDeadManEvent {
   deadlineAt  DateTime? @map("deadline_at")
   sourceSha   String @map("source_sha")
   eventDigest String @unique @map("event_digest") @db.Char(64)
+  expectationGeneration String? @map("expectation_generation") @db.Uuid
+  expectationDigest String? @map("expectation_digest") @db.Char(64)
+  expectationObservationKey String? @map("expectation_observation_key")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([component, instanceId, checkedAt(sort: Desc)], map: "executable_dead_man_latest_idx")
   @@map("executable_dead_man_event")
+}
+
+/// Deployment-owned declaration written before a monitored process starts. Lifecycle is reduced
+/// from ExecutableRuntimeExpectationEvent; a missing first heartbeat is therefore observable.
+model ExecutableRuntimeExpectation {
+  generation            String   @id @db.Uuid
+  component             String
+  instanceId            String   @map("instance_id")
+  expectedSourceSha     String   @map("expected_source_sha")
+  moduleGraphDigest     String   @map("module_graph_digest") @db.Char(64)
+  startupGraceSeconds   Int      @map("startup_grace_seconds")
+  idempotencyKey        String   @unique @map("idempotency_key")
+  metadata              Json
+  metadataDigest        String   @map("metadata_digest") @db.Char(64)
+  expectationDigest     String   @unique @map("expectation_digest") @db.Char(64)
+  activatedAt           DateTime @map("activated_at") @db.Timestamptz(6)
+  startupDeadlineAt     DateTime @map("startup_deadline_at") @db.Timestamptz(6)
+  recordedAt            DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([component, instanceId, generation])
+  @@index([component, instanceId, activatedAt(sort: Desc), generation], map: "executable_runtime_expectation_slot_idx")
+  @@map("executable_runtime_expectation")
+}
+
+/// Append-only activation/retirement history for one expected deployment generation.
+model ExecutableRuntimeExpectationEvent {
+  eventId        String   @id @map("event_id") @db.Uuid
+  generation     String   @map("generation") @db.Uuid
+  component      String
+  instanceId     String   @map("instance_id")
+  kind           String
+  reasonCode     String   @map("reason_code")
+  idempotencyKey String   @unique @map("idempotency_key")
+  eventDigest    String   @unique @map("event_digest") @db.Char(64)
+  recordedAt     DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@index([generation, recordedAt(sort: Desc), eventId(sort: Desc)], map: "executable_runtime_expectation_event_latest_idx")
+  @@map("executable_runtime_expectation_event")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).
@@ -5229,6 +5280,7 @@ model OutcomeCoordinatorAttemptResult {
   callbackKey        String   @map("callback_key")
   result             String
   failureFingerprint String?  @map("failure_fingerprint") @db.Char(64)
+  completionDeliveryReceiptId String? @map("completion_delivery_receipt_id") @db.Uuid
   detail             Json     @default("{}")
   logicalTime        BigInt   @map("logical_time")
   recordedAt         DateTime @default(now()) @map("recorded_at")
@@ -5335,4 +5387,160 @@ model OutcomeCoordinatorProjectFairness {
 
   @@id([tenantId, projectId])
   @@map("outcome_coordinator_project_fairness")
+}
+
+/// Immutable plan for one delivery attempt under one completion-only 0198 lease.
+model CompletionAckCoordinatorDeliveryPlan {
+  planId                String   @id @map("plan_id") @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  projectId             String   @map("project_id") @db.Uuid
+  coordinationId        String   @map("coordination_id") @db.Uuid
+  obligationId          String   @map("obligation_id") @db.Char(64)
+  obligationRevision    String   @map("obligation_revision") @db.Char(64)
+  taskId                String   @map("task_id") @db.Uuid
+  affectedSessionId     String   @map("affected_session_id") @db.Uuid
+  turnId                String   @map("turn_id") @db.Uuid
+  originLeaseId         String   @map("origin_lease_id") @db.Uuid
+  originLeaseGeneration BigInt   @map("origin_lease_generation")
+  originWorkerId        String   @map("origin_worker_id")
+  targetSessionId       String   @unique @map("target_session_id") @db.Uuid
+  subjectVersion        String   @map("subject_version") @db.Char(64)
+  createdLogicalTime    BigInt   @map("created_logical_time")
+  planDigest            String   @unique @map("plan_digest") @db.Char(64)
+  recordedAt            DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([coordinationId, obligationRevision, originLeaseId])
+  @@index([tenantId, coordinationId, recordedAt(sort: Desc), planId(sort: Desc)], map: "completion_ack_delivery_plan_latest_idx")
+  @@map("completion_ack_coordinator_delivery_plan")
+}
+
+/// Immutable evidence that an exact project-coordinator wake opened the plan's exact Session.
+model CompletionAckCoordinatorDeliveryReceipt {
+  deliveryReceiptId String   @id @map("delivery_receipt_id") @db.Uuid
+  planId             String   @unique @map("plan_id") @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  projectId          String   @map("project_id") @db.Uuid
+  coordinationId     String   @map("coordination_id") @db.Uuid
+  obligationId       String   @map("obligation_id") @db.Char(64)
+  obligationRevision String   @map("obligation_revision") @db.Char(64)
+  recordedLeaseId    String   @map("recorded_lease_id") @db.Uuid
+  recordedWorkerId   String   @map("recorded_worker_id")
+  wakeIdSnapshot     String   @map("wake_id_snapshot") @db.Uuid
+  sessionIdSnapshot  String   @unique @map("session_id_snapshot") @db.Uuid
+  receiptDigest      String   @unique @map("receipt_digest") @db.Char(64)
+  recordedLogicalTime BigInt  @map("recorded_logical_time")
+  recordedAt         DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@index([tenantId, coordinationId, recordedAt(sort: Desc), deliveryReceiptId(sort: Desc)], map: "completion_ack_delivery_receipt_coordination_idx")
+  @@map("completion_ack_coordinator_delivery_receipt")
+}
+
+/// Append-only proof that one current lease adopted a delivery receipt.
+model CompletionAckCoordinatorDeliveryAdoption {
+  adoptionId            String   @id @map("adoption_id") @db.Uuid
+  deliveryReceiptId     String   @map("delivery_receipt_id") @db.Uuid
+  planId                String   @map("plan_id") @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  projectId             String   @map("project_id") @db.Uuid
+  coordinationId        String   @map("coordination_id") @db.Uuid
+  obligationRevision    String   @map("obligation_revision") @db.Char(64)
+  leaseId               String   @unique @map("lease_id") @db.Uuid
+  leaseGeneration       BigInt   @map("lease_generation")
+  workerId              String   @map("worker_id")
+  adopted               Boolean
+  recordedLogicalTime   BigInt   @map("recorded_logical_time")
+  adoptionDigest        String   @unique @map("adoption_digest") @db.Char(64)
+  recordedAt            DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([deliveryReceiptId, leaseId])
+  @@map("completion_ack_coordinator_delivery_adoption")
+}
+
+/// Bounded, append-only remediation evidence. Session and task ids are deletion-stable snapshots.
+model CompletionAckRemediationAction {
+  actionId                String   @id @map("action_id") @db.Uuid
+  tenantId                String   @map("tenant_id") @db.Uuid
+  projectId               String   @map("project_id") @db.Uuid
+  coordinationId          String   @map("coordination_id") @db.Uuid
+  obligationId            String   @map("obligation_id") @db.Char(64)
+  obligationRevision      String   @map("obligation_revision") @db.Char(64)
+  planId                  String   @map("plan_id") @db.Uuid
+  deliveryReceiptId       String   @map("delivery_receipt_id") @db.Uuid
+  sourceSessionIdSnapshot String   @map("source_session_id_snapshot") @db.Uuid
+  actionKind              String   @map("action_kind")
+  actionKey               String   @map("action_key")
+  taskIdSnapshot          String   @map("task_id_snapshot") @db.Uuid
+  taskProjectIdSnapshot   String?  @map("task_project_id_snapshot") @db.Uuid
+  evidence                Json
+  evidenceDigest          String   @map("evidence_digest") @db.Char(64)
+  actionDigest            String   @unique @map("action_digest") @db.Char(64)
+  recordedAt              DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([obligationRevision, sourceSessionIdSnapshot, taskIdSnapshot, actionKind, actionKey])
+  @@index([tenantId, coordinationId, recordedAt(sort: Desc), actionId(sort: Desc)], map: "completion_ack_remediation_action_coordination_idx")
+  @@map("completion_ack_remediation_action")
+}
+
+/// Append-only progress or revocation fact for one exact coordinator delivery receipt. Repeated
+/// watchdog polls of the same durable fingerprint do not create a row or move its fixed deadline.
+model CompletionAckDeliveryProgressEvent {
+  eventId                String   @id @map("event_id") @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  projectId              String   @map("project_id") @db.Uuid
+  coordinationId         String   @map("coordination_id") @db.Uuid
+  obligationId           String   @map("obligation_id") @db.Char(64)
+  obligationRevision     String   @map("obligation_revision") @db.Char(64)
+  deliveryReceiptId      String   @map("delivery_receipt_id") @db.Uuid
+  planId                 String   @map("plan_id") @db.Uuid
+  coordinatorSessionId   String   @map("coordinator_session_id") @db.Uuid
+  eventKind              String   @map("event_kind")
+  progressFingerprint    String   @map("progress_fingerprint") @db.Char(64)
+  reasonCode             String?  @map("reason_code")
+  sourceProgressAt       DateTime @map("source_progress_at") @db.Timestamptz(6)
+  deadlineAt             DateTime @map("deadline_at") @db.Timestamptz(6)
+  detectionDeltaSeconds  Int      @map("detection_delta_seconds")
+  sourceObservedAt       DateTime @map("source_observed_at") @db.Timestamptz(6)
+  evidence               Json
+  evidenceDigest         String   @map("evidence_digest") @db.Char(64)
+  eventDigest            String   @unique @map("event_digest") @db.Char(64)
+  recordedAt             DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([deliveryReceiptId, eventKind, progressFingerprint])
+  @@index([tenantId, coordinationId, recordedAt(sort: Desc), eventId(sort: Desc)], map: "completion_ack_delivery_progress_trace_idx")
+  @@index([eventKind, deadlineAt, deliveryReceiptId], map: "completion_ack_delivery_progress_deadline_idx")
+  @@map("completion_ack_delivery_progress_event")
+}
+
+/// Non-semantic bounded-scan cursor. Deadlines and authority never read this mutable checkpoint.
+model CompletionAckDeliveryReconcileCursor {
+  singletonId             Boolean  @id @default(true) @map("singleton_id")
+  lastDeliveryReceiptId   String?  @map("last_delivery_receipt_id") @db.Uuid
+  scanCount               BigInt   @default(0) @map("scan_count")
+  updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("completion_ack_delivery_reconcile_cursor")
+}
+
+/// Append-only proof that an exact current, non-revoked coordinator delivery asked one of the
+/// four owner-only questions. It is a child of the AGENT-owned completion obligation, not a second
+/// obligation and not lifecycle authority.
+model CompletionAckOwnerDecisionBinding {
+  bindingId             String   @id @map("binding_id") @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  projectId             String   @map("project_id") @db.Uuid
+  coordinationId        String   @map("coordination_id") @db.Uuid
+  obligationId          String   @map("obligation_id") @db.Char(64)
+  obligationRevision    String   @map("obligation_revision") @db.Char(64)
+  requestId             String   @unique @map("request_id") @db.Uuid
+  deliveryReceiptId     String   @map("delivery_receipt_id") @db.Uuid
+  coordinatorSessionId  String   @map("coordinator_session_id") @db.Uuid
+  runnerIdSnapshot      String   @map("runner_id_snapshot") @db.Uuid
+  reason                String
+  requestDigest         String   @map("request_digest") @db.Char(64)
+  bindingDigest         String   @unique @map("binding_digest") @db.Char(64)
+  recordedLogicalTime   BigInt   @map("recorded_logical_time")
+  recordedAt            DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@index([tenantId, projectId, obligationId, obligationRevision, recordedAt(sort: Desc)], map: "completion_ack_owner_decision_scope_idx")
+  @@map("completion_ack_owner_decision_binding")
 }

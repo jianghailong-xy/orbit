@@ -20,6 +20,7 @@ import {
   OpenAcceptanceRunDto,
   PreapprovedRatificationDto,
   RecordMergeEvidenceDto,
+  RequestCompletionAckOwnerDecisionDto,
   UpdateProjectDto,
 } from '../projects/dto';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
@@ -107,6 +108,27 @@ export class RunnerProjectsController {
   @Get('projects/:id')
   getProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(runner.ownerId, id);
+  }
+
+  /**
+   * The sole machine door into a completion-ACK owner question. The body names the immutable
+   * obligation, while the runner principal and session header are transport facts the body cannot
+   * forge. PostgreSQL admits it only for the current non-revoked delivery of that exact revision.
+   */
+  @Post('projects/:id/completion-ack/owner-decisions')
+  requestCompletionAckOwnerDecision(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Body() dto: RequestCompletionAckOwnerDecisionDto,
+  ) {
+    return this.projects.requestCompletionAckOwnerDecision(
+      runner.ownerId,
+      id,
+      runner.id,
+      sessionId,
+      dto,
+    );
   }
 
   @Get('projects/:id/acceptance')

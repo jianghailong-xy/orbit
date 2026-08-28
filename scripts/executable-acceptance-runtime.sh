@@ -10,16 +10,20 @@ CONTAINER="orbit-executable-acceptance-pg-$$"
 ADMIN="exec_acceptance_admin"
 PASSWORD="exec_acceptance_pw"
 DATABASE="exec_acceptance_runtime"
+ROLLING_DATABASE="exec_acceptance_rolling"
 IMAGE="${EXECUTABLE_ACCEPTANCE_PG_IMAGE:-postgres:16-alpine}"
 TAP="$BUILD/executable-acceptance-runtime.tap"
 GO_OUTPUT="$BUILD/executable-acceptance-runtime-go.txt"
 EVIDENCE="$BUILD/executable-acceptance-runtime-evidence.json"
+ROLLING_EVIDENCE="$BUILD/executable-acceptance-runtime-rolling-evidence.json"
 MANIFEST="$BUILD/executable-acceptance-runtime-manifest.json"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 SOURCE_SHA="$(git -C "$REPO" rev-parse HEAD)"
+ROLLING_PRISMA="$(mktemp -d /tmp/orbit-executable-rolling.XXXXXX)"
 
 cleanup() {
   docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  rm -rf "$ROLLING_PRISMA"
 }
 trap cleanup EXIT
 
@@ -52,9 +56,35 @@ done
 [ "$READY" = 1 ] || { echo 'disposable PostgreSQL did not become ready' >&2; exit 1; }
 docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
   -c "CREATE DATABASE $DATABASE" >/dev/null
+docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+  -c "CREATE DATABASE $ROLLING_DATABASE" >/dev/null
 PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
 PORT="${PORT_LINE##*:}"
 URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
+ROLLING_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$ROLLING_DATABASE"
+
+echo "==> executable-runtime: seed an IN_FLIGHT v1 turn at the 0192 rollout frontier"
+mkdir -p "$ROLLING_PRISMA/migrations"
+cp "$API/prisma/schema.prisma" "$ROLLING_PRISMA/"
+cp "$API/prisma/migrations/migration_lock.toml" "$ROLLING_PRISMA/migrations/"
+for migration in "$API"/prisma/migrations/*/; do
+  name="$(basename "$migration")"
+  if [[ "$name" < "0193_" ]]; then cp -R "$migration" "$ROLLING_PRISMA/migrations/"; fi
+done
+DATABASE_URL="$ROLLING_URL" \
+ORBIT_FRONTIER_PRISMA_SCHEMA="$ROLLING_PRISMA/schema.prisma" \
+ORBIT_FRONTIER_PRISMA_MIGRATIONS="$ROLLING_PRISMA/migrations" \
+node "$API/node_modules/prisma/build/index.js" migrate deploy \
+  --config "$API/prisma.frontier.config.ts" >/dev/null
+EXECUTABLE_ACCEPTANCE_ROLLING_PG_URL="$ROLLING_URL" node \
+  "$REPO/scripts/executable-acceptance-rolling-upgrade.mjs" seed
+( cd "$API" && DATABASE_URL="$ROLLING_URL" node node_modules/prisma/build/index.js \
+  migrate deploy --schema prisma/schema.prisma >/dev/null )
+
+echo "==> executable-runtime: prove the pre-0193 v1 callback survives the rolling upgrade"
+EXECUTABLE_ACCEPTANCE_ROLLING_PG_URL="$ROLLING_URL" \
+EXECUTABLE_ACCEPTANCE_EVIDENCE_PATH="$ROLLING_EVIDENCE" \
+node "$REPO/scripts/executable-acceptance-rolling-upgrade.mjs" verify
 
 echo "==> executable-runtime: deploy all migrations"
 ( cd "$API" && DATABASE_URL="$URL" node node_modules/prisma/build/index.js \
@@ -64,8 +94,9 @@ echo "==> executable-runtime: run zero-skip API/DB/dead-man matrix"
 set +e
 EXECUTABLE_ACCEPTANCE_PG_URL="$URL" \
 EXECUTABLE_ACCEPTANCE_EVIDENCE_PATH="$EVIDENCE" \
+EXECUTABLE_ACCEPTANCE_ROLLING_EVIDENCE_PATH="$ROLLING_EVIDENCE" \
 EXECUTABLE_ACCEPTANCE_SOURCE_SHA="$SOURCE_SHA" \
-timeout -k 5 70 node --test --test-concurrency=1 --test-reporter=tap \
+timeout -k 5 110 node --test --test-concurrency=1 --test-reporter=tap \
   "$REPO/test/executable-acceptance-runtime.test.mjs" 2>&1 | tee "$TAP"
 TEST_RC=${PIPESTATUS[0]}
 set -e

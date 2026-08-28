@@ -215,11 +215,12 @@ test('the project index buckets every project in one pass and agrees with the pr
           }
         });
 
-      await t.test('the whole index costs two page-wide aggregates, not one per project', async () => {
+      await t.test('the whole index costs three page-wide reads, not one per project', async () => {
         rawQueries = 0;
         const rows = await projects.list(ownerId);
         assert.equal(rows.length, 3);
-        assert.equal(rawQueries, 2, 'one task rollup and one blocker rollup for the whole page');
+        assert.equal(rawQueries, 3,
+          'one task rollup, one blocker rollup and one canonical obligation view for the page');
       });
 
       await t.test('lastActivityAt is the latest task write, and Project.updatedAt is not',

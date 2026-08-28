@@ -11,10 +11,10 @@ import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
  *
  * WHAT THIS UNIT IS, AND WHAT IT IS NOT
  * =====================================
- * It claims wakes. It does not open sessions, choose tasks, judge anything or hold a timer. A
- * timer here is forbidden by the project's own red line and by this unit's whole point (see §0
- * of `coordinator-wake.ts`). Producers derive a fact from rows they have already committed and
- * hand it to `claim`; unit T3 is what turns a won claim into exactly one judgment session.
+ * It claims wakes. It does not open sessions, choose tasks, judge anything or hold a timer.
+ * Producers derive a fact from rows they have already committed and hand it to `claim`; a durable
+ * courier may retry that delivery on a clock, but the clock is never evidence and never changes
+ * the fact's identity. Unit T3 turns a won claim into exactly one judgment session.
  *
  * THE ORDER, WHICH IS THE POINT
  * =============================

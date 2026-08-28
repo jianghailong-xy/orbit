@@ -32,6 +32,7 @@ export class OutcomeWatchdogService {
     instanceId: string;
     sourceSha: string;
     moduleGraphDigest: string;
+    expectationGeneration: string;
     observedAt: Date;
     deadlineAt: Date;
     payload: Record<string, unknown>;
@@ -66,6 +67,7 @@ export class OutcomeWatchdogService {
                  'sequence', bound.sequence,
                  'sourceSha', ${input.sourceSha}::text,
                  'moduleGraphDigest', ${input.moduleGraphDigest}::text,
+                 'expectationGeneration', ${input.expectationGeneration}::uuid,
                  'observedAt', ${input.observedAt}::timestamptz,
                  'deadlineAt', ${input.deadlineAt}::timestamptz,
                  'payloadDigest', bound.payload_digest,
@@ -76,11 +78,11 @@ export class OutcomeWatchdogService {
       INSERT INTO "executable_runtime_heartbeat"
         ("id", "component", "instance_id", "sequence", "source_sha",
          "module_graph_digest", "observed_at", "deadline_at", "payload", "payload_digest",
-         "previous_digest", "heartbeat_digest")
+         "previous_digest", "heartbeat_digest", "expectation_generation")
       SELECT gen_random_uuid(), ${input.component}::text, ${input.instanceId}::text, final.sequence,
              ${input.sourceSha}::text, ${input.moduleGraphDigest}::text, ${input.observedAt}::timestamptz,
              ${input.deadlineAt}::timestamptz, final.payload, final.payload_digest,
-             final.previous_digest, final.heartbeat_digest
+             final.previous_digest, final.heartbeat_digest, ${input.expectationGeneration}::uuid
         FROM final
       RETURNING "heartbeat_digest" AS "heartbeatDigest", "sequence"
     `);
@@ -95,6 +97,115 @@ export class OutcomeWatchdogService {
       ) AS count
     `);
     return row?.count ?? 0;
+  }
+
+  /**
+   * Independent completion-ACK detector. PostgreSQL reads only the durable turn/event/session/task
+   * facts and appends immutable observations; it does not read the acceptance executor's typed
+   * admission/attempt lane and does not call the monitored /turn-complete transaction.
+   */
+  async reconcileStaleCompletionAcks(
+    observedAt: Date,
+    detectionDeltaSeconds: number,
+    limit = 64,
+  ): Promise<JsonResult> {
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT completion_ack_reconcile_stale(
+        ${observedAt}::timestamptz,
+        ${detectionDeltaSeconds}::integer,
+        ${limit}::integer
+      ) AS result
+    `);
+    if (!row) throw new Error('COMPLETION_ACK_RECONCILIATION_MISSING');
+    return asResult(row.result);
+  }
+
+  /**
+   * Independently audit delivery of an already-canonical completion-ACK obligation. Durable
+   * coordinator Session/event/turn/action fingerprints own the deadline; observing the same
+   * fingerprint again cannot extend it. A stale latest receipt is append-only revoked and the
+   * same 0198 coordination is requeued by PostgreSQL in the same transaction.
+   */
+  async reconcileStaleCompletionAckDeliveries(
+    observedAt: Date,
+    detectionDeltaSeconds: number,
+    limit = 64,
+  ): Promise<JsonResult> {
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT completion_ack_reconcile_stale_deliveries(
+        ${observedAt}::timestamptz,
+        ${detectionDeltaSeconds}::integer,
+        ${limit}::integer
+      ) AS result
+    `);
+    if (!row) throw new Error('COMPLETION_ACK_DELIVERY_RECONCILIATION_MISSING');
+    return asResult(row.result);
+  }
+
+  /** Supplemental evidence from the HTTP edge after the monitored transaction has rolled back. */
+  async recordCompletionAckFailure(input: {
+    sessionId: string;
+    turnId: string;
+    leaseGeneration: string | null;
+    errorFingerprint: string;
+    observedAt: Date;
+    evidenceSource: Record<string, unknown>;
+  }): Promise<JsonResult | null> {
+    const [scope] = await this.prisma.$queryRaw<Array<{
+      tenantId: string;
+      projectId: string;
+      taskId: string;
+      sessionId: string;
+      turnId: string;
+      leaseGeneration: string | null;
+    }>>(Prisma.sql`
+      SELECT task.owner_id AS "tenantId", task.project_id AS "projectId",
+             task.id AS "taskId", session.id AS "sessionId", turn.id AS "turnId",
+             turn.lease_generation AS "leaseGeneration"
+        FROM conversation_turn turn
+        JOIN session ON session.id = turn.session_id
+        JOIN task ON task.id = session.task_id
+       WHERE session.id = ${input.sessionId}::uuid
+         AND turn.id = ${input.turnId}::uuid
+         AND task.project_id IS NOT NULL
+       LIMIT 1
+    `);
+    if (!scope) return null;
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT completion_ack_record_failure(
+        ${scope.tenantId}::uuid,
+        ${scope.projectId}::uuid,
+        ${scope.taskId}::uuid,
+        ${scope.sessionId}::uuid,
+        ${scope.turnId}::uuid,
+        ${input.leaseGeneration ?? scope.leaseGeneration}::uuid,
+        'CONTROL_PLANE_COMMIT_REJECTED'::text,
+        ${input.errorFingerprint}::text,
+        ${input.observedAt}::timestamptz,
+        ${JSON.stringify(input.evidenceSource)}::jsonb
+      ) AS result
+    `);
+    if (!row) throw new Error('COMPLETION_ACK_FAILURE_FACT_MISSING');
+    return asResult(row.result);
+  }
+
+  /** ACK success closes every fingerprint-specific obligation for this exact turn. */
+  async recordCompletionAckRecovery(input: {
+    sessionId: string;
+    turnId: string;
+    observedAt: Date;
+    evidenceSource: Record<string, unknown>;
+  }): Promise<JsonResult> {
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT completion_ack_record_recovery(
+        ${input.sessionId}::uuid,
+        ${input.turnId}::uuid,
+        ${input.observedAt}::timestamptz,
+        ${JSON.stringify(input.evidenceSource)}::jsonb
+      ) AS result
+    `);
+    if (!row) throw new Error('COMPLETION_ACK_RECOVERY_FACT_MISSING');
+    return asResult(row.result);
   }
 
   async tenantIds(): Promise<string[]> {

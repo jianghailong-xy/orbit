@@ -43,6 +43,34 @@ function project(
 }
 
 describe('attention classification', () => {
+  it.each([
+    ['coordinator', 1, 0],
+    ['system', 0, 1],
+  ] as const)(
+    'routes a fresh Running project with a %s blocker into coordinator-owned auto-remediation',
+    (_owner, coordinatorBlockers, systemBlockers) => {
+      const row = project({
+        buckets: { running: 1, ready: 2 },
+        lastActivityAt: at(HOUR),
+        attention: {
+          userBlockers: 0,
+          coordinatorBlockers,
+          systemBlockers,
+          maxSeverity: 'CRITICAL',
+          attentionSinceAt: at(HOUR),
+          nextCheckAt: null,
+        },
+      });
+
+      expect(attentionReasonOf(row, NOW)).toBe('auto-remediation');
+      expect(attentionSectionOf(row, NOW)).toBe('attention');
+      expect(attentionChipOf(row, NOW)).toEqual({
+        tone: 'warning',
+        text: 'Auto-remediation · Coordinator-owned · Critical · <1d · 1 blocker',
+      });
+    },
+  );
+
   it('keeps a fresh run in Running while preserving its durable USER-owned blocker signal', () => {
     const row = project({
       buckets: { running: 1 },
@@ -323,11 +351,28 @@ describe('attentionChipOf', () => {
     expect(attentionChipOf(many, NOW)).toEqual({ tone: 'warning', text: '3 failed tasks' });
   });
 
-  it('names an outstanding human-owned blocker', () => {
+  it('keeps automatic remediation explicit when a project also needs a human', () => {
     const row = project({
       attention: {
         userBlockers: 2,
         coordinatorBlockers: 1,
+        systemBlockers: 0,
+        maxSeverity: 'CRITICAL',
+        attentionSinceAt: at(2 * QUIET_MS),
+        nextCheckAt: null,
+      },
+    });
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Auto-remediation · Coordinator-owned · Critical · 2d · 1 blocker · 2 need you',
+    });
+  });
+
+  it('names an outstanding human-owned blocker when no automatic repair is active', () => {
+    const row = project({
+      attention: {
+        userBlockers: 2,
+        coordinatorBlockers: 0,
         systemBlockers: 0,
         maxSeverity: 'CRITICAL',
         attentionSinceAt: at(2 * QUIET_MS),
