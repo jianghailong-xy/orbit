@@ -1913,9 +1913,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
         onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
       >
-        {hasDetail && (
-          <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
-        )}
+        {/* Keep the disclosure column stable even before a result gives a no-input tool something
+            to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
+        <span className="chat-tool-caret">
+          {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
+        </span>
         <span className="chat-tool-icon">{icon}</span>
         <span className="chat-tool-name">{label}</span>
         {p ? (

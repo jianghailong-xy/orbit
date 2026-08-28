@@ -1161,6 +1161,32 @@ describe('tool group folded row', () => {
     expect(html).toContain('Generate the client');
     expect(html).not.toContain('Build runner');
   });
+
+  it('reserves the caret column for a running call with no detail yet', () => {
+    const html = renderToStaticMarkup(
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript
+          live
+          events={[
+            { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'wait', input: {} } },
+            done(2, 't1'),
+            { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'wait', input: {} } },
+            done(4, 't2'),
+            { seq: 5, type: 'tool_use', payload: { id: 't3', name: 'wait', input: {} } },
+            done(6, 't3'),
+            { seq: 7, type: 'tool_use', payload: { id: 't4', name: 'wait', input: {} } },
+            done(8, 't4'),
+            { seq: 9, type: 'tool_use', payload: { id: 't5', name: 'wait', input: {} } },
+          ]}
+        />
+      </ExportCtx.Provider>,
+    );
+
+    expect(html).toContain('1 running · 4 succeeded');
+    expect(html).toContain(
+      'class="chat-tool-row no-detail"><span class="chat-tool-caret"></span><span class="chat-tool-icon"',
+    );
+  });
 });
 
 // A failed call is opened to find out why. The input is clamped at sixteen lines, which is enough
