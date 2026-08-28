@@ -230,6 +230,40 @@ enum TaskCompletionCriterion {
   @@map("task_completion_criterion")
 }
 
+/// Admission and process termination are independent axes. A rejected plan never has an attempt;
+/// a process termination exists only after an admitted runner crossed the spawn boundary.
+enum ExecutableAcceptanceAdmissionDecision {
+  ADMITTED
+  REJECTED
+
+  @@map("executable_acceptance_admission_decision")
+}
+
+enum ExecutableAcceptanceTerminationKind {
+  EXITED
+  TIMED_OUT
+  CANCELLED
+  SIGNALED
+  START_FAILED
+  INFRASTRUCTURE_LOST
+
+  @@map("executable_acceptance_termination_kind")
+}
+
+enum ExecutableAcceptanceLegacyTermination {
+  UNTYPED
+
+  @@map("executable_acceptance_legacy_termination")
+}
+
+enum ExecutableAcceptanceContinuationKind {
+  RETRY
+  DIAGNOSIS
+  SUCCESSOR
+
+  @@map("executable_acceptance_continuation_kind")
+}
+
 /// Lifecycle of one evidence-bound request for a criterion decision. It is monotonic: OPEN may
 /// become DECIDED or SUPERSEDED, and neither terminal fact is rewritten or reopened.
 enum TaskJudgmentRequestStatus {
@@ -475,6 +509,13 @@ model Runner {
   // for an empty requirement set, but can never prove a non-empty requirement.
   capabilities           String[]  @default([])
   capabilitiesReportedAt DateTime? @map("capabilities_reported_at")
+  // EXECUTABLE v2 is advertised separately from the open-ended capability tokens because its
+  // numeric hard maximum participates in admission. All four fields move in one heartbeat write;
+  // NULL is an N-1 runner and can never prove a v2-bound plan.
+  acceptanceRuntimeSchemaRevision     Int?      @map("acceptance_runtime_schema_revision")
+  acceptanceRuntimeCapabilityRevision Int?      @map("acceptance_runtime_capability_revision")
+  acceptanceRuntimeHardMaxSeconds      Int?      @map("acceptance_runtime_hard_max_seconds")
+  acceptanceRuntimeReportedAt          DateTime? @map("acceptance_runtime_reported_at")
   // Effective default reported by each built-in runtime on this machine. Heartbeat-owned cache,
   // kept separate from modelCatalog because availability and selected-default are independent.
   // Shape: { "claude": "claude-opus-5", "codex": "gpt-5.6-sol", ... }.
@@ -508,6 +549,9 @@ model Runner {
   repoCleanupBranch  String?     @map("repo_cleanup_branch")
   repoCleanupMessage String?     @map("repo_cleanup_message")
   repoCleanupAt      DateTime?   @map("repo_cleanup_at")
+
+  executableAcceptanceAdmissions TaskExecutableAdmission[]
+  executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
   // on its own machine while the user approves in their own browser, so a machine with no
@@ -1229,6 +1273,9 @@ model Session {
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
+  executableAcceptanceAdmissions TaskExecutableAdmission[]
+  executableAcceptanceAttempts   TaskExecutableAttempt[]
+  executableAcceptanceDiagnoses  TaskExecutableDiagnosis[]
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -3125,6 +3172,16 @@ model Task {
   /// The declared completion fact for this task. HUMAN_SIGNOFF is a first-class criterion and the
   /// compatibility value for every row that predates this column, never an exceptional fallback.
   completionCriterion TaskCompletionCriterion @default(HUMAN_SIGNOFF) @map("completion_criterion")
+  /// Present only for the negotiated protocol. NULL preserves the N-1 fixed-120-second plan.
+  acceptanceTimeoutSeconds              Int?    @map("acceptance_timeout_seconds")
+  acceptanceOwnerTimeoutCeilingSeconds  Int?    @map("acceptance_owner_timeout_ceiling_seconds")
+  acceptancePolicyTimeoutCeilingSeconds Int?    @map("acceptance_policy_timeout_ceiling_seconds")
+  acceptanceSchemaRevision               Int?    @map("acceptance_schema_revision")
+  acceptanceCapabilityRevision           Int?    @map("acceptance_capability_revision")
+  acceptanceCommandDigest                String? @map("acceptance_command_digest") @db.Char(64)
+  acceptanceEvaluationPlanDigest         String? @map("acceptance_evaluation_plan_digest") @db.Char(64)
+  /// Incremented only by the admitted start handshake, never by admission itself.
+  executionAttemptCount                  Int     @default(0) @map("execution_attempt_count")
   /// Revision of the database-owned canonical DONE fence. Current task creation writes 1
   /// explicitly and the database default protects rows inserted by an N-1 server too.
   completionFenceRevision Int @default(1) @map("completion_fence_revision")
@@ -3331,6 +3388,10 @@ model Task {
   convergenceDecisions    TaskConvergenceDecision[]
   /// `[K3]`: every attempt spent on this task — one row per Session that ran it (migration 0139).
   attempts                TaskAttempt[]
+  executableAcceptanceAdmissions TaskExecutableAdmission[]
+  executableAcceptanceAttempts   TaskExecutableAttempt[]
+  executableAcceptanceContinuations TaskExecutableContinuation[]
+  executableAcceptanceDiagnoses  TaskExecutableDiagnosis[]
   /// `[K5]`: §6's findings ABOUT this task, and the ones whose one effect IS this task.
   verificationFindings    TaskVerificationFinding[] @relation("FindingSubject")
   filedByFinding          TaskVerificationFinding[] @relation("FindingEffectTask")
@@ -3679,6 +3740,161 @@ model TaskExecutableJudgmentResult {
 
   @@index([recordedAt(sort: Desc)], map: "task_executable_judgment_result_recorded_idx")
   @@map("task_executable_judgment_result")
+}
+
+/// The pre-spawn budget/capability decision for one v2 shell turn. It is immutable: a later
+/// runner capability report produces another admission, never a rewrite of what this dispatch saw.
+model TaskExecutableAdmission {
+  id        String @id @default(uuid(7)) @db.Uuid
+  taskId    String @map("task_id") @db.Uuid
+  task      Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId String @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  turnId    String @unique @map("turn_id") @db.Uuid
+  runnerId  String @map("runner_id") @db.Uuid
+  runner    Runner @relation(fields: [runnerId], references: [id], onDelete: Restrict)
+
+  evaluationPlanDigest String @map("evaluation_plan_digest") @db.Char(64)
+  commandDigest        String @map("command_digest") @db.Char(64)
+  expectedExitCode     Int    @map("expected_exit_code")
+  requestedTimeoutSeconds     Int @map("requested_timeout_seconds")
+  ownerTimeoutCeilingSeconds  Int @map("owner_timeout_ceiling_seconds")
+  policyTimeoutCeilingSeconds Int @map("policy_timeout_ceiling_seconds")
+  requiredSchemaRevision      Int @map("required_schema_revision")
+  requiredCapabilityRevision  Int @map("required_capability_revision")
+  runnerSchemaRevision        Int? @map("runner_schema_revision")
+  runnerCapabilityRevision    Int? @map("runner_capability_revision")
+  runnerHardMaxSeconds         Int? @map("runner_hard_max_seconds")
+  runnerSha                    String? @map("runner_sha")
+  decision      ExecutableAcceptanceAdmissionDecision
+  rejectionCode String? @map("rejection_code")
+  effectiveTimeoutSeconds Int? @map("effective_timeout_seconds")
+  effectiveDeadline       DateTime? @map("effective_deadline")
+  /// Zero at admission; incremented only by the runner's idempotent start handshake.
+  spawnCount Int @default(0) @map("spawn_count")
+  decidedAt DateTime @default(now()) @map("decided_at")
+
+  attempt TaskExecutableAttempt?
+
+  @@index([taskId, decidedAt(sort: Desc)], map: "task_executable_admission_task_idx")
+  @@index([decision, decidedAt(sort: Desc)], map: "task_executable_admission_decision_idx")
+  @@map("task_executable_admission")
+}
+
+/// One process invocation. New typed rows require an ADMITTED parent; imported history instead
+/// keeps terminationKind NULL and legacyTermination=UNTYPED, so migration cannot invent a signal.
+model TaskExecutableAttempt {
+  id          String @id @default(uuid(7)) @db.Uuid
+  admissionId String? @unique @map("admission_id") @db.Uuid
+  admission   TaskExecutableAdmission? @relation(fields: [admissionId], references: [id], onDelete: Restrict)
+  taskId      String @map("task_id") @db.Uuid
+  task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId   String @map("session_id") @db.Uuid
+  session     Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  turnId      String? @map("turn_id") @db.Uuid
+  attemptNumber Int @default(0) @map("attempt_number")
+  evaluationPlanDigest String? @map("evaluation_plan_digest") @db.Char(64)
+  expectedExitCode Int? @map("expected_exit_code")
+  deadlineAt DateTime? @map("deadline_at")
+  startedAt DateTime @default(now()) @map("started_at")
+  terminatedAt DateTime? @map("terminated_at")
+  terminationKind ExecutableAcceptanceTerminationKind? @map("termination_kind")
+  actualExitCode Int? @map("actual_exit_code")
+  signal String?
+  rawOutput String? @map("raw_output")
+  outputTruncated Boolean @default(false) @map("output_truncated")
+  failureFingerprint String? @map("failure_fingerprint") @db.Char(64)
+  legacyTermination ExecutableAcceptanceLegacyTermination? @map("legacy_termination")
+  legacyExitCode Int? @map("legacy_exit_code")
+
+  continuation TaskExecutableContinuation?
+
+  @@unique([taskId, attemptNumber], map: "task_executable_attempt_number_key")
+  @@index([terminatedAt, deadlineAt], map: "task_executable_attempt_stale_idx")
+  @@index([sessionId, startedAt(sort: Desc)], map: "task_executable_attempt_session_idx")
+  @@map("task_executable_attempt")
+}
+
+/// The bounded next obligation caused by an attempt-ending fact. It is not a Task status and does
+/// not conclude the goal; retry/diagnosis/successor remain actionable until separately resolved.
+model TaskExecutableContinuation {
+  id        String @id @default(uuid(7)) @db.Uuid
+  taskId    String @map("task_id") @db.Uuid
+  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  attemptId String @unique @map("attempt_id") @db.Uuid
+  attempt   TaskExecutableAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  kind      ExecutableAcceptanceContinuationKind
+  reasonCode String @map("reason_code")
+  goalActionable Boolean @default(true) @map("goal_actionable")
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  @@index([taskId, status, createdAt(sort: Desc)], map: "task_executable_continuation_active_idx")
+  @@map("task_executable_continuation")
+}
+
+/// Evidence-backed diagnosis is deliberately separate from termination. In particular, a legacy
+/// exit=-1 can support TIMEOUT here while its attempt remains UNTYPED forever.
+model TaskExecutableDiagnosis {
+  id        String @id @default(uuid(7)) @db.Uuid
+  taskId    String @map("task_id") @db.Uuid
+  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId String @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attemptId String? @map("attempt_id") @db.Uuid
+  kind      String
+  source    String
+  evidence  Json
+  evidenceDigest String @map("evidence_digest") @db.Char(64)
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([taskId, createdAt(sort: Desc)], map: "task_executable_diagnosis_task_idx")
+  @@index([sessionId], map: "task_executable_diagnosis_session_idx")
+  @@map("task_executable_diagnosis")
+}
+
+/// Append-only liveness pulse. The digest chains previousDigest + sourceSha + deadline + payload,
+/// so a heartbeat cannot be copied to another build or observation window without detection.
+model ExecutableRuntimeHeartbeat {
+  id          String @id @default(uuid(7)) @db.Uuid
+  component   String
+  instanceId  String @map("instance_id")
+  runnerId    String? @map("runner_id") @db.Uuid
+  runner      Runner? @relation(fields: [runnerId], references: [id], onDelete: SetNull)
+  sequence    BigInt
+  sourceSha   String @map("source_sha")
+  moduleGraphDigest String @map("module_graph_digest") @db.Char(64)
+  observedAt  DateTime @map("observed_at")
+  deadlineAt  DateTime @map("deadline_at")
+  payload     Json
+  payloadDigest String @map("payload_digest") @db.Char(64)
+  previousDigest String? @map("previous_digest") @db.Char(64)
+  heartbeatDigest String @unique @map("heartbeat_digest") @db.Char(64)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([component, instanceId, sequence], map: "executable_runtime_heartbeat_sequence_key")
+  @@index([component, instanceId, observedAt(sort: Desc)], map: "executable_runtime_heartbeat_latest_idx")
+  @@map("executable_runtime_heartbeat")
+}
+
+/// Written by the external dead-man, not by the worker it monitors or any projection reducer.
+/// Latest event per component/instance is the current operational state.
+model ExecutableDeadManEvent {
+  id          String @id @default(uuid(7)) @db.Uuid
+  component   String
+  instanceId  String @map("instance_id")
+  kind        String
+  heartbeatDigest String? @map("heartbeat_digest") @db.Char(64)
+  checkedAt   DateTime @map("checked_at")
+  deadlineAt  DateTime? @map("deadline_at")
+  sourceSha   String @map("source_sha")
+  eventDigest String @unique @map("event_digest") @db.Char(64)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([component, instanceId, checkedAt(sort: Desc)], map: "executable_dead_man_latest_idx")
+  @@map("executable_dead_man_event")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).

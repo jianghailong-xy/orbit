@@ -114,9 +114,11 @@ export async function readProjectPanorama(
     SELECT (count(*) FILTER (WHERE f."status" = 'IN_PROGRESS'
                                 OR (f."status" = 'OPEN' AND live.task_id IS NOT NULL)))::int AS "running",
            (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
-                               AND f."unmetCount" = 0))::int AS "ready",
+                               AND f."unmetCount" = 0
+                               AND f."abandonedCount" = 0))::int AS "ready",
            (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
-                               AND f."unmetCount" > 0))::int AS "blocked",
+                               AND (f."unmetCount" > 0
+                                 OR f."abandonedCount" > 0)))::int AS "blocked",
            (count(*) FILTER (WHERE f."status" = 'DONE'))::int AS "done",
            (count(*) FILTER (WHERE f."status" = 'CANCELLED'))::int AS "cancelled",
            count(*)::int AS "taskCount",

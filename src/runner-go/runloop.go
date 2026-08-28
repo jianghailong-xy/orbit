@@ -734,7 +734,8 @@ func runLoop(cfg *RunnerConfig) bool {
 			modelSnapshotMu.Unlock()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", IdleCapacity: idle, Version: version,
-				LeaseOwner: t.leaseOwner, Draining: draining,
+				ExecutableAcceptance: executableAcceptanceCapabilityV2(),
+				LeaseOwner:           t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
 				ModelCatalog:         modelCatalog,

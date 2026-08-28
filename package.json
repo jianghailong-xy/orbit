@@ -28,6 +28,7 @@
     "test:outcome-reconciler:actions": "bash scripts/outcome-reconciler-actions.sh",
     "test:outcome-reconciler:coordinator": "bash scripts/outcome-reconciler-coordinator.sh",
     "test:outcome-reconciler:watchdog": "bash scripts/outcome-reconciler-watchdog.sh",
+    "test:outcome-reconciler:acceptance-runtime": "bash scripts/executable-acceptance-runtime.sh",
     "dev:apiserver": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/apiserver",
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
     "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh",

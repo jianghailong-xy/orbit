@@ -102,6 +102,11 @@ import {
   UpdateTaskDto,
 } from './dto';
 import {
+  DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS,
+  EXECUTABLE_ACCEPTANCE_CAPABILITY_REVISION,
+  EXECUTABLE_ACCEPTANCE_SCHEMA_REVISION,
+} from './executable-acceptance-runtime';
+import {
   TASK_SUPERSEDABLE_STATUSES,
   TASK_SUPERSESSION_MAX_HOPS,
   successorChain,
@@ -333,6 +338,8 @@ type IdempotentTaskWrite = {
   // winner so two same-title creates in one turn cannot silently disagree about what runs.
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  acceptanceTimeoutSeconds?: number | null;
+  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   completionCriterion?: TaskCompletionCriterionValue | null;
   completionCriterionOverrideReason?: string | null;
 };
@@ -601,6 +608,46 @@ export const TASK_LIST_SELECT = {
   acceptanceCriteria: true,
   acceptanceCommand: true,
   acceptanceExpectedExitCode: true,
+  acceptanceTimeoutSeconds: true,
+  acceptanceOwnerTimeoutCeilingSeconds: true,
+  acceptancePolicyTimeoutCeilingSeconds: true,
+  acceptanceSchemaRevision: true,
+  acceptanceCapabilityRevision: true,
+  acceptanceCommandDigest: true,
+  acceptanceEvaluationPlanDigest: true,
+  executionAttemptCount: true,
+  executableAcceptanceAdmissions: {
+    orderBy: [{ decidedAt: 'desc' as const }, { id: 'desc' as const }],
+    take: 1,
+    select: {
+      id: true,
+      decision: true,
+      rejectionCode: true,
+      requestedTimeoutSeconds: true,
+      effectiveTimeoutSeconds: true,
+      effectiveDeadline: true,
+      runnerHardMaxSeconds: true,
+      runnerSha: true,
+      spawnCount: true,
+      decidedAt: true,
+    },
+  },
+  executableAcceptanceAttempts: {
+    orderBy: [{ startedAt: 'desc' as const }, { id: 'desc' as const }],
+    take: 1,
+    select: {
+      id: true,
+      attemptNumber: true,
+      terminationKind: true,
+      actualExitCode: true,
+      legacyTermination: true,
+      legacyExitCode: true,
+      deadlineAt: true,
+      startedAt: true,
+      terminatedAt: true,
+      outputTruncated: true,
+    },
+  },
   completionCriterion: true,
   completionCriterionOverrideReason: true,
   labels: true,
@@ -1907,7 +1954,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     taskIds: string[],
   ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
-    const byTask = new Map<string, Array<{ id: string; status: TaskStatus }>>();
+    type ChainFact = {
+      id: string;
+      status: TaskStatus;
+      supersededByTaskId: string | null;
+      terminalReason: string | null;
+    };
+    const byTask = new Map<string, ChainFact[]>();
+    const statusOf = new Map<string, TaskStatus>();
+    const successorOf = new Map<string, string | null>();
+    const terminalReasonOf = new Map<string, string | null>();
     if (taskIds.length === 0) return new Map();
     const uniqueIds = [...new Set(taskIds)];
     for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
@@ -1917,23 +1973,68 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: {
           taskId: true,
           dependsOnTaskId: true,
-          dependsOnTask: { select: { status: true } },
+          dependsOnTask: {
+            select: { status: true, supersededByTaskId: true, terminalReason: true },
+          },
         },
       });
       for (const e of edges) {
         const entry = {
           id: e.dependsOnTaskId,
           status: e.dependsOnTask.status as unknown as TaskStatus,
+          supersededByTaskId: e.dependsOnTask.supersededByTaskId ?? null,
+          terminalReason: e.dependsOnTask.terminalReason ?? null,
         };
+        statusOf.set(entry.id, entry.status);
+        successorOf.set(entry.id, entry.supersededByTaskId);
+        terminalReasonOf.set(entry.id, entry.terminalReason);
         const arr = byTask.get(e.taskId);
         if (arr) arr.push(entry);
         else byTask.set(e.taskId, [entry]);
       }
     }
+
+    // An edge names an attempt, not necessarily the attempt that still owns the work. Hydrate all
+    // successor chains in breadth-first batches and reduce each edge from its trustworthy tail.
+    // Missing/cross-owner rows, deleted successor pointers, cycles and overlong chains become an
+    // OPEN-shaped fact below: fail closed (never READY) without inventing a terminal outcome.
+    let frontier = [...new Set([...successorOf.values()].filter((id): id is string => !!id))];
+    const queried = new Set<string>(statusOf.keys());
+    for (let depth = 0; frontier.length > 0 && depth <= TASK_SUPERSESSION_MAX_HOPS; depth += 1) {
+      const requested = frontier.filter((id) => !queried.has(id));
+      if (requested.length === 0) break;
+      requested.forEach((id) => queried.add(id));
+      const rows = await this.prisma.task.findMany({
+        where: { ownerId, id: { in: requested } },
+        select: { id: true, status: true, supersededByTaskId: true, terminalReason: true },
+      });
+      frontier = [];
+      for (const row of rows) {
+        statusOf.set(row.id, row.status as unknown as TaskStatus);
+        successorOf.set(row.id, row.supersededByTaskId);
+        terminalReasonOf.set(row.id, row.terminalReason);
+        if (row.supersededByTaskId) frontier.push(row.supersededByTaskId);
+      }
+    }
+
+    const resolvedByTask = new Map<string, Array<{ id: string; status: TaskStatus }>>();
+    for (const [taskId, entries] of byTask) {
+      resolvedByTask.set(taskId, entries.map((entry) => {
+        const walked = successorChain(entry.id, successorOf);
+        const tailId = walked.chain.at(-1) ?? entry.id;
+        const tailStatus = statusOf.get(tailId);
+        const deletedSuccessor = terminalReasonOf.get(tailId) === 'SUPERSEDED'
+          && (successorOf.get(tailId) ?? null) === null;
+        if (walked.truncated || tailStatus == null || deletedSuccessor) {
+          return { id: tailId, status: TaskStatus.OPEN };
+        }
+        return { id: tailId, status: tailStatus };
+      }));
+    }
     const epochs = await loadVerificationEpochGates(
       this.prisma,
       ownerId,
-      [...byTask.values()].flat().map((entry) => entry.id),
+      [...resolvedByTask.values()].flat().map((entry) => entry.id),
     );
     // §13.3 DEP's self-exemption: a check that depends on the subject it checks must not be made to
     // wait for its own conclusion. Read only when some prerequisite actually HAS an epoch, which on
@@ -1943,7 +2044,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: [...byTask.keys()] }, verifiesTaskId: { not: null } },
         select: { id: true, verifiesTaskId: true },
       })).map((row) => [row.id, row.verifiesTaskId]));
-    return new Map([...byTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
+    return new Map([...resolvedByTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
       status: entry.status,
       verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
       verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
@@ -1960,58 +2061,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     taskIds: string[],
   ): Promise<Map<string, DependencyState>> {
-    if (taskIds.length === 0) return new Map();
-    const scoped = {
-      taskId: { in: taskIds },
-      task: { ownerId },
-      dependsOnTask: { ownerId },
-    } satisfies Prisma.TaskDependencyWhereInput;
-    const [totals, completed, failed] = await Promise.all([
-      this.prisma.taskDependency.groupBy({
-        by: ['taskId'],
-        where: scoped,
-        _count: { _all: true },
-      }),
-      this.prisma.taskDependency.groupBy({
-        by: ['taskId'],
-        where: { ...scoped, dependsOnTask: { ownerId, status: TaskStatus.DONE } },
-        _count: { _all: true },
-      }),
-      this.prisma.taskDependency.groupBy({
-        by: ['taskId'],
-        where: {
-          ...scoped,
-          dependsOnTask: {
-            ownerId,
-            status: { in: [TaskStatus.FAILED, TaskStatus.CANCELLED] },
-          },
-        },
-        _count: { _all: true },
-      }),
-    ]);
-    const completedByTask = new Map(completed.map((row) => [row.taskId, row._count._all]));
-    const failedByTask = new Map(failed.map((row) => [row.taskId, row._count._all]));
-    // §13.3 DEP, as a fourth count rather than through `computeDependencyState`: this method
-    // exists to keep memory O(nodes) on a dense DAG, so it must not hydrate every prerequisite the
-    // pure predicate would want. A check that is DONE without a current pass stops counting as
-    // completed here too — the graph may under-state WHY (`BLOCKED` rather than `BLOCKED_FAILED`,
-    // which needs the verdict), but it can no longer offer a READY the API would refuse.
-    const notPassedByTask = await this.verificationBlockedCounts(ownerId, taskIds);
-    const states = new Map<string, DependencyState>();
-    for (const row of totals) {
-      const failedCount = failedByTask.get(row.taskId) ?? 0;
-      const notPassed = notPassedByTask.get(row.taskId) ?? 0;
-      const completedCount = (completedByTask.get(row.taskId) ?? 0) - notPassed;
-      states.set(
-        row.taskId,
-        failedCount > 0
-          ? 'BLOCKED_FAILED'
-          : completedCount === row._count._all
-            ? 'READY'
-            : 'BLOCKED',
-      );
-    }
-    return states;
+    // Graph cards are a read model, not a different dependency contract. Resolving the same typed
+    // facts as task_get/list/Run Now is the only way a stored W edge can show READY after its
+    // successor tail S reaches DONE. The response itself is bounded, so hydrating its edges remains
+    // bounded too; successor walks are batched by dependencyFactsFor.
+    return this.dependencyStatesFor(ownerId, taskIds);
   }
 
   /**
@@ -2513,6 +2567,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             description: dto.description,
             acceptanceCommand: dto.acceptanceCommand,
             acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
+            acceptanceTimeoutSeconds: dto.acceptanceTimeoutSeconds,
+            acceptanceOwnerTimeoutCeilingSeconds: dto.acceptanceOwnerTimeoutCeilingSeconds,
             completionCriterion: dto.completionCriterion,
             completionCriterionOverrideReason: dto.completionCriterionOverrideReason,
           }
@@ -2892,6 +2948,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       acceptanceCriteria: dto.acceptanceCriteria,
       acceptanceCommand: dto.acceptanceCommand,
       acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
+      acceptanceTimeoutSeconds: dto.acceptanceTimeoutSeconds,
+      acceptanceOwnerTimeoutCeilingSeconds: dto.acceptanceTimeoutSeconds == null
+        ? undefined
+        : (dto.acceptanceOwnerTimeoutCeilingSeconds ?? dto.acceptanceTimeoutSeconds),
+      acceptancePolicyTimeoutCeilingSeconds: dto.acceptanceTimeoutSeconds == null
+        ? undefined
+        : DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS,
+      acceptanceSchemaRevision: dto.acceptanceTimeoutSeconds == null
+        ? undefined
+        : EXECUTABLE_ACCEPTANCE_SCHEMA_REVISION,
+      acceptanceCapabilityRevision: dto.acceptanceTimeoutSeconds == null
+        ? undefined
+        : EXECUTABLE_ACCEPTANCE_CAPABILITY_REVISION,
       // Re-resolve at the shared write builder so the single and batch paths stay total when N18
       // removes the legacy default. Both paths already ran this deterministic check before any
       // ownership or transaction work; this cheap repeat protects future internal call sites too.
@@ -3305,6 +3374,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             description: item.description,
             acceptanceCommand: item.acceptanceCommand,
             acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
+            acceptanceTimeoutSeconds: item.acceptanceTimeoutSeconds,
+            acceptanceOwnerTimeoutCeilingSeconds: item.acceptanceOwnerTimeoutCeilingSeconds,
             completionCriterion: item.completionCriterion,
             completionCriterionOverrideReason: item.completionCriterionOverrideReason,
           }
@@ -4058,6 +4129,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         acceptanceCriteria: item.acceptanceCriteria ?? null,
         acceptanceCommand: item.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
+        acceptanceTimeoutSeconds: item.acceptanceTimeoutSeconds ?? null,
+        acceptanceOwnerTimeoutCeilingSeconds:
+          item.acceptanceOwnerTimeoutCeilingSeconds ?? null,
         completionCriterion: item.completionCriterion ?? null,
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
@@ -4753,6 +4827,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       !== (write.acceptanceExpectedExitCode ?? null)
     ) {
       mismatch('different expected exit code');
+    }
+    if ((existing.acceptanceTimeoutSeconds ?? null) !== (write.acceptanceTimeoutSeconds ?? null)) {
+      mismatch('different acceptance timeout');
+    }
+    const requestedOwnerCeiling = write.acceptanceTimeoutSeconds == null
+      ? null
+      : (write.acceptanceOwnerTimeoutCeilingSeconds ?? write.acceptanceTimeoutSeconds);
+    if ((existing.acceptanceOwnerTimeoutCeilingSeconds ?? null) !== requestedOwnerCeiling) {
+      mismatch('different acceptance owner ceiling');
     }
     // Optional on purpose: pre-N1 callers never declared this field, so their replay remains
     // compatible. Once a caller does declare it, handing back a row with another criterion would
@@ -6440,27 +6523,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, title: true, status: true, terminalReason: true, supersededAt: true },
           orderBy: [{ supersededAt: 'asc' }, { id: 'asc' }],
         },
+        executableAcceptanceAdmissions: {
+          orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
+          take: 20,
+          include: { attempt: true },
+        },
+        executableAcceptanceAttempts: {
+          orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+          take: 20,
+          include: { continuation: true },
+        },
+        executableAcceptanceContinuations: {
+          where: { status: 'ACTIVE' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 20,
+        },
+        executableAcceptanceDiagnoses: {
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 20,
+        },
       },
     });
     if (!task) throw new NotFoundException('task not found');
-    // §13.3 DEP: the same judgement the Run button and the Coordinator's pass make. A task page
-    // that says READY while `execute` refuses is the disagreement `RUNNABLE_TASK_SQL` already
-    // warns about, one clause further along. Built from the edges this query already hydrated, so
-    // a task with no prerequisites costs no extra read at all.
-    const prerequisiteEpochs = await loadVerificationEpochGates(
-      this.prisma,
-      ownerId,
-      task.dependsOn.map((d) => d.dependsOnTaskId),
+    // Read the same successor-tail facts as task_list, Run Now, both automatic starters and the
+    // commit gate. The relation above intentionally remains the stored audit edge (W); readiness
+    // is answered by the current work holder at the trusted chain tail (S).
+    const dependencyState = computeDependencyState(
+      (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [],
     );
-    const dependencyState = computeDependencyState(task.dependsOn.map((d) => ({
-      status: d.dependsOnTask.status as unknown as TaskStatus,
-      verificationGate: dependencyEpochGate(
-        d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
-      ),
-      verificationGateStalled: dependencyEpochStalled(
-        d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
-      ),
-    })));
     const supersession = await this.supersession(ownerId, task);
     return {
       ...task,
@@ -7057,6 +7147,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const acceptanceExpectedExitCode = dto.acceptanceExpectedExitCode === undefined
       ? before.acceptanceExpectedExitCode
       : (dto.acceptanceExpectedExitCode ?? null);
+    let acceptanceTimeoutSeconds = dto.acceptanceTimeoutSeconds === undefined
+      ? before.acceptanceTimeoutSeconds
+      : (dto.acceptanceTimeoutSeconds ?? null);
+    let acceptanceOwnerTimeoutCeilingSeconds =
+      dto.acceptanceOwnerTimeoutCeilingSeconds === undefined
+        ? before.acceptanceOwnerTimeoutCeilingSeconds
+        : (dto.acceptanceOwnerTimeoutCeilingSeconds ?? null);
+    // Clearing the executable pair necessarily clears its v2 plan. Starting or replacing a
+    // requested timeout without an explicit owner ceiling binds the owner to exactly that request;
+    // an intentionally lower ceiling is retained so admission can reject it before spawn.
+    if (acceptanceCommand == null) {
+      acceptanceTimeoutSeconds = null;
+      acceptanceOwnerTimeoutCeilingSeconds = null;
+    } else if (dto.acceptanceTimeoutSeconds !== undefined) {
+      acceptanceOwnerTimeoutCeilingSeconds = acceptanceTimeoutSeconds == null
+        ? null
+        : (dto.acceptanceOwnerTimeoutCeilingSeconds ?? acceptanceTimeoutSeconds);
+    }
     const verifiesTaskIdAfter =
       dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
     const attachesVerifier = before.verifiesTaskId == null && verifiesTaskIdAfter != null;
@@ -7068,6 +7176,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionCriterion = dto.completionCriterion;
     } else if (
       dto.acceptanceCommand !== undefined || dto.acceptanceExpectedExitCode !== undefined
+      || dto.acceptanceTimeoutSeconds !== undefined
+      || dto.acceptanceOwnerTimeoutCeilingSeconds !== undefined
     ) {
       completionCriterion = acceptanceCommand != null
         ? 'EXECUTABLE'
@@ -7096,6 +7206,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const touchesCompletionDeclaration = dto.completionCriterion !== undefined
       || dto.acceptanceCommand !== undefined
       || dto.acceptanceExpectedExitCode !== undefined
+      || dto.acceptanceTimeoutSeconds !== undefined
+      || dto.acceptanceOwnerTimeoutCeilingSeconds !== undefined
       || dto.completionPolicy !== undefined
       || dto.verifiesTaskId !== undefined;
     if (touchesCompletionDeclaration) {
@@ -7103,6 +7215,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion,
         acceptanceCommand,
         acceptanceExpectedExitCode,
+        acceptanceTimeoutSeconds,
+        acceptanceOwnerTimeoutCeilingSeconds,
         completionPolicy,
         verifiesTaskId: verifiesTaskIdAfter,
       });
@@ -7180,6 +7294,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dto.acceptanceExpectedExitCode === undefined
           ? undefined
           : (dto.acceptanceExpectedExitCode ?? null),
+      // Command clearing must clear the plan in the same statement. For any other declaration
+      // edit, write the complete frozen tuple so the database trigger derives both SHA bindings.
+      acceptanceTimeoutSeconds: touchesCompletionDeclaration
+        ? acceptanceTimeoutSeconds
+        : undefined,
+      acceptanceOwnerTimeoutCeilingSeconds: touchesCompletionDeclaration
+        ? acceptanceOwnerTimeoutCeilingSeconds
+        : undefined,
+      acceptancePolicyTimeoutCeilingSeconds: touchesCompletionDeclaration
+        ? (acceptanceTimeoutSeconds == null
+            ? null
+            : DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS)
+        : undefined,
+      acceptanceSchemaRevision: touchesCompletionDeclaration
+        ? (acceptanceTimeoutSeconds == null ? null : EXECUTABLE_ACCEPTANCE_SCHEMA_REVISION)
+        : undefined,
+      acceptanceCapabilityRevision: touchesCompletionDeclaration
+        ? (acceptanceTimeoutSeconds == null ? null : EXECUTABLE_ACCEPTANCE_CAPABILITY_REVISION)
+        : undefined,
       completionCriterion: touchesCompletionDeclaration ? completionCriterion : undefined,
       autoRunWhenReady: dto.autoRunWhenReady,
       completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,
@@ -8315,10 +8448,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * marking that dependent DONE re-enters update() and triggers the next layer.
    */
   private async triggerDependents(ownerId: string, doneTaskId: string): Promise<void> {
-    const edges = await this.prisma.taskDependency.findMany({
-      where: { dependsOnTaskId: doneTaskId },
-      select: { taskId: true },
-    });
+    // The stored edge may still name W while the completion event comes from its tail S. Resolve
+    // that relation in PostgreSQL, using the same fail-closed function as the candidate scans and
+    // commit trigger. This is the instant path; without the reverse-tail match only the periodic
+    // sweep would eventually notice S, and the two automatic starters would disagree meanwhile.
+    const edges = await this.prisma.$queryRaw<Array<{ taskId: string }>>(Prisma.sql`
+      SELECT DISTINCT d."task_id" AS "taskId"
+        FROM "task_dependency" d
+        JOIN "task" dependent ON dependent."id" = d."task_id"
+       WHERE dependent."owner_id" = ${ownerId}::uuid
+         AND task_dependency_tail_id(d."depends_on_task_id") = ${doneTaskId}::uuid
+    `);
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
     if (!dependentIds.length) return;
     const states = await this.dependencyStatesFor(ownerId, dependentIds);

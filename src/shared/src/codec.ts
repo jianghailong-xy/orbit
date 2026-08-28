@@ -267,6 +267,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // clients see. The same classification `findingId` carries for the same reason.
   'checkpointId',
   'attemptId',
+  // EXECUTABLE v2's pre-spawn decision is an inspectable row and the runner hands this address
+  // back at the idempotent start boundary.
+  'admissionId',
   // The checkpoint a QUEUED merge was authorised for (`session`, migration 0152). It names the
   // same kind of thing `checkpointId` does and is read the same way — the server looks the row up
   // by id when the merge reports back. Deliberately NOT a fence: no runner echoes it, nothing

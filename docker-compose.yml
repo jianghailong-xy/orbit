@@ -149,6 +149,23 @@ services:
       postgres:
         condition: service_healthy
 
+  # External dead-man: intentionally does not depend on watchdog or apiserver. It reads only the
+  # append-only heartbeat ledger in PostgreSQL and records deadline/recovery transitions.
+  executable-dead-man:
+    image: orbit-apiserver:local
+    container_name: orbit-executable-dead-man
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - 'while true; do node /app/scripts/executable-acceptance-dead-man.mjs; sleep 10; done'
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      EXECUTABLE_DEAD_MAN_SOURCE_SHA: "${EXECUTABLE_DEAD_MAN_SOURCE_SHA:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   web:
     build:
       context: .

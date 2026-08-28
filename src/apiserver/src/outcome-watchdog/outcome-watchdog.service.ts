@@ -23,6 +23,80 @@ function asResult(value: Prisma.JsonValue): JsonResult {
 export class OutcomeWatchdogService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Append one SHA-bound worker heartbeat. Sequence and previousDigest are read and written in the
+   * same statement, so the ledger is a verifiable chain rather than mutable "last seen" telemetry.
+   */
+  async appendRuntimeHeartbeat(input: {
+    component: string;
+    instanceId: string;
+    sourceSha: string;
+    moduleGraphDigest: string;
+    observedAt: Date;
+    deadlineAt: Date;
+    payload: Record<string, unknown>;
+  }): Promise<{ heartbeatDigest: string; sequence: bigint }> {
+    assertFullGitSha(input.sourceSha, 'WATCHDOG');
+    if (!/^[0-9a-f]{64}$/.test(input.moduleGraphDigest)) {
+      throw new Error('WATCHDOG_MODULE_GRAPH_DIGEST_INVALID');
+    }
+    const [row] = await this.prisma.$queryRaw<Array<{
+      heartbeatDigest: string;
+      sequence: bigint;
+    }>>(Prisma.sql`
+      WITH previous AS (
+        SELECT h."sequence", h."heartbeat_digest"
+          FROM "executable_runtime_heartbeat" h
+         WHERE h."component" = ${input.component}::text
+           AND h."instance_id" = ${input.instanceId}::text
+         ORDER BY h."sequence" DESC LIMIT 1
+      ), material AS (
+        SELECT coalesce((SELECT "sequence" FROM previous), 0) + 1 AS sequence,
+               (SELECT "heartbeat_digest" FROM previous) AS previous_digest,
+               ${JSON.stringify(input.payload)}::jsonb AS payload
+      ), bound AS (
+        SELECT material.*,
+               encode(digest(material.payload::text, 'sha256'), 'hex') AS payload_digest
+          FROM material
+      ), final AS (
+        SELECT bound.*,
+               encode(digest(jsonb_build_object(
+                 'component', ${input.component}::text,
+                 'instanceId', ${input.instanceId}::text,
+                 'sequence', bound.sequence,
+                 'sourceSha', ${input.sourceSha}::text,
+                 'moduleGraphDigest', ${input.moduleGraphDigest}::text,
+                 'observedAt', ${input.observedAt}::timestamptz,
+                 'deadlineAt', ${input.deadlineAt}::timestamptz,
+                 'payloadDigest', bound.payload_digest,
+                 'previousDigest', bound.previous_digest
+               )::text, 'sha256'), 'hex') AS heartbeat_digest
+          FROM bound
+      )
+      INSERT INTO "executable_runtime_heartbeat"
+        ("id", "component", "instance_id", "sequence", "source_sha",
+         "module_graph_digest", "observed_at", "deadline_at", "payload", "payload_digest",
+         "previous_digest", "heartbeat_digest")
+      SELECT gen_random_uuid(), ${input.component}::text, ${input.instanceId}::text, final.sequence,
+             ${input.sourceSha}::text, ${input.moduleGraphDigest}::text, ${input.observedAt}::timestamptz,
+             ${input.deadlineAt}::timestamptz, final.payload, final.payload_digest,
+             final.previous_digest, final.heartbeat_digest
+        FROM final
+      RETURNING "heartbeat_digest" AS "heartbeatDigest", "sequence"
+    `);
+    if (!row) throw new Error('WATCHDOG_HEARTBEAT_APPEND_FAILED');
+    return row;
+  }
+
+  async markStaleExecutableAttempts(observedAt: Date, limit = 64): Promise<number> {
+    const [row] = await this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+      SELECT executable_acceptance_mark_stale_attempts(
+        ${observedAt}::timestamptz, ${limit}::integer
+      ) AS count
+    `);
+    return row?.count ?? 0;
+  }
+
   async tenantIds(): Promise<string[]> {
     const rows = await this.prisma.$queryRaw<Array<{ tenantId: string }>>(Prisma.sql`
       SELECT DISTINCT tenant_id AS "tenantId"

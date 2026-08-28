@@ -16,9 +16,9 @@ export interface ProjectTaskDependencyFacts {
   status: string;
   /** Prerequisites of any kind, in this project or another. */
   prerequisiteCount: number;
-  /** Prerequisites still owing work — status OPEN or IN_PROGRESS. */
+  /** Effective chain tails still owing work — status OPEN or IN_PROGRESS. */
   unmetCount: number;
-  /** Prerequisites that ended without completing — status CANCELLED or FAILED. */
+  /** Effective tails that ended without completing, or invalid chains — CANCELLED or FAILED. */
   abandonedCount: number;
   /** Prerequisites that are themselves tasks of this project (an edge inside the project). */
   projectPrerequisiteCount: number;
@@ -32,7 +32,9 @@ export interface ProjectTaskDependencyFacts {
  * There is exactly one judgment about a prerequisite here and everything else is counted off it,
  * because the alternative — each endpoint asking the question in its own SQL — is how a task comes
  * to be `blocked` on one card and `ready` on the next. It mirrors `computeDependencyState`
- * (task-dependencies.ts) column for column, which is the definition the task list already shows:
+ * (task-dependencies.ts) column for column. Each stored edge first resolves through the shared,
+ * fail-closed supersession-chain function; a missing tail, broken link or cycle is treated as
+ * FAILED. The resulting effective status is the definition every task surface shows:
  *
  *   - OPEN / IN_PROGRESS prerequisite  -> unmet         (BLOCKED: somebody still owes this work)
  *   - CANCELLED / FAILED prerequisite  -> abandoned     (BLOCKED_FAILED: nothing will finish it)
@@ -41,19 +43,15 @@ export interface ProjectTaskDependencyFacts {
  * so `dependencyState` is derivable from these counts alone: no prerequisites -> NONE, any
  * abandoned -> BLOCKED_FAILED, any unmet -> BLOCKED, otherwise READY.
  *
- * Deliberately NOT the supersession-aware `dependenciesSatisfiedSql`: that predicate answers the
- * dispatcher's question ("may this run"), follows a replaced attempt to its successor, and would
- * therefore disagree with the `dependencyState` every other surface displays. Two different
- * questions, and this one is the display side of the pair.
- *
  * The two scopes here are also deliberate and different:
  *
  *   - `unmetCount` / `abandonedCount` count EVERY prerequisite, including one filed under another
  *     project. A task waiting on work outside its project is waiting, and a bucket that called it
  *     ready would send a reader looking for a dispatch refusal that does not exist.
- *   - `projectPrerequisiteCount` and `topoLevel` count only edges with both ends in this project,
- *     because they describe the SHAPE of this project's graph. An edge leaving the project is not
- *     part of the picture being drawn.
+ *   - `projectPrerequisiteCount` and `topoLevel` count the original stored edges with both ends in
+ *     this project, because they describe the SHAPE and audit history of this project's graph.
+ *     Supersession changes satisfaction, not the edge that was declared; an edge leaving the
+ *     project is not part of the picture being drawn.
  */
 export function projectTaskDependencyFactsSql(ownerId: string, projectId: string): Prisma.Sql {
   return Prisma.sql`
@@ -70,10 +68,10 @@ export function projectTaskDependencyFactsSql(ownerId: string, projectId: string
           JOIN scoped prerequisite ON prerequisite.id = d.depends_on_task_id
       ),
       prerequisite AS (
-        SELECT d.task_id, p.status::text AS status
+        SELECT d.task_id, coalesce(p.status::text, 'FAILED') AS status
           FROM task_dependency d
           JOIN scoped dependent ON dependent.id = d.task_id
-          JOIN task p ON p.id = d.depends_on_task_id
+          LEFT JOIN task p ON p.id = task_dependency_tail_id(d.depends_on_task_id)
       ),
       tally AS (
         SELECT task_id,

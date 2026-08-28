@@ -33,6 +33,7 @@ import {
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from './task-criterion-shape-advice';
+import { EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS } from './executable-acceptance-runtime';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
@@ -288,6 +289,12 @@ export class CreateTaskDto {
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
+  // Omission preserves the deployed N-1 fixed-120-second protocol. Presence opts this declaration
+  // into the version-bound v2 admission contract; admission, never DTO coercion, compares ceilings.
+  @IsOptional() @IsInt() @Min(1) @Max(EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS)
+  acceptanceTimeoutSeconds?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS)
+  acceptanceOwnerTimeoutCeilingSeconds?: number;
   // One ordinary completion criterion. Omission is the compatibility spelling of HUMAN_SIGNOFF;
   // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
@@ -485,6 +492,11 @@ export class UpdateTaskDto {
   // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;
+  // null returns the task to the N-1 legacy plan; omission preserves the stored plan.
+  @IsOptional() @IsInt() @Min(1) @Max(EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS)
+  acceptanceTimeoutSeconds?: number | null;
+  @IsOptional() @IsInt() @Min(1) @Max(EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS)
+  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   // Omit to preserve it. A criterion is never nullable: HUMAN_SIGNOFF is the explicit normal
   // choice rather than clearing the field or escalating after another criterion failed.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)

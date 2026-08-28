@@ -599,16 +599,18 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
 			} else {
-				shOut, shExit := runShellTurn(ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
-				pendingShellCtx = append(pendingShellCtx,
-					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-				if err := completeTurn(TurnCompleteRequest{
-					TurnID: resp.TurnID, Status: stSucceeded,
-					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
-					ShellExitCode: &shExit, ShellOutput: &shOut,
-					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
-				}); err != nil {
+				req, shellErr := runSynchronousShellTurn(ctx, t, job, execDir, resp, emit)
+				if shellErr != nil {
+					logln("executable shell start failed for", job.SessionID+":", shellErr)
+					req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: shellErr.Error(), Subtype: "shell"}
+				}
+				if req.ShellOutput != nil {
+					pendingShellCtx = append(pendingShellCtx,
+						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, *req.ShellOutput))
+				}
+				req.RuntimeSessionID = currentRuntimeSessionID(job)
+				req.BranchSha = effectiveBranchSha(job.WT)
+				if err := completeTurn(req); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
 			}

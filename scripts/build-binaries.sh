@@ -17,6 +17,7 @@ OUT="${1:-dist-bin}"
 SRC="src/runner-go"
 # Version of record: the root package.json.
 VER="$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+SOURCE_SHA="$(git rev-parse HEAD)"
 
 # suffix:GOOS:GOARCH
 TARGETS=(
@@ -28,7 +29,7 @@ TARGETS=(
 
 # Bake the deployment's public origin into the binary's defaultServer so a self-hosted
 # runner's `orbit register` connects there with no --server. Unset → keep the source default.
-LDFLAGS="-s -w -X main.version=$VER"
+LDFLAGS="-s -w -X main.version=$VER -X main.sourceSHA=$SOURCE_SHA"
 if [ -n "${PUBLIC_ORIGIN:-}" ]; then
   LDFLAGS="$LDFLAGS -X main.defaultServer=$PUBLIC_ORIGIN"
 fi

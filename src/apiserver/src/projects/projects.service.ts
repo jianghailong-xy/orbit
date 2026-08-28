@@ -1608,10 +1608,12 @@ export class ProjectsService {
          WHERE t."owner_id" = ${ownerId}::uuid AND t."project_id" = ${projectId}::uuid
       ),
       "inbound" AS (
-        SELECT d."task_id" AS "id", p."status"::text AS "status"
+        SELECT d."task_id" AS "id", COALESCE(p."status"::text, 'FAILED') AS "status"
           FROM "task_dependency" d
           JOIN "scoped" s ON s."id" = d."task_id"
-          JOIN "task" p ON p."id" = d."depends_on_task_id" AND p."owner_id" = ${ownerId}::uuid
+          LEFT JOIN "task" p
+            ON p."id" = task_dependency_tail_id(d."depends_on_task_id")
+           AND p."owner_id" = ${ownerId}::uuid
       ),
       "tally" AS (
         SELECT "id",

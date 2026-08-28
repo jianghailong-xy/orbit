@@ -96,6 +96,7 @@ fi
 DEPLOY_SHA="$(git rev-parse HEAD)"
 export OUTCOME_WATCHDOG_COLLECTOR_SHA="${OUTCOME_WATCHDOG_COLLECTOR_SHA:-$DEPLOY_SHA}"
 export OUTCOME_WATCHDOG_TARGET_SHA="${OUTCOME_WATCHDOG_TARGET_SHA:-$DEPLOY_SHA}"
+export EXECUTABLE_DEAD_MAN_SOURCE_SHA="${EXECUTABLE_DEAD_MAN_SOURCE_SHA:-$DEPLOY_SHA}"
 
 echo "==> Building images from source (apiserver, web)"
 if [ "$NO_CACHE" -eq 1 ]; then
@@ -114,7 +115,7 @@ else
   # All four app-layer services are named explicitly, so dependency traversal is unnecessary.
   # Suppress it to keep Compose from recreating postgres when this checkout's relative bind-mount
   # path differs from the deployment checkout (for example, when upgrading from a git worktree).
-  $DC up -d --wait --no-deps apiserver watchdog web gateway
+  $DC up -d --wait --no-deps apiserver watchdog executable-dead-man web gateway
 fi
 
 echo "==> Stack status"

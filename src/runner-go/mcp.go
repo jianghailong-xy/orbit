@@ -573,7 +573,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -607,7 +607,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -636,7 +636,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1527,7 +1527,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"acceptanceExpectedExitCode": map[string]interface{}{
 				"type":        "integer",
-				"description": "The exit code that derives DONE for acceptanceCommand; every other exit code derives FAILED. Set both fields together.",
+				"description": "The exit code that derives DONE for acceptanceCommand. Only a typed EXITED result with a different actual code derives FAILED; timeout, cancellation, signal, start failure and infrastructure loss remain actionable. Set both fields together.",
+			},
+			"acceptanceTimeoutSeconds": map[string]interface{}{
+				"type": "integer", "minimum": 1, "maximum": 86400,
+				"description": "Requested EXECUTABLE wall-clock budget. Presence opts into v2 pre-spawn admission; omission keeps the N-1 legacy plan. Admission uses exactly this value and never clamps it.",
+			},
+			"acceptanceOwnerTimeoutCeilingSeconds": map[string]interface{}{
+				"type": "integer", "minimum": 1, "maximum": 86400,
+				"description": "Owner ceiling checked at admission. Omit to bind it to acceptanceTimeoutSeconds; a lower explicit value is REJECTED before spawn.",
 			},
 			"dueDate":  str,
 			"provider": providerProp,
@@ -2074,7 +2082,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceExpectedExitCode": map[string]interface{}{
 					"type":        []string{"integer", "null"},
-					"description": "The exit code that mechanically derives DONE; every other code derives FAILED. Set or clear it together with acceptanceCommand.",
+					"description": "The exit code that mechanically derives DONE. Only typed EXITED can be compared; all non-exit termination kinds keep the goal actionable. Set or clear it together with acceptanceCommand.",
+				},
+				"acceptanceTimeoutSeconds": map[string]interface{}{
+					"type": []string{"integer", "null"}, "minimum": 1, "maximum": 86400,
+					"description": "Replace the requested v2 budget; null returns to legacy/N-1 acceptance, omission preserves it.",
+				},
+				"acceptanceOwnerTimeoutCeilingSeconds": map[string]interface{}{
+					"type": []string{"integer", "null"}, "minimum": 1, "maximum": 86400,
+					"description": "Replace the owner ceiling. It is negotiated and never used as a silent clamp.",
 				},
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",
