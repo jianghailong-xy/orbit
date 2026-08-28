@@ -1,12 +1,12 @@
 /**
  * Separating what a person typed from what Orbit appended to it.
  *
- * Two features add context to a message at delivery — `#`-reference expansion and a task list's
- * condition board. Both deliberately leave `conversation_turn.content` alone, so the durable
- * record of what was sent is the person's own words. But the runner echoes what it *received*
- * into the transcript, which is what the UI renders: the result was a one-line question followed
- * by a block of generated status text, inside the user's own bubble, looking for all the world
- * like they had typed it.
+ * Orbit can add context to a message at delivery — `#`-reference expansion, a task list's
+ * condition board, and the standing role of a conversation promoted to project coordinator.
+ * These deliberately leave `conversation_turn.content` alone, so the durable record of what was
+ * sent is the person's own words. But the runner echoes what it *received* into the transcript,
+ * which is what the UI renders: the result was a one-line question followed by a block of
+ * generated context, inside the user's own bubble, looking for all the world like they typed it.
  *
  * Stripping it outright would trade that for a worse problem — the agent answering about a quota
  * outage nobody appears to have mentioned. So the blocks come out of the bubble body and are
@@ -15,7 +15,12 @@
  */
 
 /** The blocks Orbit appends at delivery. Nothing else is ever removed from a person's message. */
-const INJECTED_TAGS = ['referenced-list', 'referenced-task', 'list-conditions'] as const;
+const INJECTED_TAGS = [
+  'referenced-list',
+  'referenced-task',
+  'list-conditions',
+  'orbit_project_coordinator_context',
+] as const;
 
 export type InjectedTag = (typeof INJECTED_TAGS)[number];
 
@@ -65,10 +70,30 @@ export function splitDeliveredMessage(raw: string): DeliveredMessage {
   return { text, injected };
 }
 
+/** The latest authored user text in echoed events, with the first-turn prompt fallback. */
+export function lastTypedUserMessageText(
+  events: readonly { type: string; payload?: unknown }[],
+  openingPrompt?: string | null,
+  numTurns?: number,
+): string {
+  // Split each candidate before deciding whether it carries text. A promoted coordinator's
+  // image-only turn has a non-empty echo made solely of delivery context; choosing first and
+  // splitting second would stop there and hide the older message that can actually be retried.
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type !== 'user') continue;
+    const echoed = (events[i].payload as { text?: unknown } | undefined)?.text;
+    if (typeof echoed !== 'string') continue;
+    const typed = splitDeliveredMessage(echoed).text;
+    if (typed.trim()) return typed;
+  }
+  return numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '';
+}
+
 const TAG_LABEL: Record<InjectedTag, string> = {
   'referenced-list': 'referenced list',
   'referenced-task': 'referenced task',
   'list-conditions': 'list conditions',
+  orbit_project_coordinator_context: 'project coordinator context',
 };
 
 /**

@@ -50,7 +50,11 @@ import {
   sha256,
 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
-import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
+import {
+  buildCoordinatorInstructions,
+  buildCoordinatorOpening,
+  coordinatorSessionTitle,
+} from './coordinator-opening';
 import { authorityPrincipal, refuseHumanOnlyAction } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
@@ -1188,11 +1192,23 @@ export class ProjectsService {
     sessionId: string,
     dto: CreateProjectDto,
   ) {
-    return this.create(
+    const project = await this.create(
       ownerId,
       dto,
       await this.coordinatorFromSession(ownerId, runnerId, sessionId),
     );
+    return {
+      // `project_create` runs inside the turn that is being promoted. A prompt attached to a
+      // later claim cannot reach backwards into that turn, while rewriting Session.prompt would
+      // falsify the conversation's opening and established runtimes would not re-read it anyway.
+      // Returning the transition instruction makes it part of this tool result — and therefore
+      // the current provider transcript — while runner inbox delivery supplies the same standing
+      // context again on later messages, including warm and reclaimed runtimes.
+      coordinatorInstructions: buildCoordinatorInstructions(project.title, project.id),
+      // Keep the transition first in the serialized tool result. Project payloads can contain long
+      // acceptance definitions, and the role change is what the currently-running turn must see.
+      ...project,
+    };
   }
 
   /**

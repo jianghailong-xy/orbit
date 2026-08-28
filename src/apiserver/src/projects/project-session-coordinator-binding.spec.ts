@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { lastValueFrom, of } from 'rxjs';
 import { uuidToBase62 } from '@orbit/shared';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
+import { buildCoordinatorInstructions } from './coordinator-opening';
 import { CreateProjectDto } from './dto';
 import { ProjectsService } from './projects.service';
 
@@ -19,6 +20,7 @@ const PROJECT_ID = '00000000-0000-7000-8000-0000000000e1';
 interface SessionRow {
   id: string;
   title: string;
+  prompt: string;
   titleManagedByProject: boolean;
   titleBeforeProjectManagement: string | null;
   ownerId: string;
@@ -34,6 +36,7 @@ interface SessionRow {
 const LIVE: SessionRow = {
   id: SESSION_ID,
   title: 'Explore the corpus',
+  prompt: 'Explore the corpus and decide what work should be recorded.',
   titleManagedByProject: false,
   titleBeforeProjectManagement: null,
   ownerId: OWNER_ID,
@@ -99,6 +102,8 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
   rows = rows.map((row) => ({ ...row }));
   const creates: Record<string, unknown>[] = [];
   const lookups: Record<string, unknown>[] = [];
+  const sessionUpdateSql: string[] = [];
+  const sessionCreates: unknown[][] = [];
   const prisma = {
     session: {
       findFirst: async ({ where }: any) => {
@@ -134,6 +139,7 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
       if (text.includes('FROM "user"')) return [{ id: OWNER_ID }];
       if (text.includes('FROM "workspace"')) return [{ id: WORKSPACE_ID }];
       if (!text.includes('UPDATE "session"')) throw new Error(`unexpected raw query: ${text}`);
+      sessionUpdateSql.push(text);
       const [title, id, ownerId, workspaceId] = query.values as string[];
       const row = rows.find(
         (candidate) =>
@@ -161,10 +167,18 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
     },
   } as never;
 
-  const service = new ProjectsService(prisma, {} as never);
+  const service = new ProjectsService(prisma, {} as never, {
+    create: async (...args: unknown[]) => {
+      sessionCreates.push(args);
+      throw new Error('promotion must reuse the existing session');
+    },
+    announceProjectSessionChanged() {},
+  } as never);
   return {
     creates,
     lookups,
+    sessionCreates,
+    sessionUpdateSql,
     sessions: rows,
     inSession: (dto: CreateProjectDto, sessionId = SESSION_ID, runnerId = RUNNER_ID) =>
       service.createInSession(OWNER_ID, runnerId, sessionId, dto),
@@ -214,6 +228,33 @@ test('a project created inside a session is coordinated BY that session', async 
   assert.equal(f.sessions[0].titleBeforeProjectManagement, 'Explore the corpus');
 });
 
+test('promotion tells the current turn its coordinator role without rewriting its opening', async () => {
+  const f = makeService();
+  const originalPrompt = f.sessions[0].prompt;
+
+  const created = await f.inSession({ title: 'Crawl', goal: 'Index the corpus' });
+
+  assert.equal(f.sessions[0].prompt, originalPrompt);
+  assert.deepEqual(f.sessionCreates, []);
+  assert.equal(f.sessionUpdateSql.length, 1);
+  assert.doesNotMatch(f.sessionUpdateSql[0], /"prompt"/i);
+  assert.equal(
+    created.coordinatorInstructions,
+    buildCoordinatorInstructions('Crawl', PROJECT_ID),
+  );
+  assert.match(created.coordinatorInstructions, /不是用来替它干活/);
+  assert.match(created.coordinatorInstructions, /先读再说/);
+  assert.match(created.coordinatorInstructions, /账号所有者通道记录/);
+});
+
+test('a headless project create does not invent a coordinator transition', async () => {
+  const f = makeService();
+
+  const created = await f.headless({ title: 'Nightly sweep' });
+
+  assert.equal('coordinatorInstructions' in created, false);
+});
+
 // The binding as a client actually reads it: the project comes back already naming the session
 // and workspace it was created in, in base62. A binding written to a column nobody can read in
 // the spelling they address things by is a binding that does not exist to the caller — and the
@@ -227,6 +268,10 @@ test('the created project already names its session and workspace, in base62', a
   assert.equal(created.coordinatorWorkspaceId, uuidToBase62(WORKSPACE_ID));
   assert.equal(created.coordinatorSessionPublicId, uuidToBase62(SESSION_ID));
   assert.equal(created.coordinatorWorkspacePublicId, uuidToBase62(WORKSPACE_ID));
+  // The instruction string is already in the public-id spelling accepted by the tools. The
+  // interceptor converts object fields, not prose embedded inside a tool result.
+  assert.match(created.coordinatorInstructions as string, new RegExp(uuidToBase62(PROJECT_ID)));
+  assert.doesNotMatch(created.coordinatorInstructions as string, new RegExp(PROJECT_ID));
 });
 
 // A project is bound or it is not, and it must not be briefly neither. One insert also means

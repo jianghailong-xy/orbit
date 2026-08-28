@@ -293,21 +293,33 @@ const EVENT_TOTAL_CAP = 1000;
 const eventBodySql = (id: string): Prisma.Sql => Prisma.sql`
   body AS (
     SELECT
-      seq, type, created_at, payload,
+      e.seq, e.type, e.created_at, e.payload,
       ${stripMarks(Prisma.sql`
         concat_ws(' ',
-          payload->>'text',
-          payload->>'name',
-          (payload->'input')::text,
-          CASE WHEN jsonb_typeof(payload->'content') = 'string'
-               THEN payload->>'content'
-               ELSE (payload->'content')::text END,
-          payload->>'message'
+          CASE WHEN e.type = 'user'
+               THEN (COALESCE(
+                 (SELECT ARRAY[ct.content]
+                    FROM conversation_turn ct
+                   WHERE ct.id = e.turn_id AND ct.session_id = e.session_id),
+                 ARRAY[e.payload->>'text']
+               ))[1]
+               ELSE e.payload->>'text' END,
+          e.payload->>'name',
+          (e.payload->'input')::text,
+          CASE WHEN jsonb_typeof(e.payload->'content') = 'string'
+               THEN e.payload->>'content'
+               ELSE (e.payload->'content')::text END,
+          e.payload->>'message'
         )
       `)} AS text
-    FROM run_event
-    WHERE session_id = ${id}::uuid
-      AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
+    FROM run_event e
+    -- A user event is the runner's delivery echo and may include generated reference/list/role
+    -- blocks. The correlated primary-key lookup reads what the person authored while preserving
+    -- run_event's backwards index/early-LIMIT plan; a join makes Postgres hash and sort the whole
+    -- session. ARRAY distinguishes a found row with NULL content (attachment-only) from no row,
+    -- which alone falls back to the echo for old/recovered events.
+    WHERE e.session_id = ${id}::uuid
+      AND e.type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
   )`;
 
 /** "This event matches": every term ANDed, and a term's alternatives ORed (see SearchTerm). */
@@ -1408,6 +1420,11 @@ export class SessionsService {
     // gated by a `AND ${norm.searchContent}` bind parameter inside the query. A parameter can't be
     // folded away when the plan is prepared, so the sub-3-character case would still execute the
     // very scan the floor exists to prevent — the 533ms one.
+    const authoredEventText = Prisma.sql`
+      CASE WHEN e.type = 'user' AND ct.id IS NOT NULL
+           THEN ct.content
+           ELSE e.payload->>'text' END
+    `;
     const contentCte =
       norm && norm.searchContent
         ? Prisma.sql`
@@ -1422,14 +1439,24 @@ export class SessionsService {
               -- leading ORDER BY key to be the grouping column, hence session_id then seq DESC.
               SELECT DISTINCT ON (e.session_id)
                 e.session_id,
-                e.payload->>'text' AS raw_text
+                ${authoredEventText} AS raw_text
               FROM run_event e
               -- Not merely a lookup: run_event has no owner column, so this join IS the
               -- authorization boundary for conversation text. Never drop it.
               JOIN session s ON s.id = e.session_id
+              LEFT JOIN conversation_turn ct
+                ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
                 AND e.type IN ('user', 'assistant')
+                -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
+                -- delivery it contains the authored user text. A reclaimed continuation can
+                -- differ, so candidate coverage remains exactly what the pre-existing echo index
+                -- could provide. This avoids turning every conversation search into a table scan.
                 AND ${matches(stripMarks(Prisma.sql`e.payload->>'text'`))}
+                -- Then reject hits that exist only in Orbit-appended delivery context. This join
+                -- runs over indexed candidates rather than turning the whole event tier into an
+                -- unindexed scan; snippets below are cut from this same authored expression.
+                AND ${matches(stripMarks(authoredEventText))}
               ORDER BY e.session_id, e.seq DESC
             ) c
           `

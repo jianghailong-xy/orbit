@@ -735,11 +735,16 @@ func TestMCPProjectUpdateIDCannotEscapeTheProjectRoute(t *testing.T) {
 func TestMCPProjectCreateCarriesTheCallingSession(t *testing.T) {
 	var session, method, path string
 	var body map[string]interface{}
+	coordinatorInstructions := "你现在是这个项目的协调会话，不是用来替它干活的。"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method, path = r.Method, r.URL.Path
 		session = r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		_, _ = w.Write([]byte(projectCreatedJSON))
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"coordinatorInstructions": coordinatorInstructions,
+			"id":                      "proj-2",
+			"title":                   "Crawl",
+		})
 	}))
 	defer srv.Close()
 
@@ -760,6 +765,14 @@ func TestMCPProjectCreateCarriesTheCallingSession(t *testing.T) {
 	// opens is the server's conclusion about the session rather than this process's request.
 	if len(body) != 1 || body["title"] != "Crawl" {
 		t.Fatalf("project_create body = %#v", body)
+	}
+	// The server's transition instruction is the immediate half of promotion: the claim that
+	// started this turn cannot be changed retroactively, so the role must survive the transport in
+	// this tool result and become part of the provider's current transcript.
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	if !strings.Contains(text, coordinatorInstructions) {
+		t.Fatalf("project_create dropped coordinator instructions: %q", text)
 	}
 }
 

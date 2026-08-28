@@ -23,6 +23,12 @@ final class DeliveredMessageTests: XCTestCase {
           标题   [W 009/250] → WARC
         </referenced-task>
         """
+    private let coordinator = """
+        <orbit_project_coordinator_context>
+          你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
+          这里用来协调任务，不是替任务干活。
+        </orbit_project_coordinator_context>
+        """
 
     func testTakesTheConditionBoardOutOfTheBubble() {
         let out = splitDeliveredMessage("这个列表现在什么情况？\n\n\(conditions)")
@@ -34,11 +40,17 @@ final class DeliveredMessageTests: XCTestCase {
     }
 
     func testPeelsSeveralBlocksInAppendOrder() {
-        let out = splitDeliveredMessage("看下 #FineWeb\n\n\(refList)\n\n\(refTask)\n\n\(conditions)")
+        let out = splitDeliveredMessage(
+            "看下 #FineWeb\n\n\(refList)\n\n\(refTask)\n\n\(conditions)\n\n\(coordinator)"
+        )
 
         XCTAssertEqual(out.text, "看下 #FineWeb")
-        XCTAssertEqual(out.injected.count, 3)
-        XCTAssertEqual(describeInjected(out.injected), "referenced list, referenced task, list conditions")
+        XCTAssertEqual(out.injected.count, 4)
+        XCTAssertEqual(out.injected.last, coordinator)
+        XCTAssertEqual(
+            describeInjected(out.injected),
+            "referenced list, referenced task, list conditions, project coordinator context"
+        )
     }
 
     func testTwoIdenticalAdjacentBlocksComeOutAsTwo() {

@@ -103,6 +103,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
+import { appendCoordinatorDeliveryContext } from '../projects/coordinator-opening';
 import { executableResultRecordedFact } from '../projects/completion-input';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -2096,6 +2097,20 @@ export class RunnerApiController {
       let attachments: TurnAttachment[] | undefined;
       let content = t.content ?? undefined;
       if (t.kind === 'message' || t.kind === 'steer') {
+        // Context derived from the Session is expanded at delivery, never written over the text
+        // the person sent. Besides giving #references their tenant, this is where an existing
+        // conversation promoted by project_create acquires the same user-level coordinator
+        // opening as a dedicated project-page conversation. Reading it per delivery covers a warm
+        // provider, a queued follow-up that skips claim, and runner reclaim with one path.
+        const sessionContext = await tx.session.findUnique({
+          where: { id: sessionId },
+          select: {
+            ownerId: true,
+            prompt: true,
+            titleBeforeProjectManagement: true,
+            coordinatorForProject: { select: { id: true } },
+          },
+        });
         // A message turn that already produced runtime output is a lease re-delivery.
         // Resume with a continuation nudge instead of replaying its side effects. A steer is
         // never re-delivered (its lease is not reclaimable above), so it never takes this.
@@ -2141,11 +2156,9 @@ export class RunnerApiController {
           // Scoped to the session's owner, not the runner: a reference resolves only against
           // what the person sending it may already see, so a stray id from elsewhere expands to
           // nothing rather than leaking another tenant's list into a prompt.
-          const owner = await tx.session.findUnique({
-            where: { id: sessionId },
-            select: { ownerId: true },
-          });
-          if (owner) content = (await this.references.expand(owner.ownerId, content)) ?? content;
+          if (sessionContext) {
+            content = (await this.references.expand(sessionContext.ownerId, content)) ?? content;
+          }
           // A list's console also carries back what the control plane noticed while nobody was
           // talking to it. Piggybacked here rather than pushed as its own turn — see
           // ListEventsService for why a second waking path is the thing being avoided.
@@ -2155,6 +2168,14 @@ export class RunnerApiController {
           if (t.kind !== 'steer') {
             content = (await this.listEvents?.appendFor(tx, sessionId, content)) ?? content;
           }
+        }
+        if (sessionContext) {
+          content = appendCoordinatorDeliveryContext(
+            content,
+            sessionContext.prompt,
+            sessionContext.titleBeforeProjectManagement,
+            sessionContext.coordinatorForProject,
+          );
         }
       } else if (t.kind !== 'shell') {
         // Control turns are fire-and-forget: ack on delivery so a stale one cannot
@@ -3166,6 +3187,16 @@ export class RunnerApiController {
       // either way, so the stored value stays. Stored full; the list query truncates it
       // (left(…, PREVIEW_LEN)).
       let pendingUserText: string | null | undefined;
+      const userTurnIds = [...new Set(durable.flatMap((event) =>
+        event.type === RunEventType.USER && event.turnId ? [event.turnId] : [],
+      ))];
+      const userTurns = userTurnIds.length > 0
+        ? await tx.conversationTurn.findMany({
+            where: { sessionId, id: { in: userTurnIds } },
+            select: { id: true, content: true },
+          })
+        : [];
+      const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
       for (const e of durable) {
         // Sub-workspace (Task/Workspace) events carry the spawning call's parentToolUseId. Skip
         // them: while a sub-workspace runs, its own tool_use/tool_result would clobber then
@@ -3181,12 +3212,18 @@ export class RunnerApiController {
                 .slice(0, 60) || null
             : null;
         if (e.type === RunEventType.USER) {
-          pendingUserText =
-            (
-              (e.payload as { text?: string; content?: string } | null)?.text ??
-              (e.payload as { content?: string } | null)?.content ??
-              ''
-            ).trim() || null;
+          // The runner echoes its full delivered input, including generated references, list state
+          // and coordinator context. The turn is the source of truth for the person's text; only
+          // old/recovered events with no matching row fall back to the echo. A known null content
+          // is an attachment-only turn and must not preview generated context as if they typed it.
+          const echoed =
+            (e.payload as { text?: string; content?: string } | null)?.text
+            ?? (e.payload as { content?: string } | null)?.content
+            ?? '';
+          const text = e.turnId && authoredUserText.has(e.turnId)
+            ? authoredUserText.get(e.turnId)
+            : echoed;
+          pendingUserText = text?.trim() || null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
         }

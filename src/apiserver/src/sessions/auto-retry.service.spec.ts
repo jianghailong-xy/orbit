@@ -52,6 +52,8 @@ function makeService(
     attachments?: Array<Record<string, unknown>>;
     /** The id of the seeded first turn, when the fixture has one (the prompt's own uploads). */
     seedTurnId?: string;
+    /** Original, pre-delivery text keyed by conversation turn id. */
+    turnContents?: Record<string, string | null>;
     /** What the commit-race branch re-reads for this session AFTER a refused resume. */
     raceReadRow?: {
       terminalReason: string | null; supersededByTaskId: string | null;
@@ -198,6 +200,10 @@ function makeService(
       },
     },
     conversationTurn: {
+      findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
+        Object.entries(opts.turnContents ?? {})
+          .filter(([id]) => args.where.sessionId === 'session-1' && args.where.id.in.includes(id))
+          .map(([id, content]) => ({ id, content })),
       findUnique: async () => (opts.seedTurnId ? { id: opts.seedTurnId } : null),
     },
     attachment: {
@@ -473,6 +479,26 @@ test('finds the user message behind a long turn', async () => {
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original message' }]);
 });
 
+test('re-sends durable user text instead of runner-appended delivery context', async () => {
+  const expanded = `look at #FineWeb
+
+<referenced-list id="list-1">
+  generated list state
+</referenced-list>
+
+<orbit_project_coordinator_context>
+  generated coordinator role
+</orbit_project_coordinator_context>`;
+  const { service, resumed } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: expanded }, turnId: 'turn-9' }],
+    turnContents: { 'turn-9': 'look at #FineWeb' },
+  });
+
+  await service.sweep(NOW);
+
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'look at #FineWeb' }]);
+});
+
 test('falls back to the opening prompt when the very first turn hit the limit', async () => {
   const { service, resumed } = makeService([row({ numTurns: 0 })], { events: [] });
   await service.sweep(NOW);
@@ -522,9 +548,18 @@ test('re-sends the images that went with the message', async () => {
 test('takes the images from the turn its text came from', async () => {
   const { service, resumedAttachments, attachments } = makeService([row()], {
     events: [
-      { type: 'user', payload: { text: 'the original message' }, turnId: 'turn-8' },
-      { type: 'user', payload: { text: '' }, turnId: 'turn-9' },
+      {
+        type: 'user',
+        payload: { text: 'the original message\n\n<orbit_project_coordinator_context>\nrole\n</orbit_project_coordinator_context>' },
+        turnId: 'turn-8',
+      },
+      {
+        type: 'user',
+        payload: { text: '\n\n<orbit_project_coordinator_context>\nrole\n</orbit_project_coordinator_context>' },
+        turnId: 'turn-9',
+      },
     ],
+    turnContents: { 'turn-8': 'the original message', 'turn-9': '' },
     attachments: [
       image({ id: 'att-8', turnId: 'turn-8', fileName: 'asked-about.png' }),
       image({ id: 'att-9', turnId: 'turn-9', fileName: 'sent-later.png' }),

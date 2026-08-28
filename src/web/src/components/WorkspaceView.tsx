@@ -166,11 +166,11 @@ import type { PlanUsageSnapshot } from '@orbit/shared';
 import {
   AgentProvider,
   derivePermissionSemantics,
-  lastUserMessageText,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
   TRASH_RETENTION_DAYS,
 } from '@orbit/shared';
+import { lastTypedUserMessageText } from '../lib/deliveredMessage';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -4316,7 +4316,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing
   // session would just throw out of the send mutation.
-  const retryText = lastUserMessageText(events, detailForSelected?.prompt, selected?.numTurns);
+  const retryText = lastTypedUserMessageText(
+    events,
+    detailForSelected?.prompt,
+    selected?.numTurns,
+  );
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({

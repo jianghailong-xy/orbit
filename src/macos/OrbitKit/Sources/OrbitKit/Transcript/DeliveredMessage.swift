@@ -2,12 +2,12 @@ import Foundation
 
 // Separating what a person typed from what Orbit appended to it.
 //
-// Two features add context to a message at delivery — `#`-reference expansion and a task list's
-// condition board. Both deliberately leave the stored turn alone, so the durable record of what
-// was sent is the person's own words. But the runner echoes what it *received* into the
-// transcript, and the transcript is what a client renders: the result was a one-line question
-// followed by a block of generated status text, inside the user's own bubble, looking for all the
-// world like they had typed it.
+// Orbit can add context to a message at delivery — `#`-reference expansion, a task list's
+// condition board, and the standing role of a conversation promoted to project coordinator.
+// These deliberately leave the stored turn alone, so the durable record of what was sent is the
+// person's own words. But the runner echoes what it *received* into the transcript, and the
+// transcript is what a client renders: the result was a one-line question followed by a block of
+// generated context, inside the user's own bubble, looking for all the world like they typed it.
 //
 // Web fixes this in `src/web/src/lib/deliveredMessage.ts`; this is the same rule for iOS and
 // macOS, which share OrbitKit. It matters more here than it looks: the reducer falls back to
@@ -16,7 +16,12 @@ import Foundation
 // message would strand its bubble on "Sending…" and append a duplicate beside it.
 
 /// The blocks Orbit appends at delivery. Nothing else is ever removed from a person's message.
-let injectedTags = ["referenced-list", "referenced-task", "list-conditions"]
+let injectedTags = [
+    "referenced-list",
+    "referenced-task",
+    "list-conditions",
+    "orbit_project_coordinator_context",
+]
 
 public struct DeliveredMessage: Equatable, Sendable {
     /// What the person typed.
@@ -75,6 +80,7 @@ private let injectedTagLabels: [String: String] = [
     "referenced-list": "referenced list",
     "referenced-task": "referenced task",
     "list-conditions": "list conditions",
+    "orbit_project_coordinator_context": "project coordinator context",
 ]
 
 /// "referenced list, list conditions ×2" — what was attached, counted where it repeats.

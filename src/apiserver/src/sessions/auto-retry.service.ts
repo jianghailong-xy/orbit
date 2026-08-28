@@ -2,8 +2,6 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Prisma, RunStatus } from '@prisma/client';
 import {
   RunEventType,
-  lastUserMessage,
-  lastUserMessageText,
   planUsageBlockedUntil,
   type PlanUsage,
 } from '@orbit/shared';
@@ -514,7 +512,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The message this retry re-sends: the session's latest user message, whole.
+   * The message this retry re-sends: the session's latest user-authored message, whole.
    *
    * `attachmentsOf` is the turn that message was sent on, because the words are only half of
    * it — a screenshot the user sent with them is a row hanging off that turn, and a retry that
@@ -539,12 +537,49 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select: { type: true, payload: true, turnId: true },
     });
     const events = recent.reverse();
-    const content = lastUserMessageText(events, prompt, numTurns);
+
+    // A provider's user event echoes exactly what the runner received, including delivery-time
+    // #reference/list expansion and a promoted coordinator's standing role. The durable turn is
+    // the source of truth for what the person actually typed. Besides preventing those generated
+    // blocks from becoming a new persisted message on every retry, this keeps an image-only turn
+    // image-only: coordinator context in its echo must not make it win as authored text.
+    const turnIds = [...new Set(events.flatMap((event) => event.turnId ? [event.turnId] : []))];
+    const turns = turnIds.length > 0
+      ? await this.prisma.conversationTurn.findMany({
+          where: { sessionId, id: { in: turnIds } },
+          select: { id: true, content: true },
+        })
+      : [];
+    const durableContent = new Map(turns.map((turn) => [turn.id, turn.content]));
+
+    let chosen: (typeof events)[number] | undefined;
+    let content = '';
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i];
+      if (event.turnId && durableContent.has(event.turnId)) {
+        const original = durableContent.get(event.turnId);
+        if (original?.trim()) {
+          chosen = event;
+          content = original;
+          break;
+        }
+        // The row exists and says the person supplied no words. Do not fall back to an echoed
+        // delivery block and mistake an image-only turn for authored text.
+        continue;
+      }
+      // Old events can predate turn attribution, and a retained event can outlive a missing turn
+      // in recovered data. Preserve their previous behaviour as a compatibility fallback.
+      const echoed = (event.payload as { text?: unknown } | undefined)?.text;
+      if (typeof echoed === 'string' && echoed.trim()) {
+        chosen = event;
+        content = echoed;
+        break;
+      }
+    }
+    if (!content && numTurns === 0 && prompt.trim()) content = prompt;
     if (!content) return { content: '', attachmentsOf: null };
-    // The turn THAT message came from — the same event `lastUserMessageText` took the words
-    // from, never merely the session's latest turn: pairing this text with a later turn's
-    // images would re-send a message the user never wrote.
-    const chosen = lastUserMessage(events);
+    // The turn THAT message came from, never merely the session's latest turn: pairing these words
+    // with a later turn's images would re-send a message the user never wrote.
     return {
       content,
       // No user event means the text above is the opening-prompt fallback, which the runner

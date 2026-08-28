@@ -931,11 +931,16 @@ func TestProjectUpdatePropagatesTheServerError(t *testing.T) {
 func TestProjectCreateCarriesTheSessionItRanIn(t *testing.T) {
 	var session, method, path string
 	var body map[string]interface{}
+	coordinatorInstructions := "你现在是这个项目的协调会话，不是用来替它干活的。"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method, path = r.Method, r.URL.Path
 		session = r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		_, _ = w.Write([]byte(projectCreatedJSON))
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"coordinatorInstructions": coordinatorInstructions,
+			"id":                      "proj-2",
+			"title":                   "Crawl",
+		})
 	}))
 	defer srv.Close()
 
@@ -956,6 +961,9 @@ func TestProjectCreateCarriesTheSessionItRanIn(t *testing.T) {
 	// claim about where a coordinator should run, and the server does not accept one.
 	if len(body) != 1 || body["title"] != "Crawl" {
 		t.Fatalf("project create body = %#v", body)
+	}
+	if !strings.Contains(out.String(), coordinatorInstructions) {
+		t.Fatalf("project create dropped coordinator instructions: %q", out.String())
 	}
 }
 

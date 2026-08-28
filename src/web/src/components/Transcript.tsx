@@ -1165,10 +1165,10 @@ function UserBubble({ node }: { node: TextNode }) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
-  // — a reference expansion, a list's condition board. Those belong to Orbit, not to the person
-  // whose bubble this is, so they come out of the body and are named on one line instead. Copying
-  // and the length cap follow the typed text for the same reason: neither should be measured
-  // against a block nobody wrote.
+  // — a reference expansion, a list's condition board, or a promoted coordinator's standing role.
+  // Those belong to Orbit, not to the person whose bubble this is, so they come out of the body
+  // and are named on one line instead. Copying and the length cap follow the typed text for the
+  // same reason: neither should be measured against a block nobody wrote.
   const { text: typed, injected } = splitDeliveredMessage(node.text);
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;

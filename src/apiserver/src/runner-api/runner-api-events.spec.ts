@@ -12,7 +12,11 @@ function makeController(
   // What the Session row already carries. The batch's single write is computed against these
   // (see the one-write invariant in common/lock-order.ts), so a test that wants to observe a set
   // being cleared has to start it non-empty — a write that would change nothing is not issued.
-  stored: { runningBgShells?: string[]; runningSubagents?: string[] } = {},
+  stored: {
+    runningBgShells?: string[];
+    runningSubagents?: string[];
+    turnContents?: Record<string, string | null>;
+  } = {},
 ) {
   const calls = {
     createMany: [] as any[],
@@ -46,6 +50,12 @@ function makeController(
         calls.toolUpdate.push(args);
         return { count: 1 };
       },
+    },
+    conversationTurn: {
+      findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
+        Object.entries(stored.turnContents ?? {})
+          .filter(([id]) => args.where.sessionId === 'session-1' && args.where.id.in.includes(id))
+          .map(([id, content]) => ({ id, content })),
     },
     session: {
       findUniqueOrThrow: async () => ({
@@ -453,6 +463,46 @@ test('an interrupt before any reply keeps the pending user message', async () =>
   const preview = previewUpdate(calls);
   assert.equal(preview.lastUserText, '设置按钮的底色很奇怪，请帮我 review');
   assert.equal(preview.lastToolUse, null, 'the turn ended, so no tool is in flight');
+});
+
+test('the pending preview uses authored turn text instead of delivery context', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'review the button colour' },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{
+      seq: 1,
+      type: RunEventType.USER,
+      ts: '2026-08-04T01:21:58.000Z',
+      turnId: 'turn-1',
+      payload: {
+        text: 'review the button colour\n\n<orbit_project_coordinator_context>\nrole\n</orbit_project_coordinator_context>',
+      },
+    }],
+  });
+
+  assert.equal(previewUpdate(calls).lastUserText, 'review the button colour');
+});
+
+test('an attachment-only coordinator turn never previews generated context as user text', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': null },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{
+      seq: 1,
+      type: RunEventType.USER,
+      ts: '2026-08-04T01:21:58.000Z',
+      turnId: 'turn-1',
+      payload: {
+        text: '\n\n<orbit_project_coordinator_context>\nrole\n</orbit_project_coordinator_context>',
+      },
+    }],
+  });
+
+  assert.equal(previewUpdate(calls).lastUserText, null);
 });
 
 /**

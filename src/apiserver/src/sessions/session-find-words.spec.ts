@@ -65,6 +65,16 @@ test('find asks for the phrase first, and a hit costs nothing more', async () =>
   assert.doesNotMatch(sql[0].sql, /AND \(text ILIKE/, 'the phrase pass is one ILIKE');
 });
 
+test('find searches authored user text rather than runner-appended delivery context', async () => {
+  const [sql] = await findIn('coordinator');
+
+  assert.doesNotMatch(sql.sql, /JOIN conversation_turn ct/);
+  assert.match(
+    sql.sql,
+    /SELECT ARRAY\[ct\.content\][\s\S]*FROM conversation_turn ct[\s\S]*ct\.id = e\.turn_id/s,
+  );
+});
+
 test('find broadens to words only once the phrase found nothing', async () => {
   const sql = await findIn('confirm directory');
   assert.equal(sql.length, 2);
@@ -158,6 +168,21 @@ test('the palette asks for the phrase first, and stops there when it finds anyth
   assert.equal(sql.length, 1, 'a hit must not cost a second query');
   assert.ok(sql[0].values.includes('%confirm directory%'));
   assert.ok(!sql[0].values.includes('%confirm%'));
+});
+
+test('the palette keeps its event index but verifies and snippets against authored user text', async () => {
+  const [sql] = await palette('coordinator');
+
+  assert.match(sql.sql, /LEFT JOIN conversation_turn ct/);
+  assert.ok(
+    sql.sql.includes("replace(replace(e.payload->>'text', '*', ''), '`', '') ILIKE"),
+    'the trigram-indexed echo remains the candidate filter',
+  );
+  assert.match(
+    sql.sql,
+    /replace\(replace\(\s*CASE WHEN e\.type = 'user' AND ct\.id IS NOT NULL\s+THEN ct\.content/s,
+  );
+  assert.match(sql.sql, /CASE WHEN e\.type = 'user' AND ct\.id IS NOT NULL[\s\S]*AS raw_text/);
 });
 
 test('the palette broadens to words only once the phrase found nothing', async () => {

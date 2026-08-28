@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { describeInjected, splitDeliveredMessage } from './deliveredMessage';
+import {
+  describeInjected,
+  lastTypedUserMessageText,
+  splitDeliveredMessage,
+} from './deliveredMessage';
 
 // The exact shapes the server appends (ReferenceExpansionService, ListEventsService).
 const CONDITIONS = `<list-conditions list="6ba7b810-9dad-11d1-80b4-00c04fd430c8" title="FineWeb">
@@ -17,6 +21,11 @@ const REF_TASK = `<referenced-task id="550e8400-e29b-41d4-a716-446655440000">
   状态   DONE
 </referenced-task>`;
 
+const COORDINATOR = `<orbit_project_coordinator_context>
+  你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
+  这里用来协调任务，不是替任务干活。
+</orbit_project_coordinator_context>`;
+
 describe('splitDeliveredMessage', () => {
   it('takes the condition board out of the bubble and keeps it verbatim', () => {
     const out = splitDeliveredMessage(`这个列表现在什么情况？\n\n${CONDITIONS}`);
@@ -29,14 +38,18 @@ describe('splitDeliveredMessage', () => {
   });
 
   it('peels several blocks and keeps the order they were appended in', () => {
-    const out = splitDeliveredMessage(`看下 #FineWeb\n\n${REF_LIST}\n\n${REF_TASK}\n\n${CONDITIONS}`);
+    const out = splitDeliveredMessage(
+      `看下 #FineWeb\n\n${REF_LIST}\n\n${REF_TASK}\n\n${CONDITIONS}\n\n${COORDINATOR}`,
+    );
 
     expect(out.text).toBe('看下 #FineWeb');
     expect(out.injected.map((b) => b.tag)).toEqual([
       'referenced-list',
       'referenced-task',
       'list-conditions',
+      'orbit_project_coordinator_context',
     ]);
+    expect(out.injected.at(-1)?.text).toBe(COORDINATOR);
   });
 
   it('leaves an ordinary message byte-identical', () => {
@@ -77,14 +90,35 @@ describe('splitDeliveredMessage', () => {
 
 describe('describeInjected', () => {
   it('names what was attached, so the reply is not unexplained', () => {
-    const { injected } = splitDeliveredMessage(`q\n\n${REF_LIST}\n\n${CONDITIONS}`);
+    const { injected } = splitDeliveredMessage(
+      `q\n\n${REF_LIST}\n\n${CONDITIONS}\n\n${COORDINATOR}`,
+    );
 
-    expect(describeInjected(injected)).toBe('referenced list, list conditions');
+    expect(describeInjected(injected)).toBe(
+      'referenced list, list conditions, project coordinator context',
+    );
   });
 
   it('counts a repeat instead of listing it twice', () => {
     const { injected } = splitDeliveredMessage(`q\n\n${REF_TASK}\n\n${REF_TASK}`);
 
     expect(describeInjected(injected)).toBe('referenced task ×2');
+  });
+});
+
+describe('lastTypedUserMessageText', () => {
+  it('skips a newer image-only echo made non-empty solely by coordinator context', () => {
+    const events = [
+      { type: 'user', payload: { text: `real question\n\n${COORDINATOR}` } },
+      { type: 'user', payload: { text: `\n\n${COORDINATOR}` } },
+    ];
+
+    expect(lastTypedUserMessageText(events, 'old opening', 2)).toBe('real question');
+  });
+
+  it('does not treat an undelivered first-turn prompt as injected echo', () => {
+    const prompt = `explain this literal example\n\n${COORDINATOR}`;
+
+    expect(lastTypedUserMessageText([], prompt, 0)).toBe(prompt);
   });
 });
