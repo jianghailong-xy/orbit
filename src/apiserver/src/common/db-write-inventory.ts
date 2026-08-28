@@ -41,10 +41,10 @@
  * validated batch — and everything it MUST re-derive is read inside it, under the locks it takes.
  * `identity` is the first half of that claim and `replay` is the second. `effects` is the third
  * thing that decides it: an external action inside a retried closure would happen once per
- * attempt, which is why every one of them in this codebase sits after the commit, and why the
- * spec asserts that mechanically rather than trusting this sentence. The API server sends no mail,
- * so the external actions this has to account for are the realtime publishes, the APNs push and
- * the nudges to a runner — the spec's pattern names all three plus a bare `fetch`.
+ * attempt, so retried units keep every such action after commit. The constrained Action Executor
+ * is the deliberate exception to "nothing external in a transaction": it is a `TX_BARE` unit
+ * whose transaction is the authorization/binding commit fence, whose provider call is
+ * provider-idempotent, and which is never automatically replayed by a database retry loop.
  *
  * ISOLATION
  * ---------
@@ -95,11 +95,11 @@ export interface TransactionUnit {
 /**
  * Every transaction boundary in the API server.
  *
- * All of them are retried. That is not a coincidence and not a policy applied without looking: a
- * transaction boundary in this codebase exists to make several database statements atomic, and
- * none of them does anything else — the spec proves the "anything else" half by scanning every
- * closure for an external call. A unit that could not be re-run would appear here as `TX_BARE`
- * with the reason in `replay`; there is currently none.
+ * Ordinary database-only units are retried. A unit that cannot be re-run appears here as
+ * `TX_BARE`, with its one-attempt decision and recovery path stated explicitly. In particular,
+ * ActionExecutorService.executeNext holds the fact-stream serialization lock across the provider
+ * commit so revocation or rebinding is ordered before or after that effect; provider idempotency
+ * and the durable lease recover an ambiguous database outcome without an in-process retry.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
@@ -853,6 +853,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
   },
   {
+    at: 'outcome-reconciler/action-executor.service.ts#executeNext',
+    shape: 'TX_BARE',
+    locks: 'outcome_fact_stream FOR UPDATE (the project serialization fence), then outcome_action_intent FOR UPDATE and outcome_action_budget_account FOR UPDATE; executor obligation/event children are appended after those parents. Authority revocation, binding replacement, precondition replacement and evaluator publication take the same fact-stream row first, so provider commit and every authority-changing fact are totally ordered.',
+    identity: 'The frozen actionIntentId plus its provider-enforced idempotencyKey. The lease token identifies this attempt; a provider replay returns the same effect receipt instead of repeating the effect.',
+    isolation: '',
+    attempts: 1,
+    replay: 'Deliberately not retried in process. The provider may already have committed when PostgreSQL rejects or loses the transaction, so replaying this closure would be unsafe. Rollback restores CLAIMED; durable logical lease expiry moves it through bounded BACKOFF, and a later claim invokes the provider with the same idempotency key to recover the standing receipt. Attempt and cost budgets make that recovery finite.',
+    effects: 'The provider action and, only for a reported partial/wrong effect, its compensator run inside this one-attempt transaction while the project fact-stream fence is held. Non-read-only adapters must assert that fence immediately before committing and must enforce the idempotency key. A timeout/partial/wrong receipt becomes an executor remediation obligation; a process/database ambiguity remains leased until the bounded recovery pass.',
+    answer: 'A commit-time authorization/binding/precondition refusal is persisted as its canonical obligation. A database conflict is not absorbed: it escapes the unit, the lease remains the durable recovery fact after rollback, and the next bounded claim recovers by provider-idempotent replay.',
+  },
+  {
     at: 'workspaces/workspaces.service.ts#reorder',
     shape: 'TX_RETRIED',
     locks: 'workspace rows, one UPDATE each, IN ID ORDER. This is the fix the audit was looking for: the statements used to run in the caller’s drag order, so two drags that move the same workspaces opposite ways took the same rows backwards.',
@@ -1193,13 +1204,23 @@ export interface TriggerWriteSource {
 export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_delete", event: "BEFORE DELETE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
   { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_rename", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
+  { table: "outcome_action_attempt", trigger: "outcome_action_attempt_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_diagnostic", trigger: "outcome_action_diagnostic_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_event", trigger: "outcome_action_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_intent", trigger: "outcome_action_committing_must_finish", event: "AFTER INSERT OR UPDATE OF status", kind: "CONSTRAINT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_receipt", trigger: "outcome_action_receipt_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
   { table: "outcome_canonical_fact", trigger: "outcome_canonical_fact_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
   { table: "outcome_evaluation_cut", trigger: "outcome_evaluation_cut_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
   { table: "outcome_evaluation_cut_fact", trigger: "outcome_evaluation_cut_fact_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_evaluator_result", trigger: "outcome_evaluator_result_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_outcome_evaluator_obligation_reduction", takes: [] },
+  { table: "outcome_executor_obligation_event", trigger: "outcome_executor_obligation_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_executor_obligation_revision", trigger: "outcome_executor_obligation_revision_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
   { table: "outcome_fact_authority_grant", trigger: "outcome_fact_authority_grant_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
   { table: "outcome_fact_authority_matrix", trigger: "outcome_fact_authority_matrix_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
   { table: "outcome_fact_authority_revocation", trigger: "outcome_fact_authority_revocation_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
   { table: "outcome_fact_binding", trigger: "outcome_fact_binding_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_obligation_event", trigger: "outcome_obligation_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_outcome_evaluator_obligation_reduction", takes: [] },
+  { table: "outcome_obligation_revision", trigger: "outcome_obligation_revision_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_outcome_evaluator_obligation_reduction", takes: [] },
   { table: "project", trigger: "project_acceptance_advance_epoch", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: [] },
   { table: "project", trigger: "project_acceptance_criteria_fact", event: "AFTER INSERT OR UPDATE OF \"acceptance_criteria\"", kind: "ROW/STATEMENT", since: "0172_structured_project_acceptance_criteria", takes: ["project_acceptance_audit WRITE", "project_acceptance_criterion_definition WRITE", "project_acceptance_run WRITE"] },
   { table: "project", trigger: "project_acceptance_done_gate", event: "BEFORE UPDATE OF \"status\", \"accepted_run_id\"", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: [] },
