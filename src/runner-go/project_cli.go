@@ -37,6 +37,7 @@ Usage:
   orbit project crossings PROJECT_ID [--state STATE] [--json]
   orbit project reopen-impact PROJECT_ID [--json]
   orbit project acceptance PROJECT_ID [--json]
+  orbit project owner-decision-request PROJECT_ID --obligation-id SHA256 --obligation-revision SHA256 --reason REASON --request JSON [--json]
   orbit project criteria-confirm PROJECT_ID [--json]
   orbit project acceptance-run PROJECT_ID [--json]
   orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]
@@ -126,15 +127,36 @@ Returns:
                    refGeneration
   audit            append-only: runs opened and concluded, DONEs bound and refused, and
                    every reopen with the fact that caused it
-  doneGate         whether a DONE would be allowed right now and, if not, the code and the
-                   sentence the write would be refused with
+  doneGate         the exact current binding/evaluation identity, proof graph, canonical
+                   obligations, structured reasons, owner/actor and next action; UNKNOWN,
+                   stale projection and read failure all deny closure explicitly
 
-The three refusals: CRITERIA_CONFIRMATION_REQUIRED (this exact revision-bearing set has not been
-confirmed), ACCEPTANCE_MISSING (one or more current criteria have no PASS conclusion), and
-ACCEPTANCE_BLOCKED (an open blocker or an unresolved verification failure). Evidence
-changes advance the version and are re-evaluated; they do not create a stale-attempt refusal.
+DONE refusal uses CANONICAL_DONE_GATE_BLOCKED and returns the full doneGate. Its reason codes name
+the actual dimension, ratification, delivery, obligation, attribution or reconciler condition.
+Legacy blocker/signal summaries are diagnostic history and do not independently decide closure.
 
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
+`,
+	"owner-decision-request": `orbit project owner-decision-request — request one irreducibly owner-shaped input
+
+Usage:
+  orbit project owner-decision-request PROJECT_ID --obligation-id SHA256
+      --obligation-revision SHA256 --reason REASON --request JSON [--json]
+
+Options:
+  --obligation-id SHA256        canonical completion-ACK obligation identity
+  --obligation-revision SHA256  exact active revision delivered to this coordinator
+  --reason REASON               NEW_AUTHORIZATION, RISK_ACCEPTANCE, GOAL_DECISION,
+                                or EXTERNAL_IDENTITY
+  --request JSON                complete decision protocol object
+  --request-file -              read that object from stdin
+  --json                        emit compact JSON
+
+The request object must contain whyNotAgent, non-empty options and impacts, recommendation,
+noActionConsequence, cost, deadline, resumeBehavior and idempotencyKey. The server accepts this
+only from the exact current, non-revoked coordinator delivery Session. It keeps the canonical
+completion obligation ACTIVE and AGENT-owned while the owner supplies the one missing input;
+code diagnosis, repair, deployment and verification are not reasons to hand work to a person.
 `,
 	"criteria-confirm": `orbit project criteria-confirm — confirm the current standard set once
 
@@ -324,7 +346,8 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_reopen_impact", Argv: []string{"orbit", "project", "reopen-impact"}, Usage: "orbit project reopen-impact PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what reopening a settled project would cost: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, readable afterwards and no longer a claim about the world the project is in — so an account owner asked for one should be asked with those numbers in hand. Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into."},
-	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the current acceptance evaluation: peer criteria, the criteria+merge evidence identity, the revision-bearing standard-set digest and its confirmation, immutable evidence versions, append-only conclusion events, merge observations, audit and doneGate. Refusals include CRITERIA_CONFIRMATION_REQUIRED, ACCEPTANCE_MISSING and ACCEPTANCE_BLOCKED; evidence changes are evaluated instead of becoming stale attempts."},
+	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the current acceptance history and the canonical doneGate: exact binding/evaluation cut, proof graph, active obligations, structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED carries this complete view; unknown types, stale projection and read failures deny closure explicitly, while legacy blocker/signal summaries do not decide it."},
+	{Tool: "project_owner_decision_request", Argv: []string{"orbit", "project", "owner-decision-request"}, Usage: "orbit project owner-decision-request PROJECT_ID --obligation-id SHA256 --obligation-revision SHA256 --reason REASON --request JSON [--json]", Arguments: []string{"[project-id] (required)", "--obligation-id <sha256> (required)", "--obligation-revision <sha256> (required)", "--reason <NEW_AUTHORIZATION|RISK_ACCEPTANCE|GOAL_DECISION|EXTERNAL_IDENTITY> (required)", "--request <json object> | --request-file - (whyNotAgent, options, impacts, recommendation, noActionConsequence, cost, deadline, resumeBehavior, idempotencyKey)", "--json"}, Description: "Request one irreducibly owner-shaped input for the exact active completion-ACK remediation delivered to this coordinator Session. The server binds the request to the current non-revoked delivery and keeps the canonical parent ACTIVE and AGENT-owned; ordinary code repair, deployment and verification remain coordinator work.", Mutates: true},
 	{Tool: "project_criteria_confirm", Argv: []string{"orbit", "project", "criteria-confirm"}, Usage: "orbit project criteria-confirm PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Confirm the complete current standard set once, bound to its revision-bearing digest. Any semantic edit requires a new confirmation. A judgment Session is refused; a headless runner is admitted with RUNNER audit provenance, which is visibility rather than proof of human presence.", Mutates: true},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Evaluate the current project acceptance evidence version. This is idempotent: concurrent callers observing the same criteria and merge evidence receive the same version. Evidence changes advance it automatically; prior conclusion events carry forward until refuted.", Mutates: true},
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the evidence version to conclude against)", "--criteria <json> | --criteria-file - (one entry per HUMAN_SIGNOFF criterion: {criterionId|ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Append evidence-backed conclusion events for HUMAN_SIGNOFF criteria. EXECUTABLE and VERIFICATION reject fallback human verdicts and use their declared durable input. Current PASS/FAIL/INCONCLUSIVE is derived from the peer outcomes; every event records who, when and which evidence version. A judgment-session or machine-attributed call may refute; human PASS uses the owner-attributed channel. That is workflow and audit provenance, not proof of human presence.", Mutates: true},
@@ -375,6 +398,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectReopenImpact(args[1:], out)
 	case "acceptance":
 		return cliProjectAcceptance(args[1:], out)
+	case "owner-decision-request":
+		return cliProjectOwnerDecisionRequest(args[1:], in, out)
 	case "criteria-confirm":
 		return cliProjectCriteriaConfirm(args[1:], out)
 	case "acceptance-run":
@@ -504,6 +529,70 @@ func cliProjectAcceptance(args []string, out io.Writer) error {
 	raw, err := t.getProjectAcceptance(id)
 	if err != nil {
 		return fmt.Errorf("get project acceptance: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliProjectOwnerDecisionRequest is the structured, reachable pause protocol for the one class
+// of completion remediation input a coordinator cannot derive. It deliberately requires the
+// current Session context: the server binds that Session to the exact non-revoked delivery.
+func cliProjectOwnerDecisionRequest(args []string, in io.Reader, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project owner-decision-request")
+	obligationID := fs.String("obligation-id", "", "canonical completion-ACK obligation identity")
+	obligationRevision := fs.String("obligation-revision", "", "exact active obligation revision")
+	reason := fs.String("reason", "", "owner-decision reason")
+	request := fs.String("request", "", "complete owner-decision protocol JSON object")
+	requestFile := fs.String("request-file", "", "read the request object from stdin (-)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	if !isSHA256Hex(*obligationID) {
+		return fmt.Errorf("--obligation-id must be 64 hex characters")
+	}
+	if !isSHA256Hex(*obligationRevision) {
+		return fmt.Errorf("--obligation-revision must be 64 hex characters")
+	}
+	if !isCompletionAckOwnerDecisionReason(*reason) {
+		return fmt.Errorf("--reason must be NEW_AUTHORIZATION, RISK_ACCEPTANCE, GOAL_DECISION or EXTERNAL_IDENTITY")
+	}
+	requestText, set, err := readCLIText(in, *request, flagWasSet(fs, "request"), *requestFile, flagWasSet(fs, "request-file"), "request")
+	if err != nil {
+		return err
+	}
+	if !set || strings.TrimSpace(requestText) == "" {
+		return fmt.Errorf("--request is required")
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(requestText), &parsed); err != nil {
+		return fmt.Errorf("--request must be one JSON object: %w", err)
+	}
+	if err := validateCompletionAckOwnerDecisionRequest(parsed); err != nil {
+		return err
+	}
+	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+	if sessionID == "" {
+		return fmt.Errorf("project_owner_decision_request requires ORBIT_SESSION_ID context")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.requestProjectOwnerDecision(id, sessionID, map[string]interface{}{
+		"obligationId":       strings.ToLower(*obligationID),
+		"obligationRevision": strings.ToLower(*obligationRevision),
+		"reason":             *reason,
+		"request":            parsed,
+	})
+	if err != nil {
+		return fmt.Errorf("request project owner decision: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

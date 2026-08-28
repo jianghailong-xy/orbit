@@ -14,6 +14,8 @@ import { RunnerProjectsController } from './runner-projects.controller';
 function acceptanceDouble(): never {
   return {
     overview: async () => assert.fail('this scenario does not read acceptance'),
+    machineRatification: async () => assert.fail('this scenario does not read ratification'),
+    ratifyByPreapproval: async () => assert.fail('this scenario does not spend preapproval'),
     confirmCriteriaSet: async () => assert.fail('this scenario does not confirm criteria'),
     openRun: async () => assert.fail('this scenario does not open an acceptance run'),
     finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
@@ -75,6 +77,22 @@ test('getProject is exposed as GET projects/:id', () => {
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
 });
 
+test('projectRatification uses the machine-redacted owner-decision view', async () => {
+  let received: unknown[] = [];
+  const expected = { ratified: false, decisionRequest: { id: 'decision-1' } };
+  const acceptance = {
+    machineRatification: async (...args: unknown[]) => {
+      received = args;
+      return expected;
+    },
+  } as never;
+  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
+
+  const result = await controller.projectRatification(RUNNER, 'project-1');
+  assert.deepEqual(received, ['owner-1', 'project-1']);
+  assert.equal(result, expected);
+});
+
 // The id an agent holds is the base62 short form (that is what every payload encodes ids as), so
 // the param has to decode before it reaches a `@db.Uuid` column — the same gate the user-facing
 // ProjectsController puts on the same id. Both id-bearing routes, not just the read: a write that
@@ -82,6 +100,8 @@ test('getProject is exposed as GET projects/:id', () => {
 for (const method of [
   'getProject',
   'updateProject',
+  'projectRatification',
+  'ratifyProjectFromPreapproval',
   'confirmAcceptanceCriteria',
   'removeProject',
 ] as const) {
@@ -556,6 +576,8 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     'listProjectHandoffs',
     'openAcceptanceRun',
     'projectAcceptance',
+    'projectRatification',
+    'ratifyProjectFromPreapproval',
     'recordMergeEvidence',
     'removeProject',
     'updateProject',
@@ -577,6 +599,8 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     listProjectHandoffs: RequestMethod.GET,
     openAcceptanceRun: RequestMethod.POST,
     projectAcceptance: RequestMethod.GET,
+    projectRatification: RequestMethod.GET,
+    ratifyProjectFromPreapproval: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     updateProject: RequestMethod.PATCH,

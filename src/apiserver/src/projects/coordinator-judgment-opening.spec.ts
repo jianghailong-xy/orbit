@@ -151,6 +151,44 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence-run order and the no-evid
   assert.match(opening, /幂等/);
 });
 
+test('COMPLETION_ACK_STALE carries the autonomous repair protocol and only four human exits', () => {
+  const obligationId = 'a'.repeat(64);
+  const obligationRevision = 'b'.repeat(64);
+  const turnId = randomUUID();
+  const fact: WakeFact = {
+    event: 'COMPLETION_ACK_STALE',
+    projectId: PROJECT,
+    subjectType: 'TASK',
+    subjectId: TASK,
+    subjectVersion: `delivery:${randomUUID()}`,
+    detail: {
+      obligationId,
+      obligationRevision,
+      binding: { turnId },
+      reason: 'CONTROL_PLANE_COMMIT_REJECTED',
+    },
+  };
+  const opening = buildJudgmentOpening(fact, '滚动升级修复');
+  assert.match(opening, new RegExp(obligationId));
+  assert.match(opening, new RegExp(obligationRevision));
+  assert.match(opening, new RegExp(turnId));
+  assert.match(opening, /mandatory remediation obligation/);
+  assert.match(opening, /不得取消或重跑/);
+  assert.match(opening, /不得直接写 Task\.status/);
+  assert.match(opening, /不得放宽 writer fence/);
+  assert.match(opening, /诊断、代码兼容修复、直接 PostgreSQL 回归、部署/);
+  for (const authority of [
+    'NEW_AUTHORIZATION', 'RISK_ACCEPTANCE', 'GOAL_DECISION', 'EXTERNAL_IDENTITY',
+  ]) assert.match(opening, new RegExp(authority));
+  assert.match(opening, /project_owner_decision_request/);
+  for (const field of [
+    'whyNotAgent', 'options', 'impacts', 'recommendation', 'noActionConsequence', 'cost',
+    'deadline', 'resumeBehavior', 'idempotencyKey',
+  ]) assert.match(opening, new RegExp(field));
+  assert.match(opening, /不得用 task_comment、聊天文本或 HUMAN_SIGNOFF 代替/);
+  assert.match(opening, /代码兼容缺陷、测试、部署和验证不属于这四类/);
+});
+
 test('a judgment session is filed under a different title from the conversation', () => {
   assert.equal(judgmentSessionTitle('协调重做'), '判断：协调重做');
   assert.ok(judgmentSessionTitle('x'.repeat(200)).length <= 80);
@@ -169,8 +207,8 @@ test('the conversation a person opens still opens the way 60dece5e restored it',
   assert.doesNotMatch(conversational, /发生了什么：/);
 });
 
-/** The red line, as a grep over this unit's own files rather than over the tree. */
-test('nothing this unit adds is reachable from a timer', () => {
+/** The reducer owns no clock; a separately supervised courier may re-deliver its durable fact. */
+test('the judgment reducer owns no timer', () => {
   const here = path.resolve(__dirname, '..', '..', 'src', 'projects');
   for (const file of [
     'coordinator-judgment-opening.ts',
@@ -181,7 +219,7 @@ test('nothing this unit adds is reachable from a timer', () => {
     for (const timer of ['setInterval', 'setTimeout', '@Interval', '@Cron', 'SchedulerRegistry']) {
       assert.ok(
         !source.includes(timer),
-        `${file} must not reach a timer, found ${timer} — a wake is a committed fact`,
+        `${file} must not own a timer, found ${timer} — a wake is a committed fact`,
       );
     }
   }

@@ -6,19 +6,18 @@ import { canonicalJson, compare } from './canonical-json';
 /**
  * What wakes a project coordinator, and what makes one waking of it the same as another.
  *
- * §0 — A WAKE IS A COMMITTED FACT, NEVER A CLOCK
- * ==============================================
+ * §0 — A WAKE IS A COMMITTED FACT; A CLOCK MAY ONLY RE-DELIVER IT
+ * =================================================================
  * The control loop this replaces woke on a timer, and a timer asks "is there anything to think
  * about?" — a question with no answer that ends the asking. `COORDINATOR_NO_PROGRESS` is what that
  * costs: the loop raised a blocker because it had made no progress, the blocker was a fact, the
- * fact justified the next wake, and the next wake made no progress either. Nothing in this module
- * or the service beside it may be reached from a timer of any kind — no interval, no schedule, no
- * periodic sweep. A wake is DERIVED from rows that are already committed: a session that ended, a
- * budget that was spent, a task set that settled. So a coordinator that is never woken is a
- * coordinator about which nothing has happened, which is the correct amount of thinking to do
- * about it.
+ * fact justified the next wake, and the next wake made no progress either. A clock therefore may
+ * not CREATE, DECIDE or RESOLVE a wake. It may re-observe, lease and re-deliver an already
+ * committed immutable fact; stale completion ACK is exactly the case where delivery liveness
+ * requires that independent clock. A wake is still DERIVED only from committed rows: a session
+ * that ended, a budget that was spent, a task set that settled, or an ACK failure observation.
  *
- * Every function here is pure: no clock, no database, no session, for the reason
+ * Every reducer here is pure: no clock, no database, no session, for the reason
  * `attempt-budget.ts` and `convergence-progress.ts` are pure — a decision that can be replayed
  * byte for byte is a decision that can be argued about after the fact.
  *
@@ -94,6 +93,8 @@ export const COORDINATOR_WAKE_EVENTS = [
   'HUMAN_SIGNOFF_DECIDED',
   /** New evidence replaced an older open human-owned question. */
   'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+  /** A terminal result is durable but the control plane has not committed its completion ACK. */
+  'COMPLETION_ACK_STALE',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];

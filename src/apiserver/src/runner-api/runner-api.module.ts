@@ -28,6 +28,8 @@ import {
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
+import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
+import { OutcomeWatchdogModule } from '../outcome-watchdog/outcome-watchdog.module';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -48,6 +50,7 @@ import { ProvidersModule } from '../providers/providers.module';
     TaskListsModule,
     ProvidersModule,
     ProjectsModule,
+    OutcomeWatchdogModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -65,6 +68,7 @@ import { ProvidersModule } from '../providers/providers.module';
   providers: [
     RunnerAuthGuard,
     RunnerSessionAuthGuard,
+    RunnerWriteProtocolInterceptor,
     {
       provide: RUNNER_ORCHESTRATION_JWT,
       inject: [ConfigService],

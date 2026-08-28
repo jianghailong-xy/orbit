@@ -17,11 +17,15 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
+  CreateRatificationDelegationDto,
+  CreateRatificationTemplateDto,
+  DecideCompletionAckOwnerDecisionDto,
   DecideProjectHandoffDto,
   ReopenProjectDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
+  OwnerRatificationDecisionDto,
   RebindProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
@@ -49,7 +53,31 @@ export class ProjectsController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProjectDto) {
-    return this.projects.create(user.userId, dto);
+    return this.projects.create(
+      user.userId,
+      dto,
+      undefined,
+      { type: 'OWNER', id: user.userId },
+    );
+  }
+
+  /** Create a reusable exact/bounded ratification authority. This is owner-authenticated and does
+   * not ratify any Project by itself. */
+  @Post('ratification/templates')
+  createRatificationTemplate(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateRatificationTemplateDto,
+  ) {
+    return this.acceptance.createRatificationTemplate(user.userId, dto);
+  }
+
+  /** Delegate only the declared semantic/digest/budget/time/use envelope to one principal. */
+  @Post('ratification/delegations')
+  createRatificationDelegation(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateRatificationDelegationDto,
+  ) {
+    return this.acceptance.createRatificationDelegation(user.userId, dto);
   }
 
   /** The owner's projects, newest first. `?status=OPEN|DONE|CANCELLED` narrows; absent means all. */
@@ -73,6 +101,23 @@ export class ProjectsController {
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(user.userId, id);
+  }
+
+  /** Decide an irreducibly owner-shaped child request and resume the same autonomous remediation.
+   * This does not sign off a Task and does not close or take ownership of the parent incident. */
+  @Post(':id/completion-ack/owner-decisions/:requestId/decision')
+  decideCompletionAckOwnerDecision(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('requestId', PublicIdPipe) requestId: string,
+    @Body() dto: DecideCompletionAckOwnerDecisionDto,
+  ) {
+    return this.projects.decideCompletionAckOwnerDecision(
+      user.userId,
+      id,
+      requestId,
+      dto,
+    );
   }
 
   /**
@@ -252,9 +297,10 @@ export class ProjectsController {
    *
    * The stated criteria as the parser decomposes them, the digest of the facts a DONE would be
    * checked against, every evidence version with its derived criteria and conclusion events, the newest
-   * merge observation per requirement, the append-only audit — and `doneGate`, which is the same
-   * decision the write path makes, evaluated as a read so a client can say what is missing before
-   * anybody presses a button. Ids are Base62.
+   * merge observation per requirement, the append-only audit — and the canonical `doneGate`, with
+   * its exact binding/evaluation cut, proof graph, active obligations, structured reasons,
+   * owner/actor and next action. It is the same decision the write path makes, evaluated as a read
+   * so a client can say what is missing before anybody presses a button. Ids are Base62.
    *
    * A read holds no lock and grants nothing: the gate that DECIDES runs inside the transaction that
    * writes DONE, under `FOR UPDATE` (§13.4 AE7).
@@ -271,7 +317,24 @@ export class ProjectsController {
     );
   }
 
-  /** Confirm once that the complete current standard set expresses the project goal. */
+  @Get(':id/ratification')
+  ownerRatification(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.ownerRatification(user.userId, id);
+  }
+
+  @Post(':id/ratification')
+  decideOwnerRatification(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: OwnerRatificationDecisionDto,
+  ) {
+    return this.acceptance.ratifyByOwner(user.userId, id, dto);
+  }
+
+  /** @deprecated Compatibility alias for an owner approval of the current contract digest. */
   @Post(':id/acceptance/criteria-confirmation')
   confirmAcceptanceCriteria(
     @CurrentUser() user: AuthUser,

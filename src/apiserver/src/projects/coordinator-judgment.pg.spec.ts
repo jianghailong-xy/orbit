@@ -22,6 +22,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { CoordinatorJudgmentService, JUDGMENT_NO_LANDING } from './coordinator-judgment.service';
+import { buildJudgmentOpening, judgmentSessionTitle } from './coordinator-judgment-opening';
 import { WakeFact, attemptEndedUnsettledFact, projectTasksSettledFact } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
@@ -236,6 +237,70 @@ test('four concurrent deliveries of one fact open one session, decided by the in
       assert.equal(wakes[0].sessionId, sessions[0].id);
     } finally {
       await Promise.all(stacks.map((s) => s.db.$disconnect()));
+    }
+  });
+
+test('a persistent-coordinator delivery replays the pre-planned Session id',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = connect();
+    try {
+      const target = await fixture(stack.db, 'planned');
+      const fact = endedFact(target, randomUUID());
+      const plannedSessionId = randomUUID();
+
+      const first = await stack.judgments.wakePlanned(fact, ALLOW, plannedSessionId);
+      const replay = await stack.judgments.wakePlanned(fact, ALLOW, plannedSessionId);
+
+      assert.equal(first.outcome, 'OPENED');
+      assert.equal(replay.outcome, 'OPENED');
+      if (first.outcome !== 'OPENED' || replay.outcome !== 'OPENED') return;
+      assert.equal(first.sessionId, plannedSessionId);
+      assert.equal(replay.sessionId, plannedSessionId);
+      assert.equal(replay.replayed, true);
+      assert.equal((await judgmentSessions(stack.db, target)).length, 1);
+      assert.equal((await wakeRows(stack.db, target)).length, 1);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a successor binds the exact Session left between insert and wake CAS',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = connect();
+    try {
+      const target = await fixture(stack.db, 'crash-window');
+      const fact = endedFact(target, randomUUID());
+      const plannedSessionId = randomUUID();
+      const claim = await new CoordinatorWakeService(
+        stack.db as unknown as PrismaService,
+      ).claim(fact, ALLOW);
+      assert.equal(claim.outcome, 'WOKEN');
+
+      const project = await stack.db.project.findUniqueOrThrow({ where: { id: target.projectId } });
+      await stack.sessions.create(target.ownerId, {
+        workspaceId: target.workspaceId,
+        title: judgmentSessionTitle(project.title),
+        prompt: buildJudgmentOpening(fact, project.title),
+      }, {
+        id: plannedSessionId,
+        dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
+        runSource: SessionRunSource.PROJECT_COORDINATOR,
+      });
+      const before = await wakeRows(stack.db, target);
+      assert.equal(before[0].status, 'CLAIMED');
+      assert.equal(before[0].sessionId, null);
+
+      const recovered = await stack.judgments.wakePlanned(fact, ALLOW, plannedSessionId);
+      assert.equal(recovered.outcome, 'OPENED');
+      if (recovered.outcome !== 'OPENED') return;
+      assert.equal(recovered.sessionId, plannedSessionId);
+      assert.equal(recovered.replayed, true);
+      const after = await wakeRows(stack.db, target);
+      assert.equal(after[0].status, 'SESSION_OPENED');
+      assert.equal(after[0].sessionId, plannedSessionId);
+      assert.equal((await judgmentSessions(stack.db, target)).length, 1);
+    } finally {
+      await stack.db.$disconnect();
     }
   });
 

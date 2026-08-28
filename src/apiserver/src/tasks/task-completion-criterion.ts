@@ -1,4 +1,5 @@
 import type { TaskCompletionPolicyValue, TaskVerdictValue } from '../projects/task-aggregation';
+import type { AttemptTerminationKind } from './executable-acceptance-runtime';
 
 /** The three peer ways a task may prove its own work complete. */
 export const TASK_COMPLETION_CRITERIA = [
@@ -9,10 +10,15 @@ export const TASK_COMPLETION_CRITERIA = [
 
 export type TaskCompletionCriterionValue = (typeof TASK_COMPLETION_CRITERIA)[number];
 
+/** Rows written by the current service are protected by migration 0193's canonical DONE fence. */
+export const TASK_COMPLETION_FENCE_REVISION = 1;
+
 export interface TaskCompletionDeclaration {
   completionCriterion?: TaskCompletionCriterionValue | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  acceptanceTimeoutSeconds?: number | null;
+  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   completionPolicy?: TaskCompletionPolicyValue | null;
   /** A verifier task points at another task; it cannot simultaneously own executable acceptance. */
   verifiesTaskId?: string | null;
@@ -54,6 +60,14 @@ export function taskCompletionDeclarationError(
   }
   if (command != null && command.trim() === '') {
     return 'acceptanceCommand must not be blank';
+  }
+  const timeout = declaration.acceptanceTimeoutSeconds ?? null;
+  const ownerCeiling = declaration.acceptanceOwnerTimeoutCeilingSeconds ?? null;
+  if (timeout == null && ownerCeiling != null) {
+    return 'acceptanceOwnerTimeoutCeilingSeconds requires acceptanceTimeoutSeconds';
+  }
+  if (timeout != null && command == null) {
+    return 'acceptanceTimeoutSeconds requires executable acceptance';
   }
 
   const criterion = resolveTaskCompletionCriterion(declaration);
@@ -101,6 +115,10 @@ export interface TaskCompletionFacts {
   completionCriterion?: TaskCompletionCriterionValue | null;
   acceptanceExpectedExitCode?: number | null;
   executableExitCode?: number | null;
+  /** Present only for v2 attempts. An exit code is a criterion fact only when this is EXITED. */
+  executableTerminationKind?: AttemptTerminationKind | null;
+  /** Historical shell results deliberately remain untyped; in particular exit=-1 is not EXITED. */
+  executableLegacyTermination?: 'UNTYPED' | null;
   /** The subject-facing result of an independent verifier. Only PASS settles the subject. */
   verificationVerdict?: TaskVerdictValue | null;
   /** Non-null identifies this task as the verifier carrier rather than the verified subject. */
@@ -112,7 +130,7 @@ export interface TaskCompletionFacts {
 
 export interface TaskCompletionEvaluation {
   criterion: TaskCompletionCriterionValue;
-  state: 'SATISFIED' | 'UNSATISFIED';
+  state: 'SATISFIED' | 'UNSATISFIED' | 'ACTIONABLE';
   satisfied: boolean;
 }
 
@@ -133,23 +151,39 @@ export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
 ): TaskCompletionEvaluation {
   const criterion = facts.completionCriterion ?? 'HUMAN_SIGNOFF';
-  let satisfied: boolean;
+  let state: TaskCompletionEvaluation['state'];
   switch (criterion) {
-    case 'EXECUTABLE':
-      satisfied = facts.executableExitCode != null
-        && facts.acceptanceExpectedExitCode != null
-        && facts.executableExitCode === facts.acceptanceExpectedExitCode;
+    case 'EXECUTABLE': {
+      const termination = facts.executableTerminationKind ?? null;
+      // A typed non-exit says why this attempt stopped, not whether the command would have met the
+      // criterion. Likewise the legacy sentinel -1 never identified timeout vs cancel vs signal.
+      if (
+        (termination != null && termination !== 'EXITED')
+        || facts.executableLegacyTermination === 'UNTYPED'
+        || facts.executableExitCode === -1
+        || facts.executableExitCode == null
+        || facts.acceptanceExpectedExitCode == null
+      ) {
+        state = 'ACTIONABLE';
+        break;
+      }
+      // Headerless/N-1 runners have no typed field. A real integer other than the historical -1
+      // sentinel remains a comparable EXITED observation during rolling compatibility.
+      state = facts.executableExitCode === facts.acceptanceExpectedExitCode
+        ? 'SATISFIED'
+        : 'UNSATISFIED';
       break;
+    }
     case 'VERIFICATION':
-      satisfied = facts.verifiesTaskId != null
+      state = (facts.verifiesTaskId != null
         ? facts.ownVerdict != null
-        : facts.verificationVerdict === 'PASS';
+        : facts.verificationVerdict === 'PASS') ? 'SATISFIED' : 'UNSATISFIED';
       break;
     case 'HUMAN_SIGNOFF':
-      satisfied = facts.humanSignoff === true;
+      state = facts.humanSignoff === true ? 'SATISFIED' : 'UNSATISFIED';
       break;
   }
-  return { criterion, state: satisfied ? 'SATISFIED' : 'UNSATISFIED', satisfied };
+  return { criterion, state, satisfied: state === 'SATISFIED' };
 }
 
 /** Project a criterion evaluation onto Task.status without creating a second predicate. */

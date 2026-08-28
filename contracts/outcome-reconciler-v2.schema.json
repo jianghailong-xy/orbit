@@ -1,0 +1,868 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbit.local/contracts/outcome-reconciler-v2.schema.json",
+  "title": "Orbit Outcome Reconciler V2 frozen contract",
+  "description": "Schema for the frozen semantic registry and the canonical facts, cuts, goals, attempts, timers, obligations, action envelopes, proofs and projections governed by it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contractName",
+    "contractVersion",
+    "evaluatorVersion",
+    "canonicalization",
+    "nonGoals",
+    "stateAlgebra",
+    "completionDimensions",
+    "bindingContract",
+    "trustEnvelope",
+    "factCutContract",
+    "factKinds",
+    "goalAttemptContract",
+    "logicalTimeContract",
+    "digestContract",
+    "obligationContract",
+    "actionSafetyContract",
+    "crossProjectContract",
+    "closedContract",
+    "projectionContract",
+    "compatibilityBoundary",
+    "sourceAudit"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "./outcome-reconciler-v2.schema.json"
+    },
+    "contractName": {
+      "type": "string",
+      "const": "orbit.outcome-reconciler"
+    },
+    "contractVersion": {
+      "type": "string",
+      "const": "2.0.0"
+    },
+    "evaluatorVersion": {
+      "type": "string",
+      "const": "outcome-reducer-v2"
+    },
+    "canonicalization": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "nonGoals": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/StableCode"
+      }
+    },
+    "stateAlgebra": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "completionDimensions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/CompletionDimensionDeclaration"
+      }
+    },
+    "bindingContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "trustEnvelope": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "factCutContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "factKinds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/StableCode"
+      }
+    },
+    "goalAttemptContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "logicalTimeContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "digestContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "obligationContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "actionSafetyContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "crossProjectContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "closedContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "projectionContract": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "compatibilityBoundary": {
+      "$ref": "#/$defs/NonEmptyObject"
+    },
+    "sourceAudit": {
+      "type": "string",
+      "const": "./outcome-reconciler-v2-source-audit.json"
+    }
+  },
+  "$defs": {
+    "StableCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "LogicalTime": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "NonEmptyObject": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "CompletionState": {
+      "type": "string",
+      "enum": [
+        "SATISFIED",
+        "UNSATISFIED",
+        "UNKNOWN",
+        "CONFLICT",
+        "NOT_APPLICABLE"
+      ]
+    },
+    "CompletionDimensionId": {
+      "type": "string",
+      "enum": [
+        "GOAL_DISPOSITION",
+        "CONTRACT_RATIFICATION",
+        "CRITERIA_EVALUATION",
+        "FACT_CUT_INTEGRITY",
+        "EVIDENCE_TRUST",
+        "BINDING_FRESHNESS",
+        "AUTHORITY_VALIDITY",
+        "POLICY_COMPLIANCE",
+        "BUDGET_COMPLIANCE",
+        "ARTIFACT_INTEGRATION",
+        "TARGET_PRESENCE",
+        "POST_MERGE_VERIFICATION",
+        "EXTERNAL_CLOSURE_DEPENDENCIES",
+        "ACTION_REMEDIATION",
+        "MODEL_COVERAGE"
+      ]
+    },
+    "CompletionDimensionDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mandatory",
+        "notApplicableAllowed",
+        "unsatisfiedObligationKind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/CompletionDimensionId"
+        },
+        "mandatory": {
+          "type": "boolean",
+          "const": true
+        },
+        "notApplicableAllowed": {
+          "type": "boolean"
+        },
+        "unsatisfiedObligationKind": {
+          "$ref": "#/$defs/StableCode"
+        }
+      }
+    },
+    "Binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "projectId",
+        "subjectType",
+        "subjectId",
+        "goalId",
+        "goalRevision",
+        "contractDigest",
+        "evaluationPlanDigest",
+        "policyDigest",
+        "riskPolicyDigest",
+        "permissionDigest",
+        "authorityGrantDigest",
+        "budgetDigest",
+        "capabilityRegistryDigest",
+        "recipientDigest",
+        "evaluatorDigest",
+        "factSchemaDigest",
+        "environmentDigest",
+        "artifactDigest",
+        "targetDigest",
+        "targetRef",
+        "asOfLogicalTime",
+        "factCutDigest"
+      ],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/Identifier" },
+        "projectId": { "$ref": "#/$defs/Identifier" },
+        "subjectType": { "$ref": "#/$defs/StableCode" },
+        "subjectId": { "$ref": "#/$defs/Identifier" },
+        "goalId": { "$ref": "#/$defs/Identifier" },
+        "goalRevision": { "$ref": "#/$defs/LogicalTime" },
+        "contractDigest": { "$ref": "#/$defs/Digest" },
+        "evaluationPlanDigest": { "$ref": "#/$defs/Digest" },
+        "policyDigest": { "$ref": "#/$defs/Digest" },
+        "riskPolicyDigest": { "$ref": "#/$defs/Digest" },
+        "permissionDigest": { "$ref": "#/$defs/Digest" },
+        "authorityGrantDigest": { "$ref": "#/$defs/Digest" },
+        "budgetDigest": { "$ref": "#/$defs/Digest" },
+        "capabilityRegistryDigest": { "$ref": "#/$defs/Digest" },
+        "recipientDigest": { "$ref": "#/$defs/Digest" },
+        "evaluatorDigest": { "$ref": "#/$defs/Digest" },
+        "factSchemaDigest": { "$ref": "#/$defs/Digest" },
+        "environmentDigest": { "$ref": "#/$defs/Digest" },
+        "artifactDigest": { "$ref": "#/$defs/Digest" },
+        "targetDigest": { "$ref": "#/$defs/Digest" },
+        "targetRef": { "$ref": "#/$defs/Identifier" },
+        "asOfLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "factCutDigest": { "$ref": "#/$defs/Digest" }
+      }
+    },
+    "FactSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "projectId"
+      ],
+      "properties": {
+        "type": { "$ref": "#/$defs/StableCode" },
+        "id": { "$ref": "#/$defs/Identifier" },
+        "projectId": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "Principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "SYSTEM",
+            "AGENT",
+            "OWNER",
+            "RUNNER",
+            "PROVIDER"
+          ]
+        },
+        "id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "Authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grantId",
+        "grantDigest",
+        "scopeDigest",
+        "delegationChainDigest",
+        "validFromLogicalTime",
+        "validThroughLogicalTime",
+        "revokedAtLogicalTime"
+      ],
+      "properties": {
+        "grantId": { "$ref": "#/$defs/Identifier" },
+        "grantDigest": { "$ref": "#/$defs/Digest" },
+        "scopeDigest": { "$ref": "#/$defs/Digest" },
+        "delegationChainDigest": { "$ref": "#/$defs/Digest" },
+        "validFromLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "validThroughLogicalTime": {
+          "anyOf": [
+            { "$ref": "#/$defs/LogicalTime" },
+            { "type": "null" }
+          ]
+        },
+        "revokedAtLogicalTime": {
+          "anyOf": [
+            { "$ref": "#/$defs/LogicalTime" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "FactSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "collectorId",
+        "collectorVersion"
+      ],
+      "properties": {
+        "system": { "$ref": "#/$defs/Identifier" },
+        "collectorId": { "$ref": "#/$defs/Identifier" },
+        "collectorVersion": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "Signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "keyId",
+        "value"
+      ],
+      "properties": {
+        "algorithm": { "$ref": "#/$defs/Identifier" },
+        "keyId": { "$ref": "#/$defs/Identifier" },
+        "value": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "CanonicalFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "factId",
+        "factKind",
+        "tenantId",
+        "subject",
+        "binding",
+        "schemaVersion",
+        "schemaDigest",
+        "payload",
+        "payloadDigest",
+        "claimType",
+        "principal",
+        "authority",
+        "observedAt",
+        "recordedAt",
+        "logicalTime",
+        "causalPredecessorFactId",
+        "idempotencyKey",
+        "source",
+        "signature"
+      ],
+      "properties": {
+        "factId": { "$ref": "#/$defs/Identifier" },
+        "factKind": { "$ref": "#/$defs/StableCode" },
+        "tenantId": { "$ref": "#/$defs/Identifier" },
+        "subject": { "$ref": "#/$defs/FactSubject" },
+        "binding": { "$ref": "#/$defs/Binding" },
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "schemaDigest": { "$ref": "#/$defs/Digest" },
+        "payload": {},
+        "payloadDigest": { "$ref": "#/$defs/Digest" },
+        "claimType": {
+          "type": "string",
+          "enum": [
+            "OBSERVATION",
+            "ATTESTATION",
+            "DECISION",
+            "INTENT",
+            "RECEIPT",
+            "INVALIDATION"
+          ]
+        },
+        "principal": { "$ref": "#/$defs/Principal" },
+        "authority": { "$ref": "#/$defs/Authority" },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "recordedAt": { "$ref": "#/$defs/Timestamp" },
+        "logicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "causalPredecessorFactId": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "idempotencyKey": { "$ref": "#/$defs/Identifier" },
+        "source": { "$ref": "#/$defs/FactSource" },
+        "signature": {
+          "anyOf": [
+            { "$ref": "#/$defs/Signature" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "FactCut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cutId",
+        "tenantId",
+        "projectId",
+        "watermarkLogicalTime",
+        "factIds",
+        "factCount",
+        "factSetDigest",
+        "openedAt",
+        "sealedAt",
+        "complete",
+        "linearizable",
+        "collectorVersion"
+      ],
+      "properties": {
+        "cutId": { "$ref": "#/$defs/Identifier" },
+        "tenantId": { "$ref": "#/$defs/Identifier" },
+        "projectId": { "$ref": "#/$defs/Identifier" },
+        "watermarkLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "factIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Identifier" }
+        },
+        "factCount": { "type": "integer", "minimum": 0 },
+        "factSetDigest": { "$ref": "#/$defs/Digest" },
+        "openedAt": { "$ref": "#/$defs/Timestamp" },
+        "sealedAt": { "$ref": "#/$defs/Timestamp" },
+        "complete": { "type": "boolean" },
+        "linearizable": { "type": "boolean" },
+        "collectorVersion": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "Ratification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "ratifierType",
+        "ratifierId",
+        "contractDigest",
+        "factId"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["UNRATIFIED", "RATIFIED", "STALE"]
+        },
+        "ratifierType": {
+          "type": "string",
+          "enum": ["OWNER", "PREAPPROVED_TEMPLATE", "BOUND_DELEGATION"]
+        },
+        "ratifierId": { "$ref": "#/$defs/Identifier" },
+        "contractDigest": { "$ref": "#/$defs/Digest" },
+        "factId": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "Goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goalId",
+        "goalRevision",
+        "tenantId",
+        "projectId",
+        "statement",
+        "contractDigest",
+        "evaluationPlanDigest",
+        "ratification",
+        "disposition"
+      ],
+      "properties": {
+        "goalId": { "$ref": "#/$defs/Identifier" },
+        "goalRevision": { "$ref": "#/$defs/LogicalTime" },
+        "tenantId": { "$ref": "#/$defs/Identifier" },
+        "projectId": { "$ref": "#/$defs/Identifier" },
+        "statement": { "$ref": "#/$defs/Identifier" },
+        "contractDigest": { "$ref": "#/$defs/Digest" },
+        "evaluationPlanDigest": { "$ref": "#/$defs/Digest" },
+        "ratification": { "$ref": "#/$defs/Ratification" },
+        "disposition": {
+          "type": "string",
+          "enum": ["ACTIVE", "ACHIEVED", "ABANDONED", "SUPERSEDED"]
+        }
+      }
+    },
+    "Attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attemptId",
+        "attemptGeneration",
+        "goalId",
+        "goalRevision",
+        "sessionId",
+        "hypothesisDigest",
+        "budgetDigest",
+        "startedAtLogicalTime",
+        "endedAtLogicalTime",
+        "status",
+        "outcome"
+      ],
+      "properties": {
+        "attemptId": { "$ref": "#/$defs/Identifier" },
+        "attemptGeneration": { "$ref": "#/$defs/LogicalTime" },
+        "goalId": { "$ref": "#/$defs/Identifier" },
+        "goalRevision": { "$ref": "#/$defs/LogicalTime" },
+        "sessionId": { "$ref": "#/$defs/Identifier" },
+        "hypothesisDigest": { "$ref": "#/$defs/Digest" },
+        "budgetDigest": { "$ref": "#/$defs/Digest" },
+        "startedAtLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "endedAtLogicalTime": {
+          "anyOf": [
+            { "$ref": "#/$defs/LogicalTime" },
+            { "type": "null" }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["OPEN", "WINDING_DOWN", "CLOSED"]
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": ["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT", "SUPERSEDED"]
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "DurableTimer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timerId",
+        "tenantId",
+        "goalId",
+        "obligationId",
+        "obligationRevision",
+        "bindingDigest",
+        "clockId",
+        "dueLogicalTime",
+        "dueAt",
+        "scheduleFactId",
+        "state",
+        "deliveryAttempt",
+        "wakeId",
+        "timeoutExit"
+      ],
+      "properties": {
+        "timerId": { "$ref": "#/$defs/Identifier" },
+        "tenantId": { "$ref": "#/$defs/Identifier" },
+        "goalId": { "$ref": "#/$defs/Identifier" },
+        "obligationId": { "$ref": "#/$defs/Digest" },
+        "obligationRevision": { "$ref": "#/$defs/Digest" },
+        "bindingDigest": { "$ref": "#/$defs/Digest" },
+        "clockId": { "$ref": "#/$defs/Identifier" },
+        "dueLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "dueAt": { "$ref": "#/$defs/Timestamp" },
+        "scheduleFactId": { "$ref": "#/$defs/Identifier" },
+        "state": {
+          "type": "string",
+          "enum": ["SCHEDULED", "FIRED", "CANCELLED"]
+        },
+        "deliveryAttempt": { "type": "integer", "minimum": 0 },
+        "wakeId": { "$ref": "#/$defs/Identifier" },
+        "timeoutExit": { "type": "string", "const": "TIMEOUT" }
+      }
+    },
+    "ObligationExit": {
+      "type": "string",
+      "enum": [
+        "RESOLVE",
+        "CANCEL",
+        "SUPERSEDE",
+        "ESCALATE",
+        "TIMEOUT"
+      ]
+    },
+    "ObligationOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "homeProjectId",
+        "blockingProjectIds",
+        "crossingId",
+        "handoffId",
+        "handoffStatus",
+        "attributionDecisionFactId"
+      ],
+      "properties": {
+        "homeProjectId": { "$ref": "#/$defs/Identifier" },
+        "blockingProjectIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Identifier" }
+        },
+        "crossingId": {
+          "anyOf": [{ "$ref": "#/$defs/Identifier" }, { "type": "null" }]
+        },
+        "handoffId": {
+          "anyOf": [{ "$ref": "#/$defs/Identifier" }, { "type": "null" }]
+        },
+        "handoffStatus": {
+          "type": "string",
+          "enum": ["NOT_REQUIRED", "PROPOSED", "ACCEPTED", "REFUSED", "SUPERSEDED"]
+        },
+        "attributionDecisionFactId": {
+          "anyOf": [{ "$ref": "#/$defs/Identifier" }, { "type": "null" }]
+        }
+      }
+    },
+    "Obligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "obligationId",
+        "obligationRevision",
+        "kind",
+        "state",
+        "mandatory",
+        "owner",
+        "capability",
+        "binding",
+        "reason",
+        "actionProtocolProfile",
+        "servesCriterionIds",
+        "blocksClosureOf",
+        "ownership",
+        "resolverProfile",
+        "createdAtLogicalTime",
+        "dueLogicalTime"
+      ],
+      "properties": {
+        "obligationId": { "$ref": "#/$defs/Digest" },
+        "obligationRevision": { "$ref": "#/$defs/Digest" },
+        "kind": { "$ref": "#/$defs/StableCode" },
+        "state": {
+          "type": "string",
+          "enum": ["ACTIVE", "RESOLVED", "CANCELLED", "SUPERSEDED", "ESCALATED", "TIMED_OUT"]
+        },
+        "mandatory": { "type": "boolean" },
+        "owner": {
+          "type": "string",
+          "enum": ["SYSTEM", "AGENT", "OWNER", "EXTERNAL"]
+        },
+        "capability": { "$ref": "#/$defs/Identifier" },
+        "binding": { "$ref": "#/$defs/Binding" },
+        "reason": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "evidenceFactIds", "attemptedActions", "nextAction"],
+          "properties": {
+            "code": { "$ref": "#/$defs/StableCode" },
+            "message": { "$ref": "#/$defs/Identifier" },
+            "evidenceFactIds": { "type": "array", "items": { "$ref": "#/$defs/Identifier" } },
+            "attemptedActions": { "type": "array", "items": { "$ref": "#/$defs/Identifier" } },
+            "nextAction": { "$ref": "#/$defs/Identifier" }
+          }
+        },
+        "actionProtocolProfile": { "$ref": "#/$defs/Identifier" },
+        "servesCriterionIds": { "type": "array", "items": { "$ref": "#/$defs/Identifier" } },
+        "blocksClosureOf": { "type": "array", "items": { "$ref": "#/$defs/CompletionDimensionId" } },
+        "ownership": { "$ref": "#/$defs/ObligationOwnership" },
+        "resolverProfile": { "$ref": "#/$defs/Identifier" },
+        "createdAtLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "dueLogicalTime": {
+          "anyOf": [{ "$ref": "#/$defs/LogicalTime" }, { "type": "null" }]
+        }
+      }
+    },
+    "ActionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accountId", "unit", "charge", "limit", "reservationId"],
+      "properties": {
+        "accountId": { "$ref": "#/$defs/Identifier" },
+        "unit": { "$ref": "#/$defs/Identifier" },
+        "charge": { "type": "number", "minimum": 0 },
+        "limit": { "type": "number", "minimum": 0 },
+        "reservationId": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "ActionRetryPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxAttempts", "backoffDigest", "sameFailureFingerprintLimit"],
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 1 },
+        "backoffDigest": { "$ref": "#/$defs/Digest" },
+        "sameFailureFingerprintLimit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ActionCompensation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compensatorCapability", "manualRecovery", "remediationObligationKind"],
+      "properties": {
+        "compensatorCapability": {
+          "anyOf": [{ "$ref": "#/$defs/Identifier" }, { "type": "null" }]
+        },
+        "manualRecovery": {
+          "anyOf": [{ "$ref": "#/$defs/Identifier" }, { "type": "null" }]
+        },
+        "remediationObligationKind": { "type": "string", "const": "REMEDIATE_SIDE_EFFECT" }
+      },
+      "anyOf": [
+        { "properties": { "compensatorCapability": { "$ref": "#/$defs/Identifier" } } },
+        { "properties": { "manualRecovery": { "$ref": "#/$defs/Identifier" } } }
+      ]
+    },
+    "ActionReceiptRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerIdentity", "effectDigest", "observedAt", "result", "idempotencyKey"],
+      "properties": {
+        "providerIdentity": { "type": "boolean", "const": true },
+        "effectDigest": { "type": "boolean", "const": true },
+        "observedAt": { "type": "boolean", "const": true },
+        "result": { "type": "boolean", "const": true },
+        "idempotencyKey": { "type": "boolean", "const": true }
+      }
+    },
+    "ActionSafetyEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionIntentId",
+        "tenantId",
+        "obligationId",
+        "obligationRevision",
+        "effectClass",
+        "resourceType",
+        "resourceId",
+        "targetDigest",
+        "authorityGrantDigest",
+        "policyDigest",
+        "preconditionDigest",
+        "evaluatedThroughLogicalTime",
+        "idempotencyKey",
+        "budget",
+        "retryPolicy",
+        "compensation",
+        "receiptRequirements"
+      ],
+      "properties": {
+        "actionIntentId": { "$ref": "#/$defs/Identifier" },
+        "tenantId": { "$ref": "#/$defs/Identifier" },
+        "obligationId": { "$ref": "#/$defs/Digest" },
+        "obligationRevision": { "$ref": "#/$defs/Digest" },
+        "effectClass": {
+          "type": "string",
+          "enum": ["READ_ONLY", "REVERSIBLE_INTERNAL", "IRREVERSIBLE_INTERNAL", "EXTERNAL_REVERSIBLE", "EXTERNAL_IRREVERSIBLE"]
+        },
+        "resourceType": { "$ref": "#/$defs/StableCode" },
+        "resourceId": { "$ref": "#/$defs/Identifier" },
+        "targetDigest": { "$ref": "#/$defs/Digest" },
+        "authorityGrantDigest": { "$ref": "#/$defs/Digest" },
+        "policyDigest": { "$ref": "#/$defs/Digest" },
+        "preconditionDigest": { "$ref": "#/$defs/Digest" },
+        "evaluatedThroughLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "idempotencyKey": { "$ref": "#/$defs/Identifier" },
+        "budget": { "$ref": "#/$defs/ActionBudget" },
+        "retryPolicy": { "$ref": "#/$defs/ActionRetryPolicy" },
+        "compensation": { "$ref": "#/$defs/ActionCompensation" },
+        "receiptRequirements": { "$ref": "#/$defs/ActionReceiptRequirements" }
+      }
+    },
+    "EvaluationClock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logicalNow", "clockId", "evaluatedThroughLogicalTime"],
+      "properties": {
+        "logicalNow": { "$ref": "#/$defs/LogicalTime" },
+        "clockId": { "$ref": "#/$defs/Identifier" },
+        "evaluatedThroughLogicalTime": { "$ref": "#/$defs/LogicalTime" }
+      }
+    },
+    "DimensionProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimensionId", "state", "evidenceFactIds", "applicabilityProofDigest", "reasonCode"],
+      "properties": {
+        "dimensionId": { "$ref": "#/$defs/CompletionDimensionId" },
+        "state": { "$ref": "#/$defs/CompletionState" },
+        "evidenceFactIds": { "type": "array", "items": { "$ref": "#/$defs/Identifier" } },
+        "applicabilityProofDigest": {
+          "anyOf": [{ "$ref": "#/$defs/Digest" }, { "type": "null" }]
+        },
+        "reasonCode": { "$ref": "#/$defs/StableCode" }
+      }
+    },
+    "OutcomeProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proofDigest",
+        "contractDigest",
+        "evaluationPlanDigest",
+        "factCutDigest",
+        "evaluatorVersion",
+        "evaluatedThroughLogicalTime",
+        "dimensions",
+        "modelGaps",
+        "closed",
+        "closedClauseResults"
+      ],
+      "properties": {
+        "proofDigest": { "$ref": "#/$defs/Digest" },
+        "contractDigest": { "$ref": "#/$defs/Digest" },
+        "evaluationPlanDigest": { "$ref": "#/$defs/Digest" },
+        "factCutDigest": { "$ref": "#/$defs/Digest" },
+        "evaluatorVersion": { "$ref": "#/$defs/Identifier" },
+        "evaluatedThroughLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "dimensions": { "type": "array", "items": { "$ref": "#/$defs/DimensionProof" } },
+        "modelGaps": { "type": "array", "items": { "$ref": "#/$defs/StableCode" } },
+        "closed": { "type": "boolean" },
+        "closedClauseResults": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        }
+      }
+    },
+    "ObligationProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "obligationId",
+        "obligationRevision",
+        "bindingDigest",
+        "reason",
+        "owner",
+        "evaluatedThroughLogicalTime",
+        "projectionRevision",
+        "staleness"
+      ],
+      "properties": {
+        "obligationId": { "$ref": "#/$defs/Digest" },
+        "obligationRevision": { "$ref": "#/$defs/Digest" },
+        "bindingDigest": { "$ref": "#/$defs/Digest" },
+        "reason": { "$ref": "#/$defs/NonEmptyObject" },
+        "owner": { "type": "string", "enum": ["SYSTEM", "AGENT", "OWNER", "EXTERNAL"] },
+        "evaluatedThroughLogicalTime": { "$ref": "#/$defs/LogicalTime" },
+        "projectionRevision": { "$ref": "#/$defs/LogicalTime" },
+        "staleness": { "type": "string", "enum": ["CURRENT", "RECONCILER_STALE"] }
+      }
+    }
+  }
+}

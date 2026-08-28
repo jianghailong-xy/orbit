@@ -210,6 +210,39 @@ const maxProjectAcceptanceCriteriaChars = 4000
 const maxProjectAcceptanceCriteriaItems = 100
 const maxProjectAcceptanceVerificationMethodChars = 4000
 
+func isCompletionAckOwnerDecisionReason(reason string) bool {
+	switch reason {
+	case "NEW_AUTHORIZATION", "RISK_ACCEPTANCE", "GOAL_DECISION", "EXTERNAL_IDENTITY":
+		return true
+	}
+	return false
+}
+
+func validateCompletionAckOwnerDecisionRequest(request map[string]interface{}) error {
+	why, ok := request["whyNotAgent"].(string)
+	if !ok || strings.TrimSpace(why) == "" {
+		return fmt.Errorf("request.whyNotAgent is required")
+	}
+	for _, field := range []string{"options", "impacts"} {
+		values, ok := request[field].([]interface{})
+		if !ok || len(values) == 0 {
+			return fmt.Errorf("request.%s must be a non-empty array", field)
+		}
+	}
+	for _, field := range []string{
+		"recommendation", "noActionConsequence", "cost", "deadline", "resumeBehavior",
+	} {
+		if value, present := request[field]; !present || value == nil {
+			return fmt.Errorf("request.%s is required", field)
+		}
+	}
+	key, ok := request["idempotencyKey"].(string)
+	if !ok || strings.TrimSpace(key) == "" {
+		return fmt.Errorf("request.idempotencyKey is required")
+	}
+	return nil
+}
+
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
@@ -371,6 +404,36 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.getProjectAcceptance(id)
 		if err != nil {
 			return toolResult("get project acceptance failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_owner_decision_request":
+		id := getString(args, "projectId")
+		obligationID := getString(args, "obligationId")
+		obligationRevision := getString(args, "obligationRevision")
+		reason := getString(args, "reason")
+		if id == "" || obligationID == "" || obligationRevision == "" || reason == "" {
+			return toolResult("projectId, obligationId, obligationRevision and reason are required", true)
+		}
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("project_owner_decision_request requires the current Orbit coordinator Session", true)
+		}
+		if !isCompletionAckOwnerDecisionReason(reason) {
+			return toolResult("reason must be NEW_AUTHORIZATION, RISK_ACCEPTANCE, GOAL_DECISION or EXTERNAL_IDENTITY", true)
+		}
+		request, ok := args["request"].(map[string]interface{})
+		if !ok {
+			return toolResult("request must be one object containing the complete owner-decision protocol", true)
+		}
+		if err := validateCompletionAckOwnerDecisionRequest(request); err != nil {
+			return toolResult(err.Error(), true)
+		}
+		raw, err := s.t.requestProjectOwnerDecision(id, s.sessionID, map[string]interface{}{
+			"obligationId": obligationID, "obligationRevision": obligationRevision,
+			"reason": reason, "request": request,
+		})
+		if err != nil {
+			return toolResult("request project owner decision failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -573,7 +636,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -607,7 +670,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -636,7 +699,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1527,7 +1590,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"acceptanceExpectedExitCode": map[string]interface{}{
 				"type":        "integer",
-				"description": "The exit code that derives DONE for acceptanceCommand; every other exit code derives FAILED. Set both fields together.",
+				"description": "The exit code that derives DONE for acceptanceCommand. Only a typed EXITED result with a different actual code derives FAILED; timeout, cancellation, signal, start failure and infrastructure loss remain actionable. Set both fields together.",
+			},
+			"acceptanceTimeoutSeconds": map[string]interface{}{
+				"type": "integer", "minimum": 1, "maximum": 86400,
+				"description": "Requested EXECUTABLE wall-clock budget. Presence opts into v2 pre-spawn admission; omission keeps the N-1 legacy plan. Admission uses exactly this value and never clamps it.",
+			},
+			"acceptanceOwnerTimeoutCeilingSeconds": map[string]interface{}{
+				"type": "integer", "minimum": 1, "maximum": 86400,
+				"description": "Owner ceiling checked at admission. Omit to bind it to acceptanceTimeoutSeconds; a lower explicit value is REJECTED before spawn.",
 			},
 			"dueDate":  str,
 			"provider": providerProp,
@@ -1759,17 +1830,52 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"branch was last observed to CONTAIN and at which " +
 				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
 				"and refused, and every reopen with the fact that caused it; the current " +
-				"revision-bearing criteriaDigest and its set-level confirmation; and doneGate — " +
-				"allowed, or the code and sentence the write would be refused with " +
-				"(CRITERIA_CONFIRMATION_REQUIRED when this exact set was not confirmed, " +
-				"ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker " +
-				"or unresolved verification failure is still open).",
+				"revision-bearing criteriaDigest and its set-level confirmation; and canonical " +
+				"doneGate — the exact binding/evaluation cut, proof graph, active obligations, " +
+				"structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED " +
+				"carries that complete view; unknown types, stale projection and read failures deny " +
+				"closure explicitly. Legacy blocker/signal summaries do not decide closure.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
+		},
+		{
+			"name": "project_owner_decision_request",
+			"description": "Pause this exact completion-ACK remediation only when it needs one " +
+				"irreducibly owner-shaped input. The only reasons are NEW_AUTHORIZATION, " +
+				"RISK_ACCEPTANCE, GOAL_DECISION and EXTERNAL_IDENTITY; code defects, tests, " +
+				"deployment and verification remain coordinator work. The request must carry the " +
+				"complete decision protocol. The server admits it only from this exact current, " +
+				"non-revoked coordinator delivery Session and keeps the parent canonical obligation " +
+				"ACTIVE and AGENT-owned.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{"type": "string"},
+				"obligationId": map[string]interface{}{
+					"type": "string", "pattern": "^[0-9a-f]{64}$",
+				},
+				"obligationRevision": map[string]interface{}{
+					"type": "string", "pattern": "^[0-9a-f]{64}$",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"enum": []string{"NEW_AUTHORIZATION", "RISK_ACCEPTANCE", "GOAL_DECISION", "EXTERNAL_IDENTITY"},
+				},
+				"request": obj(map[string]interface{}{
+					"whyNotAgent":         map[string]interface{}{"type": "string", "minLength": 1},
+					"options":             map[string]interface{}{"type": "array", "minItems": 1, "maxItems": 16},
+					"impacts":             map[string]interface{}{"type": "array", "minItems": 1, "maxItems": 16},
+					"recommendation":      map[string]interface{}{},
+					"noActionConsequence": map[string]interface{}{},
+					"cost":                map[string]interface{}{},
+					"deadline":            map[string]interface{}{},
+					"resumeBehavior":      map[string]interface{}{},
+					"idempotencyKey":      map[string]interface{}{"type": "string", "minLength": 1, "maxLength": 200},
+				}, "whyNotAgent", "options", "impacts", "recommendation", "noActionConsequence",
+					"cost", "deadline", "resumeBehavior", "idempotencyKey"),
+			}, "projectId", "obligationId", "obligationRevision", "reason", "request"),
 		},
 		{
 			"name": "project_criteria_confirm",
@@ -2074,7 +2180,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceExpectedExitCode": map[string]interface{}{
 					"type":        []string{"integer", "null"},
-					"description": "The exit code that mechanically derives DONE; every other code derives FAILED. Set or clear it together with acceptanceCommand.",
+					"description": "The exit code that mechanically derives DONE. Only typed EXITED can be compared; all non-exit termination kinds keep the goal actionable. Set or clear it together with acceptanceCommand.",
+				},
+				"acceptanceTimeoutSeconds": map[string]interface{}{
+					"type": []string{"integer", "null"}, "minimum": 1, "maximum": 86400,
+					"description": "Replace the requested v2 budget; null returns to legacy/N-1 acceptance, omission preserves it.",
+				},
+				"acceptanceOwnerTimeoutCeilingSeconds": map[string]interface{}{
+					"type": []string{"integer", "null"}, "minimum": 1, "maximum": 86400,
+					"description": "Replace the owner ceiling. It is negotiated and never used as a silent clamp.",
 				},
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",

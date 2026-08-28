@@ -7,14 +7,21 @@ import { RunnerTasksController } from './runner-tasks.controller';
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 
-test('executeTask starts the owned task through TasksService', async () => {
-  const seen: { ownerId?: string; taskId?: string; triggerId?: string } = {};
+test('executeTask starts the owned task through TasksService and carries its acting session', async () => {
+  const seen: { ownerId?: string; taskId?: string; triggerId?: string; sessionId?: string } = {};
   const expected = { ok: true, sessionId: 'session-1' };
   const tasks = {
-    execute: async (ownerId: string, taskId: string, _auto: unknown, triggerId?: string) => {
+    execute: async (
+      ownerId: string,
+      taskId: string,
+      _auto: unknown,
+      triggerId?: string,
+      sessionId?: string,
+    ) => {
       seen.ownerId = ownerId;
       seen.taskId = taskId;
       seen.triggerId = triggerId;
+      seen.sessionId = sessionId;
       return expected;
     },
   } as never;
@@ -22,9 +29,19 @@ test('executeTask starts the owned task through TasksService', async () => {
 
   // The id of THIS `task_start`, which the runner reuses across every transport retry of it: two
   // deliveries of one tool call must be one run, and that is only decidable from a carried token.
-  const result = await controller.executeTask(RUNNER, 'task-1', { triggerId: 'press-1' });
+  const result = await controller.executeTask(
+    RUNNER,
+    'task-1',
+    'coordinator-session-1',
+    { triggerId: 'press-1' },
+  );
 
-  assert.deepEqual(seen, { ownerId: 'owner-1', taskId: 'task-1', triggerId: 'press-1' });
+  assert.deepEqual(seen, {
+    ownerId: 'owner-1',
+    taskId: 'task-1',
+    triggerId: 'press-1',
+    sessionId: 'coordinator-session-1',
+  });
   assert.equal(result, expected);
 });
 
@@ -39,7 +56,7 @@ test('executeTask still starts the task for a runner that names no press', async
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
 
-  await controller.executeTask(RUNNER, 'task-1', {});
+  await controller.executeTask(RUNNER, 'task-1', undefined, {});
 
   assert.equal(seen.triggerId, undefined);
 });
@@ -169,14 +186,16 @@ test('runner task create refuses an implicit HUMAN_SIGNOFF before resolving or w
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
       assert.match(error.message, /completionCriterion/);
-      assert.match(error.message, /implicitly create HUMAN_SIGNOFF/);
+      const body = error.getResponse() as Record<string, unknown>;
+      assert.equal(body.code, 'RUNNER_COMPLETION_CRITERION_REQUIRED');
+      assert.match(error.message, /never.*HUMAN_SIGNOFF/i);
       return true;
     },
   );
   assert.equal(serviceCalls, 0);
 });
 
-test('runner task create permits all three explicit criteria and never infers from related fields', async () => {
+test('runner task create permits explicit criteria and translates unambiguous N-1 declarations', async () => {
   const writes: unknown[] = [];
   const tasks = {
     resolveAgentCreator: async () => undefined,
@@ -203,22 +222,26 @@ test('runner task create permits all three explicit criteria and never infers fr
   }
   assert.equal(writes.length, declarations.length);
 
-  for (const inferred of [
-    { verifiesTaskId: 'subject-1' },
-    { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 },
-    { completionPolicy: 'VERIFICATION_PASSED' },
-  ]) {
-    await assert.rejects(
-      () => controller.createTask(
-        RUNNER,
-        undefined,
-        undefined,
-        undefined,
-        { title: 'No inference', ...inferred } as never,
-      ),
-      /completionCriterion is required/,
+  const legacy = [
+    { verifiesTaskId: 'subject-1', expected: 'VERIFICATION' },
+    { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, expected: 'EXECUTABLE' },
+    { completionPolicy: 'VERIFICATION_PASSED', expected: 'VERIFICATION' },
+  ];
+  for (const { expected, ...declaration } of legacy) {
+    await controller.createTask(
+      RUNNER,
+      undefined,
+      undefined,
+      undefined,
+      { title: 'N-1 declaration', ...declaration } as never,
     );
   }
+  assert.equal(writes.length, declarations.length + legacy.length);
+  assert.deepEqual(
+    writes.slice(declarations.length).map((write) =>
+      (write as { completionCriterion: string }).completionCriterion),
+    legacy.map(({ expected }) => expected),
+  );
 });
 
 test('runner batch create and both dry-run paths refuse every implicit HUMAN_SIGNOFF before service', async () => {
@@ -308,10 +331,12 @@ test('the acting workspace is read from either spelling of the header', async ()
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const dto = { body: 'x' } as never;
 
-  await controller.addComment(RUNNER, undefined, 'legacy-workspace', 'task-1', dto);
-  await controller.addComment(RUNNER, 'new-workspace', undefined, 'task-1', dto);
+  await controller.addComment(RUNNER, undefined, 'legacy-workspace', undefined, 'task-1', dto);
+  await controller.addComment(RUNNER, 'new-workspace', undefined, undefined, 'task-1', dto);
   // A runner sending both is mid-upgrade; the new name is the one it means.
-  await controller.addComment(RUNNER, 'new-workspace', 'legacy-workspace', 'task-1', dto);
+  await controller.addComment(
+    RUNNER, 'new-workspace', 'legacy-workspace', undefined, 'task-1', dto,
+  );
 
   assert.deepEqual(seen, ['legacy-workspace', 'new-workspace', 'new-workspace']);
 });

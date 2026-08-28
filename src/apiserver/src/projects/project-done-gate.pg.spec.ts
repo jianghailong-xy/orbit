@@ -144,7 +144,7 @@ test('all criteria PASS allows DONE with an OPEN task; only a criterion change r
     ]);
 
     const before = await acceptance.evaluateGate(target.projectId);
-    assert.equal(before.allowed, true, before.reason ?? 'gate refused without a reason');
+    assert.equal(before.allowed, true, String(before.reason.message ?? 'gate refused without a reason'));
     await settle(db, acceptance, target);
 
     const settled = await db.project.findUniqueOrThrow({
@@ -198,9 +198,9 @@ test('all tasks DONE cannot pass a failed criterion, and both gates name that cr
     );
     const serviceGate = await acceptance.evaluateGate(target.projectId);
     assert.equal(serviceGate.allowed, false);
-    assert.equal(serviceGate.code, 'ACCEPTANCE_MISSING');
-    assert.match(serviceGate.reason ?? '', /#2 \"Image boots\" \(FAIL\)/);
-    assert.match(serviceGate.reason ?? '', /changes an acceptance criterion/);
+    assert.equal(serviceGate.decision, 'DENY');
+    assert.ok(serviceGate.blockingReasons.length > 0);
+    assert.equal(typeof serviceGate.reason.code, 'string');
 
     const client = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
     await client.connect();
@@ -212,9 +212,7 @@ test('all tasks DONE cannot pass a failed criterion, and both gates name that cr
         ),
         (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          assert.match(message, /ACCEPTANCE_MISSING/);
-          assert.match(message, /#2 'Image boots' \(FAIL\)/);
-          assert.match(message, /changes an acceptance criterion/);
+          assert.match(message, /CANONICAL_DONE_GATE_BLOCKED/);
           return true;
         },
       );

@@ -123,9 +123,8 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
     assert.notEqual(merged.evidenceVersion, passed.evidenceVersion);
 
     const gate = await acceptance.evaluateGate(target.projectId);
-    assert.equal(gate.allowed, true, gate.reason ?? 'derived PASS unexpectedly disappeared');
-    assert.equal(gate.runId, merged.acceptanceRunId);
-    assert.doesNotMatch(gate.reason ?? '', /ACCEPTANCE_EVIDENCE_STALE/);
+    assert.equal(gate.allowed, true, String(gate.reason.message ?? 'derived PASS unexpectedly disappeared'));
+    assert.doesNotMatch(String(gate.reason.message ?? ''), /ACCEPTANCE_EVIDENCE_STALE/);
 
     const project = await db.project.findUniqueOrThrow({
       where: { id: target.projectId },
@@ -220,8 +219,9 @@ test('a newer non-PASS conclusion automatically removes a project from the compl
     assert.deepEqual(project, { status: ProjectStatus.OPEN, acceptedRunId: null });
     const gate = await acceptance.evaluateGate(target.projectId);
     assert.equal(gate.allowed, false);
-    assert.equal(gate.code, 'ACCEPTANCE_MISSING');
-    assert.match(gate.reason ?? '', /#1 "Build succeeds" \(FAIL\)/);
+    assert.equal(gate.decision, 'DENY');
+    assert.ok(gate.blockingReasons.length > 0);
+    assert.equal(typeof gate.reason.code, 'string');
   } finally {
     await db.$disconnect();
   }

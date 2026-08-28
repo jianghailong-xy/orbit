@@ -94,6 +94,8 @@ export interface HandoffPlan {
   acceptanceCriteria?: string | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  acceptanceTimeoutSeconds?: number | null;
+  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   completionCriterion?: string | null;
   labels?: readonly string[] | null;
   /** WHO — the workspace that would execute it. */
@@ -163,10 +165,12 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
   // N1 criterion advances to v4 and binds that type; omission keeps the rolling-client identity.
   const executableAcceptance =
     plan.acceptanceCommand != null || plan.acceptanceExpectedExitCode != null;
+  const negotiatedAcceptance = plan.acceptanceTimeoutSeconds != null
+    || plan.acceptanceOwnerTimeoutCeilingSeconds != null;
   const typedCompletion = plan.completionCriterion != null;
   return createHash('sha256')
     .update(canonicalJson({
-      v: typedCompletion ? 4 : executableAcceptance ? 3 : 2,
+      v: negotiatedAcceptance ? 5 : typedCompletion ? 4 : executableAcceptance ? 3 : 2,
       plan: {
         title: plan.title,
         description: plan.description ?? null,
@@ -175,6 +179,11 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
           ? {
               acceptanceCommand: plan.acceptanceCommand ?? null,
               acceptanceExpectedExitCode: plan.acceptanceExpectedExitCode ?? null,
+              ...(negotiatedAcceptance ? {
+                acceptanceTimeoutSeconds: plan.acceptanceTimeoutSeconds ?? null,
+                acceptanceOwnerTimeoutCeilingSeconds:
+                  plan.acceptanceOwnerTimeoutCeilingSeconds ?? null,
+              } : {}),
             }
           : {}),
         ...(typedCompletion ? { completionCriterion: plan.completionCriterion } : {}),

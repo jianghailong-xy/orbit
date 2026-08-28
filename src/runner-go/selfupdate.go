@@ -143,30 +143,41 @@ func selfUpdateEnabled() bool {
 	return version != "dev" && os.Getenv("ORBIT_NO_SELFUPDATE") == "" && platformKey() != ""
 }
 
-// publishedVersion fetches the control plane's current runner release. Keeping
-// this read separate from downloadAndSwap lets a live runner cheaply decide
-// whether to drain before the existing updater performs the actual replacement.
-func publishedVersion(ctx context.Context, server string) (string, error) {
+// publishedManifest fetches and negotiates the control plane's current runner release. Keeping
+// this read separate from downloadAndSwap lets a live runner cheaply decide whether to drain, and
+// makes an incompatible release a no-op rather than a binary swap followed by rejected writes.
+func publishedManifest(ctx context.Context, server string) (Manifest, error) {
 	server = strings.TrimRight(server, "/")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/dl/version.json", nil)
 	if err != nil {
-		return "", err
+		return Manifest{}, err
 	}
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return Manifest{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return Manifest{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	var m Manifest
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return "", err
+		return Manifest{}, err
 	}
 	if m.Version == "" {
-		return "", fmt.Errorf("empty published version")
+		return Manifest{}, fmt.Errorf("empty published version")
+	}
+	if err := manifestProtocolCompatible(m); err != nil {
+		return Manifest{}, err
+	}
+	return m, nil
+}
+
+func publishedVersion(ctx context.Context, server string) (string, error) {
+	m, err := publishedManifest(ctx, server)
+	if err != nil {
+		return "", err
 	}
 	return m.Version, nil
 }
@@ -192,9 +203,39 @@ func availableSelfUpdate(ctx context.Context, server string) (string, bool) {
 	return remote, true
 }
 
-// downloadAndSwap fetches the published binary for `ver`, verifies it runs and
-// reports that version, then atomically swaps it over the current executable.
-func downloadAndSwap(server, key, ver string, logf func(string)) bool {
+type downloadedCapabilities struct {
+	SchemaVersion            int    `json:"schemaVersion"`
+	CapabilityRevision       int    `json:"capabilityRevision"`
+	ServerCapabilityRevision int    `json:"serverCapabilityRevision"`
+	ServerSchemaRevision     int    `json:"serverSchemaRevision"`
+	ContractDigest           string `json:"contractDigest"`
+}
+
+func downloadedContractMatchesManifest(doc downloadedCapabilities, m Manifest) bool {
+	wantCapability, wantSchema, wantDigest := m.CapabilityRevision, m.SchemaRevision, m.ContractDigest
+	if wantCapability == 0 && wantSchema == 0 && wantDigest == "" {
+		wantCapability, wantSchema, wantDigest = 1, 1, runnerWriteLegacyContractDigest
+	}
+	gotCapability := doc.ServerCapabilityRevision
+	if gotCapability == 0 {
+		gotCapability = doc.CapabilityRevision
+	}
+	gotSchema := doc.ServerSchemaRevision
+	if gotSchema == 0 {
+		gotSchema = doc.SchemaVersion
+	}
+	gotDigest := doc.ContractDigest
+	if gotCapability == 0 && gotSchema == 1 && gotDigest == "" {
+		gotCapability, gotDigest = 1, runnerWriteLegacyContractDigest
+	}
+	return gotCapability == wantCapability && gotSchema == wantSchema && gotDigest == wantDigest
+}
+
+// downloadAndSwap fetches the published binary, verifies both its version and its write contract,
+// then atomically swaps it over the current executable. The same check protects automatic upgrade,
+// explicit reinstall and N-1 rollback.
+func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) bool {
+	ver := manifest.Version
 	exe, err := resolvedExecutable()
 	if err != nil {
 		logf("cannot locate executable: " + err.Error() + "\n")
@@ -241,6 +282,14 @@ func downloadAndSwap(server, key, ver string, logf func(string)) bool {
 		logf("downloaded update failed self-test; keeping current version\n")
 		return false
 	}
+	capabilityProbe, err := exec.Command(tmp, "capabilities", "--json").Output()
+	var capabilities downloadedCapabilities
+	if err != nil || json.Unmarshal(capabilityProbe, &capabilities) != nil ||
+		!downloadedContractMatchesManifest(capabilities, manifest) {
+		_ = os.Remove(tmp)
+		logf("downloaded update reports a different runner write contract; keeping current version\n")
+		return false
+	}
 	if err := os.Rename(tmp, exe); err != nil {
 		_ = os.Remove(tmp)
 		logf("replace failed: " + err.Error() + "\n")
@@ -269,15 +318,16 @@ func selfUpdate(server string) {
 	key := platformKey()
 	server = strings.TrimRight(server, "/")
 
-	remote, err := publishedVersion(context.Background(), server)
-	if err != nil || !isNewer(remote, version) {
+	manifest, err := publishedManifest(context.Background(), server)
+	if err != nil || !isNewer(manifest.Version, version) {
 		return
 	}
+	remote := manifest.Version
 
 	fmt.Printf("orbit %s -> %s: downloading update...\n", version, remote)
 	// Never swallow the reason: a silent failure here leaves the runner pinned to
 	// an old release with nothing in the log but the line above.
-	if !downloadAndSwap(server, key, remote, func(s string) { fmt.Fprint(os.Stderr, s) }) {
+	if !downloadAndSwap(server, key, manifest, func(s string) { fmt.Fprint(os.Stderr, s) }) {
 		return
 	}
 	fmt.Printf("orbit updated to %s; restarting...\n", remote)
@@ -327,13 +377,17 @@ func upgrade(server string) {
 		fmt.Fprintln(os.Stderr, "the control plane did not publish a version")
 		os.Exit(1)
 	}
+	if err := manifestProtocolCompatible(m); err != nil {
+		fmt.Fprintln(os.Stderr, "the control plane published an incompatible runner:", err)
+		os.Exit(1)
+	}
 
 	if m.Version == version {
 		fmt.Printf("already on %s; reinstalling to repair...\n", version)
 	} else {
 		fmt.Printf("updating %s -> %s...\n", version, m.Version)
 	}
-	if !downloadAndSwap(server, key, m.Version, func(s string) { fmt.Fprint(os.Stderr, s) }) {
+	if !downloadAndSwap(server, key, m, func(s string) { fmt.Fprint(os.Stderr, s) }) {
 		fmt.Fprintln(os.Stderr, "upgrade failed.")
 		os.Exit(1)
 	}

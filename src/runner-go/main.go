@@ -44,6 +44,10 @@ func interactive() bool {
 // disables self-update.
 var version = "dev"
 
+// Exact source tree baked into release binaries. Development builds deliberately retain the
+// sentinel; v2 admission records it but production publishing always sets a full git SHA.
+var sourceSHA = "dev-local"
+
 // Control plane the runner defaults to (used by `orbit register` when no --server is given).
 // Overridden at build time with -ldflags "-X main.defaultServer=..." so a self-hosted web
 // image bakes its own PUBLIC_ORIGIN in; a plain `go build` keeps the hosted default.

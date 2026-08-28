@@ -1,5 +1,5 @@
 import { TaskStatus } from '@orbit/shared';
-import { TASK_SUPERSESSION_MAX_HOPS, successorChain } from './task-supersession';
+import { successorChain } from './task-supersession';
 import {
   VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN,
   VerificationEpochEntry,
@@ -300,19 +300,10 @@ export function dependenciesSatisfiedSql(alias = 't'): string {
     SELECT 1 FROM task_dependency dep
      WHERE dep.task_id = ${alias}.id
        AND NOT EXISTS (
-         WITH RECURSIVE chain(id, status, depth) AS (
-           SELECT p.id, p.status::text, 0
-             FROM task p WHERE p.id = dep.depends_on_task_id
-           UNION ALL
-           SELECT successor.id, successor.status::text, chain.depth + 1
-             FROM chain
-             JOIN task current ON current.id = chain.id
-             JOIN task successor ON successor.id = current.superseded_by_task_id
-            WHERE chain.depth < ${TASK_SUPERSESSION_MAX_HOPS}
-         )
-         SELECT 1 FROM chain
-           JOIN task chain_task ON chain_task.id = chain.id
-          WHERE chain.status = 'DONE'
+         SELECT 1
+           FROM task chain_task
+          WHERE chain_task.id = task_dependency_tail_id(dep.depends_on_task_id)
+            AND chain_task.status = 'DONE'
             AND ${verificationEpochOpenSql('chain_task', alias)}
        )
   )`;

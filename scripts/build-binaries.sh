@@ -17,6 +17,20 @@ OUT="${1:-dist-bin}"
 SRC="src/runner-go"
 # Version of record: the root package.json.
 VER="$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+# Docker's runner-binary build stage deliberately receives a narrow source tree with no
+# `.git` directory. Deployments therefore inject the exact checked-out commit; local release
+# builds may discover it from Git. Never publish an anonymous or malformed capability revision.
+SOURCE_SHA="${ORBIT_SOURCE_SHA:-}"
+if [ -z "$SOURCE_SHA" ]; then
+  if ! SOURCE_SHA="$(git rev-parse HEAD 2>/dev/null)"; then
+    echo "error: ORBIT_SOURCE_SHA is required when the build context has no Git metadata" >&2
+    exit 1
+  fi
+fi
+if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "error: ORBIT_SOURCE_SHA must be a full lowercase 40-character Git SHA" >&2
+  exit 1
+fi
 
 # suffix:GOOS:GOARCH
 TARGETS=(
@@ -28,7 +42,7 @@ TARGETS=(
 
 # Bake the deployment's public origin into the binary's defaultServer so a self-hosted
 # runner's `orbit register` connects there with no --server. Unset → keep the source default.
-LDFLAGS="-s -w -X main.version=$VER"
+LDFLAGS="-s -w -X main.version=$VER -X main.sourceSHA=$SOURCE_SHA"
 if [ -n "${PUBLIC_ORIGIN:-}" ]; then
   LDFLAGS="$LDFLAGS -X main.defaultServer=$PUBLIC_ORIGIN"
 fi
@@ -46,6 +60,7 @@ for t in "${TARGETS[@]}"; do
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
 done
 
-printf '{"version":"%s"}\n' "$VER" > "$OUT/version.json"
+(cd "$SRC" && go run ./cmd/release-manifest \
+  "$VER" "$ROOT/contracts/runner-write-protocol.json" "$ROOT/$OUT/version.json")
 echo ">> wrote $OUT/version.json (v$VER)"
 ls -lh "$OUT"

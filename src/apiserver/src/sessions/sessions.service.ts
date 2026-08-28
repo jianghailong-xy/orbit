@@ -48,6 +48,10 @@ import {
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  completionAckObligationsBy,
+  readCompletionAckObligations,
+} from '../common/completion-ack-obligation';
+import {
   TaskWorkFacts,
   isLockNotAvailable,
   taskWorkRefusal,
@@ -1245,7 +1249,18 @@ export class SessionsService {
       orderBy: [{ lastTurnAt: 'desc' }, { createdAt: 'desc' }],
       take: 100,
     });
-    return sessions.map((session) => withSessionState(session));
+    const activeObligations = await readCompletionAckObligations(this.prisma, {
+      tenantId: ownerId,
+      sessionIds: sessions.map((session) => session.id),
+    });
+    const obligationsBySession = completionAckObligationsBy(activeObligations, 'sessionId');
+    return sessions.map((session) => {
+      const controlPlaneObligations = obligationsBySession.get(session.id) ?? [];
+      return {
+        ...withSessionState(session),
+        ...(controlPlaneObligations.length > 0 ? { controlPlaneObligations } : {}),
+      };
+    });
   }
 
   /**
@@ -1311,7 +1326,14 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    return withSessionState(session);
+    const controlPlaneObligations = await readCompletionAckObligations(this.prisma, {
+      tenantId: ownerId,
+      sessionIds: [id],
+    });
+    return {
+      ...withSessionState(session),
+      ...(controlPlaneObligations.length > 0 ? { controlPlaneObligations } : {}),
+    };
   }
 
   /**
@@ -2165,14 +2187,26 @@ export class SessionsService {
     // hold a live approval; skip the query otherwise. That includes a self-driven turn, which
     // stays at AWAITING_INPUT while it runs — its prompt is no less blocking for it.
     const generating = sessions.filter(isSessionGenerating).map((s) => s.id);
-    if (generating.length === 0) return sessions.map((s) => ({ ...s, pendingApprovals: 0 }));
-    const counts = await this.prisma.approval.groupBy({
-      by: ['sessionId'],
-      where: { sessionId: { in: generating }, status: 'PENDING' },
-      _count: { _all: true },
-    });
+    const [counts, activeObligations] = await Promise.all([
+      generating.length === 0
+        ? Promise.resolve([])
+        : this.prisma.approval.groupBy({
+            by: ['sessionId'],
+            where: { sessionId: { in: generating }, status: 'PENDING' },
+            _count: { _all: true },
+          }),
+      readCompletionAckObligations(this.prisma, {
+        tenantId: ownerId,
+        sessionIds: sessions.map((session) => session.id),
+      }),
+    ]);
     const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));
-    return sessions.map((s) => ({ ...s, pendingApprovals: byId.get(s.id) ?? 0 }));
+    const obligationsBySession = completionAckObligationsBy(activeObligations, 'sessionId');
+    return sessions.map((s) => ({
+      ...s,
+      pendingApprovals: byId.get(s.id) ?? 0,
+      controlPlaneObligations: obligationsBySession.get(s.id) ?? [],
+    }));
   }
 
   async get(ownerId: string, id: string) {
@@ -2228,11 +2262,16 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
+    const controlPlaneObligations = await readCompletionAckObligations(this.prisma, {
+      tenantId: ownerId,
+      sessionIds: [id],
+    });
     return withSessionCapabilities({
       ...rest,
       tags,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      controlPlaneObligations,
     });
   }
 

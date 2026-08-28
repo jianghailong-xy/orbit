@@ -1676,14 +1676,18 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
 				} else {
-					output, exitCode := runShellTurn(ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
-					pendingShellCtx = append(pendingShellCtx,
-						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, output))
-					if err := completeTurn(TurnCompleteRequest{
-						TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode), Subtype: "shell",
-						ShellExitCode: &exitCode, ShellOutput: &output,
-						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
-					}); err != nil {
+					req, shellErr := runSynchronousShellTurn(ctx, t, job, execDir, resp, emit)
+					if shellErr != nil {
+						logln("executable shell start failed for", job.SessionID+":", shellErr)
+						req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: shellErr.Error(), Subtype: "shell"}
+					}
+					if req.ShellOutput != nil {
+						pendingShellCtx = append(pendingShellCtx,
+							fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, *req.ShellOutput))
+					}
+					req.RuntimeSessionID = sessionID
+					req.BranchSha = effectiveBranchSha(job.WT)
+					if err := completeTurn(req); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
 				}

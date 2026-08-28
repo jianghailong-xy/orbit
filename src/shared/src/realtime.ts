@@ -98,6 +98,30 @@ export interface ControlSessionSummary {
   /** Project relation projected onto a coordinator Session. Optional for rolling-version peers. */
   projectId?: string | null;
   projectTitle?: string | null;
+  /** Active control-plane repair facts involving this exact Session. Always sent by current
+   *  servers (including `[]` on recovery) so a stream upsert can both install and clear one. */
+  controlPlaneObligations?: Array<{
+    obligationId: string;
+    obligationRevision: string;
+    bindingDigest: string;
+    capability: string;
+    tenantId: string;
+    projectId: string;
+    taskId: string;
+    sessionId: string;
+    turnId: string;
+    factKind: string;
+    errorFingerprint: string;
+    reasonCode: string;
+    reason: string;
+    owner: string;
+    requiredAction: string;
+    actionProtocol: unknown;
+    attemptedActions: unknown;
+    firstFailureAt: string;
+    latestFailureAt: string;
+    observationCount: number;
+  }>;
   pendingApprovals: number;
   lastTurnAt: string | null;
   /** When the server will re-send the message this run's failure killed, or null if nothing is

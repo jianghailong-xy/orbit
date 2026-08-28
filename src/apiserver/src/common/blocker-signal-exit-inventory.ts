@@ -180,6 +180,12 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
   },
   {
     family: 'PROJECT_BLOCKER',
+    type: 'COMPLETION_ACK_STALE',
+    resolveWhen:
+      'The exact legacy v1 turn is ACKed and a matching DECIDED EXECUTABLE request/result canonically projects its PASS or FAIL outcome; the append-only incident and repair facts remain after the active projection and blocker close.',
+  },
+  {
+    family: 'PROJECT_BLOCKER',
     type: 'UNKNOWN_FAILURE',
     resolveWhen:
       'The unclassified failure or dead-letter loss is acknowledged and cleared, or later attributable evidence replaces it and the original subject is settled or obsolete.',

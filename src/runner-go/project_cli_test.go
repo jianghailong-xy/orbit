@@ -102,6 +102,48 @@ func TestProjectGetRequiresAProjectID(t *testing.T) {
 	}
 }
 
+func TestProjectOwnerDecisionCLIHasARealSessionBoundTransport(t *testing.T) {
+	var method, path, session string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path, session = r.Method, r.URL.Path, r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"requestId":"request-1","status":"OPEN"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "coordinator-session-1")
+	request := `{"whyNotAgent":"owner authority required","options":["grant","decline"],` +
+		`"impacts":["resume"],"recommendation":"grant","noActionConsequence":"paused",` +
+		`"cost":"none","deadline":"2026-08-29T00:00:00Z","resumeBehavior":"resume same coordination",` +
+		`"idempotencyKey":"authorization-v1"}`
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{
+		"owner-decision-request", "proj-1", "--obligation-id", strings.Repeat("a", 64),
+		"--obligation-revision", strings.Repeat("b", 64), "--reason", "NEW_AUTHORIZATION",
+		"--request", request, "--json",
+	}, strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatalf("project owner-decision-request: %v", err)
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/proj-1/completion-ack/owner-decisions" || session != "coordinator-session-1" {
+		t.Fatalf("owner decision hit %s %s with session %q", method, path, session)
+	}
+	if body["reason"] != "NEW_AUTHORIZATION" {
+		t.Fatalf("owner decision body = %#v", body)
+	}
+
+	t.Setenv("ORBIT_SESSION_ID", "")
+	err = cmdProjectCLI([]string{
+		"owner-decision-request", "proj-1", "--obligation-id", strings.Repeat("a", 64),
+		"--obligation-revision", strings.Repeat("b", 64), "--reason", "NEW_AUTHORIZATION",
+		"--request", request,
+	}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "ORBIT_SESSION_ID") {
+		t.Fatalf("owner decision without session = %v", err)
+	}
+}
+
 // A 404 (someone else's project, or a deleted one) is the server's answer and must reach the
 // caller as a failure carrying the status, not as an empty success.
 func TestProjectGetPropagatesTheServerError(t *testing.T) {
@@ -166,7 +208,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"acceptance", "criteria-confirm", "acceptance-run", "acceptance-verdict", "merge-evidence",
+		"acceptance", "owner-decision-request", "criteria-confirm", "acceptance-run", "acceptance-verdict", "merge-evidence",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -198,7 +240,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. Unit L7's two reads are here — what has been
 	// asked about work crossing this project's line, and what reopening it would cost. Neither has
 	// a companion that WRITES, and that absence is the point.
-	if len(specs) != 11 {
+	if len(specs) != 12 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -230,6 +272,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
+		"project_owner_decision_request",
 		"project_criteria_confirm", "project_acceptance_run", "project_acceptance_verdict",
 		"project_merge_evidence",
 	} {

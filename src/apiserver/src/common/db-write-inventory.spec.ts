@@ -194,7 +194,7 @@ test('every database write in the tree is in the inventory, and nothing else is'
   );
 });
 
-test('every retried unit really is retried, and every statement really is not', () => {
+test('every transaction unit matches its declared retry shape, and every statement has a class', () => {
   const files = new Map<string, string>();
   const read = (rel: string): string => {
     let source = files.get(rel);
@@ -206,11 +206,20 @@ test('every retried unit really is retried, and every statement really is not', 
   };
   for (const unit of TRANSACTION_UNITS) {
     const [rel] = unit.at.split('#');
-    assert.match(
-      read(rel),
-      /withTransactionRetry\(/,
-      `${unit.at} is declared ${unit.shape} and ${rel} does not call withTransactionRetry`,
-    );
+    if (unit.shape === 'TX_RETRIED') {
+      assert.match(
+        read(rel),
+        /withTransactionRetry\(/,
+        `${unit.at} is declared TX_RETRIED and ${rel} does not call withTransactionRetry`,
+      );
+    } else {
+      assert.match(
+        read(rel),
+        /\$transaction\(/,
+        `${unit.at} is declared TX_BARE and ${rel} does not open a bare transaction`,
+      );
+      assert.equal(unit.attempts, 1, `${unit.at} is TX_BARE but declares more than one attempt`);
+    }
   }
   for (const unit of STATEMENT_UNITS) {
     assert.ok(
@@ -314,14 +323,14 @@ function closureBody(lines: readonly string[], start: number): { from: number; t
 }
 
 /** Every transaction closure in a source file that is not a comment. */
-function closures(source: string): Array<{ from: number; to: number }> {
+function closures(source: string): Array<{ from: number; to: number; retried: boolean }> {
   const lines = source.split('\n');
-  const found: Array<{ from: number; to: number }> = [];
+  const found: Array<{ from: number; to: number; retried: boolean }> = [];
   lines.forEach((line, index) => {
     if (!/\$transaction\(|withTransactionRetry\(/.test(line)) return;
     if (/^\s*(\/\/|\*)/.test(line)) return;
     const body = closureBody(lines, index);
-    if (body) found.push(body);
+    if (body) found.push({ ...body, retried: /withTransactionRetry\(/.test(line) });
   });
   return found;
 }
@@ -364,10 +373,10 @@ test('a transaction writes through its own client and no other', () => {
  *
  * This is the one property a retry can break that nothing else in the system would notice: an
  * email, a push, a realtime publish or an HTTP call inside the closure happens once per ATTEMPT,
- * so a deadlock the loop absorbs silently becomes two notifications. Every one of them in this
- * codebase sits after the commit, and this is what keeps it that way.
+ * so a deadlock the loop absorbs silently becomes two notifications. Every retried unit keeps
+ * them after commit; explicitly inventoried TX_BARE units are not automatically replayed.
  */
-test('nothing outside the database happens inside a transaction', () => {
+test('nothing outside the database happens inside a retried transaction', () => {
   const EXTERNAL =
     /this\.realtime\.|this\.push\.|publishForUser|publishSessionUpdated|publishTaskChanged|publishRunEvent|sendMail|mailer|\bfetch\(|nodemailer|\.emit\(/;
   const offenders: string[] = [];
@@ -376,7 +385,8 @@ test('nothing outside the database happens inside a transaction', () => {
     if (EXCLUDED_SOURCES.some((excluded) => rel === excluded.path || rel.startsWith(excluded.path))) continue;
     const source = readFileSync(file, 'utf8');
     const lines = source.split('\n');
-    for (const { from, to } of closures(source)) {
+    for (const { from, to, retried } of closures(source)) {
+      if (!retried) continue;
       for (let cursor = from; cursor <= to; cursor += 1) {
         const body = lines[cursor];
         if (/^\s*(\/\/|\*)/.test(body)) continue;

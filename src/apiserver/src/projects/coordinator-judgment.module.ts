@@ -7,7 +7,9 @@ import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 
 /**
- * The timer-free fact → judgment path, shared by ProjectsModule and the task write producer.
+ * The clock-independent fact → judgment reducer, shared by synchronous producers and the
+ * separately supervised persistent delivery worker. Time may schedule a retry; it cannot become
+ * the fact, the judgment or the resolution.
  *
  * Keeping this slice in its own module avoids importing every project service into TasksModule and
  * also guarantees that both doors use one wake/judgment instance rather than re-providing either.
