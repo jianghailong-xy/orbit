@@ -40,11 +40,14 @@ export const ACCEPTANCE_FINDING_ROUTING =
  * still prevents settlement. Evidence changes are evaluated and never form a third stale state. */
 export const ACCEPTANCE_MISSING = 'ACCEPTANCE_MISSING';
 export const ACCEPTANCE_BLOCKED = 'ACCEPTANCE_BLOCKED';
+export const OWNER_RATIFICATION_REQUIRED = 'OWNER_RATIFICATION_REQUIRED';
+/** @deprecated A rolling-client spelling. New gates return OWNER_RATIFICATION_REQUIRED. */
 export const CRITERIA_CONFIRMATION_REQUIRED = 'CRITERIA_CONFIRMATION_REQUIRED';
 
 export type AcceptanceRefusalCode =
   | typeof ACCEPTANCE_MISSING
   | typeof ACCEPTANCE_BLOCKED
+  | typeof OWNER_RATIFICATION_REQUIRED
   | typeof CRITERIA_CONFIRMATION_REQUIRED;
 
 export type ProjectCriterionKind = 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';

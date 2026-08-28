@@ -1844,6 +1844,15 @@ model ProjectAcceptanceCriterionDefinition {
   /// inputs. Legacy reconciliation separately hashes text when matching old lines to stable ids.
   contentHash String @map("content_hash") @db.Char(64)
 
+  /// Owner Ratification separates the meaning being approved from the machinery that evaluates
+  /// it. Text and criterion trust advance the semantic lane; commands, verifier prose and evidence
+  /// wiring advance the evaluation-plan lane. `revision`/`contentHash` above remain the combined
+  /// acceptance-evidence identity for rolling compatibility.
+  semanticRevision      Int    @default(1) @map("semantic_revision")
+  semanticHash          String @default(dbgenerated()) @map("semantic_hash") @db.Char(64)
+  evaluationPlanRevision Int   @default(1) @map("evaluation_plan_revision")
+  evaluationPlanHash    String @default(dbgenerated()) @map("evaluation_plan_hash") @db.Char(64)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -1871,6 +1880,165 @@ model ProjectAcceptanceCriteriaConfirmation {
   @@unique([projectId, criteriaDigest], map: "project_acceptance_confirmation_digest_key")
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_acceptance_confirmation_project_idx")
   @@map("project_acceptance_criteria_confirmation")
+}
+
+/// Rebuildable current projection of the Project completion contract. The owner decision is the
+/// append-only ProjectOwnerRatification row below, never a boolean on this row.
+model ProjectCompletionContract {
+  projectId               String   @id @map("project_id") @db.Uuid
+  ownerId                 String   @map("owner_id") @db.Uuid
+  contractRevision        BigInt   @default(1) @map("contract_revision")
+  evaluationPlanRevision  BigInt   @default(1) @map("evaluation_plan_revision")
+  contractDigest          String   @map("contract_digest") @db.Char(64)
+  evaluationPlanDigest    String   @map("evaluation_plan_digest") @db.Char(64)
+  riskPolicyDigest        String   @map("risk_policy_digest") @db.Char(64)
+  permissionDigest        String   @map("permission_digest") @db.Char(64)
+  budgetDigest            String   @map("budget_digest") @db.Char(64)
+  recipientDigest         String   @map("recipient_digest") @db.Char(64)
+  semanticMaterial        Json     @map("semantic_material")
+  evaluationPlanMaterial  Json     @map("evaluation_plan_material")
+  templateId              String?  @map("template_id") @db.Uuid
+  delegationId            String?  @map("delegation_id") @db.Uuid
+  lastChangeReason        String   @map("last_change_reason")
+  updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ownerId, updatedAt(sort: Desc)], map: "project_completion_contract_owner_idx")
+  @@map("project_completion_contract")
+}
+
+/// Owner-authored reusable authority with exact semantic/digest/budget/time/use bounds.
+model ProjectRatificationTemplate {
+  id                       String    @id @db.Uuid
+  ownerId                  String    @map("owner_id") @db.Uuid
+  name                     String
+  contractConstraint       Json      @map("contract_constraint")
+  riskPolicyDigests        String[]  @map("risk_policy_digests") @db.Char(64)
+  permissionDigests        String[]  @map("permission_digests") @db.Char(64)
+  budgetDigests            String[]  @map("budget_digests") @db.Char(64)
+  recipientDigests         String[]  @map("recipient_digests") @db.Char(64)
+  maxSessionBudgetPerDay   Int       @map("max_session_budget_per_day")
+  maxUses                  Int       @map("max_uses")
+  useCount                 Int       @default(0) @map("use_count")
+  validFrom                DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
+  validThrough             DateTime  @map("valid_through") @db.Timestamptz(6)
+  templateDigest           String    @map("template_digest") @db.Char(64)
+  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([ownerId, templateDigest])
+  @@map("project_ratification_template")
+}
+
+/// Owner-authored authority for one exact non-owner principal, optionally scoped to one Project.
+model ProjectRatificationDelegation {
+  id                       String    @id @db.Uuid
+  ownerId                  String    @map("owner_id") @db.Uuid
+  delegateType             String    @map("delegate_type")
+  delegateId               String    @map("delegate_id")
+  projectId                String?   @map("project_id") @db.Uuid
+  contractConstraint       Json      @map("contract_constraint")
+  riskPolicyDigests        String[]  @map("risk_policy_digests") @db.Char(64)
+  permissionDigests        String[]  @map("permission_digests") @db.Char(64)
+  budgetDigests            String[]  @map("budget_digests") @db.Char(64)
+  recipientDigests         String[]  @map("recipient_digests") @db.Char(64)
+  maxSessionBudgetPerDay   Int       @map("max_session_budget_per_day")
+  maxUses                  Int       @map("max_uses")
+  useCount                 Int       @default(0) @map("use_count")
+  validFrom                DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
+  validThrough             DateTime  @map("valid_through") @db.Timestamptz(6)
+  delegationDigest         String    @map("delegation_digest") @db.Char(64)
+  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([ownerId, delegationDigest])
+  @@map("project_ratification_delegation")
+}
+
+/// One digest-bound owner question. CTA identity/generation make stale, expired and duplicate
+/// answers safe instead of relying on whichever row happens to render first.
+model ProjectOwnerDecisionRequest {
+  id                     String    @id @db.Uuid
+  projectId              String    @map("project_id") @db.Uuid
+  ownerId                String    @map("owner_id") @db.Uuid
+  contractDigest         String    @map("contract_digest") @db.Char(64)
+  requestGeneration      BigInt    @map("request_generation")
+  kind                   String    @default("OWNER_RATIFICATION")
+  status                 String    @default("PENDING")
+  reasonCode             String    @map("reason_code")
+  previousContractDigest String?   @map("previous_contract_digest") @db.Char(64)
+  semanticDiff           Json      @default("{}") @map("semantic_diff")
+  decisionPayload        Json      @map("decision_payload")
+  ctaToken               String    @unique @map("cta_token") @db.Uuid
+  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
+  decidedAt              DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedByType          String?   @map("decided_by_type")
+  decidedById            String?   @map("decided_by_id")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([projectId, requestGeneration])
+  @@index([ownerId, status, createdAt(sort: Desc)], map: "project_owner_decision_inbox_idx")
+  @@map("project_owner_decision_request")
+}
+
+/// Append-only approval of one exact contractDigest. evaluationPlanDigest is recorded for audit,
+/// but is intentionally not the validity key.
+model ProjectOwnerRatification {
+  id                               String    @id @db.Uuid
+  projectId                        String    @map("project_id") @db.Uuid
+  ownerId                          String    @map("owner_id") @db.Uuid
+  contractDigest                   String    @map("contract_digest") @db.Char(64)
+  evaluationPlanDigestAtDecision   String    @map("evaluation_plan_digest_at_decision") @db.Char(64)
+  source                           String
+  ratifiedByType                  String    @map("ratified_by_type")
+  ratifiedById                    String    @map("ratified_by_id")
+  authorityId                     String?   @map("authority_id") @db.Uuid
+  authorityDigest                 String?   @map("authority_digest") @db.Char(64)
+  decisionRequestId               String?   @unique @map("decision_request_id") @db.Uuid
+  idempotencyKey                  String    @map("idempotency_key")
+  validThrough                    DateTime? @map("valid_through") @db.Timestamptz(6)
+  ratifiedAt                      DateTime  @default(now()) @map("ratified_at") @db.Timestamptz(6)
+  createdAt                       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([ownerId, idempotencyKey])
+  @@index([projectId, contractDigest, ratifiedAt(sort: Desc)], map: "project_owner_ratification_digest_idx")
+  @@map("project_owner_ratification")
+}
+
+model ProjectRatifiedActionIntent {
+  id                   String   @id @db.Uuid
+  projectId            String   @map("project_id") @db.Uuid
+  ownerId              String   @map("owner_id") @db.Uuid
+  principalType        String   @map("principal_type")
+  principalId          String   @map("principal_id")
+  triggerKind          String   @map("trigger_kind")
+  effectClass          String   @map("effect_class")
+  contractDigest       String   @map("contract_digest") @db.Char(64)
+  evaluationPlanDigest String   @map("evaluation_plan_digest") @db.Char(64)
+  riskPolicyDigest     String   @map("risk_policy_digest") @db.Char(64)
+  permissionDigest     String   @map("permission_digest") @db.Char(64)
+  budgetDigest         String   @map("budget_digest") @db.Char(64)
+  recipientDigest      String   @map("recipient_digest") @db.Char(64)
+  budgetCharge         Int      @map("budget_charge")
+  action               Json
+  actionDigest         String   @map("action_digest") @db.Char(64)
+  idempotencyKey       String   @map("idempotency_key")
+  commitToken          String   @unique @map("commit_token") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([ownerId, projectId, idempotencyKey])
+  @@map("project_ratified_action_intent")
+}
+
+model ProjectRatifiedActionCommit {
+  intentId       String   @id @map("intent_id") @db.Uuid
+  projectId      String   @map("project_id") @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  contractDigest String   @map("contract_digest") @db.Char(64)
+  budgetCharge   Int      @map("budget_charge")
+  committedAt    DateTime @default(now()) @map("committed_at") @db.Timestamptz(6)
+
+  @@index([projectId, contractDigest, committedAt(sort: Desc)], map: "project_ratified_action_budget_idx")
+  @@map("project_ratified_action_commit")
 }
 
 /// One agent's membership of one project's team, and the only place a project's COORDINATOR is
