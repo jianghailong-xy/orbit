@@ -41,6 +41,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
+# Compose otherwise derives its project from the checkout directory. Orbit upgrades commonly run
+# from UUID-named worktrees, while the installed stack is the stable `orbit` project; letting that
+# name drift creates a second network and then collides with the intentionally fixed container
+# names. Operators may still override the project explicitly for an isolated deployment.
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-orbit}"
+
 if docker compose version >/dev/null 2>&1; then
   DC="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
