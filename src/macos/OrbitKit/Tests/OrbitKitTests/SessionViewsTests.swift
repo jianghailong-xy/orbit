@@ -22,6 +22,16 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionCompletionPresentation.actionTitle, "Complete")
     }
 
+    func testSessionListPresentationKeepsRowAndScopeDensityInLockstep() {
+        let compact = SessionListPresentation.resolve(isCompactWidth: true)
+        let regular = SessionListPresentation.resolve(isCompactWidth: false)
+
+        XCTAssertEqual(compact, .compact)
+        XCTAssertFalse(compact.showsPersistentScope)
+        XCTAssertEqual(regular, .regular)
+        XCTAssertTrue(regular.showsPersistentScope)
+    }
+
     func testCompactListTimeIsHiddenExactlyWhileWorkingSpinnerIsVisible() throws {
         let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
         let running = Session(id: "run", title: "Running", status: .running,

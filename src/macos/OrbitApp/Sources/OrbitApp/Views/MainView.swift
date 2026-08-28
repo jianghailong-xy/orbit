@@ -1,8 +1,9 @@
 import SwiftUI
 import OrbitKit
 
-/// The app shell: a three-column split mirroring the web AppShell — a section rail (Tasks /
-/// Agents / Skills / Runners / Settings / Admin), the selected section's list, and a detail pane.
+/// The app shell: a three-column split mirroring the web AppShell — navigation/Workspaces, the
+/// selected section's list, and a detail pane. Regular iPad groups the first column into Workspaces
+/// and Manage; macOS preserves its disclosure-style source list.
 struct MainView: View {
     @Environment(AppModel.self) private var model
 
@@ -14,7 +15,14 @@ struct MainView: View {
         } content: {
             SectionContent(section: model.selectedSection)
                 .orbitPaneBackground()
+                #if os(iOS)
+                // The regular-iPad session column carries a visible three-way scope control and
+                // two-line rows. Give it a little more preferred room than the desktop pane while
+                // leaving SwiftUI free to collapse the split when the window narrows.
+                .navigationSplitViewColumnWidth(min: 260, ideal: 330, max: 420)
+                #else
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
+                #endif
         } detail: {
             SectionDetail(section: model.selectedSection)
                 .orbitPaneBackground()
@@ -34,8 +42,9 @@ enum SidebarSelection: Hashable {
     case agent(String)
 }
 
-/// The leftmost rail, now a source list. iPad uses first-level Workspace rows with Runner metadata;
-/// macOS retains the existing expandable, runner-grouped Workspaces section. Admin is role-gated.
+/// The leftmost rail, now a source list. iPad leads with grouped, first-level Workspace rows and
+/// keeps administrative destinations under Manage; macOS retains its expandable, runner-grouped
+/// Workspaces section. Admin is role-gated on both.
 struct SectionSidebar: View {
     @Environment(AppModel.self) private var model
     let isAdmin: Bool
@@ -69,20 +78,35 @@ struct SectionSidebar: View {
         // Touch the driving fields so Observation re-renders the rail (and re-reads `selection`)
         // when the section/agent changes from outside the sidebar, e.g. a deep-link route.
         _ = (model.selectedSection, model.selectedAgentID)
+        #if !os(iOS)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
+        #endif
         return List(selection: selection) {
+            #if os(iOS)
+            Section {
+                workspaceRows
+            } header: {
+                Text("Workspaces").textCase(nil)
+            }
+
+            Section {
+                ForEach(AppSection.managementSections(isAdmin: isAdmin)) { section in
+                    Label(section.title, systemImage: section.systemImage)
+                        .tag(SidebarSelection.section(section))
+                }
+            } header: {
+                Text("Manage").textCase(nil)
+            }
+            #else
             ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
                 if section == .agents {
-                    #if os(iOS)
-                    workspaceRows(shortcutIndex: shortcutIndex)
-                    #else
                     agentsDisclosure(shortcutIndex: shortcutIndex)
-                    #endif
                 } else {
                     Label(section.title, systemImage: section.systemImage)
                         .tag(SidebarSelection.section(section))
                 }
             }
+            #endif
         }
         .navigationTitle("Orbit")
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -97,10 +121,10 @@ struct SectionSidebar: View {
 
     #if os(iOS)
     @ViewBuilder
-    private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
+    private var workspaceRows: some View {
         if let agents = model.agents, !agents.items.isEmpty {
             ForEach(agents.orderedItems) { workspace in
-                AgentRowView(agent: workspace, shortcutIndex: shortcutIndex[workspace.id])
+                AgentRowView(agent: workspace)
                     .tag(SidebarSelection.agent(workspace.id))
             }
         } else {
@@ -159,6 +183,12 @@ struct AccountFooter: View {
                     .lineLimit(1)
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
+                #if os(iOS)
+                Image(systemName: "chevron.forward")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)

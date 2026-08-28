@@ -53,30 +53,35 @@ struct WorkspaceNavigationRow: View {
     let offline: Bool
     let running: Bool
     let waiting: Int
-    var shortcutIndex: Int? = nil
+    /// The compact drawer keeps Workspace and Runner on one line. The regular-width iPad sidebar
+    /// uses a calmer two-line identity treatment so status never competes with truncated metadata.
+    var runnerOnSecondLine = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
             waiting: waiting, running: running, runnerOffline: offline)
         HStack(spacing: 12) {
             WorkspaceFolderIcon(selected: selected, offline: offline)
-            HStack(spacing: 0) {
-                Text(agent.name)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                    .layoutPriority(2)
-                if agent.enabled == false {
-                    Text("disabled")
-                        .font(.orbitMeta)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
-                        .padding(.leading, 6)
-                        .fixedSize()
+            if runnerOnSecondLine {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 0) {
+                        workspaceName
+                        disabledBadge
+                    }
+                    Text(runnerLabel)
+                        .font(.orbitListSubtitle)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
                 }
-                Text(" · \(runnerLabel)")
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
+                .layoutPriority(1)
+            } else {
+                HStack(spacing: 0) {
+                    workspaceName
+                    disabledBadge
+                    Text(" · \(runnerLabel)")
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 6)
             if case .needsYou(let count) = status {
@@ -92,26 +97,42 @@ struct WorkspaceNavigationRow: View {
                 SpinnerGlyph(color: .blue)
                     .accessibilityLabel("Session running")
             }
-            if let shortcutIndex {
-                Text("⌘\(shortcutIndex + 1)")
-                    .font(.orbitMeta)
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-            }
+        }
+    }
+
+    private var workspaceName: some View {
+        Text(agent.name)
+            .lineLimit(1)
+            .foregroundStyle(.primary)
+            .layoutPriority(2)
+    }
+
+    @ViewBuilder
+    private var disabledBadge: some View {
+        if agent.enabled == false {
+            Text("disabled")
+                .font(.orbitMeta)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(.quaternary, in: Capsule())
+                .padding(.leading, 6)
+                .fixedSize()
         }
     }
 }
 #endif
 
-/// A Workspace row for the regular-width sidebar. iOS uses the shared first-level single-line row;
-/// macOS preserves its two-line disclosure content. `shortcutIndex`, when set, shows a faint ⌘N.
+/// A Workspace row for the regular-width sidebar. iPad uses a two-line Workspace/Runner identity;
+/// macOS preserves its existing disclosure content and faint ⌘N shortcut where available.
 struct AgentRowView: View {
     #if os(iOS)
     @Environment(AppModel.self) private var model
     #endif
     let agent: Agent
+    #if !os(iOS)
     var shortcutIndex: Int? = nil
     var configuredProviders: [ConfiguredProvider] = []
+    #endif
     var body: some View {
         #if os(iOS)
         let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
@@ -127,9 +148,9 @@ struct AgentRowView: View {
             // user must not replace this Workspace's running cue. The compact drawer owns the
             // needs-you badge; the shared row only supplies its visual when that surface opts in.
             waiting: 0,
-            shortcutIndex: shortcutIndex
+            runnerOnSecondLine: true
         )
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         #else
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
@@ -163,21 +184,37 @@ struct AgentRowView: View {
 /// gear to edit the agent. Selecting a session drives the console in the detail column.
 struct AgentContentColumn: View {
     @Environment(AppModel.self) private var app
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     var body: some View {
         @Bindable var app = app
         if let agents = app.agents, let id = app.selectedAgentID, let a = agents.agent(id) {
             AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID)
                 .id(a.id)
                 .navigationTitle(a.name)
+                #if os(iOS)
+                // The iPhone list keeps its roomy large title. In the regular-width three-column
+                // iPad shell, an inline title leaves the vertical room below it to the persistent
+                // scope control and search field instead of spending a second row on the Workspace.
+                .navigationBarTitleDisplayMode(
+                    SessionListPresentation.resolve(
+                        isCompactWidth: horizontalSizeClass == .compact
+                    ).showsPersistentScope ? .inline : .automatic
+                )
+                #endif
         } else {
-            ContentUnavailableView("Select an agent", systemImage: "person.2",
-                                   description: Text("Pick an agent in the sidebar to see its sessions and settings."))
+            ContentUnavailableView("Select a workspace", systemImage: "folder",
+                                   description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
         }
     }
 }
 
 struct AgentPanes: View {
     @Environment(AppModel.self) private var app
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let agents: AgentsModel
     let agent: Agent
     @Binding var selectedSessionID: String?
@@ -213,9 +250,9 @@ struct AgentPanes: View {
         List(selection: $selectedSessionID) {
             #if os(iOS)
             // ChatGPT-style recency sections (Pinned / Today / Yesterday / Previous 7 Days / …) — a
-            // deliberate divergence from web's flat list, grouping the tall single-column iPhone list
-            // by last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the
-            // flat list (its 3-pane window reads fine without sections).
+            // deliberate divergence from web's flat list, grouping the tall iOS session column by
+            // last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the flat
+            // list (its 3-pane window reads fine without sections).
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
             // sections; the tag filter chip narrows either. Both are the pure, tested OrbitKit
             // groupers over the same console-sorted, tag-filtered list (`shownSessions`).
@@ -292,12 +329,24 @@ struct AgentPanes: View {
                     placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search sessions")
         .task(id: searchQuery) { await runSearch() }
-        // "Another session needs you", above the rows. This is the *only* instance at regular width
-        // (the console beside it stays quiet), so it excludes whatever that console is showing —
-        // whose approval card is already on screen. On compact, backing out of a console clears the
-        // selection, so nothing is excluded from the list's own screen.
+        // Regular iPad keeps the lifecycle scope visible instead of burying it in the filter menu.
+        // It lives below the inline title/search chrome and stays fixed while the rows scroll. The
+        // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
+        // "Another session needs you" follows it in the same inset. This remains the only instance at
+        // regular width (the console beside it stays quiet), so it excludes that visible console.
         .safeAreaInset(edge: .top, spacing: 0) {
-            NeedsYouBannerView(excluding: app.selectedAgentSessionID)
+            VStack(spacing: 0) {
+                if listPresentation.showsPersistentScope {
+                    VStack(spacing: 0) {
+                        scopePicker
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                        Divider()
+                    }
+                    .background(.bar)
+                }
+                NeedsYouBannerView(excluding: app.selectedAgentSessionID)
+            }
         }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
@@ -322,51 +371,10 @@ struct AgentPanes: View {
         }
         .toolbar {
             #if os(iOS)
-            // Compact: both actions sit at the trailing edge. The scope switcher collapses to a
-            // pure filter-icon menu (no text) — Open/Completed/Trash as checkmarked options plus
-            // the agent-settings gear folded in — and New Session is the rightmost primary action.
-            // Declared scope-first so New Session lands at the trailing edge (SwiftUI lays trailing
-            // items out in declaration order, leading→trailing; verify the order on device).
+            // iPhone keeps scope in this compact menu. Regular iPad exposes scope in the persistent
+            // segmented control above the list, so this menu narrows to tag filter/group + settings.
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    ForEach(SessionView.pickerCases) { v in
-                        Button { view = v } label: {
-                            if v == view { Label(v.title, systemImage: "checkmark") }
-                            else { Text(v.title) }
-                        }
-                    }
-                    if !app.sessionTags.isEmpty {
-                        Divider()
-                        // Filter by tag lives here (a submenu) rather than a persistent chip row above
-                        // the list — the row read as clutter. A checkmark marks the active tag; "All"
-                        // clears it, and the toolbar icon fills below to signal an active filter.
-                        Menu {
-                            Button { tagFilter = nil } label: {
-                                if tagFilter == nil { Label("All", systemImage: "checkmark") } else { Text("All") }
-                            }
-                            ForEach(app.sessionTags) { t in
-                                Button { tagFilter = (tagFilter == t.id ? nil : t.id) } label: {
-                                    if tagFilter == t.id { Label(t.name, systemImage: "checkmark") } else { Text(t.name) }
-                                }
-                            }
-                        } label: {
-                            Label("Filter by Tag", systemImage: "tag")
-                        }
-                        Button { groupByTag.toggle() } label: {
-                            if groupByTag { Label("Group by Tag", systemImage: "checkmark") }
-                            else { Text("Group by Tag") }
-                        }
-                    }
-                    Divider()
-                    Button { showSettings = true } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                } label: {
-                    // Filled variant when a tag filter is active, so the (now chip-less) filter state
-                    // stays visible at a glance.
-                    Image(systemName: tagFilter == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
-                }
-                .accessibilityLabel("Session scope, \(view.title)")
+                sessionOptionsMenu(includesScope: !listPresentation.showsPersistentScope)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -414,6 +422,75 @@ struct AgentPanes: View {
         // Load the owner's tag library when the pane appears so the picker + chips are populated.
         .task { await app.loadSessionTags() }
     }
+
+    #if os(iOS)
+    /// One presentation decision shared by scope chrome and row density. Only an explicit compact
+    /// width opts into the iPhone treatment, matching the app root's shell switch.
+    private var listPresentation: SessionListPresentation {
+        SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact)
+    }
+
+    /// Open / Completed / Trash stay visible on regular iPad. This is deliberately content-width,
+    /// not fixed-width, so it continues to fit the middle column at larger Dynamic Type sizes.
+    private var scopePicker: some View {
+        Picker("Session scope", selection: $view) {
+            ForEach(SessionView.pickerCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Session scope")
+    }
+
+    /// One options menu serves both iOS shells. Compact includes lifecycle scope exactly as before;
+    /// regular iPad omits that duplicate but retains tag filtering/grouping and Workspace settings.
+    private func sessionOptionsMenu(includesScope: Bool) -> some View {
+        Menu {
+            if includesScope {
+                ForEach(SessionView.pickerCases) { v in
+                    Button { view = v } label: {
+                        if v == view { Label(v.title, systemImage: "checkmark") }
+                        else { Text(v.title) }
+                    }
+                }
+            }
+            if !app.sessionTags.isEmpty {
+                if includesScope { Divider() }
+                // Filter by tag stays in a submenu instead of adding a persistent chip row. A
+                // checkmark marks the active tag; choosing it again or choosing All clears it.
+                Menu {
+                    Button { tagFilter = nil } label: {
+                        if tagFilter == nil { Label("All", systemImage: "checkmark") }
+                        else { Text("All") }
+                    }
+                    ForEach(app.sessionTags) { tag in
+                        Button { tagFilter = (tagFilter == tag.id ? nil : tag.id) } label: {
+                            if tagFilter == tag.id { Label(tag.name, systemImage: "checkmark") }
+                            else { Text(tag.name) }
+                        }
+                    }
+                } label: {
+                    Label("Filter by Tag", systemImage: "tag")
+                }
+                Button { groupByTag.toggle() } label: {
+                    if groupByTag { Label("Group by Tag", systemImage: "checkmark") }
+                    else { Text("Group by Tag") }
+                }
+            }
+            if includesScope || !app.sessionTags.isEmpty { Divider() }
+            Button { showSettings = true } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+        } label: {
+            // Filled variant keeps an active (otherwise hidden) tag filter visible at a glance.
+            Image(systemName: tagFilter == nil
+                  ? "line.3.horizontal.decrease"
+                  : "line.3.horizontal.decrease.circle.fill")
+        }
+        .accessibilityLabel(Text(includesScope
+                                 ? "Session scope, \(view.title)"
+                                 : "Session filters and workspace settings"))
+    }
+    #endif
 
     // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
     private var shownSessions: [Session] {
@@ -524,6 +601,9 @@ func newSessionDraftIdentity(_ agent: Agent) -> String {
 
 struct AgentConsoleDetail: View {
     @Environment(AppModel.self) private var app
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     var body: some View {
         if app.composingAgentSession, let registry = app.consoleRegistry, let agents = app.agents,
            let id = app.selectedAgentID, let agent = agents.agent(id) {
@@ -546,8 +626,32 @@ struct AgentConsoleDetail: View {
             // we're viewing for `/` autocomplete scoping.
             ConsoleView(sessionID: sid, agentID: app.agentID(for: sid) ?? app.selectedAgentID, registry: registry)
         } else {
+            #if os(iOS)
+            if SessionListPresentation.resolve(
+                isCompactWidth: horizontalSizeClass == .compact
+            ).showsPersistentScope {
+                ContentUnavailableView {
+                    Label("Select a session", systemImage: "bubble.left.and.bubble.right")
+                } description: {
+                    Text("The session transcript appears here.")
+                } actions: {
+                    if app.selectedAgentID != nil {
+                        Button {
+                            app.startComposingSession()
+                        } label: {
+                            Label("New Session", systemImage: "square.and.pencil")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            } else {
+                ContentUnavailableView("Select a session", systemImage: "bubble.left.and.bubble.right",
+                                       description: Text("The session transcript appears here."))
+            }
+            #else
             ContentUnavailableView("Select a session", systemImage: "bubble.left.and.bubble.right",
-                                   description: Text("The agent's live transcript appears here."))
+                                   description: Text("The session transcript appears here."))
+            #endif
         }
     }
 }
@@ -785,6 +889,9 @@ struct NewSessionView: View {
 }
 
 struct AgentSessionRow: View {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let session: Session
     /// True when the Trash tab is showing this row; the preview goes static because nothing in
     /// Trash is directly resumable. The status glyph remains the run's actual outcome.
@@ -798,7 +905,13 @@ struct AgentSessionRow: View {
 
     var body: some View {
         #if os(iOS)
-        compactRow
+        if SessionListPresentation.resolve(
+            isCompactWidth: horizontalSizeClass == .compact
+        ) == .regular {
+            regularIOSRow
+        } else {
+            compactRow
+        }
         #else
         HStack(spacing: 0) {
             // A pinned session is marked at rest by a full-height leading accent bar, flush to the
@@ -844,6 +957,43 @@ struct AgentSessionRow: View {
     }
 
     #if os(iOS)
+    /// The regular-width iPad row: two stable scan lines. Title and time own the first line; live
+    /// state takes the timestamp's slot while working. The second line spends space on at most one
+    /// named tag, then lets the preview truncate. This keeps filing metadata reachable without
+    /// letting a tag collection squeeze the session's actual identity out of the middle column.
+    private var regularIOSRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(session.title ?? "Untitled session")
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                liveIndicator
+                if let rel = relTime {
+                    Text(rel)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            HStack(spacing: 7) {
+                SessionCoordinatorBadge(session: session)
+                if let tags = session.tags, let first = tags.first {
+                    SessionTagChips(tags: [first])
+                        // Only one chip is visual; VoiceOver still hears the complete filing context.
+                        .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
+                }
+                Text(line.text)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(lineColor(line.tone))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(SessionHeader.statusWord(for: session))
+    }
+
     /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
     /// trailing relative time, a slim live cue (spinner while working / amber dot when it needs you /
     /// red dot on failure), over the preview line. No leading status glyph or pin accent bar — the

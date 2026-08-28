@@ -41,6 +41,13 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         return order.filter { !$0.adminOnly || isAdmin }
     }
 
+    /// Destinations shown below the regular-width iPad sidebar's first-class Workspace group.
+    /// Keep this derived from ``visible(isAdmin:)`` so role gating and the cross-client navigation
+    /// order stay authoritative in one place while the iPad renderer supplies the group boundary.
+    public static func managementSections(isAdmin: Bool) -> [AppSection] {
+        visible(isAdmin: isAdmin).filter { $0 != .agents }
+    }
+
     /// The section a deep-link / notification `Route` lands in. There's no aggregate Open view
     /// anymore, so "home" (`.active`) and an individual `.session` both land in Agents — the
     /// session's owning agent is resolved when routing (see `AppModel.route`).

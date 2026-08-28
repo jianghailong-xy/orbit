@@ -48,6 +48,20 @@ public enum SessionCompletionPresentation {
     public static let actionTitle = "Complete"
 }
 
+/// One width policy for the iOS session column. `nil` size classes reach the regular shell because
+/// `OrbitiOSApp.RootView` switches to the compact shell only for an explicit `.compact`; callers map
+/// that same fact to `isCompactWidth` so the row density and lifecycle control never disagree.
+public enum SessionListPresentation: Equatable, Sendable {
+    case compact
+    case regular
+
+    public static func resolve(isCompactWidth: Bool) -> SessionListPresentation {
+        isCompactWidth ? .compact : .regular
+    }
+
+    public var showsPersistentScope: Bool { self == .regular }
+}
+
 /// The relative timestamp at the trailing edge of a compact session-list row. While the row's
 /// live cue is a spinner, the cue already says the session is active and its continuously fresh
 /// `lastTurnAt` would only add a row of identical "just now" labels beside the spinners.

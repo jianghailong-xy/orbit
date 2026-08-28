@@ -901,7 +901,7 @@ private struct AgentComposePush: View {
                     .id(newSessionDraftIdentity(agent))
                 }
             } else {
-                ContentUnavailableView("Select an agent", systemImage: "person.2")
+                ContentUnavailableView("Select a workspace", systemImage: "folder")
             }
         }
         .navigationBarTitleDisplayMode(.inline)

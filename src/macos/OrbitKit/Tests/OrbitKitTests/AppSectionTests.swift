@@ -20,6 +20,11 @@ final class AppSectionTests: XCTestCase {
         XCTAssertEqual(AppSection.visible(isAdmin: true), [.runners, .agents, .tasks, .settings, .admin])
     }
 
+    func testIPadManagementGroupKeepsNavOrderAndRoleGate() {
+        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .tasks, .settings])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .tasks, .settings, .admin])
+    }
+
     func testEverySectionHasTitleAndIcon() {
         for s in AppSection.allCases {
             XCTAssertFalse(s.title.isEmpty, "\(s) missing title")
