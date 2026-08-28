@@ -201,6 +201,25 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'approvalId',
   'projectActionId',
   'decisionId',
+  // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
+  // all name rows a caller can inspect or hand back; whether the named authority is still valid is
+  // decided by the database from its immutable scope, not by preserving UUID spelling.
+  'templateId',
+  'delegationId',
+  'authorityId',
+  'decisionRequestId',
+  // Wire aliases returned by the append/CTA functions for those same durable rows.
+  'ratificationId',
+  'newDecisionRequestId',
+  'intentId',
+  // Outcome fact ingress is tenant-scoped, but each key is still an address in the canonical fact
+  // and evaluation-cut APIs rather than an equality capability. Causal predecessor ids have the
+  // same wire semantics as the fact id they reference.
+  'tenantId',
+  'grantId',
+  'factId',
+  'causalPredecessorFactId',
+  'cutId',
   // The same row as `decisionId`, under the name `[K2]`'s task ledger uses for it: a convergence
   // decision names the project-level pass that produced it, and a caller may hand that back to
   // `/projects/:id/coordinator/status`. Two names because the two ledgers are joined by a reader,
@@ -301,4 +320,9 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // which request already happened. Decoding it on the way in would make that comparison lie, and
   // it appears in no request and no response.
   'requestId',
+  // One-shot Owner Ratification capabilities. They authorize/commit an exact pending operation
+  // and are compared byte-for-byte; exposing them as public row addresses would silently break
+  // stale/duplicate CTA and action-commit fencing.
+  'ctaToken',
+  'commitToken',
 ]);

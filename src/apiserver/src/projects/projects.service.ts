@@ -113,6 +113,13 @@ export interface ProjectCoordinatorSeed {
   workspaceId: string;
 }
 
+/** Authenticated provenance for an atomic creation-time owner decision. It is transport context,
+ * never accepted from CreateProjectDto. */
+export interface ProjectCreatePrincipal {
+  type: 'OWNER' | 'RUNNER' | 'SYSTEM';
+  id: string;
+}
+
 /** Internal retry signal: the coordinator pointer changed between the optimistic pre-read (which
  * tells us which rank-30 Session to lock first) and the rank-40 Project lock that validates it. */
 class CoordinatorBindingChanged extends Error {}
@@ -274,6 +281,10 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     completionCriterionOverrideReason: true,
     revision: true,
     contentHash: true,
+    semanticRevision: true,
+    semanticHash: true,
+    evaluationPlanRevision: true,
+    evaluationPlanHash: true,
   },
 };
 
@@ -326,6 +337,10 @@ type WithAcceptanceDefinitions = {
     completionCriterionOverrideReason: string | null;
     revision: number;
     contentHash: string;
+    semanticRevision: number;
+    semanticHash: string;
+    evaluationPlanRevision: number;
+    evaluationPlanHash: string;
   }>;
   acceptanceCriteriaFormat?: string;
   acceptanceCriteria?: string | null;
@@ -364,6 +379,15 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       currentStatus: currentStatus.get(criterion.id) ?? 'UNDECIDED',
       revision: criterion.revision,
       contentHash: criterion.contentHash,
+      // Rolling/mock compatibility: old readers can omit the two new digest lanes. Real rows on
+      // migration 0195 always contain them, and then they are returned together as one coherent
+      // projection rather than leaking `undefined` keys into legacy API shapes.
+      ...(criterion.semanticRevision === undefined ? {} : {
+        semanticRevision: criterion.semanticRevision,
+        semanticHash: criterion.semanticHash,
+        evaluationPlanRevision: criterion.evaluationPlanRevision,
+        evaluationPlanHash: criterion.evaluationPlanHash,
+      }),
     })),
     acceptanceCriteriaMigration: {
       source: format,
@@ -996,9 +1020,24 @@ export class ProjectsService {
    * project it is creating — which is to say claim a conversation it does not own as this
    * project’s coordinator, and point it into a workspace it was never given.
    */
-  async create(ownerId: string, dto: CreateProjectDto, coordinator?: ProjectCoordinatorSeed) {
+  async create(
+    ownerId: string,
+    dto: CreateProjectDto,
+    coordinator?: ProjectCoordinatorSeed,
+    principal: ProjectCreatePrincipal = { type: 'SYSTEM', id: ownerId },
+  ) {
     if (!dto.title) throw new BadRequestException('title is required');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
+    if (dto.ownerRatification && (principal.type !== 'OWNER' || principal.id !== ownerId)) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'OWNER_RATIFICATION_ACTOR_FORBIDDEN',
+        message:
+          'ownerRatification can only be submitted by the owner in the same authenticated ' +
+          'project-create request; an agent or runner cannot self-approve it',
+      });
+    }
     const structuredCriteria = dto.acceptanceCriteriaItems === undefined
       ? undefined
       : ProjectsService.normalizeAcceptanceItems(dto.acceptanceCriteriaItems);
@@ -1027,8 +1066,14 @@ export class ProjectsService {
             // the column defaults, old rows rewritten by the migration) turns every project created
             // between the migration and this code into an automatic one, and rewrites exactly the
             // rows nobody asked about.
-            coordinatorEnabled: true,
-            automationPolicy: ProjectAutomationPolicy.GUARDED_AUTO,
+            coordinatorEnabled: dto.coordinatorEnabled ?? true,
+            automationPolicy: dto.automationPolicy ?? ProjectAutomationPolicy.GUARDED_AUTO,
+            ...(dto.maxConcurrentTasks !== undefined
+              ? { maxConcurrentTasks: dto.maxConcurrentTasks }
+              : {}),
+            ...(dto.sessionBudgetPerDay !== undefined
+              ? { sessionBudgetPerDay: dto.sessionBudgetPerDay }
+              : {}),
             // The control loop's row, created with the project so that "has a runtime row" is never
             // a question a later reader has to answer with a fallback.
             //
@@ -1067,32 +1112,54 @@ export class ProjectsService {
             acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
           },
         });
-        if (structuredCriteria === undefined) return created;
+        let finalProject = created;
 
-        // The INSERT compatibility trigger first makes rows from the legacy projection so an old
-        // binary remains able to create a project. Replace those rows, with the required methods,
-        // before this transaction becomes visible; the final projection write also refreshes the
-        // existing definition digest. No partially migrated structured project can commit.
-        const projection = await ProjectsService.replaceAcceptanceDefinitions(
-          client,
-          created.id,
-          dto.acceptanceCriteriaItems ?? [],
-        );
-        return client.project.update({
-          where: { id: created.id },
-          data: { acceptanceCriteria: projection, acceptanceCriteriaFormat: 'STRUCTURED' },
-          include: {
-            ...COORDINATION_INCLUDE,
-            acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
-          },
-        });
+        if (structuredCriteria !== undefined) {
+          // The INSERT compatibility trigger first makes rows from the legacy projection so an old
+          // binary remains able to create a project. Replace those rows, with the required methods,
+          // before this transaction becomes visible; the final projection write also refreshes the
+          // existing definition digest. No partially migrated structured project can commit.
+          const projection = await ProjectsService.replaceAcceptanceDefinitions(
+            client,
+            created.id,
+            dto.acceptanceCriteriaItems ?? [],
+          );
+          finalProject = await client.project.update({
+            where: { id: created.id },
+            data: { acceptanceCriteria: projection, acceptanceCriteriaFormat: 'STRUCTURED' },
+            include: {
+              ...COORDINATION_INCLUDE,
+              acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
+            },
+          });
+        }
+
+        // Explicit only for an atomic decision. Database triggers maintain ordinary creates; an
+        // atomic structured create cannot wait for its deferred definition trigger because the
+        // owner decision must bind the FINAL digest before this transaction commits.
+        let ratification: Record<string, unknown> | null = null;
+        if (dto.ownerRatification) {
+          await this.acceptance.refreshCompletionContract(client, created.id, 'PROJECT_CREATED');
+          ratification = await this.acceptance.ratifyByOwnerInTransaction(
+            client,
+            ownerId,
+            created.id,
+            {
+              decision: dto.ownerRatification.decision,
+              expectedContractDigest: dto.ownerRatification.expectedContractDigest ?? null,
+              idempotencyKey: dto.ownerRatification.idempotencyKey,
+              atomicCreate: true,
+            },
+          );
+        }
+        return { project: finalProject, ratification };
       };
       // Promoting an existing conversation changes two facts that must never split: the Project
       // points at this Session, and this Session's title becomes managed by that Project. Lock/write
       // the Session first (rank 30), then insert the new Project (rank 40). A unique conflict or any
       // other insert failure rolls the title change back with it, so a failed project_create cannot
       // leave the conversation renamed.
-      const project = coordinator
+      const createdResult = coordinator
         ? await withTransactionRetry(this.prisma, async (tx) => {
             // The Project INSERT below re-checks its owner/workspace foreign keys. Take those
             // exact key-share locks before the Session row, preserving the global 10 → 15 → 30 →
@@ -1133,7 +1200,7 @@ export class ProjectsService {
             }
             return writeProject(tx);
           }, loggedRetry(this.logger, 'projects.create'))
-        : structuredCriteria !== undefined
+        : structuredCriteria !== undefined || dto.ownerRatification !== undefined
           ? await withTransactionRetry(
               this.prisma,
               (tx) => writeProject(tx),
@@ -1141,7 +1208,10 @@ export class ProjectsService {
             )
           : await writeProject(this.prisma);
       if (coordinator) this.sessions?.announceProjectSessionChanged?.(coordinator.sessionId);
-      return withAcceptanceDefinitions(withCoordination(project));
+      const shaped = withAcceptanceDefinitions(withCoordination(createdResult.project));
+      return createdResult.ratification
+        ? { ...shaped, ownerRatification: createdResult.ratification }
+        : shaped;
     } catch (e) {
       // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
       // only when a coordinator was seeded (`id` is a server-generated uuid v7). The rows nested
@@ -1192,6 +1262,7 @@ export class ProjectsService {
       ownerId,
       dto,
       await this.coordinatorFromSession(ownerId, runnerId, sessionId),
+      { type: 'RUNNER', id: runnerId },
     );
   }
 
