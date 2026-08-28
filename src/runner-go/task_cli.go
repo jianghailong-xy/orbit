@@ -2291,6 +2291,8 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
+				"--acceptance-timeout-seconds <n> (requested v2 timeout; admitted exactly or rejected before spawn)",
+				"--acceptance-owner-timeout-ceiling-seconds <n> (owner ceiling checked before spawn; requires --acceptance-timeout-seconds)",
 			)
 		case "task_update":
 			capabilities[i].Arguments = append(
@@ -2298,6 +2300,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion <EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF> (replace the task's one normal completion criterion)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
+				"--acceptance-timeout-seconds <n> (replace the requested v2 timeout; never silently clamped)",
+				"--acceptance-owner-timeout-ceiling-seconds <n> (replace the owner ceiling; requires --acceptance-timeout-seconds)",
+				"--clear-acceptance-timeout (return the executable declaration to the N-1 legacy plan)",
 				"--clear-executable-acceptance (clear both EXECUTABLE fields)",
 			)
 		}

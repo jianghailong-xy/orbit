@@ -31,12 +31,14 @@ WORKDIR /app
 COPY src/runner-go ./src/runner-go
 COPY package.json ./package.json
 COPY scripts ./scripts
+COPY contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
 # Bake this deployment's public origin into the runner binary's defaultServer (see
 # build-binaries.sh) so a self-hosted runner's `orbit register` needs no --server.
 ARG PUBLIC_ORIGIN
 ARG ORBIT_SOURCE_SHA
 ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
-RUN ORBIT_SOURCE_SHA="$ORBIT_SOURCE_SHA" bash scripts/build-binaries.sh dist-bin
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    ORBIT_SOURCE_SHA="$ORBIT_SOURCE_SHA" bash scripts/build-binaries.sh dist-bin
 
 # ──────────────────────────────── runtime ────────────────────────────────
 FROM nginx:alpine AS runtime

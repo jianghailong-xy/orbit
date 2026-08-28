@@ -60,6 +60,7 @@ for t in "${TARGETS[@]}"; do
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
 done
 
-node scripts/runner-release-manifest.mjs "$VER" "$OUT/version.json"
+(cd "$SRC" && go run ./cmd/release-manifest \
+  "$VER" "$ROOT/contracts/runner-write-protocol.json" "$ROOT/$OUT/version.json")
 echo ">> wrote $OUT/version.json (v$VER)"
 ls -lh "$OUT"
