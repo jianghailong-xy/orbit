@@ -268,6 +268,20 @@ async function seedScope(label, options = {}) {
     cutId, tenantId, projectId, bindingDigest, digest(`fact-set:${label}`),
     `cut:${label}`, digest(`cut-request:${label}`),
   ]);
+  const proofDigest = digest(`proof:${label}`);
+  const evaluatorResult = {
+    schemaVersion: 1,
+    evaluatorVersion: 'action-test/2.0.0',
+    evaluatorDigest: binding.evaluatorDigest,
+    bindingDigest,
+    evaluatedThroughLogicalTime: '1',
+    proof: { proofDigest },
+    proofGraph: {},
+    activeMandatoryObligations: [sourceObligation],
+    attempts: [],
+    rejectedFacts: [],
+    closed: false,
+  };
   await pool.query(`
     INSERT INTO outcome_evaluator_result (
       evaluation_id, tenant_id, project_id, subject_type, subject_id, binding_digest,
@@ -275,12 +289,12 @@ async function seedScope(label, options = {}) {
       evaluation_digest, proof_digest, result_digest, is_closed, result
     ) VALUES (
       $1::uuid, $2::uuid, $3::uuid, 'PROJECT', $3::text, $4, $5::uuid, 1,
-      'action-test/2.0.0', $6, $7, $8, $9, false, '{}'::jsonb
+      'action-test/2.0.0', $6, $7, $8, $9, false, $10::jsonb
     )
   `, [
     evaluationId, tenantId, projectId, bindingDigest, cutId,
-    digest(`evaluator:${label}`), digest(`evaluation:${label}`), digest(`proof:${label}`),
-    digest(`result:${label}`),
+    binding.evaluatorDigest, digest(`evaluation:${label}`), proofDigest,
+    canonicalDigest(evaluatorResult), JSON.stringify(evaluatorResult),
   ]);
   await pool.query(`
     INSERT INTO outcome_obligation_revision (
