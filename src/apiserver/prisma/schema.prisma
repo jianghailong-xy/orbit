@@ -4157,3 +4157,191 @@ model ModelProvider {
   @@index([ownerId])
   @@map("model_provider")
 }
+
+/// The per-tenant/project serialization point for canonical append and evaluation-cut sealing.
+/// It is coordination metadata, not a fact or a projection.
+model OutcomeFactStream {
+  tenantId        String   @map("tenant_id") @db.Uuid
+  projectId       String   @map("project_id") @db.Uuid
+  lastLogicalTime BigInt   @default(0) @map("last_logical_time")
+  bindingEpoch    BigInt   @default(0) @map("binding_epoch")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  @@id([tenantId, projectId])
+  @@map("outcome_fact_stream")
+}
+
+/// Append-only binding history. Current means the highest epoch under the stream-row lock.
+model OutcomeFactBinding {
+  tenantId         String   @map("tenant_id") @db.Uuid
+  projectId        String   @map("project_id") @db.Uuid
+  bindingDigest    String   @map("binding_digest") @db.Char(64)
+  bindingEpoch     BigInt   @map("binding_epoch")
+  subjectType      String   @map("subject_type")
+  subjectId        String   @map("subject_id")
+  goalId           String   @map("goal_id")
+  goalRevision     BigInt   @map("goal_revision")
+  riskPolicyDigest String   @map("risk_policy_digest") @db.Char(64)
+  factSchemaDigest String   @map("fact_schema_digest") @db.Char(64)
+  targetDigest     String   @map("target_digest") @db.Char(64)
+  targetRef        String   @map("target_ref")
+  binding          Json
+  registeredAt     DateTime @default(now()) @map("registered_at")
+
+  @@id([tenantId, projectId, bindingDigest])
+  @@unique([tenantId, projectId, bindingEpoch])
+  @@index([tenantId, projectId, bindingEpoch(sort: Desc)], map: "outcome_fact_binding_current_idx")
+  @@map("outcome_fact_binding")
+}
+
+/// Closed authority lanes. Unknown combinations fail before a canonical fact is allocated.
+model OutcomeFactAuthorityMatrix {
+  factKind                            String  @map("fact_kind")
+  claimType                           String  @map("claim_type")
+  principalType                       String  @map("principal_type")
+  sourceSystem                        String  @map("source_system")
+  trustClass                          String  @map("trust_class")
+  proofEligible                       Boolean @map("proof_eligible")
+  signatureRequired                   Boolean @map("signature_required")
+  requiresControlledRunnerExit        Boolean @map("requires_controlled_runner_exit")
+  requiresTargetRepositoryVerification Boolean @map("requires_target_repository_verification")
+  requiresCurrentThreatModel          Boolean @map("requires_current_threat_model")
+
+  @@id([factKind, claimType, principalType, sourceSystem])
+  @@map("outcome_fact_authority_matrix")
+}
+
+/// An immutable, scope-bound grant. Revocation is a separate append-only row.
+model OutcomeFactAuthorityGrant {
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  projectId                  String   @map("project_id") @db.Uuid
+  grantId                    String   @map("grant_id") @db.Uuid
+  grantDigest                String   @map("grant_digest") @db.Char(64)
+  scopeDigest                String   @map("scope_digest") @db.Char(64)
+  delegationChainDigest      String   @map("delegation_chain_digest") @db.Char(64)
+  principalType              String   @map("principal_type")
+  principalId                String   @map("principal_id")
+  factKind                   String   @map("fact_kind")
+  claimType                  String   @map("claim_type")
+  sourceSystem               String   @map("source_system")
+  collectorId                String   @map("collector_id")
+  collectorVersion           String   @map("collector_version")
+  signatureKeyId             String?  @map("signature_key_id")
+  validFromLogicalTime       BigInt   @map("valid_from_logical_time")
+  validThroughLogicalTime    BigInt?  @map("valid_through_logical_time")
+  riskPolicyDigest           String   @map("risk_policy_digest") @db.Char(64)
+  registeredAt               DateTime @default(now()) @map("registered_at")
+
+  @@id([tenantId, projectId, grantId])
+  @@unique([tenantId, projectId, grantDigest])
+  @@map("outcome_fact_authority_grant")
+}
+
+model OutcomeFactAuthorityRevocation {
+  tenantId            String   @map("tenant_id") @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  grantId             String   @map("grant_id") @db.Uuid
+  revokedAtLogicalTime BigInt  @map("revoked_at_logical_time")
+  reasonDigest        String   @map("reason_digest") @db.Char(64)
+  recordedAt          DateTime @default(now()) @map("recorded_at")
+
+  @@id([tenantId, projectId, grantId])
+  @@map("outcome_fact_authority_revocation")
+}
+
+/// The immutable canonical ledger. `envelope` is the exact replay input; scalar columns are
+/// independently constrained/indexed metadata and never a writable summary of it.
+model OutcomeCanonicalFact {
+  factId                    String   @id @map("fact_id") @db.Uuid
+  tenantId                  String   @map("tenant_id") @db.Uuid
+  projectId                 String   @map("project_id") @db.Uuid
+  subjectType               String   @map("subject_type")
+  subjectId                 String   @map("subject_id")
+  factKind                  String   @map("fact_kind")
+  claimType                 String   @map("claim_type")
+  principalType             String   @map("principal_type")
+  principalId               String   @map("principal_id")
+  sourceSystem              String   @map("source_system")
+  grantId                   String   @map("grant_id") @db.Uuid
+  bindingDigest             String   @map("binding_digest") @db.Char(64)
+  schemaVersion             Int      @map("schema_version")
+  schemaDigest              String   @map("schema_digest") @db.Char(64)
+  payload                   Json
+  payloadDigest             String   @map("payload_digest") @db.Char(64)
+  observedAt                DateTime @map("observed_at")
+  recordedAt                DateTime @map("recorded_at")
+  logicalTime               BigInt   @map("logical_time")
+  causalPredecessorFactId   String?  @map("causal_predecessor_fact_id") @db.Uuid
+  idempotencyKey            String   @map("idempotency_key")
+  requestDigest             String   @map("request_digest") @db.Char(64)
+  trustClass                String   @map("trust_class")
+  proofEligible             Boolean  @map("proof_eligible")
+  envelope                  Json
+  envelopeDigest            String   @map("envelope_digest") @db.Char(64)
+
+  @@unique([tenantId, projectId, factId])
+  @@unique([tenantId, projectId, logicalTime])
+  @@unique([tenantId, projectId, idempotencyKey])
+  @@index([tenantId, projectId, bindingDigest, logicalTime, factId], map: "outcome_canonical_fact_cut_idx")
+  @@index([tenantId, projectId, subjectType, subjectId, logicalTime(sort: Desc)], map: "outcome_canonical_fact_subject_idx")
+  @@map("outcome_canonical_fact")
+}
+
+model OutcomeEvaluationCut {
+  cutId                    String   @id @map("cut_id") @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  projectId                String   @map("project_id") @db.Uuid
+  bindingDigest            String   @map("binding_digest") @db.Char(64)
+  watermarkLogicalTime     BigInt   @map("watermark_logical_time")
+  factCount                Int      @map("fact_count")
+  proofFactCount           Int      @map("proof_fact_count")
+  factSetDigest            String   @map("fact_set_digest") @db.Char(64)
+  openedAt                 DateTime @map("opened_at")
+  sealedAt                 DateTime @map("sealed_at")
+  complete                 Boolean
+  linearizable             Boolean
+  collectorVersion         String   @map("collector_version")
+  idempotencyKey           String   @map("idempotency_key")
+  requestDigest            String   @map("request_digest") @db.Char(64)
+  cutEnvelope              Json     @map("cut_envelope")
+
+  @@unique([tenantId, projectId, cutId])
+  @@unique([tenantId, projectId, idempotencyKey])
+  @@map("outcome_evaluation_cut")
+}
+
+model OutcomeEvaluationCutFact {
+  tenantId       String  @map("tenant_id") @db.Uuid
+  projectId      String  @map("project_id") @db.Uuid
+  cutId          String  @map("cut_id") @db.Uuid
+  factId         String  @map("fact_id") @db.Uuid
+  ordinal        Int
+  logicalTime    BigInt  @map("logical_time")
+  trustDecision  String  @map("trust_decision")
+  proofEligible  Boolean @map("proof_eligible")
+  envelopeDigest String  @map("envelope_digest") @db.Char(64)
+
+  @@id([tenantId, projectId, cutId, factId])
+  @@unique([tenantId, projectId, cutId, ordinal])
+  @@map("outcome_evaluation_cut_fact")
+}
+
+/// Mutable and rebuildable. Consumers must use the freshness view defined by migration 0194;
+/// evaluation/replay read OutcomeCanonicalFact plus OutcomeEvaluationCutFact instead.
+model OutcomeEvaluationProjection {
+  tenantId                String   @map("tenant_id") @db.Uuid
+  projectId               String   @map("project_id") @db.Uuid
+  subjectType             String   @map("subject_type")
+  subjectId               String   @map("subject_id")
+  bindingDigest           String   @map("binding_digest") @db.Char(64)
+  cutId                   String   @map("cut_id") @db.Uuid
+  watermarkLogicalTime    BigInt   @map("watermark_logical_time")
+  projection              Json
+  projectionDigest        String   @map("projection_digest") @db.Char(64)
+  isClosed                Boolean  @map("is_closed")
+  projectionRevision      BigInt   @map("projection_revision")
+  writtenAt               DateTime @default(now()) @map("written_at")
+
+  @@id([tenantId, projectId, subjectType, subjectId])
+  @@map("outcome_evaluation_projection")
+}

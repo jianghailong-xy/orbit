@@ -22,7 +22,8 @@
     "test:outcome-reconciler:bootstrap": "bash scripts/outcome-reconciler-bootstrap.sh",
     "test:outcome-reconciler:contract": "bash scripts/outcome-reconciler-contract.sh",
     "dev:apiserver": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/apiserver",
-    "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web"
+    "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
+    "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh"
   },
   "engines": {
     "node": ">=26.0.0"
