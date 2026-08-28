@@ -201,7 +201,7 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	tools := toolDescriptors(false, false)
 
 	createProps := mcpToolProps(tools, "project_create")
-	for _, field := range []string{"title", "goal", "acceptanceCriteria", "instructions"} {
+	for _, field := range []string{"title", "goal", "instructions"} {
 		prop, _ := createProps[field].(map[string]interface{})
 		if prop["type"] != "string" {
 			t.Fatalf("project_create %s schema = %#v", field, createProps[field])
@@ -220,7 +220,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	if required, _ := createItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod,completionCriterion" {
 		t.Fatalf("project_create criterion required = %#v", createItem["required"])
 	}
-	if len(createProps) != 5 {
+	if _, exposed := createProps["acceptanceCriteria"]; exposed {
+		t.Fatal("project_create exposes legacy acceptanceCriteria as an agent authoring fallback")
+	}
+	if len(createProps) != 4 {
 		t.Fatalf("project_create properties = %#v", createProps)
 	}
 	if got := mcpToolRequired(t, tools, "project_create"); len(got) != 1 || got[0] != "title" {
@@ -228,7 +231,7 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 
 	updateProps := mcpToolProps(tools, "project_update")
-	if len(updateProps) != 8 {
+	if len(updateProps) != 7 {
 		t.Fatalf("project_update properties = %#v", updateProps)
 	}
 	// The compare-and-swap fence is a STRING: configRevision is a bigint
@@ -239,12 +242,15 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	// The prose fields accept null, and that is not decoration: without it a model following the
 	// schema has no way to express "there is no stated goal any more" and would send "" instead.
-	for _, field := range []string{"goal", "acceptanceCriteria", "instructions"} {
+	for _, field := range []string{"goal", "instructions"} {
 		prop, _ := updateProps[field].(map[string]interface{})
 		types, _ := prop["type"].([]string)
 		if len(types) != 2 || types[0] != "string" || types[1] != "null" {
 			t.Fatalf("project_update %s type = %#v", field, prop["type"])
 		}
+	}
+	if _, exposed := updateProps["acceptanceCriteria"]; exposed {
+		t.Fatal("project_update exposes legacy acceptanceCriteria as an agent authoring fallback")
 	}
 	updateItems, _ := updateProps["acceptanceCriteriaItems"].(map[string]interface{})
 	if updateItems["type"] != "array" || updateItems["maxItems"] != maxProjectAcceptanceCriteriaItems {
@@ -302,8 +308,16 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 			t.Fatalf("%s does not tell the model it may write these fields", name)
 		}
 	}
-	if !strings.Contains(mcpToolDescription(tools, "project_update"), "null to clear") {
-		t.Fatalf("project_update does not document the null clear: %q", mcpToolDescription(tools, "project_update"))
+	for _, name := range []string{"project_create", "project_update"} {
+		description := mcpToolDescription(tools, name)
+		for _, want := range []string{"user/JWT API", "not an agent fallback", "HUMAN_SIGNOFF", "completionCriterion"} {
+			if !strings.Contains(description, want) {
+				t.Fatalf("%s does not explain legacy criteria compatibility (%q): %q", name, want, description)
+			}
+		}
+	}
+	if !strings.Contains(mcpToolDescription(tools, "project_update"), "[] to clear") {
+		t.Fatalf("project_update does not document the structured clear: %q", mcpToolDescription(tools, "project_update"))
 	}
 }
 
@@ -343,10 +357,9 @@ func TestMCPProjectCreatePostsTheRunnerProjectRoute(t *testing.T) {
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("project_create", map[string]interface{}{
-		"title":              "Crawl",
-		"goal":               "Index the corpus",
-		"acceptanceCriteria": "Every shard reported",
-		"instructions":       "Work shard by shard",
+		"title":        "Crawl",
+		"goal":         "Index the corpus",
+		"instructions": "Work shard by shard",
 	})
 	if res["isError"] == true {
 		t.Fatalf("project_create returned an error: %#v", res["content"])
@@ -355,10 +368,9 @@ func TestMCPProjectCreatePostsTheRunnerProjectRoute(t *testing.T) {
 		t.Fatalf("project_create hit %s %s", method, path)
 	}
 	want := map[string]interface{}{
-		"title":              "Crawl",
-		"goal":               "Index the corpus",
-		"acceptanceCriteria": "Every shard reported",
-		"instructions":       "Work shard by shard",
+		"title":        "Crawl",
+		"goal":         "Index the corpus",
+		"instructions": "Work shard by shard",
 	}
 	if fmt.Sprintf("%v", body) != fmt.Sprintf("%v", want) {
 		t.Fatalf("project_create body = %#v", body)
@@ -441,7 +453,7 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 	}
 }
 
-func TestMCPProjectWritesRejectCompetingAcceptanceShapes(t *testing.T) {
+func TestMCPProjectWritesRejectLegacyAcceptanceBeforeHTTP(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
 	defer srv.Close()
@@ -452,23 +464,24 @@ func TestMCPProjectWritesRejectCompetingAcceptanceShapes(t *testing.T) {
 		args map[string]interface{}
 	}{
 		{"project_create", map[string]interface{}{
-			"title": "LFS", "acceptanceCriteria": "Build", "acceptanceCriteriaItems": []interface{}{},
+			"title": "LFS", "acceptanceCriteria": "Build",
 		}},
 		{"project_update", map[string]interface{}{
-			"projectId": "proj-1", "acceptanceCriteria": nil, "acceptanceCriteriaItems": []interface{}{},
+			"projectId": "proj-1", "acceptanceCriteria": nil,
 		}},
 	} {
 		res := mcp.callTool(call.name, call.args)
 		if res["isError"] != true {
-			t.Fatalf("%s accepted two acceptance shapes: %#v", call.name, res)
+			t.Fatalf("%s accepted legacy acceptanceCriteria: %#v", call.name, res)
 		}
 		content, _ := res["content"].([]map[string]interface{})
-		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "cannot be used together") {
-			t.Fatalf("%s conflict result = %#v", call.name, res)
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "HUMAN_SIGNOFF") ||
+			!strings.Contains(content[0]["text"].(string), "completionCriterion") {
+			t.Fatalf("%s legacy refusal = %#v", call.name, res)
 		}
 	}
 	if hit {
-		t.Fatal("competing acceptance authoring shapes reached the server")
+		t.Fatal("legacy acceptance authoring reached the server")
 	}
 }
 

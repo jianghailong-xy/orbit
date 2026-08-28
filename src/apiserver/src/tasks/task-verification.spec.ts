@@ -134,6 +134,9 @@ test('a task reporting DONE in an opted-in list gets a verification run', async 
 
   assert.equal(f.created.length, 1);
   assert.equal(f.created[0].verifiesTaskId, TASK_ID);
+  assert.equal(f.created[0].completionCriterion, 'VERIFICATION');
+  assert.equal(f.created[0].completionPolicy, 'MANUAL');
+  assert.equal(f.created[0].completionCriterionOverrideReason, null);
   assert.equal(f.created[0].listId, 'list-1');
   assert.deepEqual(f.executed, ['verify-1']);
   assert.deepEqual(f.published, [[

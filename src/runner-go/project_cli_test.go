@@ -440,7 +440,7 @@ func TestProjectCreatePostsTheRunnerProjectRoute(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"create", "--title", "Crawl", "--goal", "Index the corpus",
-		"--acceptance-criteria", "Every shard reported", "--instructions", "Work shard by shard",
+		"--instructions", "Work shard by shard",
 		"--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
@@ -455,16 +455,37 @@ func TestProjectCreatePostsTheRunnerProjectRoute(t *testing.T) {
 	// The server's own field names, carried through unrenamed — the CLI holds no second opinion
 	// about what a project has.
 	want := map[string]interface{}{
-		"title":              "Crawl",
-		"goal":               "Index the corpus",
-		"acceptanceCriteria": "Every shard reported",
-		"instructions":       "Work shard by shard",
+		"title":        "Crawl",
+		"goal":         "Index the corpus",
+		"instructions": "Work shard by shard",
 	}
 	if fmt.Sprintf("%v", body) != fmt.Sprintf("%v", want) {
 		t.Fatalf("project create body = %#v", body)
 	}
 	if out.String() != projectCreatedJSON+"\n" {
 		t.Fatalf("project create output = %q", out.String())
+	}
+}
+
+func TestProjectCreateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	for _, args := range [][]string{
+		{"create", "--title", "LFS", "--acceptance-criteria", "Build succeeds"},
+		{"create", "--title", "LFS", "--acceptance-criteria-file", "-"},
+	} {
+		var out bytes.Buffer
+		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
+		if err == nil || !strings.Contains(err.Error(), "HUMAN_SIGNOFF") ||
+			!strings.Contains(err.Error(), "completionCriterion") {
+			t.Fatalf("legacy project create = %v", err)
+		}
+	}
+	if hit {
+		t.Fatal("legacy project create reached HTTP")
 	}
 }
 
@@ -733,10 +754,9 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	}
 }
 
-// --clear-<field> is the one way to remove prose, and it has to travel as a JSON null: an omitted
-// key means "leave it alone" and an empty string is a value the server would store as null only
-// by coincidence of its own trimming rule.
-func TestProjectUpdateClearsProseWithAnExplicitNull(t *testing.T) {
+// --clear-<field> removes ordinary prose as JSON null. Acceptance criteria use the structured []
+// spelling tested above, because a legacy null is still the implicit-HUMAN_SIGNOFF authoring shape.
+func TestProjectUpdateClearsOrdinaryProseWithAnExplicitNull(t *testing.T) {
 	var raw string
 	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -751,12 +771,12 @@ func TestProjectUpdateClearsProseWithAnExplicitNull(t *testing.T) {
 
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
-		"update", "proj-1", "--clear-goal", "--clear-acceptance-criteria", "--clear-instructions", "--json",
+		"update", "proj-1", "--clear-goal", "--clear-instructions", "--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatalf("project update: %v", err)
 	}
-	for _, field := range []string{"goal", "acceptanceCriteria", "instructions"} {
+	for _, field := range []string{"goal", "instructions"} {
 		value, present := body[field]
 		if !present {
 			t.Fatalf("project update dropped the %s clear: %s", field, raw)
@@ -765,8 +785,31 @@ func TestProjectUpdateClearsProseWithAnExplicitNull(t *testing.T) {
 			t.Fatalf("project update sent %s = %#v, not null: %s", field, value, raw)
 		}
 	}
-	if len(body) != 3 {
+	if len(body) != 2 {
 		t.Fatalf("project update body = %s", raw)
+	}
+}
+
+func TestProjectUpdateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	for _, args := range [][]string{
+		{"update", "proj-1", "--acceptance-criteria", "Build succeeds"},
+		{"update", "proj-1", "--acceptance-criteria-file", "-"},
+		{"update", "proj-1", "--clear-acceptance-criteria"},
+	} {
+		var out bytes.Buffer
+		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
+		if err == nil || !strings.Contains(err.Error(), "HUMAN_SIGNOFF") ||
+			!strings.Contains(err.Error(), "use [] to clear") {
+			t.Fatalf("legacy project update = %v", err)
+		}
+	}
+	if hit {
+		t.Fatal("legacy project update reached HTTP")
 	}
 }
 
@@ -785,13 +828,8 @@ func TestProjectUpdateRejectsContradictoryFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"update", "proj-1", "--clear-goal", "--goal", "Index the corpus"},
 		{"update", "proj-1", "--clear-goal", "--goal-file", "-"},
-		{"update", "proj-1", "--clear-acceptance-criteria", "--acceptance-criteria", "Every shard"},
-		{"update", "proj-1", "--clear-acceptance-criteria", "--acceptance-criteria-file", "-"},
 		{"update", "proj-1", "--clear-instructions", "--instructions", "Shard by shard"},
 		{"update", "proj-1", "--clear-instructions", "--instructions-file", "-"},
-		{"update", "proj-1", "--goal-file", "-", "--acceptance-criteria-file", "-"},
-		{"update", "proj-1", "--acceptance-criteria", "Every shard", "--acceptance-criteria-items", `[{"text":"Every shard"}]`},
-		{"update", "proj-1", "--clear-acceptance-criteria", "--acceptance-criteria-items", "[]"},
 	} {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("from stdin"), &out)
@@ -1037,6 +1075,35 @@ func TestProjectCreateHelpStatesTheCoordinatorDefault(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("project_create is missing from the capability document")
+	}
+}
+
+func TestProjectWriteHelpTreatsLegacyCriteriaAsUserCompatibilityNotAgentFallback(t *testing.T) {
+	for _, action := range []string{"create", "update"} {
+		var out bytes.Buffer
+		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("project %s --help: %v", action, err)
+		}
+		text := out.String()
+		for _, want := range []string{"user/JWT API", "not an agent authoring fallback", "HUMAN_SIGNOFF", "completionCriterion"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("project %s help does not explain legacy compatibility (%q):\n%s", action, want, text)
+			}
+		}
+	}
+
+	for _, command := range projectCLICapabilities {
+		if command.Tool != "project_create" && command.Tool != "project_update" {
+			continue
+		}
+		if strings.Contains(strings.Join(command.Arguments, " "), "--acceptance-criteria <") {
+			t.Fatalf("%s capability still advertises the refused legacy write: %#v", command.Tool, command.Arguments)
+		}
+		for _, want := range []string{"user/JWT API", "not an agent fallback", "HUMAN_SIGNOFF", "completionCriterion"} {
+			if !strings.Contains(command.Description, want) {
+				t.Fatalf("%s capability does not explain legacy compatibility (%q): %q", command.Tool, want, command.Description)
+			}
+		}
 	}
 }
 

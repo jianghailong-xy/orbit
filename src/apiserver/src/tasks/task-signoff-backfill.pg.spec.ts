@@ -190,17 +190,17 @@ suite('N8 import and backfill are explicit, idempotent and notification-bounded'
       assert.equal(imported.legacyImport?.importedById, f.ownerId);
       assert.ok(imported.legacyImport?.importedAt instanceof Date);
       assert.equal(imported.legacyImport?.devicePolicy, 'IN_APP_ONLY');
-      assert.equal(imported.judgmentRequest.origin, 'LEGACY_IMPORT');
-      assert.equal(imported.judgmentRequest.devicePolicy, 'IN_APP_ONLY');
-      assert.equal(imported.judgmentRequest.recipientId, f.ownerId);
+      assert.equal(imported.judgmentRequest!.origin, 'LEGACY_IMPORT');
+      assert.equal(imported.judgmentRequest!.devicePolicy, 'IN_APP_ONLY');
+      assert.equal(imported.judgmentRequest!.recipientId, f.ownerId);
       const delivery = await db.taskJudgmentPushDelivery.findFirstOrThrow({
-        where: { requestId: imported.judgmentRequest.id },
+        where: { requestId: imported.judgmentRequest!.id },
       });
       assert.equal(delivery.status, 'CANCELLED');
       assert.equal(delivery.attempts, 0);
       assert.equal(delivery.errorCode, 'POLICY_IN_APP_ONLY');
       assert.equal(await db.taskJudgmentInboxItem.count({
-        where: { requestId: imported.judgmentRequest.id, recipientId: f.ownerId },
+        where: { requestId: imported.judgmentRequest!.id, recipientId: f.ownerId },
       }), 1);
       assert.equal((await db.task.findUniqueOrThrow({ where: { id: subject.id } })).status,
         TaskStatus.OPEN, 'import and request filing never derive completion');
@@ -212,7 +212,7 @@ suite('N8 import and backfill are explicit, idempotent and notification-bounded'
         input,
       );
       assert.equal(replay.id, imported.id);
-      assert.equal(replay.judgmentRequest.id, imported.judgmentRequest.id);
+      assert.equal(replay.judgmentRequest!.id, imported.judgmentRequest!.id);
       assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: subject.id } }), 1);
       assert.equal(await db.taskLegacyEvidenceImport.count({ where: { taskId: subject.id } }), 1);
       assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: subject.id } }), 1);

@@ -112,11 +112,16 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   )));
   assert.equal(new Set(concurrent.map((row) => row.id)).size, 1);
   assert.equal(new Set(concurrent.map((row) => row.revision)).size, 1);
-  assert.equal(new Set(concurrent.map((row) => row.judgmentRequest.id)).size, 1);
-  assert.equal(concurrent[0].judgmentRequest.status, 'OPEN');
-  assert.equal(concurrent[0].judgmentRequest.kind, 'HUMAN_SIGNOFF');
-  assert.equal(concurrent[0].judgmentRequest.recipientType, 'ACCOUNT_OWNER');
-  assert.equal(concurrent[0].judgmentRequest.recipientId, f.ownerId);
+  assert.equal(new Set(concurrent.map((row) => row.judgmentRequest!.id)).size, 1);
+  assert.equal(concurrent[0].judgmentRequest!.status, 'OPEN');
+  assert.equal(concurrent[0].judgmentRequest!.kind, 'HUMAN_SIGNOFF');
+  assert.equal(concurrent[0].judgmentRequest!.recipientType, 'ACCOUNT_OWNER');
+  assert.equal(concurrent[0].judgmentRequest!.recipientId, f.ownerId);
+  assert.deepEqual(concurrent[0].consumption, {
+    kind: 'JUDGMENT_REQUEST',
+    judgmentRequestId: concurrent[0].judgmentRequest!.id,
+    requestKind: 'HUMAN_SIGNOFF',
+  });
   assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 1);
   assert.equal(await db.taskCompletionEvidenceIdempotency.count({ where: { taskId: f.taskId } }), 1);
   assert.equal(await db.taskJudgmentRequest.count({
@@ -141,7 +146,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(replay.sourceAttemptId, null);
   assert.ok(replay.submittedAt instanceof Date);
   assert.deepEqual(replay.idempotencyKeys, ['turn-1-complete', 'turn-1-equivalent']);
-  assert.equal(replay.judgmentRequest.id, concurrent[0].judgmentRequest.id);
+  assert.equal(replay.judgmentRequest!.id, concurrent[0].judgmentRequest!.id);
 
   await assert.rejects(
     service.submit(f.ownerId, f.taskId, actor, {
@@ -172,17 +177,17 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(changed.revision, '2');
   assert.notEqual(changed.id, replay.id);
   assert.notEqual(changed.evidenceDigest, replay.evidenceDigest);
-  assert.notEqual(changed.judgmentRequest.id, replay.judgmentRequest.id);
+  assert.notEqual(changed.judgmentRequest!.id, replay.judgmentRequest!.id);
   const audit = await service.list(f.ownerId, f.taskId);
   assert.deepEqual(audit.map((row) => row.revision), ['1', '2']);
   assert.equal(audit[0].id, replay.id);
-  assert.equal(audit[0].judgmentRequest.status, 'SUPERSEDED');
-  assert.equal(audit[0].judgmentRequest.supersededById, changed.judgmentRequest.id);
-  assert.equal(audit[0].judgmentRequest.supersessionRule, 'EVIDENCE_REVISED');
-  assert.equal(audit[0].judgmentRequest.supersededActorType, CreatorType.AGENT);
-  assert.equal(audit[0].judgmentRequest.supersededActorId, f.workspaceId);
-  assert.equal(audit[0].judgmentRequest.supersededSourceSessionId, f.sessionId);
-  assert.equal(audit[1].judgmentRequest.status, 'OPEN');
+  assert.equal(audit[0].judgmentRequest!.status, 'SUPERSEDED');
+  assert.equal(audit[0].judgmentRequest!.supersededById, changed.judgmentRequest!.id);
+  assert.equal(audit[0].judgmentRequest!.supersessionRule, 'EVIDENCE_REVISED');
+  assert.equal(audit[0].judgmentRequest!.supersededActorType, CreatorType.AGENT);
+  assert.equal(audit[0].judgmentRequest!.supersededActorId, f.workspaceId);
+  assert.equal(audit[0].judgmentRequest!.supersededSourceSessionId, f.sessionId);
+  assert.equal(audit[1].judgmentRequest!.status, 'OPEN');
   assert.equal(await db.taskJudgmentRequest.count({
     where: { taskId: f.taskId, status: 'OPEN' },
   }), 1);
@@ -191,7 +196,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
      WHERE "task_id" = '${f.taskId}'::uuid
   `);
   assert.deepEqual(openSignals.rows, [{
-    id: changed.judgmentRequest.id,
+    id: changed.judgmentRequest!.id,
     evidence_digest: changed.evidenceDigest,
   }]);
   assert.equal((await sql.query<{ n: number }>(`
@@ -213,19 +218,19 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
     evidence: { ...firstPayload, artifactSha256: 'b'.repeat(64), note: 'useful after DONE' },
   });
   assert.equal(terminalEvidence.revision, '3');
-  assert.equal(terminalEvidence.judgmentRequest.status, 'SUPERSEDED');
-  assert.equal(terminalEvidence.judgmentRequest.supersededById, null);
-  assert.equal(terminalEvidence.judgmentRequest.supersessionRule, 'TASK_ALREADY_DONE');
-  assert.equal(terminalEvidence.judgmentRequest.supersededActorType, CreatorType.AGENT);
-  assert.equal(terminalEvidence.judgmentRequest.supersededActorId, f.workspaceId);
-  assert.equal(terminalEvidence.judgmentRequest.supersededSourceSessionId, f.sessionId);
+  assert.equal(terminalEvidence.judgmentRequest!.status, 'SUPERSEDED');
+  assert.equal(terminalEvidence.judgmentRequest!.supersededById, null);
+  assert.equal(terminalEvidence.judgmentRequest!.supersessionRule, 'TASK_ALREADY_DONE');
+  assert.equal(terminalEvidence.judgmentRequest!.supersededActorType, CreatorType.AGENT);
+  assert.equal(terminalEvidence.judgmentRequest!.supersededActorId, f.workspaceId);
+  assert.equal(terminalEvidence.judgmentRequest!.supersededSourceSessionId, f.sessionId);
   assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 3);
   const terminalAudit = await service.list(f.ownerId, f.taskId);
   assert.deepEqual(terminalAudit.map((row) => row.revision), ['1', '2', '3']);
   assert.deepEqual(terminalAudit[2].evidence, terminalEvidence.evidence);
-  assert.equal(terminalAudit[1].judgmentRequest.status, 'SUPERSEDED');
-  assert.equal(terminalAudit[1].judgmentRequest.supersessionRule, 'TASK_ALREADY_DONE');
-  assert.equal(terminalAudit[2].judgmentRequest.status, 'SUPERSEDED');
+  assert.equal(terminalAudit[1].judgmentRequest!.status, 'SUPERSEDED');
+  assert.equal(terminalAudit[1].judgmentRequest!.supersessionRule, 'TASK_ALREADY_DONE');
+  assert.equal(terminalAudit[2].judgmentRequest!.status, 'SUPERSEDED');
   assert.equal(await db.taskJudgmentRequest.count({
     where: { taskId: f.taskId, status: 'OPEN' },
   }), 0);
@@ -246,20 +251,20 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
     idempotencyKey: 'turn-4-repair-candidate',
     evidence: { ...firstPayload, artifactSha256: 'c'.repeat(64) },
   });
-  assert.equal(repairCandidate.judgmentRequest.status, 'OPEN');
+  assert.equal(repairCandidate.judgmentRequest!.status, 'OPEN');
   await assert.rejects(
     service.reconcileSatisfiedJudgmentRequest(f.ownerId, f.taskId, {
-      requestId: repairCandidate.judgmentRequest.id,
+      requestId: repairCandidate.judgmentRequest!.id,
       sourceSessionId: f.sessionId,
     }),
     /Only a Task whose completion criterion is already satisfied at DONE may use this repair/,
   );
   assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
-    where: { id: repairCandidate.judgmentRequest.id },
+    where: { id: repairCandidate.judgmentRequest!.id },
   })).status, 'OPEN');
   await db.task.update({ where: { id: f.taskId }, data: { status: TaskStatus.DONE } });
   const repaired = await service.reconcileSatisfiedJudgmentRequest(f.ownerId, f.taskId, {
-    requestId: repairCandidate.judgmentRequest.id,
+    requestId: repairCandidate.judgmentRequest!.id,
     sourceSessionId: f.sessionId,
   });
   assert.equal(repaired.status, 'SUPERSEDED');
@@ -272,7 +277,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
     where: { taskId: f.taskId, status: 'OPEN' },
   }), 0);
   const repairReplay = await service.reconcileSatisfiedJudgmentRequest(f.ownerId, f.taskId, {
-    requestId: repairCandidate.judgmentRequest.id,
+    requestId: repairCandidate.judgmentRequest!.id,
     sourceSessionId: f.sessionId,
   });
   assert.deepEqual(repairReplay, repaired);
@@ -289,3 +294,155 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(requiredColumns.rows.length, 11);
   assert.ok(requiredColumns.rows.every((column) => column.is_nullable === 'NO'));
 });
+
+suite('verifier evidence is recorded for its own verdict without a check-of-check request',
+  async (t) => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const sql = new Client({ connectionString: URL });
+    await sql.connect();
+    const db = prismaClientFor(URL!);
+    t.after(async () => {
+      await db.$disconnect();
+      await sql.end();
+    });
+    await empty(sql);
+    const f = await fixture(db);
+    const verifierId = randomUUID();
+    const verifierSessionId = randomUUID();
+    await db.task.create({
+      data: {
+        id: verifierId,
+        ownerId: f.ownerId,
+        projectId: f.projectId,
+        title: 'verify explicit evidence',
+        creatorType: CreatorType.USER,
+        creatorId: f.ownerId,
+        assigneeId: f.workspaceId,
+        verifiesTaskId: f.taskId,
+        completionCriterion: 'VERIFICATION',
+        completionPolicy: 'MANUAL',
+        status: TaskStatus.IN_PROGRESS,
+      },
+    });
+    await db.session.create({
+      data: {
+        id: verifierSessionId,
+        ownerId: f.ownerId,
+        creatorId: f.ownerId,
+        taskId: verifierId,
+        workspaceId: f.workspaceId,
+        assignedRunnerId: (await db.runner.findFirstOrThrow({
+          where: { ownerId: f.ownerId }, select: { id: true },
+        })).id,
+        title: 'verifier evidence source',
+        prompt: 'check the subject',
+        provider: 'codex',
+        status: RunStatus.AWAITING_INPUT,
+        dispatchOrigin: SessionDispatchOrigin.USER,
+        startsTaskWork: true,
+      },
+    });
+
+    const service = new TaskCompletionEvidenceService(db as unknown as PrismaService);
+    const verifierActor = { type: CreatorType.AGENT, id: f.workspaceId };
+    const verifierEvidence = {
+      sourceSessionId: verifierSessionId,
+      idempotencyKey: 'verifier-observation',
+      evidence: { checked: f.taskId, command: 'npm test', exitCode: 0 },
+    };
+    const submitted = await service.submit(f.ownerId, verifierId, verifierActor, verifierEvidence);
+    assert.equal(submitted.judgmentRequest, null);
+    assert.deepEqual(submitted.consumption, {
+      kind: 'VERIFIER_VERDICT',
+      verifierTaskId: verifierId,
+      subjectTaskId: f.taskId,
+    });
+    assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: verifierId } }), 0);
+    assert.equal(await db.task.count({ where: { verifiesTaskId: verifierId } }), 0,
+      'submitting evidence for a verifier must not create a verifier-of-verifier carrier');
+
+    const submitReplay = await service.submit(
+      f.ownerId, verifierId, verifierActor, verifierEvidence,
+    );
+    assert.equal(submitReplay.id, submitted.id);
+    assert.equal(submitReplay.judgmentRequest, null);
+    assert.deepEqual(submitReplay.consumption, submitted.consumption);
+
+    const comment = await db.taskComment.create({
+      data: {
+        taskId: verifierId,
+        authorType: CreatorType.AGENT,
+        authorId: f.workspaceId,
+        body: 'Historical verifier observation reviewed by the owner.',
+      },
+    });
+    const legacyInput = {
+      sourceCommentId: comment.id,
+      sourceSessionId: verifierSessionId,
+      evidence: { reviewedObservation: 'the subject tests passed' },
+      idempotencyKey: 'verifier-legacy-observation',
+      reviewNote: 'I reviewed and transcribed this exact verifier comment.',
+      devicePush: false,
+    };
+    const imported = await service.importLegacyComment(
+      f.ownerId,
+      verifierId,
+      { type: CreatorType.USER, id: f.ownerId },
+      legacyInput,
+    );
+    assert.equal(imported.judgmentRequest, null);
+    assert.deepEqual(imported.consumption, submitted.consumption);
+    assert.equal(imported.legacyImport?.sourceCommentId, comment.id);
+
+    const importReplay = await service.importLegacyComment(
+      f.ownerId,
+      verifierId,
+      { type: CreatorType.USER, id: f.ownerId },
+      legacyInput,
+    );
+    assert.equal(importReplay.id, imported.id);
+    assert.equal(importReplay.judgmentRequest, null);
+    assert.deepEqual(importReplay.consumption, submitted.consumption);
+    assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: verifierId } }), 0,
+      'legacy verifier evidence must not create a HUMAN_SIGNOFF or verifier-of-verifier request');
+
+    // Simulate a pre-0192 check-of-check request that the migration retained as terminal audit
+    // history. It must be visible through listRequests, but it must never change the immutable
+    // fact-time consumer returned by submit replay or evidence listing.
+    const historicalRequestId = randomUUID();
+    await sql.query(`ALTER TABLE "task_judgment_request"
+                       DISABLE TRIGGER "task_judgment_request_verifier_role_guard"`);
+    try {
+      await sql.query(`
+        INSERT INTO "task_judgment_request"
+          ("id", "task_id", "owner_id", "evidence_id", "criterion_revision",
+           "evidence_digest", "kind", "recipient_type", "recipient_id", "status",
+           "superseded_at", "supersession_rule")
+        VALUES ($1, $2, $3::uuid, $4, $5, $6, 'HUMAN_SIGNOFF', 'ACCOUNT_OWNER', $3::text,
+                'SUPERSEDED', clock_timestamp(), 'VERIFIER_ROLE')
+      `, [historicalRequestId, verifierId, f.ownerId, submitted.id,
+        submitted.criterionRevision, submitted.evidenceDigest]);
+    } finally {
+      await sql.query(`ALTER TABLE "task_judgment_request"
+                         ENABLE TRIGGER "task_judgment_request_verifier_role_guard"`);
+    }
+
+    const replayWithHistoricalRequest = await service.submit(
+      f.ownerId, verifierId, verifierActor, verifierEvidence,
+    );
+    assert.equal(replayWithHistoricalRequest.judgmentRequest, null);
+    assert.deepEqual(replayWithHistoricalRequest.consumption, submitted.consumption);
+
+    const audit = await service.list(f.ownerId, verifierId);
+    assert.equal(audit.length, 2);
+    assert.ok(audit.every((row) => row.judgmentRequest === null));
+    assert.ok(audit.every((row) => (
+      row.consumption.kind === 'VERIFIER_VERDICT'
+      && row.consumption.verifierTaskId === verifierId
+      && row.consumption.subjectTaskId === f.taskId
+    )));
+    const requestAudit = await service.listRequests(f.ownerId, verifierId);
+    assert.equal(requestAudit.length, 1);
+    assert.equal(requestAudit[0].id, historicalRequestId);
+    assert.equal(requestAudit[0].status, 'SUPERSEDED');
+  });

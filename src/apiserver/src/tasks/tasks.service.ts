@@ -201,6 +201,7 @@ import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import {
   deriveTaskCompletionStatus,
+  projectVerifierCarrierStatus,
   resolveTaskCompletionCriterion,
   taskCompletionRequiredAction,
   taskCompletionDeclarationError,
@@ -6551,12 +6552,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
     const declared = await this.prisma.task.findFirst({
       where: { id, ownerId },
-      select: { completionCriterion: true },
+      select: { completionCriterion: true, verifiesTaskId: true },
     });
     if (!declared) throw new NotFoundException('task not found');
     if (declared.completionCriterion !== 'HUMAN_SIGNOFF') {
       const criterion = declared.completionCriterion as TaskCompletionCriterionValue;
-      const remedy = taskCompletionRequiredAction(criterion);
+      const remedy = taskCompletionRequiredAction(criterion, {
+        verifiesTaskId: declared.verifiesTaskId,
+      });
       throw new BadRequestException({
         code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
         criterion,
@@ -6641,7 +6644,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         throw new ConflictException('task moved projects while it was being signed; retry signoff');
       }
       if (task.completionCriterion !== 'HUMAN_SIGNOFF') {
-        const remedy = taskCompletionRequiredAction(task.completionCriterion);
+        const remedy = taskCompletionRequiredAction(task.completionCriterion, {
+          verifiesTaskId: task.verifiesTaskId,
+        });
         throw new BadRequestException({
           code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
           criterion: task.completionCriterion,
@@ -7001,7 +7006,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const criterion = (
         before.completionCriterion ?? 'HUMAN_SIGNOFF'
       ) as TaskCompletionCriterionValue;
-      const remedy = taskCompletionRequiredAction(criterion);
+      const remedy = taskCompletionRequiredAction(criterion, {
+        verifiesTaskId: before.verifiesTaskId,
+      });
       throw new ForbiddenException({
         code: 'DIRECT_TASK_DONE_REFUSED',
         criterion,
@@ -7018,7 +7025,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const acceptanceExpectedExitCode = dto.acceptanceExpectedExitCode === undefined
       ? before.acceptanceExpectedExitCode
       : (dto.acceptanceExpectedExitCode ?? null);
-    const completionPolicy = dto.completionPolicy ?? before.completionPolicy;
+    const verifiesTaskIdAfter =
+      dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
+    const attachesVerifier = before.verifiesTaskId == null && verifiesTaskIdAfter != null;
+    let completionPolicy = dto.completionPolicy ?? before.completionPolicy;
     let completionCriterion = (
       before.completionCriterion ?? 'HUMAN_SIGNOFF'
     ) as TaskCompletionCriterionValue;
@@ -7035,6 +7045,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? 'VERIFICATION'
         : completionCriterion === 'VERIFICATION' ? 'HUMAN_SIGNOFF' : completionCriterion;
     }
+    // The relation is the verifier declaration. Attaching it without restating two more fields
+    // produces the coherent role; explicit contradictions still reach the shared validator.
+    if (verifiesTaskIdAfter != null) {
+      if (dto.completionCriterion === undefined) completionCriterion = 'VERIFICATION';
+      if (dto.completionPolicy === undefined) completionPolicy = 'MANUAL';
+    } else if (before.verifiesTaskId != null && dto.verifiesTaskId === null
+      && dto.completionCriterion === undefined) {
+      throw new BadRequestException({
+        code: 'VERIFIER_DETACH_REQUIRES_COMPLETION_DECLARATION',
+        kind: 'REFUSAL',
+        requiredAction: 'DECLARE_THE_ORDINARY_TASK_COMPLETION_CRITERION',
+        message:
+          'Detaching a verification task removes the verdict that completes it; declare its new ' +
+          'completionCriterion (and matching completionPolicy/evidence fields) in the same request.',
+      });
+    }
     const touchesCompletionDeclaration = dto.completionCriterion !== undefined
       || dto.acceptanceCommand !== undefined
       || dto.acceptanceExpectedExitCode !== undefined
@@ -7046,8 +7072,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         acceptanceCommand,
         acceptanceExpectedExitCode,
         completionPolicy,
-        verifiesTaskId:
-          dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null),
+        verifiesTaskId: verifiesTaskIdAfter,
       });
     }
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
@@ -7125,7 +7150,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           : (dto.acceptanceExpectedExitCode ?? null),
       completionCriterion: touchesCompletionDeclaration ? completionCriterion : undefined,
       autoRunWhenReady: dto.autoRunWhenReady,
-      completionPolicy: dto.completionPolicy,
+      completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,
+      // A role declaration is not a criterion exception.  In particular, attaching an old task
+      // must not preserve a HUMAN_SIGNOFF override reason that no longer describes the row.
+      completionCriterionOverrideReason:
+        attachesVerifier ? null : undefined,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
@@ -7135,8 +7164,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // What this task verifies AFTER the write, not before it: one call may both point a task at a
     // subject and conclude about it, and judging the verdict against the old column would refuse
     // the second half of a write whose first half made it legal.
-    const verifiesTaskId =
-      dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
+    const verifiesTaskId = verifiesTaskIdAfter;
     // The column is only meaningful on a row that names what it verifies, and the database says so
     // too (0123's task_verdict_requires_subject). Checked here as well so the caller gets the
     // reason rather than a constraint name.
@@ -7144,6 +7172,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(
         'Only a verification task can carry a verdict — this task does not verify anything',
       );
+    }
+    if (dto.verdict != null && dto.verdict !== before.verdict && verifiesTaskId
+      && (before.status === TaskStatus.CANCELLED || taskRetirement(before) != null)) {
+      throw new ConflictException({
+        code: 'RETIRED_VERIFIER_VERDICT_REFUSED',
+        kind: 'REFUSAL',
+        requiredAction: 'RESTORE_THE_VERIFIER_BEFORE_RECORDING_A_VERDICT',
+        message:
+          'A cancelled or retired verification task cannot record a verdict and be revived by ' +
+          'that derived completion fact. Restore it explicitly first, or file a new verifier.',
+      });
     }
     // `[K5]` criterion 6, and §13.2 V1 said as a refusal for the first time.
     //
@@ -7156,28 +7195,71 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // one call, or write the verdict first and the status after. What stops being expressible is
     // finishing a check without saying what it found. Migration 0141 carries the same rule for
     // writers that never reach this method.
-    const concludedStatus = dto.status === undefined ? before.status : dto.status;
     const concludedVerdict = dto.verdict === undefined ? before.verdict : (dto.verdict ?? null);
-    if (
-      verifiesTaskId && concludedStatus === TaskStatus.DONE && concludedVerdict == null
-      && before.status !== TaskStatus.DONE
-    ) {
-      throw new BadRequestException(
-        'A verification task cannot be DONE without a verdict — it would never conclude, and '
-          + 'everything waiting on its subject would stay blocked with nothing to act on. Record '
-          + 'PASS, FAIL or INCONCLUSIVE in this same call, or cancel the check instead',
-      );
+    const supersededByTaskIdAfter = dto.supersededByTaskId === undefined
+      ? before.supersededByTaskId
+      : (dto.supersededByTaskId ?? null);
+    const terminalReasonAfter = supersededByTaskIdAfter
+      ? 'SUPERSEDED'
+      : dto.terminalReason === undefined
+        ? (dto.supersededByTaskId !== undefined && before.terminalReason === 'SUPERSEDED'
+            ? null
+            : before.terminalReason)
+        : (dto.terminalReason ?? null);
+    const projectedVerifierStatus = projectVerifierCarrierStatus({
+      verifiesTaskId,
+      currentStatus: before.status,
+      currentVerdict: before.verdict,
+      nextVerdict: concludedVerdict,
+      currentTerminalReason: before.terminalReason,
+      nextTerminalReason: terminalReasonAfter,
+      currentSupersededByTaskId: before.supersededByTaskId,
+      nextSupersededByTaskId: supersededByTaskIdAfter,
+      roleAttached: attachesVerifier,
+      verdictChanged: dto.verdict !== undefined && (dto.verdict ?? null) !== before.verdict,
+      requestedStatus: dto.status,
+    });
+    if (projectedVerifierStatus === TaskStatus.DONE && dto.status !== undefined) {
+      throw new BadRequestException({
+        code: 'VERIFIER_STATUS_DERIVED_FROM_VERDICT',
+        kind: 'REFUSAL',
+        requiredAction: 'REVOKE_THE_VERDICT_OR_OMIT_STATUS',
+        message:
+          'A verification task with PASS, FAIL or INCONCLUSIVE is DONE because its checking ' +
+          'activity has concluded. Revoke the verdict in the same request before choosing another status.',
+      });
     }
+    if (projectedVerifierStatus != null) data.status = projectedVerifierStatus as TaskStatus;
     // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,
     // a defect subtask, a downstream block — is recorded against the subject this task named at
     // the time. Re-pointing it afterwards would leave the ledger asserting conclusions about a
     // task this verifier no longer checks, and there is no write that repairs that, because the
     // consequences were correct when they were applied. A new check is one task create.
-    if (
-      dto.verifiesTaskId !== undefined &&
-      (dto.verifiesTaskId ?? null) !== (before.verifiesTaskId ?? null) &&
-      (before.verdict != null || BigInt(before.verdictRevision ?? 0) > 0n)
-    ) {
+    const changesVerifierSubject = dto.verifiesTaskId !== undefined
+      && (dto.verifiesTaskId ?? null) !== (before.verifiesTaskId ?? null);
+    if (changesVerifierSubject) {
+      const boundRequest = await this.prisma.taskJudgmentRequest.findFirst({
+        where: {
+          kind: 'VERIFICATION',
+          recipientType: 'VERIFIER_TASK',
+          recipientId: id,
+        },
+        select: { id: true, status: true },
+      });
+      if (boundRequest) {
+        throw new ConflictException({
+          code: 'VERIFICATION_REQUEST_CARRIER_SUBJECT_IMMUTABLE',
+          kind: 'REFUSAL',
+          requiredAction: 'KEEP_THE_REQUEST_CARRIER_OR_FILE_A_NEW_VERIFIER',
+          message:
+            `This task is the ${boundRequest.status} carrier of a VERIFICATION request, so the ` +
+            'task it verifies cannot be detached or changed. Decide/supersede that request using ' +
+            'its normal lifecycle, or file a new verifier for another subject.',
+        });
+      }
+    }
+    if (changesVerifierSubject
+      && (before.verdict != null || BigInt(before.verdictRevision ?? 0) > 0n)) {
       throw new BadRequestException(
         'This verification has already concluded — its subject can no longer be changed. File a ' +
           'new verification task for the other subject instead',
@@ -7194,50 +7276,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // row is written, since by the time a trigger runs that row is already held and taking the
     // project lock there would reverse the loop's one lock order.
     const concludesVerdict = dto.verdict != null && dto.verdict !== before.verdict;
-    // The independence rule, as a refusal rather than as a sentence in a brief.
-    //
-    // A verification is a SECOND opinion, and the run that produced the work is not a second
-    // opinion about it. The project instructions have said so in prose for as long as there have
-    // been verification tasks; prose is checked by whoever remembers to check it, and the case
-    // that matters — a session finishing its own task and then writing PASS on the check filed
-    // against it — is exactly the one where nobody is watching.
-    //
-    // Scoped to the one relation that makes it wrong: the acting session's own task IS the
-    // subject. A no-session owner/internal caller, a coordinator concluding from its own, and the
-    // verifier's own run concluding about the subject are all left alone. No-session is a channel
-    // contract here, not proof of human presence.
-    if (concludesVerdict && actingSessionId && verifiesTaskId) {
-      const actingSession = await this.prisma.session.findFirst({
-        where: { id: actingSessionId, ownerId },
-        select: { taskId: true },
-      });
-      if (actingSession?.taskId && actingSession.taskId === verifiesTaskId) {
-        throw new BadRequestException(
-          'A verification cannot be concluded from the session that ran the task it verifies — ' +
-            'the check has to be an independent run',
-        );
-      }
-    }
-    // Unit T6: `CONCLUDE_VERDICT_PASS` is HUMAN_ONLY, and this is the other door that reaches a
-    // PASS. A verification's PASS is not an opinion filed beside the work — for an explicit
-    // VERIFICATION criterion, `task-aggregation.ts` feeds that PASS to the completion evaluator and
-    // finishes the subject for every reader downstream. A judgment session is not the independent
-    // check that earns that; it is the thing that decides what to do next. FAIL and INCONCLUSIVE
-    // stay open to it: the conservative conclusion releases nothing and requests owner review.
-    //
-    // Only a write that MOVES the verdict to PASS, and read off the acting session's own row —
-    // never off this request. This prevents the judgment role from self-selecting out of the gate;
-    // it is not a human-presence guarantee for a caller that holds another valid credential.
-    if (concludesVerdict && dto.verdict === 'PASS' && actingSessionId) {
-      const acting = await this.prisma.session.findFirst({
-        where: { id: actingSessionId, ownerId },
-        select: { dispatchOrigin: true },
-      });
-      const refusal = refuseHumanOnlyAction(
-        authorityPrincipal(acting?.dispatchOrigin), 'CONCLUDE_VERDICT_PASS',
-      );
-      if (refusal) throw new ForbiddenException(refusal);
-    }
+    // An OPEN evidence-bound request still needs consuming when a previous raw/secondary writer
+    // managed to put the same verdict on its carrier. Treat an explicit non-null verdict as a
+    // request-consumption attempt even when the scalar value itself is unchanged.
+    const consumesVerificationRequest = dto.verdict != null && verifiesTaskId != null;
     // §13.1 AG6's other end, refused here so the API answers in a sentence rather than letting
     // `task_foreman_manual_policy` answer with a constraint name. `is_foreman` says "this task's
     // SESSION is the work"; a non-MANUAL policy says "the children decide when it is finished". A
@@ -7304,10 +7346,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const statusAfter = dto.status ?? before.status;
       const projectAfter =
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
-      const successorId =
-        dto.supersededByTaskId === undefined
-          ? before.supersededByTaskId
-          : (dto.supersededByTaskId ?? null);
+      const successorId = supersededByTaskIdAfter;
       const successor = successorId
         ? await this.prisma.task.findFirst({
             where: { id: successorId },
@@ -7356,12 +7395,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ? (before.supersededByTaskId === successorId && before.supersededAt
               ? before.supersededAt
               : new Date())
-          : (dto.terminalReason ? (before.supersededAt ?? new Date()) : null),
-        reason: successorId
-          ? 'SUPERSEDED'
-          : dto.terminalReason === undefined
-            ? (before.terminalReason === 'SUPERSEDED' ? null : before.terminalReason)
-            : dto.terminalReason,
+          : (terminalReasonAfter ? (before.supersededAt ?? new Date()) : null),
+        reason: terminalReasonAfter,
       };
     }
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
@@ -7415,7 +7450,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const restructures =
       dependsOnTaskIds !== undefined ||
       touchesHierarchy ||
-      concludesVerdict ||
+      consumesVerificationRequest ||
       !!supersession ||
       dto.listId !== undefined;
     // The FK re-check only fires on a SECOND write of this task's row. A supersession is that
@@ -7509,19 +7544,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // A verifier request decides two Task rows: its own verdict carrier and its subject.
             // Lock both at rank 50 in UUID order before reading the rank-60 request, so concurrent
             // verdicts and evidence supersession cannot take the same pair backwards.
-            if (concludesVerdict && verifiesTaskId) {
+            //
+            // Attaching the verifier role also takes its Task row before reading evidence. An
+            // evidence submission takes that same row first, so the winner is unambiguous: either
+            // evidence commits and this conversion is refused, or the role commits and the later
+            // submission is consumed by the verifier verdict path. Reinterpreting existing
+            // evidence would leave its old HUMAN/check-of-check request actionable beside the new
+            // role, which is why the remedy is a fresh verifier rather than a partial conversion.
+            if (attachesVerifier && !consumesVerificationRequest) {
+              await tx.$queryRaw`
+                SELECT "id" FROM "task"
+                 WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+                 FOR UPDATE`;
+            }
+            if (consumesVerificationRequest && verifiesTaskId) {
               const taskIds = orderedIds([id, verifiesTaskId]);
               await tx.$queryRaw`
                 SELECT "id" FROM "task"
                  WHERE "id" = ANY(${taskIds}::uuid[])
                  ORDER BY "id" FOR UPDATE`;
             }
+            if (attachesVerifier) {
+              const priorEvidence = await tx.taskCompletionEvidence.findFirst({
+                where: { taskId: id },
+                select: { id: true },
+              });
+              if (priorEvidence) {
+                throw new ConflictException({
+                  code: 'VERIFIER_ATTACH_COMPLETION_EVIDENCE_EXISTS',
+                  kind: 'REFUSAL',
+                  requiredAction: 'FILE_A_NEW_VERIFICATION_TASK',
+                  message:
+                    'This task already has completion evidence and a judgment lifecycle, so it ' +
+                    'cannot be reinterpreted as a verifier. File a new verification task instead.',
+                });
+              }
+            }
             // Optional only for old test/rolling transaction-client shapes. A current generated
             // client always has this model; absence means this is necessarily a legacy verifier.
             const judgmentRequestStore = (tx as unknown as {
               taskJudgmentRequest?: Prisma.TransactionClient['taskJudgmentRequest'];
             }).taskJudgmentRequest;
-            const judgmentRequest = concludesVerdict && verifiesTaskId && judgmentRequestStore
+            if (consumesVerificationRequest && judgmentRequestStore) {
+              // Rank 60, after the ordered subject/carrier Task locks above. This makes both the
+              // lifecycle decision and its authority check about the same current OPEN row.
+              await tx.$queryRaw`
+                SELECT "id" FROM "task_judgment_request"
+                 WHERE "id" = ${id}::uuid
+                 FOR UPDATE`;
+            }
+            const judgmentRequest = consumesVerificationRequest && judgmentRequestStore
               ? await judgmentRequestStore.findUnique({ where: { id } })
               : null;
             if (judgmentRequest && (
@@ -7532,7 +7604,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             )) {
               throw new ConflictException('verification task no longer matches its judgment request');
             }
-            if (judgmentRequest && judgmentRequest.status !== 'OPEN') {
+            // Authority attaches to the durable conclusion, not merely to a scalar value changing.
+            // Consuming a stranded same-value verdict by moving OPEN -> DECIDED is the same
+            // independent/HUMAN_ONLY operation as writing that verdict for the first time.
+            const requiresVerdictConclusionAuthority = concludesVerdict
+              || judgmentRequest?.status === 'OPEN';
+            if (requiresVerdictConclusionAuthority && actingSessionId && verifiesTaskId) {
+              const actingSession = await tx.session.findFirst({
+                where: { id: actingSessionId, ownerId },
+                select: { taskId: true, dispatchOrigin: true },
+              });
+              if (actingSession?.taskId && actingSession.taskId === verifiesTaskId) {
+                throw new BadRequestException(
+                  'A verification cannot be concluded from the session that ran the task it ' +
+                    'verifies — the check has to be an independent run',
+                );
+              }
+              if (dto.verdict === 'PASS') {
+                const refusal = refuseHumanOnlyAction(
+                  authorityPrincipal(actingSession?.dispatchOrigin), 'CONCLUDE_VERDICT_PASS',
+                );
+                if (refusal) throw new ForbiddenException(refusal);
+              }
+            }
+            if (judgmentRequest?.status === 'DECIDED'
+              && judgmentRequest.decision === dto.verdict
+              && before.verdict === dto.verdict) {
+              // Idempotent replay: both durable facts already say exactly what this PATCH says.
+            } else if (judgmentRequest && judgmentRequest.status !== 'OPEN') {
               throw new ConflictException({
                 code: judgmentRequest.status === 'SUPERSEDED'
                   ? 'VERIFICATION_REQUEST_SUPERSEDED'
@@ -7660,17 +7759,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // Delete before re-inserting so a retained prerequisite cannot collide with the
             // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
             // full dependency replacement atomic; [] intentionally stops after the delete.
-            // An evidence-bound verifier is the work carrier for exactly one judgment request.
-            // Recording its verdict concludes that carrier as well as deciding the request; both
-            // facts must land in this transaction so project settlement cannot be left waiting on
-            // an OPEN verifier whose only possible conclusion is already immutable. Keep legacy
-            // verifier edits unchanged: without an N11 request they retain their older explicit
-            // lifecycle contract.
-            const taskUpdateData: Prisma.TaskUpdateInput = judgmentRequest && dto.verdict
-              ? { ...data, status: TaskStatus.DONE }
-              : data;
-            let task = await tx.task.update({ where: { id }, data: taskUpdateData });
-            if (judgmentRequest && dto.verdict) {
+            // Every verifier has the same carrier lifecycle. `data.status` above derives DONE from
+            // any verdict before this transaction decides an optional evidence-bound request.
+            let task = await tx.task.update({ where: { id }, data });
+            if (judgmentRequest?.status === 'OPEN' && dto.verdict) {
               const subjectTaskId = judgmentRequest.taskId;
               const decidedAt = new Date();
               const acting = actingSessionId
@@ -7826,7 +7918,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // A PASS on an evidence-bound verifier may have derived the SUBJECT's DONE inside the
     // transaction above. Release that subject's dependents now; keying this on the verifier id
     // would leave ready auto-run work asleep until a later sweep happened to rediscover it.
-    if (concludesVerdict && dto.verdict === 'PASS' && verifiesTaskId) {
+    if (dto.verdict === 'PASS' && verifiesTaskId) {
       await this.triggerDependents(ownerId, verifiesTaskId).catch((e) =>
         this.logger.warn(
           `triggerDependents failed for verified task ${verifiesTaskId}: ${e?.message ?? e}`,
@@ -8052,6 +8144,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       projectId: task.projectId,
       assigneeId: task.assignee?.id ?? null,
       verifiesTaskId: taskId,
+      // A verifier's verdict is its own completion fact.  This declaration is explicit because
+      // this internal Prisma path intentionally bypasses create()/taskCreateData().
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'MANUAL',
+      completionCriterionOverrideReason: null,
         // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.
       autoRunWhenReady: false,
       creatorType: CreatorType.USER,
@@ -8713,6 +8810,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             listId: list.id,
             assigneeId: list.workspaceId,
             isForeman: true,
+            // A foreman produces a diagnosis and may coordinate several unrelated repairs; no
+            // single repository command or independent verifier truthfully settles that work.
+            // Keep the existing owner-review contract, but state it instead of consuming the
+            // database's legacy HUMAN_SIGNOFF default invisibly.
+            completionCriterion: 'HUMAN_SIGNOFF',
+            completionCriterionOverrideReason:
+              'A stalled-list foreman produces a cross-task diagnosis for the owner to review.',
             // Nothing gates this run but the stall that caused it; it has no prerequisites, and
             // the auto-run sweep only ever considers tasks that do.
             autoRunWhenReady: false,
@@ -9305,6 +9409,38 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // A read, not a lock: the rank-30 statement above already took the session rows, and this
         // widens which of them the scan reports rather than adding an acquisition of its own.
         const doomed = await cascadedTaskClosure(tx, ownerId, ids);
+        // recipient_id deliberately is not an FK: the request's subject owns the evidence and a
+        // subject delete cascades the whole lifecycle.  Deleting only its independently runnable
+        // carrier, however, would leave an OPEN request whose named recipient can never answer.
+        // Refuse an actionable request-bound carrier that would outlive its subject; when the
+        // subject is in this same cascade, both disappear together and no orphan is possible.
+        const requestStore = (tx as unknown as {
+          taskJudgmentRequest?: Prisma.TransactionClient['taskJudgmentRequest'];
+        }).taskJudgmentRequest;
+        const orphanedRequest = requestStore
+          ? await requestStore.findFirst({
+            where: {
+              kind: 'VERIFICATION',
+              recipientType: 'VERIFIER_TASK',
+              status: 'OPEN',
+              recipientId: { in: doomed },
+              NOT: { taskId: { in: doomed } },
+            },
+            select: { id: true, status: true, recipientId: true },
+          })
+          : null;
+        if (orphanedRequest) {
+          throw new ConflictException({
+            code: 'VERIFICATION_REQUEST_CARRIER_DELETE_REFUSED',
+            kind: 'REFUSAL',
+            requiredAction: 'KEEP_THE_REQUEST_CARRIER_OR_DELETE_ITS_SUBJECT',
+            message:
+              `Task ${uuidToBase62(orphanedRequest.recipientId)} is the ` +
+              `${orphanedRequest.status} carrier of a VERIFICATION request and cannot be deleted ` +
+              'by itself. Decide/supersede the request, or delete its subject so the complete ' +
+              'evidence lifecycle cascades together.',
+          });
+        }
         const occupying = await tx.session.findMany({
           where: { ownerId, taskId: { in: doomed }, status: { in: TASK_OCCUPYING } },
           select: { id: true },

@@ -90,6 +90,7 @@ export class RunnerProjectsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateProjectDto,
   ) {
+    RunnerProjectsController.refuseLegacyAcceptanceCriteria(dto);
     const inSession = sessionId?.trim();
     return inSession
       ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)
@@ -253,6 +254,7 @@ export class RunnerProjectsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateProjectDto,
   ) {
+    RunnerProjectsController.refuseLegacyAcceptanceCriteria(dto);
     RunnerProjectsController.refuseGovernance(dto);
     return this.projects.update(runner.ownerId, id, dto, sessionId);
   }
@@ -265,6 +267,30 @@ export class RunnerProjectsController {
   @Delete('projects/:id')
   removeProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.remove(runner.ownerId, id);
+  }
+
+  /**
+   * The legacy prose authoring shape has no place to declare how each assertion is decided. The
+   * project service therefore has to backfill HUMAN_SIGNOFF when an old user client sends it. That
+   * remains a necessary compatibility path on the JWT/user API and for reading existing projects,
+   * but it is not a safe default for an agent: a stale CLI would otherwise silently turn every
+   * mechanically decidable outcome into work only a person can close.
+   *
+   * Keep this check at the runner boundary rather than in ProjectsService. That makes old and
+   * drifted runner clients fail loudly while leaving the user API and stored legacy rows intact.
+   * Presence, not truthiness, is what matters: `null` on update is also the legacy authoring shape;
+   * an agent clears the structured set explicitly with `acceptanceCriteriaItems: []`.
+   */
+  private static refuseLegacyAcceptanceCriteria(
+    dto: Pick<CreateProjectDto | UpdateProjectDto, 'acceptanceCriteria'>,
+  ): void {
+    if (dto.acceptanceCriteria === undefined) return;
+    throw new BadRequestException(
+      'Runner project writes do not accept legacy acceptanceCriteria because it implicitly ' +
+        'creates HUMAN_SIGNOFF criteria. Send acceptanceCriteriaItems and explicitly set ' +
+        'verificationMethod and completionCriterion on every item; send [] to clear the set. ' +
+        'Legacy acceptanceCriteria remains a user-API and existing-data compatibility shape.',
+    );
   }
 
   /**

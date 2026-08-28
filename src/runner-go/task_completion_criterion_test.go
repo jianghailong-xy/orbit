@@ -125,3 +125,126 @@ func TestTaskCompletionCriterionStaysInHelpCapabilitiesCLIAndMCP(t *testing.T) {
 		}
 	}
 }
+
+func TestRunnerCLITaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{"id":"task-1"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdTaskCLI([]string{"create", "--title", "ambiguous"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "implicitly create HUMAN_SIGNOFF") ||
+		!strings.Contains(err.Error(), "completionCriterion") {
+		t.Fatalf("implicit criterion error = %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("implicit HUMAN_SIGNOFF made %d HTTP requests", requests)
+	}
+
+	err = cmdTaskCLI([]string{
+		"create-batch", "--tasks", `[{"title":"explicit","completionCriterion":"HUMAN_SIGNOFF"},{"title":"ambiguous"}]`,
+	}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "tasks[1]") ||
+		!strings.Contains(err.Error(), "implicitly create HUMAN_SIGNOFF") {
+		t.Fatalf("implicit batch criterion error = %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("implicit batch HUMAN_SIGNOFF made %d HTTP requests", requests)
+	}
+
+	for _, args := range [][]string{
+		{"create", "--title", "verifier", "--verifies-task-id", "subject"},
+		{"create", "--title", "executable", "--acceptance-command", "true", "--acceptance-expected-exit-code", "0"},
+		{"create", "--title", "subject", "--completion-policy", "VERIFICATION_PASSED"},
+	} {
+		if err := cmdTaskCLI(args, strings.NewReader(""), &out); err == nil ||
+			!strings.Contains(err.Error(), "completionCriterion is required") {
+			t.Errorf("related fields inferred a completion criterion for %v: %v", args, err)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("criterion inference attempts made %d HTTP requests", requests)
+	}
+}
+
+func TestMCPTaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{"id":"task-1"}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "session-1", t: NewTransport(srv.URL, "tok")}
+
+	for label, result := range map[string]map[string]interface{}{
+		"single": mcp.callTool("task_create", map[string]interface{}{"title": "ambiguous"}),
+		"verifier-shape": mcp.callTool("task_create", map[string]interface{}{
+			"title": "verifier", "verifiesTaskId": "subject",
+		}),
+		"executable-shape": mcp.callTool("task_create", map[string]interface{}{
+			"title": "executable", "acceptanceCommand": "true", "acceptanceExpectedExitCode": 0,
+		}),
+		"verification-policy-shape": mcp.callTool("task_create", map[string]interface{}{
+			"title": "subject", "completionPolicy": "VERIFICATION_PASSED",
+		}),
+		"batch": mcp.callTool("task_create_batch", map[string]interface{}{
+			"tasks": []interface{}{map[string]interface{}{"title": "ambiguous"}},
+		}),
+		"batch-verifies-ref": mcp.callTool("task_create_batch", map[string]interface{}{
+			"tasks": []interface{}{map[string]interface{}{
+				"title": "verifier", "verifiesRef": "subject",
+			}},
+		}),
+	} {
+		if result["isError"] != true {
+			t.Errorf("%s implicit criterion result = %#v", label, result)
+			continue
+		}
+		content, _ := result["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "implicitly create HUMAN_SIGNOFF") {
+			t.Errorf("%s refusal = %#v", label, result)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("implicit MCP HUMAN_SIGNOFF made %d HTTP requests", requests)
+	}
+}
+
+func TestMCPTaskCreateSchemasRequireAnExplicitCompletionCriterion(t *testing.T) {
+	var singleSchema, batchItemSchema map[string]interface{}
+	for _, tool := range toolDescriptors(false, false) {
+		schema, _ := tool["inputSchema"].(map[string]interface{})
+		switch tool["name"] {
+		case "task_create":
+			singleSchema = schema
+		case "task_create_batch":
+			properties, _ := schema["properties"].(map[string]interface{})
+			tasks, _ := properties["tasks"].(map[string]interface{})
+			batchItemSchema, _ = tasks["items"].(map[string]interface{})
+		}
+	}
+
+	for label, schema := range map[string]map[string]interface{}{
+		"single":     singleSchema,
+		"batch item": batchItemSchema,
+	} {
+		required, ok := schema["required"].([]string)
+		if !ok {
+			t.Fatalf("%s required = %#v", label, schema["required"])
+		}
+		hasCriterion := false
+		for _, field := range required {
+			hasCriterion = hasCriterion || field == "completionCriterion"
+		}
+		if !hasCriterion {
+			t.Errorf("%s does not require completionCriterion: %#v", label, required)
+		}
+		if _, exists := schema["anyOf"]; exists {
+			t.Errorf("%s still exposes criterion inference alternatives: %#v", label, schema["anyOf"])
+		}
+	}
+}

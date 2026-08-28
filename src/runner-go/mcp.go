@@ -444,11 +444,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		_, legacyCriteria := args["acceptanceCriteria"]
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
-		if legacyCriteria && structuredCriteria {
-			return toolResult("acceptanceCriteria and acceptanceCriteriaItems cannot be used together", true)
+		if legacyCriteria {
+			return toolResult(runnerLegacyProjectCriteriaError, true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
+		copyIfPresent(body, args, "goal", "instructions")
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], false)
 			if err != nil {
@@ -472,8 +472,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		_, legacyCriteria := args["acceptanceCriteria"]
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
-		if legacyCriteria && structuredCriteria {
-			return toolResult("acceptanceCriteria and acceptanceCriteriaItems cannot be used together", true)
+		if legacyCriteria {
+			return toolResult(runnerLegacyProjectCriteriaError, true)
 		}
 		if status, present := args["status"]; present {
 			statusText, ok := status.(string)
@@ -486,7 +486,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// three outcomes for free: absent stays absent (the project keeps what it states), a string
 		// is forwarded as given, and an explicit null survives as null rather than being mistaken
 		// for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "instructions", "status")
+		copyIfPresent(body, args, "title", "goal", "instructions", "status")
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
 			if err != nil {
@@ -579,6 +579,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 			body["assigneeId"] = s.agentID
 		}
+		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("create task failed: "+err.Error(), true)
@@ -608,6 +611,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
+			}
+			if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
+				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)
 		}
@@ -1483,7 +1489,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
 		"description": "The project's acceptance criteria as explicit assertion + method + peer " +
-			"criterion items. Use this instead of acceptanceCriteria; all three fields are required.",
+			"criterion items. This is the runner write shape; all three fields are required.",
 		"items": obj(projectCriterionProps(false), "text", "verificationMethod", "completionCriterion"),
 	}
 	projectCriteriaUpdateProp := map[string]interface{}{
@@ -1492,8 +1498,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"description": "Whole structured replacement; text, verificationMethod and completionCriterion are required. " +
 			"Preserve an item's id from project_get to " +
 			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
-			"currentStatus is derived and is not an input. Mutually exclusive with the legacy " +
-			"acceptanceCriteria field.",
+			"currentStatus is derived and is not an input. Legacy acceptanceCriteria is not a " +
+			"runner write shape.",
 		"items": obj(projectCriterionProps(true), "text", "verificationMethod", "completionCriterion"),
 	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
@@ -1511,7 +1517,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"completionCriterion": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
-				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; HUMAN_SIGNOFF uses one human signoff. They are peer choices, not a fallback chain. Omission is HUMAN_SIGNOFF unless the legacy executable pair or VERIFICATION_PASSED policy is supplied.",
+				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; HUMAN_SIGNOFF uses one human signoff. They are peer choices, not a fallback chain. Runner task creation always requires this explicit field; related command, policy, and verifier fields do not replace it.",
 			},
 			"completionCriterionOverrideReason": criterionOverrideReasonProp,
 			"acceptanceCommand": map[string]interface{}{
@@ -1876,7 +1882,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"context a whole body of work is carried out from, as opposed to a task, which is " +
 				"one piece of that work. Use it when you are asked to set up or plan out a body of " +
 				"work: state what it is trying to achieve (goal), what would settle that the goal " +
-				"was reached (acceptanceCriteria), and how the work is to be done (instructions). " +
+				"was reached (acceptanceCriteriaItems), and how the work is to be done (instructions). " +
 				"You have the authority to write these fields — record what you were asked for " +
 				"rather than waiting for somebody to type it in. Do not wait to be asked, either: " +
 				"when what you are looking at spans more than one session — it will not finish in " +
@@ -1898,7 +1904,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"this conversation rather than starting a fresh one that knows none of it. There " +
 				"is nothing to pass and nothing to choose; created outside a session there is no " +
 				"such binding. One session coordinates at most one project: recording a second " +
-				"one from this same conversation is refused, and nothing is created.",
+				"one from this same conversation is refused, and nothing is created. Existing " +
+				"legacy acceptanceCriteria text remains readable through project_get and writable " +
+				"through the old user/JWT API compatibility path. It is not an agent fallback: this " +
+				"runner tool refuses it because it would silently create HUMAN_SIGNOFF; every new " +
+				"item must declare its completionCriterion explicitly.",
 			"inputSchema": obj(map[string]interface{}{
 				"title": map[string]interface{}{
 					"type":        "string",
@@ -1907,15 +1917,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"goal": map[string]interface{}{
 					"type":        "string",
 					"description": "What this project is trying to achieve, in at most 4,000 characters.",
-				},
-				"acceptanceCriteria": map[string]interface{}{
-					"type": "string",
-					"description": "Legacy free-text authoring shape. What would settle that the goal was reached — the observable " +
-						"result a reader can verify for the whole project, as opposed to a task's " +
-						"own acceptanceCriteria, which settles one piece of it. One non-blank physical line " +
-						"becomes one criterion, except an unmarked colon-ended introduction before a marked " +
-						"list. Prefer acceptanceCriteriaItems, whose methods are required; " +
-						"do not send both. Max 4,000 characters.",
 				},
 				"acceptanceCriteriaItems": projectCriteriaCreateProp,
 				"instructions": map[string]interface{}{
@@ -1929,7 +1930,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"description": "Update a project in the account this runner belongs to: rename it, " +
 				"revise what it is trying to achieve (goal), what would settle that the goal was " +
 				"reached (acceptanceCriteriaItems) or how the work is to be done (instructions), and " +
-				"cancel or reopen work. You have authority to write these configuration fields. A " +
+				"cancel or reopen work. You have authority to write these configuration fields. " +
+				"Existing legacy acceptanceCriteria text remains readable through project_get and " +
+				"writable through the old user/JWT API compatibility path. It is not an agent " +
+				"fallback: this runner tool refuses it because it would silently create " +
+				"HUMAN_SIGNOFF; use acceptanceCriteriaItems with an explicit completionCriterion " +
+				"on every item, and [] to clear the set. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
 				"write acceptance criteria. Direct status DONE is refused for every actor: it is " +
@@ -1948,12 +1954,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"goal": map[string]interface{}{
 					"type":        []string{"string", "null"},
 					"description": "Replace what this project is trying to achieve (max 4,000 characters), or null to leave it with no stated goal.",
-				},
-				"acceptanceCriteria": map[string]interface{}{
-					"type": []string{"string", "null"},
-					"description": "Legacy text replacement for what would settle the goal (max 4,000 " +
-						"characters), or null to leave it with none stated. This settles the whole " +
-						"project, not one task. Prefer acceptanceCriteriaItems and do not send both.",
 				},
 				"acceptanceCriteriaItems": projectCriteriaUpdateProp,
 				"instructions": map[string]interface{}{
@@ -2024,18 +2024,22 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
-			"inputSchema": obj(taskCreateProps(), "title"),
+			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; HUMAN_SIGNOFF is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
+			"inputSchema": func() map[string]interface{} {
+				return obj(taskCreateProps(), "title", "completionCriterion")
+			}(),
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, `parentRef` is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Every item declares completionCriterion explicitly; HUMAN_SIGNOFF is available but never inferred from omission, and a verifier relation (including verifiesRef), executable pair, or completion policy does not replace that declaration. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, parentRef is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
-					"type":        "array",
-					"minItems":    1,
-					"maxItems":    maxTaskBatchCreate,
-					"items":       obj(taskBatchItemProps(), "title"),
+					"type":     "array",
+					"minItems": 1,
+					"maxItems": maxTaskBatchCreate,
+					"items": func() map[string]interface{} {
+						return obj(taskBatchItemProps(), "title", "completionCriterion")
+					}(),
 					"description": "The tasks to create, in dependency order (prerequisites first).",
 				},
 				"dryRun": map[string]interface{}{

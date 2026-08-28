@@ -102,6 +102,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'sourceMarkId',
   'targetMarkId',
   'verifiesTaskId',
+  // Completion-evidence responses name their current judgment consumer under a wire-only name
+  // that cannot be confused with the opaque runner requestId fence.
+  'judgmentRequestId',
   // §13.5's supersession link: the later attempt that took a cancelled one's place. An address a
   // reader hands straight to task_get, exactly like `parentTaskId` beside it.
   'supersededByTaskId',

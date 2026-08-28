@@ -29,6 +29,9 @@ export function resolveTaskCompletionCriterion(
   declaration: TaskCompletionDeclaration,
 ): TaskCompletionCriterionValue {
   if (declaration.completionCriterion != null) return declaration.completionCriterion;
+  // A verifier is itself a small piece of work whose output is its verdict.  Its role is already
+  // explicit in the relation, so callers must not have to opt it into a second, human criterion.
+  if (declaration.verifiesTaskId != null) return 'VERIFICATION';
   if (
     declaration.acceptanceCommand != null
     || declaration.acceptanceExpectedExitCode != null
@@ -71,8 +74,12 @@ export function taskCompletionDeclarationError(
       if (command != null) {
         return 'VERIFICATION cannot also declare executable acceptance';
       }
-      if (policy !== 'VERIFICATION_PASSED') {
-        return 'VERIFICATION requires completionPolicy VERIFICATION_PASSED';
+      if (declaration.verifiesTaskId != null) {
+        if (policy !== 'MANUAL') {
+          return 'A verification task requires completionPolicy MANUAL';
+        }
+      } else if (policy !== 'VERIFICATION_PASSED') {
+        return 'A subject using VERIFICATION requires completionPolicy VERIFICATION_PASSED';
       }
       return null;
     case 'HUMAN_SIGNOFF':
@@ -81,6 +88,9 @@ export function taskCompletionDeclarationError(
       }
       if (policy === 'VERIFICATION_PASSED') {
         return 'HUMAN_SIGNOFF cannot use completionPolicy VERIFICATION_PASSED';
+      }
+      if (declaration.verifiesTaskId != null) {
+        return 'A verification task must use VERIFICATION completion';
       }
       return null;
   }
@@ -91,7 +101,12 @@ export interface TaskCompletionFacts {
   completionCriterion?: TaskCompletionCriterionValue | null;
   acceptanceExpectedExitCode?: number | null;
   executableExitCode?: number | null;
+  /** The subject-facing result of an independent verifier. Only PASS settles the subject. */
   verificationVerdict?: TaskVerdictValue | null;
+  /** Non-null identifies this task as the verifier carrier rather than the verified subject. */
+  verifiesTaskId?: string | null;
+  /** A verifier's own result. Any conclusion settles the carrier activity. */
+  ownVerdict?: TaskVerdictValue | null;
   humanSignoff?: boolean;
 }
 
@@ -110,6 +125,9 @@ export interface TaskCompletionEvaluation {
  */
 export type DerivedTaskCompletionStatus = 'DONE' | null;
 
+export type TaskLifecycleStatusValue =
+  | 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED' | 'FAILED';
+
 /** Evaluate one declared criterion. It observes facts only and never writes Task.status. */
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
@@ -123,7 +141,9 @@ export function evaluateTaskCompletion(
         && facts.executableExitCode === facts.acceptanceExpectedExitCode;
       break;
     case 'VERIFICATION':
-      satisfied = facts.verificationVerdict === 'PASS';
+      satisfied = facts.verifiesTaskId != null
+        ? facts.ownVerdict != null
+        : facts.verificationVerdict === 'PASS';
       break;
     case 'HUMAN_SIGNOFF':
       satisfied = facts.humanSignoff === true;
@@ -140,6 +160,60 @@ export function deriveTaskCompletionStatus(
 }
 
 /**
+ * Project a verifier role, verdict or status edit onto its carrier lifecycle.
+ *
+ * The generic evaluator owns the positive predicate.  This projector adds only the inverse edge:
+ * when the fact that derived DONE is explicitly revoked, an otherwise-unspecified carrier returns
+ * to OPEN.  A caller may provide another conservative status while revoking (for example a
+ * simultaneous cancellation); that explicit lifecycle outcome is preserved.
+ */
+export function projectVerifierCarrierStatus(facts: {
+  verifiesTaskId?: string | null;
+  currentStatus: TaskLifecycleStatusValue;
+  currentVerdict?: TaskVerdictValue | null;
+  nextVerdict?: TaskVerdictValue | null;
+  currentTerminalReason: string | null;
+  nextTerminalReason: string | null;
+  currentSupersededByTaskId: string | null;
+  nextSupersededByTaskId: string | null;
+  /** This write turns an ordinary task into a verifier. Its former DONE fact no longer applies. */
+  roleAttached: boolean;
+  verdictChanged: boolean;
+  requestedStatus?: TaskLifecycleStatusValue;
+}): TaskLifecycleStatusValue | null {
+  if (facts.verifiesTaskId == null) return null;
+  const retirementChanged =
+    facts.currentTerminalReason !== facts.nextTerminalReason
+    || facts.currentSupersededByTaskId !== facts.nextSupersededByTaskId;
+  // A status edit also crosses the projection boundary: an existing verdict still owns DONE, so
+  // CANCELLED/FAILED cannot be accepted and then silently rewritten by the database projector.
+  if (!facts.roleAttached && !facts.verdictChanged && facts.requestedStatus === undefined
+    && !retirementChanged) return null;
+  const completed = deriveTaskCompletionStatus({
+    completionCriterion: 'VERIFICATION',
+    verifiesTaskId: facts.verifiesTaskId,
+    ownVerdict: facts.nextVerdict,
+  });
+  if (completed) {
+    // A requested non-DONE status still crosses the derived-status boundary and must be refused,
+    // even while the carrier is retired.  With no status edit, clearing the last retirement fact
+    // makes a non-cancelled carrier active again, so its retained verdict immediately owns DONE.
+    if (facts.requestedStatus !== undefined) return completed;
+    if (facts.nextTerminalReason == null && facts.nextSupersededByTaskId == null
+      && facts.currentStatus !== 'CANCELLED') return completed;
+  }
+  if (facts.roleAttached && facts.currentStatus === 'DONE') {
+    return facts.requestedStatus ?? 'OPEN';
+  }
+  if (!facts.verdictChanged) return null;
+  if (facts.currentVerdict != null && facts.nextVerdict == null
+    && facts.currentStatus === 'DONE') {
+    return facts.requestedStatus ?? 'OPEN';
+  }
+  return null;
+}
+
+/**
  * The executable remedy returned when somebody tries to write DONE directly.
  *
  * This belongs beside the predicate so a new criterion cannot be added with a generic "not
@@ -147,6 +221,7 @@ export function deriveTaskCompletionStatus(
  */
 export function taskCompletionRequiredAction(
   criterion: TaskCompletionCriterionValue,
+  role: { verifiesTaskId?: string | null } = {},
 ): { requiredAction: string; instruction: string } {
   switch (criterion) {
     case 'EXECUTABLE':
@@ -157,6 +232,14 @@ export function taskCompletionRequiredAction(
           'exit code must equal acceptanceExpectedExitCode',
       };
     case 'VERIFICATION':
+      if (role.verifiesTaskId != null) {
+        return {
+          requiredAction: 'RECORD_VERIFICATION_VERDICT',
+          instruction:
+            'record PASS, FAIL or INCONCLUSIVE on this verification task; any verdict concludes ' +
+            'the verifier carrier, while only PASS can settle the subject',
+        };
+      }
       return {
         requiredAction: 'OBTAIN_INDEPENDENT_VERIFICATION_PASS',
         instruction:

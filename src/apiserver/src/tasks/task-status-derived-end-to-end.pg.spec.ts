@@ -500,26 +500,26 @@ suite(
 
     assert.deepEqual(
       [
-        executableEvidence.judgmentRequest.kind,
-        verificationEvidence.judgmentRequest.kind,
-        firstHumanEvidence.judgmentRequest.kind,
+        executableEvidence.judgmentRequest!.kind,
+        verificationEvidence.judgmentRequest!.kind,
+        firstHumanEvidence.judgmentRequest!.kind,
       ],
       ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF'],
     );
     assert.deepEqual(
       [
-        executableEvidence.judgmentRequest.recipientType,
-        verificationEvidence.judgmentRequest.recipientType,
-        firstHumanEvidence.judgmentRequest.recipientType,
+        executableEvidence.judgmentRequest!.recipientType,
+        verificationEvidence.judgmentRequest!.recipientType,
+        firstHumanEvidence.judgmentRequest!.recipientType,
       ],
       ['SYSTEM_EXECUTABLE_EVALUATOR', 'VERIFIER_TASK', 'ACCOUNT_OWNER'],
     );
-    assert.equal(executableEvidence.judgmentRequest.recipientId, sourceSessions.executable);
+    assert.equal(executableEvidence.judgmentRequest!.recipientId, sourceSessions.executable);
     assert.equal(
-      verificationEvidence.judgmentRequest.recipientId,
-      verificationEvidence.judgmentRequest.id,
+      verificationEvidence.judgmentRequest!.recipientId,
+      verificationEvidence.judgmentRequest!.id,
     );
-    assert.equal(firstHumanEvidence.judgmentRequest.recipientId, ownerId);
+    assert.equal(firstHumanEvidence.judgmentRequest!.recipientId, ownerId);
     assert.equal(await db.taskJudgmentRequest.count({
       where: {
         taskId: { in: [executable.id, verification.id, human.id] },
@@ -595,7 +595,7 @@ suite(
       { ok: true, status: RunStatus.AWAITING_INPUT },
     );
     const executableResult = await db.taskExecutableJudgmentResult.findUniqueOrThrow({
-      where: { requestId: executableEvidence.judgmentRequest.id },
+      where: { requestId: executableEvidence.judgmentRequest!.id },
     });
     assert.equal(executableResult.command, 'printf n9-executable');
     assert.equal(executableResult.expectedExitCode, 0);
@@ -605,14 +605,14 @@ suite(
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: executable.id } })).status,
       TaskStatus.DONE);
     assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
-      where: { id: executableEvidence.judgmentRequest.id },
+      where: { id: executableEvidence.judgmentRequest!.id },
     })).decision, 'PASS');
     assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
 
     // N11 VERIFICATION: the evidence transaction created one deterministic carrier. A different
     // task-bound session supplies its verdict; neither source session nor subject may self-PASS.
     const verifier = await db.task.findUniqueOrThrow({
-      where: { id: verificationEvidence.judgmentRequest.id },
+      where: { id: verificationEvidence.judgmentRequest!.id },
     });
     assert.equal(verifier.verifiesTaskId, verification.id);
     assert.equal(await db.task.count({ where: { verifiesTaskId: verification.id } }), 1);
@@ -641,7 +641,7 @@ suite(
       db.task.findUniqueOrThrow({ where: { id: verification.id } }),
       db.task.findUniqueOrThrow({ where: { id: verifier.id } }),
       db.taskJudgmentRequest.findUniqueOrThrow({
-        where: { id: verificationEvidence.judgmentRequest.id },
+        where: { id: verificationEvidence.judgmentRequest!.id },
       }),
     ]);
     assert.equal(verifiedSubject.status, TaskStatus.DONE);
@@ -657,7 +657,7 @@ suite(
 
     // N12: the first human request is already reachable in-app. Its one push row experiences an
     // offline transport and later succeeds; retry changes the receipt, not the logical request.
-    const firstRequestId = firstHumanEvidence.judgmentRequest.id;
+    const firstRequestId = firstHumanEvidence.judgmentRequest!.id;
     const firstInbox = await db.taskJudgmentInboxItem.findUniqueOrThrow({
       where: { requestId_requestVersion: { requestId: firstRequestId, requestVersion: 1 } },
       include: { pushDelivery: true },
@@ -740,7 +740,7 @@ suite(
         },
       },
     );
-    const currentRequestId = currentHumanEvidence.judgmentRequest.id;
+    const currentRequestId = currentHumanEvidence.judgmentRequest!.id;
     assert.equal(currentHumanEvidence.revision, '2');
     assert.notEqual(currentRequestId, firstRequestId);
     const staleRequest = await db.taskJudgmentRequest.findUniqueOrThrow({
@@ -887,7 +887,7 @@ suite(
           verdict: ProjectAcceptanceVerdict.PASS,
           summary: 'The request-bound executable result matched exit code 0.',
           evidence: {
-            requestId: executableEvidence.judgmentRequest.id,
+            requestId: executableEvidence.judgmentRequest!.id,
             resultId: executableResult.id,
             command: executableResult.command,
             actualExitCode: executableResult.actualExitCode,

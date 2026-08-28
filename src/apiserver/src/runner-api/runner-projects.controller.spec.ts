@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ForbiddenException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, RequestMethod } from '@nestjs/common';
 import { ProjectStatus } from '@orbit/shared';
 import { METHOD_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { PublicIdPipe } from '../common/public-id';
@@ -134,7 +134,12 @@ test('createProject writes into the runner owner, with the body untouched', asyn
   const dto: CreateProjectDto = {
     title: 'Crawl',
     goal: 'Index the corpus',
-    acceptanceCriteria: 'Every shard reported',
+    acceptanceCriteriaItems: [{
+      text: 'Every shard reported',
+      verificationMethod: 'Compare the shard manifest with durable completion receipts.',
+      completionCriterion: 'VERIFICATION',
+      evidenceTaskId: 'verifier-1',
+    }],
     instructions: 'Work shard by shard',
   };
 
@@ -145,6 +150,31 @@ test('createProject writes into the runner owner, with the body untouched', asyn
   // canonical DTO grows later, and the two doors would quietly accept different projects.
   assert.equal(seen.dto, dto);
   assert.equal(result, created);
+});
+
+test('createProject refuses legacy acceptanceCriteria before either runner create path', async () => {
+  const projects = {
+    create: async () => assert.fail('legacy criteria must not reach the headless write'),
+    createInSession: async () => assert.fail('legacy criteria must not reach the session write'),
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+
+  for (const sessionId of [undefined, SESSION_ID]) {
+    assert.throws(
+      () => controller.createProject(RUNNER, sessionId, {
+        title: 'Crawl',
+        acceptanceCriteria: 'Every shard reported',
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof BadRequestException);
+        const message = error.message;
+        assert.match(message, /acceptanceCriteriaItems/);
+        assert.match(message, /completionCriterion/);
+        assert.match(message, /HUMAN_SIGNOFF/);
+        return true;
+      },
+    );
+  }
 });
 
 /** A controller whose two create paths are told apart by which one was called. */
@@ -408,7 +438,7 @@ test('updateProject writes into the runner owner, with the id and body untouched
 // A null is an instruction to clear, and it is the one value a "clean up the body" helper would
 // throw away. Forwarding the object verbatim is what keeps `goal: null` meaning "there is no
 // stated goal any more" rather than "leave the goal alone".
-test('updateProject forwards an explicit null clear rather than dropping it', async () => {
+test('updateProject forwards an explicit structured clear rather than dropping it', async () => {
   let seen: UpdateProjectDto | undefined;
   const projects = {
     update: async (_ownerId: string, _id: string, dto: UpdateProjectDto) => {
@@ -420,12 +450,32 @@ test('updateProject forwards an explicit null clear rather than dropping it', as
 
   await controller.updateProject(RUNNER, 'project-1', undefined, {
     goal: null,
-    acceptanceCriteria: null,
+    acceptanceCriteriaItems: [],
     instructions: null,
   });
 
-  assert.deepEqual(seen, { goal: null, acceptanceCriteria: null, instructions: null });
+  assert.deepEqual(seen, { goal: null, acceptanceCriteriaItems: [], instructions: null });
   assert.ok(seen && 'goal' in seen, 'the null clear was dropped on the way through');
+});
+
+test('updateProject refuses legacy acceptanceCriteria replacement and clear before the write', () => {
+  const projects = {
+    update: async () => assert.fail('legacy criteria must not reach the runner update'),
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+
+  for (const acceptanceCriteria of ['Every shard reported', null] as const) {
+    assert.throws(
+      () => controller.updateProject(RUNNER, 'project-1', undefined, { acceptanceCriteria }),
+      (error: unknown) => {
+        assert.ok(error instanceof BadRequestException);
+        assert.match(error.message, /acceptanceCriteriaItems/);
+        assert.match(error.message, /completionCriterion/);
+        assert.match(error.message, acceptanceCriteria === null ? /send \[\] to clear/i : /HUMAN_SIGNOFF/);
+        return true;
+      },
+    );
+  }
 });
 
 // An update on somebody else's project is the service's 404 — the same `assertOwned` the user door

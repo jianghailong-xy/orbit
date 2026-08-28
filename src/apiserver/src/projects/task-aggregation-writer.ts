@@ -113,12 +113,23 @@ export async function collectAggregationScope(
         ],
       },
       select: SCOPE_SELECT,
+      // Bound the database read itself, not merely the retained Map. A high-fanout node must not
+      // materialize a six-figure result before the loop notices its 501st distinct task. Returning
+      // no facts is the safe answer whenever this conservative page proves the closure is too big.
+      orderBy: { id: 'asc' },
+      take: AGGREGATION_SCOPE_MAX_TASKS + 1,
     });
+    if (rows.length > AGGREGATION_SCOPE_MAX_TASKS) return { facts: [], truncated: true };
     const next = new Set<string>();
     for (const row of rows) {
       if (!byId.has(row.id)) {
         byId.set(row.id, row);
         if (byId.size > AGGREGATION_SCOPE_MAX_TASKS) return { facts: [], truncated: true };
+        // A row discovered because it points at this frontier can itself have rows pointing at
+        // it. Revisit the new id once so those reverse edges are loaded too. Without this step,
+        // starting at a parent finds its direct VERIFICATION child but not that child's verifier;
+        // the planner then sees a completed subject with no PASS fact and spuriously reopens it.
+        next.add(row.id);
       }
       // ...and forwards. `chainStaysUnder` walks to the END of a chain, so every hop of it has to
       // be loaded or the walk stops at an id the map does not hold and answers "cannot tell" —

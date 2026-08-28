@@ -3,10 +3,18 @@ import test from 'node:test';
 import {
   deriveTaskCompletionStatus,
   evaluateTaskCompletion,
+  projectVerifierCarrierStatus,
   resolveTaskCompletionCriterion,
   taskCompletionDeclarationError,
   taskCompletionRequiredAction,
 } from './task-completion-criterion';
+
+const ACTIVE_VERIFIER_RETIREMENT = {
+  currentTerminalReason: null,
+  nextTerminalReason: null,
+  currentSupersededByTaskId: null,
+  nextSupersededByTaskId: null,
+};
 
 test('undeclared completion is the ordinary HUMAN_SIGNOFF criterion', () => {
   assert.equal(resolveTaskCompletionCriterion({}), 'HUMAN_SIGNOFF');
@@ -59,6 +67,96 @@ test('a satisfied VERIFICATION criterion evaluates task status to DONE', () => {
   }), 'DONE');
 });
 
+test('a verifier carrier concludes on every non-null verdict while its subject still requires PASS', () => {
+  for (const ownVerdict of ['PASS', 'FAIL', 'INCONCLUSIVE'] as const) {
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'VERIFICATION',
+      verifiesTaskId: 'subject',
+      ownVerdict,
+    }), 'DONE');
+  }
+  assert.equal(deriveTaskCompletionStatus({
+    completionCriterion: 'VERIFICATION',
+    verificationVerdict: 'FAIL',
+  }), null);
+  assert.equal(deriveTaskCompletionStatus({
+    completionCriterion: 'VERIFICATION',
+    verificationVerdict: 'INCONCLUSIVE',
+  }), null);
+});
+
+test('the verifier carrier projector derives DONE and removes it when its verdict is revoked', () => {
+  assert.equal(projectVerifierCarrierStatus({
+    ...ACTIVE_VERIFIER_RETIREMENT,
+    verifiesTaskId: 'subject',
+    currentStatus: 'OPEN',
+    currentVerdict: null,
+    nextVerdict: 'FAIL',
+    roleAttached: false,
+    verdictChanged: true,
+  }), 'DONE');
+  assert.equal(projectVerifierCarrierStatus({
+    ...ACTIVE_VERIFIER_RETIREMENT,
+    verifiesTaskId: 'subject',
+    currentStatus: 'DONE',
+    currentVerdict: 'FAIL',
+    nextVerdict: null,
+    roleAttached: false,
+    verdictChanged: true,
+  }), 'OPEN');
+  assert.equal(projectVerifierCarrierStatus({
+    ...ACTIVE_VERIFIER_RETIREMENT,
+    verifiesTaskId: 'subject',
+    currentStatus: 'DONE',
+    currentVerdict: 'PASS',
+    nextVerdict: null,
+    roleAttached: false,
+    verdictChanged: true,
+    requestedStatus: 'CANCELLED',
+  }), 'CANCELLED');
+  assert.equal(projectVerifierCarrierStatus({
+    ...ACTIVE_VERIFIER_RETIREMENT,
+    verifiesTaskId: 'subject',
+    currentStatus: 'DONE',
+    currentVerdict: 'PASS',
+    nextVerdict: null,
+    roleAttached: false,
+    verdictChanged: false,
+  }), null);
+  assert.equal(projectVerifierCarrierStatus({
+    ...ACTIVE_VERIFIER_RETIREMENT,
+    verifiesTaskId: 'subject',
+    currentStatus: 'DONE',
+    currentVerdict: 'PASS',
+    nextVerdict: 'PASS',
+    roleAttached: false,
+    verdictChanged: false,
+    requestedStatus: 'CANCELLED',
+  }), 'DONE');
+  assert.equal(projectVerifierCarrierStatus({
+    ...ACTIVE_VERIFIER_RETIREMENT,
+    verifiesTaskId: 'subject',
+    currentStatus: 'DONE',
+    currentVerdict: null,
+    nextVerdict: null,
+    roleAttached: true,
+    verdictChanged: false,
+  }), 'OPEN', 'an ordinary DONE fact cannot survive a change into the verifier role');
+
+  assert.equal(projectVerifierCarrierStatus({
+    verifiesTaskId: 'subject',
+    currentStatus: 'FAILED',
+    currentVerdict: 'FAIL',
+    nextVerdict: 'FAIL',
+    currentTerminalReason: 'ABANDONED',
+    nextTerminalReason: null,
+    currentSupersededByTaskId: null,
+    nextSupersededByTaskId: null,
+    roleAttached: false,
+    verdictChanged: false,
+  }), 'DONE', 'clearing retirement reactivates the verdict-owned carrier lifecycle');
+});
+
 test('a satisfied HUMAN_SIGNOFF criterion evaluates task status to DONE', () => {
   assert.equal(deriveTaskCompletionStatus({
     completionCriterion: 'HUMAN_SIGNOFF',
@@ -101,6 +199,11 @@ test('the three peer declarations require only their own evidence shape', () => 
     completionPolicy: 'VERIFICATION_PASSED',
   }), null);
   assert.equal(taskCompletionDeclarationError({
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'MANUAL',
+    verifiesTaskId: 'subject',
+  }), null);
+  assert.equal(taskCompletionDeclarationError({
     completionCriterion: 'HUMAN_SIGNOFF',
   }), null);
 
@@ -108,6 +211,9 @@ test('the three peer declarations require only their own evidence shape', () => 
   assert.match(taskCompletionDeclarationError({
     completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL',
   })!, /VERIFICATION_PASSED/);
+  assert.match(taskCompletionDeclarationError({
+    completionCriterion: 'HUMAN_SIGNOFF', verifiesTaskId: 'subject',
+  })!, /must use VERIFICATION/);
   assert.match(taskCompletionDeclarationError({
     completionCriterion: 'HUMAN_SIGNOFF',
     acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
@@ -121,4 +227,5 @@ test('legacy create declarations retain their explicit meaning without a fallbac
   assert.equal(resolveTaskCompletionCriterion({
     completionPolicy: 'VERIFICATION_PASSED',
   }), 'VERIFICATION');
+  assert.equal(resolveTaskCompletionCriterion({ verifiesTaskId: 'subject' }), 'VERIFICATION');
 });

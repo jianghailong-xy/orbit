@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RequestMethod } from '@nestjs/common';
+import { BadRequestException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { RunnerTasksController } from './runner-tasks.controller';
 
@@ -130,7 +130,9 @@ test('createTasks batches through TasksService with the acting workspace as crea
     },
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
-  const dto = { tasks: [{ title: 'S0', ref: 's0' }] } as never;
+  const dto = {
+    tasks: [{ title: 'S0', ref: 's0', completionCriterion: 'HUMAN_SIGNOFF' }],
+  } as never;
 
   const result = await controller.createTasks(RUNNER, 'workspace-1', undefined, 'session-1', dto);
 
@@ -140,6 +142,149 @@ test('createTasks batches through TasksService with the acting workspace as crea
     method: 'createMany',
     args: ['owner-1', dto, { type: 'AGENT', id: 'workspace-1' }, 'session-1'],
   });
+});
+
+test('runner task create refuses an implicit HUMAN_SIGNOFF before resolving or writing', async () => {
+  let serviceCalls = 0;
+  const tasks = {
+    resolveAgentCreator: async () => {
+      serviceCalls += 1;
+      return undefined;
+    },
+    create: async () => {
+      serviceCalls += 1;
+      return { id: 'task-1' };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+
+  await assert.rejects(
+    () => controller.createTask(
+      RUNNER,
+      'workspace-1',
+      undefined,
+      'session-1',
+      { title: 'Ambiguous' } as never,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(error.message, /completionCriterion/);
+      assert.match(error.message, /implicitly create HUMAN_SIGNOFF/);
+      return true;
+    },
+  );
+  assert.equal(serviceCalls, 0);
+});
+
+test('runner task create permits all three explicit criteria and never infers from related fields', async () => {
+  const writes: unknown[] = [];
+  const tasks = {
+    resolveAgentCreator: async () => undefined,
+    create: async (_ownerId: string, dto: unknown) => {
+      writes.push(dto);
+      return { id: 'task-1' };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+  const declarations = [
+    { completionCriterion: 'HUMAN_SIGNOFF' },
+    { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 },
+    { completionCriterion: 'VERIFICATION', completionPolicy: 'VERIFICATION_PASSED' },
+  ];
+
+  for (const [index, declaration] of declarations.entries()) {
+    await controller.createTask(
+      RUNNER,
+      undefined,
+      undefined,
+      undefined,
+      { title: `Task ${index}`, ...declaration } as never,
+    );
+  }
+  assert.equal(writes.length, declarations.length);
+
+  for (const inferred of [
+    { verifiesTaskId: 'subject-1' },
+    { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 },
+    { completionPolicy: 'VERIFICATION_PASSED' },
+  ]) {
+    await assert.rejects(
+      () => controller.createTask(
+        RUNNER,
+        undefined,
+        undefined,
+        undefined,
+        { title: 'No inference', ...inferred } as never,
+      ),
+      /completionCriterion is required/,
+    );
+  }
+});
+
+test('runner batch create and both dry-run paths refuse every implicit HUMAN_SIGNOFF before service', async () => {
+  let serviceCalls = 0;
+  const tasks = {
+    resolveAgentCreator: async () => {
+      serviceCalls += 1;
+      return undefined;
+    },
+    createMany: async () => {
+      serviceCalls += 1;
+    },
+    previewPlan: async () => {
+      serviceCalls += 1;
+    },
+    previewCreateMany: async () => {
+      serviceCalls += 1;
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+  const write = { tasks: [{ title: 'Explicit', completionCriterion: 'EXECUTABLE' }, { title: 'Implicit' }] } as never;
+  const dryRun = { tasks: [{ title: 'Implicit' }], dryRun: true } as never;
+  const preview = { tasks: [{ title: 'Implicit' }] } as never;
+
+  for (const invoke of [
+    () => controller.createTasks(RUNNER, undefined, undefined, undefined, write),
+    () => controller.createTasks(RUNNER, undefined, undefined, undefined, dryRun),
+    async () => controller.previewBatch(RUNNER, preview),
+  ]) {
+    await assert.rejects(invoke, (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(error.message, /tasks\[1\]|tasks\[0\]/);
+      return true;
+    });
+  }
+  assert.equal(serviceCalls, 0);
+});
+
+test('runner batch requires an explicit criterion even for verifiesRef items', async () => {
+  let previewed: unknown;
+  const tasks = {
+    previewCreateMany: async (_ownerId: string, dto: unknown) => {
+      previewed = dto;
+      return { taskCount: 2 };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+  const dto = {
+    tasks: [
+      { title: 'Subject', completionCriterion: 'VERIFICATION', completionPolicy: 'VERIFICATION_PASSED' },
+      { title: 'Verifier', completionCriterion: 'VERIFICATION', verifiesRef: 'subject' },
+    ],
+  } as never;
+
+  await controller.previewBatch(RUNNER, dto);
+  assert.equal(previewed, dto);
+
+  assert.throws(
+    () => controller.previewBatch(RUNNER, {
+      tasks: [
+        { title: 'Subject', completionCriterion: 'VERIFICATION', completionPolicy: 'VERIFICATION_PASSED' },
+        { title: 'Verifier', verifiesRef: 'subject' },
+      ],
+    } as never),
+    /tasks\[1\]\.completionCriterion is required/,
+  );
 });
 
 test('createTasks is exposed as POST tasks/batch-create', () => {

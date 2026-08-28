@@ -319,13 +319,19 @@ test('a no-session owner/internal caller and a USER-origin session conclude PASS
 
 // ═══ N21: credential possession is not human presence ═════════════════════════════════════════
 
-test('an agent-held runner credential with no acting session can edit acceptanceCriteria', async () => {
+test('an agent-held runner credential with no acting session can edit explicit structured criteria', async () => {
   const runner = await runnerFromAgentCredential();
   await reachesTheWrite(() => runnerController().updateProject(
     runner,
     PROJECT,
     undefined,
-    { acceptanceCriteria: 'replacement exam' } as never,
+    {
+      acceptanceCriteriaItems: [{
+        text: 'replacement exam',
+        verificationMethod: 'A person reviews the replacement exam.',
+        completionCriterion: 'HUMAN_SIGNOFF',
+      }],
+    } as never,
   ));
 });
 
@@ -408,20 +414,23 @@ test('an owner JWT minted with the shared secret cannot directly write project.s
 
 // ═══ task_update: a verification's PASS completes the task it checks ══════════════════════════
 
-function taskUpdateFixture(dispatchOrigin: SessionDispatchOrigin) {
+function taskUpdateFixture(
+  dispatchOrigin: SessionDispatchOrigin,
+  splitState?: { verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE'; openRequest: boolean },
+) {
   const writes: Array<Record<string, unknown>> = [];
   const task = {
     id: TASK,
     ownerId: OWNER,
     title: 'Check it',
-    status: TaskStatus.IN_PROGRESS,
+    status: splitState ? TaskStatus.DONE : TaskStatus.IN_PROGRESS,
     projectId: PROJECT,
     listId: null,
     completionPolicy: 'MANUAL',
     isForeman: false,
     verifiesTaskId: SUBJECT,
-    verdict: null,
-    verdictRevision: 0n,
+    verdict: splitState?.verdict ?? null,
+    verdictRevision: splitState ? 1n : 0n,
     supersededByTaskId: null,
     supersededAt: null,
     terminalReason: null,
@@ -459,6 +468,19 @@ function taskUpdateFixture(dispatchOrigin: SessionDispatchOrigin) {
       }),
     },
     taskDependency: { findMany: async () => [] },
+    taskJudgmentRequest: {
+      findUnique: async () => splitState?.openRequest
+        ? {
+          id: TASK,
+          taskId: SUBJECT,
+          kind: 'VERIFICATION',
+          recipientType: 'VERIFIER_TASK',
+          recipientId: TASK,
+          status: 'OPEN',
+          decision: null,
+        }
+        : null,
+    },
     task: {
       findFirst: async () => ({ ...task }),
       findMany: async () => [],
@@ -493,6 +515,20 @@ test('a judgment session cannot conclude a verification PASS', async () => {
   assert.equal(body.tier, 'HUMAN_ONLY');
   assert.deepEqual(f.writes, [], 'a refusal that leaves the row moved has prevented nothing');
 });
+
+test('a judgment session cannot consume a same-value PASS stranded behind an OPEN request',
+  async () => {
+    const f = taskUpdateFixture(SessionDispatchOrigin.PROJECT_COORDINATOR, {
+      verdict: 'PASS',
+      openRequest: true,
+    });
+
+    const body = await refusalOf(() => f.conclude('PASS'));
+
+    assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
+    assert.equal(body.action, 'CONCLUDE_VERDICT_PASS');
+    assert.deepEqual(f.writes, [], 'repairing a split state is still an authoritative conclusion');
+  });
 
 test('a judgment session may conclude FAIL or INCONCLUSIVE', async () => {
   for (const verdict of ['FAIL', 'INCONCLUSIVE']) {

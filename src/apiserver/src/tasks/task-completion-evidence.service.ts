@@ -155,6 +155,11 @@ interface RequestFactResult {
   superseded: JudgmentRequestRow[];
 }
 
+interface SubmittedEvidenceFactResult {
+  request: JudgmentRequestRow | null;
+  superseded: JudgmentRequestRow[];
+}
+
 export interface ReconcileSatisfiedJudgmentRequestInput {
   requestId: string;
   sourceSessionId: string;
@@ -235,7 +240,22 @@ function legacyImportResponse(row: EvidenceRow['legacyImport']): TaskLegacyEvide
   };
 }
 
-function response(row: EvidenceRow, request: JudgmentRequestRow): TaskCompletionEvidenceDto {
+function factTimeVerifierSubjectTaskId(row: EvidenceRow): string | null {
+  const criterion = row.criterion as JsonObject;
+  return typeof criterion.verifiesTaskId === 'string'
+    ? criterion.verifiesTaskId
+    : null;
+}
+
+function response(
+  row: EvidenceRow,
+  request: JudgmentRequestRow | null,
+): TaskCompletionEvidenceDto {
+  const criterion = row.criterion as JsonObject;
+  const subjectTaskId = factTimeVerifierSubjectTaskId(row);
+  if (subjectTaskId == null && request == null) {
+    throw new ConflictException('completion evidence has no declared consumer');
+  }
   return {
     id: row.id,
     taskId: row.taskId,
@@ -245,13 +265,29 @@ function response(row: EvidenceRow, request: JudgmentRequestRow): TaskCompletion
     sourceSessionId: row.sourceSessionId,
     sourceAttemptId: row.sourceAttemptId,
     criterionRevision: row.criterionRevision,
-    criterion: row.criterion as JsonObject,
+    criterion,
     evidence: row.evidence as JsonObject,
     evidenceDigest: row.evidenceDigest,
     revision: row.revision.toString(),
     idempotencyKeys: row.idempotencyKeys.map(({ idempotencyKey }) => idempotencyKey),
     legacyImport: legacyImportResponse(row.legacyImport),
-    judgmentRequest: requestResponse(request),
+    // The immutable criterion snapshot owns the response shape. A pre-0192 check-of-check
+    // request may still exist as terminal audit history, but it is not the consumer of a fact
+    // that was produced by a verifier. listRequests exposes that historical row explicitly.
+    judgmentRequest: subjectTaskId != null
+      ? null
+      : request ? requestResponse(request) : null,
+    consumption: subjectTaskId != null
+      ? {
+          kind: 'VERIFIER_VERDICT',
+          verifierTaskId: row.taskId,
+          subjectTaskId,
+        }
+      : {
+          kind: 'JUDGMENT_REQUEST',
+          judgmentRequestId: request!.id,
+          requestKind: request!.kind as TaskCompletionCriterionValue,
+        },
   };
 }
 
@@ -333,7 +369,7 @@ export class TaskCompletionEvidenceService {
           if (!sameRequest) {
             throw new ConflictException('idempotencyKey is already bound to different completion evidence');
           }
-          const { request, superseded } = await this.requestForEvidenceFact(
+          const { request, superseded } = await this.requestForSubmittedEvidenceFact(
             tx,
             taskId,
             replay.evidence,
@@ -396,7 +432,7 @@ export class TaskCompletionEvidenceService {
           include: evidenceInclude,
         });
       }
-      const { request, superseded } = await this.requestForEvidenceFact(
+      const { request, superseded } = await this.requestForSubmittedEvidenceFact(
         tx,
         taskId,
         evidence,
@@ -414,7 +450,7 @@ export class TaskCompletionEvidenceService {
     // The revision itself is the trigger. A source Session may still be RUNNING or
     // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
     // facts appears in this route or its key.
-    if (committed.projectId && this.completionInputs) {
+    if (committed.projectId && committed.request && this.completionInputs) {
       await this.completionInputs.route(
         completionEvidenceRevisedFact({
           projectId: committed.projectId,
@@ -461,7 +497,7 @@ export class TaskCompletionEvidenceService {
       }
     }
 
-    await this.afterEvidenceCommit(ownerId, taskId, committed.request);
+    if (committed.request) await this.afterEvidenceCommit(ownerId, taskId, committed.request);
     return committed.evidence;
   }
 
@@ -492,6 +528,40 @@ export class TaskCompletionEvidenceService {
       // between COMMIT and this line.
       this.deliveries?.kick();
     }
+  }
+
+  /**
+   * Evidence produced while running a verifier documents how it reached its own verdict. The
+   * immutable criterion snapshot, rather than the Task's later role, identifies that fact-time
+   * consumer. Manufacturing a HUMAN_SIGNOFF or another VERIFICATION request would create a
+   * recursive check-of-check lifecycle.
+   *
+   * A pre-0192 fact can lack `criterion.verifiesTaskId` even though its Task is now a verifier. In
+   * that case its original (now-terminal) request remains the consumer; absence of both facts is
+   * intentionally surfaced by `response` instead of inventing a consumer during replay.
+   */
+  private async requestForSubmittedEvidenceFact(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+    evidence: EvidenceRow,
+    task: LockedCriterionTask,
+    options: RequestCreationOptions = {},
+  ): Promise<SubmittedEvidenceFactResult> {
+    if (factTimeVerifierSubjectTaskId(evidence) != null) {
+      return { request: null, superseded: [] };
+    }
+    if (task.verifiesTaskId == null) {
+      return this.requestForEvidenceFact(tx, taskId, evidence, task, options);
+    }
+    const historical = await tx.taskJudgmentRequest.findFirst({
+      where: {
+        taskId,
+        criterionRevision: evidence.criterionRevision,
+        evidenceDigest: evidence.evidenceDigest,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    return { request: historical, superseded: [] };
   }
 
   /**
@@ -617,10 +687,15 @@ export class TaskCompletionEvidenceService {
         if (!exactReplay) {
           throw new ConflictException('legacy source or idempotencyKey is already bound to a different import');
         }
-        const request = await tx.taskJudgmentRequest.findFirst({
-          where: { evidenceId: existing.evidenceId, origin: 'LEGACY_IMPORT' },
-        });
-        if (!request) throw new ConflictException('legacy evidence import has no judgment request');
+        const subjectTaskId = factTimeVerifierSubjectTaskId(existing.evidence);
+        const request = subjectTaskId == null
+          ? await tx.taskJudgmentRequest.findFirst({
+              where: { evidenceId: existing.evidenceId, origin: 'LEGACY_IMPORT' },
+            })
+          : null;
+        if (subjectTaskId == null && !request) {
+          throw new ConflictException('legacy evidence import has no judgment request');
+        }
         return { evidence: response(existing.evidence, request), request };
       }
 
@@ -695,14 +770,14 @@ export class TaskCompletionEvidenceService {
         where: { id: evidence.id },
         include: evidenceInclude,
       });
-      const { request } = await this.requestForEvidenceFact(tx, taskId, evidence, task, {
+      const { request } = await this.requestForSubmittedEvidenceFact(tx, taskId, evidence, task, {
         origin: 'LEGACY_IMPORT',
         devicePolicy,
       });
       return { evidence: response(evidence, request), request };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.importLegacyComment'));
 
-    await this.afterEvidenceCommit(ownerId, taskId, committed.request);
+    if (committed.request) await this.afterEvidenceCommit(ownerId, taskId, committed.request);
     return committed.evidence;
   }
 
@@ -1127,7 +1202,7 @@ export class TaskCompletionEvidenceService {
     ]));
     return rows.map((row) => response(
       row,
-      byFact.get(`${row.criterionRevision}:${row.evidenceDigest}`)!,
+      byFact.get(`${row.criterionRevision}:${row.evidenceDigest}`) ?? null,
     ));
   }
 

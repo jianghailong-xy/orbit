@@ -219,9 +219,9 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
       evidence: { command, artifact: 'package.json', observedBeforeAcceptance: true },
     },
   );
-  assert.equal(evidence.judgmentRequest.kind, 'EXECUTABLE');
-  assert.equal(evidence.judgmentRequest.recipientType, 'SYSTEM_EXECUTABLE_EVALUATOR');
-  assert.equal(evidence.judgmentRequest.recipientId, f.sessionId);
+  assert.equal(evidence.judgmentRequest!.kind, 'EXECUTABLE');
+  assert.equal(evidence.judgmentRequest!.recipientType, 'SYSTEM_EXECUTABLE_EVALUATOR');
+  assert.equal(evidence.judgmentRequest!.recipientId, f.sessionId);
   await finishMessage(api, f);
 
   // The executor completed a turn and wrote no Task status. Only the L0 shell result may settle it.
@@ -240,9 +240,9 @@ suite('one declared command exits as expected, so the server derives DONE', asyn
   assert.deepEqual(result, { ok: true, status: RunStatus.AWAITING_INPUT });
   assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.DONE);
   const [request, commandResult] = await Promise.all([
-    db.taskJudgmentRequest.findUniqueOrThrow({ where: { id: evidence.judgmentRequest.id } }),
+    db.taskJudgmentRequest.findUniqueOrThrow({ where: { id: evidence.judgmentRequest!.id } }),
     db.taskExecutableJudgmentResult.findUniqueOrThrow({
-      where: { requestId: evidence.judgmentRequest.id },
+      where: { requestId: evidence.judgmentRequest!.id },
     }),
   ]);
   assert.equal(request.status, 'DECIDED');
@@ -505,7 +505,7 @@ suite('an executable result from a different Session cannot consume the open req
       evidence: { command, artifact: 'recipient-bound.txt' },
     },
   );
-  assert.equal(evidence.judgmentRequest.recipientId, namedEvaluatorId);
+  assert.equal(evidence.judgmentRequest!.recipientId, namedEvaluatorId);
 
   const api = controller(db);
   await finishMessage(api, f);
@@ -522,10 +522,10 @@ suite('an executable result from a different Session cannot consume the open req
   assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
     TaskStatus.OPEN, 'the legacy L0 path cannot bypass an explicit request recipient');
   assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
-    where: { id: evidence.judgmentRequest.id },
+    where: { id: evidence.judgmentRequest!.id },
   })).status, 'OPEN');
   assert.equal(await db.taskExecutableJudgmentResult.count({
-    where: { requestId: evidence.judgmentRequest.id },
+    where: { requestId: evidence.judgmentRequest!.id },
   }), 0);
   assert.equal(await db.taskComment.count({
     where: {

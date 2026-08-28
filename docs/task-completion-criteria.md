@@ -8,7 +8,13 @@ priority order or an escalation chain:
 - `VERIFICATION` is satisfied only by `PASS` from an independent verification task. The subject
   uses `completionPolicy: VERIFICATION_PASSED`; the verifier points to it with `verifiesTaskId`.
 - `HUMAN_SIGNOFF` is satisfied by one human signoff. It is also the compatibility value for a task
-  that predates the field or whose creator omitted it. It does not mean another criterion failed.
+  that predates the field or whose legacy user/JWT creator omitted it. It does not mean another
+  criterion failed.
+
+Runner CLI, MCP, and runner REST creates require `completionCriterion` explicitly on every task
+and batch item. Command, policy, or verifier-relation fields do not stand in for that declaration;
+old runner clients fail loudly instead of silently creating a human obligation. The legacy
+user/JWT API and existing rows retain omission compatibility.
 
 An unsatisfied criterion is a current view of missing evidence. It is not an exceptional signal
 that somebody must later clear.

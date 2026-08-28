@@ -241,10 +241,13 @@ enum TaskJudgmentRequestStatus {
 }
 
 /// Why an OPEN judgment request stopped being actionable without being decided. Evidence
-/// revisions point at their successor; TASK_ALREADY_DONE is a terminal rule and has no successor.
+/// revisions point at their successor; TASK_ALREADY_DONE and VERIFIER_ROLE are terminal rules
+/// with no successor. VERIFIER_ROLE closes a legacy check-of-check request after the task's own
+/// verdict is established as the verifier carrier's completion fact.
 enum TaskJudgmentSupersessionRule {
   EVIDENCE_REVISED
   TASK_ALREADY_DONE
+  VERIFIER_ROLE
 
   @@map("task_judgment_supersession_rule")
 }

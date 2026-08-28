@@ -121,7 +121,7 @@ func TestCreateBatchDryRunAsksForAPlanAndNotAWrite(t *testing.T) {
 
 	var out bytes.Buffer
 	if err := cmdTaskCLI(
-		[]string{"create-batch", "--tasks", `[{"title":"a","projectId":"proj-1"}]`, "--dry-run", "--json"},
+		[]string{"create-batch", "--tasks", `[{"title":"a","projectId":"proj-1","completionCriterion":"HUMAN_SIGNOFF"}]`, "--dry-run", "--json"},
 		strings.NewReader(""), &out,
 	); err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestCreateBatchWithoutDryRunSendsNoSuchFlag(t *testing.T) {
 
 	var out bytes.Buffer
 	if err := cmdTaskCLI(
-		[]string{"create-batch", "--tasks", `[{"title":"a"}]`, "--json"}, strings.NewReader(""), &out,
+		[]string{"create-batch", "--tasks", `[{"title":"a","completionCriterion":"HUMAN_SIGNOFF"}]`, "--json"}, strings.NewReader(""), &out,
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -42,7 +42,7 @@ must be read per authenticated door:
 | Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project HUMAN_SIGNOFF `PASS` | Project `DONE` |
 | --- | --- | --- | --- | --- | --- | --- |
 | Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; owner credential is recorded | allowed | allowed | direct write refused; evaluator only |
-| Headless CLI/MCP with the runner credential | no judgment role | allowed | allowed; runner credential is recorded | allowed | refused because that endpoint retains machine attribution | direct write refused; evaluator only |
+| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | allowed; runner credential is recorded | allowed | refused because that endpoint retains machine attribution | direct write refused; evaluator only |
 | One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | refused | refused | direct write refused |
 | Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed when it names its credentialed actor | allowed | allowed unless it explicitly supplies machine attribution | direct write refused; evaluator only |
 | Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | direct write refused; evaluator only |
@@ -67,7 +67,7 @@ header is absent, which is why a headless runner cannot record PASS there while 
 
 Tests lock this matrix in `coordinator-authority-boundary.spec.ts`:
 
-- `an agent-held runner credential with no acting session can edit acceptanceCriteria`;
+- `an agent-held runner credential with no acting session can edit explicit structured criteria`;
 - `an agent-held runner credential with no acting session can write task verdict=PASS`;
 - `an agent-held runner credential with no acting session cannot record acceptance PASS`;
 - `a no-acting-session runner edit changes the digest and immediately invalidates the prior set confirmation`;

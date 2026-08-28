@@ -89,6 +89,7 @@ func TestMCPTaskToolsDeclareAndForwardOnlyTheExecutableAcceptancePair(t *testing
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 	if result := mcp.callTool("task_create", map[string]interface{}{
 		"title":                      "mechanical",
+		"completionCriterion":        "EXECUTABLE",
 		"acceptanceCommand":          "test -f result.json",
 		"acceptanceExpectedExitCode": 0,
 	}); result["isError"] == true {
@@ -103,6 +104,9 @@ func TestMCPTaskToolsDeclareAndForwardOnlyTheExecutableAcceptancePair(t *testing
 	}
 	if bodies[0]["acceptanceCommand"] != "test -f result.json" || bodies[0]["acceptanceExpectedExitCode"] != float64(0) {
 		t.Fatalf("create body = %#v", bodies[0])
+	}
+	if bodies[0]["completionCriterion"] != "EXECUTABLE" {
+		t.Fatalf("create completionCriterion = %#v, want EXECUTABLE", bodies[0]["completionCriterion"])
 	}
 	if command, present := bodies[1]["acceptanceCommand"]; !present || command != nil {
 		t.Fatalf("update did not clear acceptanceCommand: %#v", bodies[1])

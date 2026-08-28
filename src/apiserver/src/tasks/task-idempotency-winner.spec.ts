@@ -197,6 +197,25 @@ test('a key holding a different session is refused', async () => {
   assert.deepEqual(writes, []);
 });
 
+test('an explicit non-human declaration cannot replay an older HUMAN_SIGNOFF winner', async () => {
+  const priorHuman = {
+    ...legitimateWinner(),
+    completionCriterion: 'HUMAN_SIGNOFF',
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+    completionCriterionOverrideReason: null,
+  };
+  const { service, writes } = fixture({ rows: () => priorHuman });
+
+  const message = await conflictOf(() => create(service, {
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'VERIFICATION_PASSED',
+  }));
+
+  assert.match(message, /different completion criterion/);
+  assert.deepEqual(writes, []);
+});
+
 // The operation is an input to the key, not a literal at the call site, which is what lets the
 // winner be REBUILT and compared. A row filed under a key another operation's template produced —
 // §13.2's defect filer and §7.3's verification filing both write this column — is not this write.

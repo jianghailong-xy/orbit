@@ -138,9 +138,9 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     await empty(sql);
     const f = await fixture(db, 'atomic');
     const results = await Promise.all(Array.from({ length: 6 }, () => f.submit(1, 'same-fact')));
-    const requestId = results[0].judgmentRequest.id;
-    assert.equal(new Set(results.map((result) => result.judgmentRequest.id)).size, 1);
-    assert.equal(results[0].judgmentRequest.recipientId, f.ownerId);
+    const requestId = results[0].judgmentRequest!.id;
+    assert.equal(new Set(results.map((result) => result.judgmentRequest!.id)).size, 1);
+    assert.equal(results[0].judgmentRequest!.recipientId, f.ownerId);
 
     const inbox = await db.taskJudgmentInboxItem.findMany({
       where: { requestId },
@@ -268,7 +268,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     await empty(sql);
     const f = await fixture(db, 'retry');
     const evidence = await f.submit(1);
-    const requestId = evidence.judgmentRequest.id;
+    const requestId = evidence.judgmentRequest!.id;
     const push = new PushService(db as unknown as PrismaService, enabledConfig());
     (push as any).authToken = () => 'auth';
     let accepted = 0;
@@ -340,7 +340,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     // A separate request that repeatedly reaches APNs but is never accepted exhausts into a DEAD
     // receipt. The human responsibility and its primary inbox delivery remain independent facts.
     const exhaustedEvidence = await f.submit(2);
-    const exhaustedRequestId = exhaustedEvidence.judgmentRequest.id;
+    const exhaustedRequestId = exhaustedEvidence.judgmentRequest!.id;
     const exhausted = await db.taskJudgmentPushDelivery.findFirstOrThrow({
       where: { requestId: exhaustedRequestId },
     });
@@ -369,7 +369,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     await empty(sql);
     const f = await fixture(db, 'concurrent');
     const evidence = await f.submit(1);
-    const requestId = evidence.judgmentRequest.id;
+    const requestId = evidence.judgmentRequest!.id;
     const original = await db.taskJudgmentPushDelivery.findFirstOrThrow({ where: { requestId } });
     await db.taskJudgmentPushDelivery.update({
       where: { id: original.id },
@@ -426,12 +426,12 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     await empty(sql);
     const f = await fixture(db, 'terminal');
     const firstEvidence = await f.submit(1);
-    const firstRequestId = firstEvidence.judgmentRequest.id;
+    const firstRequestId = firstEvidence.judgmentRequest!.id;
     const firstDelivery = await db.taskJudgmentPushDelivery.findFirstOrThrow({
       where: { requestId: firstRequestId },
     });
     const secondEvidence = await f.submit(2);
-    const secondRequestId = secondEvidence.judgmentRequest.id;
+    const secondRequestId = secondEvidence.judgmentRequest!.id;
     const cancelled = await db.taskJudgmentPushDelivery.findUniqueOrThrow({
       where: { id: firstDelivery.id },
     });

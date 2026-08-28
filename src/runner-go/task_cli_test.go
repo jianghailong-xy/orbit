@@ -218,6 +218,7 @@ func TestTaskCLICreateAttributesToAgentInSession(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{
 		"create", "--title", "Ship CLI", "--description", "Implement it",
+		"--completion-criterion", "HUMAN_SIGNOFF",
 		"--depends-on", "dep-1,dep-2", "--depends-on", "dep-2,dep-3",
 		"--auto-run-when-ready=false", "--json",
 	}, strings.NewReader(""), &out)
@@ -266,8 +267,8 @@ func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
 	t.Setenv("ORBIT_SESSION_ID", "session-1")
 
-	stdin := strings.NewReader(`[{"title":"Build","ref":"build"},
-	  {"title":"Deploy","dependsOnRefs":["build"],"assigneeId":null}]`)
+	stdin := strings.NewReader(`[{"title":"Build","ref":"build","completionCriterion":"HUMAN_SIGNOFF"},
+	  {"title":"Deploy","dependsOnRefs":["build"],"assigneeId":null,"completionCriterion":"HUMAN_SIGNOFF"}]`)
 	var out bytes.Buffer
 	if err := cmdTaskCLI([]string{"create-batch", "--tasks-file", "-", "--json"}, stdin, &out); err != nil {
 		t.Fatal(err)
@@ -314,7 +315,7 @@ func TestTaskCLICreateBatchRejectsBadPayloadsBeforeCallingTheServer(t *testing.T
 		}
 	}
 	// The request shape {"tasks": [...]} is accepted too, so a caller can paste the API body.
-	if _, err := parseTaskBatchItems(`{"tasks":[{"title":"a"}]}`); err != nil {
+	if _, err := parseTaskBatchItems(`{"tasks":[{"title":"a","completionCriterion":"HUMAN_SIGNOFF"}]}`); err != nil {
 		t.Fatalf("wrapped payload rejected: %v", err)
 	}
 }
@@ -897,7 +898,8 @@ func TestTaskCLIVerifiesTaskIDTravelsVerbatimAndClears(t *testing.T) {
 	const subject = "34AlSqrBhQa7RbAeub5Fr"
 	var out bytes.Buffer
 	if err := cmdTaskCLI([]string{
-		"create", "--title", "[VERIFY] phase", "--verifies-task-id", subject, "--json",
+		"create", "--title", "[VERIFY] phase", "--verifies-task-id", subject,
+		"--completion-criterion", "VERIFICATION", "--json",
 	}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -917,6 +919,9 @@ func TestTaskCLIVerifiesTaskIDTravelsVerbatimAndClears(t *testing.T) {
 	}
 	if bodies[0]["verifiesTaskId"] != subject {
 		t.Fatalf("create verifiesTaskId = %#v, want %q", bodies[0]["verifiesTaskId"], subject)
+	}
+	if bodies[0]["completionCriterion"] != "VERIFICATION" {
+		t.Fatalf("create completionCriterion = %#v, want VERIFICATION", bodies[0]["completionCriterion"])
 	}
 	if bodies[1]["verifiesTaskId"] != subject {
 		t.Fatalf("update verifiesTaskId = %#v, want %q", bodies[1]["verifiesTaskId"], subject)

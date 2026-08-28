@@ -174,7 +174,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     const realtime = new Proxy({}, { get: () => () => undefined }) as never;
     const tasks = new TasksService(prisma, {} as never, realtime, undefined, router);
     const signed = await tasks.signoff(ownerId, taskId, {
-      requestId: second.judgmentRequest.id,
+      requestId: second.judgmentRequest!.id,
       evidenceDigest: second.evidenceDigest,
       evidence: 'A person reviewed the exact revision-2 artifact and test output.',
     });
@@ -191,7 +191,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       1,
     );
     await tasks.signoff(ownerId, taskId, {
-      requestId: second.judgmentRequest.id,
+      requestId: second.judgmentRequest!.id,
       evidenceDigest: second.evidenceDigest,
       evidence: 'transport replay must return the original signoff',
     });
