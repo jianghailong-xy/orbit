@@ -161,14 +161,13 @@ export async function readCompletionAckObligations(
                    WHEN jsonb_typeof(active.obligation->'meaningfulAttemptedActionCount') = 'number'
                      THEN (active.obligation->>'meaningfulAttemptedActionCount')::bigint
                    ELSE 0
-                 END + COALESCE(revocations.total_count, 0),
+               END + COALESCE(revocations.total_count, 0),
                'currentOwnerDecision', owner_decision.request,
-               'requiredAction', CASE WHEN owner_decision.request_id IS NOT NULL
+               -- An owner decision is another operational state, not authority to revise the
+               -- canonical action carried by this immutable obligation revision.
+               'operationalAction', CASE WHEN owner_decision.request_id IS NOT NULL
                  THEN 'AWAIT_OWNER_DECISION'
-                 ELSE active.obligation->>'requiredAction' END,
-               'nextAction', CASE WHEN owner_decision.request_id IS NOT NULL
-                 THEN 'AWAIT_OWNER_DECISION'
-                 ELSE active.obligation->>'nextAction' END,
+                 ELSE active.obligation->>'operationalAction' END,
                'actionProtocol',
                  CASE
                    WHEN jsonb_typeof(active.obligation->'actionProtocol') = 'object'

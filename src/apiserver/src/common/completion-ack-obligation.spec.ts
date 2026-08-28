@@ -60,8 +60,7 @@ test('the operational overlay enriches actions without minting another obligatio
       ...(ROW.obligation as Record<string, unknown>),
       attemptedActions: [delivery, remediation],
       remediationActions: [remediation],
-      requiredAction: 'WAIT_FOR_REMEDIATION_TASKS',
-      nextAction: 'WAIT_FOR_REMEDIATION_TASKS',
+      operationalAction: 'WAIT_FOR_REMEDIATION_TASKS',
       currentDelivery: { deliveryReceiptId: delivery.deliveryReceiptId },
       actionProtocol: {
         name: 'completion-ack-recovery',
@@ -74,7 +73,8 @@ test('the operational overlay enriches actions without minting another obligatio
     [normalized.obligationId, normalized.obligationRevision, normalized.bindingDigest],
     [ROW.obligationId, ROW.obligationRevision, ROW.obligationRevision],
   );
-  assert.equal(normalized.requiredAction, 'WAIT_FOR_REMEDIATION_TASKS');
+  assert.equal(normalized.requiredAction, 'RECONCILE_ORIGINAL_COMPLETION_RECEIPT');
+  assert.equal(normalized.operationalAction, 'WAIT_FOR_REMEDIATION_TASKS');
   assert.deepEqual(normalized.attemptedActions, [delivery, remediation]);
   assert.deepEqual(normalized.remediationActions, [remediation]);
   assert.equal(

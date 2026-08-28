@@ -214,9 +214,15 @@ async function queueAcceptance(api, fixture) {
   });
 }
 
-async function dequeue(api, fixture, hardMaxSeconds, capabilityRevision = 2) {
+async function dequeue(
+  api,
+  fixture,
+  hardMaxSeconds,
+  capabilityRevision = 2,
+  leaseGeneration = null,
+) {
   return api.dequeueTurn(
-    fixture.sessionId, fixture.runnerId, null, false, [], hardMaxSeconds == null ? null : {
+    fixture.sessionId, fixture.runnerId, leaseGeneration, false, [], hardMaxSeconds == null ? null : {
       schemaRevision: 2, capabilityRevision, hardMaxSeconds, runnerSha: sourceSha,
     },
   );
@@ -287,8 +293,22 @@ async function completionAckFixture(label, options = {}) {
     },
   });
   const api = controller();
+  const leaseGeneration = options.exactLease ? randomUUID() : null;
+  const leaseOwner = options.exactLease ? randomUUID() : null;
   await queueAcceptance(api, fixture);
-  const delivery = await dequeue(api, fixture, null);
+  if (leaseGeneration && leaseOwner) {
+    await api.takeoverLeases(
+      { id: fixture.runnerId },
+      fixture.sessionId,
+      { leaseOwner, expectedLeaseOwner: null },
+    );
+    await api.activateLeases(
+      { id: fixture.runnerId },
+      fixture.sessionId,
+      { leaseGeneration, leaseOwner },
+    );
+  }
+  const delivery = await dequeue(api, fixture, null, 2, leaseGeneration);
   const turn = await db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } });
   const rawOutput = options.rawOutput ?? '16 tests\n16 pass\n0 fail\n';
   const actualExitCode = options.actualExitCode ?? 0;
@@ -312,7 +332,16 @@ async function completionAckFixture(label, options = {}) {
   if (options.ingestionAgeSeconds != null) {
     await backdateRunEventIngestion(event.id, options.ingestionAgeSeconds);
   }
-  return { fixture, delivery, turn, event, rawOutput, actualExitCode };
+  return {
+    fixture,
+    delivery,
+    turn,
+    event,
+    rawOutput,
+    actualExitCode,
+    leaseGeneration,
+    leaseOwner,
+  };
 }
 
 async function seedExistingExecutableRequest(
@@ -778,8 +807,9 @@ test('v1 ACK recovery fact commits atomically with projection, turn, session and
   const state = await completionAckFixture('rolling-v1-atomic-recovery', {
     ingestionAgeSeconds: 60,
     rawOutput: 'atomic recovery output\n',
+    exactLease: true,
   });
-  const { fixture, delivery, rawOutput } = state;
+  const { fixture, delivery, rawOutput, leaseOwner } = state;
   assert.equal(
     (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
     1,
@@ -815,6 +845,7 @@ test('v1 ACK recovery fact commits atomically with projection, turn, session and
     subtype: 'shell',
     shellExitCode: 0,
     shellOutput: rawOutput,
+    leaseOwner,
   };
   try {
     await assert.rejects(

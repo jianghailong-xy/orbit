@@ -277,8 +277,10 @@ SELECT active.tenant_id,
        active.obligation_id,
        active.obligation_revision,
        active.obligation || jsonb_build_object(
-         'requiredAction', operational.next_action,
-         'nextAction', operational.next_action,
+         -- Delivery is an operational projection of the immutable 0201 obligation. Keep the
+         -- canonical requiredAction/nextAction stable for the lifetime of that revision;
+         -- coordinator routing is exposed separately and cannot silently revise the obligation.
+         'operationalAction', operational.next_action,
          'attemptedActions',
            CASE
              WHEN jsonb_typeof(active.obligation->'attemptedActions') = 'array'
@@ -428,7 +430,7 @@ SELECT active.tenant_id,
   ) operational;
 
 COMMENT ON VIEW completion_ack_operational_obligation IS
-  'One canonical 0201 obligation enriched with the 0202 delivery/action ledgers; operational state never supplies lifecycle authority.';
+  'One canonical 0201 obligation enriched with the 0202 delivery/action ledgers; operational state never supplies lifecycle or canonical-action authority.';
 
 CREATE TRIGGER completion_ack_delivery_plan_append_only
   BEFORE UPDATE OR DELETE ON completion_ack_coordinator_delivery_plan
