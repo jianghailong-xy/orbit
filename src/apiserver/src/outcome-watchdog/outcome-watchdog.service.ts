@@ -158,10 +158,21 @@ export class OutcomeWatchdogService {
       sessionId: string;
       turnId: string;
       leaseGeneration: string | null;
+      ingestedRunEventId: string | null;
     }>>(Prisma.sql`
       SELECT task.owner_id AS "tenantId", task.project_id AS "projectId",
              task.id AS "taskId", session.id AS "sessionId", turn.id AS "turnId",
-             turn.lease_generation AS "leaseGeneration"
+             turn.lease_generation AS "leaseGeneration",
+             (
+               SELECT event.id
+                 FROM run_event event
+                WHERE event.session_id = session.id
+                  AND event.turn_id = turn.id
+                  AND event.type = 'tool_result'
+                  AND event.payload->>'toolUseId' = concat('shell-', turn.id::text)
+                ORDER BY event.seq DESC, event.ingested_at DESC, event.id DESC
+                LIMIT 1
+             ) AS "ingestedRunEventId"
         FROM conversation_turn turn
         JOIN session ON session.id = turn.session_id
         JOIN task ON task.id = session.task_id
@@ -182,7 +193,12 @@ export class OutcomeWatchdogService {
         'CONTROL_PLANE_COMMIT_REJECTED'::text,
         ${input.errorFingerprint}::text,
         ${input.observedAt}::timestamptz,
-        ${JSON.stringify(input.evidenceSource)}::jsonb
+        ${JSON.stringify({
+          ...input.evidenceSource,
+          ...(scope.ingestedRunEventId
+            ? { ingestedRunEventId: scope.ingestedRunEventId }
+            : {}),
+        })}::jsonb
       ) AS result
     `);
     if (!row) throw new Error('COMPLETION_ACK_FAILURE_FACT_MISSING');

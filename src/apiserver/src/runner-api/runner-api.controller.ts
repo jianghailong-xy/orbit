@@ -3721,7 +3721,10 @@ export class RunnerApiController {
             await this.completionAckMonitor.recordCompletionAckFailure({
               sessionId,
               turnId: dto.turnId,
-              leaseGeneration: leaseOwner,
+              // leaseOwner identifies the runner process holding the Session. It is not the
+              // acceptance turn's inbox lease generation. The independent monitor resolves the
+              // durable turn generation (and matching terminal event provenance) after rollback.
+              leaseGeneration: null,
               errorFingerprint: failure.fingerprint,
               observedAt: new Date(),
               evidenceSource: {

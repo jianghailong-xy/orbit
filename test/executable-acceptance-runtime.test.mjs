@@ -880,6 +880,24 @@ test('v1 ACK recovery fact commits atomically with projection, turn, session and
     SELECT count(*)::integer AS count FROM completion_ack_active_obligation
      WHERE obligation_revision = $1
   `, [standing.obligation_revision])).rows[0].count, 1);
+  const rejectedCommitFact = (await pool.query(`
+    SELECT lease_generation::text, runner_provenance, lease_provenance,
+           evidence_source
+      FROM completion_ack_fact
+     WHERE obligation_revision = $1
+       AND fact_kind = 'CONTROL_PLANE_COMMIT_REJECTED'
+  `, [standing.obligation_revision])).rows[0];
+  assert.deepEqual({
+    leaseGeneration: rejectedCommitFact.lease_generation,
+    runnerProvenance: rejectedCommitFact.runner_provenance,
+    leaseProvenance: rejectedCommitFact.lease_provenance,
+    runnerId: rejectedCommitFact.evidence_source.runnerId,
+  }, {
+    leaseGeneration: state.leaseGeneration,
+    runnerProvenance: 'INGESTED_EXACT',
+    leaseProvenance: 'INGESTED_EXACT',
+    runnerId: fixture.runnerId,
+  });
 
   const recovered = await controller(monitor).turnComplete(
     { id: fixture.runnerId }, fixture.sessionId, callback,
