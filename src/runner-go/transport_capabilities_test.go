@@ -13,6 +13,15 @@ func TestTransportAdvertisesSupportedProviders(t *testing.T) {
 		if got := r.Header.Get("X-Orbit-Supported-Providers"); got != runnerSupportedProviders {
 			t.Errorf("provider capability header = %q, want %q", got, runnerSupportedProviders)
 		}
+		if got := r.Header.Get(runnerWriteCapabilityRevisionHeader); got != "2" {
+			t.Errorf("runner capability revision = %q, want 2", got)
+		}
+		if got := r.Header.Get(runnerWriteSchemaRevisionHeader); got != "2" {
+			t.Errorf("runner schema revision = %q, want 2", got)
+		}
+		if got := r.Header.Get(runnerWriteContractDigestHeader); got != runnerWriteContractDigest {
+			t.Errorf("runner contract digest = %q", got)
+		}
 		seen[r.URL.Path] = true
 		w.Header().Set("content-type", "application/json")
 		if r.URL.Path == "/api/runner/sessions/reclaim" {

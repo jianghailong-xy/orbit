@@ -208,6 +208,10 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
 	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
+	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
+	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
+	req.Header.Set(runnerWriteContractDigestHeader, runnerWriteContractDigest)
+	req.Header.Set(runnerCLIVersionHeader, version)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
 	}
@@ -987,8 +991,9 @@ func (t *Transport) getProjectReopenImpact(id string) (json.RawMessage, error) {
 // getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
 // as the server decomposes them, the digest of the facts a DONE would be checked against, every
 // evidence version with its projected per-criterion conclusions, the newest merge observation per
-// requirement, the append-only audit, and doneGate — whether a DONE would be allowed right now and,
-// if not, the code and the sentence the write path would refuse with.
+// requirement, the append-only audit, and canonical doneGate — the exact current cut, proof graph,
+// obligations, structured reasons, owner/actor and next action. Unknown or stale inputs deny
+// closure; legacy blocker/signal summaries are not an alternate decision source.
 //
 // The read to make BEFORE claiming a project is finished. "The tests passed" written in a comment
 // is not evidence the server can check; a durable conclusion event in this record is.

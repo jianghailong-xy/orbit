@@ -9,6 +9,9 @@ export const TASK_COMPLETION_CRITERIA = [
 
 export type TaskCompletionCriterionValue = (typeof TASK_COMPLETION_CRITERIA)[number];
 
+/** Rows written by the current service are protected by migration 0193's canonical DONE fence. */
+export const TASK_COMPLETION_FENCE_REVISION = 1;
+
 export interface TaskCompletionDeclaration {
   completionCriterion?: TaskCompletionCriterionValue | null;
   acceptanceCommand?: string | null;

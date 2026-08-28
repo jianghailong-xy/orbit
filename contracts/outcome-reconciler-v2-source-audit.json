@@ -1,0 +1,635 @@
+{
+  "schemaVersion": 1,
+  "scope": "V1 and mixed-client completion inputs, compatibility projections, writers and readers that V2 must ingest or replace without treating a projection as authority.",
+  "rules": {
+    "canonicalFactsAreAppendOnly": true,
+    "projectionsAreRebuildable": true,
+    "projectionMayFeedEvaluator": false,
+    "allTenantReadsAreScoped": true,
+    "sourceLocationsAreDigestBoundByAcceptanceManifest": true
+  },
+  "surfaces": [
+    {
+      "id": "TASK_STATUS",
+      "canonicalFactKinds": [
+        "TASK_STATUS_OBSERVED",
+        "GOAL_DISPOSITION_RECORDED",
+        "ATTEMPT_TERMINATED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "task.status",
+          "role": "V1_COMPATIBILITY_LIFECYCLE_CLAIM"
+        },
+        {
+          "storage": "task_completion_evidence + task_judgment_request + task_attempt",
+          "role": "V1_EVIDENCE_AND_ATTEMPT_FACTS"
+        }
+      ],
+      "projections": [
+        "Task.status",
+        "Task.dependencyState",
+        "project task status buckets"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "class TasksService",
+          "authority": "LEGACY_AND_DECLARED_COMPLETION_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/projects/task-aggregation-writer.ts",
+          "symbol": "applyTaskAggregations",
+          "authority": "DERIVED_PARENT_PROJECTION_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
+          "symbol": "class TaskJudgmentReviewService",
+          "authority": "EVIDENCE_DECISION_WRITER"
+        },
+        {
+          "path": "src/apiserver/prisma/migrations/0193_task_done_writer_fence/migration.sql",
+          "symbol": "task_done_canonical_writer_fence",
+          "authority": "DATABASE_WRITER_FENCE"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/tasks/task-dependencies.ts",
+          "symbol": "computeDependencyState",
+          "purpose": "DEPENDENCY_PROJECTION"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-list-rollup.ts",
+          "symbol": "ProjectListRollup",
+          "purpose": "PROJECT_LIST_PROJECTION"
+        },
+        {
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "taskRow",
+          "purpose": "TASK_API"
+        }
+      ],
+      "v2Treatment": "INGEST_REVISION_BOUND_CLAIMS; DERIVE_STATUS_FROM_GOAL_AND_PROOF; NEVER_ACCEPT_DONE_ALONE"
+    },
+    {
+      "id": "PROJECT_DONE_GATE",
+      "canonicalFactKinds": [
+        "DONE_GATE_EVALUATED",
+        "ACCEPTANCE_REVISION_RECORDED",
+        "GOAL_DISPOSITION_RECORDED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "outcome_fact_binding + outcome_evaluation_cut + outcome_evaluator_result",
+          "role": "IMMUTABLE_EXACT_CUT_PROOF_AND_CANONICAL_OBLIGATIONS"
+        },
+        {
+          "storage": "project_completion_contract + project_owner_ratification",
+          "role": "CURRENT_EXACT_OWNER_AUTHORITY"
+        }
+      ],
+      "projections": [
+        "project.status",
+        "outcome_projection.done_gate",
+        "project acceptance canonical doneGate response",
+        "acceptedRunId historical link"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "symbol": "assertDoneAllowed",
+          "authority": "APPLICATION_CANONICAL_GATE_CONSUMER"
+        },
+        {
+          "path": "src/apiserver/prisma/migrations/0197_canonical_obligation_done_gate/migration.sql",
+          "symbol": "project_canonical_done_gate",
+          "authority": "DATABASE_CANONICAL_GATE_AND_DONE_WALL"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "symbol": "doneGate",
+          "purpose": "CANONICAL_V2_PROOF_OBLIGATION_READ"
+        },
+        {
+          "path": "src/apiserver/src/projects/projects.controller.ts",
+          "symbol": "acceptanceOverview",
+          "purpose": "HTTP_READ"
+        },
+        {
+          "path": "src/runner-go/project_cli.go",
+          "symbol": "doneGate",
+          "purpose": "CLI_READ"
+        }
+      ],
+      "v2Treatment": "ONE EXACT-CUT OUTCOME PROOF AND CANONICAL OBLIGATION VIEW DECIDES CLOSURE; LEGACY BLOCKER, SIGNAL AND ACCEPTANCE SUMMARIES ARE NOT WRITERS"
+    },
+    {
+      "id": "JUDGMENT_REQUEST",
+      "canonicalFactKinds": [
+        "JUDGMENT_REQUESTED",
+        "JUDGMENT_DECIDED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "task_judgment_request",
+          "role": "APPEND_OR_MONOTONIC_EVIDENCE_BOUND_REQUEST"
+        },
+        {
+          "storage": "task_executable_judgment_result + task_human_signoff + task.verdict",
+          "role": "DECISION_FACTS"
+        }
+      ],
+      "projections": [
+        "task_judgment_inbox_item",
+        "task_judgment_push_delivery",
+        "judgment review derived status"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/tasks/task-completion-evidence.service.ts",
+          "symbol": "class TaskCompletionEvidenceService",
+          "authority": "REQUEST_INGRESS"
+        },
+        {
+          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
+          "symbol": "decide",
+          "authority": "DECLARED_RECIPIENT_DECISION"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
+          "symbol": "async get",
+          "purpose": "REVIEW_API"
+        },
+        {
+          "path": "src/web/src/lib/judgments.ts",
+          "symbol": "judgment",
+          "purpose": "WEB_PRESENTATION"
+        }
+      ],
+      "v2Treatment": "TRANSLATE_REQUEST_AND_DECISION_TO_SEPARATE_FACTS; OWNER_INBOX_IS_AN_OBLIGATION_PROJECTION"
+    },
+    {
+      "id": "JUDGMENT_SIGNAL",
+      "canonicalFactKinds": [
+        "JUDGMENT_SIGNAL_OBSERVED",
+        "JUDGMENT_REQUESTED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "task_judgment_request",
+          "role": "AUTHORITATIVE_REQUEST"
+        },
+        {
+          "storage": "task_judgment_signal SQL view",
+          "role": "READ_ONLY_COMPATIBILITY_PROJECTION"
+        }
+      ],
+      "projections": [
+        "task_judgment_signal",
+        "derived.signalOpen"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/prisma/migrations/0181_task_judgment_request/migration.sql",
+          "symbol": "CREATE VIEW \"task_judgment_signal\"",
+          "authority": "SQL_VIEW_DEFINITION_ONLY"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
+          "symbol": "signalOpen",
+          "purpose": "REVIEW_PROJECTION"
+        },
+        {
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "request/signal/blocker projection",
+          "purpose": "TASK_MUTATION_RESPONSE"
+        }
+      ],
+      "v2Treatment": "DO_NOT_INGEST_VIEW_AS_AUTHORITY; PROJECT_FROM_CANONICAL_JUDGMENT_OBLIGATION"
+    },
+    {
+      "id": "JUDGMENT_BLOCKER",
+      "canonicalFactKinds": [
+        "BLOCKER_EPISODE_OBSERVED",
+        "JUDGMENT_REQUESTED",
+        "OBLIGATION_EXIT_RECORDED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "project_blocker",
+          "role": "V1_DURABLE_BLOCKER_EPISODE"
+        },
+        {
+          "storage": "project_judgment_blocker SQL view",
+          "role": "JUDGMENT_REQUEST_PROJECTION"
+        }
+      ],
+      "projections": [
+        "project_judgment_blocker",
+        "project blocker counts",
+        "attention blocker reason"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/projects/attempt-ended-unsettled.producer.ts",
+          "symbol": "raiseHumanSignal",
+          "authority": "LEGACY_COMPATIBILITY_BLOCKER_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/projects/coordinator-convergence.service.ts",
+          "symbol": "class CoordinatorConvergenceService",
+          "authority": "V1_CONVERGENCE_BLOCKER_WRITER"
+        },
+        {
+          "path": "src/apiserver/prisma/migrations/0181_task_judgment_request/migration.sql",
+          "symbol": "CREATE VIEW \"project_judgment_blocker\"",
+          "authority": "SQL_VIEW_DEFINITION_ONLY"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/projects/project-list-attention.ts",
+          "symbol": "blocker",
+          "purpose": "SERVER_ATTENTION_ROLLUP"
+        },
+        {
+          "path": "src/apiserver/src/common/blocker-signal-exit-inventory.ts",
+          "symbol": "BLOCKER_SIGNAL_EXIT_INVENTORY",
+          "purpose": "EXIT_AUDIT"
+        }
+      ],
+      "v2Treatment": "MAP_EACH_OPEN_EPISODE_TO_STABLE_OBLIGATION; EXIT_FACTS_ARE_APPEND_ONLY; LEGACY_VIEW_IS_NOT_INPUT"
+    },
+    {
+      "id": "PROJECT_ATTENTION",
+      "canonicalFactKinds": [
+        "PROJECT_ATTENTION_OBSERVED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "project list rollup + blockers + failures + activity timestamps",
+          "role": "V1_PRESENTATION_INPUTS"
+        }
+      ],
+      "projections": [
+        "Running",
+        "Needs attention",
+        "Quiet",
+        "Settled section and sort order"
+      ],
+      "writers": [
+        {
+          "path": "src/web/src/lib/projectAttention.ts",
+          "symbol": "projectAttentionSections",
+          "authority": "PURE_WEB_PROJECTION"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-list-attention.ts",
+          "symbol": "readProjectListAttention",
+          "authority": "SERVER_ROLLUP_PROJECTION"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/web/src/pages/ProjectsPage.tsx",
+          "symbol": "projectAttentionSections",
+          "purpose": "WEB_LIST"
+        },
+        {
+          "path": "src/web/src/lib/projectAttention.test.ts",
+          "symbol": "Needs attention",
+          "purpose": "PROJECTION_CONTRACT_TEST"
+        }
+      ],
+      "v2Treatment": "RENDER_SHARED_OBLIGATION_PROJECTION; DISPLAY_RECONCILER_STALE_WHEN_WATERMARK_LAGS"
+    },
+    {
+      "id": "DISPATCH_LEASE",
+      "canonicalFactKinds": [
+        "DISPATCH_LEASE_OBSERVED",
+        "ATTEMPT_STARTED",
+        "ATTEMPT_TERMINATED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "task_dispatch_epoch + task_run_request",
+          "role": "TASK_DISPATCH_CLAIM_AND_RECEIPT"
+        },
+        {
+          "storage": "project_runtime lease/fencing_token",
+          "role": "PROJECT_RECONCILER_LEASE"
+        },
+        {
+          "storage": "session inbox_lease_owner + inbox_lease_generation",
+          "role": "RUNNER_PROCESS_LEASE"
+        }
+      ],
+      "projections": [
+        "task.dispatchAttempt",
+        "task.dispatchAuthority",
+        "project runtime lease",
+        "session lease owner"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "lease_holder",
+          "authority": "TASK_RUN_REQUEST_CLAIM_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/runner-api/runner-api.controller.ts",
+          "symbol": "leaseOwner",
+          "authority": "RUNNER_LEASE_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/projects/coordinator-wake.service.ts",
+          "symbol": "claim",
+          "authority": "PROJECT_WAKE_CLAIM_WRITER"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/queue/queue.service.ts",
+          "symbol": "leaseOwner",
+          "purpose": "RUNNER_QUEUE"
+        },
+        {
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "TaskRunFenceLost",
+          "purpose": "DISPATCH_FENCE"
+        },
+        {
+          "path": "src/runner-go/runloop.go",
+          "symbol": "manualWorktreeCommandAllowed",
+          "purpose": "RUNNER_EFFECT_FENCE"
+        }
+      ],
+      "v2Treatment": "LEASE_IS_ATTEMPT_EXECUTION_AUTHORITY_NOT_GOAL_COMPLETION; EXPIRED_LEASE_DERIVES_RECOVERY_OBLIGATION"
+    },
+    {
+      "id": "MERGE_RECEIPT",
+      "canonicalFactKinds": [
+        "MERGE_RECEIPT_RECORDED",
+        "DIMENSION_EVALUATED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "session_merge_receipt",
+          "role": "APPEND_ONLY_LANDING_CLAIM"
+        },
+        {
+          "storage": "task_checkpoint + target re-observation",
+          "role": "BOUND_INTEGRATION_PROOF_INPUT"
+        }
+      ],
+      "projections": [
+        "session.mergeStatus",
+        "session.branchMerged",
+        "project acceptance mergeEvidence"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/sessions/merge-receipt.service.ts",
+          "symbol": "async record",
+          "authority": "USER_OR_AGENT_RECEIPT_INGRESS"
+        },
+        {
+          "path": "src/apiserver/src/sessions/merge-receipt.service.ts",
+          "symbol": "fromRunnerMergeResult",
+          "authority": "RUNNER_RECEIPT_INGRESS"
+        },
+        {
+          "path": "src/apiserver/src/sessions/merge-receipt.ts",
+          "symbol": "mergeReceiptIdempotencyKey",
+          "authority": "IDENTITY_DERIVATION"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/sessions/merge-receipt.service.ts",
+          "symbol": "async list",
+          "purpose": "SESSION_RECEIPT_API"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "symbol": "mergeEvidence",
+          "purpose": "ACCEPTANCE_EVIDENCE"
+        },
+        {
+          "path": "src/apiserver/src/projects/projects.service.ts",
+          "symbol": "mergeReceiptRow",
+          "purpose": "PROJECT_READ"
+        }
+      ],
+      "v2Treatment": "RECEIPT_IS_A_CLAIM; CURRENT_TARGET_PRESENCE_AND_POST_MERGE_VERIFICATION_ARE_SEPARATE_DIMENSIONS"
+    },
+    {
+      "id": "ACCEPTANCE_REVISION",
+      "canonicalFactKinds": [
+        "ACCEPTANCE_REVISION_RECORDED",
+        "GOAL_RATIFIED",
+        "DIMENSION_EVALUATED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "project_acceptance_criterion_definition.revision/content_hash",
+          "role": "STRUCTURED_CRITERIA_REVISION"
+        },
+        {
+          "storage": "project.acceptance_criteria_digest + project_acceptance_criteria_confirmation",
+          "role": "STANDARD_SET_DIGEST_AND_RATIFICATION"
+        },
+        {
+          "storage": "project_acceptance_run.criteria_revision + input_digest + acceptance_epoch",
+          "role": "EVALUATION_BINDING"
+        }
+      ],
+      "projections": [
+        "Project.acceptanceCriteria compatibility text",
+        "criteria summary verdicts",
+        "acceptedRunId"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "symbol": "confirmCriteria",
+          "authority": "OWNER_OR_ALLOWED_CONFIRMATION_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "symbol": "criteriaSemanticRevision",
+          "authority": "EVALUATION_REVISION_DERIVATION"
+        },
+        {
+          "path": "src/apiserver/src/projects/projects.service.ts",
+          "symbol": "replaceAcceptanceDefinitions",
+          "authority": "CRITERIA_INGRESS"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "symbol": "criteriaRevision",
+          "purpose": "RUN_AND_GATE_BINDING"
+        },
+        {
+          "path": "src/runner-go/project_cli.go",
+          "symbol": "revision-bearing digest",
+          "purpose": "CLI_CONFIRM_AND_READ"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-attribution.service.ts",
+          "symbol": "acceptanceEpoch",
+          "purpose": "CROSS_PROJECT_ATTRIBUTION"
+        }
+      ],
+      "v2Treatment": "SPLIT_OWNER_CONTRACT_DIGEST_FROM_EVALUATION_PLAN_DIGEST; MATERIAL_CONTRACT_EDITS_STALE_PROOF_ATOMICALLY"
+    },
+    {
+      "id": "GOAL_ATTEMPT",
+      "canonicalFactKinds": [
+        "GOAL_DECLARED",
+        "GOAL_DISPOSITION_RECORDED",
+        "ATTEMPT_STARTED",
+        "ATTEMPT_TERMINATED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "project.goal + task scope revision",
+          "role": "V1_GOAL_AND_SCOPE_CLAIMS"
+        },
+        {
+          "storage": "task_attempt + session",
+          "role": "ATTEMPT_EXECUTION_FACTS"
+        }
+      ],
+      "projections": [
+        "task.attemptGeneration",
+        "task.progressState",
+        "session run status"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/projects/session-attempt.service.ts",
+          "symbol": "class SessionAttemptService",
+          "authority": "ATTEMPT_LIFECYCLE_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/projects/convergence-ledger.ts",
+          "symbol": "attemptGeneration",
+          "authority": "CONVERGENCE_DECISION_WRITER"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/projects/attempt-budget-meter.service.ts",
+          "symbol": "attempt",
+          "purpose": "BUDGET_AND_LIVENESS"
+        },
+        {
+          "path": "src/apiserver/src/projects/attempt-ended-unsettled.producer.ts",
+          "symbol": "ATTEMPT_UNJUDGED_SIGNAL_CODE",
+          "purpose": "MISSING_RESOLVER_DETECTION"
+        }
+      ],
+      "v2Treatment": "GOAL_OUTLIVES_FAILED_CANCELLED_OR_TIMED_OUT_ATTEMPTS; ACTIVE_GOAL_REQUIRES_SUCCESSOR_DIAGNOSIS_OR_TERMINAL_DECISION"
+    },
+    {
+      "id": "CROSS_PROJECT_OWNERSHIP",
+      "canonicalFactKinds": [
+        "CROSSING_HANDOFF_RECORDED",
+        "ACCEPTANCE_REVISION_RECORDED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "task.project_id + discovered_from_project_id + project_handoff_approval",
+          "role": "OWNERSHIP_AND_HANDOFF_DECISIONS"
+        },
+        {
+          "storage": "project acceptance criterion references",
+          "role": "SERVES_CRITERION_RELATION"
+        }
+      ],
+      "projections": [
+        "task attribution surface",
+        "project crossings",
+        "reopen impact"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/projects/project-handoff.service.ts",
+          "symbol": "class ProjectHandoffService",
+          "authority": "HANDOFF_DECISION_WRITER"
+        },
+        {
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "discoveredFromProjectId",
+          "authority": "PROJECT_ATTRIBUTION_WRITER"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/projects/project-attribution.service.ts",
+          "symbol": "ProjectAttributionService",
+          "purpose": "CANONICAL_V1_ATTRIBUTION_READ"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-attribution-surface.ts",
+          "symbol": "reopenImpact",
+          "purpose": "CROSSING_AND_REOPEN_PROJECTION"
+        }
+      ],
+      "v2Treatment": "KEEP_HOME_PROJECT_OWNERSHIP; MODEL_SERVES_CRITERION_AND_BLOCKS_CLOSURE_AS_ORTHOGONAL_EDGES"
+    },
+    {
+      "id": "BLOCKER_SIGNAL_EXIT_REGISTRY",
+      "canonicalFactKinds": [
+        "BLOCKER_EPISODE_OBSERVED",
+        "OBLIGATION_EXIT_RECORDED",
+        "TIMER_FIRED"
+      ],
+      "sourceOfTruth": [
+        {
+          "storage": "project_blocker kind CHECK + named durable signal declarations",
+          "role": "V1_OPEN_EPISODE_TYPE_SET"
+        },
+        {
+          "storage": "BLOCKER_SIGNAL_EXIT_INVENTORY",
+          "role": "V1_RESOLVE_CONDITION_REGISTRY"
+        }
+      ],
+      "projections": [
+        "open blocker rows",
+        "durable signal comments",
+        "judgment signal views"
+      ],
+      "writers": [
+        {
+          "path": "src/apiserver/src/common/blocker-signal-exit-inventory.ts",
+          "symbol": "resolveWhen",
+          "authority": "EXIT_DECLARATION"
+        },
+        {
+          "path": "src/apiserver/src/common/blocker-signal-exit-inventory.spec.ts",
+          "symbol": "every blocker and durable signal declaration has a registered exit condition",
+          "authority": "SOURCE_AND_MIGRATION_COVERAGE_TEST"
+        }
+      ],
+      "readers": [
+        {
+          "path": "src/apiserver/src/projects/coordinator-convergence.service.ts",
+          "symbol": "project_blocker",
+          "purpose": "LEGACY_RESOLVER"
+        }
+      ],
+      "v2Treatment": "EVERY MANDATORY OBLIGATION KIND REFERENCES AN ACYCLIC RUNTIME-REACHABLE EXIT PROFILE; THE LEGACY BLOCKER/SIGNAL REGISTRY DOES NOT DECIDE CLOSURE"
+    }
+  ]
+}

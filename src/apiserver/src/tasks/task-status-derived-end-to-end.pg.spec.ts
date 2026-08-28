@@ -937,8 +937,8 @@ suite(
       (row) => row.evidenceVersion.toString() === acceptanceRun.attempt,
     ));
     const gateBeforeOptional = await acceptance.evaluateGate(project.id);
-    assert.equal(gateBeforeOptional.allowed, true, gateBeforeOptional.reason ?? 'doneGate refused');
-    assert.equal(gateBeforeOptional.runId, acceptanceRun.id);
+    assert.equal(gateBeforeOptional.allowed, true,
+      String(gateBeforeOptional.reason.message ?? 'doneGate refused'));
 
     const optional = await tasks.create(ownerId, {
       title: 'N9 optional follow-up outside acceptance criteria',
@@ -949,8 +949,7 @@ suite(
     assert.equal(optional.status, TaskStatus.OPEN);
     const gateAfterOptional = await acceptance.evaluateGate(project.id);
     assert.equal(gateAfterOptional.allowed, true,
-      gateAfterOptional.reason ?? 'an irrelevant OPEN task changed acceptance');
-    assert.equal(gateAfterOptional.runId, acceptanceRun.id);
+      String(gateAfterOptional.reason.message ?? 'an irrelevant OPEN task changed acceptance'));
     assert.equal(await db.projectAcceptanceRun.count({ where: { projectId: project.id } }), 1,
       'task creation does not mint or invalidate an acceptance evidence version');
 

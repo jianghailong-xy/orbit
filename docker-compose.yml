@@ -80,6 +80,7 @@ services:
       - "${ORBIT_BACKUP_SSH_DIR:-/root/.ssh}:/ssh:ro"
 
   apiserver:
+    image: orbit-apiserver:local
     build:
       context: .
       dockerfile: src/apiserver/Dockerfile
@@ -127,6 +128,26 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+
+  # Independent operational observer. It shares the immutable application image, but has its own
+  # process/module graph and never invokes the reducers; stopping apiserver does not stop it.
+  watchdog:
+    image: orbit-apiserver:local
+    container_name: orbit-watchdog
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - 'cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy && cd /app && exec node src/apiserver/dist/outcome-watchdog/main.js'
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      OUTCOME_WATCHDOG_POLICY_PATH: "/app/contracts/outcome-reconciler-v2-watchdog-slo.json"
+      # upgrade.sh supplies the checked-out commit. Empty values fail closed in the worker.
+      OUTCOME_WATCHDOG_COLLECTOR_SHA: "${OUTCOME_WATCHDOG_COLLECTOR_SHA:-}"
+      OUTCOME_WATCHDOG_TARGET_SHA: "${OUTCOME_WATCHDOG_TARGET_SHA:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     build:

@@ -46,6 +46,6 @@ for t in "${TARGETS[@]}"; do
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
 done
 
-printf '{"version":"%s"}\n' "$VER" > "$OUT/version.json"
+node scripts/runner-release-manifest.mjs "$VER" "$OUT/version.json"
 echo ">> wrote $OUT/version.json (v$VER)"
 ls -lh "$OUT"

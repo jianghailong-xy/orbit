@@ -41,10 +41,10 @@
  * validated batch — and everything it MUST re-derive is read inside it, under the locks it takes.
  * `identity` is the first half of that claim and `replay` is the second. `effects` is the third
  * thing that decides it: an external action inside a retried closure would happen once per
- * attempt, which is why every one of them in this codebase sits after the commit, and why the
- * spec asserts that mechanically rather than trusting this sentence. The API server sends no mail,
- * so the external actions this has to account for are the realtime publishes, the APNs push and
- * the nudges to a runner — the spec's pattern names all three plus a bare `fetch`.
+ * attempt, so retried units keep every such action after commit. The constrained Action Executor
+ * is the deliberate exception to "nothing external in a transaction": it is a `TX_BARE` unit
+ * whose transaction is the authorization/binding commit fence, whose provider call is
+ * provider-idempotent, and which is never automatically replayed by a database retry loop.
  *
  * ISOLATION
  * ---------
@@ -95,11 +95,11 @@ export interface TransactionUnit {
 /**
  * Every transaction boundary in the API server.
  *
- * All of them are retried. That is not a coincidence and not a policy applied without looking: a
- * transaction boundary in this codebase exists to make several database statements atomic, and
- * none of them does anything else — the spec proves the "anything else" half by scanning every
- * closure for an external call. A unit that could not be re-run would appear here as `TX_BARE`
- * with the reason in `replay`; there is currently none.
+ * Ordinary database-only units are retried. A unit that cannot be re-run appears here as
+ * `TX_BARE`, with its one-attempt decision and recovery path stated explicitly. In particular,
+ * ActionExecutorService.executeNext holds the fact-stream serialization lock across the provider
+ * commit so revocation or rebinding is ordered before or after that effect; provider idempotency
+ * and the durable lease recover an ambiguous database outcome without an in-process retry.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
@@ -169,15 +169,26 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
-    at: 'projects/project-acceptance.service.ts#confirmCriteriaSet',
+    at: 'projects/project-acceptance.service.ts#ratifyByOwner',
     shape: 'TX_RETRIED',
-    locks: 'project FOR NO KEY UPDATE (rank 40), then project_acceptance_criteria_confirmation (rank 60). The optional acting Session provenance read happens before this transaction and takes no lock.',
-    identity: 'The exact current standard-set fact: UNIQUE(project_id, criteria_digest). A duplicate request returns the existing append-only confirmation instead of inventing a second event.',
+    locks: 'project FOR NO KEY UPDATE (rank 40), project_completion_contract FOR UPDATE, then the exact project_owner_decision_request and append-only project_owner_ratification children (rank 60). Expiring a stale CTA and issuing its replacement stay under those same locks.',
+    identity: 'The owner-supplied idempotency key plus project and exact contract digest. The database unique key returns the already committed decision only when all three still agree, and rejects cross-project or cross-contract reuse.',
     isolation: '',
     attempts: 4,
-    replay: 'The digest is read from the project row after locking it inside every attempt. A retry therefore confirms the standard set the winner left, and the unique-key read/create sequence is serialized by that same project lock.',
-    effects: 'None inside. Reconciliation is invoked only after the confirmation transaction resolves.',
-    answer: 'Typed 503 from the global boundary; a judgment-session refusal is decided before the transaction and remains a 403 with PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY.',
+    replay: 'Every attempt refreshes the semantic contract while holding the project mutex, rechecks the expected digest and locks the current CTA before spending it. A victim exposes neither the decision event nor the CTA transition; a retry sees the winner and returns the same append-only ratification.',
+    effects: 'None inside. Acceptance reconciliation starts only after the ratification transaction commits; if that later step fails, replay with the same idempotency key returns the committed decision.',
+    answer: 'Typed 503 from the global boundary. Stale, expired, duplicate and actor refusals are durable ratification answers with their own codes.',
+  },
+  {
+    at: 'projects/project-acceptance.service.ts#ratifyByPreapproval',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), project_completion_contract FOR UPDATE, then exactly one project_ratification_template or project_ratification_delegation authority, the decision request and append-only ratification children (rank 60).',
+    identity: 'The caller idempotency key, exact project contract and exact owner-created authority id. Its unique receipt cannot be replayed against a different contract, project or authority scope.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Inside every attempt the function refreshes all digest lanes, locks and revalidates authority principal/scope/time/use/budget bounds, binds the selected authority into the contract, and only then consumes one use. Rollback consumes no use and grants no ratification; a retry either returns the winner or fails closed against the state it left.',
+    effects: 'None inside. Acceptance reconciliation starts only after the bounded authority transaction commits.',
+    answer: 'Typed 503 from the global boundary. Revoked, exhausted, expired, wrong-principal and out-of-bounds authorities return explicit ratification refusal codes.',
   },
   {
     at: 'projects/project-acceptance.service.ts#reconcile',
@@ -842,6 +853,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
   },
   {
+    at: 'outcome-reconciler/action-executor.service.ts#executeNext',
+    shape: 'TX_BARE',
+    locks: 'outcome_fact_stream FOR UPDATE (the project serialization fence), then outcome_action_intent FOR UPDATE and outcome_action_budget_account FOR UPDATE; executor obligation/event children are appended after those parents. Authority revocation, binding replacement, precondition replacement and evaluator publication take the same fact-stream row first, so provider commit and every authority-changing fact are totally ordered.',
+    identity: 'The frozen actionIntentId plus its provider-enforced idempotencyKey. The lease token identifies this attempt; a provider replay returns the same effect receipt instead of repeating the effect.',
+    isolation: '',
+    attempts: 1,
+    replay: 'Deliberately not retried in process. The provider may already have committed when PostgreSQL rejects or loses the transaction, so replaying this closure would be unsafe. Rollback restores CLAIMED; durable logical lease expiry moves it through bounded BACKOFF, and a later claim invokes the provider with the same idempotency key to recover the standing receipt. Attempt and cost budgets make that recovery finite.',
+    effects: 'The provider action and, only for a reported partial/wrong effect, its compensator run inside this one-attempt transaction while the project fact-stream fence is held. Non-read-only adapters must assert that fence immediately before committing and must enforce the idempotency key. A timeout/partial/wrong receipt becomes an executor remediation obligation; a process/database ambiguity remains leased until the bounded recovery pass.',
+    answer: 'A commit-time authorization/binding/precondition refusal is persisted as its canonical obligation. A database conflict is not absorbed: it escapes the unit, the lease remains the durable recovery fact after rollback, and the next bounded claim recovers by provider-idempotent replay.',
+  },
+  {
     at: 'workspaces/workspaces.service.ts#reorder',
     shape: 'TX_RETRIED',
     locks: 'workspace rows, one UPDATE each, IN ID ORDER. This is the fix the audit was looking for: the statements used to run in the caller’s drag order, so two drags that move the same workspaces opposite ways took the same rows backwards.',
@@ -1182,9 +1204,36 @@ export interface TriggerWriteSource {
 export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_delete", event: "BEFORE DELETE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
   { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_rename", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
+  { table: "outcome_action_attempt", trigger: "outcome_action_attempt_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_diagnostic", trigger: "outcome_action_diagnostic_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_event", trigger: "outcome_action_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_intent", trigger: "outcome_action_committing_must_finish", event: "AFTER INSERT OR UPDATE OF status", kind: "CONSTRAINT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_action_receipt", trigger: "outcome_action_receipt_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_canonical_fact", trigger: "outcome_canonical_fact_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_coordinator_attempt_result", trigger: "outcome_coordinator_attempt_result_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0198_outcome_persistent_coordinator", takes: [] },
+  { table: "outcome_coordinator_event", trigger: "outcome_coordinator_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0198_outcome_persistent_coordinator", takes: [] },
+  { table: "outcome_coordinator_lease", trigger: "outcome_coordinator_lease_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0198_outcome_persistent_coordinator", takes: [] },
+  { table: "outcome_coordinator_obligation_revision", trigger: "outcome_coordinator_obligation_revision_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0198_outcome_persistent_coordinator", takes: [] },
+  { table: "outcome_coordinator_wake_delivery", trigger: "outcome_coordinator_wake_delivery_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0198_outcome_persistent_coordinator", takes: [] },
+  { table: "outcome_evaluation_cut", trigger: "outcome_evaluation_cut_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_evaluation_cut_fact", trigger: "outcome_evaluation_cut_fact_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_evaluator_result", trigger: "outcome_evaluator_result_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_outcome_evaluator_obligation_reduction", takes: [] },
+  { table: "outcome_evaluator_result", trigger: "outcome_evaluator_result_projection_reduce", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0196_obligation_projection_shadow_reconciler", takes: [] },
+  { table: "outcome_executor_obligation_event", trigger: "outcome_executor_obligation_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_executor_obligation_revision", trigger: "outcome_executor_obligation_revision_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_outcome_constrained_action_executor", takes: [] },
+  { table: "outcome_fact_authority_grant", trigger: "outcome_fact_authority_grant_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_fact_authority_matrix", trigger: "outcome_fact_authority_matrix_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_fact_authority_revocation", trigger: "outcome_fact_authority_revocation_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_fact_binding", trigger: "outcome_fact_binding_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0194_outcome_canonical_fact_ingress", takes: [] },
+  { table: "outcome_obligation_event", trigger: "outcome_obligation_event_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_outcome_evaluator_obligation_reduction", takes: [] },
+  { table: "outcome_obligation_revision", trigger: "outcome_obligation_revision_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_outcome_evaluator_obligation_reduction", takes: [] },
+  { table: "outcome_projection", trigger: "outcome_projection_outbox_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0196_obligation_projection_shadow_reconciler", takes: [] },
+  { table: "outcome_watchdog", trigger: "outcome_watchdog_evidence_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0199_outcome_independent_watchdog_slo_security", takes: [] },
+  { table: "outcome_watchdog", trigger: "outcome_watchdog_sample_append_only", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0199_outcome_independent_watchdog_slo_security", takes: [] },
   { table: "project", trigger: "project_acceptance_advance_epoch", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: [] },
   { table: "project", trigger: "project_acceptance_criteria_fact", event: "AFTER INSERT OR UPDATE OF \"acceptance_criteria\"", kind: "ROW/STATEMENT", since: "0172_structured_project_acceptance_criteria", takes: ["project_acceptance_audit WRITE", "project_acceptance_criterion_definition WRITE", "project_acceptance_run WRITE"] },
   { table: "project", trigger: "project_acceptance_done_gate", event: "BEFORE UPDATE OF \"status\", \"accepted_run_id\"", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: [] },
+  { table: "project", trigger: "project_acceptance_done_insert_gate", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0197_canonical_obligation_done_gate", takes: [] },
   { table: "project", trigger: "project_acceptance_epoch_audit", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: ["project_acceptance_audit WRITE"] },
   { table: "project", trigger: "project_coordinator_companions_bind", event: "AFTER UPDATE OF \"coordinator_workspace_id\"", kind: "CONSTRAINT", since: "0113_project_coordinator_final_row", takes: ["project_member WRITE", "project_runtime WRITE", "workspace LOCK"] },
   { table: "project", trigger: "project_coordinator_companions_insert", event: "AFTER INSERT", kind: "CONSTRAINT", since: "0113_project_coordinator_final_row", takes: ["project_member WRITE", "project_runtime WRITE", "workspace LOCK"] },
@@ -1192,13 +1241,15 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "project", trigger: "project_coordinator_pointer_guard", event: "BEFORE INSERT OR UPDATE OF \"coordinator_session_id\", \"coordinator_workspace_id\"", kind: "ROW/STATEMENT", since: "0126_project_coordinator_session_lifecycle", takes: [] },
   { table: "project", trigger: "project_coordinator_rotation_count", event: "AFTER UPDATE OF \"coordinator_session_id\"", kind: "CONSTRAINT", since: "0113_project_coordinator_final_row", takes: ["project_member WRITE", "project_runtime WRITE", "workspace LOCK"] },
   { table: "project", trigger: "project_dispatch_authority_fanout", event: "AFTER UPDATE OF \"coordinator_enabled\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["task WRITE"] },
+  { table: "project", trigger: "zz_project_completion_contract_project", event: "AFTER INSERT OR UPDATE OF \"goal\", \"instructions\", \"coordinator_enabled\", \"automation_policy\", \"max_concurrent_tasks\", \"session_budget_per_day\", \"config_revision\", \"convergence_thresholds\", \"attempt_budget\", \"unbounded_authorized_by\"", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: ["project_completion_contract LOCK", "project_completion_contract WRITE"] },
   { table: "project_acceptance_audit", trigger: "project_acceptance_audit_append_only", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
   { table: "project_acceptance_conclusion", trigger: "project_acceptance_conclusion_immutable", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0179_project_acceptance_event_projection", takes: [] },
   { table: "project_acceptance_conclusion", trigger: "project_acceptance_conclusion_reconcile", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0179_project_acceptance_event_projection", takes: ["project LOCK", "project WRITE", "project_acceptance_audit WRITE"] },
   { table: "project_acceptance_conclusion", trigger: "project_acceptance_conclusion_validate", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0179_project_acceptance_event_projection", takes: ["project LOCK"] },
   { table: "project_acceptance_criteria_confirmation", trigger: "project_acceptance_confirmation_immutable", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0189_project_criteria_automation", takes: [] },
   { table: "project_acceptance_criterion", trigger: "project_acceptance_criterion_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
-  { table: "project_acceptance_criterion_definition", trigger: "project_acceptance_definition_normalize", event: "BEFORE INSERT OR UPDATE OF \"text\", \"verification_method\", \"completion_criterion\", \"acceptance_command\", \"acceptance_expected_exit_code\", \"evidence_task_id\", \"completion_criterion_override_reason\", \"revision\", \"content_hash\"", kind: "ROW/STATEMENT", since: "0189_project_criteria_automation", takes: [] },
+  { table: "project_acceptance_criterion_definition", trigger: "project_acceptance_definition_normalize", event: "BEFORE INSERT OR UPDATE OF \"text\", \"verification_method\", \"completion_criterion\", \"acceptance_command\", \"acceptance_expected_exit_code\", \"evidence_task_id\", \"completion_criterion_override_reason\", \"revision\", \"content_hash\", \"semantic_revision\", \"semantic_hash\", \"evaluation_plan_revision\", \"evaluation_plan_hash\"", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: [] },
+  { table: "project_acceptance_criterion_definition", trigger: "zz_project_completion_contract_definition", event: "AFTER INSERT OR UPDATE OR DELETE", kind: "CONSTRAINT", since: "0195_project_owner_ratification", takes: ["project LOCK", "project_completion_contract LOCK", "project_completion_contract WRITE"] },
   { table: "project_acceptance_run", trigger: "project_acceptance_run_epoch_guard", event: "BEFORE INSERT OR UPDATE", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: [] },
   { table: "project_acceptance_run", trigger: "project_acceptance_run_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
   { table: "project_action", trigger: "project_action_dispatch_immutable", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
@@ -1207,11 +1258,21 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "project_blocker", trigger: "project_blocker_resolution_final", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0125_project_blocker", takes: [] },
   { table: "project_decision", trigger: "project_decision_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0120_project_decision_audit", takes: [] },
   { table: "project_handoff_approval", trigger: "project_handoff_approval_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0155_project_handoff_approval", takes: [] },
+  { table: "project_member", trigger: "project_member_ratification_project_lock", event: "BEFORE INSERT OR UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: ["project LOCK"] },
+  { table: "project_member", trigger: "zz_project_completion_contract_member", event: "AFTER INSERT OR UPDATE OR DELETE", kind: "CONSTRAINT", since: "0195_project_owner_ratification", takes: ["project LOCK", "project_completion_contract LOCK", "project_completion_contract WRITE"] },
+  { table: "project_owner_ratification", trigger: "project_owner_ratification_immutable", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: [] },
+  { table: "project_ratification_delegation", trigger: "project_ratification_delegation_changed", event: "AFTER UPDATE OF \"revoked_at\"", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: ["project LOCK", "project_completion_contract LOCK", "project_completion_contract WRITE"] },
+  { table: "project_ratification_delegation", trigger: "project_ratification_delegation_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: [] },
+  { table: "project_ratification_template", trigger: "project_ratification_template_changed", event: "AFTER UPDATE OF \"revoked_at\"", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: ["project LOCK", "project_completion_contract LOCK", "project_completion_contract WRITE"] },
+  { table: "project_ratification_template", trigger: "project_ratification_template_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: [] },
+  { table: "project_ratified_action_commit", trigger: "project_ratified_action_commit_immutable", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: [] },
+  { table: "project_ratified_action_intent", trigger: "project_ratified_action_intent_immutable", event: "BEFORE UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: [] },
   { table: "session", trigger: "session_admission_lock_order_insert_delete", event: "BEFORE INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["project LOCK", "scope_before LOCK", "task LOCK"] },
   { table: "session", trigger: "session_admission_lock_order_update", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\", \"starts_task_work\"", kind: "ROW/STATEMENT", since: "0134_task_aggregate_parent_dispatch_guard", takes: ["project LOCK", "scope_before LOCK", "task LOCK"] },
   { table: "session", trigger: "session_completed_at_compat", event: "BEFORE INSERT OR UPDATE OF \"completed_at\", \"archived_at\"", kind: "ROW/STATEMENT", since: "0076_session_completed_semantics", takes: [] },
   { table: "session", trigger: "session_merge_projection_checkpoint_authority_trg", event: "BEFORE UPDATE OF \"merge_status\", \"merged_source_sha\", \"branch_merged\"", kind: "ROW/STATEMENT", since: "0152_task_checkpoint", takes: [] },
   { table: "session", trigger: "session_opencode_runner_claim_guard", event: "BEFORE UPDATE OF \"status\"", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
+  { table: "session", trigger: "session_owner_ratification_guard", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0195_project_owner_ratification", takes: ["task LOCK"] },
   { table: "session", trigger: "session_project_capacity_serialize_insert_delete", event: "BEFORE INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["project WRITE"] },
   { table: "session", trigger: "session_project_capacity_serialize_update", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["project WRITE"] },
   { table: "session", trigger: "session_superseded_task_guard", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["task LOCK"] },
@@ -1226,6 +1287,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "task", trigger: "task_dispatch_authority_derive", event: "BEFORE INSERT OR UPDATE OF \"project_id\", \"dispatch_authority\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
   { table: "task", trigger: "task_dispatch_epoch_seed", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch WRITE"] },
   { table: "task", trigger: "task_dispatch_epoch_update", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch LOCK"] },
+  { table: "task", trigger: "task_done_canonical_writer_fence", event: "BEFORE UPDATE OF \"status\", \"completion_fence_revision\"", kind: "ROW/STATEMENT", since: "0193_task_done_writer_fence", takes: [] },
   { table: "task", trigger: "task_judgment_verifier_delete_guard", event: "AFTER DELETE", kind: "CONSTRAINT", since: "0192_verifier_role_completion", takes: [] },
   { table: "task", trigger: "task_judgment_verifier_terminal_guard", event: "BEFORE UPDATE OF \"status\", \"verdict\", \"verifies_task_id\"", kind: "ROW/STATEMENT", since: "0192_verifier_role_completion", takes: [] },
   { table: "task", trigger: "task_open_verification_request_carrier_guard", event: "AFTER INSERT OR UPDATE OF \"verdict\", \"verifies_task_id\"", kind: "CONSTRAINT", since: "0192_verifier_role_completion", takes: [] },

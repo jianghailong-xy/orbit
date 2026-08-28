@@ -1,0 +1,974 @@
+{
+  "$schema": "./outcome-reconciler-v2.schema.json",
+  "contractName": "orbit.outcome-reconciler",
+  "contractVersion": "2.0.0",
+  "evaluatorVersion": "outcome-reducer-v2",
+  "canonicalization": {
+    "algorithm": "RFC8785_JSON_SHA256",
+    "digestEncoding": "LOWERCASE_HEX",
+    "unorderedArrays": "SORT_BY_DECLARED_STABLE_KEY",
+    "nullAndAbsentAreDistinct": true
+  },
+  "nonGoals": [
+    "HARDENED_HUMAN_PRESENCE",
+    "FULL_HISTORY_MIGRATION",
+    "GENERAL_SAAS_SAGA"
+  ],
+  "stateAlgebra": {
+    "states": [
+      "SATISFIED",
+      "UNSATISFIED",
+      "UNKNOWN",
+      "CONFLICT",
+      "NOT_APPLICABLE"
+    ],
+    "closureEligibleStates": [
+      "SATISFIED",
+      "NOT_APPLICABLE"
+    ],
+    "precedence": [
+      "NOT_APPLICABLE",
+      "SATISFIED",
+      "UNSATISFIED",
+      "UNKNOWN",
+      "CONFLICT"
+    ],
+    "definitions": {
+      "SATISFIED": "Current, trusted proof establishes the dimension for the exact binding.",
+      "UNSATISFIED": "Current, trusted proof establishes that the dimension is not met.",
+      "UNKNOWN": "The model requires the dimension but lacks current, trusted evidence to decide it.",
+      "CONFLICT": "Two current authoritative facts for the same binding cannot both be true.",
+      "NOT_APPLICABLE": "A current applicability proof establishes that this declared dimension does not apply."
+    },
+    "combineTable": {
+      "SATISFIED": {
+        "SATISFIED": "SATISFIED",
+        "UNSATISFIED": "UNSATISFIED",
+        "UNKNOWN": "UNKNOWN",
+        "CONFLICT": "CONFLICT",
+        "NOT_APPLICABLE": "SATISFIED"
+      },
+      "UNSATISFIED": {
+        "SATISFIED": "UNSATISFIED",
+        "UNSATISFIED": "UNSATISFIED",
+        "UNKNOWN": "UNKNOWN",
+        "CONFLICT": "CONFLICT",
+        "NOT_APPLICABLE": "UNSATISFIED"
+      },
+      "UNKNOWN": {
+        "SATISFIED": "UNKNOWN",
+        "UNSATISFIED": "UNKNOWN",
+        "UNKNOWN": "UNKNOWN",
+        "CONFLICT": "CONFLICT",
+        "NOT_APPLICABLE": "UNKNOWN"
+      },
+      "CONFLICT": {
+        "SATISFIED": "CONFLICT",
+        "UNSATISFIED": "CONFLICT",
+        "UNKNOWN": "CONFLICT",
+        "CONFLICT": "CONFLICT",
+        "NOT_APPLICABLE": "CONFLICT"
+      },
+      "NOT_APPLICABLE": {
+        "SATISFIED": "SATISFIED",
+        "UNSATISFIED": "UNSATISFIED",
+        "UNKNOWN": "UNKNOWN",
+        "CONFLICT": "CONFLICT",
+        "NOT_APPLICABLE": "NOT_APPLICABLE"
+      }
+    },
+    "notApplicableRequiresApplicabilityProof": true,
+    "emptyDimensionSetResult": "MODEL_GAP"
+  },
+  "completionDimensions": [
+    {
+      "id": "GOAL_DISPOSITION",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "ESTABLISH_GOAL_DISPOSITION"
+    },
+    {
+      "id": "CONTRACT_RATIFICATION",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REQUEST_GOAL_DECISION"
+    },
+    {
+      "id": "CRITERIA_EVALUATION",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "SATISFY_COMPLETION_DIMENSION"
+    },
+    {
+      "id": "FACT_CUT_INTEGRITY",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REPAIR_FACT_CUT"
+    },
+    {
+      "id": "EVIDENCE_TRUST",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REPAIR_FACT_CUT"
+    },
+    {
+      "id": "BINDING_FRESHNESS",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REFRESH_STALE_BINDING"
+    },
+    {
+      "id": "AUTHORITY_VALIDITY",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REQUEST_NEW_AUTHORIZATION"
+    },
+    {
+      "id": "POLICY_COMPLIANCE",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REQUEST_RISK_ACCEPTANCE"
+    },
+    {
+      "id": "BUDGET_COMPLIANCE",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "REQUEST_RISK_ACCEPTANCE"
+    },
+    {
+      "id": "ARTIFACT_INTEGRATION",
+      "mandatory": true,
+      "notApplicableAllowed": true,
+      "unsatisfiedObligationKind": "PROVE_ARTIFACT_INTEGRATION"
+    },
+    {
+      "id": "TARGET_PRESENCE",
+      "mandatory": true,
+      "notApplicableAllowed": true,
+      "unsatisfiedObligationKind": "PROVE_TARGET_PRESENCE"
+    },
+    {
+      "id": "POST_MERGE_VERIFICATION",
+      "mandatory": true,
+      "notApplicableAllowed": true,
+      "unsatisfiedObligationKind": "RUN_BOUND_VERIFICATION"
+    },
+    {
+      "id": "EXTERNAL_CLOSURE_DEPENDENCIES",
+      "mandatory": true,
+      "notApplicableAllowed": true,
+      "unsatisfiedObligationKind": "MONITOR_EXTERNAL_WAIT"
+    },
+    {
+      "id": "ACTION_REMEDIATION",
+      "mandatory": true,
+      "notApplicableAllowed": true,
+      "unsatisfiedObligationKind": "REMEDIATE_SIDE_EFFECT"
+    },
+    {
+      "id": "MODEL_COVERAGE",
+      "mandatory": true,
+      "notApplicableAllowed": false,
+      "unsatisfiedObligationKind": "DIAGNOSE_MODEL_GAP"
+    }
+  ],
+  "bindingContract": {
+    "requiredFields": [
+      "tenantId",
+      "projectId",
+      "subjectType",
+      "subjectId",
+      "goalId",
+      "goalRevision",
+      "contractDigest",
+      "evaluationPlanDigest",
+      "policyDigest",
+      "riskPolicyDigest",
+      "permissionDigest",
+      "authorityGrantDigest",
+      "budgetDigest",
+      "capabilityRegistryDigest",
+      "recipientDigest",
+      "evaluatorDigest",
+      "factSchemaDigest",
+      "environmentDigest",
+      "artifactDigest",
+      "targetDigest",
+      "targetRef",
+      "asOfLogicalTime",
+      "factCutDigest"
+    ],
+    "materialInvalidators": [
+      "CONTRACT_CHANGED",
+      "CRITERIA_CHANGED",
+      "ARTIFACT_CHANGED",
+      "TARGET_CHANGED",
+      "RISK_POLICY_CHANGED",
+      "PERMISSION_CHANGED",
+      "AUTHORITY_CHANGED",
+      "BUDGET_CHANGED",
+      "CAPABILITY_REGISTRY_CHANGED",
+      "RECIPIENT_CHANGED",
+      "EVALUATOR_CHANGED",
+      "FACT_SCHEMA_CHANGED",
+      "ENVIRONMENT_CHANGED",
+      "AS_OF_ADVANCED"
+    ],
+    "staleHandling": "ATOMICALLY_SUPERSEDE_PROOF_AND_REDUCE_NEW_REVISION",
+    "lateFactRule": "ACCEPT_ONLY_IF_BINDING_AND_AUTHORITY_WERE_VALID_AT_THE_CUT"
+  },
+  "trustEnvelope": {
+    "requiredFields": [
+      "factId",
+      "factKind",
+      "tenantId",
+      "subject",
+      "binding",
+      "schemaVersion",
+      "schemaDigest",
+      "payload",
+      "payloadDigest",
+      "claimType",
+      "principal",
+      "authority",
+      "observedAt",
+      "recordedAt",
+      "logicalTime",
+      "causalPredecessorFactId",
+      "idempotencyKey",
+      "source",
+      "signature"
+    ],
+    "subjectRequiredFields": [
+      "type",
+      "id",
+      "projectId"
+    ],
+    "principalRequiredFields": [
+      "type",
+      "id"
+    ],
+    "authorityRequiredFields": [
+      "grantId",
+      "grantDigest",
+      "scopeDigest",
+      "delegationChainDigest",
+      "validFromLogicalTime",
+      "validThroughLogicalTime",
+      "revokedAtLogicalTime"
+    ],
+    "sourceRequiredFields": [
+      "system",
+      "collectorId",
+      "collectorVersion"
+    ],
+    "signatureRequiredFields": [
+      "algorithm",
+      "keyId",
+      "value"
+    ],
+    "claimTypes": [
+      "OBSERVATION",
+      "ATTESTATION",
+      "DECISION",
+      "INTENT",
+      "RECEIPT",
+      "INVALIDATION"
+    ],
+    "trustDecisions": [
+      "TRUSTED",
+      "UNTRUSTED",
+      "OUT_OF_SCOPE",
+      "REVOKED",
+      "STALE_SCHEMA",
+      "BAD_DIGEST"
+    ],
+    "claimIsProof": false,
+    "projectionMayBeAuthority": false,
+    "immutableAfterAppend": true
+  },
+  "factCutContract": {
+    "requiredFields": [
+      "cutId",
+      "tenantId",
+      "projectId",
+      "watermarkLogicalTime",
+      "factIds",
+      "factCount",
+      "factSetDigest",
+      "openedAt",
+      "sealedAt",
+      "complete",
+      "linearizable",
+      "collectorVersion"
+    ],
+    "order": [
+      "logicalTime",
+      "factId"
+    ],
+    "atomicEvaluation": true,
+    "emptyCut": "MODEL_GAP",
+    "projectionInput": "REFUSE"
+  },
+  "factKinds": [
+    "GOAL_DECLARED",
+    "GOAL_RATIFIED",
+    "GOAL_DISPOSITION_RECORDED",
+    "ATTEMPT_STARTED",
+    "ATTEMPT_TERMINATED",
+    "DIMENSION_EVALUATED",
+    "MODEL_GAP_DETECTED",
+    "TASK_STATUS_OBSERVED",
+    "DONE_GATE_EVALUATED",
+    "JUDGMENT_REQUESTED",
+    "JUDGMENT_DECIDED",
+    "JUDGMENT_SIGNAL_OBSERVED",
+    "BLOCKER_EPISODE_OBSERVED",
+    "PROJECT_ATTENTION_OBSERVED",
+    "DISPATCH_LEASE_OBSERVED",
+    "MERGE_RECEIPT_RECORDED",
+    "ACCEPTANCE_REVISION_RECORDED",
+    "TIMER_SCHEDULED",
+    "TIMER_FIRED",
+    "TIMER_CANCELLED",
+    "ACTION_INTENT_RECORDED",
+    "ACTION_RECEIPT_RECORDED",
+    "OBLIGATION_EXIT_RECORDED",
+    "CROSSING_HANDOFF_RECORDED"
+  ],
+  "goalAttemptContract": {
+    "goalRequiredFields": [
+      "goalId",
+      "goalRevision",
+      "tenantId",
+      "projectId",
+      "statement",
+      "contractDigest",
+      "evaluationPlanDigest",
+      "ratification",
+      "disposition"
+    ],
+    "goalDispositions": [
+      "ACTIVE",
+      "ACHIEVED",
+      "ABANDONED",
+      "SUPERSEDED"
+    ],
+    "attemptRequiredFields": [
+      "attemptId",
+      "attemptGeneration",
+      "goalId",
+      "goalRevision",
+      "sessionId",
+      "hypothesisDigest",
+      "budgetDigest",
+      "startedAtLogicalTime",
+      "endedAtLogicalTime",
+      "status",
+      "outcome"
+    ],
+    "attemptStatuses": [
+      "OPEN",
+      "WINDING_DOWN",
+      "CLOSED"
+    ],
+    "attemptOutcomes": [
+      "SUCCEEDED",
+      "FAILED",
+      "CANCELLED",
+      "TIMED_OUT",
+      "SUPERSEDED"
+    ],
+    "terminalAttemptDoesNotTerminateGoal": true,
+    "failedOrCancelledActiveGoalRequires": "START_SUCCESSOR_ATTEMPT_OR_DIAGNOSE_OR_TERMINAL_GOAL_DECISION",
+    "attemptIdentityExcludedFromObligationIdentity": true
+  },
+  "logicalTimeContract": {
+    "evaluationRequiredFields": [
+      "logicalNow",
+      "clockId",
+      "evaluatedThroughLogicalTime"
+    ],
+    "timerRequiredFields": [
+      "timerId",
+      "tenantId",
+      "goalId",
+      "obligationId",
+      "obligationRevision",
+      "bindingDigest",
+      "clockId",
+      "dueLogicalTime",
+      "dueAt",
+      "scheduleFactId",
+      "state",
+      "deliveryAttempt",
+      "wakeId",
+      "timeoutExit"
+    ],
+    "timerStates": [
+      "SCHEDULED",
+      "FIRED",
+      "CANCELLED"
+    ],
+    "wallClockDecisionUse": "FORBIDDEN",
+    "wallClockPurpose": "AUDIT_AND_EXTERNAL_SCHEDULING_ONLY",
+    "timerPersistence": "DURABLE_APPEND_FACT_PLUS_REBUILDABLE_DUE_INDEX",
+    "timerDelivery": "AT_LEAST_ONCE_WITH_IDEMPOTENT_WAKE"
+  },
+  "digestContract": {
+    "contractMaterialFields": [
+      "goal",
+      "outcomes",
+      "riskBoundary",
+      "criteria",
+      "criteriaTrust",
+      "ownerId",
+      "templateDigest",
+      "delegationDigest"
+    ],
+    "evaluationPlanMaterialFields": [
+      "commands",
+      "verifiers",
+      "evidenceWiring",
+      "collectorVersions",
+      "environment"
+    ],
+    "contractDigestAndEvaluationPlanDigestAreDistinct": true,
+    "contractRatificationRequired": true,
+    "allowedRatifers": [
+      "OWNER",
+      "PREAPPROVED_TEMPLATE",
+      "BOUND_DELEGATION"
+    ],
+    "ordinaryRunnerMayRatify": false,
+    "unratifiedAllowedEffects": [
+      "READ_ONLY_ANALYSIS",
+      "PLANNING",
+      "DISCARDABLE_EXPLORATION"
+    ],
+    "materialContractChange": "STALE_AND_REQUEST_ONE_NEW_OWNER_DECISION",
+    "evaluationPlanOnlyChange": "RE_EVALUATE_WITHOUT_OWNER_RATIFICATION"
+  },
+  "obligationContract": {
+    "requiredFields": [
+      "obligationId",
+      "obligationRevision",
+      "kind",
+      "state",
+      "mandatory",
+      "owner",
+      "capability",
+      "binding",
+      "reason",
+      "actionProtocolProfile",
+      "servesCriterionIds",
+      "blocksClosureOf",
+      "ownership",
+      "resolverProfile",
+      "createdAtLogicalTime",
+      "dueLogicalTime"
+    ],
+    "identityComponents": [
+      "tenantId",
+      "goalId",
+      "goalRevision",
+      "contractDigest",
+      "kind",
+      "subjectType",
+      "subjectId",
+      "homeProjectId"
+    ],
+    "identityForbiddenComponents": [
+      "attemptId",
+      "attemptGeneration",
+      "sessionId",
+      "leaseId",
+      "wallClock",
+      "reasonText"
+    ],
+    "revisionComponents": [
+      "obligationId",
+      "bindingDigest",
+      "authorityGrantDigest",
+      "reasonCode",
+      "owner",
+      "capability",
+      "actionProtocolDigest",
+      "dueLogicalTime"
+    ],
+    "states": [
+      "ACTIVE",
+      "RESOLVED",
+      "CANCELLED",
+      "SUPERSEDED",
+      "ESCALATED",
+      "TIMED_OUT"
+    ],
+    "exits": [
+      "RESOLVE",
+      "CANCEL",
+      "SUPERSEDE",
+      "ESCALATE",
+      "TIMEOUT"
+    ],
+    "owners": [
+      "SYSTEM",
+      "AGENT",
+      "OWNER",
+      "EXTERNAL"
+    ],
+    "humanDecisionKinds": [
+      "REQUEST_GOAL_DECISION",
+      "REQUEST_RISK_ACCEPTANCE",
+      "REQUEST_NEW_AUTHORIZATION",
+      "REQUEST_EXTERNAL_IDENTITY"
+    ],
+    "resolverProfiles": [
+      {
+        "id": "STANDARD_MANDATORY",
+        "startState": "ACTIVE",
+        "resolvers": [
+          {
+            "id": "FACT_RESOLVES",
+            "from": "ACTIVE",
+            "exit": "RESOLVE",
+            "to": "RESOLVED",
+            "actor": "SYSTEM",
+            "capability": "obligation.exit.resolve",
+            "adapter": "OUTCOME_RECONCILER"
+          },
+          {
+            "id": "DECISION_CANCELS",
+            "from": "ACTIVE",
+            "exit": "CANCEL",
+            "to": "CANCELLED",
+            "actor": "SYSTEM",
+            "capability": "obligation.exit.cancel",
+            "adapter": "OUTCOME_RECONCILER"
+          },
+          {
+            "id": "REVISION_SUPERSEDES",
+            "from": "ACTIVE",
+            "exit": "SUPERSEDE",
+            "to": "SUPERSEDED",
+            "actor": "SYSTEM",
+            "capability": "obligation.exit.supersede",
+            "adapter": "OUTCOME_RECONCILER"
+          },
+          {
+            "id": "POLICY_ESCALATES",
+            "from": "ACTIVE",
+            "exit": "ESCALATE",
+            "to": "ESCALATED",
+            "actor": "SYSTEM",
+            "capability": "obligation.exit.escalate",
+            "adapter": "OUTCOME_RECONCILER"
+          },
+          {
+            "id": "DURABLE_TIMER_EXPIRES",
+            "from": "ACTIVE",
+            "exit": "TIMEOUT",
+            "to": "TIMED_OUT",
+            "actor": "SYSTEM",
+            "capability": "obligation.exit.timeout",
+            "adapter": "DURABLE_TIMER_SERVICE"
+          }
+        ]
+      }
+    ],
+    "runtimeAdapters": [
+      {
+        "id": "OUTCOME_RECONCILER",
+        "status": "REGISTERED",
+        "actors": [
+          "SYSTEM"
+        ]
+      },
+      {
+        "id": "DURABLE_TIMER_SERVICE",
+        "status": "REGISTERED",
+        "actors": [
+          "SYSTEM"
+        ]
+      },
+      {
+        "id": "COORDINATOR_AGENT",
+        "status": "REGISTERED",
+        "actors": [
+          "AGENT"
+        ]
+      },
+      {
+        "id": "OWNER_DECISION_INBOX",
+        "status": "REGISTERED",
+        "actors": [
+          "OWNER"
+        ]
+      },
+      {
+        "id": "EXTERNAL_WAIT_MONITOR",
+        "status": "REGISTERED",
+        "actors": [
+          "SYSTEM",
+          "EXTERNAL"
+        ]
+      },
+      {
+        "id": "ACTION_EXECUTOR",
+        "status": "REGISTERED",
+        "actors": [
+          "SYSTEM"
+        ]
+      }
+    ],
+    "actionProtocolProfiles": [
+      {
+        "id": "SYSTEM_ACTION",
+        "actor": "SYSTEM",
+        "requiredFields": [
+          "actionKind",
+          "precondition",
+          "idempotencyKey",
+          "onSuccess",
+          "onRefusal"
+        ]
+      },
+      {
+        "id": "AGENT_ACTION",
+        "actor": "AGENT",
+        "requiredFields": [
+          "actionKind",
+          "context",
+          "successEvidence",
+          "failureProtocol",
+          "resumeBehavior"
+        ]
+      },
+      {
+        "id": "OWNER_DECISION",
+        "actor": "OWNER",
+        "requiredFields": [
+          "whyNotAgent",
+          "options",
+          "impacts",
+          "recommendation",
+          "noActionConsequence",
+          "cost",
+          "deadline",
+          "resumeBehavior",
+          "idempotencyKey"
+        ]
+      },
+      {
+        "id": "EXTERNAL_MONITOR",
+        "actor": "SYSTEM",
+        "requiredFields": [
+          "provider",
+          "condition",
+          "pollBudget",
+          "nextWake",
+          "escalation"
+        ]
+      }
+    ],
+    "kinds": [
+      {
+        "kind": "ESTABLISH_GOAL_DISPOSITION",
+        "defaultOwner": "AGENT",
+        "capability": "goal.disposition.propose",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "SATISFY_COMPLETION_DIMENSION",
+        "defaultOwner": "AGENT",
+        "capability": "dimension.satisfy",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REPAIR_FACT_CUT",
+        "defaultOwner": "SYSTEM",
+        "capability": "fact-cut.repair",
+        "actionProtocolProfile": "SYSTEM_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REFRESH_STALE_BINDING",
+        "defaultOwner": "SYSTEM",
+        "capability": "binding.refresh",
+        "actionProtocolProfile": "SYSTEM_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "PROVE_ARTIFACT_INTEGRATION",
+        "defaultOwner": "AGENT",
+        "capability": "artifact.integrate",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "PROVE_TARGET_PRESENCE",
+        "defaultOwner": "SYSTEM",
+        "capability": "target.presence.verify",
+        "actionProtocolProfile": "SYSTEM_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "RUN_BOUND_VERIFICATION",
+        "defaultOwner": "AGENT",
+        "capability": "verification.execute",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "DIAGNOSE_MODEL_GAP",
+        "defaultOwner": "AGENT",
+        "capability": "model-gap.diagnose",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "START_SUCCESSOR_ATTEMPT",
+        "defaultOwner": "AGENT",
+        "capability": "attempt.start-successor",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "MONITOR_EXTERNAL_WAIT",
+        "defaultOwner": "SYSTEM",
+        "capability": "external-wait.monitor",
+        "actionProtocolProfile": "EXTERNAL_MONITOR",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REQUEST_GOAL_DECISION",
+        "defaultOwner": "OWNER",
+        "capability": "owner.goal-decision",
+        "actionProtocolProfile": "OWNER_DECISION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REQUEST_RISK_ACCEPTANCE",
+        "defaultOwner": "OWNER",
+        "capability": "owner.risk-acceptance",
+        "actionProtocolProfile": "OWNER_DECISION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REQUEST_NEW_AUTHORIZATION",
+        "defaultOwner": "OWNER",
+        "capability": "owner.authorization",
+        "actionProtocolProfile": "OWNER_DECISION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REQUEST_EXTERNAL_IDENTITY",
+        "defaultOwner": "OWNER",
+        "capability": "owner.external-identity",
+        "actionProtocolProfile": "OWNER_DECISION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "REMEDIATE_SIDE_EFFECT",
+        "defaultOwner": "AGENT",
+        "capability": "effect.remediate",
+        "actionProtocolProfile": "AGENT_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      },
+      {
+        "kind": "RECOVER_RECONCILER",
+        "defaultOwner": "SYSTEM",
+        "capability": "reconciler.recover",
+        "actionProtocolProfile": "SYSTEM_ACTION",
+        "resolverProfile": "STANDARD_MANDATORY"
+      }
+    ]
+  },
+  "actionSafetyContract": {
+    "requiredFields": [
+      "actionIntentId",
+      "tenantId",
+      "obligationId",
+      "obligationRevision",
+      "effectClass",
+      "resourceType",
+      "resourceId",
+      "targetDigest",
+      "authorityGrantDigest",
+      "policyDigest",
+      "preconditionDigest",
+      "evaluatedThroughLogicalTime",
+      "idempotencyKey",
+      "budget",
+      "retryPolicy",
+      "compensation",
+      "receiptRequirements"
+    ],
+    "budgetRequiredFields": [
+      "accountId",
+      "unit",
+      "charge",
+      "limit",
+      "reservationId"
+    ],
+    "retryPolicyRequiredFields": [
+      "maxAttempts",
+      "backoffDigest",
+      "sameFailureFingerprintLimit"
+    ],
+    "compensationRequiredFields": [
+      "compensatorCapability",
+      "manualRecovery",
+      "remediationObligationKind"
+    ],
+    "receiptRequiredFields": [
+      "providerIdentity",
+      "effectDigest",
+      "observedAt",
+      "result",
+      "idempotencyKey"
+    ],
+    "effectClasses": [
+      "READ_ONLY",
+      "REVERSIBLE_INTERNAL",
+      "IRREVERSIBLE_INTERNAL",
+      "EXTERNAL_REVERSIBLE",
+      "EXTERNAL_IRREVERSIBLE"
+    ],
+    "missingContext": "FAIL_CLOSED",
+    "revokedAuthority": "FAIL_CLOSED",
+    "crashReplay": "SAME_IDEMPOTENCY_KEY_NO_DUPLICATE_EFFECT",
+    "wrongEffect": "APPEND_RECEIPT_AND_DERIVE_REMEDIATE_SIDE_EFFECT"
+  },
+  "crossProjectContract": {
+    "ownershipRequiredFields": [
+      "homeProjectId",
+      "blockingProjectIds",
+      "crossingId",
+      "handoffId",
+      "handoffStatus",
+      "attributionDecisionFactId"
+    ],
+    "servesCriterionAndBlocksClosureAreOrthogonal": true,
+    "foreignWorkOwnership": "REMAINS_WITH_HOME_PROJECT",
+    "foreignClosureDependency": "EXPLICIT_BLOCKS_CLOSURE_EDGE",
+    "implicitAdoption": "FORBIDDEN",
+    "handoffStatuses": [
+      "NOT_REQUIRED",
+      "PROPOSED",
+      "ACCEPTED",
+      "REFUSED",
+      "SUPERSEDED"
+    ]
+  },
+  "closedContract": {
+    "relation": "NECESSARY_AND_SUFFICIENT",
+    "clauses": [
+      "CONTRACT_RATIFIED_FOR_EXACT_CONTRACT_DIGEST",
+      "EVALUATION_PLAN_MATCHES_EXACT_EVALUATION_PLAN_DIGEST",
+      "FACT_CUT_IS_COMPLETE_LINEARIZABLE_AND_TRUSTED",
+      "EVALUATOR_VERSION_AND_DIGEST_MATCH_BINDING",
+      "EVERY_MANDATORY_DIMENSION_IS_SATISFIED_OR_PROVEN_NOT_APPLICABLE",
+      "NO_UNKNOWN_DIMENSION",
+      "NO_UNSATISFIED_DIMENSION",
+      "NO_CONFLICT_DIMENSION",
+      "NO_MODEL_GAP",
+      "GOAL_DISPOSITION_IS_ACHIEVED",
+      "NO_ACTIVE_MANDATORY_OBLIGATION",
+      "NO_STALE_OR_REVOKED_BINDING",
+      "NO_UNREMEDIATED_SIDE_EFFECT",
+      "ALL_EXTERNAL_CLOSURE_DEPENDENCIES_SETTLED"
+    ],
+    "forbiddenShortcuts": [
+      "EMPTY_REDUCER_OUTPUT",
+      "TASK_STATUS_DONE_ALONE",
+      "PROJECT_STATUS_DONE_ALONE",
+      "ATTEMPT_SUCCEEDED_ALONE",
+      "ATTEMPT_FAILED_OR_CANCELLED_AS_GOAL_EXIT",
+      "COMMAND_EXIT_ZERO_WITHOUT_BOUND_EVIDENCE",
+      "MERGE_RECEIPT_WITHOUT_CURRENT_TARGET_PRESENCE",
+      "OLD_PROOF_AFTER_BINDING_CHANGE",
+      "V1_PROJECTION_AS_CANONICAL_FACT"
+    ]
+  },
+  "projectionContract": {
+    "requiredFields": [
+      "obligationId",
+      "obligationRevision",
+      "bindingDigest",
+      "reason",
+      "owner",
+      "evaluatedThroughLogicalTime",
+      "projectionRevision",
+      "staleness"
+    ],
+    "consumers": [
+      "DONE_GATE",
+      "AGENT_QUEUE",
+      "OWNER_DECISION_INBOX",
+      "PROJECT_ATTENTION",
+      "MUTATION_RESPONSE",
+      "WEB"
+    ],
+    "writer": "OUTCOME_RECONCILER_ONLY",
+    "rebuildable": true,
+    "mayFeedEvaluator": false,
+    "staleCode": "RECONCILER_STALE",
+    "doneGate": {
+      "schemaVersion": 2,
+      "decisionSource": "EXACT_CURRENT_BINDING_EVALUATION_CUT",
+      "requiredFields": [
+        "canonicalIdentity",
+        "proof",
+        "proofGraph",
+        "reasons",
+        "blockingReasons",
+        "diagnostics",
+        "reason",
+        "obligations",
+        "blockingObligations",
+        "nonBlockingObligations",
+        "ratification",
+        "deliveryPolicy",
+        "crossProject"
+      ],
+      "reasonRequiredFields": [
+        "code",
+        "message",
+        "owner",
+        "actor",
+        "nextAction",
+        "blocksGate"
+      ],
+      "legacyBlockerSignalInputs": false,
+      "unknownType": "FAIL_CLOSED_WITH_UPGRADE_OR_ROLLBACK_ACTION",
+      "staleProjection": "FAIL_CLOSED_WITH_LAST_PROOF_AND_RECOVERY_ACTION",
+      "readFailure": "FAIL_CLOSED_WITH_DIAGNOSTIC",
+      "servesCriterionImpliesBlocksClosure": false,
+      "foreignClosureRequiresAcceptedExplicitCrossing": true
+    },
+    "actorCtaMayDiffer": true,
+    "actorCtaMayChangeUnderlyingObligation": false
+  },
+  "compatibilityBoundary": {
+    "currentProtocol": "V2",
+    "acceptedLegacyProtocols": [
+      "V1",
+      "V1_HEADERLESS_N_MINUS_ONE"
+    ],
+    "legacyWriteMode": "TRANSLATE_UNAMBIGUOUS_CLAIM_TO_APPEND_ONLY_FACT_OR_REFUSE",
+    "legacyReadMode": "SERVE_REBUILDABLE_PROJECTION_WITH_V2_ID_REVISION_BINDING_AND_WATERMARK",
+    "legacyDirectDone": "REFUSE",
+    "legacyCompletionFallbackToHuman": "REFUSE",
+    "legacyMayMintAuthority": false,
+    "legacyMayRatifyContract": false,
+    "legacyMayWriteProjection": false,
+    "unknownRevision": "REFUSE_WITH_STRUCTURED_UPGRADE_OR_ROLLBACK_ACTION",
+    "mixedClientCutover": "DUAL_READ_SHADOW_COMPARE_SINGLE_V2_PROJECTION_WRITER",
+    "rollback": "DISABLE_V2_WRITER_KEEP_APPEND_ONLY_FACTS_REBUILD_V1_PROJECTION",
+    "v1History": "READ_AS_LEGACY_CLAIMS_NOT_RETROACTIVE_TRUSTED_FACTS"
+  },
+  "sourceAudit": "./outcome-reconciler-v2-source-audit.json"
+}
