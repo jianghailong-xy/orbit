@@ -374,6 +374,24 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_obligations":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		surface := getString(args, "surface")
+		if surface == "" {
+			surface = "AGENT_QUEUE"
+		}
+		if !isOutcomeSurface(surface) {
+			return toolResult("surface must be one of DONE_GATE, AGENT_QUEUE, PROJECT_ATTENTION, WEB", true)
+		}
+		raw, err := s.t.getProjectOutcome(id, surface)
+		if err != nil {
+			return toolResult("get project obligations failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_criteria_confirm":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1768,6 +1786,20 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name":        "project_obligations",
+			"description": "Read the canonical obligation surface for this project. All surfaces preserve the exact obligation id/revision, semantic binding, reason/proof and evaluated-through watermark; only the authenticated AGENT CTA differs. AGENT_QUEUE is the default. A stale projection is an explicit control-plane error and never an empty queue.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type": "string", "description": "The project to read.",
+				},
+				"surface": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"DONE_GATE", "AGENT_QUEUE", "PROJECT_ATTENTION", "WEB"},
+					"description": "Actor view to read; defaults to AGENT_QUEUE.",
 				},
 			}, "projectId"),
 		},

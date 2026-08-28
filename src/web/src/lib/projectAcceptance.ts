@@ -79,6 +79,8 @@ export interface ProjectAcceptanceOverview {
   }>;
   acceptanceDigest: string;
   criteriaDigest: string;
+  contractDigest?: string;
+  evaluationPlanDigest?: string;
   criteriaConfirmation: {
     confirmed: boolean;
     criteriaDigest: string;

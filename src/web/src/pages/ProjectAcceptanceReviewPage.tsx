@@ -7,7 +7,6 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
-  projectAcceptanceConfirmationPath,
   projectAcceptanceOverviewPath,
   projectAcceptanceVerdictPath,
   type ProjectAcceptanceCriterion,
@@ -16,6 +15,7 @@ import {
   type ProjectAcceptanceRun,
   type ProjectAcceptanceVerdict,
 } from '../lib/projectAcceptance';
+import { ownerRatificationReviewPath } from '../lib/outcomeSurfaces';
 
 type DraftVerdict = ProjectAcceptanceVerdict | '';
 
@@ -301,27 +301,10 @@ export function ProjectAcceptanceReviewPage() {
   }) ?? [];
   const answeredCount = humanCriteria.length - unanswered.length;
 
-  const confirm = useMutation({
-    mutationFn: () => {
-      if (!projectId) throw new Error('项目验收尚未准备好。');
-      return api(projectAcceptanceConfirmationPath(projectId), { method: 'POST' });
-    },
-    onMutate: () => setInlineError(null),
-    onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['project-acceptance'] }),
-        qc.invalidateQueries({ queryKey: ['judgments'] }),
-        qc.invalidateQueries({ queryKey: ['project', projectId] }),
-      ]);
-      await review.refetch();
-    },
-    onError: (error: Error) => setInlineError(error.message),
-  });
-
   const submit = useMutation({
     mutationFn: () => {
       if (!projectId || !runId || !run) throw new Error('项目验收尚未准备好。');
-      if (!criteriaConfirmed) throw new Error('请先确认当前标准集。');
+      if (!criteriaConfirmed) throw new Error('请先在独立的 Owner Ratification 流程批准当前项目合约。');
       if (unanswered.length > 0) {
         throw new Error(`每条判据都要回答；尚未回答：${unanswered.map((item) => item.ordinal).join('、')}。`);
       }
@@ -400,19 +383,12 @@ export function ProjectAcceptanceReviewPage() {
         className="judgment-state-alert project-criteria-confirmation"
         type={criteriaConfirmed ? 'success' : 'warning'}
         showIcon
-        title={criteriaConfirmed ? '当前标准集已确认' : '先确认这套标准算数'}
+        title={criteriaConfirmed ? '当前项目合约已完成 Owner Ratification' : '当前项目合约尚未 Owner Ratification'}
         description={criteriaConfirmed
-          ? `确认绑定标准集 digest ${review.data.criteriaDigest}；任何语义修改都会立即失效。`
-          : '这是对整套标准的一次价值判断，不是逐条代替机器判绿。确认绑定当前 digest；标准文本或判据改变后必须重新确认。'}
+          ? `Ratification 绑定 contract digest ${review.data.contractDigest ?? review.data.criteriaDigest}；本页只处理逐项 HUMAN_SIGNOFF。`
+          : 'Owner Ratification 是项目合约的价值与授权决定；它与本页逐项 HUMAN_SIGNOFF 明确分离。'}
         action={criteriaConfirmed ? undefined : (
-          <Button
-            type="primary"
-            loading={confirm.isPending}
-            disabled={confirm.isPending}
-            onClick={() => confirm.mutate()}
-          >
-            确认当前标准集
-          </Button>
+          <Link to={ownerRatificationReviewPath(projectId)}>前往 Owner Ratification →</Link>
         )}
       />
 
@@ -482,7 +458,7 @@ export function ProjectAcceptanceReviewPage() {
           {unanswered.length > 0
             ? `还需回答判据：${unanswered.map((criterion) => criterion.ordinal).join('、')}。`
             : !criteriaConfirmed
-              ? '先确认当前标准集，再提交人工判定。'
+              ? '先在独立页面完成 Owner Ratification，再提交逐项人工判定。'
               : invalidExitCodes.length > 0
               ? `退出码必须是整数：判据 ${invalidExitCodes.map((criterion) => criterion.ordinal).join('、')}。`
               : '全部判据已回答。最终 run verdict 由服务端根据逐条结论推导。'}
@@ -504,7 +480,7 @@ export function ProjectAcceptanceReviewPage() {
           type="info"
           showIcon
           title="没有需要人工逐条判定的标准"
-          description="确认标准集后，EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE。"
+          description="Owner Ratification 完成后，EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE；这里不会制造 HUMAN_SIGNOFF。"
         />
       )}
 

@@ -44,6 +44,7 @@ import {
   projectAcceptanceInboxPath,
   type ProjectAcceptanceInboxPage,
 } from '../lib/projectAcceptance';
+import { outcomeInboxPath, type OutcomeHumanInbox } from '../lib/outcomeSurfaces';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -232,7 +233,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(1)),
     refetchInterval: 15_000,
   });
-  const openJudgmentCount = (judgments.data?.total ?? 0) + (projectAcceptance.data?.total ?? 0);
+  const outcomeDecisions = useQuery({
+    queryKey: ['outcomes', 'inbox', 'nav-count'],
+    queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(1)),
+    refetchInterval: 15_000,
+  });
+  const openJudgmentCount = (judgments.data?.total ?? 0)
+    + (projectAcceptance.data?.total ?? 0)
+    + (outcomeDecisions.data?.total ?? 0);
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =

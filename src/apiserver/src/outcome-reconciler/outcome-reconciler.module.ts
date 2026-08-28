@@ -8,8 +8,13 @@ import { OutcomeEvaluatorService } from './outcome-evaluator.service';
 import { OutcomeFactIngressService } from './outcome-fact-ingress.service';
 import { OutcomeProjectionService } from './outcome-projection.service';
 import { OutcomeVersioningService } from './outcome-versioning.service';
+import { OutcomeSurfaceService } from './outcome-surface.service';
+import { OutcomeSurfacesController } from './outcome-surfaces.controller';
+import { ProjectAcceptanceModule } from '../projects/project-acceptance.module';
 
 @Module({
+  imports: [ProjectAcceptanceModule],
+  controllers: [OutcomeSurfacesController],
   providers: [
     OutcomeFactIngressService,
     OutcomeEvaluatorService,
@@ -19,6 +24,7 @@ import { OutcomeVersioningService } from './outcome-versioning.service';
     OutcomeCoordinatorResolverRegistry,
     OutcomeCoordinatorService,
     OutcomeVersioningService,
+    OutcomeSurfaceService,
   ],
   exports: [
     OutcomeFactIngressService,
@@ -29,6 +35,7 @@ import { OutcomeVersioningService } from './outcome-versioning.service';
     OutcomeCoordinatorResolverRegistry,
     OutcomeCoordinatorService,
     OutcomeVersioningService,
+    OutcomeSurfaceService,
   ],
 })
 export class OutcomeReconcilerModule {}

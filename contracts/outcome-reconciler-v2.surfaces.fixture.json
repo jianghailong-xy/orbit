@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 2,
+  "logicalNow": "50",
+  "projection": {
+    "schemaVersion": 2,
+    "staleness": "CURRENT",
+    "canonicalIdentity": {
+      "bindingDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evaluatedThroughLogicalTime": "42",
+      "projectionRevision": "7",
+      "proofDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "doneGate": {
+      "allowed": false,
+      "reason": { "code": "ACTIVE_MANDATORY_OBLIGATION" }
+    },
+    "obligations": [
+      {
+        "obligationId": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "obligationRevision": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "bindingDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "binding": { "tenantId": "tenant-a", "projectId": "project-a", "contractDigest": "9999999999999999999999999999999999999999999999999999999999999999" },
+        "kind": "RUN_BOUND_VERIFICATION",
+        "owner": "AGENT",
+        "capability": "verification.execute",
+        "reason": {
+          "code": "VERIFICATION_REQUIRED",
+          "message": "The bound verification has not produced a passing fact.",
+          "evidenceFactIds": ["fact-agent-1"],
+          "attemptedActions": ["resolved inputs", "prepared command"],
+          "nextAction": "verification.execute"
+        },
+        "evaluatedThroughLogicalTime": "42",
+        "projectionRevision": "7",
+        "staleness": "CURRENT"
+      },
+      {
+        "obligationId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "obligationRevision": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "bindingDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "binding": { "tenantId": "tenant-a", "projectId": "project-a", "contractDigest": "9999999999999999999999999999999999999999999999999999999999999999" },
+        "kind": "REQUEST_RISK_ACCEPTANCE",
+        "owner": "OWNER",
+        "capability": "owner.risk-acceptance",
+        "reason": {
+          "code": "RISK_ACCEPTANCE_REQUIRED",
+          "message": "Only the owner can accept this exact risk envelope.",
+          "evidenceFactIds": ["fact-owner-1"],
+          "attemptedActions": ["reduced scope", "checked existing authority"],
+          "nextAction": "owner.risk-acceptance"
+        },
+        "evaluatedThroughLogicalTime": "42",
+        "projectionRevision": "7",
+        "staleness": "CURRENT"
+      }
+    ]
+  },
+  "decisionRequests": [
+    {
+      "requestId": "11111111-1111-4111-a111-111111111111",
+      "requestRevision": "1111111111111111111111111111111111111111111111111111111111111111",
+      "obligationId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "obligationRevision": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bindingDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "OPEN",
+      "expiresLogicalTime": "100",
+      "protocol": {
+        "decisionType": "RISK_ACCEPTANCE",
+        "agentWorkCompleted": ["reduced scope", "checked existing authority"],
+        "whyNotAgent": "The agent cannot accept risk outside its existing authority.",
+        "options": [
+          { "id": "ACCEPT_BOUND_RISK", "label": "Accept exact envelope" },
+          { "id": "REJECT", "label": "Reject and stop" }
+        ],
+        "impacts": [
+          { "option": "ACCEPT_BOUND_RISK", "impact": "Automatic execution resumes under this binding only." },
+          { "option": "REJECT", "impact": "The obligation remains blocked." }
+        ],
+        "recommendation": { "option": "REJECT", "reason": "No approval should be inferred." },
+        "cost": { "amount": 10, "unit": "EUR" },
+        "deadline": { "logicalTime": "100" },
+        "noActionConsequence": "The doneGate stays blocked and no side effect is dispatched.",
+        "resumeBehavior": "Wake the same agent coordination after an exact bound decision."
+      }
+    }
+  ],
+  "expected": {
+    "agentQueue": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+    "ownerInbox": ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+    "agentCta": "EXECUTE",
+    "ownerCta": "DECIDE"
+  }
+}

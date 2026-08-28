@@ -5066,7 +5066,10 @@ model OutcomeCoordinatorOwnerDecisionRequest {
   tenantId               String   @map("tenant_id") @db.Uuid
   projectId              String   @map("project_id") @db.Uuid
   coordinationId         String   @map("coordination_id") @db.Uuid
+  obligationId           String   @map("obligation_id") @db.Char(64)
   obligationRevision     String   @map("obligation_revision") @db.Char(64)
+  bindingDigest          String   @map("binding_digest") @db.Char(64)
+  requestRevision        String   @map("request_revision") @db.Char(64)
   reason                 String
   whyNotAgent            String   @map("why_not_agent")
   idempotencyKey         String   @map("idempotency_key")
@@ -5077,11 +5080,14 @@ model OutcomeCoordinatorOwnerDecisionRequest {
   decisionDigest         String?  @map("decision_digest") @db.Char(64)
   decisionIdempotencyKey String?  @map("decision_idempotency_key")
   requestedLogicalTime   BigInt   @map("requested_logical_time")
+  expiresLogicalTime     BigInt   @map("expires_logical_time")
+  supersededByRequestRevision String? @map("superseded_by_request_revision") @db.Char(64)
   decidedLogicalTime     BigInt?  @map("decided_logical_time")
   createdAt              DateTime @default(now()) @map("created_at")
   decidedAt              DateTime? @map("decided_at")
 
   @@unique([tenantId, projectId, idempotencyKey])
+  @@unique([tenantId, projectId, obligationId, requestRevision], map: "outcome_coordinator_owner_current_revision_idx")
   @@index([tenantId, status, createdAt, requestId], map: "outcome_coordinator_owner_open_idx")
   @@map("outcome_coordinator_owner_decision_request")
 }
@@ -5125,6 +5131,8 @@ model OutcomeCoordinatorProjectFairness {
 
   @@id([tenantId, projectId])
   @@map("outcome_coordinator_project_fairness")
+}
+
 /// Linearized work request for the exact current binding and stream watermark. A newer request
 /// supersedes an older pending one; COMMITTED always names the immutable evaluator result.
 model OutcomeReconcileRequest {

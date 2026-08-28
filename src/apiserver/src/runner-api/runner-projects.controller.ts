@@ -28,6 +28,7 @@ import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { OutcomeSurfaceService } from '../outcome-reconciler/outcome-surface.service';
 
 /**
  * A project's durable context, read and written by `orbit project` and the `project_*` MCP tools
@@ -63,6 +64,7 @@ export class RunnerProjectsController {
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
+    private readonly outcomeSurfaces: OutcomeSurfaceService,
   ) {}
 
   /**
@@ -107,6 +109,21 @@ export class RunnerProjectsController {
   @Get('projects/:id')
   getProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(runner.ownerId, id);
+  }
+
+  /** The same semantic projection served to the owner and Web, with an AGENT-derived CTA. */
+  @Get('projects/:id/outcome')
+  projectOutcome(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('surface') requestedSurface = 'AGENT_QUEUE',
+  ) {
+    return this.outcomeSurfaces.readProjectSurface({
+      tenantId: runner.ownerId,
+      projectId: id,
+      surface: this.outcomeSurfaces.parseSurface(requestedSurface),
+      actor: 'AGENT',
+    });
   }
 
   @Get('projects/:id/acceptance')

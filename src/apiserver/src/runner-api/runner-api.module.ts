@@ -29,6 +29,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
+import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -49,6 +50,7 @@ import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
     TaskListsModule,
     ProvidersModule,
     ProjectsModule,
+    OutcomeReconcilerModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.

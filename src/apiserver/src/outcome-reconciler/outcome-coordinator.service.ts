@@ -259,7 +259,10 @@ export class OutcomeCoordinatorService {
     clockId: string;
     logicalNow: string;
     requestId: string;
+    requestRevision: string;
+    obligationId: string;
     obligationRevision: string;
+    bindingDigest: string;
     idempotencyKey: string;
     decision: Record<string, unknown>;
   }): Promise<JsonResult> {
@@ -268,7 +271,10 @@ export class OutcomeCoordinatorService {
       SELECT outcome_decide_coordinator_owner_request(
         ${input.tenantId}::uuid,
         ${input.requestId}::uuid,
+        ${input.requestRevision},
+        ${input.obligationId},
         ${input.obligationRevision},
+        ${input.bindingDigest},
         ${input.idempotencyKey},
         ${JSON.stringify(input.decision)}::jsonb
       ) AS result

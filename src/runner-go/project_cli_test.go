@@ -166,7 +166,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"acceptance", "criteria-confirm", "acceptance-run", "acceptance-verdict", "merge-evidence",
+		"acceptance", "obligations", "criteria-confirm", "acceptance-run", "acceptance-verdict", "merge-evidence",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -198,7 +198,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. Unit L7's two reads are here — what has been
 	// asked about work crossing this project's line, and what reopening it would cost. Neither has
 	// a companion that WRITES, and that absence is the point.
-	if len(specs) != 11 {
+	if len(specs) != 12 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
