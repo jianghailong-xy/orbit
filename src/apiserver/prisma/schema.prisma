@@ -1961,6 +1961,7 @@ model ProjectOwnerDecisionRequest {
   projectId              String    @map("project_id") @db.Uuid
   ownerId                String    @map("owner_id") @db.Uuid
   contractDigest         String    @map("contract_digest") @db.Char(64)
+  contractRevision       BigInt    @map("contract_revision")
   requestGeneration      BigInt    @map("request_generation")
   kind                   String    @default("OWNER_RATIFICATION")
   status                 String    @default("PENDING")
@@ -1987,6 +1988,7 @@ model ProjectOwnerRatification {
   projectId                        String    @map("project_id") @db.Uuid
   ownerId                          String    @map("owner_id") @db.Uuid
   contractDigest                   String    @map("contract_digest") @db.Char(64)
+  contractRevision                 BigInt    @map("contract_revision")
   evaluationPlanDigestAtDecision   String    @map("evaluation_plan_digest_at_decision") @db.Char(64)
   source                           String
   ratifiedByType                  String    @map("ratified_by_type")
@@ -2013,11 +2015,15 @@ model ProjectRatifiedActionIntent {
   triggerKind          String   @map("trigger_kind")
   effectClass          String   @map("effect_class")
   contractDigest       String   @map("contract_digest") @db.Char(64)
+  contractRevision     BigInt   @map("contract_revision")
   evaluationPlanDigest String   @map("evaluation_plan_digest") @db.Char(64)
   riskPolicyDigest     String   @map("risk_policy_digest") @db.Char(64)
   permissionDigest     String   @map("permission_digest") @db.Char(64)
   budgetDigest         String   @map("budget_digest") @db.Char(64)
   recipientDigest      String   @map("recipient_digest") @db.Char(64)
+  outcomeBindingDigest String?  @map("outcome_binding_digest") @db.Char(64)
+  outcomeBindingEpoch  BigInt?  @map("outcome_binding_epoch")
+  outcomeWatermarkLogicalTime BigInt? @map("outcome_watermark_logical_time")
   budgetCharge         Int      @map("budget_charge")
   action               Json
   actionDigest         String   @map("action_digest") @db.Char(64)
@@ -5119,4 +5125,126 @@ model OutcomeCoordinatorProjectFairness {
 
   @@id([tenantId, projectId])
   @@map("outcome_coordinator_project_fairness")
+/// Linearized work request for the exact current binding and stream watermark. A newer request
+/// supersedes an older pending one; COMMITTED always names the immutable evaluator result.
+model OutcomeReconcileRequest {
+  requestId          String    @id @map("request_id") @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  projectId          String    @map("project_id") @db.Uuid
+  requestGeneration  BigInt    @map("request_generation")
+  bindingDigest      String    @map("binding_digest") @db.Char(64)
+  triggerLogicalTime BigInt    @map("trigger_logical_time")
+  reasonCode         String    @map("reason_code")
+  changedFields      String[]  @map("changed_fields")
+  invalidators       String[]
+  status             String
+  evaluationId       String?   @map("evaluation_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  concludedAt        DateTime? @map("concluded_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, projectId, requestGeneration])
+  @@index([tenantId, projectId, bindingDigest, requestGeneration(sort: Desc)], map: "outcome_reconcile_request_binding_idx")
+  @@map("outcome_reconcile_request")
+}
+
+/// Append-only binding epoch edge, including every changed field and canonical invalidator.
+model OutcomeBindingTransition {
+  transitionId     String   @id @map("transition_id") @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  projectId        String   @map("project_id") @db.Uuid
+  fromBindingDigest String? @map("from_binding_digest") @db.Char(64)
+  toBindingDigest  String   @map("to_binding_digest") @db.Char(64)
+  fromBindingEpoch BigInt?  @map("from_binding_epoch")
+  toBindingEpoch   BigInt   @map("to_binding_epoch")
+  changedFields    String[] @map("changed_fields")
+  invalidators     String[]
+  requestId        String   @unique @map("request_id") @db.Uuid
+  recordedAt       DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, projectId, toBindingDigest])
+  @@map("outcome_binding_transition")
+}
+
+/// Immutable reason an evaluator result stopped being eligible for the current binding/watermark.
+model OutcomeProofObsolescence {
+  evaluationId         String   @id @map("evaluation_id") @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  projectId            String   @map("project_id") @db.Uuid
+  bindingDigest        String   @map("binding_digest") @db.Char(64)
+  requestId            String   @map("request_id") @db.Uuid
+  transitionId         String?  @map("transition_id") @db.Uuid
+  reasonCode           String   @map("reason_code")
+  obsoleteAtLogicalTime BigInt  @map("obsolete_at_logical_time")
+  recordedAt           DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@map("outcome_proof_obsolescence")
+}
+
+model OutcomeProofSuccessor {
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  projectId                String   @map("project_id") @db.Uuid
+  predecessorEvaluationId  String   @map("predecessor_evaluation_id") @db.Uuid
+  successorEvaluationId    String   @map("successor_evaluation_id") @db.Uuid
+  requestId                String   @map("request_id") @db.Uuid
+  recordedAt               DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@id([tenantId, projectId, predecessorEvaluationId, successorEvaluationId])
+  @@map("outcome_proof_successor")
+}
+
+model OutcomeObsoleteObligation {
+  tenantId                       String   @map("tenant_id") @db.Uuid
+  projectId                      String   @map("project_id") @db.Uuid
+  predecessorObligationId        String   @map("predecessor_obligation_id") @db.Char(64)
+  predecessorObligationRevision  String   @map("predecessor_obligation_revision") @db.Char(64)
+  bindingDigest                  String   @map("binding_digest") @db.Char(64)
+  requestId                      String   @map("request_id") @db.Uuid
+  transitionId                   String?  @map("transition_id") @db.Uuid
+  obligation                     Json
+  obsoleteAtLogicalTime          BigInt   @map("obsolete_at_logical_time")
+  recordedAt                     DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@id([tenantId, projectId, predecessorObligationRevision])
+  @@map("outcome_obsolete_obligation")
+}
+
+/// Exists even when successorCount is zero, proving that the empty successor set was decided.
+model OutcomeObligationReduction {
+  tenantId                      String   @map("tenant_id") @db.Uuid
+  projectId                     String   @map("project_id") @db.Uuid
+  predecessorObligationRevision String   @map("predecessor_obligation_revision") @db.Char(64)
+  successorEvaluationId         String   @map("successor_evaluation_id") @db.Uuid
+  requestId                     String   @map("request_id") @db.Uuid
+  reducedAt                     DateTime @default(now()) @map("reduced_at") @db.Timestamptz(6)
+
+  @@id([tenantId, projectId, predecessorObligationRevision])
+  @@map("outcome_obligation_reduction")
+}
+
+/// Many-to-many by design: neither predecessor nor successor is unique on its own.
+model OutcomeObligationSuccessor {
+  tenantId                       String   @map("tenant_id") @db.Uuid
+  projectId                      String   @map("project_id") @db.Uuid
+  predecessorObligationRevision  String   @map("predecessor_obligation_revision") @db.Char(64)
+  successorObligationRevision    String   @map("successor_obligation_revision") @db.Char(64)
+  successorEvaluationId          String   @map("successor_evaluation_id") @db.Uuid
+  requestId                      String   @map("request_id") @db.Uuid
+  recordedAt                     DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@id([tenantId, projectId, predecessorObligationRevision, successorObligationRevision])
+  @@map("outcome_obligation_successor")
+}
+
+model OutcomeBindingRatification {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  bindingDigest     String   @map("binding_digest") @db.Char(64)
+  contractDigest    String   @map("contract_digest") @db.Char(64)
+  contractRevision  BigInt?  @map("contract_revision")
+  ratificationId    String?  @map("ratification_id") @db.Uuid
+  carriedForward    Boolean  @default(false) @map("carried_forward")
+  boundAt           DateTime @default(now()) @map("bound_at") @db.Timestamptz(6)
+
+  @@id([tenantId, projectId, bindingDigest])
+  @@map("outcome_binding_ratification")
 }

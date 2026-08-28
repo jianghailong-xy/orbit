@@ -7,6 +7,7 @@ import {
 import { OutcomeEvaluatorService } from './outcome-evaluator.service';
 import { OutcomeFactIngressService } from './outcome-fact-ingress.service';
 import { OutcomeProjectionService } from './outcome-projection.service';
+import { OutcomeVersioningService } from './outcome-versioning.service';
 
 @Module({
   providers: [
@@ -17,6 +18,7 @@ import { OutcomeProjectionService } from './outcome-projection.service';
     ActionExecutorService,
     OutcomeCoordinatorResolverRegistry,
     OutcomeCoordinatorService,
+    OutcomeVersioningService,
   ],
   exports: [
     OutcomeFactIngressService,
@@ -26,6 +28,7 @@ import { OutcomeProjectionService } from './outcome-projection.service';
     ActionExecutorService,
     OutcomeCoordinatorResolverRegistry,
     OutcomeCoordinatorService,
+    OutcomeVersioningService,
   ],
 })
 export class OutcomeReconcilerModule {}
