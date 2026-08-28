@@ -255,6 +255,27 @@ async function seedScope(label, options = {}) {
     createdAtLogicalTime: '1',
     dueLogicalTime: null,
   };
+  // The projection reducer is installed by the sibling canonical-obligation stack and runs on
+  // every evaluator-result insert.  Keep this Action Executor fixture a structurally valid
+  // canonical result so the two first-class subsystems compose; `{}` used to work only when the
+  // projection migration was absent from the database.
+  const projectionProofDigest = digest(`proof:${label}`);
+  const projectionResult = {
+    schemaVersion: 1,
+    evaluatorVersion: 'action-test/2.0.0',
+    evaluatorDigest: binding.evaluatorDigest,
+    bindingDigest,
+    evaluatedThroughLogicalTime: '1',
+    proof: {
+      proofDigest: projectionProofDigest,
+      dimensions: [],
+      modelGaps: [],
+      closedClauseResults: {},
+    },
+    proofGraph: {},
+    activeMandatoryObligations: [sourceObligation],
+    closed: false,
+  };
   await pool.query(`
     INSERT INTO outcome_evaluation_cut (
       cut_id, tenant_id, project_id, binding_digest, watermark_logical_time,
@@ -275,12 +296,12 @@ async function seedScope(label, options = {}) {
       evaluation_digest, proof_digest, result_digest, is_closed, result
     ) VALUES (
       $1::uuid, $2::uuid, $3::uuid, 'PROJECT', $3::text, $4, $5::uuid, 1,
-      'action-test/2.0.0', $6, $7, $8, $9, false, '{}'::jsonb
+      'action-test/2.0.0', $6, $7, $8, $9, false, $10::jsonb
     )
   `, [
     evaluationId, tenantId, projectId, bindingDigest, cutId,
-    digest(`evaluator:${label}`), digest(`evaluation:${label}`), digest(`proof:${label}`),
-    digest(`result:${label}`),
+    binding.evaluatorDigest, digest(`evaluation:${label}`), projectionProofDigest,
+    digest(`result:${label}`), JSON.stringify(projectionResult),
   ]);
   await pool.query(`
     INSERT INTO outcome_obligation_revision (

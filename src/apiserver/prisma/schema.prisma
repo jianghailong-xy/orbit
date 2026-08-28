@@ -4857,3 +4857,102 @@ model OutcomeActionDiagnostic {
   @@unique([tenantId, projectId, idempotencyKey])
   @@map("outcome_action_diagnostic")
 }
+
+/// Stable delivery contract plus one current-target revision. Historical revisions remain so an
+/// EVER_DELIVERED policy can be audited without weakening CURRENT_TARGET_CONTAINS.
+model OutcomeDeliveryBinding {
+  deliveryBindingId             String   @id @map("delivery_binding_id") @db.Uuid
+  bindingSequence               BigInt   @default(autoincrement()) @unique @map("binding_sequence")
+  tenantId                      String   @map("tenant_id") @db.Uuid
+  projectId                     String   @map("project_id") @db.Uuid
+  goalId                        String   @map("goal_id")
+  goalRevision                  BigInt   @map("goal_revision")
+  canonicalBindingDigest        String   @map("canonical_binding_digest") @db.Char(64)
+  deliveryBindingDigest         String   @map("delivery_binding_digest") @db.Char(64)
+  bindingRevisionDigest         String   @map("binding_revision_digest") @db.Char(64)
+  policyMode                    String   @map("policy_mode")
+  repositoryProvider            String   @map("repository_provider")
+  repositoryId                  String   @map("repository_id")
+  repositoryDigest              String   @map("repository_digest") @db.Char(64)
+  targetRef                     String   @map("target_ref")
+  currentTargetSha              String   @map("current_target_sha")
+  currentTargetContentDigest    String   @map("current_target_content_digest") @db.Char(64)
+  artifactDigest                String   @map("artifact_digest") @db.Char(64)
+  evaluationPlanDigest          String   @map("evaluation_plan_digest") @db.Char(64)
+  acceptanceCommandDigest       String   @map("acceptance_command_digest") @db.Char(64)
+  integrationProviderIdentity   String   @map("integration_provider_identity")
+  verificationProviderIdentity  String   @map("verification_provider_identity")
+  asOfLogicalTime               BigInt   @map("as_of_logical_time")
+  idempotencyKey                String   @map("idempotency_key")
+  requestDigest                 String   @map("request_digest") @db.Char(64)
+  createdAt                     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, projectId, bindingRevisionDigest])
+  @@unique([tenantId, projectId, idempotencyKey])
+  @@index([tenantId, projectId, deliveryBindingDigest, bindingSequence(sort: Desc)], map: "outcome_delivery_binding_current_idx")
+  @@map("outcome_delivery_binding")
+}
+
+/// Provider-authenticated repository delivery receipt. Its provider receipt identity is replay-fenced.
+model OutcomeDeliveryAttestation {
+  attestationId          String   @id @map("attestation_id") @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  projectId              String   @map("project_id") @db.Uuid
+  deliveryBindingDigest  String   @map("delivery_binding_digest") @db.Char(64)
+  bindingRevisionDigest  String   @map("binding_revision_digest") @db.Char(64)
+  providerReceiptId      String   @map("provider_receipt_id")
+  providerIdentity       String   @map("provider_identity")
+  repositoryProvider     String   @map("repository_provider")
+  repositoryId           String   @map("repository_id")
+  repositoryDigest       String   @map("repository_digest") @db.Char(64)
+  targetRef              String   @map("target_ref")
+  targetSha              String   @map("target_sha")
+  targetContentDigest    String   @map("target_content_digest") @db.Char(64)
+  artifactDigest         String   @map("artifact_digest") @db.Char(64)
+  result                 String
+  externalEffectState    String   @map("external_effect_state")
+  verifiedAt             DateTime @map("verified_at") @db.Timestamptz(6)
+  verifiedLogicalTime    BigInt   @map("verified_logical_time")
+  idempotencyKey         String   @map("idempotency_key")
+  receipt                Json
+  receiptDigest          String   @map("receipt_digest") @db.Char(64)
+  recordedAt             DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, projectId, providerIdentity, providerReceiptId])
+  @@unique([tenantId, projectId, idempotencyKey])
+  @@index([tenantId, projectId, deliveryBindingDigest, verifiedLogicalTime(sort: Desc), attestationId], map: "outcome_delivery_attestation_binding_idx")
+  @@map("outcome_delivery_attestation")
+}
+
+/// Mechanical acceptance rerun from a clean checkout of the exact attested target SHA.
+model OutcomeDeliveryVerification {
+  verificationId          String   @id @map("verification_id") @db.Uuid
+  tenantId                String   @map("tenant_id") @db.Uuid
+  projectId               String   @map("project_id") @db.Uuid
+  deliveryBindingDigest   String   @map("delivery_binding_digest") @db.Char(64)
+  bindingRevisionDigest   String   @map("binding_revision_digest") @db.Char(64)
+  providerReceiptId       String   @map("provider_receipt_id")
+  providerIdentity        String   @map("provider_identity")
+  repositoryDigest        String   @map("repository_digest") @db.Char(64)
+  targetRef               String   @map("target_ref")
+  targetSha               String   @map("target_sha")
+  targetContentDigest     String   @map("target_content_digest") @db.Char(64)
+  artifactDigest          String   @map("artifact_digest") @db.Char(64)
+  evaluationPlanDigest    String   @map("evaluation_plan_digest") @db.Char(64)
+  acceptanceCommandDigest String   @map("acceptance_command_digest") @db.Char(64)
+  environment             String
+  result                  String
+  exitCode                Int      @map("exit_code")
+  skipCount               Int      @map("skip_count")
+  verifiedAt              DateTime @map("verified_at") @db.Timestamptz(6)
+  verifiedLogicalTime     BigInt   @map("verified_logical_time")
+  idempotencyKey          String   @map("idempotency_key")
+  receipt                 Json
+  receiptDigest           String   @map("receipt_digest") @db.Char(64)
+  recordedAt              DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, projectId, providerIdentity, providerReceiptId])
+  @@unique([tenantId, projectId, idempotencyKey])
+  @@index([tenantId, projectId, deliveryBindingDigest, verifiedLogicalTime(sort: Desc), verificationId], map: "outcome_delivery_verification_binding_idx")
+  @@map("outcome_delivery_verification")
+}

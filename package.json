@@ -26,6 +26,7 @@
     "test:outcome-reconciler:projection": "bash scripts/outcome-reconciler-projection.sh",
     "test:outcome-reconciler:done-gate": "bash scripts/outcome-reconciler-done-gate.sh",
     "test:outcome-reconciler:actions": "bash scripts/outcome-reconciler-actions.sh",
+    "test:outcome-reconciler:delivery": "bash scripts/outcome-reconciler-delivery.sh",
     "dev:apiserver": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/apiserver",
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
     "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh",

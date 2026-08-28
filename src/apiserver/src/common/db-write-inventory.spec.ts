@@ -51,6 +51,8 @@ const TAKES_LOCK = /FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE|pg_advisory/;
  * asked to declare a retry decision for a write it does not make.
  */
 const WRITES_ROWS = /\b(INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|CREATE\s+|DROP\s+|ALTER\s+|TRUNCATE\b)/i;
+/** Stored procedures whose SELECT-shaped API appends rows after validating their bound payload. */
+const CALLS_WRITE_FUNCTION = /\bSELECT\s+outcome_(?:register_delivery_binding|record_delivery_attestation|record_delivery_verification)\s*\(/i;
 
 type Shape = 'TX_RETRIED' | 'TX_BARE' | 'INHERITED' | 'AUTOCOMMIT';
 
@@ -140,7 +142,7 @@ function scan(): Scanned[] {
         const end = window.indexOf('`;');
         const statement = end >= 0 ? window.slice(0, end + 2) : window;
         if (TAKES_LOCK.test(statement)) add('LOCK');
-        else if (WRITES_ROWS.test(statement)) add('RAW_WRITE');
+        else if (WRITES_ROWS.test(statement) || CALLS_WRITE_FUNCTION.test(statement)) add('RAW_WRITE');
       }
     });
   }
