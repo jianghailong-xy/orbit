@@ -395,7 +395,7 @@ export interface ProjectGraphOverview {
    * only for an empty canvas; a plan that is entirely done points at its last unit, which is where
    * its story ends.
    */
-  frontier: { x: number; y: number } | null;
+  frontier: { x: number; y: number; width: number; height: number } | null;
   /** Units on the canvas: standalone tasks and boxes, not the subtasks inside them. */
   unitCount: number;
 }
@@ -437,7 +437,15 @@ export function projectGraphOverview(layout: ProjectDependencyLayout): ProjectGr
 
   return {
     bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
-    frontier: { x: frontier.x, y: frontier.y },
+    // Keep the unit's real dimensions. A frontier can be a parent-task box or a folded mark,
+    // neither of which is the size of an ordinary task card. The viewport uses this rectangle to
+    // put the unit's centre — not an assumed card-sized point near its top-left — in the canvas.
+    frontier: {
+      x: frontier.x,
+      y: frontier.y,
+      width: frontier.width,
+      height: frontier.height,
+    },
     unitCount: units.length,
   };
 }

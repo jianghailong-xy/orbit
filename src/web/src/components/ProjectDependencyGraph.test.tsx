@@ -18,7 +18,9 @@ import {
   layoutProjectDependencyGraph,
   markStatus,
   projectGraphOverview,
+  PROJECT_GRAPH_FOLD_HEIGHT,
   PROJECT_GRAPH_FOLD_WIDTH,
+  PROJECT_GRAPH_NODE_HEIGHT,
   PROJECT_GRAPH_NODE_WIDTH,
   type ProjectDependencyGraphResponse,
   type ProjectRunMark,
@@ -64,7 +66,12 @@ describe('projectGraphOverview', () => {
 
     const placements = layoutProjectDependencyGraph(chain(118, 12)).placements;
     const thirteenth = placements.find((placement) => placement.task.id === 't12')!;
-    expect(overview.frontier).toEqual({ x: thirteenth.x, y: thirteenth.y });
+    expect(overview.frontier).toEqual({
+      x: thirteenth.x,
+      y: thirteenth.y,
+      width: PROJECT_GRAPH_NODE_WIDTH,
+      height: PROJECT_GRAPH_NODE_HEIGHT,
+    });
   });
 
   it('points at the end when there is nothing left to do', () => {
@@ -73,7 +80,12 @@ describe('projectGraphOverview', () => {
       (placement) => placement.task.id === 't4',
     )!;
 
-    expect(overview.frontier).toEqual({ x: last.x, y: last.y });
+    expect(overview.frontier).toEqual({
+      x: last.x,
+      y: last.y,
+      width: PROJECT_GRAPH_NODE_WIDTH,
+      height: PROJECT_GRAPH_NODE_HEIGHT,
+    });
   });
 
   it('measures a parent as the box it is drawn as, and can point at one', () => {
@@ -97,7 +109,39 @@ describe('projectGraphOverview', () => {
     expect(overview.unitCount).toBe(1);
     expect(overview.bounds.width).toBe(box.width);
     expect(overview.bounds.height).toBe(box.height);
-    expect(overview.frontier).toEqual({ x: box.x, y: box.y });
+    expect(overview.frontier).toEqual({
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+    });
+  });
+
+  it('keeps the real dimensions of a folded frontier', () => {
+    const graph: ProjectDependencyGraphResponse = {
+      marks: [
+        {
+          kind: 'RUN',
+          id: 'run:1',
+          title: '3 steps',
+          taskCount: 3,
+          statusCounts: { DONE: 2, OPEN: 1 },
+          parentTaskId: null,
+          members: [],
+          expandable: false,
+        },
+      ],
+      edges: [],
+      taskCount: 3,
+      folded: true,
+      truncated: false,
+      limits: { maxTasks: 50_000, maxMarks: 500 },
+    };
+
+    expect(overviewOf(graph).frontier).toMatchObject({
+      width: PROJECT_GRAPH_FOLD_WIDTH,
+      height: PROJECT_GRAPH_FOLD_HEIGHT,
+    });
   });
 
   it('has nothing to bound when the project has no tasks', () => {
@@ -157,6 +201,44 @@ describe('planProjectGraphViewport', () => {
     expect(horizontal.fitted).toBe(false);
     expect(vertical.fitted).toBe(true);
     expect(vertical.viewport.zoom).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it('centres a parent-task box by its real size on a phone canvas', () => {
+    const graph: ProjectDependencyGraphResponse = {
+      marks: [
+        {
+          kind: 'TASK',
+          id: 'parent',
+          taskId: 'parent',
+          title: 'Delivery',
+          status: 'OPEN',
+          parentTaskId: null,
+        },
+        ...Array.from({ length: 8 }, (_, i) => ({
+          kind: 'TASK' as const,
+          id: `child-${i}`,
+          taskId: `child-${i}`,
+          title: `Step ${i + 1}`,
+          status: 'OPEN',
+          parentTaskId: 'parent',
+        })),
+      ],
+      edges: [],
+      taskCount: 9,
+      folded: false,
+      truncated: false,
+      limits: { maxTasks: 50_000, maxMarks: 500 },
+    };
+    const canvas = { width: 369, height: 520 };
+    const overview = overviewOf(graph, 'TB');
+    const plan = planProjectGraphViewport(overview, canvas, 0.12)!;
+
+    expect(plan.fitted).toBe(false);
+    const frontier = overview.frontier!;
+    const centreX = plan.viewport.x + (frontier.x + frontier.width / 2) * plan.viewport.zoom;
+    const centreY = plan.viewport.y + (frontier.y + frontier.height / 2) * plan.viewport.zoom;
+    expect(centreX).toBeCloseTo(canvas.width / 2);
+    expect(centreY).toBeCloseTo(canvas.height / 2);
   });
 });
 

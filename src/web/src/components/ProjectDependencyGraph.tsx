@@ -700,8 +700,8 @@ export function planProjectGraphViewport(
 
   return {
     viewport: {
-      x: canvas.width / 2 - (overview.frontier.x + PROJECT_GRAPH_NODE_WIDTH / 2) * READABLE_ZOOM,
-      y: canvas.height / 2 - (overview.frontier.y + PROJECT_GRAPH_NODE_HEIGHT / 2) * READABLE_ZOOM,
+      x: canvas.width / 2 - (overview.frontier.x + overview.frontier.width / 2) * READABLE_ZOOM,
+      y: canvas.height / 2 - (overview.frontier.y + overview.frontier.height / 2) * READABLE_ZOOM,
       zoom: READABLE_ZOOM,
     },
     fitted: false,
