@@ -27,6 +27,7 @@ const { TaskCompletionEvidenceService, normalizeCompletionEvidence } = require(p
 const { ProjectsService } = require(path.join(apiDist, 'projects/projects.service.js'));
 const { SessionsService } = require(path.join(apiDist, 'sessions/sessions.service.js'));
 const { RunnerApiController } = require(path.join(apiDist, 'runner-api/runner-api.controller.js'));
+const { HTTP_CODE_METADATA } = require('@nestjs/common/constants');
 const { OutcomeWatchdogService } = require(path.join(
   apiDist, 'outcome-watchdog/outcome-watchdog.service.js',
 ));
@@ -82,6 +83,14 @@ const coordinatorModuleGraphDigest = sha([
   'projects/coordinator-judgment',
   'prisma',
 ].sort().join('\n'));
+
+test('turn-complete success is an explicit HTTP 200 contract', () => {
+  assert.equal(
+    Reflect.getMetadata(HTTP_CODE_METADATA, RunnerApiController.prototype.turnComplete),
+    200,
+  );
+  evidence.completionAck.httpSuccessStatus = 200;
+});
 
 function runDeadman(args) {
   const child = spawnSync(process.execPath, [

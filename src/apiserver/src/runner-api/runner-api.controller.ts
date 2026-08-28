@@ -2915,6 +2915,7 @@ export class RunnerApiController {
   /** A single interactive turn finished; retain or release its active-turn slot. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/turn-complete')
+  @HttpCode(200)
   async turnComplete(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
