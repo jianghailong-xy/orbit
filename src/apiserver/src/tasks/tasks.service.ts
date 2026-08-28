@@ -203,6 +203,7 @@ import {
   deriveTaskCompletionStatus,
   projectVerifierCarrierStatus,
   resolveTaskCompletionCriterion,
+  TASK_COMPLETION_FENCE_REVISION,
   taskCompletionRequiredAction,
   taskCompletionDeclarationError,
   type TaskCompletionCriterionValue,
@@ -2865,6 +2866,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // removes the legacy default. Both paths already ran this deterministic check before any
       // ownership or transaction work; this cheap repeat protects future internal call sites too.
       completionCriterion: this.assertCompletionDeclaration(dto),
+      completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
       completionCriterionOverrideReason:
         normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
@@ -8147,6 +8149,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A verifier's verdict is its own completion fact.  This declaration is explicit because
       // this internal Prisma path intentionally bypasses create()/taskCreateData().
       completionCriterion: 'VERIFICATION',
+      completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
       completionPolicy: 'MANUAL',
       completionCriterionOverrideReason: null,
         // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.

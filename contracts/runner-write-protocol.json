@@ -1,0 +1,31 @@
+{
+  "name": "orbit.runner-write",
+  "capabilityRevision": 2,
+  "schemaRevision": 2,
+  "minimumCapabilityRevision": 1,
+  "minimumSchemaRevision": 1,
+  "legacyContractDigest": "runner-write-v1",
+  "completionCriterion": {
+    "requiredAtRunnerBoundary": true,
+    "legacyTranslations": [
+      "acceptanceCommand+acceptanceExpectedExitCode=>EXECUTABLE",
+      "completionPolicy=VERIFICATION_PASSED=>VERIFICATION",
+      "verifiesTaskId=>VERIFICATION"
+    ],
+    "fullyOmitted": "REFUSE"
+  },
+  "taskStatus": {
+    "directDone": "REFUSE",
+    "canonicalWriter": "DECLARED_COMPLETION_FACT_PROJECTOR"
+  },
+  "bootstrapFence": {
+    "requires": [
+      "MERGE_RECEIPT",
+      "TARGET_CONTAINS_SOURCE",
+      "INDEPENDENT_CLEAN_TARGET_SHA_VERIFIER",
+      "NONZERO_EXECUTIONS",
+      "ZERO_FAILURES",
+      "ZERO_SKIPS"
+    ]
+  }
+}

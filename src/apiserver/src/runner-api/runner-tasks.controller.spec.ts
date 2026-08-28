@@ -169,14 +169,16 @@ test('runner task create refuses an implicit HUMAN_SIGNOFF before resolving or w
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
       assert.match(error.message, /completionCriterion/);
-      assert.match(error.message, /implicitly create HUMAN_SIGNOFF/);
+      const body = error.getResponse() as Record<string, unknown>;
+      assert.equal(body.code, 'RUNNER_COMPLETION_CRITERION_REQUIRED');
+      assert.match(error.message, /never.*HUMAN_SIGNOFF/i);
       return true;
     },
   );
   assert.equal(serviceCalls, 0);
 });
 
-test('runner task create permits all three explicit criteria and never infers from related fields', async () => {
+test('runner task create permits explicit criteria and translates unambiguous N-1 declarations', async () => {
   const writes: unknown[] = [];
   const tasks = {
     resolveAgentCreator: async () => undefined,
@@ -203,22 +205,26 @@ test('runner task create permits all three explicit criteria and never infers fr
   }
   assert.equal(writes.length, declarations.length);
 
-  for (const inferred of [
-    { verifiesTaskId: 'subject-1' },
-    { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 },
-    { completionPolicy: 'VERIFICATION_PASSED' },
-  ]) {
-    await assert.rejects(
-      () => controller.createTask(
-        RUNNER,
-        undefined,
-        undefined,
-        undefined,
-        { title: 'No inference', ...inferred } as never,
-      ),
-      /completionCriterion is required/,
+  const legacy = [
+    { verifiesTaskId: 'subject-1', expected: 'VERIFICATION' },
+    { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, expected: 'EXECUTABLE' },
+    { completionPolicy: 'VERIFICATION_PASSED', expected: 'VERIFICATION' },
+  ];
+  for (const { expected, ...declaration } of legacy) {
+    await controller.createTask(
+      RUNNER,
+      undefined,
+      undefined,
+      undefined,
+      { title: 'N-1 declaration', ...declaration } as never,
     );
   }
+  assert.equal(writes.length, declarations.length + legacy.length);
+  assert.deepEqual(
+    writes.slice(declarations.length).map((write) =>
+      (write as { completionCriterion: string }).completionCriterion),
+    legacy.map(({ expected }) => expected),
+  );
 });
 
 test('runner batch create and both dry-run paths refuse every implicit HUMAN_SIGNOFF before service', async () => {

@@ -2957,6 +2957,9 @@ model Task {
   /// The declared completion fact for this task. HUMAN_SIGNOFF is a first-class criterion and the
   /// compatibility value for every row that predates this column, never an exceptional fallback.
   completionCriterion TaskCompletionCriterion @default(HUMAN_SIGNOFF) @map("completion_criterion")
+  /// Revision of the database-owned canonical DONE fence. Current task creation writes 1
+  /// explicitly and the database default protects rows inserted by an N-1 server too.
+  completionFenceRevision Int @default(1) @map("completion_fence_revision")
   /// Why the creator deliberately kept a completion criterion after Orbit questioned the shape of
   /// the acceptance prose. NULL means no override was needed or recorded; the text is audit
   /// evidence only and is never interpreted as completion evidence.
