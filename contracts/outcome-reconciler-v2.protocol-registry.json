@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 1,
+  "registryVersion": "2.0.0",
+  "contractName": "orbit.outcome-reconciler",
+  "contractVersion": "2.0.0",
+  "modelGap": {
+    "unknownTypeFactKind": "MODEL_GAP_DETECTED",
+    "obligationKind": "DIAGNOSE_MODEL_GAP",
+    "owner": "AGENT",
+    "outcome": "MODEL_GAP",
+    "visible": true,
+    "handleable": true,
+    "implicitHumanFallback": false
+  },
+  "profiles": {
+    "identity": {
+      "STABLE_GOAL_OBLIGATION": {
+        "namespace": "orbit.obligation.v2",
+        "components": [
+          "tenantId",
+          "goalId",
+          "goalRevision",
+          "contractDigest",
+          "kind",
+          "subjectType",
+          "subjectId",
+          "homeProjectId"
+        ],
+        "forbiddenComponents": [
+          "attemptId",
+          "attemptGeneration",
+          "sessionId",
+          "leaseId",
+          "wallClock",
+          "reasonText"
+        ],
+        "stability": "ATTEMPT_AND_DELIVERY_INVARIANT"
+      }
+    },
+    "binding": {
+      "EXACT_V2_BINDING": {
+        "requiredFields": [
+          "tenantId",
+          "projectId",
+          "subjectType",
+          "subjectId",
+          "goalId",
+          "goalRevision",
+          "contractDigest",
+          "evaluationPlanDigest",
+          "policyDigest",
+          "riskPolicyDigest",
+          "permissionDigest",
+          "authorityGrantDigest",
+          "budgetDigest",
+          "capabilityRegistryDigest",
+          "recipientDigest",
+          "evaluatorDigest",
+          "factSchemaDigest",
+          "environmentDigest",
+          "artifactDigest",
+          "targetDigest",
+          "targetRef",
+          "asOfLogicalTime",
+          "factCutDigest"
+        ],
+        "materialInvalidators": [
+          "CONTRACT_CHANGED",
+          "CRITERIA_CHANGED",
+          "ARTIFACT_CHANGED",
+          "TARGET_CHANGED",
+          "RISK_POLICY_CHANGED",
+          "PERMISSION_CHANGED",
+          "AUTHORITY_CHANGED",
+          "BUDGET_CHANGED",
+          "CAPABILITY_REGISTRY_CHANGED",
+          "RECIPIENT_CHANGED",
+          "EVALUATOR_CHANGED",
+          "FACT_SCHEMA_CHANGED",
+          "ENVIRONMENT_CHANGED",
+          "AS_OF_ADVANCED"
+        ],
+        "foreignProjectRule": "EXPLICIT_ACCEPTED_HANDOFF_ONLY"
+      }
+    },
+    "disposition": {
+      "MANDATORY_FIVE_STATE": {
+        "SATISFIED": {
+          "directive": "RESOLVE",
+          "blocksClosure": false
+        },
+        "UNSATISFIED": {
+          "directive": "EXECUTE_ACTION",
+          "blocksClosure": true
+        },
+        "UNKNOWN": {
+          "directive": "MODEL_GAP",
+          "blocksClosure": true
+        },
+        "CONFLICT": {
+          "directive": "MODEL_GAP",
+          "blocksClosure": true
+        },
+        "NOT_APPLICABLE": {
+          "directive": "RESOLVE_NOT_APPLICABLE",
+          "blocksClosure": false
+        }
+      }
+    },
+    "goalAttempt": {
+      "GOAL_SCOPED": {
+        "appliesTo": "GOAL",
+        "requiresActiveGoal": true,
+        "terminalAttemptEffect": "DOES_NOT_TERMINATE_GOAL",
+        "identityAcrossAttempts": "STABLE"
+      },
+      "GOAL_AND_ATTEMPT": {
+        "appliesTo": "GOAL_AND_ATTEMPT",
+        "requiresActiveGoal": true,
+        "terminalAttemptEffect": "DERIVE_SUCCESSOR_OR_TERMINAL_GOAL_DECISION",
+        "identityAcrossAttempts": "STABLE"
+      },
+      "OWNER_GOAL_DECISION": {
+        "appliesTo": "GOAL",
+        "requiresActiveGoal": true,
+        "terminalAttemptEffect": "OWNER_MAY_CHANGE_GOAL_DISPOSITION",
+        "identityAcrossAttempts": "STABLE"
+      }
+    },
+    "authority": {
+      "BOUND_GRANT_COMMIT_RECHECK": {
+        "bindingField": "authorityGrantDigest",
+        "commitRecheck": true,
+        "onMissingOrRevoked": "VISIBLE_AUTHORITY_BLOCK"
+      }
+    },
+    "policy": {
+      "BOUND_POLICY_COMMIT_RECHECK": {
+        "bindingField": "policyDigest",
+        "commitRecheck": true,
+        "onMismatch": "VISIBLE_POLICY_BLOCK"
+      }
+    },
+    "budget": {
+      "FINITE_RESERVED_BUDGET": {
+        "bindingField": "budgetDigest",
+        "reservationRequired": true,
+        "onExhausted": "VISIBLE_BUDGET_EXHAUSTED"
+      }
+    },
+    "crossProject": {
+      "EXPLICIT_HANDOFF": {
+        "homeProjectSource": "BINDING_PROJECT",
+        "servesCriterionSource": "EXPLICIT_STABLE_IDS",
+        "blocksClosureProjectSource": "OWNERSHIP_BLOCKING_PROJECT_IDS",
+        "foreignEdgeRequires": [
+          "crossingId",
+          "handoffId",
+          "ACCEPTED",
+          "attributionDecisionFactId"
+        ],
+        "implicitAdoption": "FORBIDDEN"
+      }
+    }
+  },
+  "types": [
+    {
+      "kind": "ESTABLISH_GOAL_DISPOSITION",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {
+        "profile": "EXACT_V2_BINDING",
+        "subjectTypes": ["GOAL", "PROJECT"]
+      },
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {
+        "role": "AGENT",
+        "adapter": "COORDINATOR_AGENT",
+        "capability": "goal.disposition.propose",
+        "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"
+      },
+      "resolver": {
+        "id": "RESOLVE_ESTABLISH_GOAL_DISPOSITION",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.establish-goal-disposition",
+        "actionId": "PROPOSE_GOAL_DISPOSITION",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {
+        "id": "PROPOSE_GOAL_DISPOSITION",
+        "effectClass": "REVERSIBLE_INTERNAL",
+        "resourceType": "GOAL",
+        "precondition": "GOAL_IS_ACTIVE",
+        "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK",
+        "authorityScopes": ["goal:propose-disposition"],
+        "policyProfile": "BOUND_POLICY_COMMIT_RECHECK",
+        "policyRules": ["goal-disposition"],
+        "budgetProfile": "FINITE_RESERVED_BUDGET",
+        "budgetUnit": "PROTOCOL_ACTION",
+        "budgetCharge": 1
+      },
+      "prerequisites": [
+        {"factKind": "GOAL_DECLARED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}
+      ],
+      "successFacts": ["GOAL_DISPOSITION_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 100, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 4, 16], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.internal", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["GOAL_DISPOSITION"]}
+    },
+    {
+      "kind": "SATISFY_COMPLETION_DIMENSION",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["COMPLETION_DIMENSION"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {"role": "AGENT", "adapter": "COORDINATOR_AGENT", "capability": "dimension.satisfy", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_SATISFY_COMPLETION_DIMENSION",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.satisfy-completion-dimension",
+        "actionId": "SATISFY_DIMENSION",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "SATISFY_DIMENSION", "effectClass": "REVERSIBLE_INTERNAL", "resourceType": "COMPLETION_DIMENSION", "precondition": "DIMENSION_IS_NOT_SETTLED", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["dimension:satisfy"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["dimension-evidence"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "GOAL_RATIFIED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["DIMENSION_EVALUATED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 100, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 4, 16], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.internal", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["CRITERIA_EVALUATION"]}
+    },
+    {
+      "kind": "REPAIR_FACT_CUT",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["FACT_CUT", "PROJECT"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {"role": "SYSTEM", "adapter": "OUTCOME_RECONCILER", "capability": "fact-cut.repair", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REPAIR_FACT_CUT",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.repair-fact-cut",
+        "actionId": "REPAIR_FACT_CUT",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REPAIR_FACT_CUT", "effectClass": "REVERSIBLE_INTERNAL", "resourceType": "FACT_CUT", "precondition": "FACT_CUT_IS_INCOMPLETE_OR_NONLINEARIZABLE", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["fact-cut:repair"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["fact-cut-integrity"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "GOAL_DECLARED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["ACTION_RECEIPT_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 50, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 4, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 2, 8, 32], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.internal", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["FACT_CUT_INTEGRITY"]}
+    },
+    {
+      "kind": "REFRESH_STALE_BINDING",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["BINDING", "PROJECT"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {"role": "SYSTEM", "adapter": "OUTCOME_RECONCILER", "capability": "binding.refresh", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REFRESH_STALE_BINDING",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.refresh-stale-binding",
+        "actionId": "REFRESH_BINDING",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REFRESH_BINDING", "effectClass": "REVERSIBLE_INTERNAL", "resourceType": "BINDING", "precondition": "MATERIAL_BINDING_INVALIDATOR_EXISTS", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["binding:refresh"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["binding-freshness"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "GOAL_DECLARED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["ACTION_RECEIPT_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 50, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 4, 16], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.internal", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["BINDING_FRESHNESS"]}
+    },
+    {
+      "kind": "PROVE_ARTIFACT_INTEGRATION",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["ARTIFACT", "TASK"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_AND_ATTEMPT",
+      "actor": {"role": "AGENT", "adapter": "COORDINATOR_AGENT", "capability": "artifact.integrate", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_PROVE_ARTIFACT_INTEGRATION",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.prove-artifact-integration",
+        "actionId": "PROVE_ARTIFACT_INTEGRATION",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "PROVE_ARTIFACT_INTEGRATION", "effectClass": "READ_ONLY", "resourceType": "ARTIFACT", "precondition": "BOUND_ARTIFACT_EXISTS", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["artifact:read"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["artifact-integration"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "GOAL_RATIFIED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["MERGE_RECEIPT_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 200, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [2, 8, 32], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "NONE_REQUIRED", "capability": null, "manualRecovery": "NO_EFFECT_TO_REVERSE", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["ARTIFACT_INTEGRATION"]}
+    },
+    {
+      "kind": "PROVE_TARGET_PRESENCE",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["TARGET", "GIT_REFERENCE"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_AND_ATTEMPT",
+      "actor": {"role": "SYSTEM", "adapter": "OUTCOME_RECONCILER", "capability": "target.presence.verify", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_PROVE_TARGET_PRESENCE",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.prove-target-presence",
+        "actionId": "PROVE_TARGET_PRESENCE",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "PROVE_TARGET_PRESENCE", "effectClass": "READ_ONLY", "resourceType": "GIT_REFERENCE", "precondition": "TARGET_REF_AND_DIGEST_ARE_BOUND", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["target:read"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["target-presence"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "GOAL_RATIFIED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["MERGE_RECEIPT_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 100, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 4, 16], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "NONE_REQUIRED", "capability": null, "manualRecovery": "NO_EFFECT_TO_REVERSE", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["TARGET_PRESENCE"]}
+    },
+    {
+      "kind": "RUN_BOUND_VERIFICATION",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["VERIFICATION", "TASK", "PROJECT"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_AND_ATTEMPT",
+      "actor": {"role": "AGENT", "adapter": "COORDINATOR_AGENT", "capability": "verification.execute", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_RUN_BOUND_VERIFICATION",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.run-bound-verification",
+        "actionId": "RUN_BOUND_VERIFICATION",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "RUN_BOUND_VERIFICATION", "effectClass": "READ_ONLY", "resourceType": "VERIFICATION", "precondition": "EVALUATION_PLAN_AND_TARGET_ARE_BOUND", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["verification:execute"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["bound-verification"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "GOAL_RATIFIED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["ACCEPTANCE_REVISION_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 500, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [4, 16, 64], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "NONE_REQUIRED", "capability": null, "manualRecovery": "NO_EFFECT_TO_REVERSE", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["POST_MERGE_VERIFICATION"]}
+    },
+    {
+      "kind": "DIAGNOSE_MODEL_GAP",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["MODEL_GAP", "PROJECT"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {"role": "AGENT", "adapter": "COORDINATOR_AGENT", "capability": "model-gap.diagnose", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_DIAGNOSE_MODEL_GAP",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.diagnose-model-gap",
+        "actionId": "DIAGNOSE_MODEL_GAP",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "DIAGNOSE_MODEL_GAP", "effectClass": "READ_ONLY", "resourceType": "MODEL", "precondition": "MODEL_GAP_FACT_EXISTS", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["model-gap:diagnose"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["model-coverage"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "MODEL_GAP_DETECTED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["DIMENSION_EVALUATED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 200, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 2, "sameFailureFingerprintLimit": 1, "backoffLogicalTicks": [2, 8], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "NONE_REQUIRED", "capability": null, "manualRecovery": "NO_EFFECT_TO_REVERSE", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["MODEL_COVERAGE"]}
+    },
+    {
+      "kind": "START_SUCCESSOR_ATTEMPT",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["GOAL", "ATTEMPT"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_AND_ATTEMPT",
+      "actor": {"role": "AGENT", "adapter": "COORDINATOR_AGENT", "capability": "attempt.start-successor", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_START_SUCCESSOR_ATTEMPT",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.start-successor-attempt",
+        "actionId": "START_SUCCESSOR_ATTEMPT",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "START_SUCCESSOR_ATTEMPT", "effectClass": "REVERSIBLE_INTERNAL", "resourceType": "ATTEMPT", "precondition": "GOAL_ACTIVE_AND_LATEST_ATTEMPT_TERMINAL", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["attempt:start"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["successor-attempt"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "ATTEMPT_TERMINATED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["ATTEMPT_STARTED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 100, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 4, 16], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.internal", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["GOAL_DISPOSITION"]}
+    },
+    {
+      "kind": "MONITOR_EXTERNAL_WAIT",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["EXTERNAL_WAIT", "JUDGMENT_REQUEST"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {"role": "SYSTEM", "adapter": "EXTERNAL_WAIT_MONITOR", "capability": "external-wait.monitor", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_MONITOR_EXTERNAL_WAIT",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.monitor-external-wait",
+        "actionId": "MONITOR_EXTERNAL_WAIT",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "MONITOR_EXTERNAL_WAIT", "effectClass": "READ_ONLY", "resourceType": "EXTERNAL_WAIT", "precondition": "EXTERNAL_WAIT_IS_ACTIVE", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["external-wait:read"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["external-wait-monitor"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "JUDGMENT_REQUESTED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["JUDGMENT_SIGNAL_OBSERVED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 1000, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 5, "sameFailureFingerprintLimit": 3, "backoffLogicalTicks": [10, 20, 40, 80, 160], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "NONE_REQUIRED", "capability": null, "manualRecovery": "NO_EFFECT_TO_REVERSE", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["EXTERNAL_CLOSURE_DEPENDENCIES"]}
+    },
+    {
+      "kind": "REQUEST_GOAL_DECISION",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["GOAL", "JUDGMENT_REQUEST"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "OWNER_GOAL_DECISION",
+      "actor": {"role": "OWNER", "adapter": "OWNER_DECISION_INBOX", "capability": "owner.goal-decision", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REQUEST_GOAL_DECISION",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.request-goal-decision",
+        "actionId": "REQUEST_GOAL_DECISION",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REQUEST_GOAL_DECISION", "effectClass": "IRREVERSIBLE_INTERNAL", "resourceType": "OWNER_DECISION", "precondition": "GOAL_DECISION_IS_IRREDUCIBLY_VALUE_LADEN", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["owner:goal-decision"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["owner-decision-only"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "JUDGMENT_REQUESTED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["JUDGMENT_DECIDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 10000, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 2, "sameFailureFingerprintLimit": 1, "backoffLogicalTicks": [100, 500], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "MANUAL", "capability": null, "manualRecovery": "APPEND_A_SUPERSEDING_OWNER_DECISION", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["GOAL_DISPOSITION"]}
+    },
+    {
+      "kind": "REQUEST_RISK_ACCEPTANCE",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["RISK", "JUDGMENT_REQUEST"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "OWNER_GOAL_DECISION",
+      "actor": {"role": "OWNER", "adapter": "OWNER_DECISION_INBOX", "capability": "owner.risk-acceptance", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REQUEST_RISK_ACCEPTANCE",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.request-risk-acceptance",
+        "actionId": "REQUEST_RISK_ACCEPTANCE",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REQUEST_RISK_ACCEPTANCE", "effectClass": "IRREVERSIBLE_INTERNAL", "resourceType": "OWNER_DECISION", "precondition": "RISK_IS_OUTSIDE_PREAPPROVED_POLICY", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["owner:risk-acceptance"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["risk-acceptance-owner-only"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "JUDGMENT_REQUESTED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["JUDGMENT_DECIDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 10000, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 2, "sameFailureFingerprintLimit": 1, "backoffLogicalTicks": [100, 500], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "MANUAL", "capability": null, "manualRecovery": "APPEND_A_SUPERSEDING_RISK_DECISION", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["POLICY_COMPLIANCE"]}
+    },
+    {
+      "kind": "REQUEST_NEW_AUTHORIZATION",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["AUTHORITY", "JUDGMENT_REQUEST"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "OWNER_GOAL_DECISION",
+      "actor": {"role": "OWNER", "adapter": "OWNER_DECISION_INBOX", "capability": "owner.authorization", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REQUEST_NEW_AUTHORIZATION",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.request-new-authorization",
+        "actionId": "REQUEST_NEW_AUTHORIZATION",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REQUEST_NEW_AUTHORIZATION", "effectClass": "IRREVERSIBLE_INTERNAL", "resourceType": "AUTHORITY_GRANT", "precondition": "CURRENT_GRANT_CANNOT_AUTHORIZE_ACTION", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["owner:authorization"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["new-authorization-owner-only"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "JUDGMENT_REQUESTED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["JUDGMENT_DECIDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 10000, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 2, "sameFailureFingerprintLimit": 1, "backoffLogicalTicks": [100, 500], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "MANUAL", "capability": null, "manualRecovery": "REVOKE_OR_SUPERSEDE_THE_GRANT_WITH_AN_OWNER_FACT", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["AUTHORITY_VALIDITY"]}
+    },
+    {
+      "kind": "REQUEST_EXTERNAL_IDENTITY",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["EXTERNAL_IDENTITY", "JUDGMENT_REQUEST"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "OWNER_GOAL_DECISION",
+      "actor": {"role": "OWNER", "adapter": "OWNER_DECISION_INBOX", "capability": "owner.external-identity", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REQUEST_EXTERNAL_IDENTITY",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.request-external-identity",
+        "actionId": "REQUEST_EXTERNAL_IDENTITY",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REQUEST_EXTERNAL_IDENTITY", "effectClass": "IRREVERSIBLE_INTERNAL", "resourceType": "EXTERNAL_IDENTITY", "precondition": "EXTERNAL_PRINCIPAL_CANNOT_BE_DERIVED", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["owner:external-identity"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["external-identity-owner-only"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "JUDGMENT_REQUESTED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["JUDGMENT_DECIDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 10000, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 2, "sameFailureFingerprintLimit": 1, "backoffLogicalTicks": [100, 500], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "MANUAL", "capability": null, "manualRecovery": "REVOKE_OR_SUPERSEDE_THE_IDENTITY_BINDING", "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["AUTHORITY_VALIDITY"]}
+    },
+    {
+      "kind": "REMEDIATE_SIDE_EFFECT",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["SIDE_EFFECT", "ACTION_RECEIPT"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_AND_ATTEMPT",
+      "actor": {"role": "AGENT", "adapter": "COORDINATOR_AGENT", "capability": "effect.remediate", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_REMEDIATE_SIDE_EFFECT",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.remediate-side-effect",
+        "actionId": "REMEDIATE_SIDE_EFFECT",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "RECOVER_RECONCILER", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "REMEDIATE_SIDE_EFFECT", "effectClass": "EXTERNAL_REVERSIBLE", "resourceType": "EXTERNAL_EFFECT", "precondition": "WRONG_EFFECT_RECEIPT_EXISTS", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["effect:remediate"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["effect-remediation"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "ACTION_RECEIPT_RECORDED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["ACTION_RECEIPT_RECORDED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 200, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "RECOVER_RECONCILER"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [2, 8, 32], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.external", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["ACTION_REMEDIATION"]}
+    },
+    {
+      "kind": "RECOVER_RECONCILER",
+      "mandatory": true,
+      "identityProfile": "STABLE_GOAL_OBLIGATION",
+      "binding": {"profile": "EXACT_V2_BINDING", "subjectTypes": ["RECONCILER", "DURABLE_TIMER"]},
+      "dispositionProfile": "MANDATORY_FIVE_STATE",
+      "goalAttemptProfile": "GOAL_SCOPED",
+      "actor": {"role": "SYSTEM", "adapter": "OUTCOME_RECONCILER", "capability": "reconciler.recover", "onUnavailable": "VISIBLE_PROTOCOL_BLOCK"},
+      "resolver": {
+        "id": "RESOLVE_RECOVER_RECONCILER",
+        "actor": "SYSTEM",
+        "adapter": "OUTCOME_RECONCILER",
+        "capability": "obligation.resolve.recover-reconciler",
+        "actionId": "RECOVER_RECONCILER",
+        "from": "ACTIVE",
+        "routes": [
+          {"on": "SUCCESS_FACT", "terminal": "RESOLVED", "kind": null, "bypassesPrerequisites": false},
+          {"on": "FAILURE_FACT", "terminal": "VISIBLE_FAILURE", "kind": null, "bypassesPrerequisites": true},
+          {"on": "TIMEOUT", "terminal": null, "kind": "DIAGNOSE_MODEL_GAP", "bypassesPrerequisites": true}
+        ]
+      },
+      "action": {"id": "RECOVER_RECONCILER", "effectClass": "REVERSIBLE_INTERNAL", "resourceType": "RECONCILER", "precondition": "STALE_WATERMARK_OR_OVERDUE_TIMER_EXISTS", "authorityProfile": "BOUND_GRANT_COMMIT_RECHECK", "authorityScopes": ["reconciler:recover"], "policyProfile": "BOUND_POLICY_COMMIT_RECHECK", "policyRules": ["reconciler-recovery"], "budgetProfile": "FINITE_RESERVED_BUDGET", "budgetUnit": "PROTOCOL_ACTION", "budgetCharge": 1},
+      "prerequisites": [{"factKind": "TIMER_SCHEDULED", "obligationKind": null, "onMissing": "VISIBLE_PREREQUISITE"}],
+      "successFacts": ["TIMER_FIRED"],
+      "failureFacts": ["ACTION_RECEIPT_RECORDED", "MODEL_GAP_DETECTED"],
+      "timeout": {"logicalTicks": 50, "durable": true, "factKind": "OBLIGATION_EXIT_RECORDED", "exit": "TIMEOUT", "recoveryKind": "DIAGNOSE_MODEL_GAP"},
+      "retry": {"maxAttempts": 3, "sameFailureFingerprintLimit": 2, "backoffLogicalTicks": [1, 2, 8], "onExhausted": "VISIBLE_RETRY_EXHAUSTED"},
+      "compensation": {"mode": "AUTOMATIC", "capability": "effect.rollback.internal", "manualRecovery": null, "remediationObligationKind": "REMEDIATE_SIDE_EFFECT"},
+      "attribution": {"profile": "EXPLICIT_HANDOFF", "servesCriterionMode": "EXPLICIT_STABLE_IDS", "blocksClosureOf": ["MODEL_COVERAGE"]}
+    }
+  ]
+}
