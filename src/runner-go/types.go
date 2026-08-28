@@ -805,7 +805,12 @@ type WorktreesRemovableResponse struct {
 }
 
 type Manifest struct {
-	Version string `json:"version"`
+	Version                   string `json:"version"`
+	CapabilityRevision        int    `json:"capabilityRevision,omitempty"`
+	SchemaRevision            int    `json:"schemaRevision,omitempty"`
+	MinimumCapabilityRevision int    `json:"minimumCapabilityRevision,omitempty"`
+	MinimumSchemaRevision     int    `json:"minimumSchemaRevision,omitempty"`
+	ContractDigest            string `json:"contractDigest,omitempty"`
 }
 
 // PermissionRule mirrors @orbit/shared: a claude permission rule to add for the rest of

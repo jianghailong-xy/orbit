@@ -1226,6 +1226,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "task", trigger: "task_dispatch_authority_derive", event: "BEFORE INSERT OR UPDATE OF \"project_id\", \"dispatch_authority\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
   { table: "task", trigger: "task_dispatch_epoch_seed", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch WRITE"] },
   { table: "task", trigger: "task_dispatch_epoch_update", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch LOCK"] },
+  { table: "task", trigger: "task_done_canonical_writer_fence", event: "BEFORE UPDATE OF \"status\", \"completion_fence_revision\"", kind: "ROW/STATEMENT", since: "0193_task_done_writer_fence", takes: [] },
   { table: "task", trigger: "task_judgment_verifier_delete_guard", event: "AFTER DELETE", kind: "CONSTRAINT", since: "0192_verifier_role_completion", takes: [] },
   { table: "task", trigger: "task_judgment_verifier_terminal_guard", event: "BEFORE UPDATE OF \"status\", \"verdict\", \"verifies_task_id\"", kind: "ROW/STATEMENT", since: "0192_verifier_role_completion", takes: [] },
   { table: "task", trigger: "task_open_verification_request_carrier_guard", event: "AFTER INSERT OR UPDATE OF \"verdict\", \"verifies_task_id\"", kind: "CONSTRAINT", since: "0192_verifier_role_completion", takes: [] },

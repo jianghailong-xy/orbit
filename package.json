@@ -19,6 +19,8 @@
     "db:down": "docker compose down",
     "prisma:generate": "npm run prisma:generate -w @orbit/apiserver",
     "prisma:migrate": "npm run prisma:migrate -w @orbit/apiserver",
+    "test:outcome-reconciler:bootstrap": "bash scripts/outcome-reconciler-bootstrap.sh",
+    "test:outcome-reconciler:contract": "bash scripts/outcome-reconciler-contract.sh",
     "dev:apiserver": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/apiserver",
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web"
   },

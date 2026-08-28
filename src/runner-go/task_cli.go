@@ -2270,12 +2270,17 @@ type cliServiceTokenContext struct {
 }
 
 type cliCapabilitiesDocument struct {
-	SchemaVersion     int                  `json:"schemaVersion"`
-	CLIVersion        string               `json:"cliVersion"`
-	Registered        bool                 `json:"registered"`
-	UnavailableReason string               `json:"unavailableReason,omitempty"`
-	Context           cliCapabilityContext `json:"context"`
-	Capabilities      []cliCapability      `json:"capabilities"`
+	SchemaVersion            int                  `json:"schemaVersion"`
+	CapabilityRevision       int                  `json:"capabilityRevision"`
+	ServerCapabilityRevision int                  `json:"serverCapabilityRevision"`
+	ServerSchemaRevision     int                  `json:"serverSchemaRevision"`
+	ContractDigest           string               `json:"contractDigest"`
+	CapabilityCount          int                  `json:"capabilityCount"`
+	CLIVersion               string               `json:"cliVersion"`
+	Registered               bool                 `json:"registered"`
+	UnavailableReason        string               `json:"unavailableReason,omitempty"`
+	Context                  cliCapabilityContext `json:"context"`
+	Capabilities             []cliCapability      `json:"capabilities"`
 }
 
 func buildCLICapabilities(executable string) cliCapabilitiesDocument {
@@ -2357,12 +2362,17 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		unavailableReason = "runner credential storage is not private; restart the Orbit runner once to migrate it"
 	}
 	return cliCapabilitiesDocument{
-		SchemaVersion:     1,
-		CLIVersion:        version,
-		Registered:        registered,
-		UnavailableReason: unavailableReason,
-		Context:           ctx,
-		Capabilities:      commands,
+		SchemaVersion:            runnerWriteSchemaRevision,
+		CapabilityRevision:       runnerWriteCapabilityRevision,
+		ServerCapabilityRevision: runnerWriteCapabilityRevision,
+		ServerSchemaRevision:     runnerWriteSchemaRevision,
+		ContractDigest:           runnerWriteContractDigest,
+		CapabilityCount:          len(commands),
+		CLIVersion:               version,
+		Registered:               registered,
+		UnavailableReason:        unavailableReason,
+		Context:                  ctx,
+		Capabilities:             commands,
 	}
 }
 
