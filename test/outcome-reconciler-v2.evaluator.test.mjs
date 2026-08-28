@@ -559,7 +559,7 @@ async function setupDbScope({ factKind = 'DIMENSION_EVALUATED', evaluatorVersion
   return scope;
 }
 
-async function appendDbFact(client, scope, payload, key) {
+async function appendDbFact(client, scope, payload, key, causalPredecessorFactId = null) {
   const runner = scope.factKind === 'ATTEMPT_TERMINATED';
   const completePayload = runner ? {
     ...payload,
@@ -580,7 +580,7 @@ async function appendDbFact(client, scope, payload, key) {
     principal: { type: scope.principalType, id: scope.principalId },
     authority: scope.authority,
     observedAt: '2026-08-28T00:00:00.000Z',
-    causalPredecessorFactId: null,
+    causalPredecessorFactId,
     idempotencyKey: key,
     source: {
       system: scope.sourceSystem,
@@ -665,11 +665,11 @@ async function commitDbEvaluation(client, scope, cut, evaluation) {
 
 async function closedDbFixture(label = 'closed') {
   const scope = await setupDbScope();
-  await appendAllDimensions(scope, label);
+  const facts = await appendAllDimensions(scope, label);
   const cut = await sealDbCut(pool, scope, `${label}:cut`);
   const evaluation = await evaluateDbCut(pool, scope, cut);
   assert.equal(evaluation.closed, true);
-  return { scope, cut, evaluation };
+  return { scope, cut, evaluation, facts };
 }
 
 test('PostgreSQL PASS racing a criteria-standard edit cannot leave a false current close', async () => {
@@ -757,7 +757,7 @@ function dbAttempt(scope, generation, outcome) {
   };
 }
 
-test('PostgreSQL cancel then later success evidence resolves, rather than loses, the successor obligation', async () => {
+test('PostgreSQL cancel then later success evidence atomically obsoletes and remaps the old obligation', async () => {
   const scope = await setupDbScope({ factKind: 'ATTEMPT_TERMINATED' });
   await appendDbFact(pool, scope, dbAttempt(scope, 1, 'CANCELLED'), 'cancel-attempt');
   const cancelledCut = await sealDbCut(pool, scope, 'cancel-cut');
@@ -774,7 +774,18 @@ test('PostgreSQL cancel then later success evidence resolves, rather than loses,
   const transition = await pool.query(`SELECT to_state, reason_code FROM outcome_obligation_event
     WHERE tenant_id = $1::uuid AND project_id = $2::uuid AND obligation_id = $3
     ORDER BY event_id DESC LIMIT 1`, [scope.tenantId, scope.projectId, successor.obligationId]);
-  assert.deepEqual(transition.rows[0], { to_state: 'RESOLVED', reason_code: 'SUCCESSOR_ATTEMPT_OBSERVED' });
+  assert.deepEqual(transition.rows[0], {
+    to_state: 'SUPERSEDED', reason_code: 'MATCHING_FACT_APPENDED',
+  });
+  const reduced = await pool.query(`SELECT successor_count FROM outcome_obligation_successor_set
+    WHERE tenant_id = $1::uuid AND project_id = $2::uuid
+      AND predecessor_obligation_revision = $3`,
+  [scope.tenantId, scope.projectId, successor.obligationRevision]);
+  assert.deepEqual(
+    reduced.rows[0],
+    { successor_count: 1 },
+    'the old goal-disposition blocker maps to the current unresolved goal-disposition blocker',
+  );
   evidence.races.cancelVsEvidence = true;
   evidence.invariants.noLostObligation = true;
   evidence.invariants.appendOnlyObligationLedger = true;
@@ -825,12 +836,14 @@ test('two concurrent successor reductions create one result and one active succe
 });
 
 test('PostgreSQL verdict replacement reopens and material artifact replacement supersedes obligations', async () => {
-  const { scope, cut, evaluation } = await closedDbFixture('replacement');
+  const { scope, cut, evaluation, facts } = await closedDbFixture('replacement');
   await commitDbEvaluation(pool, scope, cut, evaluation);
   await appendDbFact(pool, scope, {
     dimensionId: 'CRITERIA_EVALUATION', state: 'UNSATISFIED', applicabilityProofDigest: null,
     reasonCode: 'VERDICT_REPLACED_WITH_FAIL',
-  }, 'verdict-replacement');
+  }, 'verdict-replacement', facts.find(
+    (fact) => fact.payload.dimensionId === 'CRITERIA_EVALUATION',
+  ).factId);
   const verdictCut = await sealDbCut(pool, scope, 'verdict-replacement-cut');
   const verdictEvaluation = await evaluateDbCut(pool, scope, verdictCut);
   assert.equal(verdictEvaluation.closed, false);

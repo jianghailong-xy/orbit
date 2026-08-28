@@ -26,7 +26,8 @@
     "dev:apiserver": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/apiserver",
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
     "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh",
-    "test:outcome-reconciler:ratification": "bash scripts/outcome-reconciler-ratification.sh"
+    "test:outcome-reconciler:ratification": "bash scripts/outcome-reconciler-ratification.sh",
+    "test:outcome-reconciler:versioning": "bash scripts/outcome-reconciler-versioning.sh"
   },
   "engines": {
     "node": ">=26.0.0"
