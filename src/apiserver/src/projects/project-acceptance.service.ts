@@ -16,11 +16,9 @@ import {
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  ACCEPTANCE_BLOCKED,
   ACCEPTANCE_DIGEST_VERSION,
-  ACCEPTANCE_FINDING_ROUTING,
   ACCEPTANCE_MISSING,
-  OWNER_RATIFICATION_REQUIRED,
+  CANONICAL_DONE_GATE_BLOCKED,
   AcceptanceFacts,
   AcceptanceRefusalCode,
   StatedAcceptanceCriterion,
@@ -36,7 +34,6 @@ import {
   authorityPrincipal,
   refuseHumanOnlyAction,
 } from './coordinator-authority';
-import { verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** What a caller may say when opening a run. Both attributions are historical ids: they record who
@@ -162,6 +159,23 @@ export interface PreapprovedRatificationInput {
 export interface RatificationPrincipal {
   actorType: 'AGENT' | 'RUNNER' | 'SERVICE';
   actorId: string;
+}
+
+/** The DONE decision is returned as the canonical proof/obligation view, not as a writable
+ * blocker flag or a lossy refusal string. Unknown fields remain forward-compatible JSON, while
+ * these fields are the minimum every caller may safely switch on. */
+export interface CanonicalDoneGateView extends Record<string, unknown> {
+  schemaVersion: number;
+  allowed: boolean;
+  decision: 'ALLOW' | 'DENY';
+  staleness: string;
+  canonicalIdentity: Record<string, unknown>;
+  proof: unknown;
+  reasons: unknown[];
+  blockingReasons: unknown[];
+  obligations: unknown[];
+  blockingObligations: unknown[];
+  reason: Record<string, unknown>;
 }
 
 /** A DONE that was refused, with the code the caller switches on. Thrown as a 409 because it is a
@@ -1031,13 +1045,16 @@ export class ProjectAcceptanceService {
             tx,
             projectId,
             'done_bound',
-            `automatically satisfied confirmed criteria at evidence version ${gate.attempt}`,
+            gate.attempt === null
+              ? 'automatically satisfied the current canonical outcome proof'
+              : `automatically satisfied canonical outcome proof at legacy evidence version ${gate.attempt}`,
             {
               source: 'AUTOMATIC_CRITERIA_EVALUATOR',
               actorStatusWrite: false,
               criteriaDigest: locked.acceptanceCriteriaDigest,
               acceptanceDigest: gate.digest,
-              evidenceVersion: String(gate.attempt),
+              evidenceVersion: gate.attempt === null ? null : String(gate.attempt),
+              canonicalIdentity: gate.gate.canonicalIdentity as unknown as Prisma.InputJsonValue,
             },
             gate.runId,
           );
@@ -1472,6 +1489,101 @@ export class ProjectAcceptanceService {
   // The DONE hard gate (§13.4 AE2)
   // ------------------------------------------------------------------------------------------
 
+  private static failedCanonicalGate(
+    code: string,
+    message: string,
+    detail: Record<string, unknown> = {},
+  ): CanonicalDoneGateView {
+    const reason = {
+      code,
+      category: code === 'GATE_READ_FAILED' ? 'READ_FAILURE' : 'MODEL_GAP',
+      message,
+      owner: 'SYSTEM',
+      actor: 'SYSTEM',
+      nextAction: 'reconciler.recover',
+      blocksGate: true,
+      evidenceFactIds: [],
+      attemptedActions: [],
+      detail,
+    };
+    return {
+      schemaVersion: 2,
+      allowed: false,
+      decision: 'DENY',
+      staleness: code === 'GATE_READ_FAILED' ? 'READ_FAILED' : 'CURRENT',
+      canonicalIdentity: {},
+      proof: null,
+      proofGraph: null,
+      reasons: [reason],
+      blockingReasons: [reason],
+      diagnostics: [],
+      reason,
+      obligations: [],
+      blockingObligations: [],
+      nonBlockingObligations: [],
+      owner: 'SYSTEM',
+      actor: 'SYSTEM',
+      nextAction: 'reconciler.recover',
+      compatibility: {
+        legacyBlockerSignalInputs: false,
+        projectionIsAuthority: false,
+      },
+    };
+  }
+
+  private static canonicalGateRow(value: Prisma.JsonValue | undefined): CanonicalDoneGateView {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return ProjectAcceptanceService.failedCanonicalGate(
+        'GATE_READ_FAILED',
+        'The canonical DONE gate returned no structured result.',
+        { cause: 'INVALID_GATE_ROW' },
+      );
+    }
+    const gate = value as Record<string, unknown>;
+    const reason = gate.reason;
+    if (
+      gate.schemaVersion !== 2
+      || typeof gate.allowed !== 'boolean'
+      || !['ALLOW', 'DENY'].includes(String(gate.decision))
+      || !gate.canonicalIdentity || typeof gate.canonicalIdentity !== 'object'
+      || Array.isArray(gate.canonicalIdentity)
+      || !Array.isArray(gate.reasons)
+      || !Array.isArray(gate.blockingReasons)
+      || !Array.isArray(gate.obligations)
+      || !Array.isArray(gate.blockingObligations)
+      || !reason || typeof reason !== 'object' || Array.isArray(reason)
+    ) {
+      return ProjectAcceptanceService.failedCanonicalGate(
+        'GATE_READ_FAILED',
+        'The canonical DONE gate returned an unknown schema or field type.',
+        { cause: 'UNKNOWN_GATE_SCHEMA' },
+      );
+    }
+    return gate as CanonicalDoneGateView;
+  }
+
+  private async canonicalGate(
+    tx: Prisma.TransactionClient | PrismaService,
+    projectId: string,
+  ): Promise<CanonicalDoneGateView> {
+    try {
+      const [row] = await tx.$queryRaw<Array<{ gate: Prisma.JsonValue }>>(Prisma.sql`
+        SELECT project_canonical_done_gate(
+          ${projectId}::uuid, 'PROJECT', ${projectId}
+        ) AS gate
+      `);
+      return ProjectAcceptanceService.canonicalGateRow(row?.gate);
+    } catch (error) {
+      return ProjectAcceptanceService.failedCanonicalGate(
+        'GATE_READ_FAILED',
+        'The canonical DONE gate could not read or validate its authoritative inputs.',
+        {
+          cause: error instanceof Error ? error.name : 'UNKNOWN_READ_FAILURE',
+        },
+      );
+    }
+  }
+
   /**
    * AE2's three steps, in the transaction that is about to write DONE.
    *
@@ -1479,317 +1591,54 @@ export class ProjectAcceptanceService {
    * it, because taking a lock inside a check is how a check ends up covering a different world than
    * the write it guards.
    *
-   * Returns the run the DONE will be bound to. Throws a typed 409 otherwise, and the reason is
-   * always one a person can act on: there is no run, the run says something other than PASS, the
-   * current conclusion projection is non-PASS, or the project still has something unresolved in
-   * it. Task counts and task statuses are intentionally absent: they are a process
-   * measure, while this gate decides whether the stated outcome was achieved.
+   * Returns the exact canonical cut and an optional historical acceptance-run link. Throws one
+   * typed 409 carrying the complete proof, obligations, owners and next actions otherwise. Task
+   * counts, legacy blockers and signal summaries are intentionally absent: they are process/read
+   * models, while this gate decides whether the stated outcome was achieved.
    */
   async assertDoneAllowed(
     tx: Prisma.TransactionClient,
     projectId: string,
-  ): Promise<{ runId: string; attempt: bigint; digest: string }> {
-    const digest = await this.digest(tx, projectId);
-    return this.assertDoneAllowedForDigest(tx, projectId, digest);
-  }
-
-  /**
-   * Ratification is the owner's authorization to act on the semantic contract, not an alternate
-   * acceptance verdict. Keep this check at the final edge of the DONE gate: missing or failing
-   * evidence must still report its own actionable acceptance finding, while a fully evidenced
-   * project may cross the side-effecting DONE boundary only with the exact contract approved.
-   */
-  private async assertOwnerRatificationForDone(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-  ): Promise<void> {
-    const [contract] = await tx.$queryRaw<Array<{
-      contractDigest: string;
-      evaluationPlanDigest: string;
-      ratified: boolean;
-      decisionRequestId: string | null;
-    }>>(Prisma.sql`
-      SELECT state."contract_digest" AS "contractDigest",
-             state."evaluation_plan_digest" AS "evaluationPlanDigest",
-             project_owner_ratification_effective(
-               state."project_id", state."contract_digest"
-             ) AS "ratified",
-             request."id" AS "decisionRequestId"
-        FROM "project_completion_contract" state
-        LEFT JOIN LATERAL (
-          SELECT r."id" FROM "project_owner_decision_request" r
-           WHERE r."project_id" = state."project_id" AND r."status" = 'PENDING'
-           ORDER BY r."request_generation" DESC LIMIT 1
-        ) request ON TRUE
-       WHERE state."project_id" = ${projectId}::uuid
-    `);
-    if (!contract?.ratified) {
+  ): Promise<{
+    runId: string | null;
+    attempt: bigint | null;
+    digest: string;
+    gate: CanonicalDoneGateView;
+  }> {
+    const gate = await this.canonicalGate(tx, projectId);
+    if (!gate.allowed) {
+      const reason = gate.reason;
       throw new AcceptanceRefusal(
-        OWNER_RATIFICATION_REQUIRED,
-        'the owner has not ratified the exact current completion contract — ratification approves ' +
-          'the goal, semantic criteria, risk, permissions, budget and recipient; evaluation-plan ' +
-          'changes are evaluated separately',
+        CANONICAL_DONE_GATE_BLOCKED,
+        typeof reason.message === 'string'
+          ? reason.message
+          : 'the canonical DONE gate is closed by a structured obligation',
         {
-          requiredAction: 'answer the current owner ratification decision request',
-          contractDigest: contract?.contractDigest ?? null,
-          evaluationPlanDigest: contract?.evaluationPlanDigest ?? null,
-          decisionRequestId: contract?.decisionRequestId ?? null,
+          requiredAction: typeof reason.nextAction === 'string'
+            ? reason.nextAction
+            : 'reconcile the current canonical outcome cut',
+          reasonCode: typeof reason.code === 'string' ? reason.code : 'CANONICAL_DONE_GATE_BLOCKED',
+          doneGate: gate,
         },
       );
     }
-  }
-
-  /** The gate after its acceptance digest has already been read in this transaction.
-   *
-   * The write path calls {@link assertDoneAllowed}, which computes the digest here under its
-   * project lock. The read-only overview has to return that same digest beside the gate result, so
-   * it computes it once and enters here directly. Keeping the rest of the decision in one helper
-   * prevents a large project from materializing and hashing its complete task set twice merely to
-   * describe why it is not DONE. */
-  private async assertDoneAllowedForDigest(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-    digest: string,
-  ): Promise<{ runId: string; attempt: bigint; digest: string }> {
-    // HUMAN_SIGNOFF judgment blockers are projections of OPEN requests, not mutable
-    // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
-    // merely because there is intentionally no blocker row for somebody to close by hand.
-    const [{ count: openBlockers }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-      SELECT (
-        (SELECT count(*) FROM "project_blocker" blocker
-          WHERE blocker."project_id" = ${projectId}::uuid
-            AND blocker."resolved_at" IS NULL)
-        +
-        (SELECT count(*) FROM "project_judgment_blocker" judgment
-          WHERE judgment."project_id" = ${projectId}::uuid)
-      )::int AS "count"
-    `);
-    // §13.6 SU6: a failure whose verifier or whose subject was REPLACED is a record, not a request
-    // — nothing will ever run either of them again, so the later PASS that is the only thing which
-    // resolves this row can never arrive. Counting it would make a project that re-ran a failed
-    // check from scratch permanently unacceptable, which is precisely the history this project has.
-    // Raw rather than Prisma because the predicate is shared verbatim with §7.4's own reader.
-    const [{ count: unresolvedFailures }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-      SELECT count(*)::int AS "count"
-        FROM "task_verification_failure" f
-        JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
-        JOIN "task" subject  ON subject."id"  = f."subject_task_id"
-       WHERE f."project_id" = ${projectId}::uuid
-         AND f."resolved_at" IS NULL
-         AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
-    `);
-    if (openBlockers > 0 || unresolvedFailures > 0) {
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_BLOCKED,
-        `this project still has ${openBlockers} open blocker(s) and ${unresolvedFailures} ` +
-          'unresolved verification failure(s) — a project cannot be finished over something it ' +
-          'already knows is unfinished',
-        {
-          requiredAction: 'resolve the open blockers and verification failures, then re-run acceptance',
-          openBlockers,
-          unresolvedVerificationFailures: unresolvedFailures,
-        },
-      );
-    }
-
-    if (ProjectAcceptanceService.conclusionDelegate(tx)) {
-      const liveVersion = await tx.projectAcceptanceRun.findFirst({
-        where: { projectId, supersededAt: null },
-        orderBy: { attempt: 'desc' },
-      });
-      if (!liveVersion) {
-        throw new AcceptanceRefusal(
-          ACCEPTANCE_MISSING,
-          'this project has no current evidence version — evaluate the current evidence set once ' +
-            'before recording DONE. ' + ACCEPTANCE_FINDING_ROUTING,
-          {
-            requiredAction: 'evaluate the current evidence set and record criterion conclusions. ' +
-              ACCEPTANCE_FINDING_ROUTING,
-            acceptanceDigest: digest,
-          },
-        );
-      }
-      const project = await tx.project.findUniqueOrThrow({
-        where: { id: projectId },
-        select: { acceptanceCriteria: true },
-      });
-      const definitions = await ProjectAcceptanceService.statedCriteria(
-        tx, projectId, project.acceptanceCriteria,
-      );
-      const events = await ProjectAcceptanceService.conclusionEvents(
-        tx, projectId, liveVersion.attempt,
-      );
-      const standing = ProjectAcceptanceService.projectedCriteria(
-        definitions.map((definition) => ({
-          id: definition.definitionId ?? `legacy:${definition.ordinal}`,
-          ordinal: definition.ordinal,
-          criterionKey: definition.key,
-          criterionText: definition.text,
-          definitionId: definition.definitionId,
-          definitionRevision: definition.definitionRevision,
-          verdict: null,
-          summary: null,
-          evidence: {},
-          evidenceTaskId: null,
-          evidenceSessionId: null,
-          decidedAt: null,
-        })),
-        events,
-      );
-      const unmet = standing
-        .filter((criterion) => criterion.verdict !== ProjectAcceptanceVerdict.PASS)
-        .map((criterion) => ({
-          ordinal: criterion.ordinal,
-          criterionKey: criterion.criterionKey,
-          criterionText: criterion.criterionText,
-          verdict: criterion.verdict ?? ACCEPTANCE_UNDECIDED,
-        }));
-      if (definitions.length === 0 || unmet.length > 0) {
-        const named = unmet
-          .map((criterion) =>
-            `#${criterion.ordinal} ${JSON.stringify(criterion.criterionText)} (${criterion.verdict})`)
-          .join('; ');
-        throw new AcceptanceRefusal(
-          ACCEPTANCE_MISSING,
-          definitions.length === 0
-            ? 'this project states no acceptance criteria — DONE cannot pass vacuously'
-            : `the current acceptance evaluation has non-PASS criteria: ${named}. ` +
-                ACCEPTANCE_FINDING_ROUTING,
-          {
-            requiredAction: 'record new evidence-backed conclusions for the named criteria. ' +
-              ACCEPTANCE_FINDING_ROUTING,
-            runId: liveVersion.id,
-            evidenceVersion: String(liveVersion.attempt),
-            unmetCriteria: unmet,
-            acceptanceDigest: digest,
-          },
-        );
-      }
-      await this.assertOwnerRatificationForDone(tx, projectId);
-      return { runId: liveVersion.id, attempt: liveVersion.attempt, digest };
-    }
-
+    // accepted_run_id remains a historical compatibility link. It does not decide closure: the
+    // canonical evaluator proof above already did. A project with no legacy acceptance version may
+    // therefore close with NULL instead of manufacturing a second acceptance writer.
     const live = await tx.projectAcceptanceRun.findFirst({
       where: { projectId, supersededAt: null },
       orderBy: { attempt: 'desc' },
-      include: { criteria: { orderBy: { ordinal: 'asc' } } },
+      select: { id: true, attempt: true },
     });
-    if (!live || live.verdict === null) {
-      const undecided = live?.criteria
-        .filter((criterion) => criterion.verdict === null)
-        .map((criterion) => `#${criterion.ordinal} ${JSON.stringify(criterion.criterionText)}`)
-        .join('; ');
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_MISSING,
-        live === null
-          ? 'no project acceptance has been run — DONE is a claim about evidence, and there is ' +
-            'none. ' + ACCEPTANCE_FINDING_ROUTING
-          : `acceptance run ${uuidToBase62(live.id)} has not concluded; non-PASS criteria: ` +
-            `${undecided || 'the run has no undecided criterion row to explain its open summary'}. ` +
-            ACCEPTANCE_FINDING_ROUTING,
-        {
-          requiredAction: (live === null
-            ? 'run project acceptance and record a conclusion for every criterion. '
-            : 'record a conclusion for every criterion. ') + ACCEPTANCE_FINDING_ROUTING,
-          acceptanceDigest: digest,
-        },
-      );
-    }
-    if (live.verdict !== ProjectAcceptanceVerdict.PASS) {
-      const unmet = live.criteria
-        .filter((criterion) => criterion.verdict !== ProjectAcceptanceVerdict.PASS)
-        .map((criterion) => ({
-          ordinal: criterion.ordinal,
-          criterionKey: criterion.criterionKey,
-          criterionText: criterion.criterionText,
-          verdict: criterion.verdict ?? 'UNDECIDED',
-        }));
-      const named = unmet
-        .map((criterion) =>
-          `#${criterion.ordinal} ${JSON.stringify(criterion.criterionText)} (${criterion.verdict})`)
-        .join('; ');
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_MISSING,
-        `the latest project acceptance did not PASS these criteria: ` +
-          `${named || `the run summary is ${live.verdict}, but no non-PASS criterion row was found`}. ` +
-          ACCEPTANCE_FINDING_ROUTING,
-        {
-          requiredAction: 'fix or re-scope the named criteria, then run a new acceptance. ' +
-            ACCEPTANCE_FINDING_ROUTING,
-          runId: live.id,
-          verdict: live.verdict,
-          unmetCriteria: unmet,
-          acceptanceDigest: digest,
-        },
-      );
-    }
-    // §13.4 AE2 step 2 asks for a PASS whose `decidedBy` is COORDINATOR_AGENT, because clause 2
-    // makes acceptance something a coordinator EXECUTES rather than something anyone asserts. A
-    // non-PASS conclusion is rejected above for the more useful reason — the named unmet criteria
-    // — regardless of who recorded it. Attribution matters only once the outcome could grant DONE.
-    if (live.decidedBy !== 'COORDINATOR_AGENT') {
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_MISSING,
-        `the latest project acceptance was concluded by ${live.decidedBy}; §13.4 requires the ` +
-          'coordinator agent to run it — do it from a session (CLI `orbit project acceptance-run`, ' +
-          'MCP `project_acceptance_run`) rather than by hand',
-        {
-          requiredAction: 'run acceptance from a coordinator session',
-          runId: live.id,
-          decidedBy: live.decidedBy,
-          acceptanceDigest: digest,
-        },
-      );
-    }
-    // Unit L2's epoch (migration 0150). `superseded_at` says the same thing along the paths that
-    // remember to write it — `ProjectsService.update`'s DONE → OPEN branch, and 0127's fact-change
-    // reopen — and says nothing along the ones that do not: a DONE → CANCELLED → OPEN route (that
-    // branch tests `status = DONE`), a raw UPDATE, or a binary that predates the column. The epoch
-    // is advanced by the database on every reopen whoever performs it, so this comparison holds
-    // where the flag does not.
-    //
-    // Checked BEFORE the digest because it is the more specific answer AND the one the digest
-    // cannot give: a reopen on its own moves none of the acceptance projections, so a project
-    // reopened and left otherwise untouched has a PASS whose digest still matches perfectly.
-    //
-    // Legacy-schema compatibility only. Schema 0179 evaluates append-only conclusion events above
-    // and never reaches an epoch/freshness refusal.
-    const { acceptanceEpoch } = await tx.project.findUniqueOrThrow({
-      where: { id: projectId },
-      select: { acceptanceEpoch: true },
-    });
-    if (live.acceptanceEpoch !== acceptanceEpoch) {
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_MISSING,
-        `acceptance run ${uuidToBase62(live.id)} passed in acceptance epoch ` +
-          `${live.acceptanceEpoch}, and this project is now in epoch ${acceptanceEpoch} — it was ` +
-          'reopened after that run, so what it concluded is history rather than a claim about now',
-        {
-          requiredAction: 'evaluate the current evidence set',
-          runId: live.id,
-          evidenceEpoch: String(live.acceptanceEpoch),
-          acceptanceEpoch: String(acceptanceEpoch),
-        },
-      );
-    }
-    if (live.inputDigest !== digest) {
-      throw new AcceptanceRefusal(
-        ACCEPTANCE_MISSING,
-        `acceptance run ${uuidToBase62(live.id)} passed against different acceptance facts — ` +
-          'the acceptance criteria or their merge evidence changed since it ran. ' +
-          ACCEPTANCE_FINDING_ROUTING,
-        {
-          requiredAction: 'evaluate the current criteria and evidence. ' +
-            ACCEPTANCE_FINDING_ROUTING,
-          runId: live.id,
-          evidenceDigest: live.inputDigest,
-          acceptanceDigest: digest,
-        },
-      );
-    }
-    await this.assertOwnerRatificationForDone(tx, projectId);
-    return { runId: live.id, attempt: live.attempt, digest };
+    const bindingDigest = gate.canonicalIdentity.bindingDigest;
+    return {
+      runId: live?.id ?? null,
+      attempt: live?.attempt ?? null,
+      digest: typeof bindingDigest === 'string' ? bindingDigest : '',
+      gate,
+    };
   }
+
 
   // ------------------------------------------------------------------------------------------
   // Read faces
@@ -2165,7 +2014,9 @@ export class ProjectAcceptanceService {
         completionCriterionOverrideReason: c.completionCriterionOverrideReason,
       })),
       criteriaEmptyReason: criteria.length > 0 ? null : 'NO_ACCEPTANCE_CRITERIA',
-      acceptanceDigest: evaluated.digest,
+      acceptanceDigest: typeof evaluated.canonicalIdentity.bindingDigest === 'string'
+        ? evaluated.canonicalIdentity.bindingDigest
+        : null,
       criteriaDigest: criteriaConfirmation.criteriaDigest,
       criteriaConfirmation,
       contractDigest: ownerRatification.contractDigest,
@@ -2174,12 +2025,7 @@ export class ProjectAcceptanceService {
       acceptedRunId: project.acceptedRunId,
       legacyAcceptedAt: project.legacyAcceptedAt,
       legacyEvidence: project.legacyAcceptedAt !== null && project.acceptedRunId === null,
-      doneGate: {
-        allowed: evaluated.allowed,
-        runId: evaluated.runId,
-        refusalCode: evaluated.code,
-        reason: evaluated.reason,
-      },
+      doneGate: evaluated,
       runs: runs.map((run) => ProjectAcceptanceService.runRow(
         {
           ...run,
@@ -2211,34 +2057,24 @@ export class ProjectAcceptanceService {
    * inside the transaction that writes DONE, under `FOR UPDATE` (§13.4 AE7). One transaction all
    * the same: a digest assembled from separately-timed reads describes no world at all.
    */
-  async evaluateGate(projectId: string): Promise<{
-    digest: string;
-    allowed: boolean;
-    runId: string | null;
-    code: AcceptanceRefusalCode | null;
-    reason: string | null;
-  }> {
-    // Retried whole: the gate reads the project acceptance standing under the project lock and
-    // decides from that read alone. Task status is not an input.
-    return withTransactionRetry(this.prisma, async (tx) => {
-      const digest = await this.digest(tx, projectId);
-      try {
-        const allowed = await this.assertDoneAllowedForDigest(tx, projectId, digest);
-        return { digest, allowed: true, runId: allowed.runId, code: null, reason: null };
-      } catch (e) {
-        if (e instanceof AcceptanceRefusal) {
-          const body = e.getResponse() as { code: AcceptanceRefusalCode; message: string };
-          return { digest, allowed: false, runId: null, code: body.code, reason: body.message };
-        }
-        throw e;
-      }
-    }, loggedRetry(this.logger, 'projectAcceptance.evaluateGate', {
-      // Digesting is linear in the number of tasks. Prisma's five-second default is smaller than
-      // one legitimate large-project read, and expiring it also holds a pool connection long
-      // enough to make unrelated runner requests fail while the client unwinds. This is a ceiling,
-      // not a delay: ordinary projects still commit immediately.
-      transaction: { timeout: 30_000, maxWait: 10_000 },
-    }));
+  async evaluateGate(projectId: string): Promise<CanonicalDoneGateView> {
+    // The database function pins and checks one binding/evaluation cut. The whole retry is safe:
+    // it is a read, and every successful attempt returns the complete identity of the cut it saw.
+    try {
+      return await withTransactionRetry(
+        this.prisma,
+        (tx) => this.canonicalGate(tx, projectId),
+        loggedRetry(this.logger, 'projectAcceptance.evaluateGate', {
+          transaction: { timeout: 30_000, maxWait: 10_000 },
+        }),
+      );
+    } catch (error) {
+      return ProjectAcceptanceService.failedCanonicalGate(
+        'GATE_READ_FAILED',
+        'The canonical DONE gate could not read or validate its authoritative inputs.',
+        { cause: error instanceof Error ? error.name : 'UNKNOWN_READ_FAILURE' },
+      );
+    }
   }
 
   /**

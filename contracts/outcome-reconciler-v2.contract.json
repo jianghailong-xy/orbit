@@ -916,6 +916,39 @@
     "rebuildable": true,
     "mayFeedEvaluator": false,
     "staleCode": "RECONCILER_STALE",
+    "doneGate": {
+      "schemaVersion": 2,
+      "decisionSource": "EXACT_CURRENT_BINDING_EVALUATION_CUT",
+      "requiredFields": [
+        "canonicalIdentity",
+        "proof",
+        "proofGraph",
+        "reasons",
+        "blockingReasons",
+        "diagnostics",
+        "reason",
+        "obligations",
+        "blockingObligations",
+        "nonBlockingObligations",
+        "ratification",
+        "deliveryPolicy",
+        "crossProject"
+      ],
+      "reasonRequiredFields": [
+        "code",
+        "message",
+        "owner",
+        "actor",
+        "nextAction",
+        "blocksGate"
+      ],
+      "legacyBlockerSignalInputs": false,
+      "unknownType": "FAIL_CLOSED_WITH_UPGRADE_OR_ROLLBACK_ACTION",
+      "staleProjection": "FAIL_CLOSED_WITH_LAST_PROOF_AND_RECOVERY_ACTION",
+      "readFailure": "FAIL_CLOSED_WITH_DIAGNOSTIC",
+      "servesCriterionImpliesBlocksClosure": false,
+      "foreignClosureRequiresAcceptedExplicitCrossing": true
+    },
     "actorCtaMayDiffer": true,
     "actorCtaMayChangeUnderlyingObligation": false
   },

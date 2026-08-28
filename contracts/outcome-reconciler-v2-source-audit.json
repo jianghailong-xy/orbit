@@ -81,36 +81,37 @@
       ],
       "sourceOfTruth": [
         {
-          "storage": "project_acceptance_criterion_definition + confirmation + run + conclusion",
-          "role": "V1_ACCEPTANCE_FACT_SET"
+          "storage": "outcome_fact_binding + outcome_evaluation_cut + outcome_evaluator_result",
+          "role": "IMMUTABLE_EXACT_CUT_PROOF_AND_CANONICAL_OBLIGATIONS"
         },
         {
-          "storage": "project.status + accepted_run_id",
-          "role": "V1_GATE_PROJECTION"
+          "storage": "project_completion_contract + project_owner_ratification",
+          "role": "CURRENT_EXACT_OWNER_AUTHORITY"
         }
       ],
       "projections": [
         "project.status",
-        "project acceptance doneGate response",
-        "acceptedRunId"
+        "outcome_projection.done_gate",
+        "project acceptance canonical doneGate response",
+        "acceptedRunId historical link"
       ],
       "writers": [
         {
           "path": "src/apiserver/src/projects/project-acceptance.service.ts",
           "symbol": "assertDoneAllowed",
-          "authority": "APPLICATION_GATE_AND_ACCEPTANCE_EVENT_WRITER"
+          "authority": "APPLICATION_CANONICAL_GATE_CONSUMER"
         },
         {
-          "path": "src/apiserver/prisma/migrations/0189_project_criteria_automation/migration.sql",
-          "symbol": "project_acceptance_done_gate",
-          "authority": "DATABASE_GATE"
+          "path": "src/apiserver/prisma/migrations/0197_canonical_obligation_done_gate/migration.sql",
+          "symbol": "project_canonical_done_gate",
+          "authority": "DATABASE_CANONICAL_GATE_AND_DONE_WALL"
         }
       ],
       "readers": [
         {
           "path": "src/apiserver/src/projects/project-acceptance.service.ts",
           "symbol": "doneGate",
-          "purpose": "CANONICAL_V1_ACCEPTANCE_READ"
+          "purpose": "CANONICAL_V2_PROOF_OBLIGATION_READ"
         },
         {
           "path": "src/apiserver/src/projects/projects.controller.ts",
@@ -123,7 +124,7 @@
           "purpose": "CLI_READ"
         }
       ],
-      "v2Treatment": "REPLACE_GATE_INPUTS_WITH_ONE_OUTCOME_PROOF; RETAIN_DATABASE_FAIL_CLOSED_FENCE_DURING_CUTOVER"
+      "v2Treatment": "ONE EXACT-CUT OUTCOME PROOF AND CANONICAL OBLIGATION VIEW DECIDES CLOSURE; LEGACY BLOCKER, SIGNAL AND ACCEPTANCE SUMMARIES ARE NOT WRITERS"
     },
     {
       "id": "JUDGMENT_REQUEST",
@@ -168,11 +169,6 @@
           "path": "src/web/src/lib/judgments.ts",
           "symbol": "judgment",
           "purpose": "WEB_PRESENTATION"
-        },
-        {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "project_judgment_blocker",
-          "purpose": "V1_DONE_GATE_BLOCKER_READ"
         }
       ],
       "v2Treatment": "TRANSLATE_REQUEST_AND_DECISION_TO_SEPARATE_FACTS; OWNER_INBOX_IS_AN_OBLIGATION_PROJECTION"
@@ -258,11 +254,6 @@
         }
       ],
       "readers": [
-        {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "openBlockers",
-          "purpose": "V1_DONE_GATE"
-        },
         {
           "path": "src/apiserver/src/projects/project-list-attention.ts",
           "symbol": "blocker",
@@ -490,7 +481,7 @@
         },
         {
           "path": "src/runner-go/project_cli.go",
-          "symbol": "standard-set digest",
+          "symbol": "revision-bearing digest",
           "purpose": "CLI_CONFIRM_AND_READ"
         },
         {
@@ -633,17 +624,12 @@
       ],
       "readers": [
         {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "unresolvedFailures",
-          "purpose": "CLOSURE_GATE"
-        },
-        {
           "path": "src/apiserver/src/projects/coordinator-convergence.service.ts",
           "symbol": "project_blocker",
           "purpose": "LEGACY_RESOLVER"
         }
       ],
-      "v2Treatment": "EVERY_MANDATORY_OBLIGATION_KIND_REFERENCES_AN_ACYCLIC_RUNTIME_REACHABLE_PROFILE_WITH_RESOLVE_CANCEL_SUPERSEDE_ESCALATE_TIMEOUT"
+      "v2Treatment": "EVERY MANDATORY OBLIGATION KIND REFERENCES AN ACYCLIC RUNTIME-REACHABLE EXIT PROFILE; THE LEGACY BLOCKER/SIGNAL REGISTRY DOES NOT DECIDE CLOSURE"
     }
   ]
 }

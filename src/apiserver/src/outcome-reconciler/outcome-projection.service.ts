@@ -57,8 +57,8 @@ export class OutcomeProjectionService {
 
   async reduce(
     evaluationId: string,
-    projectionSchemaVersion = 1,
-    reducerVersion = 'outcome-projection-reducer-v1',
+    projectionSchemaVersion = 2,
+    reducerVersion = 'outcome-projection-reducer-v2',
   ): Promise<OutcomeProjectionReceipt> {
     const [row] = await this.prisma.$queryRaw<Array<{ receipt: Prisma.JsonValue }>>(Prisma.sql`
       SELECT outcome_projection.reduce_evaluation(
@@ -74,8 +74,8 @@ export class OutcomeProjectionService {
   }
 
   async rebuildAll(
-    projectionSchemaVersion = 1,
-    reducerVersion = 'outcome-projection-reducer-v1',
+    projectionSchemaVersion = 2,
+    reducerVersion = 'outcome-projection-reducer-v2',
   ): Promise<OutcomeProjectionRebuildReceipt> {
     const [row] = await this.prisma.$queryRaw<Array<{ receipt: Prisma.JsonValue }>>(Prisma.sql`
       SELECT outcome_projection.full_rebuild(
@@ -101,8 +101,8 @@ export class OutcomeProjectionService {
         ${input.projectId}::uuid,
         ${input.subjectType},
         ${input.subjectId},
-        ${input.projectionSchemaVersion ?? 1},
-        ${input.reducerVersion ?? 'outcome-projection-reducer-v1'}
+        ${input.projectionSchemaVersion ?? 2},
+        ${input.reducerVersion ?? 'outcome-projection-reducer-v2'}
       ) AS receipt
     `);
     if (!row) throw new Error('Outcome projection reconciliation returned no receipt');

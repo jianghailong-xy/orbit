@@ -69,6 +69,7 @@ const sourceFiles = [
   'scripts/outcome-reconciler-projection.sh',
   'scripts/outcome-reconciler-projection-manifest.mjs',
   'src/apiserver/prisma/migrations/0196_obligation_projection_shadow_reconciler/migration.sql',
+  'src/apiserver/prisma/migrations/0197_canonical_obligation_done_gate/migration.sql',
   'src/apiserver/src/outcome-reconciler/outcome-projection.service.ts',
   'src/apiserver/src/outcome-reconciler/outcome-reconciler.module.ts',
   'test/outcome-reconciler-v2.projection.test.mjs',

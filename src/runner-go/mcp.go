@@ -1759,11 +1759,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"branch was last observed to CONTAIN and at which " +
 				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
 				"and refused, and every reopen with the fact that caused it; the current " +
-				"revision-bearing criteriaDigest and its set-level confirmation; and doneGate — " +
-				"allowed, or the code and sentence the write would be refused with " +
-				"(CRITERIA_CONFIRMATION_REQUIRED when this exact set was not confirmed, " +
-				"ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker " +
-				"or unresolved verification failure is still open).",
+				"revision-bearing criteriaDigest and its set-level confirmation; and canonical " +
+				"doneGate — the exact binding/evaluation cut, proof graph, active obligations, " +
+				"structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED " +
+				"carries that complete view; unknown types, stale projection and read failures deny " +
+				"closure explicitly. Legacy blocker/signal summaries do not decide closure.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",

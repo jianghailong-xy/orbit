@@ -526,7 +526,7 @@ test('full truncate/rebuild exactly reproduces incremental rows, proof and check
     'SELECT count(*)::bigint AS n FROM outcome_projection.outbox',
   )).rows[0].n);
   const rebuild = await pool.query(`SELECT outcome_projection.full_rebuild(
-    1, 'outcome-projection-reducer-v1'
+    2, 'outcome-projection-reducer-v2'
   ) AS receipt`);
   const rebuilt = await projectionSnapshot();
   assert.deepEqual(rebuilt, incremental);
@@ -579,7 +579,7 @@ test('shadow checksum detects corruption and reducer reconciliation repairs it',
   [openScope.tenantId, openScope.projectId]);
   assert.equal(mismatch.rows[0].comparison_status, 'CHECKSUM_MISMATCH');
   await pool.query(`SELECT outcome_projection.reconcile_subject(
-    $1::uuid, $2::uuid, 'PROJECT', $3, 1, 'outcome-projection-reducer-v1'
+    $1::uuid, $2::uuid, 'PROJECT', $3, 2, 'outcome-projection-reducer-v2'
   )`, [openScope.tenantId, openScope.projectId, openScope.subjectId]);
   const repaired = await pool.query(`SELECT comparison_status
     FROM outcome_projection.shadow_compare($1::uuid, $2::uuid)`,
