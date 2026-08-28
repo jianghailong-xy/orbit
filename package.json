@@ -23,6 +23,7 @@
     "test:outcome-reconciler:contract": "bash scripts/outcome-reconciler-contract.sh",
     "test:outcome-reconciler:protocol": "bash scripts/outcome-reconciler-protocol.sh",
     "test:outcome-reconciler:evaluator": "bash scripts/outcome-reconciler-evaluator.sh",
+    "test:outcome-reconciler:actions": "bash scripts/outcome-reconciler-actions.sh",
     "dev:apiserver": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/apiserver",
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
     "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh"
