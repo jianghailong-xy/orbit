@@ -735,9 +735,10 @@ const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
  * second starter and started naming none at all: every task in a `coordinator_enabled` Project
  * (0122's `task_dispatch_authority_derive` gives them COORDINATOR at birth) fell out of this
  * candidate set and never ran, with nothing else scanning for it. Whether a task runs by itself is
- * now answered by the task's own auto-run opt-in and its prerequisites, and by nothing about the
- * Project it is filed under. The column and 0122's triggers that derive it are left standing — no
- * reader of them is left in this service, but removing them is its own change.
+ * now answered by the task's own auto-run opt-in and its prerequisites. Project-scoped tasks have
+ * one additional, orthogonal admission rule: the owner's exact current completion contract must
+ * be ratified. The column and 0122's triggers that derive it are left standing — no reader of them
+ * is left in this service, but removing them is its own change.
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
@@ -753,6 +754,21 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- Ratification is a durable Project boundary, not a per-task checklist. Keep unratified work out
+  -- of the sweep (so it does not create one refusal per minute), while the Session insert trigger
+  -- performs the same check again under the transaction that would start the side-effecting run.
+  AND (
+    t.project_id IS NULL
+    OR EXISTS (
+      SELECT 1
+        FROM project_completion_contract ratified_contract
+       WHERE ratified_contract.project_id = t.project_id
+         AND project_owner_ratification_effective(
+           t.project_id,
+           ratified_contract.contract_digest
+         )
+    )
+  )
   -- A schedule that has not come due yet is a veto, and it has to be one HERE as well as on the
   -- instant path (see triggerDependents): a task scheduled for Sunday whose last prerequisite
   -- lands on Friday is ready in every other sense, and without this clause the sweep would start
@@ -816,6 +832,20 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
+  -- As in AUTO_RUN_READY_SQL, this avoids retry churn; the Session insert trigger is the final
+  -- fail-closed guard against revocation or a semantic change racing dispatch.
+  AND (
+    t.project_id IS NULL
+    OR EXISTS (
+      SELECT 1
+        FROM project_completion_contract ratified_contract
+       WHERE ratified_contract.project_id = t.project_id
+         AND project_owner_ratification_effective(
+           t.project_id,
+           ratified_contract.contract_digest
+         )
+    )
+  )
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
   -- replaced attempt's work is held by its successor. Read as a plain DONE check this is a

@@ -18,6 +18,7 @@ import {
   CreateProjectDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
+  PreapprovedRatificationDto,
   RecordMergeEvidenceDto,
   UpdateProjectDto,
 } from '../projects/dto';
@@ -91,10 +92,16 @@ export class RunnerProjectsController {
     @Body() dto: CreateProjectDto,
   ) {
     RunnerProjectsController.refuseLegacyAcceptanceCriteria(dto);
+    RunnerProjectsController.refuseGovernance(dto);
     const inSession = sessionId?.trim();
     return inSession
       ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)
-      : this.projects.create(runner.ownerId, dto);
+      : this.projects.create(
+          runner.ownerId,
+          dto,
+          undefined,
+          { type: 'RUNNER', id: runner.id },
+        );
   }
 
   @Get('projects/:id')
@@ -107,11 +114,30 @@ export class RunnerProjectsController {
     return this.acceptance.overview(runner.ownerId, id);
   }
 
+  @Get('projects/:id/ratification')
+  projectRatification(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
+    return this.acceptance.machineRatification(runner.ownerId, id);
+  }
+
+  /** A machine may spend an authority the owner already bounded; it may never claim OWNER. */
+  @Post('projects/:id/ratification')
+  ratifyProjectFromPreapproval(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: PreapprovedRatificationDto,
+  ) {
+    return this.acceptance.ratifyByPreapproval(
+      runner.ownerId,
+      id,
+      { actorType: 'RUNNER', actorId: runner.id },
+      dto,
+    );
+  }
+
   /**
-   * Confirm the current standard-set digest. Session-aware clients forward the acting Session as
-   * transport context, and an attributed PROJECT_COORDINATOR judgment Session is genuinely
-   * refused. A caller that omits it is indistinguishable from the admitted headless-runner path and
-   * is recorded as machine provenance rather than mislabeled as human.
+   * Deprecated compatibility route. It still attributes the real runner principal so the service
+   * rejects self-ratification; machine callers must instead spend an owner-created, bounded
+   * template/delegation through the ratification route above.
    */
   @Post('projects/:id/acceptance/criteria-confirmation')
   confirmAcceptanceCriteria(
@@ -307,13 +333,15 @@ export class RunnerProjectsController {
    * Refused rather than dropped. A silently ignored field reads to the caller as a write that
    * happened, and the caller here is a model that will go on to act as though it did.
    */
-  private static refuseGovernance(dto: UpdateProjectDto): void {
+  private static refuseGovernance(dto: CreateProjectDto | UpdateProjectDto): void {
     // `expectedConfigRevision` is NOT one of them, and deliberately: it grants nothing, it only
     // refuses. An agent stating the revision it read is an agent that will be told when the owner
     // changed something underneath it, which is the opposite of widening its own authority.
-    const named = [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId' as const].filter(
-      (field) => dto[field] !== undefined,
-    );
+    const named = [
+      ...ProjectsService.AUTHORIZATION_FIELDS,
+      ...('coordinatorAgentId' in dto ? ['coordinatorAgentId' as const] : []),
+      ...('ownerRatification' in dto ? ['ownerRatification' as const] : []),
+    ].filter((field) => (dto as unknown as Record<string, unknown>)[field] !== undefined);
     if (named.length === 0) return;
     throw new ForbiddenException(
       `${named.join(', ')} ${named.length === 1 ? 'is' : 'are'} the account owner’s to set, not ` +

@@ -20,7 +20,7 @@ import {
   ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_FINDING_ROUTING,
   ACCEPTANCE_MISSING,
-  CRITERIA_CONFIRMATION_REQUIRED,
+  OWNER_RATIFICATION_REQUIRED,
   AcceptanceFacts,
   AcceptanceRefusalCode,
   StatedAcceptanceCriterion,
@@ -141,6 +141,27 @@ export interface CriteriaConfirmationActor {
   actorType: 'USER' | 'RUNNER';
   actorId: string;
   actingSessionId?: string;
+}
+
+export interface OwnerRatificationDecisionInput {
+  expectedContractDigest?: string | null;
+  decisionRequestId?: string | null;
+  ctaToken?: string | null;
+  decision: 'APPROVE' | 'DENY';
+  idempotencyKey: string;
+  atomicCreate?: boolean;
+}
+
+export interface PreapprovedRatificationInput {
+  authority: 'PREAPPROVED_TEMPLATE' | 'BOUND_DELEGATION';
+  authorityId: string;
+  expectedContractDigest?: string | null;
+  idempotencyKey: string;
+}
+
+export interface RatificationPrincipal {
+  actorType: 'AGENT' | 'RUNNER' | 'SERVICE';
+  actorId: string;
 }
 
 /** A DONE that was refused, with the code the caller switches on. Thrown as a 409 because it is a
@@ -343,40 +364,175 @@ export class ProjectAcceptanceService {
     if (!found) throw new NotFoundException('project not found');
   }
 
-  /** Read whether one append-only confirmation names the exact current standard-set digest. */
-  async criteriaConfirmation(ownerId: string, projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: { id: projectId, ownerId },
-      select: { acceptanceCriteriaDigest: true },
-    });
-    if (!project) throw new NotFoundException('project not found');
-    const confirmation = await this.prisma.projectAcceptanceCriteriaConfirmation.findUnique({
-      where: {
-        projectId_criteriaDigest: {
-          projectId,
-          criteriaDigest: project.acceptanceCriteriaDigest,
-        },
-      },
-    });
-    return {
-      confirmed: confirmation !== null,
-      criteriaDigest: project.acceptanceCriteriaDigest,
-      confirmation,
-    };
+  /** Refresh the two digest lanes under the database's Project-row serialization point. */
+  async refreshCompletionContract(
+    tx: Prisma.TransactionClient | PrismaService,
+    projectId: string,
+    reason: string,
+  ): Promise<Record<string, unknown>> {
+    const [row] = await tx.$queryRaw<Array<{ state: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT project_refresh_completion_contract(
+        ${projectId}::uuid, ${reason}
+      ) AS state
+    `);
+    if (!row?.state || typeof row.state !== 'object' || Array.isArray(row.state)) {
+      throw new Error('Owner Ratification contract refresh returned no state');
+    }
+    return row.state as Record<string, unknown>;
+  }
+
+  /** The owner-facing current contract, its independent evaluation plan, and at most one CTA. */
+  async ownerRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
+    const [row] = await this.prisma.$queryRaw<Array<{ state: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT project_owner_ratification_state_json(
+        ${ownerId}::uuid, ${projectId}::uuid
+      ) AS state
+    `);
+    if (!row?.state || typeof row.state !== 'object' || Array.isArray(row.state)) {
+      throw new NotFoundException('project not found');
+    }
+    return row.state as Record<string, unknown>;
+  }
+
+  /** Machine-readable status contains the question and every digest needed to escalate it, but
+   * never the owner's one-use CTA capability. A runner can spend an owner-created bounded
+   * authority through the preapproval path; possessing the decision button is not such authority. */
+  async machineRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
+    const state = await this.ownerRatification(ownerId, projectId);
+    const request = state.decisionRequest;
+    if (!request || typeof request !== 'object' || Array.isArray(request)) return state;
+    const safeRequest = Object.fromEntries(
+      Object.entries(request as Record<string, unknown>)
+        .filter(([field]) => field !== 'ctaToken'),
+    );
+    return { ...state, decisionRequest: safeRequest };
+  }
+
+  private static ratificationResult(result: Prisma.JsonValue | undefined): Record<string, unknown> {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      throw new Error('Owner Ratification operation returned no result');
+    }
+    const value = result as Record<string, unknown>;
+    if (value.ok === false) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        ...value,
+      });
+    }
+    return value;
+  }
+
+  /** Owner decision, optionally inside the same transaction that creates the Project. */
+  async ratifyByOwnerInTransaction(
+    tx: Prisma.TransactionClient | PrismaService,
+    ownerId: string,
+    projectId: string,
+    input: OwnerRatificationDecisionInput,
+  ): Promise<Record<string, unknown>> {
+    const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT project_owner_ratify_contract(
+        ${ownerId}::uuid,
+        ${projectId}::uuid,
+        'OWNER',
+        ${ownerId},
+        ${input.expectedContractDigest ?? null},
+        ${input.decisionRequestId ?? null}::uuid,
+        ${input.ctaToken ?? null}::uuid,
+        ${input.decision},
+        ${input.idempotencyKey},
+        ${input.atomicCreate ?? false}
+      ) AS result
+    `);
+    return ProjectAcceptanceService.ratificationResult(row?.result);
+  }
+
+  async ratifyByOwner(
+    ownerId: string,
+    projectId: string,
+    input: OwnerRatificationDecisionInput,
+  ): Promise<Record<string, unknown>> {
+    const result = await withTransactionRetry(
+      this.prisma,
+      (tx) => this.ratifyByOwnerInTransaction(tx, ownerId, projectId, input),
+      loggedRetry(this.logger, 'projectAcceptance.ratifyByOwner'),
+    );
+    await this.reconcile(ownerId, projectId);
+    return result;
+  }
+
+  async ratifyByPreapproval(
+    ownerId: string,
+    projectId: string,
+    principal: RatificationPrincipal,
+    input: PreapprovedRatificationInput,
+  ): Promise<Record<string, unknown>> {
+    const result = await withTransactionRetry(this.prisma, async (tx) => {
+      const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+        SELECT project_preapproved_ratify_contract(
+          ${ownerId}::uuid,
+          ${projectId}::uuid,
+          ${principal.actorType},
+          ${principal.actorId},
+          ${input.authority},
+          ${input.authorityId}::uuid,
+          ${input.expectedContractDigest ?? null},
+          ${input.idempotencyKey}
+        ) AS result
+      `);
+      return ProjectAcceptanceService.ratificationResult(row?.result);
+    }, loggedRetry(this.logger, 'projectAcceptance.ratifyByPreapproval'));
+    await this.reconcile(ownerId, projectId);
+    return result;
+  }
+
+  async createRatificationTemplate(ownerId: string, spec: object) {
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT project_create_ratification_template(
+        ${ownerId}::uuid, ${JSON.stringify(spec)}::jsonb
+      ) AS result
+    `);
+    return ProjectAcceptanceService.ratificationResult(row?.result);
+  }
+
+  async createRatificationDelegation(ownerId: string, spec: object) {
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT project_create_ratification_delegation(
+        ${ownerId}::uuid, ${JSON.stringify(spec)}::jsonb
+      ) AS result
+    `);
+    return ProjectAcceptanceService.ratificationResult(row?.result);
   }
 
   /**
-   * Confirm the complete standard set once. The one-shot judgment role is genuinely refused; a
-   * headless runner or owner credential is admitted and recorded honestly as credential
-   * provenance. Safety against later edits comes from the digest comparison, not that label.
+   * Rolling user-route alias. A runner can no longer spend this mutation: unlike the former
+   * criteria checklist, Owner Ratification is an authority decision, not credential provenance.
    */
+  async criteriaConfirmation(ownerId: string, projectId: string) {
+    const state = await this.ownerRatification(ownerId, projectId);
+    return {
+      confirmed: state.ratified === true,
+      criteriaDigest: state.contractDigest,
+      confirmation: state.ratification ?? null,
+      deprecatedSpelling: true,
+    };
+  }
+
   async confirmCriteriaSet(
     ownerId: string,
     projectId: string,
     actor: CriteriaConfirmationActor,
   ) {
-    if (actor.actorType !== 'USER' && actor.actorType !== 'RUNNER') {
-      throw new BadRequestException('actorType must be USER or RUNNER');
+    if (actor.actorType !== 'USER') {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'OWNER_RATIFICATION_ACTOR_FORBIDDEN',
+        message:
+          'a runner or agent cannot approve its own goal, risk, permissions, budget, recipient ' +
+          'or completion contract; use an owner decision or an already bounded template/delegation',
+        owner: 'USER',
+      });
     }
     let acting: { dispatchOrigin: string } | null = null;
     if (actor.actingSessionId) {
@@ -390,41 +546,32 @@ export class ProjectAcceptanceService {
       'CONFIRM_ACCEPTANCE_CRITERIA',
     );
     if (refusal) throw new ForbiddenException(refusal);
-
-    const confirmation = await withTransactionRetry(this.prisma, async (tx) => {
-      const locked = await ProjectAcceptanceService.lockProject(
-        tx, projectId, ownerId, 'FOR NO KEY UPDATE',
-      );
-      const criteriaCount = await tx.projectAcceptanceCriterionDefinition.count({
-        where: { projectId },
-      });
-      if (criteriaCount === 0) {
-        throw new BadRequestException(
-          'this project states no acceptance criteria — an empty standard set cannot be confirmed',
-        );
-      }
-      const existing = await tx.projectAcceptanceCriteriaConfirmation.findUnique({
-        where: {
-          projectId_criteriaDigest: {
-            projectId,
-            criteriaDigest: locked.acceptanceCriteriaDigest,
-          },
-        },
-      });
-      if (existing) return existing;
-      return tx.projectAcceptanceCriteriaConfirmation.create({
-        data: {
-          projectId,
-          criteriaDigest: locked.acceptanceCriteriaDigest,
-          confirmedByType: actor.actorType,
-          confirmedById: actor.actorId,
-          actingSessionId: actor.actingSessionId ?? null,
-        },
-      });
-    }, loggedRetry(this.logger, 'projectAcceptance.confirmCriteriaSet'));
-
-    await this.reconcile(ownerId, projectId);
-    return { ...confirmation, current: true };
+    const state = await this.ownerRatification(ownerId, projectId);
+    if (state.ratified === true) {
+      const ratification = state.ratification as Record<string, unknown>;
+      return {
+        ...ratification,
+        // Compatibility response names. No row is written to the deprecated confirmation table.
+        id: String(ratification.id),
+        criteriaDigest: String(state.contractDigest),
+        current: true,
+      };
+    }
+    const request = state.decisionRequest as Record<string, unknown> | null;
+    if (!request) throw new ConflictException('owner ratification request is unavailable');
+    const ratification = await this.ratifyByOwner(ownerId, projectId, {
+      expectedContractDigest: String(state.contractDigest),
+      decisionRequestId: String(request.id),
+      ctaToken: String(request.ctaToken),
+      decision: 'APPROVE',
+      idempotencyKey: `legacy-owner-ratification:${String(request.id)}`,
+    });
+    return {
+      ...ratification,
+      id: String(ratification.ratificationId),
+      criteriaDigest: String(ratification.contractDigest),
+      current: true,
+    };
   }
 
   static async writeAudit(
@@ -1012,28 +1159,13 @@ export class ProjectAcceptanceService {
     // Retried whole: the verdict is computed inside the closure from facts read under the project
     // lock, so a re-run recomputes rather than replaying a verdict from a discarded snapshot.
     const finalized = await withTransactionRetry(this.prisma, async (tx) => {
-      const locked = await ProjectAcceptanceService.lockProject(
+      await ProjectAcceptanceService.lockProject(
         tx, projectId, ownerId, 'FOR NO KEY UPDATE',
       );
-      const confirmation = await tx.projectAcceptanceCriteriaConfirmation.findUnique({
-        where: {
-          projectId_criteriaDigest: {
-            projectId,
-            criteriaDigest: locked.acceptanceCriteriaDigest,
-          },
-        },
-        select: { id: true },
-      });
-      if (!confirmation) {
-        throw new AcceptanceRefusal(
-          CRITERIA_CONFIRMATION_REQUIRED,
-          'confirm the current project acceptance standard set before concluding its human criteria',
-          {
-            requiredAction: 'confirm the current project acceptance standard set',
-            criteriaDigest: locked.acceptanceCriteriaDigest,
-          },
-        );
-      }
+      // Evaluation and ratification are independent lanes. A verifier may evaluate an unratified
+      // draft, and an evaluation-plan-only edit may be re-evaluated without asking the owner to
+      // approve the same semantics again. The DONE gate, not this evidence writer, requires the
+      // exact current contractDigest to be ratified.
       const run = await tx.projectAcceptanceRun.findFirst({
         where: { id: runId, projectId },
         include: { criteria: { orderBy: { ordinal: 'asc' } } },
@@ -1361,6 +1493,52 @@ export class ProjectAcceptanceService {
     return this.assertDoneAllowedForDigest(tx, projectId, digest);
   }
 
+  /**
+   * Ratification is the owner's authorization to act on the semantic contract, not an alternate
+   * acceptance verdict. Keep this check at the final edge of the DONE gate: missing or failing
+   * evidence must still report its own actionable acceptance finding, while a fully evidenced
+   * project may cross the side-effecting DONE boundary only with the exact contract approved.
+   */
+  private async assertOwnerRatificationForDone(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<void> {
+    const [contract] = await tx.$queryRaw<Array<{
+      contractDigest: string;
+      evaluationPlanDigest: string;
+      ratified: boolean;
+      decisionRequestId: string | null;
+    }>>(Prisma.sql`
+      SELECT state."contract_digest" AS "contractDigest",
+             state."evaluation_plan_digest" AS "evaluationPlanDigest",
+             project_owner_ratification_effective(
+               state."project_id", state."contract_digest"
+             ) AS "ratified",
+             request."id" AS "decisionRequestId"
+        FROM "project_completion_contract" state
+        LEFT JOIN LATERAL (
+          SELECT r."id" FROM "project_owner_decision_request" r
+           WHERE r."project_id" = state."project_id" AND r."status" = 'PENDING'
+           ORDER BY r."request_generation" DESC LIMIT 1
+        ) request ON TRUE
+       WHERE state."project_id" = ${projectId}::uuid
+    `);
+    if (!contract?.ratified) {
+      throw new AcceptanceRefusal(
+        OWNER_RATIFICATION_REQUIRED,
+        'the owner has not ratified the exact current completion contract — ratification approves ' +
+          'the goal, semantic criteria, risk, permissions, budget and recipient; evaluation-plan ' +
+          'changes are evaluated separately',
+        {
+          requiredAction: 'answer the current owner ratification decision request',
+          contractDigest: contract?.contractDigest ?? null,
+          evaluationPlanDigest: contract?.evaluationPlanDigest ?? null,
+          decisionRequestId: contract?.decisionRequestId ?? null,
+        },
+      );
+    }
+  }
+
   /** The gate after its acceptance digest has already been read in this transaction.
    *
    * The write path calls {@link assertDoneAllowed}, which computes the digest here under its
@@ -1373,31 +1551,6 @@ export class ProjectAcceptanceService {
     projectId: string,
     digest: string,
   ): Promise<{ runId: string; attempt: bigint; digest: string }> {
-    const project = await tx.project.findUniqueOrThrow({
-      where: { id: projectId },
-      select: { acceptanceCriteriaDigest: true },
-    });
-    const confirmation = await tx.projectAcceptanceCriteriaConfirmation.findUnique({
-      where: {
-        projectId_criteriaDigest: {
-          projectId,
-          criteriaDigest: project.acceptanceCriteriaDigest,
-        },
-      },
-      select: { id: true },
-    });
-    if (!confirmation) {
-      throw new AcceptanceRefusal(
-        CRITERIA_CONFIRMATION_REQUIRED,
-        'the current project acceptance standard set has not been confirmed — confirm the ' +
-          'complete set once; any later text or criterion edit advances its digest and requires ' +
-          'a new confirmation',
-        {
-          requiredAction: 'confirm the current project acceptance standard set',
-          criteriaDigest: project.acceptanceCriteriaDigest,
-        },
-      );
-    }
     // HUMAN_SIGNOFF judgment blockers are projections of OPEN requests, not mutable
     // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
     // merely because there is intentionally no blocker row for somebody to close by hand.
@@ -1512,6 +1665,7 @@ export class ProjectAcceptanceService {
           },
         );
       }
+      await this.assertOwnerRatificationForDone(tx, projectId);
       return { runId: liveVersion.id, attempt: liveVersion.attempt, digest };
     }
 
@@ -1633,6 +1787,7 @@ export class ProjectAcceptanceService {
         },
       );
     }
+    await this.assertOwnerRatificationForDone(tx, projectId);
     return { runId: live.id, attempt: live.attempt, digest };
   }
 
@@ -1852,11 +2007,13 @@ export class ProjectAcceptanceService {
                       )
                  )
                )::int AS "unansweredCount",
-               EXISTS (
-                 SELECT 1 FROM "project_acceptance_criteria_confirmation" confirmation
-                  WHERE confirmation."project_id" = p."id"
-                    AND confirmation."criteria_digest" = p."acceptance_criteria_digest"
-               ) AS "criteriaConfirmed"
+               COALESCE((
+                 SELECT project_owner_ratification_effective(
+                   contract."project_id", contract."contract_digest"
+                 )
+                   FROM "project_completion_contract" contract
+                  WHERE contract."project_id" = p."id"
+               ), false) AS "criteriaConfirmed"
           FROM "project_acceptance_run" r
           JOIN "project" p ON p."id" = r."project_id"
           JOIN "project_acceptance_criterion" c ON c."run_id" = r."id"
@@ -1865,8 +2022,10 @@ export class ProjectAcceptanceService {
            AND r."superseded_at" IS NULL
          GROUP BY r."id", p."id", p."title", p."status", r."attempt", r."started_at"
       ), pending AS (
-        SELECT * FROM standing
-         WHERE "unansweredCount" > 0 OR NOT "criteriaConfirmed"
+        -- Ratification has its own project-level decision request and is not a fake unanswered
+        -- acceptance criterion. In particular, an evaluation-plan-only edit may create a new
+        -- evidence version without manufacturing work for the owner.
+        SELECT * FROM standing WHERE "unansweredCount" > 0
       )
       SELECT pending.*, count(*) OVER ()::int AS "total"
         FROM pending
@@ -1887,7 +2046,7 @@ export class ProjectAcceptanceService {
         answeredCount: row.humanCriterionCount - row.unansweredCount,
         unansweredCount: row.unansweredCount,
         criteriaConfirmed: row.criteriaConfirmed,
-        confirmationRequired: !row.criteriaConfirmed,
+        confirmationRequired: false,
         currentVerdict: ACCEPTANCE_UNDECIDED,
       })),
     };
@@ -1976,7 +2135,13 @@ export class ProjectAcceptanceService {
       : undefined;
 
     const evaluated = await this.evaluateGate(projectId);
-    const criteriaConfirmation = await this.criteriaConfirmation(ownerId, projectId);
+    const ownerRatification = await this.ownerRatification(ownerId, projectId);
+    const criteriaConfirmation = {
+      confirmed: ownerRatification.ratified === true,
+      criteriaDigest: ownerRatification.contractDigest,
+      confirmation: ownerRatification.ratification ?? null,
+      deprecatedSpelling: true,
+    };
 
     const criteria = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
@@ -2003,6 +2168,9 @@ export class ProjectAcceptanceService {
       acceptanceDigest: evaluated.digest,
       criteriaDigest: criteriaConfirmation.criteriaDigest,
       criteriaConfirmation,
+      contractDigest: ownerRatification.contractDigest,
+      evaluationPlanDigest: ownerRatification.evaluationPlanDigest,
+      ownerRatification,
       acceptedRunId: project.acceptedRunId,
       legacyAcceptedAt: project.legacyAcceptedAt,
       legacyEvidence: project.legacyAcceptedAt !== null && project.acceptedRunId === null,
