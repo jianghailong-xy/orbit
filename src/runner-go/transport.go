@@ -25,6 +25,11 @@ const (
 	sessionOrchestrationCredentialV1     = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1             = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1                 = "session-worktree-ops-v1"
+	// These runtimes expose an authoritative history-compaction boundary. The control plane may
+	// therefore attach full project-coordinator context once per engine/compaction epoch instead
+	// of spending it on every user message. Kimi/OpenCode intentionally do not claim this yet.
+	sessionClaudeCoordinatorContextV1 = "session-claude-coordinator-context-v1"
+	sessionCodexCoordinatorContextV1  = "session-codex-coordinator-context-v1"
 	// Mid-turn delivery for the codex runtime (`turn/steer`). Declared from the runtime table
 	// rather than listed here — see declaredSteerCapabilities — because a runner that names
 	// it is telling the control plane to file codex steers for this machine, and one whose
@@ -51,6 +56,8 @@ func init() {
 		sessionOrchestrationCredentialV1,
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
+		sessionClaudeCoordinatorContextV1,
+		sessionCodexCoordinatorContextV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 

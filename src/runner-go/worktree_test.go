@@ -868,6 +868,188 @@ func TestFreshenBaseShaAfterRebase(t *testing.T) {
 	}
 }
 
+// A rebase can consume every committed change because the target already contains it, leaving
+// the session branch exactly at the target tip and the next unit of work only in the worktree.
+// The old base is still an ancestor in that shape, so the ordinary merge-base healer keeps it and
+// reports all intervening upstream commits as this session's diff. Once dirty work exists, and the
+// old committed range is proven landed in the remembered target, the tip becomes the new base.
+func TestFreshenBaseShaReanchorsDirtyFullyLandedTip(t *testing.T) {
+	repo := initRepo(t)
+	fork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "already-landed.txt", "landed\n", "session work")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+	commitFile(t, repo, "upstream.txt", "upstream\n", "main advances")
+	targetTip := mustGit(t, repo, "rev-parse", "main")
+
+	// With no unique commits left, rebase fast-forwards the session branch exactly to main. This is
+	// the production edge case: branch tip == target tip, with later work still uncommitted.
+	mustGit(t, repo, "checkout", "orbit/feat")
+	mustGit(t, repo, "rebase", "main")
+	if got := mustGit(t, repo, "rev-parse", "orbit/feat"); got != targetTip {
+		t.Fatalf("rebased branch tip = %s, want target tip %s", got, targetTip)
+	}
+	mustGit(t, repo, "checkout", "main")
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, repo, "worktree", "add", wtPath, "orbit/feat")
+	const sessionID = "s-dirty-landed"
+	mustGit(t, repo, "update-ref", baseRefName(sessionID), fork)
+	wt := &Worktree{
+		Path: wtPath, Branch: "orbit/feat", BaseSha: fork, RepoDir: repo, Session: sessionID,
+	}
+	rememberMergeTarget(sessionID, "main")
+	defer forgetMergeTarget(sessionID)
+
+	// Clean merged branches retain their cumulative fork and merged verdict.
+	freshenBaseSha(wt)
+	if got := wt.baseSha(); got != fork {
+		t.Fatalf("clean merged branch base = %s, want original fork %s", got, fork)
+	}
+	if !branchMergedInto(wt) {
+		t.Fatal("clean landed branch lost its merged verdict")
+	}
+
+	if err := os.WriteFile(filepath.Join(wtPath, "new-work.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, _ := liveDiff(wt)
+	if got := wt.baseSha(); got != targetTip {
+		t.Fatalf("dirty landed branch base = %s, want frozen target tip %s", got, targetTip)
+	}
+	if got := mustGit(t, repo, "rev-parse", baseRefName(sessionID)); got != targetTip {
+		t.Fatalf("persisted dirty-work base = %s, want %s", got, targetTip)
+	}
+	if len(files) != 1 || files[0].Path != "new-work.txt" {
+		t.Fatalf("dirty diff should contain only new work, got %+v", files)
+	}
+	if branchMergedInto(wt) {
+		t.Fatal("new dirty-work epoch must not retain the old merged verdict")
+	}
+}
+
+// Exact regression shape: the session branch has no commits at all (tip == its old base), main
+// advances independently, then `git rebase main` fast-forwards the branch to main. The only work
+// attributable to this session is still uncommitted. The old-base..tip range consists entirely of
+// upstream commits, so none of them may appear in the worktree bar.
+func TestFreshenBaseShaReanchorsDirtyBranchFastForwardedFromItsBase(t *testing.T) {
+	repo := initRepo(t)
+	oldBase := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "branch", "orbit/empty")
+	commitFile(t, repo, "upstream-one.txt", "one\n", "main one")
+	commitFile(t, repo, "upstream-two.txt", "two\n", "main two")
+	targetTip := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "orbit/empty")
+	mustGit(t, repo, "rebase", "main")
+	if got := mustGit(t, repo, "rev-parse", "orbit/empty"); got != targetTip {
+		t.Fatalf("fast-forwarded branch tip = %s, want target tip %s", got, targetTip)
+	}
+	mustGit(t, repo, "checkout", "main")
+
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, repo, "worktree", "add", wtPath, "orbit/empty")
+	const sessionID = "s-empty-fast-forward"
+	mustGit(t, repo, "update-ref", baseRefName(sessionID), oldBase)
+	wt := &Worktree{
+		Path: wtPath, Branch: "orbit/empty", BaseSha: oldBase, RepoDir: repo, Session: sessionID,
+	}
+	rememberMergeTarget(sessionID, "main")
+	defer forgetMergeTarget(sessionID)
+	if err := os.WriteFile(filepath.Join(wtPath, "only-session-work.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, _ := liveDiff(wt)
+	if got := wt.baseSha(); got != targetTip {
+		t.Fatalf("dirty fast-forwarded branch base = %s, want %s", got, targetTip)
+	}
+	if len(files) != 1 || files[0].Path != "only-session-work.txt" {
+		t.Fatalf("upstream commits leaked into the session diff: %+v", files)
+	}
+}
+
+// repoRoot HEAD is not necessarily the branch this session will merge into. Main may contain the
+// session while its remembered target (develop here) does not; tightening merely because
+// tip==merge-base(HEAD, branch) would then move replayAnchor past work develop still needs.
+func TestFreshenBaseShaDoesNotReanchorAgainstWrongTarget(t *testing.T) {
+	repo := initRepo(t)
+	fork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "branch", "develop")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feature.txt", "feature\n", "session work")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+	tip := mustGit(t, repo, "rev-parse", "main")
+	if got := mustGit(t, repo, "merge-base", "HEAD", "orbit/feat"); got != tip {
+		t.Fatalf("test requires tip == merge-base(repo HEAD, branch), got %s want %s", got, tip)
+	}
+
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, repo, "worktree", "add", wtPath, "orbit/feat")
+	const sessionID = "s-other-target"
+	mustGit(t, repo, "update-ref", baseRefName(sessionID), fork)
+	wt := &Worktree{
+		Path: wtPath, Branch: "orbit/feat", BaseSha: fork, RepoDir: repo, Session: sessionID,
+	}
+	rememberMergeTarget(sessionID, "develop")
+	defer forgetMergeTarget(sessionID)
+	if err := os.WriteFile(filepath.Join(wtPath, "new-work.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, _ := liveDiff(wt)
+	if got := wt.baseSha(); got != fork {
+		t.Fatalf("base advanced to %s even though develop lacks the old work; want %s", got, fork)
+	}
+	if got := mustGit(t, repo, "rev-parse", baseRefName(sessionID)); got != fork {
+		t.Fatalf("persisted base advanced against the wrong target: got %s want %s", got, fork)
+	}
+	paths := map[string]bool{}
+	for _, file := range files {
+		paths[file.Path] = true
+	}
+	if !paths["feature.txt"] || !paths["new-work.txt"] || len(paths) != 2 {
+		t.Fatalf("diff must retain old work needed by develop plus new dirty work, got %+v", files)
+	}
+}
+
+// effectiveBranch falls back to wt.Branch while HEAD is detached, which is useful for read-only
+// status during a rebase. It must not authorize a durable base advance: a dirty detached checkout
+// can be an in-progress/conflicted rebase whose final branch tip is not known yet.
+func TestFreshenBaseShaDoesNotReanchorDetachedDirtyCheckout(t *testing.T) {
+	repo := initRepo(t)
+	fork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feature.txt", "feature\n", "session work")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, repo, "worktree", "add", wtPath, "orbit/feat")
+	mustGit(t, wtPath, "checkout", "--detach")
+	if current := currentBranch(&Worktree{Path: wtPath}); current != "" {
+		t.Fatalf("detached checkout unexpectedly reported branch %q", current)
+	}
+	const sessionID = "s-detached-dirty"
+	mustGit(t, repo, "update-ref", baseRefName(sessionID), fork)
+	wt := &Worktree{
+		Path: wtPath, Branch: "orbit/feat", BaseSha: fork, RepoDir: repo, Session: sessionID,
+	}
+	rememberMergeTarget(sessionID, "main")
+	defer forgetMergeTarget(sessionID)
+	if err := os.WriteFile(filepath.Join(wtPath, "in-progress.txt"), []byte("partial\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	freshenBaseSha(wt)
+	if got := wt.baseSha(); got != fork {
+		t.Fatalf("detached dirty checkout advanced base to %s, want %s", got, fork)
+	}
+	if got := mustGit(t, repo, "rev-parse", baseRefName(sessionID)); got != fork {
+		t.Fatalf("detached dirty checkout persisted base %s, want %s", got, fork)
+	}
+}
+
 // TestBranchMergedInto_AfterMergeRecommit is the after-merge re-commit acceptance case: once a
 // session's branch is merged, committing MORE work on the same branch must re-enable Merge (the
 // branch is no longer fully in main) and re-base the diff on the merge point so it shows only the

@@ -4,12 +4,22 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestTransportAdvertisesSupportedProviders(t *testing.T) {
 	seen := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capabilities := "," + r.Header.Get(runnerCapabilitiesHeader) + ","
+		for _, capability := range []string{
+			sessionClaudeCoordinatorContextV1,
+			sessionCodexCoordinatorContextV1,
+		} {
+			if !strings.Contains(capabilities, ","+capability+",") {
+				t.Errorf("runner capability header %q omits %q", capabilities, capability)
+			}
+		}
 		if got := r.Header.Get("X-Orbit-Supported-Providers"); got != runnerSupportedProviders {
 			t.Errorf("provider capability header = %q, want %q", got, runnerSupportedProviders)
 		}

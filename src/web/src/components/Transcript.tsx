@@ -1249,7 +1249,7 @@ function UserBubble({ node }: { node: TextNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {node.text && (
+      {typed && (
         <div className="chat-user-meta">
           <button
             type="button"

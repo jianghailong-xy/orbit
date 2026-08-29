@@ -172,6 +172,19 @@ function diffHarness(
   return { api: controller(prisma), writes };
 }
 
+test('diff refresh persists a healed base with the clean snapshot omitted by legacy encoding', async () => {
+  const h = diffHarness(null);
+  const baseSha = 'd'.repeat(40);
+
+  await h.api.diffResult({ id: RUNNER_ID }, SESSION_ID, {
+    baseSha,
+  });
+
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.writes[0].data.baseSha, baseSha);
+  assert.deepEqual(h.writes[0].data.changedFiles, []);
+});
+
 test('a conservative false report keeps merged state when the source tip is unchanged', async () => {
   const h = diffHarness(SOURCE_SHA);
 

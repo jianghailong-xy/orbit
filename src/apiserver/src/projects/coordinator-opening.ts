@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { uuidToBase62 } from '@orbit/shared';
 
 /** The title a coordination session is filed under. */
@@ -58,17 +59,54 @@ export function buildCoordinatorDeliveryInstructions(projectId: string): string 
   return renderCoordinatorInstructions(`项目（id: ${uuidToBase62(projectId)}）`);
 }
 
+/**
+ * Identity of one coordinator context inside one live engine context.
+ *
+ * Binding the exact rendered instructions means an instruction edit automatically invalidates an
+ * old acknowledgement. The lease generation invalidates it on process restart, and the durable
+ * compaction event seq invalidates it when the provider drops history without restarting.
+ */
+export function buildCoordinatorDeliveryContextKey(
+  projectId: string,
+  leaseGeneration: string,
+  contextEpoch: number,
+): string {
+  return createHash('sha256')
+    .update([
+      'orbit-project-coordinator-context-v1',
+      projectId,
+      leaseGeneration,
+      String(contextEpoch),
+      buildCoordinatorDeliveryInstructions(projectId),
+    ].join('\0'))
+    .digest('hex');
+}
+
 /** The first user message for a coordinator created from the project page. */
 export function buildCoordinatorOpening(title: string, projectId: string): string {
   return buildCoordinatorInstructions(title, projectId);
 }
 
 /** Whether the immutable project id shows that this session already opened as its coordinator. */
-function hasCoordinatorOpening(prompt: string, projectId: string): boolean {
+export function hasCoordinatorOpening(prompt: string, projectId: string): boolean {
   // Match the stable identity sentence rather than the whole prompt: project titles can change,
   // and tightening the instructions later must not make every dedicated coordinator receive two
   // copies. An arbitrary session that already contains this exact marker is already role-aware.
   return prompt.includes(`（id: ${uuidToBase62(projectId)}）的协调会话。`);
+}
+
+/** Append the canonical delivery block without making assumptions about how the role was gained. */
+export function wrapCoordinatorDeliveryContext(
+  content: string | undefined,
+  projectId: string,
+): string {
+  const coordinatorInstructions = buildCoordinatorDeliveryInstructions(projectId);
+  // This deliberately remains user-level context, matching the project-page opening. Project
+  // title is agent-writable data and must never be promoted into a system/developer instruction.
+  return (
+    `${content ?? ''}\n\n<orbit_project_coordinator_context>\n${coordinatorInstructions}\n`
+    + '</orbit_project_coordinator_context>'
+  );
 }
 
 /** Add delivery-time role context to a promoted coordinator's next user/steer message. */
@@ -84,13 +122,9 @@ export function appendCoordinatorDeliveryContext(
   ) {
     return content;
   }
-  const coordinatorInstructions = buildCoordinatorDeliveryInstructions(project.id);
   // This deliberately remains user-level context, matching the project-page opening. Project
   // title is agent-writable data and must never be promoted into a system/developer instruction.
   // The stored ConversationTurn remains exactly what the person typed; this expansion is the same
   // delivery-time pattern used for #references and pending list events.
-  return (
-    `${content ?? ''}\n\n<orbit_project_coordinator_context>\n${coordinatorInstructions}\n`
-    + '</orbit_project_coordinator_context>'
-  );
+  return wrapCoordinatorDeliveryContext(content, project.id);
 }

@@ -936,6 +936,13 @@ describe('injected context in a user bubble', () => {
     expect(html).toContain('把 WARC 拆开并行跑');
     expect(html).not.toContain('Orbit attached');
   });
+
+  it('does not offer to copy a message whose only text was injected', () => {
+    const html = renderToStaticMarkup(<Transcript events={[userEvent(`\n\n${CONDITIONS}`)]} />);
+
+    expect(html).toContain('Orbit attached');
+    expect(html).not.toContain('aria-label="Copy message"');
+  });
 });
 
 describe('transcript Markdown links', () => {

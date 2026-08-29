@@ -1500,6 +1500,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		}
 		emit(evTurnEnd, kimiTurnEndPayload(gauge, subtype, job))
 		liveFiles, livePatches := liveDiff(job.WT)
+		liveBaseSha := job.WT.baseSha()
 		if completeErr := completeTurn(TurnCompleteRequest{
 			TurnID:           done.turnID,
 			Status:           status,
@@ -1510,6 +1511,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			IsolationStatus:  job.IsolationStatus,
 			ChangedFiles:     liveFiles,
 			ChangedDiff:      livePatches,
+			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
 			BranchSha:        effectiveBranchSha(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
@@ -1739,8 +1741,10 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 
 			case "diff":
 				liveFiles, livePatches := liveDiff(job.WT)
+				liveBaseSha := job.WT.baseSha()
 				if err := t.diffResult(job.SessionID, DiffResultRequest{
 					ChangedFiles: liveFiles, ChangedDiff: livePatches,
+					BaseSha:       liveBaseSha,
 					WorktreeDirty: worktreeIsDirty(job.WT), BranchMerged: branchMergedInto(job.WT),
 					BranchSha: effectiveBranchSha(job.WT), WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {

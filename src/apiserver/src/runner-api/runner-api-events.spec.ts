@@ -16,6 +16,7 @@ function makeController(
     runningBgShells?: string[];
     runningSubagents?: string[];
     turnContents?: Record<string, string | null>;
+    coordinatorContextEpoch?: number;
   } = {},
 ) {
   const calls = {
@@ -64,6 +65,7 @@ function makeController(
         cancelRequestedAt: null,
         runningBgShells: stored.runningBgShells ?? [],
         runningSubagents: stored.runningSubagents ?? [],
+        coordinatorContextEpoch: stored.coordinatorContextEpoch ?? 0,
       }),
       updateMany: async (args: any) => {
         calls.updateMany.push(args);
@@ -106,6 +108,48 @@ test('a reclaimed session init is persisted without advancing lastTurnAt', async
     !calls.update.some((c: any) => 'lastTurnAt' in (c.data ?? {})),
     'the old activity time remains unchanged',
   );
+});
+
+test('a compaction boundary advances the coordinator epoch in the batch one-write', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.SYSTEM,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { subtype: 'context_compacted' },
+      },
+    ],
+  });
+
+  assert.equal(calls.update.length, 1);
+  assert.equal(calls.update[0].data.coordinatorContextEpoch, 42);
+  assert.equal(calls.update[0].data.coordinatorContextAckKey, null);
+});
+
+test('replaying an already-observed compaction boundary does not advance the epoch', async () => {
+  const { calls, controller } = makeController(
+    RunStatus.AWAITING_INPUT,
+    'runtime-1',
+    { coordinatorContextEpoch: 42 },
+  );
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.SYSTEM,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { subtype: 'context_compacted' },
+      },
+    ],
+  });
+
+  assert.equal(calls.update.length, 1, 'the ordinary frontier update may still share this write');
+  assert.equal('coordinatorContextEpoch' in calls.update[0].data, false);
+  assert.equal('coordinatorContextAckKey' in calls.update[0].data, false);
 });
 
 test('an OpenCode init event persists the runtime id without counting as turn activity', async () => {

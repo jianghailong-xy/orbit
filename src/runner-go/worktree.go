@@ -518,12 +518,63 @@ func (ops worktreeGitOps) freshenBaseSha(wt *Worktree) string {
 	// the diff should be based on the new branch's fork point, so it shows the new branch's delta
 	// rather than mis-basing on the branch Orbit forked at claim.
 	baseSha := ops.resolveBaseSha(wt.RepoDir, wt.Session, ops.effectiveBranch(wt), persisted)
-	if !ops.cancelled() {
-		// Bounded telemetry passes a private worktree copy: update it even though
-		// persistBaseRef is false so every later calculation in this scan uses the
-		// healed fork. Unbounded callers update the live Worktree as before.
-		wt.setBaseSha(baseSha)
+	if ops.cancelled() {
+		return persisted
 	}
+	// Bounded telemetry passes a private worktree copy: update it even though
+	// persistBaseRef is false so every later calculation in this scan uses the
+	// healed fork. Unbounded callers update the live Worktree as before.
+	wt.setBaseSha(baseSha)
+
+	// A fully-landed branch deliberately keeps its old fork while it is clean: that preserves the
+	// session's cumulative diff and lets branchMergedInto continue to report “✓ In <target>”. There
+	// is one importantly different state, though. A shell `git rebase <target>` can drop every
+	// already-landed commit and leave the branch tip exactly on the target, with the session's new
+	// work present only as uncommitted files. In that state merge-base == tip, so resolveBaseSha's
+	// clean-merged guard retains the old fork and the live diff counts every upstream commit since
+	// it (the “309 files changed” phantom diff).
+	//
+	// Tightening to the current tip is safe only after proving, against this session's REMEMBERED
+	// merge target, that all committed work since the old base has already landed. Looking only at
+	// repoRoot HEAD is insufficient: the root may be on main while this session merges to develop,
+	// and advancing the replay anchor then would silently omit work develop still needs. Dirty is
+	// the boundary between the two meanings: a clean merged branch keeps its cumulative history;
+	// a dirty merged branch shows and later replays only the new working-tree delta.
+	if baseSha == "" || !ops.worktreeIsDirty(wt) || ops.cancelled() {
+		return baseSha
+	}
+	// A normal checkout has a symbolic branch. During a rebase HEAD is detached (and during a
+	// conflicted rebase it is both detached and dirty); effectiveBranch deliberately falls back to
+	// wt.Branch for read-only status, but that fallback is not enough authority to advance a durable
+	// replay boundary.
+	branchBefore := ops.currentBranch(wt)
+	if branchBefore == "" || ops.cancelled() {
+		return baseSha
+	}
+	tipBefore, err := ops.run(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branchBefore)
+	if err != nil || tipBefore == "" || tipBefore == baseSha || ops.cancelled() || !ops.branchMergedInto(wt) {
+		return baseSha
+	}
+	// The live runtime may still be running git while bounded heartbeat/on-demand telemetry probes
+	// it. Freeze both branch and tip around the landed-work proof: if either changed meanwhile,
+	// retaining the older base is conservative; adopting the newer, unproved tip could drop a
+	// fresh commit.
+	branchAfter := ops.currentBranch(wt)
+	if ops.cancelled() || branchAfter == "" || branchAfter != branchBefore {
+		return baseSha
+	}
+	tipAfter, err := ops.run(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branchAfter)
+	if err != nil || ops.cancelled() || tipAfter == "" || tipAfter != tipBefore {
+		return baseSha
+	}
+	baseSha = tipBefore
+	if ops.persistBaseRef {
+		_, _ = ops.run(wt.RepoDir, "update-ref", baseRefName(wt.Session), baseSha)
+		if ops.cancelled() {
+			return wt.baseSha()
+		}
+	}
+	wt.setBaseSha(baseSha)
 	return baseSha
 }
 

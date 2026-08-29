@@ -1027,6 +1027,12 @@ model Session {
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
+  /// Highest durable runtime compaction boundary observed for this conversation. This is an
+  /// event seq rather than a counter so replaying the same event batch cannot advance it twice.
+  coordinatorContextEpoch Int @default(0) @map("coordinator_context_epoch")
+  /// SHA-256 of the coordinator context last confirmed by a successful top-level turn. The
+  /// digest also binds the project, exact instruction body, engine lease generation and epoch.
+  coordinatorContextAckKey String? @map("coordinator_context_ack_key") @db.Char(64)
   // Stable UUID of the runner process authorized to activate new generations. Process takeover
   // is an expected-owner CAS, so a delayed request from a superseded process cannot regain control.
   inboxLeaseOwner      String?   @map("inbox_lease_owner") @db.Uuid
@@ -1583,6 +1589,9 @@ model ConversationTurn {
   // Random runner-engine generation that owns the current delivery lease. A
   // delayed release from a dead process may expire only its own generation.
   leaseGeneration String?   @map("lease_generation") @db.Uuid
+  /// Coordinator-context digest attached to this delivery. It is acknowledged onto Session only
+  /// when this exact top-level turn succeeds under the same engine generation and compaction epoch.
+  coordinatorContextKey String? @map("coordinator_context_key") @db.Char(64)
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 

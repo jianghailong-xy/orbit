@@ -188,6 +188,9 @@ type SessionLiveState struct {
 	SessionID       string        `json:"sessionId"`
 	IsolationStatus string        `json:"isolationStatus"`
 	ChangedFiles    []ChangedFile `json:"changedFiles"`
+	// BaseSha is the healed fork point used for ChangedFiles. It is read only after the live
+	// diff computation, which may advance a stale in-memory base after a rebase.
+	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (the actual checked-out branch when one
 	// exists, otherwise the session's recorded branch). The server uses it to distinguish a
 	// branch that is unchanged since a successful merge from one that gained new commits.
@@ -485,6 +488,8 @@ type DiffResultRequest struct {
 	ChangedFiles  []ChangedFile `json:"changedFiles,omitempty"`
 	ChangedDiff   []FilePatch   `json:"changedDiff,omitempty"`
 	WorktreeDirty bool          `json:"worktreeDirty"`
+	// BaseSha is the healed fork point used for this exact diff snapshot.
+	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
 	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
@@ -730,6 +735,8 @@ type TurnCompleteRequest struct {
 	// running diff) while the session is still going — not just at terminal /complete.
 	IsolationStatus string        `json:"isolationStatus,omitempty"`
 	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
+	// BaseSha is the healed fork point used for ChangedFiles/ChangedDiff.
+	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
 	// Per-file unified diffs (capped) for the same uncommitted worktree state, so the web

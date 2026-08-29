@@ -144,6 +144,7 @@ func collectHeartbeatSessionStates(ctx context.Context, targets []heartbeatTelem
 		// Base-SHA healing is intentionally local to the immutable worktree copy
 		// captured by heartbeatSnapshot. The collector never reads ClaimedSession.
 		changedFiles := ops.liveDiffStat(target.worktree)
+		changedFiles = nonNilChangedFiles(changedFiles)
 		if len(changedFiles) > heartbeatTelemetryMaxChangedFiles {
 			changedFiles = changedFiles[:heartbeatTelemetryMaxChangedFiles]
 		}
@@ -155,11 +156,14 @@ func collectHeartbeatSessionStates(ctx context.Context, targets []heartbeatTelem
 			SessionID:       target.sessionID,
 			IsolationStatus: target.isolationStatus,
 			ChangedFiles:    changedFiles,
-			BranchSha:       ops.effectiveBranchSha(target.worktree),
-			WorktreeDirty:   ops.worktreeIsDirty(target.worktree),
-			MergeTargets:    mergeTargets,
-			BranchMerged:    ops.branchMergedInto(target.worktree),
-			WorktreeBranch:  ops.currentBranch(target.worktree),
+			// liveDiffStat may heal the telemetry copy's stale fork point. Report that exact
+			// post-computation value so the control plane persists the base these files used.
+			BaseSha:        target.worktree.baseSha(),
+			BranchSha:      ops.effectiveBranchSha(target.worktree),
+			WorktreeDirty:  ops.worktreeIsDirty(target.worktree),
+			MergeTargets:   mergeTargets,
+			BranchMerged:   ops.branchMergedInto(target.worktree),
+			WorktreeBranch: ops.currentBranch(target.worktree),
 		}
 		if ctx.Err() != nil {
 			break

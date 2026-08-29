@@ -50,6 +50,7 @@ type codexAppServer struct {
 	stdin   io.WriteCloser
 	ioWg    sync.WaitGroup
 	approve codexApprovalFn
+	emit    emitFn
 
 	writeMu sync.Mutex
 	mu      sync.Mutex
@@ -283,6 +284,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0, job))
 		liveFiles, livePatches := liveDiff(job.WT)
+		liveBaseSha := job.WT.baseSha()
 		if err := completeTurn(TurnCompleteRequest{
 			TurnID:           snapshot.orbitTurnID,
 			Status:           result.Status,
@@ -295,6 +297,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			IsolationStatus:  job.IsolationStatus,
 			ChangedFiles:     liveFiles,
 			ChangedDiff:      livePatches,
+			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
 			BranchSha:        effectiveBranchSha(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
@@ -634,9 +637,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 
 		case "diff":
 			liveFiles, livePatches := liveDiff(job.WT)
+			liveBaseSha := job.WT.baseSha()
 			if err := t.diffResult(job.SessionID, DiffResultRequest{
 				ChangedFiles:   liveFiles,
 				ChangedDiff:    livePatches,
+				BaseSha:        liveBaseSha,
 				WorktreeDirty:  worktreeIsDirty(job.WT),
 				BranchSha:      effectiveBranchSha(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),
@@ -948,6 +953,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		cancel:          cancel,
 		stdin:           stdin,
 		approve:         approve,
+		emit:            emit,
 		pending:         map[string]chan codexRPCMessage{},
 		notifications:   make(chan codexRPCMessage, 256),
 		done:            make(chan struct{}),
@@ -1087,11 +1093,13 @@ func (a *codexAppServer) currentInstructionMode() codexInstructionMode {
 	return a.instructionMode
 }
 
-func (a *codexAppServer) markInstructionContextForRefresh() {
+func (a *codexAppServer) markInstructionContextForRefresh() bool {
 	a.instructionMu.Lock()
+	newlyInvalidated := !a.contextNeedsRefresh
 	a.contextNeedsRefresh = true
 	a.contextRefreshEpoch++
 	a.instructionMu.Unlock()
+	return newlyInvalidated
 }
 
 // prepareInstructionContext runs immediately before turn/start. Compaction
@@ -1375,9 +1383,14 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 		}
 		if msg.Method != "" {
 			// Never lose this state transition even if the high-volume notification
-			// channel is full; the next turn must restore compacted instructions.
+			// channel is full; the next turn must restore compacted instructions. The
+			// durable system event is the control plane's matching boundary for sparse
+			// project-coordinator context, emitted only once when two protocol shapes
+			// describe the same compaction before another turn starts.
 			if codexNotificationCompacted(msg) {
-				a.markInstructionContextForRefresh()
+				if a.markInstructionContextForRefresh() && a.emit != nil {
+					a.emit(evSystem, map[string]interface{}{"subtype": "context_compacted"})
+				}
 			}
 			select {
 			case a.notifications <- msg:

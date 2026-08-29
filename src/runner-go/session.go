@@ -18,6 +18,57 @@ import (
 
 const maxRespawns = 3
 
+func coordinatorContextBoundaryEvent(eventType string, payload map[string]interface{}) bool {
+	if eventType != evSystem {
+		return false
+	}
+	subtype, _ := payload["subtype"].(string)
+	return subtype == "compact_boundary" || subtype == "compact_summary" ||
+		subtype == "context_compacted" || payload["compactMetadata"] != nil
+}
+
+// coordinatorContextFlushBarrier orders the one event that invalidates coordinator context
+// ahead of the turn acknowledgement that may dequeue the next message. Generations, rather than
+// a boolean, matter because another compaction can be emitted while an earlier /events request is
+// in flight.
+type coordinatorContextFlushBarrier struct {
+	observed atomic.Uint64
+	flushed  atomic.Uint64
+}
+
+func (b *coordinatorContextFlushBarrier) mark() {
+	b.observed.Add(1)
+}
+
+func (b *coordinatorContextFlushBarrier) flush(
+	ctx context.Context,
+	flushEvents func(context.Context) error,
+) error {
+	for {
+		target := b.observed.Load()
+		if target <= b.flushed.Load() {
+			return nil
+		}
+		if err := flushEvents(ctx); err != nil {
+			return err
+		}
+		b.flushed.Store(target)
+		// A second compaction may have arrived while the first batch was in flight. Loop so
+		// turn-complete can never open the next inbox turn ahead of that newer boundary.
+	}
+}
+
+func (b *coordinatorContextFlushBarrier) beforeTurnComplete(
+	ctx context.Context,
+	flushEvents func(context.Context) error,
+	turnComplete func(context.Context) (string, error),
+) (string, error) {
+	if err := b.flush(ctx, flushEvents); err != nil {
+		return "", err
+	}
+	return turnComplete(ctx)
+}
+
 // Wait between crash respawns, escalating with the attempt number (5s, 10s, 15s at the
 // cap of 3). Long enough to outlast a transient hiccup, short enough not to park the
 // user's turn behind a dead engine.
@@ -392,6 +443,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	var bufMu sync.Mutex
 	var buf []RunEvent
+	// A coordinator context can be acknowledged only after its compaction boundary is durable on
+	// the control plane. The provider emits and completes on different goroutines, so count under
+	// the same lock that appends the event and drain every generation before /turn-complete.
+	coordinatorContextBarrier := &coordinatorContextFlushBarrier{}
 	emissionGate := &eventEmissionGate{}
 	flushGate := newEventFlushGate()
 	flushWithContext := func(ctx context.Context) error {
@@ -466,6 +521,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			seqMu.Unlock()
 			bufMu.Lock()
 			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload})
+			if coordinatorContextBoundaryEvent(eventType, payload) {
+				coordinatorContextBarrier.mark()
+			}
 			bufMu.Unlock()
 		})
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
@@ -609,12 +667,22 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			logln("failed-turn completion handed to session supervisor for", sessionID)
 			return nil
 		}
-		// Capture before the network round-trip. Once the server commits
-		// AWAITING_INPUT, a new send/claim may reach pool.activate before this
-		// response returns; generation matching prevents this old ack from
-		// releasing the new claim's permit.
-		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(completionCtx, sessionID, req)
+		// Sparse coordinator context is keyed by the durable compaction epoch. Flush only when a
+		// provider actually compacted: ordinary turns keep the existing low-latency 250ms batching,
+		// while a queued follow-up cannot cross the one boundary that would make its key stale.
+		var permitGeneration uint64
+		next, err := coordinatorContextBarrier.beforeTurnComplete(
+			completionCtx,
+			flushWithContext,
+			func(turnCompleteCtx context.Context) (string, error) {
+				// Capture before the network round-trip. Once the server commits
+				// AWAITING_INPUT, a new send/claim may reach pool.activate before this
+				// response returns; generation matching prevents this old ack from
+				// releasing the new claim's permit.
+				permitGeneration = pool.permitGeneration(live)
+				return t.turnComplete(turnCompleteCtx, sessionID, req)
+			},
+		)
 		if isLeaseOwnershipError(err) {
 			markOwnershipLost(err)
 		}
@@ -961,12 +1029,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	if job.WT != nil {
 		finalizeRequest.Branch = job.WT.Branch
-		finalizeRequest.BaseSha = job.WT.baseSha()
 		// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
 		// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
 		// it / offer Adopt.
 		finalizeRequest.WorktreeBranch = currentBranch(job.WT)
 		finalizeRequest.ChangedFiles, finalizeRequest.ChangedDiff = finalizeWorktree(job.WT, status == stCancelled)
+		// finalizeWorktree may heal a stale fork point while computing this snapshot.
+		finalizeRequest.BaseSha = job.WT.baseSha()
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		finalizeRequest.MergeTargets = mergeTargetsForWT(job.WT)
 	}
@@ -1670,9 +1739,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// claude involvement and no turn consumed. Acked server-side on delivery, so
 				// there's no redelivery to dedup against.
 				liveFiles, livePatches := liveDiff(job.WT)
+				liveBaseSha := job.WT.baseSha()
 				if err := t.diffResult(job.SessionID, DiffResultRequest{
 					ChangedFiles:   liveFiles,
 					ChangedDiff:    livePatches,
+					BaseSha:        liveBaseSha,
 					WorktreeDirty:  worktreeIsDirty(job.WT),
 					BranchSha:      effectiveBranchSha(job.WT),
 					BranchMerged:   branchMergedInto(job.WT),
@@ -1838,6 +1909,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// Live worktree state for the composer's status bar: what this turn left in
 				// the worktree (uncommitted), so the diff updates each turn, not just at end.
 				liveFiles, livePatches := liveDiff(job.WT)
+				liveBaseSha := job.WT.baseSha()
 				if err := completeTurn(TurnCompleteRequest{
 					TurnID:           turnID,
 					Status:           turnStatus,
@@ -1851,6 +1923,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					IsolationStatus:  job.IsolationStatus,
 					ChangedFiles:     liveFiles,
 					ChangedDiff:      livePatches,
+					BaseSha:          liveBaseSha,
 					WorktreeDirty:    worktreeIsDirty(job.WT),
 					BranchSha:        effectiveBranchSha(job.WT),
 					BranchMerged:     branchMergedInto(job.WT),

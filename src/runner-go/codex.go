@@ -111,6 +111,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			}
 			emit(evTurnEnd, codexTurnEndPayload(result, 1, 0, job))
 			liveFiles, livePatches := liveDiff(job.WT)
+			liveBaseSha := job.WT.baseSha()
 			if err := completeTurn(TurnCompleteRequest{
 				TurnID:           resp.TurnID,
 				Status:           result.Status,
@@ -123,6 +124,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				IsolationStatus:  job.IsolationStatus,
 				ChangedFiles:     liveFiles,
 				ChangedDiff:      livePatches,
+				BaseSha:          liveBaseSha,
 				WorktreeDirty:    worktreeIsDirty(job.WT),
 				BranchSha:        effectiveBranchSha(job.WT),
 				BranchMerged:     branchMergedInto(job.WT),
@@ -183,9 +185,11 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 
 		case "diff":
 			liveFiles, livePatches := liveDiff(job.WT)
+			liveBaseSha := job.WT.baseSha()
 			if err := t.diffResult(job.SessionID, DiffResultRequest{
 				ChangedFiles:   liveFiles,
 				ChangedDiff:    livePatches,
+				BaseSha:        liveBaseSha,
 				WorktreeDirty:  worktreeIsDirty(job.WT),
 				BranchSha:      effectiveBranchSha(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),

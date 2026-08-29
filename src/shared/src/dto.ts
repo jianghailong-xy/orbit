@@ -484,6 +484,10 @@ export interface SessionLiveState {
   sessionId: string;
   /** What the runner did: 'worktree' | 'shared-nogit'. */
   isolationStatus: string;
+  /** The healed base commit used to compute `changedFiles`. Persisted with that snapshot so the
+   *  control plane never pairs a post-rebase diff with the session's stale fork point. Absent
+   *  from older runners. */
+  baseSha?: string;
   /** The worktree's current uncommitted diff vs base; empty when nothing changed yet. */
   changedFiles: ChangedFile[];
   /** Whether the worktree has uncommitted changes right now (`git status` non-empty). Drives
@@ -1177,6 +1181,9 @@ export interface TurnCompleteRequest {
   // ── Live worktree state (so the composer's status bar updates each turn) ──
   /** What the runner did: 'worktree' | 'shared-nogit'. */
   isolationStatus?: string;
+  /** The healed base commit used for this live diff snapshot. If a legacy Go encoder omits an
+   *  empty `changedFiles` slice, its presence still denotes a newly computed clean snapshot. */
+  baseSha?: string;
   /** The worktree's current diff vs base (uncommitted), refreshed each turn. */
   changedFiles?: ChangedFile[];
   /** Per-file unified diffs (capped) for the same uncommitted state, for on-demand viewing. */
@@ -1389,6 +1396,9 @@ export interface SessionCommitResultRequest {
  * again, fixing the "No diff to preview" gap for files added/changed since the last turn end.
  */
 export interface SessionDiffResultRequest {
+  /** The healed base commit used for this recomputed diff snapshot. If a legacy Go encoder omits
+   *  an empty `changedFiles` slice, its presence still denotes a newly computed clean snapshot. */
+  baseSha?: string;
   changedFiles?: ChangedFile[];
   changedDiff?: FilePatch[];
   worktreeDirty?: boolean;

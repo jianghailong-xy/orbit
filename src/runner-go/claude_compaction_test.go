@@ -86,3 +86,19 @@ func TestCompactSummaryIsStored(t *testing.T) {
 		t.Fatalf("tool results regressed: %v", *got3)
 	}
 }
+
+func TestCoordinatorContextBoundaryEventsEnterTheCompletionFlushBarrier(t *testing.T) {
+	for _, payload := range []map[string]interface{}{
+		{"subtype": "compact_boundary"},
+		{"subtype": "compact_summary"},
+		{"subtype": "context_compacted"},
+		{"subtype": "future_name", "compactMetadata": map[string]interface{}{"trigger": "auto"}},
+	} {
+		if !coordinatorContextBoundaryEvent(evSystem, payload) {
+			t.Errorf("boundary payload was not classified: %#v", payload)
+		}
+	}
+	if coordinatorContextBoundaryEvent(evAssistant, map[string]interface{}{"subtype": "compact_boundary"}) {
+		t.Fatal("a non-system event entered the compaction flush barrier")
+	}
+}

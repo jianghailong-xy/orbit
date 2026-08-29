@@ -108,7 +108,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
-import { appendCoordinatorDeliveryContext } from '../projects/coordinator-opening';
+import {
+  appendCoordinatorDeliveryContext,
+  buildCoordinatorDeliveryContextKey,
+  hasCoordinatorOpening,
+  wrapCoordinatorDeliveryContext,
+} from '../projects/coordinator-opening';
 import { executableResultRecordedFact } from '../projects/completion-input';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -236,6 +241,31 @@ const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
+/** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
+export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
+  'session-claude-coordinator-context-v1';
+/** Runner guarantees a durable compaction boundary before the next Codex top-level turn. */
+export const SESSION_CODEX_COORDINATOR_CONTEXT_V1 =
+  'session-codex-coordinator-context-v1';
+const COORDINATOR_CONTEXT_BOUNDARY_SUBTYPES = new Set([
+  'compact_boundary',
+  'compact_summary',
+  'context_compacted',
+]);
+
+function supportsSparseCoordinatorContext(
+  runtime: AgentProvider,
+  capabilities: readonly string[],
+  leaseGeneration: string | null,
+): leaseGeneration is string {
+  if (!leaseGeneration) return false;
+  const capability = runtime === AgentProvider.CLAUDE
+    ? SESSION_CLAUDE_COORDINATOR_CONTEXT_V1
+    : runtime === AgentProvider.CODEX
+      ? SESSION_CODEX_COORDINATOR_CONTEXT_V1
+      : null;
+  return capability != null && capabilities.includes(capability);
+}
 
 // Existing ConversationTurn is the whole L0 execution queue. The reserved client-turn prefix
 // marks provenance and binds the expected exit code: one successful message mints one shell turn,
@@ -1062,6 +1092,7 @@ export class RunnerApiController {
               },
               data: {
                 isolationStatus: s.isolationStatus,
+                ...(s.baseSha !== undefined ? { baseSha: s.baseSha } : {}),
                 changedFiles: (s.changedFiles ?? []) as unknown as Prisma.InputJsonValue,
                 // Drives the status bar's Commit-vs-Merge action (older runners omit it →
                 // left untouched, so the bar falls back to the session lifecycle).
@@ -2411,15 +2442,24 @@ export class RunnerApiController {
       // when the running turn ends. Resolved per poll, through the same runtime resolution
       // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime
       // it borrows rather than by its slug.
+      const execRuntime = await sessionExecRuntime(tx, owned[0]);
       const deliverSteer =
-        acceptsSteer &&
-        supportsMidTurnSteer(await sessionExecRuntime(tx, owned[0]), declaredCapabilities);
+        acceptsSteer && supportsMidTurnSteer(execRuntime, declaredCapabilities);
+      // Only runtimes whose runner can durably report history compaction may stop repeating the
+      // coordinator block on every turn. A null generation is a legacy poller and cannot prove a
+      // process boundary either, so it stays on the correctness-first legacy path.
+      const sparseCoordinatorContext = supportsSparseCoordinatorContext(
+        execRuntime,
+        declaredCapabilities,
+        leaseGeneration,
+      );
       const rows = await tx.$queryRaw<Array<{
         id: string;
         seq: number;
         kind: string;
         content: string | null;
         clientTurnId: string;
+        coordinatorContextKey: string | null;
       }>>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
@@ -2498,7 +2538,8 @@ export class RunnerApiController {
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
-        RETURNING id, seq, kind, content, "client_turn_id" AS "clientTurnId"
+        RETURNING id, seq, kind, content, "client_turn_id" AS "clientTurnId",
+                  "coordinator_context_key" AS "coordinatorContextKey"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -2638,6 +2679,8 @@ export class RunnerApiController {
             ownerId: true,
             prompt: true,
             titleBeforeProjectManagement: true,
+            coordinatorContextEpoch: true,
+            coordinatorContextAckKey: true,
             coordinatorForProject: { select: { id: true } },
           },
         });
@@ -2700,12 +2743,43 @@ export class RunnerApiController {
           }
         }
         if (sessionContext) {
-          content = appendCoordinatorDeliveryContext(
-            content,
-            sessionContext.prompt,
-            sessionContext.titleBeforeProjectManagement,
-            sessionContext.coordinatorForProject,
-          );
+          if (!sparseCoordinatorContext) {
+            // Rolling-upgrade and runtimes without a reliable compaction signal retain the old
+            // behaviour. Repetition is expensive, but losing a coordinator's boundary is worse.
+            content = appendCoordinatorDeliveryContext(
+              content,
+              sessionContext.prompt,
+              sessionContext.titleBeforeProjectManagement,
+              sessionContext.coordinatorForProject,
+            );
+          } else if (t.kind !== 'steer' && sessionContext.coordinatorForProject) {
+            const projectId = sessionContext.coordinatorForProject.id;
+            const contextKey = buildCoordinatorDeliveryContextKey(
+              projectId,
+              leaseGeneration!,
+              sessionContext.coordinatorContextEpoch,
+            );
+            if (sessionContext.coordinatorContextAckKey !== contextKey) {
+              // A dedicated project-page coordinator's initial turn already IS the canonical
+              // opening. Stamp it for acknowledgement without appending a second copy. A resumed
+              // delivery is not treated as that opening: its content is a continuation nudge and
+              // the replacement engine must receive the standing context again.
+              const openingAlreadyPresent =
+                !started
+                && t.clientTurnId === `initial-${sessionId}`
+                && sessionContext.titleBeforeProjectManagement == null
+                && hasCoordinatorOpening(sessionContext.prompt, projectId);
+              if (!openingAlreadyPresent) {
+                content = wrapCoordinatorDeliveryContext(content, projectId);
+              }
+              if (t.coordinatorContextKey !== contextKey) {
+                await tx.conversationTurn.updateMany({
+                  where: { id: t.id, sessionId, status: 'IN_FLIGHT' },
+                  data: { coordinatorContextKey: contextKey },
+                });
+              }
+            }
+          }
         }
       } else if (t.kind !== 'shell') {
         // Control turns are fire-and-forget: ack on delivery so a stale one cannot
@@ -2935,6 +3009,11 @@ export class RunnerApiController {
   ) {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const usage = dto.usage;
+    // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's
+    // baseSha still proves that it computed a worktree snapshot, so normalize that shape to the
+    // empty snapshot instead of advancing the base while retaining the previous file list.
+    const changedFilesSnapshot =
+      dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
     // Retried whole. Every decision — the duplicate-ack check, the park, the merge-state clear, the
     // billing accrual — is taken from the Session row read under its own lock inside the closure,
     // so a re-run cannot accrue against a turn the winner already closed. `dto` and its usage are
@@ -2956,6 +3035,9 @@ export class RunnerApiController {
           creatorId: true,
           workspaceId: true,
           assignedRunnerId: true,
+          inboxLeaseGeneration: true,
+          coordinatorContextEpoch: true,
+          coordinatorForProject: { select: { id: true } },
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -2976,8 +3058,29 @@ export class RunnerApiController {
           clientTurnId: true,
           content: true,
           leaseGeneration: true,
+          coordinatorContextKey: true,
         },
       });
+      // A dequeue only proposes that context was delivered. The successful top-level turn is its
+      // acknowledgement. Recompute from current state under the Session lock: a late completion
+      // from an old process, a pre-compaction turn, a re-bound project or an older instruction
+      // body cannot acknowledge the context needed now.
+      const expectedCoordinatorContextKey =
+        current.coordinatorForProject && current.inboxLeaseGeneration
+          ? buildCoordinatorDeliveryContextKey(
+              current.coordinatorForProject.id,
+              current.inboxLeaseGeneration,
+              current.coordinatorContextEpoch,
+            )
+          : null;
+      const acknowledgedCoordinatorContextKey =
+        dto.status === RunStatus.SUCCEEDED
+        && completedTurn?.kind === 'message'
+        && completedTurn.leaseGeneration === current.inboxLeaseGeneration
+        && completedTurn.coordinatorContextKey != null
+        && completedTurn.coordinatorContextKey === expectedCoordinatorContextKey
+          ? completedTurn.coordinatorContextKey
+          : null;
       const queuedAcceptanceIdentity = taskAcceptanceTurnIdentity(completedTurn?.clientTurnId);
       const taskAcceptanceTurn =
         completedTurn?.kind === 'shell'
@@ -3606,11 +3709,14 @@ export class RunnerApiController {
               }
             : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
-          // runner reports the worktree's uncommitted diff vs base on every turn-complete).
+          // runner reports the worktree's uncommitted diff and the exact healed base used to
+          // compute it on every turn-complete). Keep both in this one write so a rebase cannot
+          // leave the stored file list and its merge anchor describing different snapshots.
           isolationStatus: dto.isolationStatus ?? undefined,
-          ...(dto.changedFiles !== undefined
+          ...(changedFilesSnapshot !== undefined
             ? {
-                changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue,
+                ...(dto.baseSha !== undefined ? { baseSha: dto.baseSha } : {}),
+                changedFiles: changedFilesSnapshot as unknown as Prisma.InputJsonValue,
               }
             : {}),
           ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
@@ -3627,6 +3733,9 @@ export class RunnerApiController {
           sumOutputTokens: { increment: usage?.output_tokens ?? 0 },
           sumCacheRead: { increment: usage?.cache_read_input_tokens ?? 0 },
           sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
+          ...(acknowledgedCoordinatorContextKey
+            ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
+            : {}),
           // Folded into the park so the row is written once (I3). The park is conditional, so
           // the branch below covers the case where it matched nothing.
           ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
@@ -3635,8 +3744,16 @@ export class RunnerApiController {
       if (parked.count === 0) {
         // Nothing was written above — an UPDATE that matches no row leaves the tuple, and its
         // xmin, exactly as it was — so this is still this transaction's first Session write.
-        if (clearsMergedState) {
-          await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
+        if (clearsMergedState || acknowledgedCoordinatorContextKey) {
+          await tx.session.update({
+            where: { id: sessionId },
+            data: {
+              ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
+              ...(acknowledgedCoordinatorContextKey
+                ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
+                : {}),
+            },
+          });
         }
         const latest = await tx.session.findUnique({
           where: { id: sessionId },
@@ -3937,6 +4054,7 @@ export class RunnerApiController {
           cancelRequestedAt: true,
           runningBgShells: true,
           runningSubagents: true,
+          coordinatorContextEpoch: true,
           // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
           // while this is still null, and the row is held FOR UPDATE across that decision.
           engineStartedAt: true,
@@ -3960,6 +4078,25 @@ export class RunnerApiController {
       // once, this transaction's lock set is the Session row and its own child rows, and nothing
       // else. `lock-order.pg.spec.ts` reads those four locks out of pg_locks to keep it that way.
       const sessionData: Prisma.SessionUpdateInput = {};
+      const coordinatorContextBoundarySeq = durable.reduce((latest, event) => {
+        if (event.type !== RunEventType.SYSTEM) return latest;
+        const payload = event.payload as {
+          subtype?: unknown;
+          compactMetadata?: unknown;
+        } | null;
+        const subtype = String(payload?.subtype ?? '');
+        return (COORDINATOR_CONTEXT_BOUNDARY_SUBTYPES.has(subtype)
+          || payload?.compactMetadata != null)
+          ? Math.max(latest, event.seq)
+          : latest;
+      }, 0);
+      if (coordinatorContextBoundarySeq > session.coordinatorContextEpoch) {
+        // Event seq is monotonic and createMany is retry-idempotent. Taking max rather than
+        // incrementing means replaying the same compaction batch cannot create a fresh epoch and
+        // force another unnecessary coordinator injection.
+        sessionData.coordinatorContextEpoch = coordinatorContextBoundarySeq;
+        sessionData.coordinatorContextAckKey = null;
+      }
       if (durable.length > 0) {
         await tx.runEvent.createMany({
           data: durable.map((e) => ({
@@ -4830,6 +4967,10 @@ export class RunnerApiController {
     @Body() dto: SessionDiffResultRequest,
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
+    // See turnComplete: a healed base with an omitted legacy `omitempty` slice means the newly
+    // computed snapshot is empty, never that the old changedFiles still belong to the new base.
+    const changedFilesSnapshot =
+      dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
     const branchMerged = await this.reconcileReportedBranchMerged(
       sessionId,
       runner.id,
@@ -4843,9 +4984,10 @@ export class RunnerApiController {
         status: { in: OPEN },
       },
       data: {
-        ...(dto.changedFiles !== undefined
+        ...(changedFilesSnapshot !== undefined
           ? {
-              changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue,
+              ...(dto.baseSha !== undefined ? { baseSha: dto.baseSha } : {}),
+              changedFiles: changedFilesSnapshot as unknown as Prisma.InputJsonValue,
             }
           : {}),
         ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),

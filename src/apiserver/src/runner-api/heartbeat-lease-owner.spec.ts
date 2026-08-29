@@ -15,6 +15,7 @@ function harness(
 ) {
   const findManyWhere: unknown[] = [];
   const updateManyWhere: unknown[] = [];
+  const updateManyData: unknown[] = [];
   const mergeDrainCalls: unknown[][] = [];
   const commitDrainCalls: unknown[][] = [];
   const abandonedSweeps: unknown[][] = [];
@@ -28,8 +29,9 @@ function harness(
         findManyWhere.push(where);
         return matchingIds.map((id) => ({ id }));
       },
-      updateMany: async ({ where }: { where: unknown }) => {
+      updateMany: async ({ where, data }: { where: unknown; data: unknown }) => {
         updateManyWhere.push(where);
+        updateManyData.push(data);
         return { count: 1 };
       },
     },
@@ -53,6 +55,7 @@ function harness(
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     findManyWhere,
     updateManyWhere,
+    updateManyData,
     mergeDrainCalls,
     commitDrainCalls,
     abandonedSweeps,
@@ -84,6 +87,8 @@ test('heartbeat cancels supervised sessions not owned by this process', async ()
 
 test('modern heartbeat live-diff writes are fenced by the process owner', async () => {
   const h = harness([SESSION_A]);
+  const baseSha = 'a'.repeat(40);
+  const changedFiles = [{ path: 'src/a.ts', additions: 2, deletions: 1, status: 'M' }];
   await h.controller.heartbeat(
     { id: RUNNER_ID, version: null },
     {
@@ -95,7 +100,8 @@ test('modern heartbeat live-diff writes are fenced by the process owner', async 
         {
           sessionId: SESSION_A,
           isolationStatus: 'worktree',
-          changedFiles: [],
+          baseSha,
+          changedFiles,
           branchMerged: true,
         },
       ],
@@ -104,6 +110,8 @@ test('modern heartbeat live-diff writes are fenced by the process owner', async 
 
   assert.equal(h.updateManyWhere.length, 1);
   assert.equal((h.updateManyWhere[0] as { inboxLeaseOwner?: string }).inboxLeaseOwner, OWNER);
+  assert.equal((h.updateManyData[0] as { baseSha?: string }).baseSha, baseSha);
+  assert.deepEqual((h.updateManyData[0] as { changedFiles?: unknown }).changedFiles, changedFiles);
 });
 
 test('legacy heartbeat omits the owner fence', async () => {

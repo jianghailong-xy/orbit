@@ -169,6 +169,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			"contextTokens": result.ContextTokens,
 		}, job))
 		liveFiles, livePatches := liveDiff(job.WT)
+		liveBaseSha := job.WT.baseSha()
 		if err := completeTurn(TurnCompleteRequest{
 			TurnID:           turnID,
 			Status:           result.Status,
@@ -181,6 +182,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			IsolationStatus:  job.IsolationStatus,
 			ChangedFiles:     liveFiles,
 			ChangedDiff:      livePatches,
+			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
 			WorktreeBranch:   currentBranch(job.WT),
@@ -348,8 +350,10 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 
 func reportOpenCodeDiff(ctx context.Context, t *Transport, job *ClaimedSession) {
 	liveFiles, livePatches := liveDiff(job.WT)
+	liveBaseSha := job.WT.baseSha()
 	if err := t.diffResultContext(ctx, job.SessionID, DiffResultRequest{
 		ChangedFiles: liveFiles, ChangedDiff: livePatches,
+		BaseSha:       liveBaseSha,
 		WorktreeDirty: worktreeIsDirty(job.WT), BranchMerged: branchMergedInto(job.WT),
 		WorktreeBranch: currentBranch(job.WT),
 	}); err != nil && ctx.Err() == nil {

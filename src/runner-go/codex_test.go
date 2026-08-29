@@ -245,6 +245,28 @@ func TestCodexCompactionNotificationShapes(t *testing.T) {
 	}
 }
 
+func TestCodexCompactionEmitsOneDurableCoordinatorBoundary(t *testing.T) {
+	var events []emittedEvent
+	app := &codexAppServer{
+		emit: func(typ string, payload map[string]interface{}) {
+			events = append(events, emittedEvent{typ: typ, payload: payload})
+		},
+		// Deliberately tiny: the second raw notification is dropped, but the boundary signal is
+		// handled before this queue and must not be lost with it.
+		notifications: make(chan codexRPCMessage, 1),
+		pending:       map[string]chan codexRPCMessage{},
+		done:          make(chan struct{}),
+	}
+	app.readLoop(strings.NewReader(
+		"{\"method\":\"thread/compacted\"}\n" +
+			"{\"method\":\"item/completed\",\"params\":{\"item\":{\"type\":\"context_compaction\"}}}\n",
+	))
+
+	if len(events) != 1 || events[0].typ != evSystem || events[0].payload["subtype"] != "context_compacted" {
+		t.Fatalf("compaction boundary events = %#v", events)
+	}
+}
+
 func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *testing.T) {
 	job := &ClaimedSession{Agent: AgentExecConfig{AppendSystemPrompt: "Owner instructions."}}
 	got := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "turn-1", "hello", nil, codexTurnContextOptions{
