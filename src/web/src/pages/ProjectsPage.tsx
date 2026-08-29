@@ -63,6 +63,8 @@ import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { JudgmentRequestSummary } from '../components/JudgmentRequestSummary';
+import { OwnerRatificationSummary } from '../components/OwnerRatificationSummary';
+import type { OwnerRatificationReference } from '../lib/ownerRatification';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -91,6 +93,8 @@ interface Project {
   lastActivityAt: string | null;
   /** Open blocker ownership: the durable signal for whether a person must act next. */
   attention: ProjectAttentionSummary;
+  /** Secret-free pending owner decision; identical to the inbox/detail reference. */
+  ownerRatification?: OwnerRatificationReference | null;
 }
 
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
@@ -491,6 +495,13 @@ export function ProjectsPage() {
               <List.Item
                 className="project-row"
                 style={{ padding: '11px 10px' }}
+                data-decision-request-id={p.ownerRatification?.decisionRequestId}
+                data-obligation-id={p.ownerRatification?.obligationId}
+                data-obligation-revision={p.ownerRatification?.obligationRevision}
+                data-contract-digest={p.ownerRatification?.contractDigest}
+                data-reason={p.ownerRatification?.reasonCode}
+                data-owner={p.ownerRatification?.owner}
+                data-evaluated-through-watermark={p.ownerRatification?.evaluatedThroughWatermark}
               >
                 {/* One link spanning the whole row — meta and count alike — so the entire row is a
                     single click and a single tab stop, rather than a title-sized target with dead
@@ -517,6 +528,14 @@ export function ProjectsPage() {
                       ) : null}
                     </div>
                     <div className="project-row-goal">{goal}</div>
+                    {p.ownerRatification ? (
+                      <div className="project-row-ratification">
+                        Request r{p.ownerRatification.requestRevision} ·{' '}
+                        {p.ownerRatification.decisionRequestId} · digest{' '}
+                        {p.ownerRatification.contractDigest.slice(0, 10)}… · watermark{' '}
+                        {p.ownerRatification.evaluatedThroughWatermark}
+                      </div>
+                    ) : null}
                   </div>
                   <ProjectRowMeter buckets={p.buckets} />
                   {/* Furthest right, and the smaller of the two: when the project last moved is
@@ -694,6 +713,8 @@ export function ProjectDetailPage() {
               coordinator. A long brief stays complete here; its full Markdown remains the one
               source rather than being hidden behind a disclosure or repeated below the graph. */}
           <ProjectGoalCard goal={p.goal} />
+
+          <OwnerRatificationSummary reference={p.ownerRatification} />
 
           <JudgmentRequestSummary projectId={id} heading="待我判定" />
 

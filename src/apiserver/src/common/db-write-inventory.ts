@@ -171,12 +171,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'projects/project-acceptance.service.ts#ratifyByOwner',
     shape: 'TX_RETRIED',
-    locks: 'project FOR NO KEY UPDATE (rank 40), project_completion_contract FOR UPDATE, then the exact project_owner_decision_request and append-only project_owner_ratification children (rank 60). Expiring a stale CTA and issuing its replacement stay under those same locks.',
+    locks: 'project FOR NO KEY UPDATE (rank 40), project_completion_contract FOR UPDATE, then the exact project_owner_decision_request and append-only project_owner_ratification children (rank 60). Expiring a stale CTA and issuing its replacement stay under those same locks. A successful APPROVE finally moves only matching pending task_auto_dispatch_wakeup children to due-now (rank 70); it does not lock or mutate Task/Session rows.',
     identity: 'The owner-supplied idempotency key plus project and exact contract digest. The database unique key returns the already committed decision only when all three still agree, and rejects cross-project or cross-contract reuse.',
     isolation: '',
     attempts: 4,
-    replay: 'Every attempt refreshes the semantic contract while holding the project mutex, rechecks the expected digest and locks the current CTA before spending it. A victim exposes neither the decision event nor the CTA transition; a retry sees the winner and returns the same append-only ratification.',
-    effects: 'None inside. Acceptance reconciliation starts only after the ratification transaction commits; if that later step fails, replay with the same idempotency key returns the committed decision.',
+    replay: 'Every attempt refreshes the semantic contract while holding the project mutex, rechecks the expected digest and locks the current CTA before spending it. A victim exposes neither the decision receipt, CTA transition nor due-now wake; a retry sees the owner-scoped request receipt and returns the same APPROVE or DENY. An expired CTA commits its EXPIRED transition and replacement request before the API translates the typed refusal.',
+    effects: 'None inside. The wake is a database retry clock and is only made due; no Session or runner call occurs. Acceptance reconciliation starts only after the decision transaction commits; if that later step fails, replay with the same idempotency key returns the committed decision.',
     answer: 'Typed 503 from the global boundary. Stale, expired, duplicate and actor refusals are durable ratification answers with their own codes.',
   },
   {
@@ -929,6 +929,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/convergence-ledger.service.ts#record', under: 'sessionAttempt.open, projectReconcile.applyDecisionAction, and every caller that judges a task' },
   { at: 'sessions/sessions.service.ts#assertFenceHeld', under: 'sessions.writeFenced and sessions.resume' },
   { at: 'projects/project-acceptance.service.ts#ensureEvidenceVersionTx', under: 'projectAcceptance.openRun, .recordMergeEvidence, and projects.update through ensureCurrentEvidenceVersion — every caller already holds project rank 40; this participant advances the one current evidence version and writes only rank-60 children' },
+  { at: 'projects/project-acceptance.service.ts#ratifyByOwnerInTransaction', under: 'projectAcceptance.ratifyByOwner and atomic projects.create — the database function owns the rank-40/60 decision fence; an APPROVE then advances only matching persistent auto-dispatch wake children to due-now in that same transaction' },
   { at: 'projects/project-acceptance.service.ts#writeAudit', under: 'projectAcceptance evidence-version, conclusion, merge-evidence and DONE transactions' },
   { at: 'projects/project-handoff.service.ts#spend', under: "tasks.create and tasks.createMany — unit L4's APPLY, one compare-and-set per yes inside the transaction that writes the task it authorises" },
   { at: 'tasks/tasks.service.ts#lockPlanExecutionIdentity', under: 'tasks.create, tasks.createMany — rank 10 then rank 15, before either takes a list or a session' },

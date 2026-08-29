@@ -44,6 +44,10 @@ import {
   projectAcceptanceInboxPath,
   type ProjectAcceptanceInboxPage,
 } from '../lib/projectAcceptance';
+import {
+  ownerRatificationInboxPath,
+  type OwnerRatificationInboxPage,
+} from '../lib/ownerRatification';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -232,7 +236,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(1)),
     refetchInterval: 15_000,
   });
-  const openJudgmentCount = (judgments.data?.total ?? 0) + (projectAcceptance.data?.total ?? 0);
+  const ownerRatification = useQuery({
+    queryKey: ['owner-ratification', 'pending', 'nav-count'],
+    queryFn: () => api<OwnerRatificationInboxPage>(ownerRatificationInboxPath(1)),
+    refetchInterval: 15_000,
+  });
+  const openJudgmentCount = (judgments.data?.total ?? 0)
+    + (projectAcceptance.data?.total ?? 0)
+    + (ownerRatification.data?.total ?? 0);
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =
