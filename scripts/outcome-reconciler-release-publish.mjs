@@ -302,7 +302,6 @@ try {
     `release-frontier:${registration.bindingDigest}:cut`, collectorVersion,
   ])).receipt;
   assert.equal(Number(cut.factCount), 15);
-  assert.equal(Number(cut.proofFactCount), 15);
   const facts = (await client.query(`
     SELECT cut_fact.trust_decision AS "trustDecision",
            cut_fact.proof_eligible AS "proofEligible", fact.envelope
@@ -313,6 +312,8 @@ try {
      WHERE cut_fact.tenant_id=$1::uuid AND cut_fact.project_id=$2::uuid
        AND cut_fact.cut_id=$3::uuid ORDER BY cut_fact.ordinal
   `, [scope.ownerId, scope.projectId, cut.cutId])).rows;
+  assert.equal(facts.length, 15);
+  assert.equal(facts.filter((fact) => fact.proofEligible).length, 15);
   const goal = {
     goalId: binding.goalId,
     goalRevision: binding.goalRevision,
