@@ -18,6 +18,8 @@ const TARGET_SHA = process.env.WATCHDOG_CURRENT_BINDING_TARGET_SHA;
 const STARTED_AT = process.env.WATCHDOG_CURRENT_BINDING_STARTED_AT;
 const MIGRATION_COUNT = process.env.WATCHDOG_CURRENT_BINDING_MIGRATION_COUNT;
 const LAST_MIGRATION = process.env.WATCHDOG_CURRENT_BINDING_LAST_MIGRATION;
+const REQUIRED_MIGRATION_APPLIED =
+  process.env.WATCHDOG_CURRENT_BINDING_REQUIRED_MIGRATION_APPLIED;
 
 for (const [name, value] of Object.entries({
   WATCHDOG_CURRENT_BINDING_PG_URL: URL,
@@ -29,10 +31,12 @@ for (const [name, value] of Object.entries({
   WATCHDOG_CURRENT_BINDING_STARTED_AT: STARTED_AT,
   WATCHDOG_CURRENT_BINDING_MIGRATION_COUNT: MIGRATION_COUNT,
   WATCHDOG_CURRENT_BINDING_LAST_MIGRATION: LAST_MIGRATION,
+  WATCHDOG_CURRENT_BINDING_REQUIRED_MIGRATION_APPLIED: REQUIRED_MIGRATION_APPLIED,
 })) assert.ok(value, `${name} is required`);
 
 assert.match(TARGET_SHA, /^[0-9a-f]{40}$/);
-assert.equal(LAST_MIGRATION, '0206_watchdog_current_binding');
+assert.match(LAST_MIGRATION, /^\d{4}_[a-z0-9_]+$/);
+assert.equal(REQUIRED_MIGRATION_APPLIED, '1');
 
 const pool = new Pool({ connectionString: URL, max: 12 });
 const component = 'outcome-watchdog';
@@ -64,6 +68,7 @@ const evidence = {
     systemIdentifier: null,
     migrations: Number(MIGRATION_COUNT),
     lastMigration: LAST_MIGRATION,
+    requiredMigrationApplied: true,
   },
   observationWindow: {
     startedAt: STARTED_AT,

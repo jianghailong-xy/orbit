@@ -55,8 +55,13 @@ function serviceWith(opts: {
     // here is the part that is this file's subject — that it happens once per page and that its
     // answer reaches the rows.
     $queryRaw: async (sql: unknown) => {
-      calls.graph.push(sql);
-      return opts.graph ?? [];
+      const query = sql as { strings?: readonly string[]; sql?: string };
+      const rendered = query.strings?.join(' ') ?? query.sql ?? String(sql);
+      if (rendered.includes('"unmetCount"')) {
+        calls.graph.push(sql);
+        return opts.graph ?? [];
+      }
+      return [];
     },
     task: {
       findFirst: async (args: any) => {

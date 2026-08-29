@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
+import {
+  CreatorType,
+  PrismaClient,
+  RunStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
+} from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -114,6 +120,7 @@ async function session(
       title: `run of ${taskId}`,
       prompt: 'do the thing',
       status,
+      dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
 }

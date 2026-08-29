@@ -6,7 +6,8 @@ import XCTest
 // It is a *test* only so it can reuse OrbitKit's build and run on Linux (`swift test`), which is
 // where the transcript pieces the iOS optimisation work targets actually live — the reducer, the
 // snapshot store, the row builder and the Markdown parser are all UI-free. It is SKIPPED unless
-// `ORBIT_PERF=1` is set, so CI never pays for it:
+// `ORBIT_PERF=1` is set. Ordinary CI does not pay for it; the release-frontier full matrix
+// enables it so every declared Swift test executes with zero skips:
 //
 //   docker run --rm -e ORBIT_PERF=1 -v "$PWD:/src" -w /src/src/macos/OrbitKit swift:6.1 \
 //     swift test --filter PerfBaselineTests

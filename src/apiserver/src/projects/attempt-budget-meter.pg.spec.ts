@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
+import {
+  CreatorType,
+  PrismaClient,
+  RunStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
+} from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -114,6 +120,7 @@ async function fixture(options: { coordinatorEnabled?: boolean } = {}): Promise<
       title: 'the attempt',
       prompt: 'do the task',
       status: RunStatus.RUNNING,
+      dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
     },
   });

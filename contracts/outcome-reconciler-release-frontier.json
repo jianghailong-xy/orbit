@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "kind": "orbit.outcome-reconciler.release-frontier-contract",
+  "project": {
+    "publicId": "34EVnSK4xSBvXox6Za9AA",
+    "databaseId": "01a04416-6517-7329-b0b7-9926a89d86aa"
+  },
+  "task": {
+    "publicId": "34FPjTbN1Y1KM1XZzVaHx",
+    "databaseId": "01a04c3d-237d-745f-937c-3bc220a94a21",
+    "acceptanceCommand": "npm run test:outcome-reconciler:release-frontier",
+    "expectedExitCode": 0
+  },
+  "session": {
+    "publicId": "3pbmdZbj29xhjM0AXepDD6",
+    "databaseId": "7debc31d-edb7-5e82-9a9f-263e60dc92a8",
+    "sourceBranch": "orbit/manifest-current-binding-dedbcc"
+  },
+  "repository": {
+    "provider": "GITHUB",
+    "id": "jianghailong-xy/orbit",
+    "targetBranch": "main",
+    "targetRef": "refs/heads/main",
+    "deploymentCheckout": "/root/orbit"
+  },
+  "ownerRatification": {
+    "publicId": "wcTYTTh2pHj6myzKLXM20",
+    "databaseId": "1f10e17f-f4da-424f-859e-e6acc9c374dc",
+    "ownerDatabaseId": "5ccdf9b9-6871-49a6-8595-839c6a1f79d2",
+    "contractDigest": "038956112d061ea7b3b0e2b9e94b6a7349af2fd3c7ca5d126b669174758bc903",
+    "contractRevision": "1",
+    "evaluationPlanDigest": "c05e07633d01b7fe1f3a7a92af931656d439a09b8484d93e03493c68b10b5e9e"
+  },
+  "immutableVerifier": {
+    "taskPublicId": "34EVtK2RbRq0fI3hsQISw",
+    "evidencePublicId": "DphKCyIZ7Se648G54i1Ux",
+    "evidenceDigest": "50e55c8c721a0f9a79a0d22445febfe095ebc4a65747f221b890425f46289085",
+    "expectedStatus": "DONE",
+    "expectedVerdict": "FAIL"
+  },
+  "postgres": {
+    "version": "16.14",
+    "minimumMigrations": 209
+  },
+  "canonicalBinding": {
+    "subjectType": "PROJECT",
+    "goalDisposition": "ACTIVE",
+    "pendingDimension": "POST_MERGE_VERIFICATION",
+    "pendingReasonCode": "INDEPENDENT_TARGET_VERIFIER_PENDING"
+  },
+  "namedSuites": [
+    { "name": "bootstrap", "packageScript": "test:outcome-reconciler:bootstrap", "manifest": "build/outcome-reconciler-bootstrap-manifest.json" },
+    { "name": "contract", "packageScript": "test:outcome-reconciler:contract", "manifest": "build/outcome-reconciler-v2-contract-manifest.json" },
+    { "name": "protocol", "packageScript": "test:outcome-reconciler:protocol", "manifest": "build/outcome-reconciler-v2-protocol-manifest.json" },
+    { "name": "evaluator", "packageScript": "test:outcome-reconciler:evaluator", "manifest": "build/outcome-reconciler-v2-evaluator-manifest.json" },
+    { "name": "projection", "packageScript": "test:outcome-reconciler:projection", "manifest": "build/outcome-reconciler-v2-projection-manifest.json" },
+    { "name": "done-gate", "packageScript": "test:outcome-reconciler:done-gate", "manifest": "build/outcome-reconciler-v2-done-gate-manifest.json" },
+    { "name": "actions", "packageScript": "test:outcome-reconciler:actions", "manifest": "build/outcome-reconciler-v2-actions-manifest.json" },
+    { "name": "coordinator", "packageScript": "test:outcome-reconciler:coordinator", "manifest": "build/outcome-reconciler-v2-coordinator-manifest.json" },
+    { "name": "watchdog", "packageScript": "test:outcome-reconciler:watchdog", "manifest": "build/outcome-reconciler-v2-watchdog-manifest.json" },
+    { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "manifest": "build/executable-acceptance-runtime-manifest.json" },
+    { "name": "fact-ingress", "packageScript": "test:outcome-reconciler:fact-ingress", "manifest": "build/outcome-reconciler-v2-fact-ingress-manifest.json" },
+    { "name": "ratification", "packageScript": "test:outcome-reconciler:ratification", "manifest": "build/outcome-reconciler-v2-ratification-manifest.json" },
+    { "name": "auto-dispatch", "packageScript": "test:outcome-reconciler:auto-dispatch", "manifest": "build/outcome-reconciler-auto-dispatch-manifest.json" },
+    { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "manifest": "build/work-overview-readiness-manifest.json" },
+    { "name": "auto-dispatch-integration", "packageScript": "test:outcome-reconciler:auto-dispatch:integration", "manifest": "build/outcome-reconciler-auto-dispatch-integration-attestation.json" },
+    { "name": "watchdog-current-binding-regression", "packageScript": "test:outcome-reconciler:watchdog-current-binding:regression", "manifest": "build/outcome-reconciler-watchdog-current-binding-manifest.json" },
+    { "name": "watchdog-current-binding", "packageScript": "test:outcome-reconciler:watchdog-current-binding", "manifest": "build/outcome-reconciler-watchdog-current-binding-attestation.json" }
+  ],
+  "restoredSuites": [
+    { "name": "delivery", "packageScript": "test:outcome-reconciler:delivery", "manifest": "build/outcome-reconciler-v2-delivery-manifest.json" },
+    { "name": "versioning", "packageScript": "test:outcome-reconciler:versioning", "manifest": "build/outcome-reconciler-v2-versioning-manifest.json" },
+    { "name": "surfaces", "packageScript": "test:outcome-reconciler:surfaces", "manifest": "build/outcome-reconciler-v2-surfaces-manifest.json" },
+    { "name": "replay", "packageScript": "test:outcome-reconciler:replay", "manifest": "build/outcome-reconciler-v2-replay-manifest.json" },
+    { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "manifest": "build/outcome-reconciler-v2-canary-manifest.json" },
+    { "name": "owner-ratification-ui", "packageScript": "test:outcome-reconciler:owner-ratification-ui", "manifest": "build/outcome-reconciler-owner-ratification-ui-manifest.json" }
+  ],
+  "fullMatrices": [
+    { "name": "full-api", "packageScript": "test:outcome-reconciler:full-api", "manifest": "build/outcome-reconciler-full-api-manifest.json" },
+    { "name": "full-clients", "packageScript": "test:outcome-reconciler:full-clients", "manifest": "build/outcome-reconciler-full-clients-manifest.json" }
+  ],
+  "additionalManifests": [
+    "build/outcome-reconciler-v2-watchdog-capacity-manifest.json",
+    "build/outcome-reconciler-authoritative-target-manifest.json",
+    "build/outcome-reconciler-release-live-state-manifest.json"
+  ]
+}

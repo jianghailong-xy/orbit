@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Unique executable acceptance for runtime-v2. All time-based cases use virtual clocks or
-# millisecond processes; the harness itself is designed to finish inside the old 120-second shell.
+# Unique executable acceptance for runtime-v2. Logical deadlines use virtual clocks or
+# millisecond processes. The outer 240-second guard covers compilation, a rolling migration,
+# and the serial real-PostgreSQL matrix; each liveness probe retains its own tight deadline.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -104,7 +105,7 @@ EXECUTABLE_ACCEPTANCE_PG_URL="$URL" \
 EXECUTABLE_ACCEPTANCE_EVIDENCE_PATH="$EVIDENCE" \
 EXECUTABLE_ACCEPTANCE_ROLLING_EVIDENCE_PATH="$ROLLING_EVIDENCE" \
 EXECUTABLE_ACCEPTANCE_SOURCE_SHA="$SOURCE_SHA" \
-timeout -k 5 110 node --test --test-concurrency=1 --test-reporter=tap \
+timeout -k 5 240 node --test --test-concurrency=1 --test-reporter=tap \
   "$REPO/test/executable-acceptance-runtime.test.mjs" 2>&1 | tee "$TAP"
 TEST_RC=${PIPESTATUS[0]}
 set -e

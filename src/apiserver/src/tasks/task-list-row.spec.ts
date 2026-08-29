@@ -58,10 +58,16 @@ test('listRow reuses the page select and restricts live overlays to the one owne
       },
     },
     taskDependency: { findMany: async () => [] },
-    $queryRaw: async (strings: TemplateStringsArray, ...bindings: unknown[]) => {
-      runnableSql = strings.join('?');
-      runnableBindings = bindings;
-      return [{ runnable: true }];
+    $queryRaw: async (query: { text?: string; values?: unknown[] } | TemplateStringsArray, ...bindings: unknown[]) => {
+      if (Array.isArray(query)) {
+        runnableSql = (query as unknown as TemplateStringsArray).join('?');
+        runnableBindings = bindings;
+      } else {
+        const rendered = query as { text?: string; values?: unknown[] };
+        runnableSql = rendered.text ?? '';
+        runnableBindings = rendered.values ?? [];
+      }
+      return [{ id: TASK_ID }];
     },
   };
   const service = new TasksService(prisma as never, {} as never, {} as never);
@@ -80,7 +86,7 @@ test('listRow reuses the page select and restricts live overlays to the one owne
   assert.equal(row.dependencyState, 'NONE');
   assert.equal(row.blocked, false);
   assert.equal(row.runnable, true);
-  assert.match(runnableSql, /SELECT EXISTS/);
+  assert.match(runnableSql, /SELECT t\.id[\s\S]*t\.id IN/);
   assert.deepEqual(runnableBindings.slice(0, 2), [OWNER_ID, TASK_ID]);
 });
 

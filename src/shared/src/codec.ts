@@ -208,6 +208,45 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'delegationId',
   'authorityId',
   'decisionRequestId',
+  // The outcome, autonomous-coordination and durable delivery ledgers expose these immutable row
+  // addresses in receipts/manifests. They are inspectable identities, not authorization
+  // capabilities; the corresponding equality capabilities are classified below.
+  'ingestedByRunnerId',
+  'wakeupId',
+  'evaluationId',
+  'firstEvaluationId',
+  'actionIntentId',
+  'receiptId',
+  'diagnosticId',
+  'clockId',
+  'coordinationId',
+  'leaseId',
+  'externalWaitId',
+  'deliveryId',
+  'resultId',
+  'completionDeliveryReceiptId',
+  'waitId',
+  'planId',
+  'affectedSessionId',
+  'originLeaseId',
+  'deliveryReceiptId',
+  'recordedLeaseId',
+  'wakeIdSnapshot',
+  'sessionIdSnapshot',
+  'adoptionId',
+  'actionId',
+  'sourceSessionIdSnapshot',
+  'taskIdSnapshot',
+  'taskProjectIdSnapshot',
+  'lastDeliveryReceiptId',
+  'bindingId',
+  'runnerIdSnapshot',
+  'deliveryBindingId',
+  'attestationId',
+  'verificationId',
+  'transitionId',
+  'predecessorEvaluationId',
+  'successorEvaluationId',
   // Wire aliases returned by the append/CTA functions for those same durable rows.
   'ratificationId',
   'newDecisionRequestId',
@@ -323,6 +362,11 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // which request already happened. Decoding it on the way in would make that comparison lie, and
   // it appears in no request and no response.
   'requestId',
+  // UUID-shaped generations are compare-and-swap fences. Encoding one would make the runner's
+  // exact echo fail even though the underlying lease/expectation had not changed.
+  'ingestedUnderLeaseGeneration',
+  'expectationGeneration',
+  'leaseToken',
   // One-shot Owner Ratification capabilities. They authorize/commit an exact pending operation
   // and are compared byte-for-byte; exposing them as public row addresses would silently break
   // stale/duplicate CTA and action-commit fencing.

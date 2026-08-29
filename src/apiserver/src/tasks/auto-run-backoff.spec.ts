@@ -405,11 +405,13 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.auto_run_when_ready = true/);
   assert.match(sql, /EXISTS \(SELECT 1 FROM workspace a[\s\S]*a\.runner_id IS NOT NULL\)/);
-  // §13.6 SU9: an edge is satisfied by the END of its supersession chain, so the sweep asks for
-  // "no prerequisite whose chain contains no DONE" rather than "no prerequisite that is not DONE".
-  // The two agree on every task nothing replaced, and only the first can ever release a task whose
-  // prerequisite was re-done under a new id.
-  assert.match(sql, /NOT EXISTS \([\s\S]*WITH RECURSIVE chain[\s\S]*chain\.status = 'DONE'/);
+  // §13.6 SU9: an edge is satisfied by the END of its supersession chain. The database function
+  // is the bounded, fail-closed resolver shared with the commit guard, so a prerequisite replaced
+  // and re-done under a new id remains satisfiable.
+  assert.match(
+    sql,
+    /NOT EXISTS \([\s\S]*task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+  );
   // Load-bearing despite being logically implied by the two clauses around it: it is the only
   // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
   // hash-joining every dependency edge in the deployment (32ms -> 264ms on a 55k-edge database).

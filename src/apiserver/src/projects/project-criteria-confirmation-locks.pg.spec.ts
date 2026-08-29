@@ -21,6 +21,7 @@ import {
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
+import { establishCanonicalClosedEvaluationForPgTest } from '../outcome-reconciler/outcome-closed-test-helper';
 
 /**
  * N22's two locks, deliberately landed before the automatic evaluator.
@@ -107,6 +108,7 @@ async function fixture(db: PrismaClient, label: string) {
       id: projectId,
       ownerId,
       title: `${label} project`,
+      goal: `Prove the ${label} contract-confirmation boundary`,
       acceptanceCriteria: 'The standard set is fit for its goal',
     },
   });
@@ -127,6 +129,13 @@ test('a no-acting-session runner edit changes the digest and immediately invalid
         actorId: target.ownerId,
       });
       assert.equal(confirmed.current, true);
+      await establishCanonicalClosedEvaluationForPgTest(
+        db,
+        target.ownerId,
+        target.projectId,
+        'Prove the digest-lock contract-confirmation boundary',
+        'criteria-confirmation-digest-lock',
+      );
 
       // This is the runner credential's intentional headless path: no acting-session id is sent.
       // The system cannot call it human. The digest lock must therefore do all of the safety work.
@@ -157,12 +166,27 @@ test('a no-acting-session runner edit changes the digest and immediately invalid
         'an edit cannot carry the project into DONE on a stale confirmation');
       const gated = await acceptance.reconcile(target.ownerId, target.projectId);
       assert.equal(gated.done, false);
-      assert.equal(gated.code, 'CRITERIA_CONFIRMATION_REQUIRED',
-        'the evaluator must stop on the identity-independent digest lock before DONE');
+      assert.equal(gated.code, 'OWNER_RATIFICATION_REQUIRED',
+        'the evaluator must stop on the exact unratified contract digest before DONE');
 
+      await assert.rejects(
+        acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
+          actorType: 'RUNNER',
+          actorId: target.runnerId,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof ForbiddenException);
+          assert.equal(
+            (error.getResponse() as { code?: string }).code,
+            'OWNER_RATIFICATION_ACTOR_FORBIDDEN',
+          );
+          return true;
+        },
+        'the machine that edited the contract cannot ratify its replacement digest',
+      );
       const reconfirmed = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-        actorType: 'RUNNER',
-        actorId: target.runnerId,
+        actorType: 'USER',
+        actorId: target.ownerId,
       });
       assert.equal(reconfirmed.current, true);
       assert.equal(reconfirmed.criteriaDigest, state.criteriaDigest);
@@ -172,7 +196,7 @@ test('a no-acting-session runner edit changes the digest and immediately invalid
     }
   });
 
-test('a PROJECT_COORDINATOR judgment session is refused when it tries to confirm the criteria set',
+test('a runner cannot ratify a contract, with or without a PROJECT_COORDINATOR session',
   { skip }, async () => {
     const { db, acceptance } = await connect();
     try {
@@ -199,28 +223,35 @@ test('a PROJECT_COORDINATOR judgment session is refused when it tries to confirm
       } catch (error) {
         assert.ok(error instanceof ForbiddenException, `expected a refusal, got ${error}`);
         const body = error.getResponse() as Record<string, unknown>;
-        assert.equal(body.code, 'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY');
-        assert.equal(body.tier, 'HUMAN_ONLY');
-        assert.equal(body.requiredAction, 'ASK_A_PERSON');
+        assert.equal(body.code, 'OWNER_RATIFICATION_ACTOR_FORBIDDEN');
+        assert.equal(body.owner, 'USER');
       }
 
-      assert.equal(await db.projectAcceptanceCriteriaConfirmation.count({
+      assert.equal(await db.projectOwnerRatification.count({
         where: { projectId: target.projectId },
       }), 0);
 
-      // Negative control: the same runner, without a one-shot acting session, is admitted and is
-      // stored as machine provenance. This is audit visibility, deliberately not proof of a human.
+      await assert.rejects(
+        acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
+          actorType: 'RUNNER', actorId: target.runnerId,
+        }),
+        (error: unknown) => error instanceof ForbiddenException,
+      );
+
+      // Negative control: the account owner is admitted and the immutable contract receipt names
+      // OWNER provenance; no deprecated criteria-confirmation row is created.
       const confirmation = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-        actorType: 'RUNNER',
-        actorId: target.runnerId,
+        actorType: 'USER', actorId: target.ownerId,
       });
-      const row = await db.projectAcceptanceCriteriaConfirmation.findUniqueOrThrow({
+      const row = await db.projectOwnerRatification.findUniqueOrThrow({
         where: { id: confirmation.id },
       });
-      assert.equal(row.confirmedByType, 'RUNNER');
-      assert.equal(row.confirmedById, target.runnerId);
-      assert.equal(row.actingSessionId, null);
-      assert.equal(row.criteriaDigest, confirmation.criteriaDigest);
+      assert.equal(row.ratifiedByType, 'OWNER');
+      assert.equal(row.ratifiedById, target.ownerId);
+      assert.equal(row.contractDigest, confirmation.criteriaDigest);
+      assert.equal(await db.projectAcceptanceCriteriaConfirmation.count({
+        where: { projectId: target.projectId },
+      }), 0);
     } finally {
       await db.$disconnect();
     }

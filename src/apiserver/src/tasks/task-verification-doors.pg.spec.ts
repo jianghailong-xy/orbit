@@ -38,7 +38,9 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
+import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
 import { ProjectsService } from '../projects/projects.service';
+import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 import { TasksService } from './tasks.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 
@@ -96,6 +98,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
     // the whole point: aggregation has to work without one.
     await db.project.create({ data: { id, ownerId, title } });
     await db.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
+    await ratifyProjectForPgTest(db, ownerId, id, title);
   }
   return { ownerId, projectId, otherProjectId, workspaceId };
 }
@@ -296,11 +299,25 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     const formerlyDone = await tasks.create(w.ownerId, {
       title: 'ordinary task completed before becoming a check', projectId: w.projectId,
     });
-    await db.task.update({ where: { id: formerlyDone.id }, data: { status: TaskStatus.DONE } });
-    await tasks.update(w.ownerId, formerlyDone.id, { verifiesTaskId: subject.id });
+    await assert.rejects(
+      db.task.update({ where: { id: formerlyDone.id }, data: { status: TaskStatus.DONE } }),
+      /TASK_DONE_CANONICAL_FACT_REQUIRED/,
+      'an ordinary task cannot become DONE without its declared completion fact',
+    );
+    await completeHumanTaskForPgTest(
+      db,
+      w.ownerId,
+      formerlyDone.id,
+      'ordinary task completed before becoming a check',
+    );
+    await assert.rejects(
+      tasks.update(w.ownerId, formerlyDone.id, { verifiesTaskId: subject.id }),
+      /already has completion evidence.*File a new verification task instead/,
+      'a completed task cannot discard its judgment lifecycle by becoming a verifier',
+    );
     const attached = await db.task.findUniqueOrThrow({ where: { id: formerlyDone.id } });
-    assert.equal(attached.status, TaskStatus.OPEN,
-      'the ordinary DONE fact must not survive attachment of the verifier role');
+    assert.equal(attached.status, TaskStatus.DONE);
+    assert.equal(attached.verifiesTaskId, null);
     assert.equal(attached.verdict, null);
 
     const evidenced = await tasks.create(w.ownerId, {

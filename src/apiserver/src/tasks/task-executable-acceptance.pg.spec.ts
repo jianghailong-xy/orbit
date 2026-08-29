@@ -456,7 +456,7 @@ suite('an in-flight result cannot settle a declaration whose expected exit code 
   );
   const staleSignal = await db.taskComment.findFirstOrThrow({ where: { taskId: f.taskId } });
   assert.match(staleSignal.body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
-  assert.match(staleSignal.body, /命令：printf stale[\s\S]*期望退出码：0/);
+  assert.match(staleSignal.body, /命令：printf stale[\s\S]*期望退出码：7/);
 });
 
 suite('an executable result from a different Session cannot consume the open request', async (t) => {

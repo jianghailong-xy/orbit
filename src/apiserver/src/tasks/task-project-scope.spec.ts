@@ -27,8 +27,10 @@ function serviceWith(prisma: unknown): TasksService {
 /** Renders each `$queryRaw` template the way PostgreSQL would see it, bound values included. */
 function recordingQueryRaw(rows: (sql: string) => unknown[]) {
   const statements: { text: string; values: unknown[] }[] = [];
-  const $queryRaw = async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-    const sql = Prisma.sql(strings, ...(bound as never[]));
+  const $queryRaw = async (query: Prisma.Sql | TemplateStringsArray, ...bound: unknown[]) => {
+    const sql = Array.isArray(query)
+      ? Prisma.sql(query as unknown as TemplateStringsArray, ...(bound as never[]))
+      : query as Prisma.Sql;
     statements.push({ text: sql.text, values: sql.values });
     return rows(sql.text);
   };

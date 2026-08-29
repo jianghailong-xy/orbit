@@ -961,7 +961,7 @@ test('an action holding the fence linearizes before concurrent revocation', asyn
   evidence.idempotency.oneProviderReceipt = true;
 });
 
-test('revocation that wins before the fence prevents provider commit and records authorization obligation', async () => {
+test('revocation that wins before the fence prevents provider commit and requires current re-evaluation', async () => {
   const scope = await seedScope('revoke-before');
   const intent = intentFor(scope);
   await enqueue(scope, intent);
@@ -971,14 +971,17 @@ test('revocation that wins before the fence prevents provider commit and records
   `, [scope.tenantId, scope.projectId, scope.grantId, digest('revoke-before-reason')]);
   const result = await fencedFinish(scope, claimed, receiptFor(intent, 'SUCCEEDED'), null, 1);
   assert.equal(result.begun.authorized, false);
-  assert.equal(result.begun.code, 'AUTHORITY_REVOKED');
+  assert.equal(result.begun.code, 'OBLIGATION_STALE',
+    'revocation invalidates the source obligation before a stale action can route owner work');
   const receipts = await one(pool, `SELECT count(*)::integer AS count FROM outcome_action_receipt WHERE action_intent_id = $1`, [intent.actionIntentId]);
   assert.equal(receipts.count, 0);
   const active = await one(pool, `
     SELECT kind, owner, human_decision_reason AS "humanReason"
       FROM outcome_executor_active_obligation WHERE action_intent_id = $1
   `, [intent.actionIntentId]);
-  assert.deepEqual(active, { kind: 'REQUEST_NEW_AUTHORIZATION', owner: 'OWNER', humanReason: 'NEW_AUTHORIZATION' });
+  assert.deepEqual(active, {
+    kind: 'REFRESH_STALE_BINDING', owner: 'SYSTEM', humanReason: null,
+  });
   evidence.races.revokeBeforeFenceRefuses = true;
 });
 

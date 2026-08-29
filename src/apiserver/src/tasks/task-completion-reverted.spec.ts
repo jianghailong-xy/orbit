@@ -58,6 +58,7 @@ function makeService(verifications = 0) {
         return create;
       },
     },
+    taskDependency: { findMany: async () => [] },
     // §8.6 LO1: a PURE `{status}` PATCH is an acceptance fact, so it now runs inside a
     // transaction that takes the project, the task closure and nothing else. Before this change it
     // was a single unlocked `task.update`, which is exactly the fast path that let a status write

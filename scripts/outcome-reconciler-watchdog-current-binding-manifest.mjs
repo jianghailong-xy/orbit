@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [tapPath, evidencePath, outputPath] = process.argv.slice(2);
@@ -17,6 +17,9 @@ const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
 const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], {
   cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
 }).trim();
+const expectedMigrationFrontier = readdirSync(path.join(repo, 'src/apiserver/prisma/migrations'), {
+  withFileTypes: true,
+}).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort().at(-1);
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -50,7 +53,8 @@ assert.equal(evidence.targetSha, targetSha);
 assert.equal(evidence.postgres.required, true);
 assert.equal(evidence.postgres.connected, true);
 assert.ok(evidence.postgres.migrations > 0);
-assert.equal(evidence.postgres.lastMigration, '0206_watchdog_current_binding');
+assert.equal(evidence.postgres.lastMigration, expectedMigrationFrontier);
+assert.equal(evidence.postgres.requiredMigrationApplied, true);
 for (const [name, count] of Object.entries(evidence.samples)) {
   assert.ok(Number.isInteger(count) && count > 0, `${name} has zero samples`);
 }
@@ -77,6 +81,7 @@ const sourceFiles = [
   'scripts/outcome-reconciler-watchdog-current-binding-regression.sh',
   'scripts/outcome-reconciler-watchdog-current-binding-manifest.mjs',
   'scripts/outcome-reconciler-watchdog-current-binding-integration.mjs',
+  'scripts/outcome-reconciler-deployment-attestation.mjs',
   'scripts/outcome-reconciler-watchdog-current-binding.sh',
 ];
 const sourceDigests = Object.fromEntries(sourceFiles.map((relative) => [

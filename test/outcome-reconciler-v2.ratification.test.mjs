@@ -41,7 +41,7 @@ const evidence = {
     runnerDecisionCapabilityRedacted: false,
     unratifiedAutomaticExecutionRefused: false,
     harmlessManualPlanningAllowed: false,
-    autoRunQueriesPrefilterUnratifiedProjects: false,
+    autoRunBlockedWorkIsDurablyVisible: false,
   },
   races: {
     permissionRevocationFailsClosed: false,
@@ -241,7 +241,7 @@ async function commitAction(client, projectId, intent) {
   );
 }
 
-test('requires the isolated PostgreSQL 16 authority database and both dispatch queries prefilter', async () => {
+test('requires isolated PostgreSQL 16 and automatic dispatch never loses unratified work', async () => {
   const result = await pool.query(`
     SELECT current_database() AS database,
            current_user AS role,
@@ -264,8 +264,14 @@ test('requires the isolated PostgreSQL 16 authority database and both dispatch q
     path.join(ROOT, 'src/apiserver/src/tasks/tasks.service.ts'),
     'utf8',
   );
-  const references = source.match(/project_owner_ratification_effective\(/g) ?? [];
-  assert.ok(references.length >= 2, 'ready and scheduled automatic dispatch must both prefilter');
+  assert.match(source, /const AUTO_RUN_READY_SQL[\s\S]*task_auto_dispatch_state/,
+    'ready work with a standing refusal must remain durably wakeable');
+  assert.match(source, /const AUTO_RUN_READY_SQL[\s\S]*Policy is deliberately NOT a candidate filter/,
+    'ready work must reach the guarded dispatch door that records a typed obligation');
+  assert.match(source, /const SCHEDULED_DUE_SQL[\s\S]*project_owner_ratification_effective\(/,
+    'scheduled scans retain their bounded ratification prefilter');
+  assert.match(source, /dispatchReadyTask[\s\S]*recordAutoDispatchObservation/,
+    'the guarded dispatch door must persist its outcome instead of silently dropping work');
   const migration = readFileSync(
     path.join(
       ROOT,
@@ -275,7 +281,7 @@ test('requires the isolated PostgreSQL 16 authority database and both dispatch q
   );
   assert.match(migration, /CREATE TRIGGER session_owner_ratification_guard/);
   assert.match(migration, /FOR NO KEY UPDATE OF p/);
-  evidence.invariants.autoRunQueriesPrefilterUnratifiedProjects = true;
+  evidence.invariants.autoRunBlockedWorkIsDurablyVisible = true;
 });
 
 test('agent and runner self-approval are rejected, including the rolling runner route', async () => {
@@ -301,7 +307,16 @@ test('agent and runner self-approval are rejected, including the rolling runner 
   );
   assert.match(acceptanceSource, /if \(actor\.actorType !== 'USER'\)/);
   assert.match(acceptanceSource, /OWNER_RATIFICATION_ACTOR_FORBIDDEN/);
-  assert.match(acceptanceSource, /async machineRatification[\s\S]*field !== 'ctaToken'/);
+  assert.match(acceptanceSource,
+    /async machineRatification[\s\S]*withoutOwnerRatificationCapability\(state\)/);
+  const surfaceSource = readFileSync(
+    path.join(ROOT, 'src/apiserver/src/projects/owner-ratification-surface.ts'),
+    'utf8',
+  );
+  assert.match(surfaceSource, /key !== 'ctaToken' && key !== 'cta_token'/);
+  assert.match(surfaceSource,
+    /value\.map\(withoutOwnerRatificationCapability\)[\s\S]*withoutOwnerRatificationCapability\(nested\)/,
+    'capability redaction must recursively cover arrays and nested objects');
   const runnerSource = readFileSync(
     path.join(ROOT, 'src/apiserver/src/runner-api/runner-projects.controller.ts'),
     'utf8',

@@ -661,10 +661,21 @@ test('online obligation selection is bounded and uses the owner/target index', a
   } finally {
     client.release();
   }
-  const definition = await pool.query(`SELECT pg_get_functiondef(
-    'outcome_projection.read_surface(uuid,uuid,text,text,text)'::regprocedure
-  ) AS source`);
-  assert.match(definition.rows[0].source, /LIMIT 1/);
+  const definitions = await pool.query(`SELECT
+    pg_get_functiondef(
+      'outcome_projection.read_surface(uuid,uuid,text,text,text)'::regprocedure
+    ) AS public_source,
+    pg_get_functiondef(
+      'outcome_projection.read_surface_projection_only(uuid,uuid,text,text,text)'::regprocedure
+    ) AS projection_source`);
+  assert.match(definitions.rows[0].public_source, /completion_ack_operational_read_surface/,
+    'the public surface must retain the completion-ack operational overlay');
+  assert.match(definitions.rows[0].public_source, /read_surface_projection_only/,
+    'the integrity-only lane must retain the bounded canonical projection reader');
+  assert.match(definitions.rows[0].projection_source, /ORDER BY binding_epoch DESC LIMIT 1/,
+    'current binding selection in the canonical projection reader must be bounded');
+  assert.match(definitions.rows[0].projection_source, /LIMIT 1/,
+    'projection row selection must remain bounded');
   evidence.invariants.boundedTargetIndex = true;
 });
 

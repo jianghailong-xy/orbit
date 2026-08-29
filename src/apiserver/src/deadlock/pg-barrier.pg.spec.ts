@@ -316,46 +316,42 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
     );
   });
 
-  await t.test('every project_event in a round is attributable to a named event source', async () => {
+  await t.test('ordinary round writes do not resurrect the retired project_event outbox', async () => {
     const ids = newFixtureIds('event-source');
     await seedThreePartyFixture(admin, ids);
-    const kinds = async (sourceId: string): Promise<string[]> => {
-      const { rows } = await admin.query<{ kind: string }>(
-        `SELECT "kind" FROM "project_event" WHERE "source_id" = $1::uuid ORDER BY "kind"`,
-        [sourceId],
-      );
-      return rows.map((r) => r.kind);
-    };
-    // project_session_event_source on a telemetry-only write: the trigger runs and decides there
-    // is no signal, which is why the baseline can count the round's outbox rows exactly.
     await admin.query(
       `UPDATE "session" SET "last_turn_at" = $2, "updated_at" = $2 WHERE "id" = $1::uuid`,
       [ids.telemetrySessionId, ids.telemetryTurnAt],
     );
-    assert.deepEqual(await kinds(ids.telemetrySessionId), ['session.started']);
-    // The same trigger on a status change does enqueue one.
     await admin.query(
       `UPDATE "session" SET "status" = 'AWAITING_INPUT'::run_status, "updated_at" = $2 WHERE "id" = $1::uuid`,
       [ids.telemetrySessionId, ids.telemetryTurnAt],
     );
-    assert.deepEqual(await kinds(ids.telemetrySessionId), ['session.awaiting_input', 'session.started']);
-
-    // project_task_event_source and project_task_dependency_event_source, the two the victim's
-    // rollback has to erase. `task.created` is the seed's and must survive.
-    assert.deepEqual(await kinds(ids.dependentTaskId), ['task.created']);
     await admin.query(
       `UPDATE "task" SET "status" = 'IN_PROGRESS'::task_status, "updated_at" = $2 WHERE "id" = $1::uuid`,
       [ids.dependentTaskId, ids.telemetryTurnAt],
     );
     await admin.query(
       `INSERT INTO "task_dependency" ("id", "task_id", "depends_on_task_id")
-       VALUES ($1::uuid, $2::uuid, $3::uuid)`,
+      VALUES ($1::uuid, $2::uuid, $3::uuid)`,
       [ids.dependencyId, ids.dependentTaskId, ids.prerequisiteTaskId],
     );
-    assert.deepEqual(
-      await kinds(ids.dependentTaskId),
-      ['task.created', 'task.dependency_changed', 'task.status_changed'],
+    const state = await admin.query<{ session_status: string; task_status: string; edges: string; outbox: string | null }>(
+      `SELECT s."status"::text AS session_status,
+              t."status"::text AS task_status,
+              (SELECT count(*) FROM "task_dependency" d
+                WHERE d."id" = $3::uuid)::text AS edges,
+              to_regclass('public.project_event')::text AS outbox
+         FROM "session" s, "task" t
+        WHERE s."id" = $1::uuid AND t."id" = $2::uuid`,
+      [ids.telemetrySessionId, ids.dependentTaskId, ids.dependencyId],
     );
+    assert.deepEqual(state.rows, [{
+      session_status: 'AWAITING_INPUT',
+      task_status: 'IN_PROGRESS',
+      edges: '1',
+      outbox: null,
+    }]);
   });
 
   await t.test('the three-party plan still contends the rows the production report named', async () => {

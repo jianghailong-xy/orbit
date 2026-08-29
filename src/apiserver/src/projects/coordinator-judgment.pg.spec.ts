@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -26,6 +27,7 @@ import { buildJudgmentOpening, judgmentSessionTitle } from './coordinator-judgme
 import { WakeFact, attemptEndedUnsettledFact, projectTasksSettledFact } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ratifyProjectForPgTest } from './project-ratification-test-helper';
 import { ProjectsService } from './projects.service';
 
 /**
@@ -124,6 +126,7 @@ async function fixture(db: PrismaClient, label: string, landed = true): Promise<
       creatorType: CreatorType.USER, creatorId: ownerId, status: TaskStatus.IN_PROGRESS,
     },
   });
+  await ratifyProjectForPgTest(db, ownerId, projectId, label);
   return { ownerId, workspaceId, projectId, taskId };
 }
 
@@ -359,9 +362,12 @@ test('a second wake opens a second session — an ended judgment is never resume
       assert.ok(ended.finishedAt, 'the first judgment really has finished');
 
       // A different fact about the same project: the project's tasks all settled.
-      await stack.db.task.update({
-        where: { id: target.taskId }, data: { status: TaskStatus.DONE },
-      });
+      await completeHumanTaskForPgTest(
+        stack.db,
+        target.ownerId,
+        target.taskId,
+        'coordinator-judgment:second-wake',
+      );
       const settled = projectTasksSettledFact(target.projectId, [
         { taskId: target.taskId, status: 'DONE' },
       ])!;
@@ -505,8 +511,8 @@ test('a wake with nowhere to open releases its key, and the same fact wakes once
  *
  * That value had five trigger guards and three CHECKs over it, dropped on the stated grounds that
  * "no new PROJECT_COORDINATOR session can be created". This unit creates them again, so what is
- * left has to be looked at rather than assumed — and what is left is one trigger, on
- * `project_action`, a table nothing here writes.
+ * left has to be looked at rather than assumed. The current survivors guard only durable
+ * obligation/receipt/action tables; no Session trigger can resurrect the removed control loop.
  */
 test('nothing left over from the control loop fires on a judgment session',
   { skip, timeout: 120_000 }, async () => {
@@ -524,15 +530,18 @@ test('nothing left over from the control loop fires on a judgment session',
       const triggers = await client.query(`
         SELECT c.relname AS on_table, t.tgname
           FROM pg_trigger t
-          JOIN pg_proc p ON p.oid = t.tgfoid
           JOIN pg_class c ON c.oid = t.tgrelid
          WHERE NOT t.tgisinternal
-           AND pg_get_functiondef(p.oid) LIKE '%PROJECT_COORDINATOR%'
+           AND pg_get_functiondef(t.tgfoid) LIKE '%PROJECT_COORDINATOR%'
          ORDER BY 1, 2`);
       assert.deepEqual(
         triggers.rows.map((r) => r.on_table),
-        ['project_action'],
-        'the only survivor guards project_action, which no judgment path writes',
+        [
+          'completion_ack_coordinator_delivery_receipt',
+          'outcome_coordinator_obligation',
+          'project_action',
+        ],
+        'only append-only obligation, receipt and action guards may name the dispatch origin',
       );
     } finally {
       await client.end();

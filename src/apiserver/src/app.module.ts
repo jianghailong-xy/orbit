@@ -21,7 +21,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
 import { SharedModule } from './shared/shared.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
-import { OutcomeReconcilerModule } from './outcome-reconciler/outcome-reconciler.module';
+import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
 import { OutcomeWatchdogModule } from './outcome-watchdog/outcome-watchdog.module';
 
 @Module({
@@ -46,7 +46,7 @@ import { OutcomeWatchdogModule } from './outcome-watchdog/outcome-watchdog.modul
     SharedModule,
     PushModule,
     ProvidersModule,
-    OutcomeReconcilerModule,
+    OutcomeReconcilerHttpModule,
     // API adapters may inject the storage boundary, but the poller is intentionally absent. The
     // standalone outcome-watchdog/main process owns collection and survives a reconciler stop.
     OutcomeWatchdogModule,

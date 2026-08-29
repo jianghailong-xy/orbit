@@ -103,12 +103,15 @@ MIGRATION_COUNT="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc
 LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
   'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
   | tr -d '[:space:]')"
+REQUIRED_MIGRATION_APPLIED="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+  "SELECT count(*) FROM _prisma_migrations WHERE migration_name='0206_watchdog_current_binding' AND finished_at IS NOT NULL" \
+  | tr -d '[:space:]')"
 [ "$MIGRATION_COUNT" -gt 0 ] || {
   echo '!! zero applied migrations is forbidden' >&2
   exit 1
 }
-[ "$LAST_MIGRATION" = '0206_watchdog_current_binding' ] || {
-  echo "!! migration frontier is $LAST_MIGRATION, expected 0206_watchdog_current_binding" >&2
+[ "$REQUIRED_MIGRATION_APPLIED" = '1' ] || {
+  echo '!! required migration 0206_watchdog_current_binding is not applied exactly once' >&2
   exit 1
 }
 
@@ -123,6 +126,7 @@ WATCHDOG_CURRENT_BINDING_TARGET_SHA="$TARGET_SHA" \
 WATCHDOG_CURRENT_BINDING_STARTED_AT="$STARTED_AT" \
 WATCHDOG_CURRENT_BINDING_MIGRATION_COUNT="$MIGRATION_COUNT" \
 WATCHDOG_CURRENT_BINDING_LAST_MIGRATION="$LAST_MIGRATION" \
+WATCHDOG_CURRENT_BINDING_REQUIRED_MIGRATION_APPLIED="$REQUIRED_MIGRATION_APPLIED" \
 timeout -k 10 "$TIMEOUT_SECONDS" node --test --test-concurrency=1 --test-reporter=tap \
   "$REPO/test/outcome-reconciler-watchdog-current-binding.test.mjs" 2>&1 | tee "$TAP"
 TEST_RC=${PIPESTATUS[0]}

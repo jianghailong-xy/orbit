@@ -23,6 +23,7 @@ function harness(rows: Array<{ id: string; status?: TaskStatus }>, total = rows.
     },
     session: { groupBy: async () => [] },
     taskDependency: { findMany: async () => [] },
+    $queryRaw: async () => [],
   };
   return { service: serviceWith(prisma), calls };
 }

@@ -20,12 +20,14 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
+import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 
 /**
  * H2G — the automatic doors' request identity is ABA-safe, on a real PostgreSQL, through the door.
@@ -130,6 +132,7 @@ async function fixture(
       autoRunWhenReady: task.autoRunWhenReady ?? false,
     },
   });
+  await ratifyProjectForPgTest(db, ids.ownerId, ids.projectId, `dispatch-epoch-${label}`);
   return ids;
 }
 
@@ -144,11 +147,16 @@ async function extraTask(
     data: {
       id, ownerId: ids.ownerId, projectId: ids.projectId, assigneeId: ids.agentId,
       title: `extra ${id.slice(0, 8)}`, creatorType: CreatorType.USER, creatorId: ids.ownerId,
-      provider: 'claude', status: opts.status ?? TaskStatus.OPEN,
+      provider: 'claude', status: TaskStatus.OPEN,
       autoRunWhenReady: opts.autoRunWhenReady ?? false,
       parentTaskId: opts.parentTaskId ?? null,
     },
   });
+  if (opts.status === TaskStatus.DONE) {
+    await completeHumanTaskForPgTest(
+      db, ids.ownerId, id, `dispatch-epoch-extra-${id}`,
+    );
+  }
   return id;
 }
 
@@ -191,10 +199,20 @@ async function receiptRow(
 }
 
 const sessionCount = (db: PrismaClient, taskId: string) =>
-  db.session.count({ where: { taskId } });
+  db.session.count({ where: { taskId, startsTaskWork: true } });
 
-/** Move a task's status through the door the application uses for it: a plain write. */
+/** Move a task through the production completion door; reopening remains an ordinary status edit. */
 async function setStatus(db: PrismaClient, taskId: string, status: TaskStatus): Promise<void> {
+  if (status === TaskStatus.DONE) {
+    const task = await db.task.findUniqueOrThrow({
+      where: { id: taskId },
+      select: { ownerId: true },
+    });
+    await completeHumanTaskForPgTest(
+      db, task.ownerId, taskId, `dispatch-epoch-status-${randomUUID()}`,
+    );
+    return;
+  }
   await db.task.update({ where: { id: taskId }, data: { status } });
 }
 

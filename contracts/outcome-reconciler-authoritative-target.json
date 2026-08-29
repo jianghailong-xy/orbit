@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "taskId": "34FPjTUdvHbYMJvhv8vRT",
-  "sourceBranch": "orbit/target-393fc6",
+  "taskId": "34FPjTbN1Y1KM1XZzVaHx",
+  "sourceBranch": "orbit/manifest-current-binding-dedbcc",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
@@ -422,7 +422,7 @@
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/target-393fc6",
+    "sourceBranch": "orbit/manifest-current-binding-dedbcc",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

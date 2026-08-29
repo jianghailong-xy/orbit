@@ -155,9 +155,9 @@ async function seed(client: Client, ids: FixtureIds): Promise<void> {
   ] as Array<[string, string | null]>) {
     await client.query(
       `INSERT INTO "session" ("id", "title", "prompt", "owner_id", "creator_id", "assigned_runner_id",
-                              "workspace_id", "task_id", "status", "updated_at")
+                              "workspace_id", "task_id", "status", "dispatch_origin", "updated_at")
        VALUES ($1::uuid, $2, 'fixture', $3::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid,
-               'RUNNING'::run_status, CURRENT_TIMESTAMP)`,
+               'RUNNING'::run_status, 'USER'::session_dispatch_origin, CURRENT_TIMESTAMP)`,
       [id, `${ids.label}-session`, ids.ownerId, ids.runnerId, ids.workspaceId, taskId],
     );
   }

@@ -8,6 +8,10 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  establishCanonicalClosedEvaluationForPgTest,
+  establishCanonicalRefutedEvaluationForPgTest,
+} from '../outcome-reconciler/outcome-closed-test-helper';
+import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
@@ -110,6 +114,9 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
   try {
     const target = await fixture(db, 'merge-carries-pass');
     const passed = await humanConclusion(acceptance, target, [ProjectAcceptanceVerdict.PASS]);
+    await establishCanonicalClosedEvaluationForPgTest(
+      db, target.ownerId, target.projectId, 'merge evidence stays current', 'merge-carries-pass',
+    );
     await settle(db, acceptance, target);
 
     const merged = await acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
@@ -166,7 +173,7 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
           decidedById: randomUUID(),
         },
       }),
-      /project_acceptance_conclusion_pass_human_chk/,
+      /project_acceptance_conclusion_pass_authority_chk/,
     );
 
     const columns = await db.$queryRaw<Array<{ columnName: string; nullable: string }>>(Prisma.sql`
@@ -197,6 +204,9 @@ test('a newer non-PASS conclusion automatically removes a project from the compl
   try {
     const target = await fixture(db, 'refutation-reopens');
     await humanConclusion(acceptance, target, [ProjectAcceptanceVerdict.PASS]);
+    await establishCanonicalClosedEvaluationForPgTest(
+      db, target.ownerId, target.projectId, 'new evidence may refute completion', 'refutation-reopens',
+    );
     await settle(db, acceptance, target);
 
     const merged = await acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
@@ -210,6 +220,15 @@ test('a newer non-PASS conclusion automatically removes a project from the compl
       target.projectId,
       merged.acceptanceRunId!,
       [{ ordinal: 1, verdict: ProjectAcceptanceVerdict.FAIL, summary: 'new evidence refutes it' }],
+    );
+    // The legacy conclusion is append-only evidence, not a second Project-status writer. Drive the
+    // same newer fact through the canonical evaluator before asserting the derived reopen.
+    await establishCanonicalRefutedEvaluationForPgTest(
+      db,
+      target.ownerId,
+      target.projectId,
+      'new evidence may refute completion',
+      'refutation-reopens-new-cut',
     );
 
     const project = await db.project.findUniqueOrThrow({

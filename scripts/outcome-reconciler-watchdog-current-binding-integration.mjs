@@ -505,7 +505,8 @@ function validateRegression(regression, targetSha) {
   assert.equal(regression.postgres.required, true);
   assert.equal(regression.postgres.connected, true);
   assert.ok(regression.postgres.migrations > 0);
-  assert.equal(regression.postgres.lastMigration, '0206_watchdog_current_binding');
+  assert.equal(regression.postgres.requiredMigrationApplied, true);
+  assert.match(regression.postgres.lastMigration, /^\d{4}_[a-z0-9_]+$/);
   for (const [name, count] of Object.entries(regression.samples)) {
     assert.ok(Number.isInteger(count) && count > 0, `${name} has zero regression samples`);
   }

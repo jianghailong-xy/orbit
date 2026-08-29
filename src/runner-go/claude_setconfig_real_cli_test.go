@@ -126,13 +126,15 @@ func TestRealClaudeRefusesAnUnknownPermissionMode(t *testing.T) {
 	}
 }
 
-// A model switch on a live session, which the CLI both answers and writes into the
-// conversation.
+// A model switch on a live session, acknowledged on the control channel and followed by a
+// second independent request on the same process.
 //
-// That second frame is the only record a transcript gets of a model change, and its shape
-// is not the one Orbit's own user frames have: `content` is a bare string where userFrame
-// always sends an array of content blocks. Anything reading user frames back has to keep
-// coping with both, so the string-ness is asserted rather than assumed.
+// Claude Code 2.1.251 deliberately drops its own set_model breadcrumb echo in headless
+// remote-control mode (older releases wrote a synthetic user frame saying "Set model
+// to..."). The success response is now the engine's model-switch acknowledgement. A
+// permission-mode request and its volunteered status frame form a bounded barrier after
+// it: they prove that the process which accepted set_model remained alive and serviced a
+// later control request, instead of treating a closed pipe or a process exit as success.
 func TestRealClaudeAcceptsASetModel(t *testing.T) {
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
@@ -144,20 +146,31 @@ func TestRealClaudeAcceptsASetModel(t *testing.T) {
 	if len(frames) != 1 || frames[0].subtype != ctrlSetModel {
 		t.Fatalf("the payload resolved to %d frame(s), want exactly one %s", len(frames), ctrlSetModel)
 	}
-	echo := p.awaitFrame("a user frame echoing the model switch", func(m map[string]interface{}) bool {
+
+	barrier, barrierRefused := p.setConfig(`{"permissionMode":"plan"}`, agent)
+	if barrierRefused != nil {
+		t.Fatalf("%s accepted set_model but could not service the following control request: %v%s",
+			p.exe, barrierRefused, p.engineOutput())
+	}
+	if len(barrier) != 1 || barrier[0].subtype != ctrlSetPermissionMode {
+		t.Fatalf("the barrier resolved to %d frame(s), want exactly one %s", len(barrier), ctrlSetPermissionMode)
+	}
+	status := p.awaitFrame(`a system/status frame after the model-switch barrier`, func(m map[string]interface{}) bool {
+		return m["type"] == "system" && m["subtype"] == "status"
+	})
+	if got := status["permissionMode"]; got != "plan" {
+		t.Fatalf("%s answered the post-model barrier but reports permissionMode %v, want %q: %v",
+			p.exe, got, "plan", status)
+	}
+	for _, m := range p.seen {
 		if m["type"] != frameUser {
-			return false
+			continue
 		}
 		msg, _ := m["message"].(map[string]interface{})
-		return msg != nil && strings.Contains(fmt.Sprint(msg["content"]), "Set model to")
-	})
-	msg, _ := echo["message"].(map[string]interface{})
-	content, isString := msg["content"].(string)
-	if !isString {
-		t.Fatalf("the model-switch echo carries content of type %T, want a bare string: %v", msg["content"], echo)
-	}
-	if want := "<local-command-stdout>Set model to " + realClaudeTargetModel + "</local-command-stdout>"; content != want {
-		t.Errorf("the model-switch echo says\n\t%q\nwant\n\t%q", content, want)
+		if msg != nil && strings.Contains(fmt.Sprint(msg["content"]), "Set model to") {
+			t.Fatalf("%s restored the legacy synthetic set_model breadcrumb before the barrier; re-audit the real CLI contract: %v",
+				p.exe, m)
+		}
 	}
 }
 

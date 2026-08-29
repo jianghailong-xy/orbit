@@ -433,6 +433,8 @@ export function planTaskAggregation(
       push(verifiers, task.verifiesTaskId, task);
     }
   }
+  for (const bucket of children.values()) bucket.sort((a, b) => a.id.localeCompare(b.id));
+  for (const bucket of verifiers.values()) bucket.sort((a, b) => a.id.localeCompare(b.id));
 
   // §13.6 SU6's derived half, resolved once for the whole snapshot: a task is obsolete when it was
   // itself retired OR when it checks work that was. Both settle, and computing it here rather than
@@ -457,7 +459,9 @@ export function planTaskAggregation(
   const effective = new Map<string, AggregationTaskStatus>();
 
   // Sorted ids, each expanded bottom-up. Starting mid-tree is harmless: that node's own subtree is
-  // evaluated first, and an ancestor reached later skips everything already settled.
+  // evaluated first, and an ancestor reached later skips everything already settled. Preserve
+  // that insertion order for writes: PostgreSQL's canonical DONE guard must observe descendants
+  // settled before their ancestors, rather than an unrelated UUID ordering.
   for (const root of [...byId.keys()].sort()) {
     for (const id of postOrder(root, children, effective)) {
       const task = byId.get(id)!;
@@ -472,7 +476,7 @@ export function planTaskAggregation(
   }
 
   return {
-    aggregations: [...planned.values()].sort((a, b) => (a.taskId < b.taskId ? -1 : 1)),
+    aggregations: [...planned.values()],
     completionGaps: [...gaps.values()].sort((a, b) => (a.taskId < b.taskId ? -1 : 1)),
     childCounts: childCounts.sort((a, b) => (a.taskId < b.taskId ? -1 : 1)),
     cycleTaskIds,

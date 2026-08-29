@@ -19,6 +19,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { establishCanonicalClosedEvaluationForPgTest } from '../outcome-reconciler/outcome-closed-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -67,7 +68,14 @@ async function base(db: PrismaClient, label: string) {
       passwordHash: 'x',
     },
   });
-  await db.project.create({ data: { id: projectId, ownerId, title: `${label} project` } });
+  await db.project.create({
+    data: {
+      id: projectId,
+      ownerId,
+      title: `${label} project`,
+      goal: `Prove the ${label} criterion automation boundary`,
+    },
+  });
   return { ownerId, projectId };
 }
 
@@ -195,6 +203,9 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
     await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
       actorType: 'USER', actorId: target.ownerId,
     });
+    await establishCanonicalClosedEvaluationForPgTest(
+      db, target.ownerId, target.projectId, 'executable criterion passes', 'executable',
+    );
 
     const run = await acceptance.openRun(
       target.ownerId,
@@ -270,6 +281,9 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
     await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
       actorType: 'USER', actorId: target.ownerId,
     });
+    await establishCanonicalClosedEvaluationForPgTest(
+      db, target.ownerId, target.projectId, 'verification criterion passes', 'verification',
+    );
     let overview = await acceptance.overview(target.ownerId, target.projectId);
     assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.INCONCLUSIVE);
     assert.equal(overview.status, ProjectStatus.OPEN);
@@ -302,16 +316,19 @@ test('HUMAN_SIGNOFF waits for the human criterion conclusion after one set confi
     const confirmation = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
       actorType: 'USER', actorId: target.ownerId,
     });
-    const row = await db.projectAcceptanceCriteriaConfirmation.findUniqueOrThrow({
+    const ratification = await db.projectOwnerRatification.findUniqueOrThrow({
       where: { id: confirmation.id },
     });
-    assert.equal(row.criteriaDigest, confirmation.criteriaDigest);
+    assert.equal(ratification.contractDigest, confirmation.criteriaDigest);
     assert.equal(
-      await db.projectAcceptanceCriteriaConfirmation.count({
+      await db.projectOwnerRatification.count({
         where: { projectId: target.projectId },
       }),
       1,
-      'one standard-set confirmation, not one confirmation per criterion',
+      'one contract ratification, not one approval per criterion',
+    );
+    await establishCanonicalClosedEvaluationForPgTest(
+      db, target.ownerId, target.projectId, 'owner accepts the release tradeoff', 'human',
     );
     assert.equal(
       await db.project.findUniqueOrThrow({ where: { id: target.projectId } }).then((p) => p.status),

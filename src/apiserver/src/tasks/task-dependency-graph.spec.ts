@@ -69,6 +69,10 @@ function graphFixture(
         return (args.where.id.in as string[]).filter((id) => taskRows.has(id)).length;
       },
       findMany: async (args: any) => {
+        // No task in this topology-only fixture is a verifier or verified subject. Answer the
+        // shared verification-epoch reader explicitly instead of treating its OR-shaped query as
+        // the node hydration query below.
+        if (args.select?.verifiesTaskId === true && args.select?.title !== true) return [];
         nodeRefreshWhere = args.where;
         if (!ownsFocus || args.where.ownerId !== OWNER_ID) return [];
         return (args.where.id.in as string[])
@@ -108,6 +112,20 @@ function graphFixture(
           );
         };
         const matchingEdges = edges.filter((edge) => matches(edge, args.where)).slice(0, args.take);
+
+        // The shared dependency-state reader asks for the stored edge plus the current canonical
+        // prerequisite attempt. Its nested shape is distinct from the topology walk below; a raw
+        // StoredEdge here would make the fixture claim the joined prerequisite was undefined.
+        if (args.select.dependsOnTask?.select?.status && !args.select.task) {
+          return matchingEdges.map((edge) => ({
+            ...edge,
+            dependsOnTask: {
+              status: taskRows.get(edge.dependsOnTaskId)?.status ?? TaskStatus.OPEN,
+              supersededByTaskId: null,
+              terminalReason: null,
+            },
+          }));
+        }
 
         // Traversal hydrates both endpoints. The induced-edge query below selects ids only.
         if (args.select.task?.select?.id && args.select.dependsOnTask?.select?.id) {
@@ -528,7 +546,7 @@ test('multi-level graph deduplicates diamond nodes and orients every edge prereq
   // One traversal query per breadth-first layer, not one per task.
   assert.deepEqual(fixture.traversalBatches, [[FOCUS], [TASK_B, TASK_C], [TASK_D, TASK_E]]);
   assert.deepEqual(fixture.traversalTakes, [401, 401, 401]);
-  assert.equal(fixture.stateBatches.length, 4);
+  assert.equal(fixture.stateBatches.length, 1, 'dependency state is derived in one bounded edge batch');
   assert.ok(
     fixture.stateBatches.every(
       (batch) =>

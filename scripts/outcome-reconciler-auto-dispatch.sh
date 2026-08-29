@@ -112,15 +112,18 @@ MIGRATION_COUNT="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc
 LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
   'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
   | tr -d '[:space:]')"
+REQUIRED_MIGRATION_APPLIED="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+  "SELECT count(*) FROM _prisma_migrations WHERE migration_name='0205_task_auto_dispatch_obligation' AND finished_at IS NOT NULL" \
+  | tr -d '[:space:]')"
 [ "$MIGRATION_COUNT" -gt 0 ] || {
   echo '!! zero applied migrations is forbidden' >&2
   exit 1
 }
-[ "$LAST_MIGRATION" = '0205_task_auto_dispatch_obligation' ] || {
-  echo "!! migration frontier is $LAST_MIGRATION, expected 0205_task_auto_dispatch_obligation" >&2
+[ "$REQUIRED_MIGRATION_APPLIED" = '1' ] || {
+  echo "!! required migration 0205_task_auto_dispatch_obligation is not applied exactly once" >&2
   exit 1
 }
-echo "==> auto-dispatch: migrations=$MIGRATION_COUNT system_identifier=$SYSTEM_IDENTIFIER"
+echo "==> auto-dispatch: migrations=$MIGRATION_COUNT frontier=$LAST_MIGRATION system_identifier=$SYSTEM_IDENTIFIER"
 
 echo '==> auto-dispatch: run immediate/sweep/rolling/concurrency/refusal matrix'
 set +e
@@ -134,6 +137,7 @@ AUTO_DISPATCH_TARGET_SHA="$TARGET_SHA" \
 AUTO_DISPATCH_STARTED_AT="$STARTED_AT" \
 AUTO_DISPATCH_MIGRATION_COUNT="$MIGRATION_COUNT" \
 AUTO_DISPATCH_LAST_MIGRATION="$LAST_MIGRATION" \
+AUTO_DISPATCH_REQUIRED_MIGRATION_APPLIED="$REQUIRED_MIGRATION_APPLIED" \
 timeout -k 10 "$TIMEOUT_SECONDS" node --test --test-concurrency=1 --test-reporter=tap \
   "$REPO/test/outcome-reconciler-auto-dispatch.test.mjs" 2>&1 | tee "$TAP"
 TEST_RC=${PIPESTATUS[0]}

@@ -18,8 +18,11 @@ function serviceWith(prisma: unknown): TasksService {
  */
 function recordingQueryRaw(rows: (sql: string) => unknown[]) {
   const statements: string[] = [];
-  const $queryRaw = async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-    const sql = Prisma.sql(strings, ...(bound as never[])).text;
+  const $queryRaw = async (query: Prisma.Sql | TemplateStringsArray, ...bound: unknown[]) => {
+    const rendered = Array.isArray(query)
+      ? Prisma.sql(query as unknown as TemplateStringsArray, ...(bound as never[]))
+      : query as Prisma.Sql;
+    const sql = rendered.text;
     statements.push(sql);
     return rows(sql);
   };
@@ -65,7 +68,8 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
   ];
   let findManyArgs: any;
   const countWheres: any[] = [];
-  const raw = recordingQueryRaw(() => [{ count: 3 }]);
+  const raw = recordingQueryRaw((sql) =>
+    sql.includes('count(*)') ? [{ count: 3 }] : rows.map(({ id }) => ({ id })));
   const service = serviceWith({
     $queryRaw: raw.$queryRaw,
     task: {
@@ -121,10 +125,12 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
     queued: 2,
     runnable: 3,
   });
-  // filtered total + running + queued stay Prisma counts; the runnable badge is the one raw query.
+  // Filtered total + running + queued stay Prisma counts. Raw SQL serves the scope-wide runnable
+  // badge and the bounded per-row runnable overlay; neither is inferred from Task.status.
   assert.equal(countWheres.length, 3);
-  assert.equal(raw.statements.length, 1);
-  assert.match(raw.statements[0], /count\(\*\)::int/);
+  assert.equal(raw.statements.length, 2);
+  assert.equal(raw.statements.filter((sql) => /count\(\*\)::int/.test(sql)).length, 1);
+  assert.equal(raw.statements.filter((sql) => /t\.id IN/.test(sql)).length, 1);
 });
 
 test('runnable filter is applied before pagination with the same rules as the Run action', async () => {
@@ -155,7 +161,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     );
     assert.match(
       sql,
-      /NOT EXISTS \([\s\S]*FROM task_dependency dep[\s\S]*WITH RECURSIVE chain/,
+      /NOT EXISTS \([\s\S]*FROM task_dependency dep[\s\S]*task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
     );
     assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
     assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);

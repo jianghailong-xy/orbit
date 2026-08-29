@@ -24,7 +24,10 @@ const (
 // can be observed.
 func TestHostSetupChildRunsMain(t *testing.T) {
 	if os.Getenv(hostSetupChildEnv) != "1" {
-		t.Skip("child half of TestHostSetupWithoutRootExitsOne")
+		// The assertion lives in TestHostSetupWithoutRootExitsOne, which re-executes
+		// this entry point with a genuinely unprivileged uid. A normal suite pass has
+		// no child payload to execute and is not an untested platform condition.
+		return
 	}
 	os.Args = []string{"orbit", "host", "setup", "--server", "https://orbit.example.com"}
 	main()

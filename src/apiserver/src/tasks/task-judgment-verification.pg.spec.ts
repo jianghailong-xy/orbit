@@ -93,7 +93,7 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
         provider: 'codex',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
+        startsTaskWork: false,
       },
     });
 
@@ -392,7 +392,7 @@ suite('new VERIFICATION evidence retires the old carrier and only the new reques
         provider: 'codex',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
+        startsTaskWork: false,
       },
     });
 

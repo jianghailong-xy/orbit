@@ -23,6 +23,7 @@ import {
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
+import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -211,7 +212,15 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
 
   // N24: once the task's declared criterion is already satisfied, a later evidence revision is
   // still retained but neither the old nor the new request remains actionable.
-  await db.task.update({ where: { id: f.taskId }, data: { status: TaskStatus.DONE } });
+  await new TasksService(
+    db as unknown as PrismaService,
+    {} as never,
+    { publishForUser() {} } as never,
+  ).signoff(f.ownerId, f.taskId, {
+    requestId: changed.judgmentRequest!.id,
+    evidenceDigest: changed.evidenceDigest,
+    evidence: 'Owner reviewed the current N24 evidence revision.',
+  });
   const terminalEvidence = await service.submit(f.ownerId, f.taskId, actor, {
     sourceSessionId: f.sessionId,
     idempotencyKey: 'turn-3-after-done',
@@ -228,8 +237,8 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   const terminalAudit = await service.list(f.ownerId, f.taskId);
   assert.deepEqual(terminalAudit.map((row) => row.revision), ['1', '2', '3']);
   assert.deepEqual(terminalAudit[2].evidence, terminalEvidence.evidence);
-  assert.equal(terminalAudit[1].judgmentRequest!.status, 'SUPERSEDED');
-  assert.equal(terminalAudit[1].judgmentRequest!.supersessionRule, 'TASK_ALREADY_DONE');
+  assert.equal(terminalAudit[1].judgmentRequest!.status, 'DECIDED');
+  assert.equal(terminalAudit[1].judgmentRequest!.decision, 'PASS');
   assert.equal(terminalAudit[2].judgmentRequest!.status, 'SUPERSEDED');
   assert.equal(await db.taskJudgmentRequest.count({
     where: { taskId: f.taskId, status: 'OPEN' },

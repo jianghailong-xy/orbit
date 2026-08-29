@@ -7,13 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import {
-  projectAcceptanceConfirmationPath,
   projectAcceptanceOverviewPath,
   projectAcceptanceReviewPath,
   projectAcceptanceVerdictPath,
   type ProjectAcceptanceOverview,
   type ProjectAcceptanceRun,
 } from '../lib/projectAcceptance';
+import { ownerRatificationReviewPath } from '../lib/outcomeSurfaces';
 import { ProjectAcceptanceReviewPage } from './ProjectAcceptanceReviewPage';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -289,8 +289,8 @@ describe('project acceptance review', () => {
       path === projectAcceptanceOverviewPath(PROJECT) && !options?.method).length).toBeGreaterThan(1);
   });
 
-  it('confirms the standard set once before enabling human criteria', async () => {
-    let current: ProjectAcceptanceOverview = {
+  it('routes an unratified contract to the separate Owner Ratification authority flow', async () => {
+    const current: ProjectAcceptanceOverview = {
       ...overview,
       criteriaConfirmation: {
         confirmed: false,
@@ -299,10 +299,6 @@ describe('project acceptance review', () => {
       },
     };
     apiMock.mockImplementation((path: string, options?: { method?: string }) => {
-      if (path === projectAcceptanceConfirmationPath(PROJECT) && options?.method === 'POST') {
-        current = { ...overview };
-        return Promise.resolve({ current: true }) as Promise<never>;
-      }
       if (path === projectAcceptanceOverviewPath(PROJECT)) {
         return Promise.resolve(current) as Promise<never>;
       }
@@ -310,17 +306,12 @@ describe('project acceptance review', () => {
     });
     await mount();
 
-    expect(container.textContent).toContain('先确认这套标准算数');
+    expect(container.textContent).toContain('当前项目合约尚未 Owner Ratification');
+    expect(container.textContent).toContain('Owner Ratification 是项目合约的价值与授权决定');
     expect(submitButton().disabled).toBe(true);
-    const confirmation = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('确认当前标准集')) as HTMLButtonElement;
-    await act(async () => confirmation.click());
-    await flush();
-    await flush();
-
-    expect(apiMock).toHaveBeenCalledWith(projectAcceptanceConfirmationPath(PROJECT), {
-      method: 'POST',
-    });
-    expect(container.textContent).toContain('当前标准集已确认');
+    const ratificationLink = [...container.querySelectorAll('a')].find((link) =>
+      link.textContent?.includes('前往 Owner Ratification')) as HTMLAnchorElement;
+    expect(ratificationLink.getAttribute('href')).toBe(ownerRatificationReviewPath(PROJECT));
+    expect(apiMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
   });
 });

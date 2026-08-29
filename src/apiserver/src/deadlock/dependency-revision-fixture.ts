@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Client } from 'pg';
 
+import { ratifyProjectWithPgClientForTest } from '../projects/project-ratification-test-helper';
 import { historicalTouchSql } from './pre-0132-dispatch-touch';
 
 /**
@@ -94,9 +95,20 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
       [ids.workspaceId, ids.ownerId, `${ids.label}-workspace`, ids.runnerId],
     );
     await client.query(
-      `INSERT INTO "project" ("id", "owner_id", "title", "coordinator_enabled", "updated_at")
-       VALUES ($1::uuid, $2::uuid, $3, true, CURRENT_TIMESTAMP)`,
+      `INSERT INTO "project" ("id", "owner_id", "title", "goal", "coordinator_enabled", "updated_at")
+       VALUES ($1::uuid, $2::uuid, $3, 'prove the dependency dispatch fence', true, CURRENT_TIMESTAMP)`,
       [ids.projectId, ids.ownerId, `${ids.label}-project`],
+    );
+    await client.query(
+      `INSERT INTO "project_acceptance_criterion_definition" (
+         "id", "project_id", "ordinal", "text", "verification_method",
+         "completion_criterion", "content_hash", "semantic_hash", "evaluation_plan_hash"
+       ) VALUES (
+         gen_random_uuid(), $1::uuid, 1, 'dependency dispatch remains fenced',
+         'exercise both observed PostgreSQL commit orders', 'HUMAN_SIGNOFF',
+         repeat('a', 64), repeat('b', 64), repeat('c', 64)
+       )`,
+      [ids.projectId],
     );
     await client.query(
       `INSERT INTO "project_runtime" ("project_id", "fencing_token", "updated_at")
@@ -121,6 +133,7 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
       `UPDATE "task" SET "assignee_id" = $2::uuid WHERE "id" = $1::uuid`,
       [ids.dependentTaskId, ids.workspaceId],
     );
+    await ratifyProjectWithPgClientForTest(client, ids.ownerId, ids.projectId, ids.label);
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK').catch(() => undefined);

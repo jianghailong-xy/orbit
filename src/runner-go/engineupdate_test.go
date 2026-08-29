@@ -367,6 +367,10 @@ func TestEngineCommandTimesOutDespiteForkedChild(t *testing.T) {
 // upgrade` under a non-root runner, against a root-owned npm prefix, wedged for the whole
 // ceiling on every pass and reported a failure that retrying reproduces forever.
 func TestEngineBinaryUpdatable(t *testing.T) {
+	if target := os.Getenv(engineUnwritableChildEnv); target != "" {
+		assertEngineBinaryNotUpdatable(t, target)
+		return
+	}
 	dir := t.TempDir()
 
 	own := filepath.Join(dir, "mine")
@@ -394,18 +398,11 @@ func TestEngineBinaryUpdatable(t *testing.T) {
 		t.Fatal("a missing binary should not read as 'not yours'")
 	}
 
-	if os.Geteuid() == 0 {
-		// Root passes every mode check, which is correct — a root runner really can replace it.
-		// The unwritable case needs a non-root process to mean anything.
-		t.Skip("running as root; the unwritable case is meaningless here")
-	}
 	theirs := filepath.Join(dir, "theirs")
 	if err := os.WriteFile(theirs, []byte("#!/bin/sh\n"), 0o555); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := engineBinaryUpdatable(theirs); ok {
-		t.Fatal("a binary this user cannot write should not be attempted")
-	}
+	assertEngineBinaryNotUpdatableAsRunner(t, theirs)
 }
 
 func TestRunnerUserLabelAlwaysNamesSomething(t *testing.T) {

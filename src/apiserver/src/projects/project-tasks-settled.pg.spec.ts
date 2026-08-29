@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import { TasksService } from '../tasks/tasks.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -181,14 +182,20 @@ async function settleEveryProjectTask(stack: Stack, target: Fixture): Promise<vo
     });
     if (unfinished.length === 0) return;
     for (const task of unfinished) {
-      await stack.tasks.update(
-        target.ownerId,
-        task.id,
-        {
-          status: TaskStatus.DONE,
-          ...(task.verifiesTaskId ? { verdict: TaskVerdict.PASS } : {}),
-        } as never,
-      );
+      if (task.verifiesTaskId) {
+        await stack.tasks.update(
+          target.ownerId,
+          task.id,
+          { status: TaskStatus.DONE, verdict: TaskVerdict.PASS } as never,
+        );
+      } else {
+        await completeHumanTaskForPgTest(
+          stack.db,
+          target.ownerId,
+          task.id,
+          `project-tasks-settled:${task.id}`,
+        );
+      }
     }
   }
   assert.fail('verification tasks did not settle within ten derivation rounds');
@@ -200,10 +207,11 @@ test('last terminal task wakes once, then the judgment reuses and concludes one 
     try {
       const target = await fixture(stack, 't7-close', 2);
 
-      await stack.tasks.update(
+      await completeHumanTaskForPgTest(
+        stack.db,
         target.ownerId,
         target.taskIds[0],
-        { status: TaskStatus.DONE } as never,
+        'project-tasks-settled:first-sibling',
       );
       assert.equal(
         await stack.db.projectCoordinatorWake.count({ where: { projectId: target.projectId } }),

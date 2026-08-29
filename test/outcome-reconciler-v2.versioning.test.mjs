@@ -778,8 +778,14 @@ test('contract A to B to A never reactivates the old ratification, CTA or idempo
     request: initial.decisionRequest,
     idempotencyKey: initialKey,
   });
-  assert.deepEqual(replay.ok, false);
-  assert.equal(replay.code, 'OWNER_DECISION_STALE');
+  assert.equal(replay.ok, true,
+    'a transport retry must recover the exact committed historical receipt');
+  assert.equal(replay.duplicate, true);
+  assert.equal(replay.contractDigest, initial.contractDigest);
+  assert.equal(replay.currentContractDigest, current.contractDigest);
+  assert.equal(replay.ratified, true, 'the recorded historical decision remains APPROVE');
+  assert.equal(replay.effectiveNow, false,
+    'recovering an old approval receipt must never authorize the current semantic epoch');
 
   await pool.query(
     `UPDATE "project_owner_decision_request" SET "expires_at"=now()-interval '1 second'

@@ -278,7 +278,8 @@ function validateRegression(regression, targetSha) {
   assert.equal(regression.fixture.productionWrites, false);
   assert.equal(regression.fixture.manualProductionStart, false);
   assert.match(regression.postgres.database, /^orbit_auto_dispatch_[a-z0-9_]+$/);
-  assert.equal(regression.postgres.lastMigration, '0205_task_auto_dispatch_obligation');
+  assert.equal(regression.postgres.requiredMigrationApplied, true);
+  assert.match(regression.postgres.lastMigration, /^\d{4}_[a-z0-9_]+$/);
   const started = Date.parse(regression.observationWindow.startedAt);
   const finished = Date.parse(regression.observationWindow.finishedAt);
   assert.ok(Number.isFinite(started) && Number.isFinite(finished) && finished >= started);

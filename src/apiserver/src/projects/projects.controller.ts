@@ -121,17 +121,17 @@ export class ProjectsController {
 
   /** Decide an irreducibly owner-shaped child request and resume the same autonomous remediation.
    * This does not sign off a Task and does not close or take ownership of the parent incident. */
-  @Post(':id/completion-ack/owner-decisions/:requestId/decision')
+  @Post(':id/completion-ack/owner-decisions/:decisionRequestId/decision')
   decideCompletionAckOwnerDecision(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Param('requestId', PublicIdPipe) requestId: string,
+    @Param('decisionRequestId', PublicIdPipe) decisionRequestId: string,
     @Body() dto: DecideCompletionAckOwnerDecisionDto,
   ) {
     return this.projects.decideCompletionAckOwnerDecision(
       user.userId,
       id,
-      requestId,
+      decisionRequestId,
       dto,
     );
   }

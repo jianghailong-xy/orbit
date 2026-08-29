@@ -1609,6 +1609,13 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						// the turn was stopped before anything had agreed to stop it — which
 						// is precisely the claim an unconfirmed interrupt cannot make.
 						emit(evInterrupt, map[string]interface{}{"requestId": w.id})
+					case w.resp.Subtype == ctrlError:
+						// An explicit refusal is a completed protocol answer, even if the CLI
+						// writes its result and exits immediately afterwards. Process teardown
+						// may cancel procCtx before this goroutine is scheduled; it must not erase
+						// an answer the person needs to know their stop did not take.
+						logln("interrupt", w.id, "for", job.SessionID, "failed:", err)
+						emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
 					case procCtx.Err() != nil:
 						// The process is going away; its teardown owns that account.
 						logln("interrupt", w.id, "for", job.SessionID, "abandoned:", err)

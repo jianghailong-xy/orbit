@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [tapPath, evidencePath, outputPath] = process.argv.slice(2);
@@ -12,6 +12,9 @@ const tap = readFileSync(path.resolve(tapPath), 'utf8');
 const evidence = JSON.parse(readFileSync(path.resolve(evidencePath), 'utf8'));
 const targetSha = process.env.AUTO_DISPATCH_TARGET_SHA;
 const fixtureCleaned = process.env.AUTO_DISPATCH_FIXTURE_CLEANED;
+const expectedMigrationFrontier = readdirSync(path.join(repo, 'src/apiserver/prisma/migrations'), {
+  withFileTypes: true,
+}).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort().at(-1);
 
 function counter(name) {
   const match = tap.match(new RegExp(`^# ${name} (\\d+)$`, 'm'));
@@ -56,13 +59,16 @@ assert.deepEqual(
     required: evidence.postgres.required,
     connected: evidence.postgres.connected,
     lastMigration: evidence.postgres.lastMigration,
+    requiredMigrationApplied: evidence.postgres.requiredMigrationApplied,
   },
   {
     required: true,
     connected: true,
-    lastMigration: '0205_task_auto_dispatch_obligation',
+    lastMigration: expectedMigrationFrontier,
+    requiredMigrationApplied: true,
   },
 );
+assert.match(evidence.postgres.lastMigration, /^\d{4}_[a-z0-9_]+$/);
 assert.match(evidence.postgres.version, /^1[6-9]\./);
 assert.match(evidence.postgres.systemIdentifier, /^[0-9]+$/);
 assert.ok(evidence.postgres.migrations > 0, 'zero migration samples are forbidden');

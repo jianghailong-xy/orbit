@@ -52,6 +52,7 @@ before(async () => {
       inbox_lease_owner uuid,
       provider text NOT NULL DEFAULT 'claude',
       provider_builtin boolean NOT NULL DEFAULT true,
+      task_id uuid,
       status text NOT NULL,
       cancel_requested_at timestamptz
     );

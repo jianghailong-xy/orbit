@@ -30,6 +30,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -45,6 +46,7 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ratifyProjectForPgTest } from './project-ratification-test-helper';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 
@@ -120,14 +122,15 @@ async function settleEveryProjectTask(
     });
     if (unfinished.length === 0) return;
     for (const task of unfinished) {
-      await stack.tasks.update(
-        ownerId,
-        task.id,
-        {
-          status: TaskStatus.DONE,
-          ...(task.verifiesTaskId ? { verdict: TaskVerdict.PASS } : {}),
-        } as never,
-      );
+      if (task.verifiesTaskId) {
+        await stack.tasks.update(
+          ownerId,
+          task.id,
+          { status: TaskStatus.DONE, verdict: TaskVerdict.PASS } as never,
+        );
+      } else {
+        await completeHumanTaskForPgTest(stack.db, ownerId, task.id, `T8-${task.id}`);
+      }
     }
   }
   assert.fail('the dynamically grown T8 project did not settle within twelve rounds');
@@ -211,9 +214,11 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
     );
     assert.equal(project.coordinatorEnabled, true);
     assert.equal(project.coordinatorWorkspaceId, workspaceId);
+    await ratifyProjectForPgTest(db, ownerId, project.id, 'T8 integrated replay');
 
-    // Create the edge before releasing it, then commit the release without the instant trigger.
-    // T1's backstop is the only dispatcher in this scenario.
+    // Create the edge before releasing it. The production signoff service owns the instant
+    // dependency trigger; the explicit sweep immediately afterwards proves that its backstop is
+    // idempotent with the already-committed dispatch receipt.
     const prerequisite = await stack.tasks.create(ownerId, {
       title: 'T8 prerequisite',
       projectId: project.id,
@@ -227,10 +232,13 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       autoRunWhenReady: true,
       dependsOnTaskIds: [prerequisite.id],
     });
-    await db.task.update({
-      where: { id: prerequisite.id },
-      data: { status: TaskStatus.DONE },
-    });
+    await completeHumanTaskForPgTest(
+      db,
+      ownerId,
+      prerequisite.id,
+      'T8-prerequisite',
+      stack.tasks,
+    );
     await (stack.tasks as unknown as { reconcileReadyTasks(): Promise<void> })
       .reconcileReadyTasks();
 

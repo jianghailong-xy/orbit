@@ -7,6 +7,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -381,7 +382,7 @@ test(
 
       assert.equal(await settledFact(), null, 'a project with open tasks has not settled');
 
-      await db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
+      await completeHumanTaskForPgTest(db, ownerId, taskId, 'coordinator-wake-settled');
       await db.task.update({ where: { id: other }, data: { status: TaskStatus.CANCELLED } });
 
       const first = (await settledFact())!;
@@ -394,8 +395,18 @@ test(
       assert.equal(unchanged.subjectVersion, first.subjectVersion);
       assert.equal((await wakes.claim(unchanged, ALLOW)).outcome, 'ALREADY_AWAKE');
 
-      // Reopening a task and settling it to a DIFFERENT status is a different world, and wakes.
-      await db.task.update({ where: { id: other }, data: { status: TaskStatus.DONE } });
+      // Adding and canonically settling another task is a different task-set world, and wakes.
+      const later = await db.task.create({
+        data: {
+          ownerId,
+          projectId,
+          title: 'a later settled task',
+          creatorType: CreatorType.USER,
+          creatorId: ownerId,
+          status: TaskStatus.OPEN,
+        },
+      });
+      await completeHumanTaskForPgTest(db, ownerId, later.id, 'coordinator-wake-later');
       const moved = (await settledFact())!;
       assert.notEqual(moved.subjectVersion, first.subjectVersion);
       assert.equal((await wakes.claim(moved, ALLOW)).outcome, 'WOKEN');

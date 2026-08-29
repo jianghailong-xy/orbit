@@ -62,6 +62,8 @@ const evidence = {
     user: null,
     migrations: Number(process.env.AUTO_DISPATCH_MIGRATION_COUNT ?? 0),
     lastMigration: process.env.AUTO_DISPATCH_LAST_MIGRATION ?? null,
+    requiredMigrationApplied:
+      process.env.AUTO_DISPATCH_REQUIRED_MIGRATION_APPLIED === '1',
   },
   observationWindow: {
     startedAt: process.env.AUTO_DISPATCH_STARTED_AT ?? new Date().toISOString(),
@@ -146,11 +148,10 @@ before(async () => {
   assert.equal(identity.systemIdentifier, expectedSystemIdentifier);
   assert.match(identity.version, /^1[6-9]\./, 'PostgreSQL 16+ is required');
   assert.ok(evidence.postgres.migrations > 0, 'zero applied migrations is forbidden');
-  assert.equal(
-    evidence.postgres.lastMigration,
-    '0205_task_auto_dispatch_obligation',
-    'the automatic-dispatch migration was not the deployed frontier',
-  );
+  assert.equal(evidence.postgres.requiredMigrationApplied, true,
+    'the automatic-dispatch migration was not applied exactly once');
+  assert.match(evidence.postgres.lastMigration, /^\d{4}_[a-z0-9_]+$/,
+    'the full migration frontier was not recorded');
   Object.assign(evidence.postgres, {
     connected: true,
     version: identity.version,
@@ -243,6 +244,7 @@ async function ratify(world, suffix = randomUUID()) {
       projectId: world.projectId,
       ownerId: world.ownerId,
       contractDigest: contract.contractDigest,
+      contractRevision: contract.contractRevision,
       evaluationPlanDigestAtDecision: contract.evaluationPlanDigest,
       source: 'OWNER',
       ratifiedByType: 'OWNER',

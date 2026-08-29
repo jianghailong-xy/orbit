@@ -83,7 +83,7 @@ const SRC = path.resolve(__dirname, '../../src');
 /** Nothing waits in these tests; the backoff itself is `transaction-retry.spec.ts`'s subject. */
 const NO_WAIT = { sleep: async () => undefined };
 
-for (const unit of TRANSACTION_UNITS) {
+for (const unit of TRANSACTION_UNITS.filter((candidate) => candidate.shape === 'TX_RETRIED')) {
   test(`${unit.at} · commits after one 40P01`, async () => {
     const { runner, clients } = flaky(1, deadlock);
     const seen: object[] = [];
@@ -146,12 +146,17 @@ test('the attempt budgets the inventory declares are the ones the code asks for'
   // is enough: a file only contains `maxAttempts` when a unit in it is capped, and the inventory
   // has to name that unit for the sets to match.
   const capped = new Set(
-    TRANSACTION_UNITS.filter((unit) => unit.attempts !== DEFAULT_TRANSACTION_MAX_ATTEMPTS).map(
+    TRANSACTION_UNITS.filter(
+      (unit) => unit.shape === 'TX_RETRIED'
+        && unit.attempts !== DEFAULT_TRANSACTION_MAX_ATTEMPTS,
+    ).map(
       (unit) => unit.at.split('#')[0],
     ),
   );
   const asks = new Set(
-    [...new Set(TRANSACTION_UNITS.map((unit) => unit.at.split('#')[0]))].filter((rel) =>
+    [...new Set(TRANSACTION_UNITS
+      .filter((unit) => unit.shape === 'TX_RETRIED')
+      .map((unit) => unit.at.split('#')[0]))].filter((rel) =>
       /maxAttempts:/.test(readFileSync(path.join(SRC, rel), 'utf8')),
     ),
   );
@@ -169,11 +174,17 @@ test('a unit that declares a non-default isolation really asks for it', () => {
   for (const unit of TRANSACTION_UNITS) {
     if (!unit.isolation) continue;
     const [rel] = unit.at.split('#');
+    const expected = unit.isolation === 'SERIALIZABLE'
+      ? /isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/
+      : /isolationLevel: Prisma\.TransactionIsolationLevel\.RepeatableRead/;
     assert.match(
       readFileSync(path.join(SRC, rel), 'utf8'),
-      /isolationLevel: Prisma\.TransactionIsolationLevel\.RepeatableRead/,
+      expected,
       `${unit.at} declares ${unit.isolation} and ${rel} does not ask for it`,
     );
-    assert.equal(unit.isolation, 'REPEATABLE READ', `${unit.at} declares an isolation nothing here sets`);
+    assert.ok(
+      unit.isolation === 'REPEATABLE READ' || unit.isolation === 'SERIALIZABLE',
+      `${unit.at} declares an isolation nothing here sets`,
+    );
   }
 });

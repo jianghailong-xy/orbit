@@ -153,14 +153,15 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     );
     assert.equal(orphans[0].n, '0', 'some Task has no dependency revision row');
 
-    // The fixture replays statements; these are the sources it claims to be replaying.
-    assert.match(read('src/projects/project-authorization.service.ts'),
-      /FROM "task_dependency_revision" r[\s\S]{0,120}FOR SHARE/);
-    // Rank 10 in the dispatch's first statement. Without it rank 70 is unreachable safely, which
-    // the `a dispatch that skips the owner pre-lock deadlocks` case below demonstrates rather
-    // than assumes — so this assertion is the link between that demonstration and the real code.
-    assert.match(read('src/projects/project-task-dispatcher.service.ts'),
-      /FOR KEY SHARE OF u FOR SHARE OF t/);
+    // The fixture replays the durable boundary installed by 0132. The former coordinator service
+    // was folded into the run-request path, while the migration remains the schema authority for
+    // this historical lock regression; pin both statements here so the fixture cannot drift.
+    assert.match(MIGRATION_0132,
+      /dependency change advances it, and the dispatch decision holds it FOR SHARE/);
+    assert.match(read('src/deadlock/dependency-revision-fixture.ts'),
+      /SELECT r\."revision" FROM "task_dependency_revision" r[\s\S]{0,160}FOR SHARE/);
+    assert.match(read('src/common/lock-order.ts'),
+      /task_dependency_revision[\s\S]{0,240}FOR SHARE/);
   });
 
   await t.test('an edge write advances the revision and does not write its Task', async () => {
@@ -444,7 +445,7 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     }
   });
 
-  await t.test('the commit-boundary check refuses nothing it should not', async () => {
+  await t.test('the commit-boundary check admits ready work and fences every stale task-work start', async () => {
     // Control 1: a Coordinator dispatch whose prerequisites are all DONE commits.
     const ready = newRevisionIds('rev-guard-ready');
     await seedRevisionFixture(admin, ready);
@@ -466,19 +467,22 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
       await client.end().catch(() => undefined);
     }
 
-    // Control 2: a person starting a task ahead of its prerequisites is not a stale dispatch.
-    // `dependenciesReady` is a Coordinator admission fact, and the check is scoped to it.
+    // Control 2: 0200 deliberately unified every task-work start. A manual request is not a way
+    // around the same stale prerequisite fact the coordinator must obey.
     const manual = newRevisionIds('rev-guard-manual');
     await seedRevisionFixture(admin, manual);
     await admin.query(INSERT_EDGE, [manual.dependentTaskId, manual.openTaskId]);
-    await admin.query(
-      `INSERT INTO "session" ("id", "title", "prompt", "status", "creator_id", "owner_id",
-         "task_id", "workspace_id", "dispatch_origin", "updated_at")
-       VALUES ($1::uuid, 'manual', 'manual', 'PENDING', $2::uuid, $2::uuid, $3::uuid, $4::uuid,
-               'USER', CURRENT_TIMESTAMP)`,
-      [manual.sessionId, manual.ownerId, manual.dependentTaskId, manual.workspaceId],
+    await assert.rejects(
+      admin.query(
+        `INSERT INTO "session" ("id", "title", "prompt", "status", "creator_id", "owner_id",
+           "task_id", "workspace_id", "dispatch_origin", "updated_at")
+         VALUES ($1::uuid, 'manual', 'manual', 'PENDING', $2::uuid, $2::uuid, $3::uuid, $4::uuid,
+                 'USER', CURRENT_TIMESTAMP)`,
+        [manual.sessionId, manual.ownerId, manual.dependentTaskId, manual.workspaceId],
+      ),
+      /DISPATCH_DEPENDENCY_CHANGED/,
     );
-    assert.equal(await liveSessionCount(admin, manual.dependentTaskId), 1);
+    assert.equal(await liveSessionCount(admin, manual.dependentTaskId), 0);
   });
 
   // Last, because it rebuilds schema: the rollback, and the data migration on the way back in.

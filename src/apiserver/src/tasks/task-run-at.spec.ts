@@ -36,8 +36,11 @@ function serviceWith(prisma: unknown, sessions: unknown = {}, realtime: unknown 
 /** Renders the tagged template PostgreSQL would get, like task-labels.spec's recorder. */
 function recordingQueryRaw(rows: (sql: string) => unknown[]) {
   const statements: string[] = [];
-  const $queryRaw = async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-    const sql = Prisma.sql(strings, ...(bound as never[])).text;
+  const $queryRaw = async (query: Prisma.Sql | TemplateStringsArray, ...bound: unknown[]) => {
+    const rendered = Array.isArray(query)
+      ? Prisma.sql(query as unknown as TemplateStringsArray, ...(bound as never[]))
+      : query as Prisma.Sql;
+    const sql = rendered.text;
     statements.push(sql);
     return rows(sql);
   };
@@ -150,7 +153,7 @@ test('a prerequisite finishing does not start a task scheduled for later', async
   const executed: string[] = [];
   const future = new Date(Date.now() + 60 * 60_000);
   const service = serviceWith({
-    taskDependency: { findMany: async () => [{ taskId: TASK_ID }, { taskId: OTHER_TASK_ID }] },
+    $queryRaw: async () => [{ taskId: TASK_ID }, { taskId: OTHER_TASK_ID }],
     task: {
       findMany: async () => [
         {
@@ -179,7 +182,10 @@ test('a prerequisite finishing does not start a task scheduled for later', async
       [TASK_ID, 'READY'],
       [OTHER_TASK_ID, 'READY'],
     ]);
-  (service as any).execute = async (_o: string, id: string) => void executed.push(id);
+  (service as any).dispatchReadyTask = async (_o: string, id: string) => {
+    executed.push(id);
+    return { ok: true, sessionId: `session-${id}` };
+  };
 
   await (service as any).triggerDependents(OWNER_ID, 'done-task');
 
@@ -192,7 +198,7 @@ test('a prerequisite finishing does not start a task scheduled for later', async
 test('a dependent whose schedule has already passed is started by its prerequisite', async () => {
   const executed: string[] = [];
   const service = serviceWith({
-    taskDependency: { findMany: async () => [{ taskId: TASK_ID }] },
+    $queryRaw: async () => [{ taskId: TASK_ID }],
     task: {
       findMany: async () => [
         {
@@ -211,7 +217,10 @@ test('a dependent whose schedule has already passed is started by its prerequisi
   // say which clause refused it. One satisfied prerequisite reduces to the READY this stubbed.
   (service as any).dependencyFactsFor = async () =>
     new Map([[TASK_ID, [{ status: TaskStatus.DONE }]]]);
-  (service as any).execute = async (_o: string, id: string) => void executed.push(id);
+  (service as any).dispatchReadyTask = async (_o: string, id: string) => {
+    executed.push(id);
+    return { ok: true, sessionId: `session-${id}` };
+  };
 
   await (service as any).triggerDependents(OWNER_ID, 'done-task');
 
@@ -284,7 +293,11 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.dispatch_hold = false/, 'a paused list must hold a schedule back');
   assert.match(sql, /a\.runner_id IS NOT NULL/, 'no runner, no dispatch');
-  assert.match(sql, /WITH RECURSIVE chain/, 'an unfinished prerequisite blocks — through its chain');
+  assert.match(
+    sql,
+    /task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+    'an unfinished prerequisite blocks — through its canonical chain tail',
+  );
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.
   assert.match(sql, /ORDER BY t\.run_at ASC, t\.id ASC/);

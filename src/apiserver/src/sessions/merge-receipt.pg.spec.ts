@@ -31,6 +31,7 @@ import { TaskCheckpointService } from '../projects/task-checkpoint.service';
 import { ConvergenceLedgerService } from '../projects/convergence-ledger.service';
 import { mergeReceiptIdempotencyKey } from './merge-receipt';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -64,6 +65,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   });
   await db.project.create({ data: { id: projectId, ownerId, title: label } });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
+  await ratifyProjectForPgTest(db, ownerId, projectId, label);
   await db.task.create({
     data: { id: taskId, ownerId, title: label, creatorType: 'USER', creatorId: ownerId, projectId },
   });
@@ -80,7 +82,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
 async function emptyWorld(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
   await client.query(`
-    TRUNCATE "session_merge_receipt", "project_event", "project_decision", "project_action",
+    TRUNCATE "session_merge_receipt", "project_action",
              "project_runtime", "task", "session", "workspace", "runner", "project", "user"
     RESTART IDENTITY CASCADE
   `);

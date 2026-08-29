@@ -11,7 +11,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
@@ -45,6 +45,12 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TaskJudgmentReviewService } from './task-judgment-review.service';
 import { TasksService } from './tasks.service';
+import {
+  OUTCOME_DIMENSIONS,
+  evaluateCanonicalOutcome,
+  outcomeDigest,
+  outcomeEvaluatorDigest,
+} from '../outcome-reconciler/outcome-evaluator';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -254,6 +260,194 @@ async function dependencyState(tasks: TasksService, ownerId: string, taskId: str
   return (await tasks.get(ownerId, taskId) as { dependencyState: string }).dependencyState;
 }
 
+function n9Digest(label: string): string {
+  return createHash('sha256').update(label).digest('hex');
+}
+
+async function establishCanonicalClosedEvaluation(
+  sql: Client,
+  ownerId: string,
+  projectId: string,
+  goal: string,
+): Promise<void> {
+  const stateResult = await sql.query(
+    'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS state',
+    [ownerId, projectId],
+  );
+  let state = stateResult.rows[0].state as Record<string, unknown> & {
+    contractDigest: string;
+    evaluationPlanDigest: string;
+    riskPolicyDigest: string;
+    permissionDigest: string;
+    budgetDigest: string;
+    recipientDigest: string;
+    ratified: boolean;
+    decisionRequest?: { id?: string; ctaToken?: string };
+  };
+  if (!state.ratified) {
+    const request = state.decisionRequest;
+    assert.ok(request?.id && request.ctaToken, 'owner decision request has an exact CTA');
+    const ratification = await sql.query(
+      `SELECT project_owner_ratify_contract(
+         $1::uuid,$2::uuid,'OWNER',$1::text,$3,$4::uuid,$5::uuid,'APPROVE',$6,false
+       ) AS result`,
+      [
+        ownerId,
+        projectId,
+        state.contractDigest,
+        request.id,
+        request.ctaToken,
+        `n9-owner-ratification:${projectId}`,
+      ],
+    );
+    assert.equal(
+      ratification.rows[0].result.ok,
+      true,
+      `owner ratification failed: ${JSON.stringify(ratification.rows[0].result)}`,
+    );
+    state = (await sql.query(
+      'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS state',
+      [ownerId, projectId],
+    )).rows[0].state;
+  }
+  assert.equal(state.ratified, true);
+
+  const grantId = randomUUID();
+  const principalId = randomUUID();
+  const collectorId = `n9-canonical-${randomUUID()}`;
+  const authority = (await sql.query(
+    `SELECT outcome_register_authority_grant(
+       $1::uuid,$2::uuid,$3::uuid,'SYSTEM',$4,'DIMENSION_EVALUATED',
+       'ATTESTATION','OUTCOME_EVALUATOR',$5,'n9-canonical-v1',NULL,
+       1::bigint,NULL::bigint,$6
+     ) AS authority`,
+    [ownerId, projectId, grantId, principalId, collectorId, state.riskPolicyDigest],
+  )).rows[0].authority as Record<string, unknown> & { grantDigest: string };
+  const binding = {
+    tenantId: ownerId,
+    projectId,
+    subjectType: 'PROJECT',
+    subjectId: projectId,
+    goalId: `goal:${projectId}`,
+    goalRevision: '1',
+    contractDigest: state.contractDigest,
+    evaluationPlanDigest: state.evaluationPlanDigest,
+    policyDigest: n9Digest(`policy:${projectId}`),
+    riskPolicyDigest: state.riskPolicyDigest,
+    permissionDigest: state.permissionDigest,
+    authorityGrantDigest: authority.grantDigest,
+    budgetDigest: state.budgetDigest,
+    capabilityRegistryDigest: n9Digest(`registry:${projectId}`),
+    recipientDigest: state.recipientDigest,
+    evaluatorDigest: outcomeEvaluatorDigest('outcome-reducer-v2'),
+    factSchemaDigest: n9Digest('n9-canonical-fact-schema-v2'),
+    environmentDigest: n9Digest(`environment:${projectId}`),
+    artifactDigest: n9Digest(`artifact:${projectId}`),
+    targetDigest: n9Digest(`target:${projectId}`),
+    targetRef: 'refs/heads/main',
+    asOfLogicalTime: '0',
+    factCutDigest: n9Digest(`prospective-cut:${projectId}`),
+  };
+  const registered = (await sql.query(
+    'SELECT outcome_register_fact_binding($1::uuid,$2::uuid,$3::jsonb) AS result',
+    [ownerId, projectId, JSON.stringify(binding)],
+  )).rows[0].result as { bindingDigest: string };
+  for (const dimension of OUTCOME_DIMENSIONS) {
+    const payload = {
+      dimensionId: dimension.id,
+      state: 'SATISFIED',
+      applicabilityProofDigest: null,
+      reasonCode: `${dimension.id}_SATISFIED`,
+    };
+    const draft = {
+      factKind: 'DIMENSION_EVALUATED',
+      tenantId: ownerId,
+      subject: { type: 'PROJECT', id: projectId, projectId },
+      binding,
+      schemaVersion: 2,
+      schemaDigest: binding.factSchemaDigest,
+      payload,
+      payloadDigest: outcomeDigest(payload),
+      claimType: 'ATTESTATION',
+      principal: { type: 'SYSTEM', id: principalId },
+      authority,
+      observedAt: '2026-08-29T00:00:00.000Z',
+      causalPredecessorFactId: null,
+      idempotencyKey: `n9:${projectId}:${dimension.id}`,
+      source: {
+        system: 'OUTCOME_EVALUATOR',
+        collectorId,
+        collectorVersion: 'n9-canonical-v1',
+      },
+      signature: null,
+    };
+    await sql.query(
+      `SELECT outcome_ingest_canonical_fact($1::uuid,'SYSTEM',$2,$3::jsonb)`,
+      [ownerId, principalId, JSON.stringify(draft)],
+    );
+  }
+  const cut = (await sql.query(
+    'SELECT outcome_seal_evaluation_cut($1::uuid,$2::uuid,$3,$4,$5) AS result',
+    [ownerId, projectId, registered.bindingDigest, `n9:${projectId}:cut`, 'n9-canonical-v1'],
+  )).rows[0].result as { cutId: string; watermarkLogicalTime: string };
+  const facts = (await sql.query(
+    `SELECT cut_fact.trust_decision AS "trustDecision",
+            cut_fact.proof_eligible AS "proofEligible", fact.envelope
+       FROM outcome_evaluation_cut_fact cut_fact
+       JOIN outcome_canonical_fact fact
+         ON fact.tenant_id=cut_fact.tenant_id AND fact.project_id=cut_fact.project_id
+        AND fact.fact_id=cut_fact.fact_id
+      WHERE cut_fact.tenant_id=$1::uuid AND cut_fact.project_id=$2::uuid
+        AND cut_fact.cut_id=$3::uuid
+      ORDER BY cut_fact.ordinal`,
+    [ownerId, projectId, cut.cutId],
+  )).rows;
+  const evaluation = evaluateCanonicalOutcome({
+    binding,
+    goal: {
+      goalId: binding.goalId,
+      goalRevision: binding.goalRevision,
+      tenantId: ownerId,
+      projectId,
+      statement: goal,
+      contractDigest: binding.contractDigest,
+      evaluationPlanDigest: binding.evaluationPlanDigest,
+      ratification: {
+        status: 'RATIFIED',
+        ratifierType: 'OWNER',
+        ratifierId: ownerId,
+        contractDigest: binding.contractDigest,
+        factId: randomUUID(),
+      },
+      disposition: 'ACHIEVED',
+    },
+    factCut: cut,
+    facts,
+    clock: {
+      logicalNow: cut.watermarkLogicalTime,
+      clockId: 'n9-canonical-clock',
+      evaluatedThroughLogicalTime: cut.watermarkLogicalTime,
+    },
+    evaluatorVersion: 'outcome-reducer-v2',
+  });
+  assert.equal(evaluation.closed, true);
+  await sql.query(
+    `SELECT outcome_commit_evaluation(
+       $1::uuid,$2::uuid,'PROJECT',$2::text,$3::uuid,$4,$5::bigint,$6,$7,$8::jsonb
+     )`,
+    [
+      ownerId,
+      projectId,
+      cut.cutId,
+      registered.bindingDigest,
+      cut.watermarkLogicalTime,
+      evaluation.evaluatorVersion,
+      evaluation.evaluatorDigest,
+      JSON.stringify(evaluation),
+    ],
+  );
+}
+
 suite(
   'N9 replays AWAITING_INPUT evidence through all three judgments and an acceptance-only doneGate without a direct DONE write',
   { timeout: 300_000 },
@@ -345,6 +539,8 @@ suite(
       acceptanceCriteria: 'The request-bound shell command exits zero.',
       acceptanceCommand: 'printf n9-executable',
       acceptanceExpectedExitCode: 0,
+      acceptanceTimeoutSeconds: 120,
+      acceptanceOwnerTimeoutCeilingSeconds: 120,
     });
     const verification = await tasks.create(ownerId, {
       title: 'N9 VERIFICATION',
@@ -386,22 +582,25 @@ suite(
     };
     await db.session.createMany({
       data: [
-        [sourceSessions.executable, executable.id, 'N9 executable evidence'],
-        [sourceSessions.verification, verification.id, 'N9 verification evidence'],
-        [sourceSessions.human, human.id, 'N9 human evidence'],
-      ].map(([id, taskId, title]) => ({
-        id,
+        { id: sourceSessions.executable, taskId: executable.id, title: 'N9 executable evidence', startsTaskWork: true },
+        { id: sourceSessions.verification, taskId: verification.id, title: 'N9 verification evidence', startsTaskWork: false },
+        { id: sourceSessions.human, taskId: human.id, title: 'N9 human evidence', startsTaskWork: true },
+      ].map((source) => ({
+        id: source.id,
         ownerId,
         creatorId: ownerId,
-        taskId,
+        taskId: source.taskId,
         workspaceId,
         assignedRunnerId: runnerId,
-        title,
+        title: source.title,
         prompt: 'Submit explicit structured evidence, then wait.',
         provider: 'codex',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
+        // A VERIFICATION subject accepts evidence but has no task-start work of its own. Its
+        // independently created carrier below is the runnable task. The source row remains a
+        // provenance-bearing evidence session without crossing the 0207 dispatch fence.
+        startsTaskWork: source.startsTaskWork,
       })),
     });
     const coordinatorSessionId = randomUUID();
@@ -577,20 +776,48 @@ suite(
         sessionId: string,
         runnerId: string,
         leaseGeneration: string | null,
-      ) => Promise<{ turnId: string; kind: string; content?: string; taskAcceptance?: boolean } | null>;
-    }).dequeueTurn(sourceSessions.executable, runnerId, null);
+        acceptsSteer: boolean,
+        declaredCapabilities: string[],
+        executableCapability: {
+          schemaRevision: number;
+          capabilityRevision: number;
+          hardMaxSeconds: number;
+          runnerSha: string;
+        },
+      ) => Promise<{
+        turnId: string;
+        kind: string;
+        content?: string;
+        taskAcceptance?: boolean;
+        acceptancePlan?: { admissionId: string };
+      } | null>;
+    }).dequeueTurn(sourceSessions.executable, runnerId, null, false, [], {
+      schemaRevision: 2,
+      capabilityRevision: 2,
+      hardMaxSeconds: 600,
+      runnerSha: '9'.repeat(40),
+    });
     assert.ok(acceptanceTurn);
     assert.equal(acceptanceTurn.kind, 'shell');
     assert.equal(acceptanceTurn.taskAcceptance, true);
     assert.equal(acceptanceTurn.content, 'printf n9-executable');
+    assert.ok(acceptanceTurn.acceptancePlan);
+    const acceptanceAttempt = await api.startExecutableAcceptanceAttempt(
+      { id: runnerId },
+      sourceSessions.executable,
+      acceptanceTurn.acceptancePlan.admissionId,
+    );
     const rawOutput = 'n9-executable\nraw-output-is-preserved';
     assert.deepEqual(
       await api.turnComplete({ id: runnerId }, sourceSessions.executable, {
         turnId: acceptanceTurn.turnId,
         status: SharedRunStatus.SUCCEEDED,
         subtype: 'shell',
-        shellExitCode: 0,
         shellOutput: rawOutput,
+        acceptanceAdmissionId: acceptanceTurn.acceptancePlan.admissionId,
+        acceptanceAttemptId: acceptanceAttempt.attemptId,
+        acceptanceTerminationKind: 'EXITED',
+        acceptanceActualExitCode: 0,
       }),
       { ok: true, status: RunStatus.AWAITING_INPUT },
     );
@@ -936,6 +1163,9 @@ suite(
     assert.ok(conclusions.every(
       (row) => row.evidenceVersion.toString() === acceptanceRun.attempt,
     ));
+    await establishCanonicalClosedEvaluation(sql, ownerId, project.id, project.goal ?? '');
+    const reconciled = await acceptance.reconcile(ownerId, project.id);
+    assert.equal(reconciled.done, true);
     const gateBeforeOptional = await acceptance.evaluateGate(project.id);
     assert.equal(gateBeforeOptional.allowed, true,
       String(gateBeforeOptional.reason.message ?? 'doneGate refused'));

@@ -32,7 +32,7 @@ const POLL_INTERVAL_MS = 2;
  *     re-resolves the batch's own refs; only a real transaction can say whether that lands.
  *  3. **The victim left nothing.** A rolled-back attempt is invisible by construction to the
  *     transaction that ran it — so the only place the claim can be checked is a third connection,
- *     afterwards, counting `task`, `task_dependency` and `project_event` rows.
+ *     afterwards, counting `task` and `task_dependency` rows and the one post-commit publish.
  *
  * The conflict is scheduled, never raced. The competitor takes the Session the create is about to
  * ask for, the create is allowed to park behind it (observed in `pg_stat_activity`, not waited
@@ -154,14 +154,19 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
     );
   }
 
-  /** Every `project_event` this project holds, and how many times each was observed. */
-  async function projectEvents(ids: FixtureIds): Promise<{ rows: number; occurrences: number }> {
-    const { rows } = await admin.query<{ rows: string; occurrences: string | null }>(
-      `SELECT count(*)::text AS rows, sum("occurrences")::text AS occurrences
-         FROM "project_event" WHERE "project_id" = $1::uuid`,
-      [ids.projectId],
+  /** The durable shape an uncontended or retried two-row batch must leave behind. */
+  async function batchShape(ownerId: string, titles: string[]): Promise<{ tasks: number; edges: number }> {
+    const { rows } = await admin.query<{ tasks: string; edges: string }>(
+      `WITH batch AS (
+         SELECT "id" FROM "task" WHERE "owner_id" = $1::uuid AND "title" = ANY($2::text[])
+       )
+       SELECT (SELECT count(*) FROM batch)::text AS tasks,
+              (SELECT count(*) FROM "task_dependency" d
+                WHERE d."task_id" IN (SELECT "id" FROM batch)
+                   OR d."depends_on_task_id" IN (SELECT "id" FROM batch))::text AS edges`,
+      [ownerId, titles],
     );
-    return { rows: Number(rows[0].rows), occurrences: Number(rows[0].occurrences ?? 0) };
+    return { tasks: Number(rows[0].tasks), edges: Number(rows[0].edges) };
   }
 
   await t.test('one create: one task, one edge, one publish', async () => {
@@ -240,7 +245,11 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
     );
     assert.equal(controlRows.length, 2);
     assert.deepEqual(clean.logged, [], 'the control run met no conflict at all');
-    const expected = await projectEvents(control);
+    const expected = await batchShape(control.ownerId, [
+      'taskretry-control-a',
+      'taskretry-control-b',
+    ]);
+    assert.deepEqual(expected, { tasks: 2, edges: 1 }, 'the uncontended control is one whole batch');
 
     const ids = newFixtureIds('taskretry-batch');
     await seedLockFixture(admin, ids);
@@ -291,19 +300,19 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
     assert.equal(Number(edges.rows[0].n), 1, 'one within-batch edge, re-resolved and committed');
     assert.equal(tasks.rows[1].id, created[1].id);
 
-    // The outbox: the same events a clean run produces, no more and no fewer. `occurrences` is
-    // summed as well because the outbox merges on its dedupe key — an event the victim had
-    // already written would come back as a second observation rather than as a second row.
-    assert.deepEqual(await projectEvents(ids), expected, 'the outbox matches an uncontended run');
-
-    // And nothing pointing at a task that does not exist: an event the victim left behind would
-    // be exactly this, since its task went back with the rollback.
-    const orphans = await admin.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM "project_event" e
-        WHERE e."source_type" = 'TASK'
-          AND NOT EXISTS (SELECT 1 FROM "task" t WHERE t."id" = e."source_id")`,
+    assert.deepEqual(
+      await batchShape(ids.ownerId, ['taskretry-batch-item-a', 'taskretry-batch-item-b']),
+      expected,
+      'the retried transaction has the same durable row shape as an uncontended batch',
     );
-    assert.equal(Number(orphans.rows[0].n), 0, 'no project_event outlived the task it is about');
+    const retiredOutbox = await admin.query<{ relation: string | null }>(
+      `SELECT to_regclass('public.project_event')::text AS relation`,
+    );
+    assert.equal(
+      retiredOutbox.rows[0].relation,
+      null,
+      'migration 0164 keeps the retired project_event outbox absent',
+    );
 
     assert.deepEqual(
       published,

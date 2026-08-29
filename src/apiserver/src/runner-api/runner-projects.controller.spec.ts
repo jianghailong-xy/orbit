@@ -576,10 +576,12 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     'listProjectHandoffs',
     'openAcceptanceRun',
     'projectAcceptance',
+    'projectOutcome',
     'projectRatification',
     'ratifyProjectFromPreapproval',
     'recordMergeEvidence',
     'removeProject',
+    'requestCompletionAckOwnerDecision',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -599,10 +601,12 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     listProjectHandoffs: RequestMethod.GET,
     openAcceptanceRun: RequestMethod.POST,
     projectAcceptance: RequestMethod.GET,
+    projectOutcome: RequestMethod.GET,
     projectRatification: RequestMethod.GET,
     ratifyProjectFromPreapproval: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    requestCompletionAckOwnerDecision: RequestMethod.POST,
     updateProject: RequestMethod.PATCH,
   });
 });

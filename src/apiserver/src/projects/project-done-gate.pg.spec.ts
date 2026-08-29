@@ -14,6 +14,8 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { establishCanonicalClosedEvaluationForPgTest } from '../outcome-reconciler/outcome-closed-test-helper';
+import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -142,6 +144,9 @@ test('all criteria PASS allows DONE with an OPEN task; only a criterion change r
       ProjectAcceptanceVerdict.PASS,
       ProjectAcceptanceVerdict.PASS,
     ]);
+    await establishCanonicalClosedEvaluationForPgTest(
+      db, target.ownerId, target.projectId, 'both project criteria pass', 'pass-open-task',
+    );
 
     const before = await acceptance.evaluateGate(target.projectId);
     assert.equal(before.allowed, true, String(before.reason.message ?? 'gate refused without a reason'));
@@ -157,7 +162,7 @@ test('all criteria PASS allows DONE with an OPEN task; only a criterion change r
     assert.equal(settled.status, ProjectStatus.DONE);
     assert.equal(openTasks, 1, 'the nice-to-have remains OPEN while the goal is DONE');
 
-    await db.task.update({ where: { id: target.taskId }, data: { status: TaskStatus.DONE } });
+    await completeHumanTaskForPgTest(db, target.ownerId, target.taskId, 'pass-open-task');
     const afterTaskWrite = await db.project.findUniqueOrThrow({
       where: { id: target.projectId },
       select: { status: true, acceptedRunId: true },

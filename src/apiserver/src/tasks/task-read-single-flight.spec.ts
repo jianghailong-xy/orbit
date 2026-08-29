@@ -17,7 +17,10 @@ function deferred<T>() {
 }
 
 function serviceWith(prisma: unknown): TasksService {
-  return new TasksService(prisma as never, {} as never, {} as never);
+  return new TasksService({
+    taskDependency: { findMany: async () => [] },
+    ...(prisma as Record<string, unknown>),
+  } as never, {} as never, {} as never);
 }
 
 test('concurrent identical task pages execute one underlying query group', async () => {

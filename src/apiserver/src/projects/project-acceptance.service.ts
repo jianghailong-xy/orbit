@@ -19,6 +19,7 @@ import {
   ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_MISSING,
   CANONICAL_DONE_GATE_BLOCKED,
+  OWNER_RATIFICATION_REQUIRED,
   AcceptanceFacts,
   AcceptanceRefusalCode,
   StatedAcceptanceCriterion,
@@ -1263,8 +1264,26 @@ export class ProjectAcceptanceService {
         await tx.projectAcceptanceConclusion.createMany({ data: automaticEvents });
       }
 
+      // The canonical outcome proof is necessary, but it is not a substitute for the project's
+      // declared acceptance conjunction. In particular, an EXECUTABLE failure or an independent
+      // verifier FAIL must not be able to reach DONE merely because the broader outcome cut is
+      // already satisfied. Re-read the append-only conclusions after writing automatic results so
+      // this decision covers the same transaction state that would be committed with DONE.
+      const reconciledStanding = automaticEvents.length === 0
+        ? standing
+        : ProjectAcceptanceService.projectedCriteria(
+            run.criteria,
+            await ProjectAcceptanceService.conclusionEvents(tx, projectId, run.attempt),
+          );
       try {
         const gate = await this.assertDoneAllowed(tx, projectId);
+        // Owner ratification and canonical-cut validity are checked first so their typed routing
+        // reason is never hidden by an as-yet unjudged legacy criterion. Once that authority
+        // boundary is open, the declared criterion conjunction is still independently required.
+        if (ProjectAcceptanceService.projectedVerdict(reconciledStanding)
+            !== ProjectAcceptanceVerdict.PASS) {
+          return { done: false, runId: run.id, code: ACCEPTANCE_MISSING };
+        }
         if (locked.status !== ProjectStatus.DONE) {
           await tx.project.update({
             where: { id: projectId },
@@ -1291,8 +1310,18 @@ export class ProjectAcceptanceService {
         return { done: true, runId: gate.runId, code: null };
       } catch (error) {
         if (error instanceof AcceptanceRefusal) {
-          const body = error.getResponse() as { code: AcceptanceRefusalCode };
-          return { done: false, runId: run.id, code: body.code };
+          const body = error.getResponse() as {
+            code: AcceptanceRefusalCode;
+            reasonCode?: string;
+          };
+          // Preserve the owner-only boundary as the public refusal. The generic wrapper remains
+          // correct for every other structured canonical reason, while this one is an existing
+          // closed API code clients use to route the request to the owner.
+          const code = body.reasonCode === OWNER_RATIFICATION_REQUIRED
+            || body.reasonCode === 'OWNER_RATIFICATION_INVALID'
+            ? OWNER_RATIFICATION_REQUIRED
+            : body.code;
+          return { done: false, runId: run.id, code };
         }
         throw error;
       }

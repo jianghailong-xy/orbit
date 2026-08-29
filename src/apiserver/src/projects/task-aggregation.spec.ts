@@ -380,7 +380,7 @@ const CASES: Case[] = [
       task('p', 'OPEN', { parent: 'gp', policy: 'ALL_CHILDREN_DONE' }),
       task('leaf', 'DONE', { parent: 'p' }),
     ],
-    expect: ['gp:OPEN->DONE', 'p:OPEN->DONE'],
+    expect: ['p:OPEN->DONE', 'gp:OPEN->DONE'],
   },
   {
     name: 'AG2: an outstanding leaf stops the chain at the level that owns it',
@@ -399,7 +399,7 @@ const CASES: Case[] = [
       task('p', 'DONE', { parent: 'gp', policy: 'ALL_CHILDREN_DONE' }),
       task('leaf', 'OPEN', { parent: 'p' }),
     ],
-    expect: ['gp:DONE->OPEN', 'p:DONE->OPEN'],
+    expect: ['p:DONE->OPEN', 'gp:DONE->OPEN'],
   },
   {
     name: 'AG2: a MANUAL middle level stops the recomputation from propagating through it',
@@ -418,7 +418,7 @@ const CASES: Case[] = [
       task('leaf', 'DONE', { parent: 'p' }),
       task('v', 'DONE', { verifies: 'gp', verdict: 'PASS' }),
     ],
-    expect: ['gp:OPEN->DONE', 'p:OPEN->DONE'],
+    expect: ['p:OPEN->DONE', 'gp:OPEN->DONE'],
   },
   {
     name: 'AG2: five levels converge in one pass',
@@ -429,7 +429,7 @@ const CASES: Case[] = [
       task('d', 'OPEN', { parent: 'c', policy: 'ALL_CHILDREN_DONE' }),
       task('e', 'DONE', { parent: 'd' }),
     ],
-    expect: ['a:OPEN->DONE', 'b:OPEN->DONE', 'c:OPEN->DONE', 'd:OPEN->DONE'],
+    expect: ['d:OPEN->DONE', 'c:OPEN->DONE', 'b:OPEN->DONE', 'a:OPEN->DONE'],
   },
 
   // ---- Structural edges -------------------------------------------------------------------------
@@ -510,7 +510,7 @@ test('the plan is a pure recomputation, so it is idempotent by construction', as
     const forward = planTaskAggregation(tasks);
     const backward = planTaskAggregation([...tasks].reverse());
     assert.deepEqual(forward, backward);
-    assert.deepEqual(moves(forward), ['gp:OPEN->DONE', 'p:OPEN->DONE']);
+    assert.deepEqual(moves(forward), ['p:OPEN->DONE', 'gp:OPEN->DONE']);
   });
 
   await t.test('replanning the world the plan produced yields nothing to do', () => {

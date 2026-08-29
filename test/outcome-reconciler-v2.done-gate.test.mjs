@@ -49,7 +49,7 @@ const evidence = {
     unknownObligationFailClosed: false,
     staleProjectionFailClosed: false,
     readFailureFailClosed: false,
-    authoritativeRecoveryAutomatic: false,
+    authoritativeRecoveryUsesNewBinding: false,
     legacySummaryNotAWriter: false,
     databaseWallUsesCanonicalGate: false,
     soleProjectionReducer: false,
@@ -692,7 +692,7 @@ test('unknown project-gate subject types fail closed instead of selecting a near
   assert.equal(gate.reason.code, 'UNKNOWN_SUBJECT_TYPE');
 });
 
-test('stale projection and active work recover automatically from newer authoritative facts', async () => {
+test('stale projection recovers on a new binding while conflicting immutable facts stay visible', async () => {
   const scope = await setupScope('automatic-recovery');
   const initial = await createEvaluation(scope, 'automatic-recovery-initial');
   assert.equal((await queryGate(scope.projectId)).allowed, true);
@@ -739,13 +739,40 @@ test('stale projection and active work recover automatically from newer authorit
     'SATISFIED',
     `automatic-recovery:satisfied:${randomUUID()}`,
   );
-  const recoveredCut = await sealCut(pool, scope, `automatic-recovery:recovered-cut:${randomUUID()}`);
-  const recoveredEvaluation = await evaluateCut(pool, scope, recoveredCut);
-  const recoveredCommit = await commitEvaluation(pool, scope, recoveredCut, recoveredEvaluation);
+  const conflictingCut = await sealCut(
+    pool, scope, `automatic-recovery:conflicting-cut:${randomUUID()}`,
+  );
+  const conflictingEvaluation = await evaluateCut(pool, scope, conflictingCut);
+  await commitEvaluation(pool, scope, conflictingCut, conflictingEvaluation);
+  const conflicting = await queryGate(scope.projectId);
+  assert.equal(conflicting.allowed, false,
+    'a later fact must not erase contradictory authoritative history in the same binding');
+  assert.equal(conflicting.reason.detailCode, 'AUTHORITATIVE_FACT_CONFLICT');
+
+  // Canonical facts are immutable. Recovery is therefore a version transition: publish a new
+  // binding, then attest its complete cut. The prior conflict remains auditable under the old
+  // binding but cannot poison the current one.
+  scope.binding = {
+    ...scope.binding,
+    factCutDigest: digest(`automatic-recovery:new-binding:${randomUUID()}`),
+  };
+  const replacement = await jsonCall(
+    pool,
+    'SELECT outcome_register_fact_binding($1::uuid,$2::uuid,$3::jsonb) AS result',
+    [scope.tenantId, scope.projectId, JSON.stringify(scope.binding)],
+  );
+  scope.bindingDigest = replacement.bindingDigest;
+  const {
+    cut: recoveredCut,
+    evaluation: recoveredEvaluation,
+    committed: recoveredCommit,
+  } = await createEvaluation(scope, 'automatic-recovery:new-binding');
+  assert.equal(recoveredEvaluation.closed, true);
   const recovered = await queryGate(scope.projectId);
   assertStructuredGate(recovered);
   assert.equal(recovered.allowed, true);
   assert.equal(recovered.canonicalIdentity.evaluationId, recoveredCommit.evaluationId);
+  assert.equal(recovered.canonicalIdentity.cutId, recoveredCut.cutId);
   assert.equal(recovered.obligations.length, 0);
 
   await pool.query(
@@ -758,7 +785,7 @@ test('stale projection and active work recover automatically from newer authorit
   )).rows[0];
   assert.equal(legacy.resolved_at, null);
   assert.equal(legacy.status, 'DONE');
-  evidence.invariants.authoritativeRecoveryAutomatic = true;
+  evidence.invariants.authoritativeRecoveryUsesNewBinding = true;
   evidence.invariants.legacySummaryNotAWriter = true;
   evidence.samples.recoveredProofDigest = recovered.canonicalIdentity.proofDigest;
 });

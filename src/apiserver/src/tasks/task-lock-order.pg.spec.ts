@@ -28,6 +28,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { TasksService } from './tasks.service';
+import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -67,6 +68,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   for (const [id, title] of [[projectId, label], [otherProjectId, `${label}-other`]] as const) {
     await db.project.create({ data: { id, ownerId, title } });
     await db.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
+    await ratifyProjectForPgTest(db, ownerId, id, title);
   }
   return { ownerId, projectId, otherProjectId, workspaceId };
 }
@@ -79,7 +81,7 @@ async function emptyWorld(client: Client): Promise<void> {
   // the one that leaked. Bounded, so a leak is named where it happened.
   await client.query(`SET lock_timeout = '10s'`);
   await client.query(`
-    TRUNCATE "project_event", "project_decision", "project_action", "project_runtime",
+    TRUNCATE "project_action", "project_runtime",
              "task_dependency", "task", "session", "workspace", "runner", "project", "user"
     RESTART IDENTITY CASCADE
   `);
@@ -218,7 +220,7 @@ suite('the Project → Task → Session acquisition order, on real PostgreSQL', 
         title: 'fresh check', projectId: w.projectId, verifiesTaskId: subject.id,
       });
       const patches: Array<[string, string, Record<string, unknown>]> = [
-        ['pure status', subject.id, { status: TaskStatus.DONE }],
+        ['pure status', subject.id, { status: TaskStatus.IN_PROGRESS }],
         ['pure completionPolicy', subject.id, { completionPolicy: 'ALL_CHILDREN_DONE' }],
         ['verdict REVOCATION', check.id, { verdict: null }],
         ['verifies detach', fresh.id, { verifiesTaskId: null }],
@@ -236,9 +238,9 @@ suite('the Project → Task → Session acquisition order, on real PostgreSQL', 
     const w = await world(db, 'outcome');
     const tasks = tasksService(db);
     const task = await tasks.create(w.ownerId, { title: 't', projectId: w.projectId });
-    await tasks.update(w.ownerId, task.id, { status: TaskStatus.DONE } as never);
+    await tasks.update(w.ownerId, task.id, { status: TaskStatus.IN_PROGRESS } as never);
     const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
-    assert.equal(row.status, 'DONE');
+    assert.equal(row.status, 'IN_PROGRESS');
   });
 
   // -------------------------------------------------------------------------------------
@@ -398,7 +400,7 @@ suite('the Project → Task → Session acquisition order, on real PostgreSQL', 
     // shape that can be produced without a Coordinator. Every one is a separate transaction taking
     // LO1's chain, and `Promise.allSettled` so a refusal is examined rather than thrown away.
     const outcomes = await withDeadline(Promise.allSettled([
-      tasks.update(w.ownerId, rows[0].id, { status: TaskStatus.DONE } as never),
+      tasks.update(w.ownerId, rows[0].id, { status: TaskStatus.FAILED } as never),
       tasks.update(w.ownerId, rows[1].id, { status: TaskStatus.IN_PROGRESS } as never),
       tasks.update(w.ownerId, rows[2].id, { dependsOnTaskIds: [rows[3].id] } as never),
       tasks.update(w.ownerId, rows[4].id, { dependsOnTaskIds: [rows[5].id] } as never),
