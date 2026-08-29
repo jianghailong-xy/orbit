@@ -14,6 +14,7 @@ PG_DATABASE="${WORK_OVERVIEW_PG_DATABASE:-pcc_work_overview_$$_fixture}"
 PG_IMAGE="${WORK_OVERVIEW_PG_IMAGE:-postgres:16-alpine}"
 TARGET_SHA="$(git -C "$REPO" rev-parse HEAD)"
 MAIN_SHA="$(git -C "$REPO" rev-parse refs/heads/main)"
+BASE_SHA="21e019a47adffe018a7539163c9fc3e0ab83c6cc"
 MAIN_WORKTREE="${WORK_OVERVIEW_MAIN_WORKTREE:-/root/orbit}"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 PROVIDER="${WORK_OVERVIEW_PROVIDER:-codex}"
@@ -42,6 +43,10 @@ cleanup() {
 trap cleanup EXIT
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '!! target SHA is not full' >&2; exit 1; }
+git -C "$REPO" merge-base --is-ancestor "$BASE_SHA" "$TARGET_SHA" || {
+  echo "!! task base $BASE_SHA is not an ancestor of target $TARGET_SHA" >&2
+  exit 1
+}
 [ "$MAIN_SHA" = "$TARGET_SHA" ] || {
   echo "!! HEAD $TARGET_SHA is not refs/heads/main $MAIN_SHA" >&2
   exit 1
@@ -222,6 +227,7 @@ WEB_CREATED_AT="$(docker inspect orbit-web --format '{{.Created}}')"
 
 echo '==> work-overview: write machine-bound zero-skip manifest'
 WORK_OVERVIEW_REPO="$REPO" \
+WORK_OVERVIEW_BASE_SHA="$BASE_SHA" \
 WORK_OVERVIEW_TARGET_SHA="$TARGET_SHA" \
 WORK_OVERVIEW_MAIN_SHA="$MAIN_SHA" \
 WORK_OVERVIEW_REPOSITORY="$REPOSITORY" \

@@ -11,6 +11,7 @@ const requiredEnv = (name) => {
   return value;
 };
 const repo = requiredEnv('WORK_OVERVIEW_REPO');
+const baseSha = requiredEnv('WORK_OVERVIEW_BASE_SHA');
 const targetSha = requiredEnv('WORK_OVERVIEW_TARGET_SHA');
 const mainSha = requiredEnv('WORK_OVERVIEW_MAIN_SHA');
 const repository = requiredEnv('WORK_OVERVIEW_REPOSITORY');
@@ -23,7 +24,7 @@ const pgSystemIdentifier = requiredEnv('WORK_OVERVIEW_PG_SYSTEM_IDENTIFIER');
 const migrationCount = Number(requiredEnv('WORK_OVERVIEW_MIGRATION_COUNT'));
 const lastMigration = requiredEnv('WORK_OVERVIEW_LAST_MIGRATION');
 
-if (!/^[0-9a-f]{40}$/.test(targetSha) || mainSha !== targetSha) {
+if (!/^[0-9a-f]{40}$/.test(baseSha) || !/^[0-9a-f]{40}$/.test(targetSha) || mainSha !== targetSha) {
   throw new Error(`target/main SHA mismatch target=${targetSha} main=${mainSha}`);
 }
 if (!/^[0-9a-f]{64}$/.test(sourceArchiveDigest)) throw new Error('source archive digest is invalid');
@@ -90,7 +91,8 @@ if (live.assertions?.projectListMatchesPanorama !== true) {
 }
 
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
-const changedFiles = git('diff-tree', '--no-commit-id', '--name-only', '-r', targetSha)
+execFileSync('git', ['-C', repo, 'merge-base', '--is-ancestor', baseSha, targetSha]);
+const changedFiles = git('diff', '--name-only', baseSha, targetSha)
   .split('\n').filter(Boolean);
 const relevantFiles = changedFiles.filter((file) =>
   file === 'package.json'
@@ -119,6 +121,7 @@ const manifest = {
   verifiedAt: new Date().toISOString(),
   startedAt,
   source: {
+    baseSha,
     gitTree: git('rev-parse', `${targetSha}^{tree}`),
     archiveSha256: sourceArchiveDigest,
     relevantSourceSha256: sourceDigest,
