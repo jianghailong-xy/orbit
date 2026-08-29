@@ -188,9 +188,20 @@ WEB_ARTIFACT_DIGEST="$(
     | while IFS= read -r work_overview_artifact; do sha256sum "$work_overview_artifact"; done \
     | sha256sum | cut -d' ' -f1
 )"
-DEPLOYED_WEB_ARTIFACT_DIGEST="$(docker exec orbit-web sh -c \
-  'cd /usr/share/nginx/html && find . -type f ! -path "./dl/*" ! -name "install.sh" -print | LC_ALL=C sort | while IFS= read -r artifact; do sha256sum "$artifact"; done | sha256sum' \
-  | cut -d' ' -f1)"
+# Hash the exact target artifact manifest inside the container. The nginx base contributes its own
+# 50x.html, which is deployment chrome rather than a Vite output; hashing every runtime file would
+# reject a byte-identical target artifact merely because that unrelated base file exists.
+DEPLOYED_WEB_ARTIFACT_DIGEST="$(
+  cd "$WEB/dist"
+  find . -type f ! -path './dl/*' ! -name 'install.sh' -print | LC_ALL=C sort \
+    | while IFS= read -r work_overview_artifact; do
+        work_overview_deployed_hash="$(docker exec orbit-web sha256sum \
+          "/usr/share/nginx/html/$work_overview_artifact" | cut -d' ' -f1)"
+        [[ "$work_overview_deployed_hash" =~ ^[0-9a-f]{64}$ ]] || exit 1
+        printf '%s  %s\n' "$work_overview_deployed_hash" "$work_overview_artifact"
+      done \
+    | sha256sum | cut -d' ' -f1
+)"
 [ "$WEB_ARTIFACT_DIGEST" = "$DEPLOYED_WEB_ARTIFACT_DIGEST" ] || {
   echo "!! Web artifact mismatch local=$WEB_ARTIFACT_DIGEST deployed=$DEPLOYED_WEB_ARTIFACT_DIGEST" >&2
   exit 1
