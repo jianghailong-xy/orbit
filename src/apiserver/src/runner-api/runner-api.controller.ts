@@ -21,6 +21,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   checkpointIdForCommit,
@@ -686,6 +687,12 @@ export class RunnerApiController {
     private readonly projectAcceptance?: ProjectAcceptanceService,
     /** Separate-transaction completion-ACK observations. Optional only in direct controller specs. */
     private readonly completionAckMonitor?: OutcomeWatchdogService,
+    /**
+     * The exact Task=DONE commit made by an executable callback must release its dependents just
+     * like the interactive completion doors in TasksService. Optional only for direct unit
+     * fixtures; RunnerApiModule imports the one shared TasksService instance in production.
+     */
+    private readonly tasks?: TasksService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -3186,6 +3193,7 @@ export class RunnerApiController {
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       let acceptanceTaskChanged = false;
+      let acceptanceTaskCompleted = false;
       let acceptanceFailureReason: string | null = null;
       const typedTermination = ATTEMPT_TERMINATION_KINDS.includes(
         dto.acceptanceTerminationKind as AttemptTerminationKind,
@@ -3463,6 +3471,7 @@ export class RunnerApiController {
             derivedStatus,
           );
           acceptanceTaskChanged = true;
+          acceptanceTaskCompleted = derivedStatus === TaskStatus.DONE;
           if (derivedStatus === TaskStatus.FAILED) {
             failSession = true;
             acceptanceFailureReason =
@@ -3713,6 +3722,8 @@ export class RunnerApiController {
         retryAt: current.retryAt,
         taskReclaimed,
         taskId: current.taskId,
+        taskOwnerId: current.ownerId,
+        taskCompleted: acceptanceTaskCompleted,
       };
         }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
       } catch (error) {
@@ -3759,6 +3770,24 @@ export class RunnerApiController {
         },
       }).catch((error) => this.logger.error(
         `completion ACK recovery fact could not be appended for ${sessionId}/${dto.turnId}: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
+    }
+    // This is the immediate completion edge for both the legacy rolling-v1 shell receipt and the
+    // current executable callback. The ACK transaction above is authoritative and idempotent:
+    // only its first compare-and-set reports taskCompleted. A process crash here loses latency,
+    // not work, because the periodic READY sweep observes the same dependency watermark.
+    if (
+      'taskCompleted' in finalized
+      && finalized.taskCompleted
+      && finalized.taskOwnerId
+      && finalized.taskId
+    ) {
+      await this.tasks?.dispatchDependentsAfterCompletion(
+        finalized.taskOwnerId,
+        finalized.taskId,
+      ).catch((error) => this.logger.warn(
+        `successor dispatch after executable completion ${finalized.taskId} failed: `
         + `${error instanceof Error ? error.message : error}`,
       ));
     }

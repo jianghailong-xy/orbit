@@ -48,6 +48,18 @@ import {
   readCompletionAckObligations,
 } from '../common/completion-ack-obligation';
 import {
+  controlPlaneObligationsBy,
+  readControlPlaneObligations,
+} from '../common/control-plane-obligation';
+import {
+  AUTO_DISPATCH_WAKE_DELAY_MS,
+  autoDispatchAttemptingDisposition,
+  autoDispatchFailureDisposition,
+  autoDispatchSkippedDisposition,
+  recordAutoDispatchObservation,
+  type AutoDispatchDisposition,
+} from '../common/auto-dispatch-obligation';
+import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
   lastProviderByWorkspace,
@@ -808,20 +820,25 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
-  -- Ratification is a durable Project boundary, not a per-task checklist. Keep unratified work out
-  -- of the sweep (so it does not create one refusal per minute), while the Session insert trigger
-  -- performs the same check again under the transaction that would start the side-effecting run.
-  AND (
-    t.project_id IS NULL
-    OR EXISTS (
-      SELECT 1
-        FROM project_completion_contract ratified_contract
-       WHERE ratified_contract.project_id = t.project_id
-         AND project_owner_ratification_effective(
-           t.project_id,
-           ratified_contract.contract_digest
-         )
-    )
+  -- Policy is deliberately NOT a candidate filter. The Session insert remains the fail-closed
+  -- authority boundary, while dispatchReadyTask records its typed refusal as a canonical
+  -- obligation with a persistent wake. Filtering unratified work here was the production silent
+  -- READY bug: no Session, no dispatchAttempt and no reason existed for a reader to follow.
+  --
+  -- A standing obligation may damp repeated evaluation until its committed wake is due. A clock
+  -- re-delivers that fact; it never invents the reason.
+  AND NOT EXISTS (
+    SELECT 1
+      FROM task_auto_dispatch_state dispatch_state
+      JOIN task_auto_dispatch_wakeup dispatch_wake
+        ON dispatch_wake.task_id = dispatch_state.task_id
+       AND dispatch_wake.watermark = dispatch_state.watermark
+       AND dispatch_wake.obligation_revision = dispatch_state.obligation_revision
+       AND dispatch_wake.state = 'PENDING'
+     WHERE dispatch_state.task_id = t.id
+       AND dispatch_state.watermark = COALESCE(e.epoch, 0)
+       AND dispatch_state.state = 'ACTIVE'
+       AND dispatch_wake.due_at > now()
   )
   -- A schedule that has not come due yet is a veto, and it has to be one HERE as well as on the
   -- instant path (see triggerDependents): a task scheduled for Sunday whose last prerequisite
@@ -1525,7 +1542,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // ended up running twice a minute (TasksService was provided by two modules), and the
       // symptom — duplicate dispatch — took a production incident to spot. Sequential, not
       // concurrent, so the foreman sees the dispatch decisions this same tick already made.
-      this.reconcileReadyTasks()
+      this.reconcileAutoDispatchReceipts()
+        .then(() => this.reconcileReadyTasks())
         .catch((e) =>
           this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
         )
@@ -5148,12 +5166,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const [withRun, states, activeObligations] = await Promise.all([
       this.withRunning(ownerId, tasks),
       this.dependencyStatesFor(ownerId, tasks.map((t) => t.id)),
-      readCompletionAckObligations(this.prisma, {
+      readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         taskIds: tasks.map((task) => task.id),
       }),
     ]);
-    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
+    const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     return withRun.map((t) => {
       const dependencyState = states.get(t.id) ?? 'NONE';
       const controlPlaneObligations = obligationsByTask.get(t.id) ?? [];
@@ -5190,7 +5208,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.withRunning(ownerId, [task], true),
       this.dependencyStatesFor(ownerId, [id]),
       this.runnableTask(ownerId, id),
-      readCompletionAckObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
+      readControlPlaneObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
     ]);
     const dependencyState = states.get(id) ?? 'NONE';
     return {
@@ -5361,12 +5379,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const [withRun, states, activeObligations] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
-      readCompletionAckObligations(this.prisma, {
+      readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         taskIds: pageTasks.map((task) => task.id),
       }),
     ]);
-    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
+    const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
       const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
@@ -5513,12 +5531,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const [withRun, states, activeObligations] = await Promise.all([
       this.withRunning(ownerId, rows, true),
       this.dependencyStatesFor(ownerId, rows.map((task) => task.id)),
-      readCompletionAckObligations(this.prisma, {
+      readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         taskIds: rows.map((task) => task.id),
       }),
     ]);
-    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
+    const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
       const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
@@ -6666,7 +6684,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const [dependencyFacts, supersession, controlPlaneObligations] = await Promise.all([
       this.dependencyFactsFor(ownerId, [id]),
       this.supersession(ownerId, task),
-      readCompletionAckObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
+      readControlPlaneObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
     ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -7021,7 +7039,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Everything below observes committed facts and is best-effort, like update's existing
     // dependency/aggregation fan-out. None of it is needed to make the signoff atomic.
     if (committed.transitioned) {
-      await this.triggerDependents(ownerId, id).catch((e) =>
+      await this.dispatchDependentsAfterCompletion(ownerId, id).catch((e) =>
         this.logger.warn(`triggerDependents failed for signed task ${id}: ${e?.message ?? e}`),
       );
       // HUMAN_SIGNOFF is one of the three peer completion criteria, not the legacy manual-DONE
@@ -8213,7 +8231,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // transaction above. Release that subject's dependents now; keying this on the verifier id
     // would leave ready auto-run work asleep until a later sweep happened to rediscover it.
     if (dto.verdict === 'PASS' && verifiesTaskId) {
-      await this.triggerDependents(ownerId, verifiesTaskId).catch((e) =>
+      await this.dispatchDependentsAfterCompletion(ownerId, verifiesTaskId).catch((e) =>
         this.logger.warn(
           `triggerDependents failed for verified task ${verifiesTaskId}: ${e?.message ?? e}`,
         ),
@@ -8591,7 +8609,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * so one failure doesn't stop the others. Downstream chains flow naturally: the workspace
    * marking that dependent DONE re-enters update() and triggers the next layer.
    */
-  private async triggerDependents(ownerId: string, doneTaskId: string): Promise<void> {
+  async dispatchDependentsAfterCompletion(ownerId: string, doneTaskId: string): Promise<void> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
     // that relation in PostgreSQL, using the same fail-closed function as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
@@ -8641,17 +8659,125 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // between here and its own re-read the user may have scheduled this task for later, or the
         // prerequisite may have reopened, and either replaces the reason this loop had for starting
         // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
-        await this.execute(
+        await this.dispatchReadyTask(
           ownerId,
           dep.id,
-          { observedEpoch: epoch },
-          TASK_RUN_TRIGGER.dependency(dep.id, epoch),
+          epoch,
+          'DEPENDENCY_TRIGGER',
         );
       } catch (e) {
         this.logger.warn(
           `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
         );
       }
+    }
+  }
+
+  /** Compatibility name for focused service fixtures that exercise the historical instant door. */
+  private triggerDependents(ownerId: string, doneTaskId: string): Promise<void> {
+    return this.dispatchDependentsAfterCompletion(ownerId, doneTaskId);
+  }
+
+  /**
+   * The one automatic dependency-dispatch door shared by the completion edge and ready sweep.
+   *
+   * The first write is intentional: it makes a process crash before execute() observable and
+   * retryable. PostgreSQL de-duplicates it by (task, dispatch epoch), so concurrent trigger/sweep
+   * deliveries spend one dispatchAttempt and still race through the existing task_run_request and
+   * live-session unique claim. A committed Session receipt is terminal and wins over a late
+   * refusal from the losing delivery.
+   */
+  private async dispatchReadyTask(
+    ownerId: string,
+    taskId: string,
+    watermark: bigint,
+    triggerKind: 'DEPENDENCY_TRIGGER' | 'READY_SWEEP',
+  ): Promise<TaskRunAnswer> {
+    await recordAutoDispatchObservation(this.prisma, {
+      tenantId: ownerId,
+      taskId,
+      watermark,
+      triggerKind,
+      outcome: 'ATTEMPTING',
+      disposition: autoDispatchAttemptingDisposition(),
+    });
+    try {
+      const answer = await this.execute(
+        ownerId,
+        taskId,
+        { observedEpoch: watermark },
+        TASK_RUN_TRIGGER.dependency(taskId, watermark),
+      );
+      if (answer.ok) {
+        if (!answer.sessionId) {
+          throw new Error('AUTO_DISPATCH_SESSION_RECEIPT_MISSING');
+        }
+        await recordAutoDispatchObservation(this.prisma, {
+          tenantId: ownerId,
+          taskId,
+          watermark,
+          triggerKind,
+          outcome: 'DISPATCHED',
+          disposition: {
+            reasonCode: 'SESSION_CREATED',
+            reason: 'The idempotent automatic dispatch request committed its task work session.',
+            owner: 'SYSTEM',
+            nextAction: 'OBSERVE_ACTIVE_TASK_SESSION',
+            wakeAt: null,
+          },
+          sessionId: answer.sessionId,
+        });
+      } else {
+        const skipped = autoDispatchSkippedDisposition(answer.skipped);
+        await recordAutoDispatchObservation(this.prisma, {
+          tenantId: ownerId,
+          taskId,
+          watermark,
+          triggerKind,
+          outcome: skipped.outcome,
+          disposition: skipped.disposition,
+        });
+      }
+      return answer;
+    } catch (error) {
+      await recordAutoDispatchObservation(this.prisma, {
+        tenantId: ownerId,
+        taskId,
+        watermark,
+        triggerKind,
+        outcome: 'REFUSED',
+        disposition: autoDispatchFailureDisposition(error),
+      });
+      throw error;
+    }
+  }
+
+  private async recordReadySweepRefusal(
+    task: { id: string; ownerId: string; dispatchEpoch: bigint },
+    disposition: AutoDispatchDisposition,
+  ): Promise<void> {
+    await recordAutoDispatchObservation(this.prisma, {
+      tenantId: task.ownerId,
+      taskId: task.id,
+      watermark: task.dispatchEpoch,
+      triggerKind: 'READY_SWEEP',
+      outcome: 'REFUSED',
+      disposition,
+    });
+  }
+
+  /**
+   * Closes the narrow crash window in which execute() committed the authoritative Session but
+   * this process died before recording its dispatch receipt. The SQL function uses the live
+   * task-session claim as the source of truth and is safe to re-deliver on every sweep.
+   */
+  private async reconcileAutoDispatchReceipts(): Promise<void> {
+    const [row] = await this.prisma.$queryRaw<Array<{ reconciled: number }>>`
+      SELECT task_auto_dispatch_reconcile_sessions()::int AS reconciled`;
+    if ((row?.reconciled ?? 0) > 0) {
+      this.logger.log(
+        `auto-run: reconciled ${row.reconciled} committed session receipt(s) after interrupted dispatch observation`,
+      );
     }
   }
 
@@ -8772,6 +8898,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
     // list assigned to that runner at once.
     const perList = new Map<string, { quota: number; disk: number; resumesAt?: Date }>();
+    const observedAt = new Date();
     const holdFor = (listId: string | null) => {
       if (!listId) return null;
       let e = perList.get(listId);
@@ -8790,6 +8917,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           e.quota += 1;
           if (!e.resumesAt || blockedUntil < e.resumesAt) e.resumesAt = blockedUntil;
         }
+        await this.recordReadySweepRefusal(t, {
+          reasonCode: 'PROVIDER_QUOTA_EXHAUSTED',
+          reason: 'The selected provider has no dispatch quota until its reported reset.',
+          owner: 'SYSTEM',
+          nextAction: 'RESUME_AFTER_PROVIDER_QUOTA_RESET',
+          wakeAt: blockedUntil,
+        });
         continue;
       }
       // Disk is checked before the failure backoff for the same reason quota is: it prevents a
@@ -8800,22 +8934,57 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         diskHeld += 1;
         const e = holdFor(t.listId);
         if (e) e.disk += 1;
+        await this.recordReadySweepRefusal(t, {
+          reasonCode: 'RUNNER_DISK_BELOW_FLOOR',
+          reason: 'The assignee runner reported less free disk than its configured safety floor.',
+          owner: 'AGENT',
+          nextAction: 'FREE_RUNNER_DISK_OR_MOVE_THE_ASSIGNEE',
+          wakeAt: new Date(observedAt.getTime() + AUTO_DISPATCH_WAKE_DELAY_MS),
+        });
         continue;
       }
-      if (heldOff.has(t.id)) continue;
+      if (heldOff.has(t.id)) {
+        const backoffUntil = heldOff.get(t.id);
+        await this.recordReadySweepRefusal(
+          t,
+          backoffUntil
+            ? {
+                reasonCode: 'AUTO_RUN_RETRY_BACKOFF_ACTIVE',
+                reason: 'A recent failed task run is inside the bounded automatic retry backoff.',
+                owner: 'SYSTEM',
+                nextAction: 'RESUME_AFTER_AUTO_RUN_BACKOFF',
+                wakeAt: backoffUntil,
+              }
+            : {
+                reasonCode: 'AUTO_RUN_FAILURE_BUDGET_EXHAUSTED',
+                reason: 'Repeated task-work failures exhausted the automatic retry budget.',
+                owner: 'OWNER',
+                nextAction: 'REVIEW_FAILURES_AND_EXPLICITLY_RESTART_TASK_WORK',
+                wakeAt: new Date(observedAt.getTime() + AUTO_DISPATCH_WAKE_DELAY_MS),
+              },
+        );
+        continue;
+      }
       // Nothing left to claim it: leave the task OPEN and pick it up on a later sweep. The task
       // table is already the durable queue — it carries the assignee, the provider and the
       // description — so a second copy of it in `session` buys nothing until a slot exists.
       if (!takeBudget(budget, t.assignee.runnerId!, t.listId)) {
         atCapacity += 1;
+        await this.recordReadySweepRefusal(t, {
+          reasonCode: 'RUNNER_OR_LIST_CAPACITY_EXHAUSTED',
+          reason: 'The runner or task-list materialisation budget has no free task-work slot.',
+          owner: 'SYSTEM',
+          nextAction: 'RETRY_AFTER_A_TASK_WORK_SLOT_IS_RELEASED',
+          wakeAt: new Date(observedAt.getTime() + AUTO_DISPATCH_WAKE_DELAY_MS),
+        });
         continue;
       }
       try {
-        const res = await this.execute(
+        const res = await this.dispatchReadyTask(
           t.ownerId,
           t.id,
-          { observedEpoch: t.dispatchEpoch },
-          TASK_RUN_TRIGGER.dependency(t.id, t.dispatchEpoch),
+          t.dispatchEpoch,
+          'READY_SWEEP',
         );
         // A task overtaken out from under this pass is not dispatched and must not be logged as
         // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
@@ -9298,8 +9467,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async autoRunHoldOff(
     taskIds: string[],
     quotaBlindTaskIds: ReadonlySet<string>,
-  ): Promise<Set<string>> {
-    const held = new Set<string>();
+  ): Promise<Map<string, Date | null>> {
+    const held = new Map<string, Date | null>();
     const uniqueIds = [...new Set(taskIds)];
     const usageLimitIs = (negated: boolean) => {
       const clauses = USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
@@ -9324,12 +9493,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         if (!row.taskId) continue;
         const failed = row._count._all;
         if (failed >= MAX_AUTO_RUN_FAILURES) {
-          held.add(row.taskId);
+          held.set(row.taskId, null);
           continue;
         }
         const lastFailedAt = row._max.createdAt?.getTime();
         if (lastFailedAt === undefined) continue;
-        if (now - lastFailedAt < AUTO_RUN_RETRY_BACKOFF_MS[failed - 1]) held.add(row.taskId);
+        const until = lastFailedAt + AUTO_RUN_RETRY_BACKOFF_MS[failed - 1];
+        if (now < until) held.set(row.taskId, new Date(until));
       }
       // The mirror query: only the usage-limit failures, counted for their recency alone, and
       // only for the tasks the gate is blind on. A separate round trip rather than one
@@ -9351,7 +9521,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         if (!row.taskId || held.has(row.taskId)) continue;
         const lastFailedAt = row._max.createdAt?.getTime();
         if (lastFailedAt === undefined) continue;
-        if (now - lastFailedAt < QUOTA_BLIND_RETRY_BACKOFF_MS) held.add(row.taskId);
+        const until = lastFailedAt + QUOTA_BLIND_RETRY_BACKOFF_MS;
+        if (now < until) held.set(row.taskId, new Date(until));
       }
     }
     return held;

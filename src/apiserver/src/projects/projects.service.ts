@@ -25,9 +25,9 @@ import {
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import {
-  completionAckObligationsBy,
-  readCompletionAckObligations,
-} from '../common/completion-ack-obligation';
+  controlPlaneObligationsBy,
+  readControlPlaneObligations,
+} from '../common/control-plane-obligation';
 import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
@@ -1386,12 +1386,12 @@ export class ProjectsService {
     const [rollups, attention, activeObligations] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
-      readCompletionAckObligations(this.prisma, {
+      readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         projectIds: projects.map((project) => project.id),
       }),
     ]);
-    const obligationsByProject = completionAckObligationsBy(activeObligations, 'projectId');
+    const obligationsByProject = controlPlaneObligationsBy(activeObligations, 'projectId');
     return projects.map((project) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, five zero
       // buckets and no activity rather than making every client handle two shapes.
@@ -1440,7 +1440,7 @@ export class ProjectsService {
         _count: { _all: true },
       }),
       this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
-      readCompletionAckObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
+      readControlPlaneObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
     ]);
     return withAcceptanceDefinitions({
       ...withCoordination(project),
@@ -1704,13 +1704,13 @@ export class ProjectsService {
         projectId,
         page.map((task) => task.id),
       ),
-      readCompletionAckObligations(this.prisma, {
+      readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         projectIds: [projectId],
         taskIds: page.map((task) => task.id),
       }),
     ]);
-    const obligationsByTask = completionAckObligationsBy(activeObligations, 'taskId');
+    const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
       const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
