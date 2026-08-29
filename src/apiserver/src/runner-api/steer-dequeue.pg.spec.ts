@@ -66,7 +66,8 @@ before(async () => {
       status text NOT NULL,
       delivered_at timestamptz,
       lease_deadline_at timestamptz,
-      lease_generation uuid
+      lease_generation uuid,
+      coordinator_context_key text
     );
   `);
 });
