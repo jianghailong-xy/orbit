@@ -22,7 +22,12 @@ import { SessionsService } from './sessions.service';
 const TASK = '00000000-0000-4000-8000-000000000101';
 const SESSION = '00000000-0000-4000-8000-000000000102';
 
-type TaskFacts = { completionPolicy: string; hasDirectChildren: boolean };
+type TaskFacts = {
+  completionPolicy: string;
+  completionCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  verifiesTaskId: string | null;
+  hasDirectChildren: boolean;
+};
 
 /** The only two reads these paths make: the session row, and the task facts behind it. */
 function serviceFor(
@@ -66,8 +71,19 @@ function serviceFor(
   return new SessionsService(prisma, {} as never, {} as never);
 }
 
-const AGGREGATE: TaskFacts = { completionPolicy: 'ALL_CHILDREN_DONE', hasDirectChildren: true };
-const LEAF: TaskFacts = { completionPolicy: 'ALL_CHILDREN_DONE', hasDirectChildren: false };
+const AGGREGATE: TaskFacts = {
+  completionPolicy: 'ALL_CHILDREN_DONE',
+  completionCriterion: 'HUMAN_SIGNOFF',
+  verifiesTaskId: null,
+  hasDirectChildren: true,
+};
+const LEAF: TaskFacts = {
+  completionPolicy: 'ALL_CHILDREN_DONE',
+  completionCriterion: 'HUMAN_SIGNOFF',
+  verifiesTaskId: null,
+  hasDirectChildren: false,
+};
+const COMPLETION_OWNER_REFUSAL = /completed by its declared completion owner/;
 
 function terminalRow(startsTaskWork: boolean): Record<string, unknown> {
   return {
@@ -86,7 +102,7 @@ test('a terminal WORK session is refused a manual resume once its task aggregate
     () => service.resume('owner-1', SESSION, { content: 'go on' } as never),
     (error: unknown) => {
       assert.ok(error instanceof ConflictException, 'a 409, not a raw constraint violation');
-      assert.match(String((error as Error).message), /aggregating its subtasks/);
+      assert.match(String((error as Error).message), COMPLETION_OWNER_REFUSAL);
       return true;
     },
   );
@@ -108,7 +124,7 @@ test('a terminal NON-work session on the same task is NOT refused by the aggrega
     () => service.resume('owner-1', SESSION, { content: 'what happened here?' } as never),
     (error: unknown) => {
       const message = String((error as Error).message);
-      assert.doesNotMatch(message, /aggregating its subtasks/, 'the gate had no opinion');
+      assert.doesNotMatch(message, COMPLETION_OWNER_REFUSAL, 'the gate had no opinion');
       assert.match(message, PAST_THE_GATE, 'and the call got past it to the next decision');
       return true;
     },
@@ -121,7 +137,7 @@ test('arming a retry on a WORK session is refused once its task aggregates', asy
     () => service.armAutoRetry('owner-1', SESSION, new Date(Date.now() + 60_000).toISOString()),
     (error: unknown) => {
       assert.ok(error instanceof ConflictException);
-      assert.match(String((error as Error).message), /aggregating its subtasks/);
+      assert.match(String((error as Error).message), COMPLETION_OWNER_REFUSAL);
       return true;
     },
   );
@@ -148,7 +164,7 @@ test('the compatibility boundary: a childless non-MANUAL task still resumes', as
     () => service.resume('owner-1', SESSION, { content: 'again' } as never),
     (error: unknown) => {
       const message = String((error as Error).message);
-      assert.doesNotMatch(message, /aggregating its subtasks/);
+      assert.doesNotMatch(message, COMPLETION_OWNER_REFUSAL);
       assert.match(message, PAST_THE_GATE);
       return true;
     },
