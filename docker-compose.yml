@@ -145,6 +145,7 @@ services:
       # upgrade.sh supplies the checked-out commit. Empty values fail closed in the worker.
       OUTCOME_WATCHDOG_COLLECTOR_SHA: "${OUTCOME_WATCHDOG_COLLECTOR_SHA:-}"
       OUTCOME_WATCHDOG_TARGET_SHA: "${OUTCOME_WATCHDOG_TARGET_SHA:-}"
+      OUTCOME_WATCHDOG_TARGET_REF: "${OUTCOME_WATCHDOG_TARGET_REF:-refs/heads/main}"
       # Deployment-owned generations are registered in PostgreSQL before this process starts.
       # A missing first heartbeat is therefore observable by the external dead-man.
       OUTCOME_WATCHDOG_EXPECTATION_GENERATION: "${OUTCOME_WATCHDOG_EXPECTATION_GENERATION:-}"

@@ -129,7 +129,9 @@ async function waitPast(timestamp, marginMs = 100) {
 
 async function empty() {
   await pool.query(`
-    TRUNCATE executable_runtime_expectation_event, executable_runtime_expectation,
+    TRUNCATE executable_runtime_binding_fact, executable_runtime_binding,
+             executable_runtime_binding_stream,
+             executable_runtime_expectation_event, executable_runtime_expectation,
              completion_ack_obligation_event, completion_ack_fact,
              completion_ack_obligation_revision,
              executable_dead_man_event, executable_runtime_heartbeat, task, session, workspace,
@@ -2512,6 +2514,14 @@ test('Run Now, instant trigger, periodic sweep and execute commit gate use the s
   assert.equal(dispatched, 1, 'Run Now did not cross the READY gate');
   await service.triggerDependents(chain.ownerId, chain.successorId);
   assert.ok(dispatched >= 2, 'instant successor completion did not find the stored W edge');
+  // 0205 deliberately dampens a refused automatic dispatch at one epoch. Move the task to its
+  // next dispatch moment before exercising the periodic door; the dependency edge still names W
+  // and its DONE chain tail is still S, while the durable wake correctly remains scoped to the
+  // failed prior moment.
+  await db.task.update({
+    where: { id: chain.dependentId },
+    data: { runAt: new Date(Date.now() - 1_000) },
+  });
   await service.reconcileReadyTasks();
   assert.ok(dispatched >= 3, 'periodic selector did not dispatch the chain-tail-ready task');
 

@@ -108,8 +108,14 @@ fi
 # running collector and the code whose projection it observes. Operators can deliberately point
 # TARGET at another full SHA; the normal same-release deployment binds both to this checkout.
 DEPLOY_SHA="$(git rev-parse HEAD)"
+DEPLOY_BRANCH="$(git symbolic-ref --quiet --short HEAD || true)"
+[ -n "$DEPLOY_BRANCH" ] || {
+  echo "error: deployment checkout is detached; set OUTCOME_WATCHDOG_TARGET_REF explicitly" >&2
+  exit 1
+}
 export OUTCOME_WATCHDOG_COLLECTOR_SHA="${OUTCOME_WATCHDOG_COLLECTOR_SHA:-$DEPLOY_SHA}"
 export OUTCOME_WATCHDOG_TARGET_SHA="${OUTCOME_WATCHDOG_TARGET_SHA:-$DEPLOY_SHA}"
+export OUTCOME_WATCHDOG_TARGET_REF="${OUTCOME_WATCHDOG_TARGET_REF:-refs/heads/$DEPLOY_BRANCH}"
 export OUTCOME_COORDINATOR_SOURCE_SHA="${OUTCOME_COORDINATOR_SOURCE_SHA:-$DEPLOY_SHA}"
 export OUTCOME_COORDINATOR_TARGET_SHA="${OUTCOME_COORDINATOR_TARGET_SHA:-$DEPLOY_SHA}"
 export EXECUTABLE_DEAD_MAN_SOURCE_SHA="${EXECUTABLE_DEAD_MAN_SOURCE_SHA:-$DEPLOY_SHA}"

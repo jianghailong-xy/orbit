@@ -19,6 +19,7 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
   private contract!: WatchdogContract;
   private collectorSha!: string;
   private targetSha!: string;
+  private targetRef!: string;
   private instanceId!: string;
   private watchdogExpectationGeneration!: string;
   private completionAckExpectationGeneration!: string;
@@ -42,8 +43,11 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
     validateWatchdogContract(this.contract);
     this.collectorSha = this.config.get<string>('OUTCOME_WATCHDOG_COLLECTOR_SHA') ?? '';
     this.targetSha = this.config.get<string>('OUTCOME_WATCHDOG_TARGET_SHA') ?? '';
+    this.targetRef = this.config.get<string>('OUTCOME_WATCHDOG_TARGET_REF')
+      ?? 'refs/heads/main';
     assertFullGitSha(this.collectorSha, 'COLLECTOR');
     assertFullGitSha(this.targetSha, 'TARGET');
+    if (!/^refs\/.+/.test(this.targetRef)) throw new Error('OUTCOME_WATCHDOG_TARGET_REF_INVALID');
     this.instanceId = this.config.get<string>('OUTCOME_WATCHDOG_INSTANCE_ID')
       ?? `${hostname()}:${process.pid}`;
     this.watchdogExpectationGeneration = this.requiredGeneration(
@@ -52,6 +56,23 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
     this.completionAckExpectationGeneration = this.requiredGeneration(
       'COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION',
     );
+    const binding = await this.watchdog.registerCurrentBinding({
+      component: 'outcome-watchdog',
+      instanceId: this.instanceId,
+      expectationGeneration: this.watchdogExpectationGeneration,
+      sourceSha: this.collectorSha,
+      targetSha: this.targetSha,
+      targetRef: this.targetRef,
+      moduleGraphDigest: this.moduleGraphDigest,
+    });
+    this.logger.log(JSON.stringify({
+      event: 'OUTCOME_WATCHDOG_CURRENT_BINDING_REGISTERED',
+      instanceId: this.instanceId,
+      sourceSha: this.collectorSha,
+      targetSha: this.targetSha,
+      targetRef: this.targetRef,
+      ...binding,
+    }));
     await this.runOnce();
     this.timer = setInterval(
       () => void this.runOnce(),
@@ -121,6 +142,8 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
         instanceId: this.instanceId,
         sequence: heartbeat.sequence.toString(),
         heartbeatDigest: heartbeat.heartbeatDigest,
+        bindingDigest: heartbeat.bindingDigest,
+        evaluatedThroughLogicalTime: heartbeat.evaluatedThroughLogicalTime?.toString(),
         completionHeartbeatDigest: completionHeartbeat.heartbeatDigest,
         sourceSha: this.collectorSha,
         staleAttempts,

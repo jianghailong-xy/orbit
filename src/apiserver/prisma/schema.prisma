@@ -3991,11 +3991,16 @@ model ExecutableRuntimeHeartbeat {
   previousDigest String? @map("previous_digest") @db.Char(64)
   heartbeatDigest String @unique @map("heartbeat_digest") @db.Char(64)
   expectationGeneration String? @map("expectation_generation") @db.Uuid
+  runtimeBindingDigest String? @map("runtime_binding_digest") @db.Char(64)
+  runtimeBindingLogicalTime BigInt? @map("runtime_binding_logical_time")
+  runtimeBinding ExecutableRuntimeBinding? @relation(fields: [component, runtimeBindingDigest], references: [component, bindingDigest], onDelete: Restrict)
   ingestedAt DateTime @default(now()) @map("ingested_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([component, instanceId, sequence], map: "executable_runtime_heartbeat_sequence_key")
   @@index([component, instanceId, observedAt(sort: Desc)], map: "executable_runtime_heartbeat_latest_idx")
+  @@unique([component, runtimeBindingLogicalTime], map: "executable_runtime_heartbeat_binding_watermark_idx")
+  @@index([component, runtimeBindingDigest, runtimeBindingLogicalTime(sort: Desc), id(sort: Desc)], map: "executable_runtime_heartbeat_binding_latest_idx")
   @@map("executable_runtime_heartbeat")
 }
 
@@ -4036,6 +4041,7 @@ model ExecutableRuntimeExpectation {
   activatedAt           DateTime @map("activated_at") @db.Timestamptz(6)
   startupDeadlineAt     DateTime @map("startup_deadline_at") @db.Timestamptz(6)
   recordedAt            DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  runtimeBindings       ExecutableRuntimeBinding[]
 
   @@unique([component, instanceId, generation])
   @@index([component, instanceId, activatedAt(sort: Desc), generation], map: "executable_runtime_expectation_slot_idx")
@@ -4056,6 +4062,66 @@ model ExecutableRuntimeExpectationEvent {
 
   @@index([generation, recordedAt(sort: Desc), eventId(sort: Desc)], map: "executable_runtime_expectation_event_latest_idx")
   @@map("executable_runtime_expectation_event")
+}
+
+/// Serialization fence and logical clock for the singleton outcome-watchdog runtime binding.
+/// Binding/fact history is immutable; only this stream head advances under the registration and
+/// heartbeat functions' component-wide lock.
+model ExecutableRuntimeBindingStream {
+  component       String   @id
+  lastLogicalTime BigInt   @default(0) @map("last_logical_time")
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("executable_runtime_binding_stream")
+}
+
+/// Immutable target-SHA and deployment-generation identity for one outcome-watchdog generation.
+/// Current/superseded state is derived from ExecutableRuntimeBindingFact, never rewritten here.
+model ExecutableRuntimeBinding {
+  bindingDigest         String   @id @map("binding_digest") @db.Char(64)
+  component             String
+  expectationGeneration String   @unique @map("expectation_generation") @db.Uuid
+  expectationDigest     String   @map("expectation_digest") @db.Char(64)
+  instanceId            String   @map("instance_id")
+  sourceSha             String   @map("source_sha")
+  targetSha             String   @map("target_sha")
+  targetRef             String   @map("target_ref")
+  moduleGraphDigest     String   @map("module_graph_digest") @db.Char(64)
+  binding               Json
+  registeredAt          DateTime @default(now()) @map("registered_at") @db.Timestamptz(6)
+  expectation           ExecutableRuntimeExpectation @relation(fields: [expectationGeneration], references: [generation], onDelete: Restrict)
+  heartbeats            ExecutableRuntimeHeartbeat[]
+  facts                 ExecutableRuntimeBindingFact[] @relation("RuntimeBindingFactSubject")
+  supersedingFacts      ExecutableRuntimeBindingFact[] @relation("RuntimeBindingFactSuccessor")
+
+  @@unique([component, bindingDigest])
+  @@index([component, registeredAt(sort: Desc), expectationGeneration], map: "executable_runtime_binding_registered_idx")
+  @@map("executable_runtime_binding")
+}
+
+/// Append-only current/superseded/obsolete/heartbeat fact stream. The current binding and its
+/// evaluated-through watermark are derived from this ledger plus the bound heartbeat chain.
+model ExecutableRuntimeBindingFact {
+  factId                       String   @id @map("fact_id") @db.Uuid
+  component                    String
+  logicalTime                  BigInt   @map("logical_time")
+  kind                         String
+  bindingDigest                String?  @map("binding_digest") @db.Char(64)
+  supersededByBindingDigest    String?  @map("superseded_by_binding_digest") @db.Char(64)
+  subjectInstanceId            String   @map("subject_instance_id")
+  subjectSourceSha             String   @map("subject_source_sha")
+  heartbeatDigest              String?  @map("heartbeat_digest") @db.Char(64)
+  idempotencyKey               String   @unique @map("idempotency_key")
+  payload                      Json
+  factDigest                   String   @unique @map("fact_digest") @db.Char(64)
+  recordedAt                   DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  binding                      ExecutableRuntimeBinding? @relation("RuntimeBindingFactSubject", fields: [component, bindingDigest], references: [component, bindingDigest], onDelete: Restrict)
+  supersededByBinding          ExecutableRuntimeBinding? @relation("RuntimeBindingFactSuccessor", fields: [component, supersededByBindingDigest], references: [component, bindingDigest], onDelete: Restrict)
+
+  @@unique([component, logicalTime])
+  @@index([component, bindingDigest, logicalTime(sort: Desc), factId(sort: Desc)], map: "executable_runtime_binding_fact_subject_idx")
+  @@index([component, heartbeatDigest], map: "executable_runtime_binding_fact_legacy_idx")
+  @@map("executable_runtime_binding_fact")
 }
 
 /// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).

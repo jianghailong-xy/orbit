@@ -24,6 +24,43 @@ export class OutcomeWatchdogService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Register the singleton outcome-watchdog generation as the component-wide current binding.
+   * The database appends replacement/legacy-obsoletion facts under one stream lock; replaying the
+   * same generation is idempotent, while a superseded generation cannot make itself current again.
+   */
+  async registerCurrentBinding(input: {
+    component: 'outcome-watchdog';
+    instanceId: string;
+    expectationGeneration: string;
+    sourceSha: string;
+    targetSha: string;
+    targetRef: string;
+    moduleGraphDigest: string;
+  }): Promise<JsonResult> {
+    assertFullGitSha(input.sourceSha, 'WATCHDOG');
+    assertFullGitSha(input.targetSha, 'WATCHDOG_TARGET');
+    if (!/^refs\/.+/.test(input.targetRef)) {
+      throw new Error('WATCHDOG_TARGET_REF_INVALID');
+    }
+    if (!/^[0-9a-f]{64}$/.test(input.moduleGraphDigest)) {
+      throw new Error('WATCHDOG_MODULE_GRAPH_DIGEST_INVALID');
+    }
+    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT executable_runtime_register_current_binding(
+        ${input.component}::text,
+        ${input.instanceId}::text,
+        ${input.expectationGeneration}::uuid,
+        ${input.sourceSha}::text,
+        ${input.targetSha}::text,
+        ${input.targetRef}::text,
+        ${input.moduleGraphDigest}::text
+      ) AS result
+    `);
+    if (!row) throw new Error('WATCHDOG_CURRENT_BINDING_REGISTRATION_FAILED');
+    return asResult(row.result);
+  }
+
+  /**
    * Append one SHA-bound worker heartbeat. Sequence and previousDigest are read and written in the
    * same statement, so the ledger is a verifiable chain rather than mutable "last seen" telemetry.
    */
@@ -36,10 +73,39 @@ export class OutcomeWatchdogService {
     observedAt: Date;
     deadlineAt: Date;
     payload: Record<string, unknown>;
-  }): Promise<{ heartbeatDigest: string; sequence: bigint }> {
+  }): Promise<{
+    heartbeatDigest: string;
+    sequence: bigint;
+    bindingDigest?: string;
+    evaluatedThroughLogicalTime?: bigint;
+  }> {
     assertFullGitSha(input.sourceSha, 'WATCHDOG');
     if (!/^[0-9a-f]{64}$/.test(input.moduleGraphDigest)) {
       throw new Error('WATCHDOG_MODULE_GRAPH_DIGEST_INVALID');
+    }
+    if (input.component === 'outcome-watchdog') {
+      const [bound] = await this.prisma.$queryRaw<Array<{
+        result: Prisma.JsonValue;
+      }>>(Prisma.sql`
+        SELECT executable_runtime_append_current_heartbeat(
+          ${input.component}::text,
+          ${input.instanceId}::text,
+          ${input.expectationGeneration}::uuid,
+          ${input.sourceSha}::text,
+          ${input.moduleGraphDigest}::text,
+          ${input.observedAt}::timestamptz,
+          ${input.deadlineAt}::timestamptz,
+          ${JSON.stringify(input.payload)}::jsonb
+        ) AS result
+      `);
+      if (!bound) throw new Error('WATCHDOG_BOUND_HEARTBEAT_APPEND_FAILED');
+      const result = asResult(bound.result);
+      return {
+        heartbeatDigest: String(result.heartbeatDigest),
+        sequence: BigInt(String(result.sequence)),
+        bindingDigest: String(result.bindingDigest),
+        evaluatedThroughLogicalTime: BigInt(String(result.evaluatedThroughLogicalTime)),
+      };
     }
     const [row] = await this.prisma.$queryRaw<Array<{
       heartbeatDigest: string;
