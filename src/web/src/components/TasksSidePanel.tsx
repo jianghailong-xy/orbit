@@ -44,7 +44,15 @@ import {
   projectAcceptanceInboxPath,
   type ProjectAcceptanceInboxPage,
 } from '../lib/projectAcceptance';
-import { outcomeInboxPath, type OutcomeHumanInbox } from '../lib/outcomeSurfaces';
+import {
+  isRatificationInboxItem,
+  outcomeInboxPath,
+  type OutcomeHumanInbox,
+} from '../lib/outcomeSurfaces';
+import {
+  ownerRatificationInboxPath,
+  type OwnerRatificationInboxPage,
+} from '../lib/ownerRatification';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -235,12 +243,20 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   });
   const outcomeDecisions = useQuery({
     queryKey: ['outcomes', 'inbox', 'nav-count'],
-    queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(1)),
+    queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
     refetchInterval: 15_000,
   });
+  const ownerRatification = useQuery({
+    queryKey: ['owner-ratification', 'pending', 'nav-count'],
+    queryFn: () => api<OwnerRatificationInboxPage>(ownerRatificationInboxPath(100)),
+    refetchInterval: 15_000,
+  });
+  const genericOutcomeCount = (outcomeDecisions.data?.items ?? [])
+    .filter((item) => !isRatificationInboxItem(item)).length;
   const openJudgmentCount = (judgments.data?.total ?? 0)
     + (projectAcceptance.data?.total ?? 0)
-    + (outcomeDecisions.data?.total ?? 0);
+    + genericOutcomeCount
+    + (ownerRatification.data?.total ?? 0);
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =

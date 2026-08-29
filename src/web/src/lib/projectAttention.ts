@@ -1,5 +1,6 @@
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
+import type { OwnerRatificationReference } from './ownerRatification';
 
 /**
  * The projects index is an execution-and-attention router, not a second activity feed.
@@ -29,6 +30,8 @@ export interface AttentionProject {
   lastActivityAt: string | null;
   /** Durable open-blocker ownership aggregated by GET /projects. Optional for older servers. */
   attention?: ProjectAttentionSummary;
+  /** Exact owner decision projected by the server without its CTA capability. */
+  ownerRatification?: OwnerRatificationReference | null;
 }
 
 export interface ProjectAttentionSummary {
@@ -49,6 +52,7 @@ export type AttentionSectionKey =
   | 'completed';
 
 export type AttentionReason =
+  | 'owner-ratification'
   | 'needs-user'
   | 'auto-remediation'
   | 'failed'
@@ -167,6 +171,7 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
+  if (project.ownerRatification?.status === 'PENDING') return 'owner-ratification';
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
   if (failedTaskCount(project) > 0) return 'failed';
@@ -197,7 +202,7 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
   // These blockers are not passive metadata: they are canonical work Orbit has already routed to
   // its coordinator/system. Keeping the row in Running would hide the broken control loop behind
   // unrelated fresh activity in the same project.
-  if (reason === 'auto-remediation') return 'attention';
+  if (reason === 'owner-ratification' || reason === 'auto-remediation') return 'attention';
 
   const quietRunning = project.buckets.running > 0
     && quietDays(project.lastActivityAt, now) !== null;
@@ -217,12 +222,13 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
 }
 
 const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
-  'needs-user': 0,
-  'auto-remediation': 1,
-  failed: 2,
-  'no-activity-running': 3,
-  'no-activity-ready': 4,
-  'ready-to-close': 5,
+  'owner-ratification': 0,
+  'needs-user': 1,
+  'auto-remediation': 2,
+  failed: 3,
+  'no-activity-running': 4,
+  'no-activity-ready': 5,
+  'ready-to-close': 6,
 };
 
 const ATTENTION_SEVERITY_RANK: Record<NonNullable<ProjectAttentionSummary['maxSeverity']>, number> = {
@@ -259,6 +265,7 @@ export function orderWithinSection<T extends AttentionProject>(
         - (right ? ATTENTION_REASON_RANK[right] : Number.MAX_SAFE_INTEGER);
       if (byReason) return byReason;
       if (
+        (left === 'owner-ratification' && right === 'owner-ratification') ||
         (left === 'needs-user' && right === 'needs-user') ||
         (left === 'auto-remediation' && right === 'auto-remediation')
       ) {
@@ -268,8 +275,12 @@ export function orderWithinSection<T extends AttentionProject>(
           - (rightSeverity ? ATTENTION_SEVERITY_RANK[rightSeverity] : Number.MAX_SAFE_INTEGER);
         if (bySeverity) return bySeverity;
         const byAttentionAge = byInstantAsc(
-          a.attention?.attentionSinceAt,
-          b.attention?.attentionSinceAt,
+          left === 'owner-ratification'
+            ? a.ownerRatification?.createdAt
+            : a.attention?.attentionSinceAt,
+          right === 'owner-ratification'
+            ? b.ownerRatification?.createdAt
+            : b.attention?.attentionSinceAt,
         );
         if (byAttentionAge) return byAttentionAge;
       }
@@ -311,6 +322,20 @@ export interface AttentionChip {
 export function attentionChipOf(project: AttentionProject, now: number): AttentionChip | null {
   const reason = attentionReasonOf(project, now);
   if (!reason) return null;
+
+  if (reason === 'owner-ratification') {
+    const reference = project.ownerRatification!;
+    const age = elapsedDayLabel(reference.createdAt, now);
+    return {
+      tone: 'warning',
+      text: [
+        'Owner Ratification',
+        'Needs you',
+        `r${reference.requestRevision}`,
+        age,
+      ].filter(Boolean).join(' · '),
+    };
+  }
 
   if (reason === 'needs-user') {
     const blockers = project.attention?.userBlockers ?? 0;

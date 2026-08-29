@@ -80,6 +80,7 @@ import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import type { OwnerRatificationReference } from './owner-ratification-surface';
 import {
   TASK_COMPLETION_CRITERIA,
   type TaskCompletionCriterionValue,
@@ -620,6 +621,22 @@ export class ProjectsService {
     // service they never reach; Nest injects the real one by type, not by position.
     private readonly sessions: SessionsService = undefined as unknown as SessionsService,
   ) {}
+
+  /** Rolling-test compatibility for focused Prisma/service doubles that predate this projection. */
+  private pendingOwnerRatificationReferences(
+    ownerId: string,
+    projectIds: readonly string[],
+  ): Promise<OwnerRatificationReference[]> {
+    const method = (this.acceptance as unknown as {
+      pendingOwnerRatificationReferences?: (
+        owner: string,
+        projects: readonly string[],
+      ) => Promise<OwnerRatificationReference[]>;
+    }).pendingOwnerRatificationReferences;
+    return typeof method === 'function'
+      ? method.call(this.acceptance, ownerId, projectIds)
+      : Promise.resolve([]);
+  }
 
   /**
    * Ownership check for the write paths, and the 404 every unknown or cross-tenant id gets.
@@ -1385,15 +1402,22 @@ export class ProjectsService {
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    const [rollups, attention, activeObligations] = await Promise.all([
+    const [rollups, attention, activeObligations, ownerRatifications] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
       readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         projectIds: projects.map((project) => project.id),
       }),
+      this.pendingOwnerRatificationReferences(
+        ownerId,
+        projects.map((project) => project.id),
+      ),
     ]);
     const obligationsByProject = controlPlaneObligationsBy(activeObligations, 'projectId');
+    const ratificationsByProject = new Map(
+      ownerRatifications.map((reference) => [reference.projectId, reference]),
+    );
     return projects.map((project) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
       // buckets and no activity rather than making every client handle two shapes.
@@ -1409,6 +1433,9 @@ export class ProjectsService {
         // whether an absent field means "none" or "this server did not compute attention".
         attention: attention.get(project.id) ?? emptyProjectListAttention(),
         controlPlaneObligations: obligationsByProject.get(project.id) ?? [],
+        // Secret-free and built by the same adapter as `/judgments` and project detail. A CTA is
+        // never selected for this read, so a list cache cannot accidentally become authority.
+        ownerRatification: ratificationsByProject.get(project.id) ?? null,
       };
     });
   }
@@ -1435,7 +1462,7 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, acceptance, controlPlaneObligations] = await Promise.all([
+    const [byStatus, acceptance, controlPlaneObligations, ownerRatifications] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId: id },
@@ -1443,12 +1470,14 @@ export class ProjectsService {
       }),
       this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
       readControlPlaneObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
+      this.pendingOwnerRatificationReferences(ownerId, [id]),
     ]);
     return withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
       acceptance,
       controlPlaneObligations,
+      ownerRatification: ownerRatifications[0] ?? null,
     });
   }
 

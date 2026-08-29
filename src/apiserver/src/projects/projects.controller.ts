@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
@@ -93,6 +94,21 @@ export class ProjectsController {
     @Query('limit') limit?: string,
   ) {
     return this.acceptance.pendingInbox(
+      user.userId,
+      limit === undefined ? 100 : Number(limit),
+    );
+  }
+
+  /** Pending Owner Ratification questions, projected without their one-use CTA capability. */
+  @Get('ratification/pending')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
+  @Header('Vary', 'Authorization')
+  pendingOwnerRatification(
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limit?: string,
+  ) {
+    return this.acceptance.pendingOwnerRatificationInbox(
       user.userId,
       limit === undefined ? 100 : Number(limit),
     );
@@ -318,6 +334,10 @@ export class ProjectsController {
   }
 
   @Get(':id/ratification')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
+  @Header('Vary', 'Authorization')
+  @Header('Referrer-Policy', 'no-referrer')
   ownerRatification(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
@@ -326,6 +346,10 @@ export class ProjectsController {
   }
 
   @Post(':id/ratification')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
+  @Header('Vary', 'Authorization')
+  @Header('Referrer-Policy', 'no-referrer')
   decideOwnerRatification(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,

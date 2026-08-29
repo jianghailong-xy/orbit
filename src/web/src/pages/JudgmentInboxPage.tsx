@@ -17,9 +17,14 @@ import {
   isRatificationInboxItem,
   outcomeDecisionReviewPath,
   outcomeInboxPath,
-  ownerRatificationReviewPath,
+  type CanonicalOwnerInboxItem,
   type OutcomeHumanInbox,
 } from '../lib/outcomeSurfaces';
+import {
+  ownerRatificationInboxPath,
+  ownerRatificationReviewPath,
+  type OwnerRatificationInboxPage,
+} from '../lib/ownerRatification';
 
 const when = (value: string): string => new Date(value).toLocaleString();
 
@@ -36,8 +41,15 @@ export function JudgmentInboxPage() {
     queryKey: ['outcomes', 'inbox'],
     queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
   });
+  const ratificationInbox = useQuery({
+    queryKey: ['owner-ratification', 'pending'],
+    queryFn: () => api<OwnerRatificationInboxPage>(ownerRatificationInboxPath(100)),
+  });
+  const genericOutcomeItems = (outcomeInbox.data?.items ?? [])
+    .filter((item): item is CanonicalOwnerInboxItem => !isRatificationInboxItem(item));
   const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0)
-    + (outcomeInbox.data?.total ?? 0);
+    + genericOutcomeItems.length
+    + (ratificationInbox.data?.total ?? 0);
   const entries = [
     ...(taskInbox.data?.items ?? []).map((item) => ({
       kind: 'TASK' as const,
@@ -49,20 +61,32 @@ export function JudgmentInboxPage() {
       at: item.startedAt,
       item,
     })),
+    ...(ratificationInbox.data?.items ?? []).map((item) => ({
+      kind: 'RATIFICATION' as const,
+      at: item.createdAt,
+      item,
+    })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  const loading = taskInbox.isLoading || projectInbox.isLoading || outcomeInbox.isLoading;
-  const failed = taskInbox.isError || projectInbox.isError || outcomeInbox.isError;
-  const error = taskInbox.error ?? projectInbox.error ?? outcomeInbox.error;
-  const fetching = taskInbox.isFetching || projectInbox.isFetching || outcomeInbox.isFetching;
+  const hasAnyData = Boolean(
+    taskInbox.data || projectInbox.data || outcomeInbox.data || ratificationInbox.data,
+  );
+  const loading = !hasAnyData && (taskInbox.isLoading || projectInbox.isLoading
+    || outcomeInbox.isLoading || ratificationInbox.isLoading);
+  const failed = !hasAnyData && (taskInbox.isError || projectInbox.isError
+    || outcomeInbox.isError || ratificationInbox.isError);
+  const error = taskInbox.error ?? projectInbox.error
+    ?? outcomeInbox.error ?? ratificationInbox.error;
+  const fetching = taskInbox.isFetching || projectInbox.isFetching
+    || outcomeInbox.isFetching || ratificationInbox.isFetching;
 
   return (
     <div className="judgment-page judgment-inbox-page">
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>这里只出现真正需要人的决定：Owner Ratification、逐项 HUMAN_SIGNOFF 与四类目标/风险/授权/身份请求；Agent 能处理的工作留在 Agent Queue。</p>
+          <p>任务级 HUMAN_SIGNOFF、项目验收与 Owner Ratification 共用一个收件箱；这里也只出现四类目标/风险/授权/身份请求，机械标准只展示结果。</p>
         </div>
-        {taskInbox.data && projectInbox.data && outcomeInbox.data
+        {hasAnyData
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>
           : null}
       </header>
@@ -85,35 +109,26 @@ export function JudgmentInboxPage() {
                 void taskInbox.refetch();
                 void projectInbox.refetch();
                 void outcomeInbox.refetch();
+                void ratificationInbox.refetch();
               }}
             >
               Retry
             </Button>
           )}
         />
-      ) : entries.length === 0 && (outcomeInbox.data?.items.length ?? 0) === 0 ? (
+      ) : entries.length === 0 && genericOutcomeItems.length === 0 ? (
         <Empty description="没有待判定的证据" />
       ) : (
         <ul className="judgment-inbox-list" aria-label="Open human decisions">
-          {(outcomeInbox.data?.items ?? []).map((item) => {
-            const ratification = isRatificationInboxItem(item);
-            const protocol = ratification ? item.protocol : item.decision;
-            const requestId = ratification
-              ? item.requestId
-              : String(item.decisionRequest?.requestId ?? '');
-            const to = ratification
-              ? ownerRatificationReviewPath(item.projectId)
-              : outcomeDecisionReviewPath(requestId);
+          {genericOutcomeItems.map((item) => {
+            const protocol = item.decision;
+            const requestId = String(item.decisionRequest?.requestId ?? '');
             return (
               <li key={`outcome:${requestId}`} className="judgment-inbox-card">
-                <Link to={to}>
-                  <Tag color={ratification ? 'purple' : 'gold'}>
-                    {ratification ? 'Owner Ratification' : protocol.decisionType}
-                  </Tag>
+                <Link to={outcomeDecisionReviewPath(requestId)}>
+                  <Tag color="gold">{protocol.decisionType}</Tag>
                   <div className="judgment-inbox-title">{item.projectTitle}</div>
-                  <div className="judgment-inbox-project">
-                    {ratification ? '项目合约批准（独立于逐项签字）' : 'Canonical project obligation'}
-                  </div>
+                  <div className="judgment-inbox-project">Canonical project obligation</div>
                   <dl className="judgment-inbox-facts">
                     <div><dt>Agent 已做</dt><dd>{JSON.stringify(protocol.agentWorkCompleted)}</dd></div>
                     <div><dt>whyNotAgent</dt><dd>{protocol.whyNotAgent}</dd></div>
@@ -143,11 +158,11 @@ export function JudgmentInboxPage() {
                 <span className="judgment-inbox-open">Review and decide →</span>
               </Link>
             </li>
-          ) : (
+          ) : entry.kind === 'PROJECT' ? (
             <li key={`project:${entry.item.runId}`} className="judgment-inbox-card project-acceptance-inbox-card">
               <Link to={projectAcceptanceReviewPath(entry.item.projectId, entry.item.runId)}>
                 <Tag color="gold">
-                  逐项 HUMAN_SIGNOFF
+                  {entry.item.confirmationRequired ? '确认项目标准集' : '项目人工验收'}
                 </Tag>
                 <div className="judgment-inbox-title">{entry.item.projectTitle}</div>
                 <div className="judgment-inbox-project">Project {entry.item.projectStatus}</div>
@@ -158,7 +173,40 @@ export function JudgmentInboxPage() {
                   <div><dt>人工标准</dt><dd>{entry.item.answeredCount}/{entry.item.humanCriterionCount} answered</dd></div>
                   <div><dt>Opened</dt><dd>{when(entry.item.startedAt)}</dd></div>
                 </dl>
-                <span className="judgment-inbox-open">处理逐项人工标准 →</span>
+                <span className="judgment-inbox-open">确认标准集并处理人工标准 →</span>
+              </Link>
+            </li>
+          ) : (
+            <li
+              key={`ratification:${entry.item.decisionRequestId}`}
+              className="judgment-inbox-card owner-ratification-inbox-card"
+              data-decision-request-id={entry.item.decisionRequestId}
+              data-obligation-id={entry.item.obligationId}
+              data-obligation-revision={entry.item.obligationRevision}
+              data-contract-digest={entry.item.contractDigest}
+              data-reason={entry.item.reasonCode}
+              data-owner={entry.item.owner}
+              data-evaluated-through-watermark={entry.item.evaluatedThroughWatermark}
+            >
+              <Link to={ownerRatificationReviewPath(
+                entry.item.projectId,
+                entry.item.decisionRequestId,
+              )}>
+                <Tag color="volcano">Owner Ratification</Tag>
+                <div className="judgment-inbox-title">{entry.item.projectTitle}</div>
+                <div className="judgment-inbox-project">
+                  {entry.item.reasonCode} · owner {entry.item.owner}
+                </div>
+                <dl className="judgment-inbox-facts">
+                  <div><dt>Request</dt><dd>{entry.item.decisionRequestId}</dd></div>
+                  <div><dt>Revision</dt><dd>{entry.item.requestRevision}</dd></div>
+                  <div><dt>Obligation</dt><dd>{entry.item.obligationId}</dd></div>
+                  <div><dt>Obligation revision</dt><dd>{entry.item.obligationRevision}</dd></div>
+                  <div><dt>Contract digest</dt><dd>{shortDigest(entry.item.contractDigest)}</dd></div>
+                  <div><dt>Evaluated through</dt><dd>{entry.item.evaluatedThroughWatermark}</dd></div>
+                  <div><dt>Expires</dt><dd>{when(entry.item.expiresAt)}</dd></div>
+                </dl>
+                <span className="judgment-inbox-open">Review exact contract and decide →</span>
               </Link>
             </li>
           ))}

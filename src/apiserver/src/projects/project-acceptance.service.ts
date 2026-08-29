@@ -35,6 +35,11 @@ import {
   refuseHumanOnlyAction,
 } from './coordinator-authority';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  ownerRatificationReference,
+  withoutOwnerRatificationCapability,
+  type OwnerRatificationReference,
+} from './owner-ratification-surface';
 
 /** What a caller may say when opening a run. Both attributions are historical ids: they record who
  *  ran an acceptance, and nothing later may rewrite that by deleting a session. */
@@ -159,6 +164,21 @@ export interface PreapprovedRatificationInput {
 export interface RatificationPrincipal {
   actorType: 'AGENT' | 'RUNNER' | 'SERVICE';
   actorId: string;
+}
+
+interface PendingOwnerRatificationRow {
+  projectId: string;
+  projectTitle: string;
+  ownerId: string;
+  requestId: string;
+  requestGeneration: bigint;
+  contractDigest: string;
+  contractRevision: bigint;
+  reasonCode: string;
+  createdAt: Date;
+  expiresAt: Date;
+  linkedObligations: Prisma.JsonValue;
+  total?: number;
 }
 
 /** The DONE decision is returned as the canonical proof/obligation view, not as a writable
@@ -395,17 +415,173 @@ export class ProjectAcceptanceService {
     return row.state as Record<string, unknown>;
   }
 
+  /**
+   * Secret-free pending references for project list/detail and the global inbox.
+   *
+   * The LATERAL observation is deterministic when several tasks are blocked by the same Project
+   * contract: all are retained in `linkedObligations`, while the oldest immutable observation is
+   * the canonical obligation identity displayed beside the one owner request. No CTA column is
+   * selected, which is stronger than selecting it and promising to redact it later.
+   */
+  private async pendingOwnerRatificationRows(
+    ownerId: string,
+    projectIds?: readonly string[],
+    limit?: number,
+  ): Promise<PendingOwnerRatificationRow[]> {
+    if (projectIds?.length === 0) return [];
+    const projectFilter = projectIds
+      ? Prisma.sql`AND request."project_id" IN (${Prisma.join(
+          projectIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})`
+      : Prisma.empty;
+    const bounded = limit === undefined ? Prisma.empty : Prisma.sql`LIMIT ${limit}`;
+    return this.prisma.$queryRaw<PendingOwnerRatificationRow[]>(Prisma.sql`
+      SELECT request."project_id" AS "projectId", project."title" AS "projectTitle",
+             request."owner_id" AS "ownerId", request."id" AS "requestId",
+             request."request_generation" AS "requestGeneration",
+             request."contract_digest"::text AS "contractDigest",
+             contract."contract_revision" AS "contractRevision",
+             request."reason_code" AS "reasonCode", request."created_at" AS "createdAt",
+             request."expires_at" AS "expiresAt",
+             COALESCE(observed.items, '[]'::jsonb) AS "linkedObligations",
+             count(*) OVER ()::int AS "total"
+        FROM "project_owner_decision_request" request
+        JOIN "project" project
+          ON project."id" = request."project_id"
+         AND project."owner_id" = ${ownerId}::uuid
+        JOIN "project_completion_contract" contract
+          ON contract."project_id" = request."project_id"
+         AND contract."contract_digest" = request."contract_digest"
+        LEFT JOIN LATERAL (
+          SELECT jsonb_agg(jsonb_build_object(
+                   'obligationId', revision."obligation_id"::text,
+                   'obligationRevision', revision."obligation_revision"::text,
+                   'bindingDigest', revision."binding_digest"::text,
+                   'evaluatedThroughWatermark', state."watermark"::text,
+                   'taskId', state."task_id"::text,
+                   'reasonCode', revision."reason_code"
+                 ) ORDER BY state."first_observed_at", revision."obligation_id",
+                            revision."obligation_revision") AS items
+            FROM "task_auto_dispatch_state" state
+            JOIN "task_auto_dispatch_obligation_revision" revision
+              ON revision."tenant_id" = state."tenant_id"
+             AND revision."task_id" = state."task_id"
+             AND revision."obligation_revision" = state."obligation_revision"
+           WHERE state."tenant_id" = request."owner_id"
+             AND state."project_id" = request."project_id"
+             AND state."state" = 'ACTIVE'
+             AND revision."reason_code" = 'OWNER_RATIFICATION_REQUIRED'
+             AND revision."binding"->>'contractDigest' = request."contract_digest"::text
+        ) observed ON true
+       WHERE request."owner_id" = ${ownerId}::uuid
+         AND request."status" = 'PENDING'
+         ${projectFilter}
+       ORDER BY request."created_at" DESC, request."id" DESC
+       ${bounded}
+    `);
+  }
+
+  async pendingOwnerRatificationReferences(
+    ownerId: string,
+    projectIds?: readonly string[],
+  ): Promise<OwnerRatificationReference[]> {
+    const rows = await this.pendingOwnerRatificationRows(ownerId, projectIds);
+    return rows.map((row) => ownerRatificationReference(row));
+  }
+
+  async pendingOwnerRatificationInbox(ownerId: string, requestedLimit = 100): Promise<{
+    total: number;
+    items: OwnerRatificationReference[];
+  }> {
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 200) {
+      throw new BadRequestException('limit must be an integer from 1 through 200');
+    }
+    const rows = await this.pendingOwnerRatificationRows(ownerId, undefined, requestedLimit);
+    return {
+      total: rows[0]?.total ?? 0,
+      items: rows.map((row) => ownerRatificationReference(row)),
+    };
+  }
+
   /** The owner-facing current contract, its independent evaluation plan, and at most one CTA. */
   async ownerRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
-    const [row] = await this.prisma.$queryRaw<Array<{ state: Prisma.JsonValue }>>(Prisma.sql`
-      SELECT project_owner_ratification_state_json(
-        ${ownerId}::uuid, ${projectId}::uuid
-      ) AS state
+    const [row] = await this.prisma.$queryRaw<Array<{
+      projectTitle: string;
+      state: Prisma.JsonValue;
+      latestDecision: Prisma.JsonValue | null;
+    }>>(Prisma.sql`
+      SELECT project."title" AS "projectTitle",
+             project_owner_ratification_state_json(
+               ${ownerId}::uuid, ${projectId}::uuid
+             ) AS state,
+             (
+               SELECT jsonb_build_object(
+                 'decisionRequestId', decided."id",
+                 'contractDigest', decided."contract_digest"::text,
+                 'decision', COALESCE(decided."decision", CASE decided."status"
+                   WHEN 'APPROVED' THEN 'APPROVE' WHEN 'DENIED' THEN 'DENY' END),
+                 'status', decided."status",
+                 'decidedAt', decided."decided_at",
+                 'decidedByType', decided."decided_by_type"
+               )
+                 FROM "project_owner_decision_request" decided
+                WHERE decided."project_id" = project."id"
+                  AND decided."owner_id" = ${ownerId}::uuid
+                  AND decided."status" IN ('APPROVED', 'DENIED')
+                  AND decided."decided_at" IS NOT NULL
+                ORDER BY decided."decided_at" DESC, decided."request_generation" DESC
+                LIMIT 1
+             ) AS "latestDecision"
+        FROM "project" project
+       WHERE project."id" = ${projectId}::uuid
+         AND project."owner_id" = ${ownerId}::uuid
     `);
     if (!row?.state || typeof row.state !== 'object' || Array.isArray(row.state)) {
       throw new NotFoundException('project not found');
     }
-    return row.state as Record<string, unknown>;
+    const state = row.state as Record<string, unknown>;
+    const [reference] = await this.pendingOwnerRatificationReferences(ownerId, [projectId]);
+    const request = state.decisionRequest && typeof state.decisionRequest === 'object'
+      && !Array.isArray(state.decisionRequest)
+      ? state.decisionRequest as Record<string, unknown>
+      : null;
+    const payload = request?.payload && typeof request.payload === 'object'
+      && !Array.isArray(request.payload)
+      ? request.payload as Record<string, unknown>
+      : {};
+    const decisionSurface = reference && request
+      && String(request.id) === reference.decisionRequestId
+      ? {
+          reference,
+          semanticContract: state.semanticContract ?? {},
+          evaluationPlan: state.evaluationPlan ?? {},
+          semanticDiff: request.semanticDiff ?? {},
+          impact: payload.impact ?? null,
+          impacts: payload.impacts ?? {
+            APPROVE:
+              'Ratifies only this exact contract digest and permits guarded automatic execution ' +
+              'to continue inside its risk, permission, recipient and budget envelope.',
+            DENY:
+              'Does not ratify this contract. Automatic side-effecting execution remains disabled ' +
+              'until the owner reviews a current request after changing or reconsidering it.',
+          },
+          recommendation: payload.recommended ?? payload.recommendation ?? null,
+          noActionConsequence:
+            payload.consequenceOfNoAction ?? payload.noActionConsequence ?? null,
+          whyNotAgent: payload.whyNotAgent ?? null,
+          resumeAfterDecision: payload.resumeAfterDecision ?? payload.resumeBehavior ?? null,
+          options: payload.options ?? ['APPROVE', 'DENY'],
+        }
+      : null;
+    return {
+      ...state,
+      projectId,
+      projectTitle: row.projectTitle,
+      owner: 'OWNER',
+      ownerId,
+      latestDecision: row.latestDecision ?? null,
+      decisionSurface,
+    };
   }
 
   /** Machine-readable status contains the question and every digest needed to escalate it, but
@@ -413,20 +589,18 @@ export class ProjectAcceptanceService {
    * authority through the preapproval path; possessing the decision button is not such authority. */
   async machineRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
     const state = await this.ownerRatification(ownerId, projectId);
-    const request = state.decisionRequest;
-    if (!request || typeof request !== 'object' || Array.isArray(request)) return state;
-    const safeRequest = Object.fromEntries(
-      Object.entries(request as Record<string, unknown>)
-        .filter(([field]) => field !== 'ctaToken'),
-    );
-    return { ...state, decisionRequest: safeRequest };
+    return withoutOwnerRatificationCapability(state) as Record<string, unknown>;
   }
 
-  private static ratificationResult(result: Prisma.JsonValue | undefined): Record<string, unknown> {
+  private static ratificationValue(result: unknown): Record<string, unknown> {
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
       throw new Error('Owner Ratification operation returned no result');
     }
-    const value = result as Record<string, unknown>;
+    return withoutOwnerRatificationCapability(result) as Record<string, unknown>;
+  }
+
+  private static ratificationResult(result: unknown): Record<string, unknown> {
+    const value = ProjectAcceptanceService.ratificationValue(result);
     if (value.ok === false) {
       throw new ConflictException({
         statusCode: 409,
@@ -443,6 +617,7 @@ export class ProjectAcceptanceService {
     ownerId: string,
     projectId: string,
     input: OwnerRatificationDecisionInput,
+    options: { commitRefusal?: boolean } = {},
   ): Promise<Record<string, unknown>> {
     const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
       SELECT project_owner_ratify_contract(
@@ -458,7 +633,50 @@ export class ProjectAcceptanceService {
         ${input.atomicCreate ?? false}
       ) AS result
     `);
-    return ProjectAcceptanceService.ratificationResult(row?.result);
+    const result = ProjectAcceptanceService.ratificationValue(row?.result);
+    // Expiry rotates the CTA and records the old request as EXPIRED. The user endpoint must commit
+    // that recovery state before translating the typed refusal to HTTP; atomic Project creation
+    // keeps the historical rollback-on-refusal behavior.
+    if (result.ok === false) {
+      if (options.commitRefusal) return result;
+      return ProjectAcceptanceService.ratificationResult(result);
+    }
+    // A persistent auto-dispatch wake already owns retrying the refused task. Approval moves its
+    // due time forward inside the same transaction as the ratification, so "resume automatically"
+    // is a committed fact rather than a hopeful UI sentence. The wake still re-enters the ordinary
+    // guarded admission path; ratification never creates a Session directly.
+    const rearmedWakeups = input.decision === 'APPROVE'
+      ? await tx.$executeRaw(Prisma.sql`
+          UPDATE "task_auto_dispatch_wakeup" wake
+             SET "due_at" = LEAST(wake."due_at", clock_timestamp()),
+                 "updated_at" = clock_timestamp()
+            FROM "task_auto_dispatch_state" state,
+                 "task_auto_dispatch_obligation_revision" revision
+           WHERE wake."tenant_id" = ${ownerId}::uuid
+             AND wake."project_id" = ${projectId}::uuid
+             AND wake."state" = 'PENDING'
+             AND state."tenant_id" = wake."tenant_id"
+             AND state."task_id" = wake."task_id"
+             AND state."watermark" = wake."watermark"
+             AND state."obligation_revision" = wake."obligation_revision"
+             AND state."state" = 'ACTIVE'
+             AND revision."tenant_id" = state."tenant_id"
+             AND revision."task_id" = state."task_id"
+             AND revision."obligation_revision" = state."obligation_revision"
+             AND revision."reason_code" = 'OWNER_RATIFICATION_REQUIRED'
+             AND revision."binding"->>'contractDigest' = ${input.expectedContractDigest}
+        `)
+      : 0;
+    return {
+      ...result,
+      automaticResume: {
+        scheduled: input.decision === 'APPROVE',
+        rearmedWakeups,
+        behavior: input.decision === 'APPROVE'
+          ? 'Persistent auto-dispatch wakes re-enter guarded admission without another click.'
+          : 'Automatic side-effecting execution remains disabled.',
+      },
+    };
   }
 
   async ratifyByOwner(
@@ -466,13 +684,24 @@ export class ProjectAcceptanceService {
     projectId: string,
     input: OwnerRatificationDecisionInput,
   ): Promise<Record<string, unknown>> {
+    // Cross-account ids get the ordinary project 404 before entering a database function. The
+    // function repeats the owner predicate under lock, so this is an information-safe API answer,
+    // not the authority check itself.
+    await this.assertOwned(projectId, ownerId);
     const result = await withTransactionRetry(
       this.prisma,
-      (tx) => this.ratifyByOwnerInTransaction(tx, ownerId, projectId, input),
+      (tx) => this.ratifyByOwnerInTransaction(
+        tx,
+        ownerId,
+        projectId,
+        input,
+        { commitRefusal: true },
+      ),
       loggedRetry(this.logger, 'projectAcceptance.ratifyByOwner'),
     );
+    const decision = ProjectAcceptanceService.ratificationResult(result);
     await this.reconcile(ownerId, projectId);
-    return result;
+    return decision;
   }
 
   async ratifyByPreapproval(

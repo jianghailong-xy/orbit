@@ -2026,12 +2026,17 @@ model ProjectOwnerDecisionRequest {
   decisionPayload        Json      @map("decision_payload")
   ctaToken               String    @unique @map("cta_token") @db.Uuid
   expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// Terminal owner answer plus its replay identity. Kept on the exact request so DENY has the
+  /// same recoverable network-retry semantics as an append-only APPROVE ratification.
+  decision               String?
+  decisionIdempotencyKey String?   @map("decision_idempotency_key")
   decidedAt              DateTime? @map("decided_at") @db.Timestamptz(6)
   decidedByType          String?   @map("decided_by_type")
   decidedById            String?   @map("decided_by_id")
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([projectId, requestGeneration])
+  @@unique([ownerId, decisionIdempotencyKey], map: "project_owner_decision_idempotency_key")
   @@index([ownerId, status, createdAt(sort: Desc)], map: "project_owner_decision_inbox_idx")
   @@map("project_owner_decision_request")
 }

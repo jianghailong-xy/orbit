@@ -82,6 +82,7 @@ describe('human judgment entry points', () => {
   it('renders the global 待我判定 inbox as exact request/revision links', () => {
     const client = cacheWith(['judgments', 'open'], { total: 1, items: [item] });
     client.setQueryData(['project-acceptance', 'pending'], { total: 1, items: [projectItem] });
+    client.setQueryData(['owner-ratification', 'pending'], { total: 0, items: [] });
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>
@@ -90,7 +91,7 @@ describe('human judgment entry points', () => {
       </QueryClientProvider>,
     );
     expect(html).toContain('待我判定');
-    expect(html).toContain('任务级 HUMAN_SIGNOFF、项目标准集确认与少数项目级 HUMAN_SIGNOFF 共用一个收件箱');
+    expect(html).toContain('任务级 HUMAN_SIGNOFF、项目验收与 Owner Ratification 共用一个收件箱');
     expect(html).toContain('Review this exact accessible build');
     expect(html).toContain('Evidence</dt><dd>r7');
     expect(html).toContain('Implementation workspace');
