@@ -1,0 +1,432 @@
+{
+  "schemaVersion": 1,
+  "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
+  "projectId": "34EVnSK4xSBvXox6Za9AA",
+  "taskId": "34FPjTUdvHbYMJvhv8vRT",
+  "sourceBranch": "orbit/target-393fc6",
+  "targetBranch": "main",
+  "targetRef": "refs/heads/main",
+  "targetDeclaration": {
+    "mode": "RUNTIME_EXACT_REMOTE_REF",
+    "rule": "declared target is the full SHA resolved from refs/heads/main in the clean clone and must equal HEAD, main, origin/main and ls-remote"
+  },
+  "lineage": {
+    "remoteMainObservedBeforeIntegration": "aca97577e5e57cb2d6d39e503a035115e1cedd9c",
+    "localMainIntegrationBase": "2e052c542670ae0aa8a4395623e84a69220d4119",
+    "historyPolicy": "NO_FORCE_NO_RESET_NO_REWRITE"
+  },
+  "immutableVerifier": {
+    "taskId": "34EVtK2RbRq0fI3hsQISw",
+    "status": "DONE",
+    "verdict": "FAIL",
+    "evidenceId": "DphKCyIZ7Se648G54i1Ux",
+    "evidenceDigest": "50e55c8c721a0f9a79a0d22445febfe095ebc4a65747f221b890425f46289085",
+    "mustRemainUnsuperseded": true
+  },
+  "candidates": [
+    {
+      "taskId": "34FLebbbryXOpHmTLVQ9G",
+      "taskStatus": "DONE",
+      "sessionId": "3kvxEp1FyUa5gIfEX6Pe4F",
+      "branch": "orbit/work-overview-ready-b68c5b",
+      "candidateCommit": "2e052c542670ae0aa8a4395623e84a69220d4119",
+      "requiredAncestor": true,
+      "mergeReceiptIds": ["34FNxFGIwVV9hbaoQzNlo", "34FOA6pEYBS2qstcgeZln", "34FOIgqqL0QIlnJPpIaRG"]
+    },
+    {
+      "taskId": "34FImA0McB4HUBd0SB633",
+      "taskStatus": "DONE",
+      "sessionId": "7Qypd2tZqAtjsNQCcFkMRa",
+      "branch": "orbit/owner-ratification-project-attention-5ef8ba",
+      "candidateCommit": "6a9c4710cc00e47f6a6f1a48c6a796686e9484a6",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34FIm9qiJ567naahHHe8x",
+      "taskStatus": "DONE",
+      "sessionId": "7DHGjXLrL3IEKvW7klcxyy",
+      "branch": "orbit/watchdog-current-binding-heartbeat-c3165c",
+      "candidateCommit": "21e019a47adffe018a7539163c9fc3e0ab83c6cc",
+      "requiredAncestor": true,
+      "mergeReceiptIds": ["34FJihM87sS8EyNJPMrFz"]
+    },
+    {
+      "taskId": "34FHy7tBjoBzVG6AytLx0",
+      "taskStatus": "DONE",
+      "sessionId": "5ti975CcEW756tp83MtvOw",
+      "branch": "orbit/auto-dispatch-sha-e22760",
+      "candidateCommit": "c2f326329dbd0282dde7b5941755d5f4e76922ac",
+      "requiredAncestor": true,
+      "mergeReceiptIds": ["34FIGPN2DlJ5zMvVgL7si", "34FIQb3K5yzxtWSyzyld2"]
+    },
+    {
+      "taskId": "34FGd24hax5lmOVKTY1ZS",
+      "taskStatus": "DONE",
+      "sessionId": "5k9Ewp4pfylzIRFWgQmJx3",
+      "branch": "orbit/ready-autorun-successor-28d986",
+      "candidateCommit": "577a71b266219014ad8a4ee44e8ab4ee75c4c179",
+      "requiredAncestor": true,
+      "mergeReceiptIds": ["34FIGPN2DlJ5zMvVgL7si", "34FIQb3K5yzxtWSyzyld2"]
+    },
+    {
+      "taskId": "34F3VZHYd0mo4WLoXv0IE",
+      "taskStatus": "DONE",
+      "sessionId": "5QfYptjVOBdLwDxfOSHcG7",
+      "branch": "orbit/rolling-upgrade-v1-completion-ack-ea2881",
+      "candidateCommit": "aca97577e5e57cb2d6d39e503a035115e1cedd9c",
+      "requiredAncestor": true,
+      "mergeReceiptIds": ["34F7sqVdz2dBPnmkcJf8T"]
+    },
+    {
+      "taskId": "34Ex0SFCY6DpfvW2I4ydE",
+      "taskStatus": "DONE",
+      "sessionId": "12eYVGLnH6KzxbLNlQQ0wa",
+      "branch": "orbit/retry-watchdog-111k-86bb97",
+      "candidateCommit": "38cd86d35040a4fd5a9ce08cfaf43331d1ce2d99",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34Ex0RtksY6XjVp2L796F",
+      "taskStatus": "DONE",
+      "sessionId": "2pZXrvGxYMUrs5Wsebphue",
+      "branch": "orbit/executable-typed-attempt-2e9228",
+      "candidateCommit": "4416910a93836843a2d875d2372bf4e6f7040e57",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34Elz5t7HAZZRf6ruE73y",
+      "taskStatus": "FAILED",
+      "sessionId": "3RIgJAt2GsNCTVoKKfOvK",
+      "branch": "orbit/watchdog-operational-slo-ce7015",
+      "candidateCommit": "0fcd83faa6c2cbf1fd622ee486b916b37a178723",
+      "requiredAncestor": true,
+      "historicalOutcomeMustRemain": "FAILED",
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34Elz5p7RdzZ9wcK5UFIV",
+      "taskStatus": "DONE",
+      "sessionId": "2JLb9vUuFkGb7NMgjzhFzk",
+      "branch": "orbit/action-executor-a56eba",
+      "candidateCommit": "4815302d00abd6b45d1642c9dcb844fb74728f31",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34Elz5k9GltFxhKDOiFSZ",
+      "taskStatus": "DONE",
+      "sessionId": "6IsnpJg8h21YVozUmrSe63",
+      "branch": "orbit/owner-ratification-00fa47",
+      "candidateCommit": "5ec1a8d01cdbf71b40c48583603f0bb1667e43bc",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34Elz5dWHPpplmIzmWSoa",
+      "taskStatus": "DONE",
+      "sessionId": "4IndwPPhjIV4akTcIOWS0a",
+      "branch": "orbit/canonical-fact-ingress-trust-envelope-ev-2a3716",
+      "candidateCommit": "8bee96c270d9e6d962f6179ae267fa85ae16f2a2",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34Elz5AB4mdoYFOp9MeMn",
+      "taskStatus": "DONE",
+      "sessionId": "4xcldUqmc7hfJSRUwzSk0d",
+      "branch": "orbit/merge-writer-fence-4226af",
+      "candidateCommit": "bcaf8b3aa1de73ade10a4a32828d6544b32d1a66",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtK2RbRq0fI3hsQISw",
+      "taskStatus": "DONE",
+      "verdict": "FAIL",
+      "sessionId": "4zch3AZLmX4iVAGDhJiIHB",
+      "branch": "orbit/outcome-reconciler-797546",
+      "candidateCommit": "2e052c542670ae0aa8a4395623e84a69220d4119",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJyRwtCxw0Dv9yE6N",
+      "taskStatus": "DONE",
+      "sessionId": "1p8xVhUSyAfitp1TPrZ7k",
+      "branch": "orbit/shadow-canary-b23610",
+      "candidateCommit": "b0a5aa2b32100044fc4151f49037d83dbb4b918c",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJuwMDJkbocbCPllX",
+      "taskStatus": "DONE",
+      "sessionId": "gsPokCIjPkKRbpvpCkzPh",
+      "branch": "orbit/trace-replay-faf3d9",
+      "candidateCommit": "73b5c36546b7b87f4fd5f32268486484f988b8e9",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJonTl7mXp28rETmy",
+      "taskStatus": "DONE",
+      "sessionId": "4gzt9xqB6dlyPtS41u7Hs5",
+      "branch": "orbit/agent-queue-user-inbox-project-attention-c7ce44",
+      "candidateCommit": "f6f0b8ee62a9e3a50843221c58c448b630df2827",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJm4HjI7HWSuvTAFj",
+      "taskStatus": "DONE",
+      "sessionId": "1mOmwPvihTBU98IfsWbTcl",
+      "branch": "orbit/contract-artifact-obsolete-successor-8895fe",
+      "candidateCommit": "714bfee6e27e10acc4dcfa9ce717266f052fb1cd",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJfvapERXMEHLDLMm",
+      "taskStatus": "DONE",
+      "sessionId": "19MhmHl36z0i5cfGnutSMc",
+      "branch": "orbit/merge-delivery-obligation-36cadf",
+      "candidateCommit": "d657e6aaeaca387549c2746d8aa209ac82750533",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJVmvsOHA9NZmL7pZ",
+      "taskStatus": "DONE",
+      "sessionId": "4EUGUvUVKJD9sMNjy9LRaQ",
+      "branch": "orbit/coordinator-48cb6b",
+      "candidateCommit": "da1ed71c89d47cdf69a84ff89dc6c92be892012d",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJOZfyyba6M8JjERI",
+      "taskStatus": "DONE",
+      "sessionId": "3nZUSTBTGzaoXgu7kxBiUm",
+      "branch": "orbit/donegate-canonical-obligations-e340ee",
+      "candidateCommit": "7ed639fbc478974b20085e277de3ccf2507bfefb",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJKNrRMsn8FfotuhH",
+      "taskStatus": "DONE",
+      "sessionId": "54j4YYcYC5FHagYQceDkzW",
+      "branch": "orbit/obligation-projection-shadow-reconciler-6bcf12",
+      "candidateCommit": "800fea1dfbd15999b0f48abf644495e29c5eed16",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJGaA0pzGbVrmC1az",
+      "taskStatus": "DONE",
+      "sessionId": "1otmQyYdPy1Tkg96I3787B",
+      "branch": "orbit/outcome-evaluator-obligation-d26504",
+      "candidateCommit": "431b880af1853b1a18f6c97eac9557e439afc88f",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJ9rE1lcD7wfJiBP0",
+      "taskStatus": "DONE",
+      "sessionId": "7Lh3OV3aUiFX8q9zBiE19I",
+      "branch": "orbit/obligation-action-protocol-registry-36584e",
+      "candidateCommit": "49796ada5e9a490dbb7776db504bcdb6a4b7c953",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34EVtJ4ah5Kv4BCd3AiYX",
+      "taskStatus": "DONE",
+      "sessionId": "5fZrYKfkxtsxg3S75acVa0",
+      "branch": "orbit/outcome-contract-evidence-obligation-7ae318",
+      "candidateCommit": "19165b1b59ac0cfc5054ea584645d57a070a0cb7",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    }
+  ],
+  "recordedMergeReceipts": [
+    {
+      "id": "34FNxFGIwVV9hbaoQzNlo",
+      "result": "MERGED",
+      "sourceSha": "acd8a3e9df4c9cc854e3316a691075edba9c89ba",
+      "targetShaBefore": "21e019a47adffe018a7539163c9fc3e0ab83c6cc",
+      "targetShaAfter": "acd8a3e9df4c9cc854e3316a691075edba9c89ba"
+    },
+    {
+      "id": "34FOA6pEYBS2qstcgeZln",
+      "result": "MERGED",
+      "sourceSha": "a412cd9a09b0ce0060d809214b9c485e49e9d98b",
+      "targetShaBefore": "acd8a3e9df4c9cc854e3316a691075edba9c89ba",
+      "targetShaAfter": "a412cd9a09b0ce0060d809214b9c485e49e9d98b"
+    },
+    {
+      "id": "34FOIgqqL0QIlnJPpIaRG",
+      "result": "MERGED",
+      "sourceSha": "2e052c542670ae0aa8a4395623e84a69220d4119",
+      "targetShaBefore": "a412cd9a09b0ce0060d809214b9c485e49e9d98b",
+      "targetShaAfter": "2e052c542670ae0aa8a4395623e84a69220d4119"
+    },
+    {
+      "id": "34FJihM87sS8EyNJPMrFz",
+      "result": "MERGED",
+      "sourceSha": "21e019a47adffe018a7539163c9fc3e0ab83c6cc",
+      "targetShaBefore": "c2f326329dbd0282dde7b5941755d5f4e76922ac",
+      "targetShaAfter": "21e019a47adffe018a7539163c9fc3e0ab83c6cc"
+    },
+    {
+      "id": "34FIGPN2DlJ5zMvVgL7si",
+      "result": "MERGED",
+      "sourceSha": "577a71b266219014ad8a4ee44e8ab4ee75c4c179",
+      "targetShaBefore": "38cd86d35040a4fd5a9ce08cfaf43331d1ce2d99",
+      "targetShaAfter": "4fbbe8c9fda8108ebb397df71dcf8c68b24408c1"
+    },
+    {
+      "id": "34FIQb3K5yzxtWSyzyld2",
+      "result": "ALREADY_MERGED",
+      "sourceSha": "577a71b266219014ad8a4ee44e8ab4ee75c4c179",
+      "targetShaBefore": "4fbbe8c9fda8108ebb397df71dcf8c68b24408c1",
+      "targetShaAfter": "c2f326329dbd0282dde7b5941755d5f4e76922ac"
+    },
+    {
+      "id": "34F7sqVdz2dBPnmkcJf8T",
+      "result": "MERGED",
+      "sourceSha": "aca97577e5e57cb2d6d39e503a035115e1cedd9c",
+      "targetShaBefore": "2d212ba975c09aeacd217a30d2b9002790dcee2d",
+      "targetShaAfter": "aca97577e5e57cb2d6d39e503a035115e1cedd9c"
+    }
+  ],
+  "deploymentAndDeliveryEvidence": [
+    {
+      "taskId": "34FHy7tBjoBzVG6AytLx0",
+      "commentId": "34FIWcPRHwGwV7qx4SEjr",
+      "targetSha": "c2f326329dbd0282dde7b5941755d5f4e76922ac",
+      "attestationDigest": "d75a3ac437e0fd78a143f8f25f7b69e3389a9cf25e359134ef4b9207bfc892b1"
+    },
+    {
+      "taskId": "34FIm9qiJ567naahHHe8x",
+      "commentId": "34FK0x2MTau0tGK0oAuIp",
+      "targetSha": "21e019a47adffe018a7539163c9fc3e0ab83c6cc",
+      "attestationDigest": "180569a73a5a75ce04ac806bbe5b745a35451f65da22c82a75fed285588e951a"
+    },
+    {
+      "taskId": "34F3VZHYd0mo4WLoXv0IE",
+      "commentId": "34F80rI2qEWiq9Zf4NooS",
+      "targetSha": "aca97577e5e57cb2d6d39e503a035115e1cedd9c",
+      "manifestDigest": "29666a5b83098f339bb504022584aef972a0f923cf824fd24d693955bcc528db"
+    },
+    {
+      "taskId": "34FLebbbryXOpHmTLVQ9G",
+      "commentId": "34FONc8YZr0VA4e72rbbA",
+      "targetSha": "2e052c542670ae0aa8a4395623e84a69220d4119",
+      "manifestDigest": "476f10556589d42b7b11edd9d3b3875130ae22d6de60ffb53defb03b4abe19e9"
+    }
+  ],
+  "integrationMerges": [
+    {
+      "sourceBranch": "orbit/obligation-action-protocol-registry-36584e",
+      "mergeCommit": "3a7b46bac508a95fdc254daa58af1132a3532d43",
+      "conflictResolution": "overlapping protocol/schema changes were patch-equivalent or already supersets on main; retained the integrated main form while adding source ancestry"
+    },
+    {
+      "sourceBranch": "orbit/canonical-fact-ingress-trust-envelope-ev-2a3716",
+      "mergeCommit": "b6c5490b0be094bfc018da11e794a5566ad5e12f",
+      "conflictResolution": "retained the existing main supersets for overlapping fact-ingress files and preserved source ancestry"
+    },
+    {
+      "sourceBranch": "orbit/merge-writer-fence-4226af",
+      "mergeCommit": "2bdaa72494ffbf698c78c335ab1d38e6e7cf2ee6",
+      "conflictResolution": "retained the existing main supersets for overlapping bootstrap/writer-fence files and preserved source ancestry"
+    },
+    {
+      "sourceBranch": "orbit/executable-typed-attempt-2e9228",
+      "mergeCommit": "350a2f43511354b4f82f7e9384a9f4a685ef30fb",
+      "conflictResolution": "git patch comparison proved the candidate tree delta already present; created an ancestry-only merge with no semantic tree regression"
+    },
+    {
+      "sourceBranch": "orbit/merge-delivery-obligation-36cadf",
+      "mergeCommit": "90890378e3576524e3b334b815114aaf6df1fc2c",
+      "conflictResolution": "unioned package entrypoints, Prisma models, module providers, delivery trigger inventory and structurally valid projection fixtures"
+    },
+    {
+      "sourceBranch": "orbit/agent-queue-user-inbox-project-attention-c7ce44",
+      "mergeCommit": "70fe7e78f3b8cb3bb4ca64178fa03758837d10df",
+      "conflictResolution": "unioned versioning/surface models and providers; retained current owner completion endpoint and added outcome routes plus Go project_obligations capability"
+    },
+    {
+      "sourceBranch": "orbit/owner-ratification-project-attention-5ef8ba",
+      "mergeCommit": "224f39aa357d9e775d1eede29c934b3271a71667",
+      "conflictResolution": "kept generic outcome decisions and specialized ratification together, deduplicated inbox counts, used the exact request-bound one-use CTA page and preserved project-only compatibility links"
+    },
+    {
+      "sourceBranch": "orbit/trace-replay-faf3d9",
+      "mergeCommit": "8730e8ece787cd2d2405bfcdc85dffba00aa38c1",
+      "conflictResolution": "package script conflict resolved as a strict union; replay sources were otherwise additive"
+    },
+    {
+      "sourceBranch": "orbit/shadow-canary-b23610",
+      "mergeCommit": "de4d2570a0a14cf46024830e42b09cfcc7c36c48",
+      "conflictResolution": "package script conflict resolved as a strict union; canary contract, verifier and sources were otherwise additive"
+    }
+  ],
+  "requiredEntrypoints": [
+    {
+      "suite": "delivery",
+      "packageScript": "test:outcome-reconciler:delivery",
+      "command": "bash scripts/outcome-reconciler-delivery.sh",
+      "shell": "scripts/outcome-reconciler-delivery.sh",
+      "manifestGenerator": "scripts/outcome-reconciler-delivery-manifest.mjs"
+    },
+    {
+      "suite": "versioning",
+      "packageScript": "test:outcome-reconciler:versioning",
+      "command": "bash scripts/outcome-reconciler-versioning.sh",
+      "shell": "scripts/outcome-reconciler-versioning.sh",
+      "manifestGenerator": "scripts/outcome-reconciler-versioning-manifest.mjs"
+    },
+    {
+      "suite": "surfaces",
+      "packageScript": "test:outcome-reconciler:surfaces",
+      "command": "bash scripts/outcome-reconciler-surfaces.sh",
+      "shell": "scripts/outcome-reconciler-surfaces.sh",
+      "manifestGenerator": "scripts/outcome-reconciler-surfaces-manifest.mjs"
+    },
+    {
+      "suite": "replay",
+      "packageScript": "test:outcome-reconciler:replay",
+      "command": "bash scripts/outcome-reconciler-replay.sh",
+      "shell": "scripts/outcome-reconciler-replay.sh",
+      "manifestGenerator": "scripts/outcome-reconciler-replay-manifest.mjs"
+    },
+    {
+      "suite": "canary",
+      "packageScript": "test:outcome-reconciler:canary",
+      "command": "bash scripts/outcome-reconciler-canary.sh",
+      "shell": "scripts/outcome-reconciler-canary.sh",
+      "manifestGenerator": "scripts/outcome-reconciler-canary-manifest.mjs",
+      "additionalVerifier": "scripts/outcome-reconciler-canary-verify.mjs"
+    },
+    {
+      "suite": "owner-ratification-ui",
+      "packageScript": "test:outcome-reconciler:owner-ratification-ui",
+      "command": "bash scripts/outcome-reconciler-owner-ratification-ui.sh",
+      "shell": "scripts/outcome-reconciler-owner-ratification-ui.sh",
+      "manifestGenerator": "scripts/outcome-reconciler-owner-ratification-ui-manifest.mjs"
+    }
+  ],
+  "authoritativeReceiptLookup": {
+    "sourceBranch": "orbit/target-393fc6",
+    "targetBranch": "main",
+    "requiredResult": ["MERGED", "ALREADY_MERGED"],
+    "requiredRecordedBy": "AGENT",
+    "sourceAndTargetAfterMustEqualDeclaredTarget": true,
+    "targetBeforeMustBeStrictAncestor": true
+  }
+}
