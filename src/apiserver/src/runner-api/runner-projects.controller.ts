@@ -65,7 +65,10 @@ export class RunnerProjectsController {
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
-    private readonly outcomeSurfaces: OutcomeSurfaceService,
+    // Keep direct constructions in older focused controller specs source-compatible. Nest still
+    // injects the typed service in production; only tests that never reach an outcome route use
+    // the default, matching the compatibility defaults on ProjectsService itself.
+    private readonly outcomeSurfaces: OutcomeSurfaceService = undefined as unknown as OutcomeSurfaceService,
   ) {}
 
   /**
