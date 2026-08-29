@@ -20,8 +20,10 @@ package main
 //
 // Two things make it cheap enough to keep in the default suite:
 //
-//   - None of these frames starts a turn. `set_model` and `set_permission_mode` are
-//     answered by the CLI itself, so no request reaches the API and no tokens are spent.
+//   - The control frames themselves start no turn. The model probe opens one credential-free
+//     turn only to read the CLI's authoritative system/init model after set_model; the CLI
+//     reports that state before its synthetic signed-out answer, so no API request or token is
+//     involved.
 //   - The control channel is serviced before authentication matters. A config dir with no
 //     credentials in it answers all of these (verified against 2.1.241 on an empty HOME),
 //     which is why nothing here borrows the machine's login and why "signed out" is not a
@@ -55,9 +57,9 @@ const (
 	realClaudeContractTimeout = 90 * time.Second
 
 	// The two model ids the set_model probes move between: the process is spawned on one
-	// and asked for the other, because a set_model naming the model already loaded is
-	// accepted without the echo this pins (2.1.241). Haiku is the spawn model so that a
-	// probe that somehow did run a turn would be the cheapest one available.
+	// and asked for the other, so an init readback left on the spawn model cannot pass.
+	// Haiku is the spawn model so that a probe that somehow did reach an API would be the
+	// cheapest one available.
 	realClaudeSpawnModel  = "claude-haiku-4-5-20251001"
 	realClaudeTargetModel = "claude-sonnet-5"
 )
@@ -126,13 +128,14 @@ func TestRealClaudeRefusesAnUnknownPermissionMode(t *testing.T) {
 	}
 }
 
-// A model switch on a live session, which the CLI both answers and writes into the
-// conversation.
+// A model switch on a live session, which the CLI both answers and reports as the active
+// model in the next turn's system/init handshake.
 //
-// That second frame is the only record a transcript gets of a model change, and its shape
-// is not the one Orbit's own user frames have: `content` is a bare string where userFrame
-// always sends an array of content blocks. Anything reading user frames back has to keep
-// coping with both, so the string-ness is asserted rather than assumed.
+// Claude 2.1.250 also volunteered a user frame saying "Set model to ...". Claude 2.1.251
+// stopped emitting that frame, while its control response still carries only success and
+// the request id. That ACK alone cannot prove the state moved. system/init is the CLI's
+// authoritative readback: it names the model the new turn will use, so an unchanged or
+// wrongly applied request still fails this assertion.
 func TestRealClaudeAcceptsASetModel(t *testing.T) {
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
@@ -144,22 +147,13 @@ func TestRealClaudeAcceptsASetModel(t *testing.T) {
 	if len(frames) != 1 || frames[0].subtype != ctrlSetModel {
 		t.Fatalf("the payload resolved to %d frame(s), want exactly one %s", len(frames), ctrlSetModel)
 	}
-	echo := p.awaitFrame("a user frame echoing the model switch", func(m map[string]interface{}) bool {
-		if m["type"] != frameUser {
-			return false
-		}
-		msg, _ := m["message"].(map[string]interface{})
-		return msg != nil && strings.Contains(fmt.Sprint(msg["content"]), "Set model to")
+	p.startReadbackTurn()
+	init := p.awaitFrame("a system/init frame reading back the active model", func(m map[string]interface{}) bool {
+		return m["type"] == "system" && m["subtype"] == "init"
 	})
-	msg, _ := echo["message"].(map[string]interface{})
-	content, isString := msg["content"].(string)
-	if !isString {
-		t.Fatalf("the model-switch echo carries content of type %T, want a bare string: %v", msg["content"], echo)
-	}
-	plain := "<local-command-stdout>Set model to " + realClaudeTargetModel + "</local-command-stdout>"
-	inlineCode := "<local-command-stdout>Set model to `" + realClaudeTargetModel + "`</local-command-stdout>"
-	if content != plain && content != inlineCode {
-		t.Errorf("the model-switch echo says\n\t%q\nwant exactly one of\n\t%q\n\t%q", content, plain, inlineCode)
+	if got := init["model"]; got != realClaudeTargetModel {
+		t.Errorf("the first turn after set_model initialized on model %v, want exactly %q: %v",
+			got, realClaudeTargetModel, init)
 	}
 }
 
@@ -273,9 +267,10 @@ func realClaudeTransportArgs(job *ClaimedSession) []string {
 
 // realClaudeProbe is one live `claude`, driven through the production control path.
 type realClaudeProbe struct {
-	t   *testing.T
-	exe string
-	rt  *claudeRuntime
+	t         *testing.T
+	exe       string
+	sessionID string
+	rt        *claudeRuntime
 
 	// frames holds the stdout lines that are NOT control_responses; the responses go where
 	// production sends them, into rt.resolveControl. Nothing reads this until an assertion
@@ -305,6 +300,25 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 	// history, and both dirs go away with the test.
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	// The model test opens one turn to obtain system/init. Make the empty config decisive:
+	// inherited API, OAuth, gateway or cloud-provider credentials must not turn that local
+	// state readback into a paid external request.
+	for _, key := range []string{
+		"ANTHROPIC_API_KEY",
+		"ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_MODEL",
+		"CLAUDE_CODE_OAUTH_TOKEN",
+		"CLAUDE_CODE_USE_ANTHROPIC_AWS",
+		"CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+		"CLAUDE_CODE_USE_BEDROCK",
+		"CLAUDE_CODE_USE_FOUNDRY",
+		"CLAUDE_CODE_USE_GATEWAY",
+		"CLAUDE_CODE_USE_MANTLE",
+		"CLAUDE_CODE_USE_VERTEX",
+	} {
+		t.Setenv(key, "")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &ClaimedSession{
@@ -319,10 +333,11 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 		t.Fatalf("spawning %s: %v", exe, err)
 	}
 	p := &realClaudeProbe{
-		t:      t,
-		exe:    exe,
-		rt:     newClaudeRuntime(proc),
-		frames: make(chan map[string]interface{}, 256),
+		t:         t,
+		exe:       exe,
+		sessionID: job.SessionUUID,
+		rt:        newClaudeRuntime(proc),
+		frames:    make(chan map[string]interface{}, 256),
 	}
 	go p.readStdout(proc.stdout)
 	go p.readStderr(proc.stderr)
@@ -390,6 +405,20 @@ func (p *realClaudeProbe) request(subtype string, payload map[string]interface{}
 	err = p.rt.awaitControl(context.Background(), w, realClaudeContractTimeout)
 	p.t.Logf("%s answered %s in %s: %v", p.exe, subtype, time.Since(started).Round(time.Millisecond), err)
 	return err
+}
+
+// startReadbackTurn asks the already-configured process for the first handshake that can
+// authoritatively name its active model. It uses the same user frame and runtime queue as
+// a production turn; credentials were removed before spawn, so the CLI stops locally after
+// reporting init instead of sending this probe to an API.
+func (p *realClaudeProbe) startReadbackTurn() {
+	p.t.Helper()
+	if err := p.rt.send(userFrame(p.sessionID, []map[string]interface{}{
+		{"type": "text", "text": "Orbit model-state protocol probe"},
+	})); err != nil {
+		p.t.Fatalf("feeding the model readback turn: %v%s", err, p.engineOutput())
+	}
+	p.rt.beginTurn()
 }
 
 // awaitFrame returns the first frame the CLI emitted — already arrived, or still to come —
