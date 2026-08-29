@@ -218,7 +218,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'actionIntentId',
   'receiptId',
   'diagnosticId',
-  'clockId',
   'coordinationId',
   'leaseId',
   'externalWaitId',
@@ -332,47 +331,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // by accident.
   'wakeId',
   'raisedBlockerId',
-  // Outcome v2's immutable rows and row references. These are durable audit addresses a caller
-  // can receive and follow; snapshots retain the same address semantics after the live relation
-  // moves or disappears. Lease ROW ids belong here too — the separate leaseToken is the opaque
-  // equality capability and is deliberately classified below.
-  'wakeupId',
-  'evaluationId',
-  'firstEvaluationId',
-  'actionIntentId',
-  'receiptId',
-  'diagnosticId',
-  'coordinationId',
-  'leaseId',
-  'externalWaitId',
-  'deliveryId',
-  'resultId',
-  'completionDeliveryReceiptId',
-  'waitId',
-  'planId',
-  'affectedSessionId',
-  'originLeaseId',
-  'deliveryReceiptId',
-  'recordedLeaseId',
-  'wakeIdSnapshot',
-  'sessionIdSnapshot',
-  'adoptionId',
-  'actionId',
-  'sourceSessionIdSnapshot',
-  'taskIdSnapshot',
-  'taskProjectIdSnapshot',
-  'lastDeliveryReceiptId',
-  'bindingId',
-  'runnerIdSnapshot',
-  'deliveryBindingId',
-  'attestationId',
-  'verificationId',
-  'transitionId',
-  'predecessorEvaluationId',
-  'successorEvaluationId',
-  // The authenticated runner that ingested a RunEvent is audit provenance and can be followed to
-  // that runner. The lease generation beside it is a fence and is classified in the denylist.
-  'ingestedByRunnerId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
@@ -412,11 +370,6 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // which request already happened. Decoding it on the way in would make that comparison lie, and
   // it appears in no request and no response.
   'requestId',
-  // UUID-shaped generations are compare-and-swap fences. Encoding one would make the runner's
-  // exact echo fail even though the underlying lease/expectation had not changed.
-  'ingestedUnderLeaseGeneration',
-  'expectationGeneration',
-  'leaseToken',
   // One-shot Owner Ratification capabilities. They authorize/commit an exact pending operation
   // and are compared byte-for-byte; exposing them as public row addresses would silently break
   // stale/duplicate CTA and action-commit fencing.

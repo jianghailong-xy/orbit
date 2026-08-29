@@ -718,7 +718,7 @@ export class RunnerApiController {
     /** Criterion inputs are optional only for direct unit fixtures. Production resolves the
      * shared, durable input router through ProjectsModule. */
     private readonly completionInputs?: CompletionInputRouter,
-    /** Project EXECUTABLE criteria consume the same durable command-result row as Task L0. */
+    /** Project EXECUTABLE criteria consume the Task's exact durable typed-attempt fact. */
     private readonly projectAcceptance?: ProjectAcceptanceService,
     /** Separate-transaction completion-ACK observations. Optional only in direct controller specs. */
     private readonly completionAckMonitor?: OutcomeWatchdogService,
@@ -3302,6 +3302,7 @@ export class RunnerApiController {
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
+      let acceptanceAttemptTerminatedId: string | null = null;
       let acceptanceFailureReason: string | null = null;
       const typedTermination = ATTEMPT_TERMINATION_KINDS.includes(
         dto.acceptanceTerminationKind as AttemptTerminationKind,
@@ -3384,6 +3385,7 @@ export class RunnerApiController {
               failureFingerprint: fingerprint,
             },
           });
+          acceptanceAttemptTerminatedId = attempt.id;
           if (continuation.kind !== 'NONE') {
             await tx.taskExecutableContinuation.create({
               data: {
@@ -3846,6 +3848,7 @@ export class RunnerApiController {
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
         taskCompleted: acceptanceTaskCompleted,
+        acceptanceAttemptTerminatedId,
       };
         }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
       } catch (error) {
@@ -3912,6 +3915,24 @@ export class RunnerApiController {
         `successor dispatch after executable completion ${finalized.taskId} failed: `
         + `${error instanceof Error ? error.message : error}`,
       ));
+    }
+    // A v2 termination is itself the canonical executable fact, even when no legacy judgment
+    // request exists. Reconcile after commit so the Project lock is never taken beneath the
+    // Session/Task locks held by the runner ACK transaction. A failure loses latency, not the
+    // append-only attempt; the same evidence-task reconciliation is safe to replay during repair.
+    if (
+      'acceptanceAttemptTerminatedId' in finalized
+      && finalized.acceptanceAttemptTerminatedId
+      && finalized.taskId
+      && this.projectAcceptance
+    ) {
+      await this.projectAcceptance.reconcileForEvidenceTask(finalized.taskId).catch((error) =>
+        this.logger.warn(
+          `project acceptance reconciliation after typed attempt `
+          + `${finalized.acceptanceAttemptTerminatedId} failed: `
+          + `${error instanceof Error ? error.message : error}`,
+        ),
+      );
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound

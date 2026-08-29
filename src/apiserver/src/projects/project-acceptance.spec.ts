@@ -26,6 +26,7 @@ function facts(overrides: Partial<AcceptanceFacts> = {}): AcceptanceFacts {
   return {
     criteriaRevision: sha256('every suite green\nmerged to main'),
     mergeEvidence: [['r1', 'main', 'a'.repeat(64), '3']],
+    executableAttempts: [],
     ...overrides,
   };
 }
@@ -42,6 +43,7 @@ test('the digest is stable under evidence reordering and changes with acceptance
     acceptanceDigest(PROJECT, {
       ...base,
       mergeEvidence: [...base.mergeEvidence].reverse(),
+      executableAttempts: [...base.executableAttempts].reverse(),
     }),
   );
 
@@ -53,6 +55,23 @@ test('the digest is stable under evidence reordering and changes with acceptance
     // AE9's whole point: identical content at a new generation is still a different observation,
     // because "changed and changed back" is real for squash and force-push.
     ['same content, new generation', facts({ mergeEvidence: [['r1', 'main', 'a'.repeat(64), '4']] })],
+    ['typed executable attempt recorded', facts({
+      executableAttempts: [[
+        'project-acceptance-executable-attempt-v1',
+        'criterion-1',
+        '1',
+        'task-1',
+        'attempt-1',
+        'admission-1',
+        'c'.repeat(64),
+        '0',
+        'EXITED',
+        '0',
+        'd'.repeat(64),
+        'false',
+        '2026-08-29T19:21:00.000Z',
+      ]],
+    })],
   ];
   for (const [what, changed] of moved) {
     assert.notEqual(acceptanceDigest(PROJECT, changed), acceptanceDigest(PROJECT, base), what);
@@ -74,10 +93,10 @@ test('the digest names the project and its own version', () => {
   const other = '00000000-0000-7000-8000-0000000025ff';
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
-  // match a new reading of the same world. It moved to 5 when revision-bearing criterion
-  // declarations became part of the confirmed standard set. Schema 0179 treats this digest as an
-  // evidence-version identity, not a freshness gate: conclusions are evaluated across versions.
-  assert.equal(ACCEPTANCE_DIGEST_VERSION, 5);
+  // match a new reading of the same world. Schema 0179 treats this digest as an evidence-version
+  // identity, not a freshness gate: conclusions are evaluated across versions. It moved to 6
+  // when current-plan typed attempt terminations became acceptance facts.
+  assert.equal(ACCEPTANCE_DIGEST_VERSION, 6);
 });
 
 test('the result digest is about the conclusions, not the world', () => {

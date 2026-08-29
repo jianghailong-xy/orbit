@@ -24,6 +24,20 @@ The service gate is `ProjectAcceptanceService.assertDoneAllowed`. Migration
 `0182_project_done_gate_acceptance_only` enforces the same criterion rule for direct database
 writers and removes the task-change triggers that previously reopened accepted projects.
 
+An `EXECUTABLE` project criterion does consume one narrowly scoped Task fact: the newest typed,
+terminated attempt for its wired evidence Task, but only when the Task still belongs to the same
+Project and its command, expected exit code, admitted evaluation-plan digest, and current Task plan
+all match exactly. That attempt identity advances the immutable acceptance evidence version; it
+does not import Task status or backlog state. Legacy judgment-result rows remain a compatibility
+fallback when no matching typed attempt exists.
+
+The runner invokes this reconciliation after committing a typed termination, outside its
+Session/Task transaction so lock order remains Project-first. A deployment that predates this hook
+needs a one-time replay of `reconcileForEvidenceTask` for already-terminated attempts; replay reads
+the append-only facts and must not rerun their commands. This acceptance projection also does not
+invent an Outcome V2 binding or fact stream: a missing canonical Outcome stream remains a separate,
+fail-closed initialization/backfill obligation.
+
 ## Where a new finding belongs
 
 A new finding belongs to the existing project only if it changes an acceptance criterion. In that

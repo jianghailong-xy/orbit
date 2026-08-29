@@ -54,10 +54,7 @@ import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-tas
 // future public request-row addresses.
 const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version']);
 
-const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {
-  'ProjectsController.decideCompletionAckOwnerDecision(requestId)':
-    'the completion-ack request UUID is an exact bound-request fence; the project id remains the public address',
-};
+const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 
 // Query filters, on the other hand, are a mixed bag of ids and ordinary filters, so those do
 // read the shared classification — one list, so a name can't be an id on the way out and a
