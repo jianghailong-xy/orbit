@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="brand/orbit-lockup.svg" alt="Orbit" width="208">
-</p>
+<h1 align="center">Orbit</h1>
 
 <p align="center"><strong>Agent Mission Control</strong></p>
 

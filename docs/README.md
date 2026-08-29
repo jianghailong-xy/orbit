@@ -78,7 +78,6 @@ that include an "implementation differences" section should be read with that se
 - [Dependency security baseline](dependency-security.md) — alert reachability, remediation evidence, and update policy.
 - [Support](../SUPPORT.md) — where to ask questions and report problems.
 - [Code of Conduct](../CODE_OF_CONDUCT.md) — expected community behavior.
-- [Brand assets](../brand/README.md) — approved marks, colors, naming, and usage.
 - [Project maturity and brand roadmap](project-maturity.md) — current gaps and a phased path to independent
   open-source operation.
 

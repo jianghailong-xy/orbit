@@ -46,7 +46,6 @@ src/
   ios/          iPhone/iPad app reusing OrbitKit and shared SwiftUI sources
 gateway/        nginx configuration for the Compose deployment
 docs/           user guides, operator runbooks, and design records
-brand/          approved brand assets and source explorations
 scripts/        build, backup, and repository automation
 ```
 

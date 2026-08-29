@@ -77,8 +77,7 @@ Chinese; do not translate or rewrite a historical decision record merely for con
 diverges from an old design, append an implementation note and update the current operator or architecture
 guide.
 
-Start at [docs/README.md](docs/README.md). Brand assets and naming conventions are documented in
-[brand/README.md](brand/README.md).
+Start at [docs/README.md](docs/README.md).
 
 ## License
 
