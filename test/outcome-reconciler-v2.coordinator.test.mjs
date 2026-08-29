@@ -727,15 +727,24 @@ test('only a complete closed-set owner request enters the durable queue and deci
   const accepted = (await call('GOAL_DECISION', request)).rows[0].result;
   assert.equal(accepted.status, 'OPEN');
   assert.equal((await current(scope)).durableOwner, 'OWNER');
-  const decided = (await one(pool, `
+  const binding = await one(pool, `
+    SELECT request_revision AS "requestRevision", obligation_id AS "obligationId",
+           obligation_revision AS "obligationRevision", binding_digest AS "bindingDigest"
+      FROM outcome_coordinator_owner_decision_request
+     WHERE tenant_id = $1::uuid AND request_id = $2::uuid
+  `, [scope.tenantId, accepted.requestId]);
+  const decide = () => one(pool, `
     SELECT outcome_decide_coordinator_owner_request(
-      $1::uuid, $2::uuid, $3, 'decision:owner-valid', $4::jsonb
+      $1::uuid, $2::uuid, $3, $4, $5, $6, 'decision:owner-valid', $7::jsonb
     ) AS result
   `, [
-    scope.tenantId, accepted.requestId, scope.obligationRevision,
+    scope.tenantId, accepted.requestId, binding.requestRevision, binding.obligationId,
+    binding.obligationRevision, binding.bindingDigest,
     JSON.stringify({ option: 'continue', actor: 'owner:test' }),
-  ])).result;
+  ]);
+  const decided = (await decide()).result;
   assert.equal(decided.resumed, true);
+  assert.equal((await decide()).result.replayed, true, 'the exact decision callback is idempotent');
   const resumed = await claim(scope, 1, 'worker:owner-resumed');
   assert.ok(resumed);
   evidence.decisions.validRequestDurable = true;

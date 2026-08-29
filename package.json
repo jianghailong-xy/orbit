@@ -34,6 +34,8 @@
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
     "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh",
     "test:outcome-reconciler:ratification": "bash scripts/outcome-reconciler-ratification.sh",
+    "test:outcome-reconciler:versioning": "bash scripts/outcome-reconciler-versioning.sh",
+    "test:outcome-reconciler:surfaces": "bash scripts/outcome-reconciler-surfaces.sh",
     "test:outcome-reconciler:auto-dispatch": "bash scripts/outcome-reconciler-auto-dispatch.sh",
     "test:outcome-reconciler:work-overview-readiness": "bash scripts/outcome-reconciler-work-overview-readiness.sh",
     "test:outcome-reconciler:auto-dispatch:integration": "bash scripts/outcome-reconciler-auto-dispatch-integration.sh",

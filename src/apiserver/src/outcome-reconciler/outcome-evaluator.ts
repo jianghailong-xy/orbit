@@ -408,10 +408,16 @@ function dimensionResults(
         reasonCode: 'NO_CURRENT_AUTHORITATIVE_EVIDENCE',
       };
     }
-    const newest = candidates.reduce((current, fact) => (
-      fact.logicalTime !== null && fact.logicalTime > current ? fact.logicalTime : current
-    ), 0n);
-    const current = candidates.filter((fact) => fact.logicalTime === newest);
+    // Recorded logical time orders ingress; it does not silently make an unrelated assertion
+    // true.  A later authoritative fact replaces an earlier one only through the canonical
+    // causal-predecessor edge.  Otherwise both facts remain on the current frontier and a late
+    // matching contradiction is visible as CONFLICT instead of being hidden by last-write-wins.
+    const candidateIds = new Set(candidates.map((fact) => fact.factId));
+    const superseded = new Set(candidates.flatMap((fact) => {
+      const predecessor = stringValue(fact.envelope.causalPredecessorFactId);
+      return predecessor && candidateIds.has(predecessor) ? [predecessor] : [];
+    }));
+    const current = candidates.filter((fact) => !superseded.has(fact.factId));
     const states = [...new Set(current.map((fact) => {
       const payload = isRecord(fact.envelope.payload) ? fact.envelope.payload : {};
       return stringValue(payload.state);

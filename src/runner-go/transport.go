@@ -1047,6 +1047,18 @@ func (t *Transport) requestProjectOwnerDecision(
 	return out, err
 }
 
+// getProjectOutcome is intentionally a raw pass-through. Reformatting the semantic item in the
+// CLI would create a second obligation contract; only the server derives the AGENT CTA.
+func (t *Transport) getProjectOutcome(id, surface string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/projects/" + url.PathEscape(id) + "/outcome?surface=" + url.QueryEscape(surface)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // confirmProjectAcceptanceCriteria records one confirmation for the exact current standard-set
 // digest. The transport's session header is attribution, not a body field: the ordinary
 // session-aware client forwards it so an attributed judgment Session is refused. An omitted header

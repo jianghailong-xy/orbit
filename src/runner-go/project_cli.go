@@ -38,6 +38,7 @@ Usage:
   orbit project reopen-impact PROJECT_ID [--json]
   orbit project acceptance PROJECT_ID [--json]
   orbit project owner-decision-request PROJECT_ID --obligation-id SHA256 --obligation-revision SHA256 --reason REASON --request JSON [--json]
+  orbit project obligations PROJECT_ID [--surface SURFACE] [--json]
   orbit project criteria-confirm PROJECT_ID [--json]
   orbit project acceptance-run PROJECT_ID [--json]
   orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]
@@ -157,6 +158,16 @@ noActionConsequence, cost, deadline, resumeBehavior and idempotencyKey. The serv
 only from the exact current, non-revoked coordinator delivery Session. It keeps the canonical
 completion obligation ACTIVE and AGENT-owned while the owner supplies the one missing input;
 code diagnosis, repair, deployment and verification are not reasons to hand work to a person.
+`,
+	"obligations": `orbit project obligations — the canonical next obligations for this actor
+
+Usage:
+  orbit project obligations PROJECT_ID [--surface AGENT_QUEUE|DONE_GATE|PROJECT_ATTENTION|WEB] [--json]
+
+Every view carries the same obligation id and revision, semantic binding, structured reason and
+proof, and evaluated-through watermark as the API and Web. Only the AGENT-specific CTA is derived
+for this runner. AGENT_QUEUE is the default. RECONCILER_STALE is an error state, never an empty
+queue and never evidence that the project has nothing left to do.
 `,
 	"criteria-confirm": `orbit project criteria-confirm — confirm the current standard set once
 
@@ -348,6 +359,7 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_reopen_impact", Argv: []string{"orbit", "project", "reopen-impact"}, Usage: "orbit project reopen-impact PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what reopening a settled project would cost: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, readable afterwards and no longer a claim about the world the project is in — so an account owner asked for one should be asked with those numbers in hand. Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into."},
 	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the current acceptance history and the canonical doneGate: exact binding/evaluation cut, proof graph, active obligations, structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED carries this complete view; unknown types, stale projection and read failures deny closure explicitly, while legacy blocker/signal summaries do not decide it."},
 	{Tool: "project_owner_decision_request", Argv: []string{"orbit", "project", "owner-decision-request"}, Usage: "orbit project owner-decision-request PROJECT_ID --obligation-id SHA256 --obligation-revision SHA256 --reason REASON --request JSON [--json]", Arguments: []string{"[project-id] (required)", "--obligation-id <sha256> (required)", "--obligation-revision <sha256> (required)", "--reason <NEW_AUTHORIZATION|RISK_ACCEPTANCE|GOAL_DECISION|EXTERNAL_IDENTITY> (required)", "--request <json object> | --request-file - (whyNotAgent, options, impacts, recommendation, noActionConsequence, cost, deadline, resumeBehavior, idempotencyKey)", "--json"}, Description: "Request one irreducibly owner-shaped input for the exact active completion-ACK remediation delivered to this coordinator Session. The server binds the request to the current non-revoked delivery and keeps the canonical parent ACTIVE and AGENT-owned; ordinary code repair, deployment and verification remain coordinator work.", Mutates: true},
+	{Tool: "project_obligations", Argv: []string{"orbit", "project", "obligations"}, Usage: "orbit project obligations PROJECT_ID [--surface SURFACE] [--json]", Arguments: []string{"[project-id] (required)", "--surface <AGENT_QUEUE|DONE_GATE|PROJECT_ATTENTION|WEB>", "--json"}, Description: "Read the canonical obligation identity, revision, binding, structured reason/proof and evaluated-through watermark, with only the AGENT CTA derived for this runner. Stale projection is explicit and never an empty queue."},
 	{Tool: "project_criteria_confirm", Argv: []string{"orbit", "project", "criteria-confirm"}, Usage: "orbit project criteria-confirm PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Confirm the complete current standard set once, bound to its revision-bearing digest. Any semantic edit requires a new confirmation. A judgment Session is refused; a headless runner is admitted with RUNNER audit provenance, which is visibility rather than proof of human presence.", Mutates: true},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Evaluate the current project acceptance evidence version. This is idempotent: concurrent callers observing the same criteria and merge evidence receive the same version. Evidence changes advance it automatically; prior conclusion events carry forward until refuted.", Mutates: true},
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the evidence version to conclude against)", "--criteria <json> | --criteria-file - (one entry per HUMAN_SIGNOFF criterion: {criterionId|ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Append evidence-backed conclusion events for HUMAN_SIGNOFF criteria. EXECUTABLE and VERIFICATION reject fallback human verdicts and use their declared durable input. Current PASS/FAIL/INCONCLUSIVE is derived from the peer outcomes; every event records who, when and which evidence version. A judgment-session or machine-attributed call may refute; human PASS uses the owner-attributed channel. That is workflow and audit provenance, not proof of human presence.", Mutates: true},
@@ -400,6 +412,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectAcceptance(args[1:], out)
 	case "owner-decision-request":
 		return cliProjectOwnerDecisionRequest(args[1:], in, out)
+	case "obligations":
+		return cliProjectObligations(args[1:], out)
 	case "criteria-confirm":
 		return cliProjectCriteriaConfirm(args[1:], out)
 	case "acceptance-run":
@@ -593,6 +607,42 @@ func cliProjectOwnerDecisionRequest(args []string, in io.Reader, out io.Writer) 
 	})
 	if err != nil {
 		return fmt.Errorf("request project owner decision: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+func isOutcomeSurface(surface string) bool {
+	switch surface {
+	case "DONE_GATE", "AGENT_QUEUE", "PROJECT_ATTENTION", "WEB":
+		return true
+	}
+	return false
+}
+
+func cliProjectObligations(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project obligations")
+	surface := fs.String("surface", "AGENT_QUEUE", "canonical surface to read")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	if !isOutcomeSurface(*surface) {
+		return fmt.Errorf("--surface must be one of AGENT_QUEUE, DONE_GATE, PROJECT_ATTENTION, WEB")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getProjectOutcome(id, *surface)
+	if err != nil {
+		return fmt.Errorf("get project obligations: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
