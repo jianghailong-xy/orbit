@@ -64,6 +64,35 @@ function positiveTestSamples(value, at = '$', found = []) {
   return found;
 }
 
+// These are workflow-state counters, not test-result counters. The work-overview fixture
+// intentionally observes the immutable FAILED watchdog attempt that was superseded by its
+// successful successor. Keep those counters in the release manifest as evidence, but do not
+// misclassify them as a failing test run.
+const nonTestWorkflowCounterPaths = new Map([
+  ['work-overview-readiness', new Set([
+    '$.liveFixture.panorama.buckets.failed',
+    '$.liveFixture.panorama.buckets.cancelled',
+    '$.liveFixture.projectListRollup.buckets.failed',
+    '$.liveFixture.projectListRollup.buckets.cancelled',
+  ])],
+]);
+
+function partitionOutcomeCounters(suiteName, entries) {
+  const workflowPaths = nonTestWorkflowCounterPaths.get(suiteName) ?? new Set();
+  const testResults = [];
+  const workflowState = [];
+  for (const entry of entries) {
+    if (workflowPaths.has(entry.path)) {
+      assert.ok(Number.isInteger(entry.value) && entry.value >= 0,
+        `${suiteName} contains invalid workflow counter ${entry.path}=${entry.value}`);
+      workflowState.push(entry);
+    } else {
+      testResults.push(entry);
+    }
+  }
+  return { testResults, workflowState };
+}
+
 const targetSha = execFileSync('git', ['rev-parse', 'HEAD'], {
   cwd: repo, encoding: 'utf8',
 }).trim();
@@ -101,9 +130,13 @@ const manifestRows = declaredSuites.map((suite) => {
     ?? value.refs?.declaredTarget
     ?? value.repository?.targetSha;
   assert.equal(boundTarget, targetSha, `${suite.name} is not bound to the target SHA`);
-  const failures = numericLeaves(value, new Set(['fail', 'failed', 'failedFiles']));
+  const failureCounters = partitionOutcomeCounters(suite.name,
+    numericLeaves(value, new Set(['fail', 'failed', 'failedFiles'])));
   const skips = numericLeaves(value, new Set(['skip', 'skipped', 'skipCount']));
-  const cancelled = numericLeaves(value, new Set(['cancelled', 'todo']));
+  const cancelledCounters = partitionOutcomeCounters(suite.name,
+    numericLeaves(value, new Set(['cancelled', 'todo'])));
+  const failures = failureCounters.testResults;
+  const cancelled = cancelledCounters.testResults;
   for (const entry of [...failures, ...skips, ...cancelled]) {
     assert.equal(entry.value, 0, `${suite.name} contains ${entry.path}=${entry.value}`);
   }
@@ -118,6 +151,10 @@ const manifestRows = declaredSuites.map((suite) => {
     failures,
     skips,
     cancelled,
+    workflowStateCounters: [
+      ...failureCounters.workflowState,
+      ...cancelledCounters.workflowState,
+    ],
   };
 });
 
