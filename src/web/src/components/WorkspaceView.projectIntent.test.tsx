@@ -36,6 +36,18 @@ const RUNNER = {
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
+let client: QueryClient | null = null;
+
+function mountedContainer(): HTMLDivElement {
+  if (!container) throw new Error('WorkspaceView is not mounted');
+  return container;
+}
+
+async function waitForUi(assertion: () => void): Promise<void> {
+  await act(async () => {
+    await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
+  });
+}
 
 function LocationProbe() {
   const location = useLocation();
@@ -107,31 +119,43 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  container?.remove();
+  const mountedRoot = root;
+  const mountedClient = client;
+  const mountedNode = container;
   root = null;
+  client = null;
   container = null;
-  delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
-  delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
-  vi.unstubAllGlobals();
+  try {
+    if (mountedRoot) await act(async () => mountedRoot.unmount());
+  } finally {
+    try {
+      if (mountedClient) {
+        await mountedClient.cancelQueries();
+        mountedClient.clear();
+      }
+    } finally {
+      mountedNode?.remove();
+      delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      vi.unstubAllGlobals();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  }
 });
 
-async function flush(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+async function mount(entry: string, expectedTitle: string): Promise<void> {
+  const nextClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
-}
-
-async function mount(entry: string): Promise<void> {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
   await act(async () => {
-    root?.render(
-      <QueryClientProvider client={client}>
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[entry]}>
           <AntApp>
             <WorkspaceView runner={RUNNER} />
@@ -141,18 +165,23 @@ async function mount(entry: string): Promise<void> {
       </QueryClientProvider>,
     );
   });
-  await flush();
+  await waitForUi(() => {
+    expect(nextContainer.querySelector('.np-title')?.textContent).toBe(expectedTitle);
+  });
 }
 
 const one = (selector: string): HTMLElement => {
-  const element = container?.querySelector<HTMLElement>(selector) ?? null;
+  const element = mountedContainer().querySelector<HTMLElement>(selector);
   expect(element, selector).toBeTruthy();
   return element!;
 };
 
-describe('New Session project intent', () => {
+// The loaded-suite peak observed for the real WorkspaceView/AntD mount was 5.112s (3.54s
+// targeted). Keep a local 12s case budget around the 8s observable UI wait; neither changes the
+// global timeout nor sleeps blindly.
+describe('New Session project intent', { timeout: 12_000 }, () => {
   it('renders the intent strip and project hero when the compose route carries ?intent=project', async () => {
-    await mount(`${NEW_SESSION_PATH}?intent=project`);
+    await mount(`${NEW_SESSION_PATH}?intent=project`, 'Start a new project');
 
     expect(one('.np-title').textContent).toBe('Start a new project');
     expect(one('.np-sub').textContent).toBe(
@@ -167,7 +196,7 @@ describe('New Session project intent', () => {
   });
 
   it('keeps the ordinary compose framing byte-for-byte when the route has no intent', async () => {
-    await mount(NEW_SESSION_PATH);
+    await mount(NEW_SESSION_PATH, 'Start a new session');
 
     expect({
       title: one('.np-title').outerHTML,
@@ -182,13 +211,17 @@ describe('New Session project intent', () => {
   });
 
   it('dismisses into the ordinary New Session route and framing', async () => {
-    await mount(`${NEW_SESSION_PATH}?intent=project`);
+    await mount(`${NEW_SESSION_PATH}?intent=project`, 'Start a new project');
 
     await act(async () => one('button[aria-label="Dismiss project intent"]').click());
-    await flush();
+    await waitForUi(() => {
+      expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
+      expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
+      expect(one('.np-title').textContent).toBe('Start a new session');
+    });
 
     expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
-    expect(container?.querySelector('.composer-project-intent')).toBeNull();
+    expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
     expect(one('.np-title').textContent).toBe('Start a new session');
     expect(one('.np-sub').textContent).toBe(
       'Describe the task — Orbit remembers who runs it.',

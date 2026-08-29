@@ -148,20 +148,32 @@ const reads = () =>
     .map(([path]) => String(path))
     .filter((path) => path === '/projects' || path.startsWith('/projects?'));
 
-let container: HTMLDivElement;
-let root: Root;
-let landedOn = '';
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+let client: QueryClient | null = null;
+
+function mountedContainer(): HTMLDivElement {
+  if (!container) throw new Error('ProjectsPage toolbar is not mounted');
+  return container;
+}
+
+async function waitForUi(assertion: () => void): Promise<void> {
+  await act(async () => {
+    await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
+  });
+}
 
 function RouteProbe() {
   const location = useLocation();
-  landedOn = `${location.pathname}${location.search}`;
-  return null;
+  return <output data-testid="location">{location.pathname + location.search}</output>;
 }
+
+const currentLocation = (): string | null =>
+  mountedContainer().querySelector('[data-testid="location"]')?.textContent ?? null;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
-  landedOn = '';
   // antd's responsive controls subscribe to breakpoints on mount and jsdom ships no matchMedia. The
   // stub answers "no breakpoint matches", which is the desktop reading; layout is not the subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -187,19 +199,41 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
+  const mountedRoot = root;
+  const mountedClient = client;
+  const mountedNode = container;
+  root = null;
+  client = null;
+  container = null;
+  try {
+    if (mountedRoot) await act(async () => mountedRoot.unmount());
+  } finally {
+    try {
+      if (mountedClient) {
+        await mountedClient.cancelQueries();
+        mountedClient.clear();
+      }
+    } finally {
+      mountedNode?.remove();
+      vi.unstubAllGlobals();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  }
 });
 
 async function mount(initialEntry = '/projects'): Promise<void> {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+  const nextClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  });
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
   await act(async () => {
-    root.render(
-      <QueryClientProvider client={client}>
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[initialEntry]}>
           <Routes>
             <Route path="/projects" element={<ProjectsPage />} />
@@ -210,14 +244,9 @@ async function mount(initialEntry = '/projects'): Promise<void> {
       </QueryClientProvider>,
     );
   });
-  await flush();
-}
-
-/** One macrotask, so a resolved query's re-render lands before the assertion — an `await act` on
- *  its own only drains microtasks, which is not where react-query's state settles. */
-async function flush(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitForUi(() => {
+    expect(nextContainer.querySelector('.project-row, .ant-empty')).not.toBeNull();
+    expect(nextContainer.querySelector('[data-testid="location"]')?.textContent).toBe(initialEntry);
   });
 }
 
@@ -225,7 +254,7 @@ async function flush(): Promise<void> {
 const text = () => document.body.textContent ?? '';
 
 function segment(label: string): HTMLInputElement {
-  const item = [...container.querySelectorAll('.ant-segmented-item')].find((el) =>
+  const item = [...mountedContainer().querySelectorAll('.ant-segmented-item')].find((el) =>
     el.textContent?.trim().startsWith(label),
   );
   expect(item, `segment ${label}`).toBeTruthy();
@@ -240,16 +269,20 @@ function button(label: string, scope: ParentNode = document.body): HTMLButtonEle
   return found! as HTMLButtonElement;
 }
 
-async function click(element: HTMLElement): Promise<void> {
+async function click(element: HTMLElement, assertion?: () => void): Promise<void> {
   await act(async () => {
     element.click();
   });
-  await flush();
+  if (assertion) await waitForUi(assertion);
 }
 
 /** Type into a controlled antd field. React tracks the DOM value itself, so the native setter has
  *  to be called before the event or the change is swallowed as a no-op. */
-async function type(element: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {
+async function type(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+  assertion?: () => void,
+): Promise<void> {
   const proto =
     element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
@@ -257,23 +290,25 @@ async function type(element: HTMLInputElement | HTMLTextAreaElement, value: stri
     setter.call(element, value);
     element.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await flush();
+  if (assertion) await waitForUi(assertion);
 }
 
 const searchBox = () =>
-  container.querySelector('input[aria-label="Search projects"]') as HTMLInputElement;
+  mountedContainer().querySelector('input[aria-label="Search projects"]') as HTMLInputElement;
 
 describe('ProjectsPage — status filter', () => {
   it('restores a terminal lifecycle directly from a deep link without first reading Open', async () => {
     serve({ '/projects?status=CANCELLED': [ABANDONED] });
     await mount('/projects?status=CANCELLED');
 
-    expect(landedOn).toBe('/projects?status=CANCELLED');
+    expect(currentLocation()).toBe('/projects?status=CANCELLED');
     expect(segment('Cancelled').checked).toBe(true);
     expect(text()).toContain('Project history');
     expect(text()).toContain('Open projects');
     expect(
-      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+        el.textContent?.trim(),
+      ),
     ).toEqual(['Completed', 'Cancelled']);
     expect(reads()).toEqual(['/projects?status=CANCELLED']);
     expect(text()).toContain('Abandoned Prototype');
@@ -285,24 +320,32 @@ describe('ProjectsPage — status filter', () => {
     await mount();
 
     expect(reads()).toEqual(['/projects?status=OPEN']);
-    expect(landedOn).toBe('/projects');
+    expect(currentLocation()).toBe('/projects');
     expect(segment('All').checked).toBe(true);
     expect(text()).toContain('Open projects');
     expect(button('History')).toBeTruthy();
     expect(
-      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+        el.textContent?.trim(),
+      ),
     ).toEqual(['All', 'Running 2', 'Ready 1']);
 
-    await click(segment('Ready'));
-    expect(landedOn).toBe('/projects?view=READY');
+    await click(segment('Ready'), () => {
+      expect(currentLocation()).toBe('/projects?view=READY');
+      expect(text()).toContain('Ready Rollout');
+    });
+    expect(currentLocation()).toBe('/projects?view=READY');
     expect(reads()).toEqual(['/projects?status=OPEN']);
     expect(text()).toContain('Ready Rollout');
     expect(text()).not.toContain('Website Revamp');
     // Ledger has ready tasks too, but its active run gives Running priority.
     expect(text()).not.toContain('Ledger Migration');
 
-    await click(segment('Running'));
-    expect(landedOn).toBe('/projects?view=RUNNING');
+    await click(segment('Running'), () => {
+      expect(currentLocation()).toBe('/projects?view=RUNNING');
+      expect(text()).toContain('Website Revamp');
+    });
+    expect(currentLocation()).toBe('/projects?view=RUNNING');
     expect(reads()).toEqual(['/projects?status=OPEN']);
     expect(text()).toContain('Website Revamp');
     // This stale row is routed into Needs attention, but it remains in the Running VIEW because
@@ -310,8 +353,11 @@ describe('ProjectsPage — status filter', () => {
     expect(text()).toContain('Ledger Migration');
     expect(text()).not.toContain('Ready Rollout');
 
-    await click(segment('All'));
-    expect(landedOn).toBe('/projects');
+    await click(segment('All'), () => {
+      expect(currentLocation()).toBe('/projects');
+      expect(text()).toContain('Ready Rollout');
+    });
+    expect(currentLocation()).toBe('/projects');
     expect(text()).toContain('Website Revamp');
     expect(text()).toContain('Ledger Migration');
     expect(text()).toContain('Ready Rollout');
@@ -327,23 +373,28 @@ describe('ProjectsPage — status filter', () => {
     await mount();
 
     expect(
-      [...container.querySelectorAll('.ant-segmented-item')]
+      [...mountedContainer().querySelectorAll('.ant-segmented-item')]
         .some((el) => el.textContent?.trim() === 'Completed'),
     ).toBe(false);
-    await click(button('History'));
+    await click(button('History'), () => {
+      expect(currentLocation()).toBe('/projects?status=DONE');
+      expect(text()).toContain('Legacy Cleanup');
+    });
     expect(reads()).toEqual(['/projects?status=OPEN', '/projects?status=DONE']);
-    expect(landedOn).toBe('/projects?status=DONE');
+    expect(currentLocation()).toBe('/projects?status=DONE');
     // The answer on screen is the one the server just gave, not a slice of the first read.
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
     expect(segment('Completed').checked).toBe(true);
     expect(
-      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+        el.textContent?.trim(),
+      ),
     ).toEqual(['Completed', 'Cancelled']);
 
     // A terminal filter is already its own heading. The list is immediately readable, with no
     // second Completed title, expander, pills, or row-level DONE repetition beneath the segment.
-    const completed = container.querySelector('section[data-section="completed"]')!;
+    const completed = mountedContainer().querySelector('section[data-section="completed"]')!;
     expect(completed).toBeTruthy();
     expect(completed.getAttribute('aria-label')).toBe('Completed projects');
     expect(completed.querySelector('h3')).toBeNull();
@@ -351,7 +402,10 @@ describe('ProjectsPage — status filter', () => {
     expect(completed.querySelector('.project-row-title')?.textContent).toBe('Legacy Cleanup');
     expect(completed.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
 
-    await click(segment('Cancelled'));
+    await click(segment('Cancelled'), () => {
+      expect(currentLocation()).toBe('/projects?status=CANCELLED');
+      expect(text()).toContain('Abandoned Prototype');
+    });
     expect(reads()).toEqual([
       '/projects?status=OPEN',
       '/projects?status=DONE',
@@ -359,10 +413,10 @@ describe('ProjectsPage — status filter', () => {
     ]);
     expect(text()).toContain('Abandoned Prototype');
     expect(text()).not.toContain('Legacy Cleanup');
-    expect(landedOn).toBe('/projects?status=CANCELLED');
+    expect(currentLocation()).toBe('/projects?status=CANCELLED');
     expect(segment('Cancelled').checked).toBe(true);
 
-    const cancelled = container.querySelector('section[data-section="cancelled"]')!;
+    const cancelled = mountedContainer().querySelector('section[data-section="cancelled"]')!;
     expect(cancelled).toBeTruthy();
     expect(cancelled.getAttribute('aria-label')).toBe('Cancelled projects');
     expect(cancelled.querySelector('h3')).toBeNull();
@@ -370,6 +424,9 @@ describe('ProjectsPage — status filter', () => {
     expect(cancelled.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
   }, 10_000);
 
+  // This three-navigation AntD case peaked at 5.035s in the loaded suite. Its local 10s budget is
+  // bounded to that observed integration cost; every transition below still waits on its URL and
+  // rendered row rather than on elapsed time.
   it('returns from a completed project detail to the same URL-owned lifecycle view', async () => {
     const projectId = encodeId(P2);
     serve({
@@ -383,25 +440,36 @@ describe('ProjectsPage — status filter', () => {
       },
     });
     await mount();
-    await click(button('History'));
+    await click(button('History'), () => {
+      expect(currentLocation()).toBe('/projects?status=DONE');
+      expect(text()).toContain('Legacy Cleanup');
+    });
 
-    const row = container.querySelector('a.project-row-link') as HTMLAnchorElement;
+    const row = mountedContainer().querySelector('a.project-row-link') as HTMLAnchorElement;
     expect(row).toBeTruthy();
-    await click(row);
-    expect(landedOn).toBe(`/projects/${projectId}`);
+    await click(row, () => {
+      expect(currentLocation()).toBe(`/projects/${projectId}`);
+      expect(apiMock).toHaveBeenCalledWith(`/projects/${projectId}`);
+      expect(text()).toContain('← Projects');
+    });
+    expect(currentLocation()).toBe(`/projects/${projectId}`);
     expect(apiMock).toHaveBeenCalledWith(`/projects/${projectId}`);
 
-    const back = [...container.querySelectorAll('a')].find(
+    const back = [...mountedContainer().querySelectorAll('a')].find(
       (candidate) => candidate.textContent?.trim() === '← Projects',
     );
     expect(back).toBeTruthy();
-    await click(back! as HTMLAnchorElement);
+    await click(back! as HTMLAnchorElement, () => {
+      expect(currentLocation()).toBe('/projects?status=DONE');
+      expect(segment('Completed').checked).toBe(true);
+      expect(text()).toContain('Legacy Cleanup');
+    });
 
-    expect(landedOn).toBe('/projects?status=DONE');
+    expect(currentLocation()).toBe('/projects?status=DONE');
     expect(segment('Completed').checked).toBe(true);
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
-  });
+  }, 10_000);
 
   it('returns from project detail to the same URL-owned Open work view', async () => {
     const projectId = encodeId(P1);
@@ -419,16 +487,25 @@ describe('ProjectsPage — status filter', () => {
     expect(segment('Running').checked).toBe(true);
     expect(text()).toContain('Website Revamp');
     expect(text()).not.toContain('Ready Rollout');
-    await click(container.querySelector('a.project-row-link') as HTMLAnchorElement);
-    expect(landedOn).toBe(`/projects/${projectId}`);
+    await click(
+      mountedContainer().querySelector('a.project-row-link') as HTMLAnchorElement,
+      () => {
+        expect(currentLocation()).toBe(`/projects/${projectId}`);
+        expect(text()).toContain('← Projects');
+      },
+    );
+    expect(currentLocation()).toBe(`/projects/${projectId}`);
 
-    const back = [...container.querySelectorAll('a')].find(
+    const back = [...mountedContainer().querySelectorAll('a')].find(
       (candidate) => candidate.textContent?.trim() === '← Projects',
     );
     expect(back).toBeTruthy();
-    await click(back! as HTMLAnchorElement);
+    await click(back! as HTMLAnchorElement, () => {
+      expect(currentLocation()).toBe('/projects?view=RUNNING');
+      expect(text()).toContain('Website Revamp');
+    });
 
-    expect(landedOn).toBe('/projects?view=RUNNING');
+    expect(currentLocation()).toBe('/projects?view=RUNNING');
     expect(segment('Running').checked).toBe(true);
     expect(text()).toContain('Website Revamp');
     expect(text()).not.toContain('Ready Rollout');
@@ -440,7 +517,10 @@ describe('ProjectsPage — status filter', () => {
       '/projects?status=DONE': [CLEANUP],
     });
     await mount();
-    await click(button('History'));
+    await click(button('History'), () => {
+      expect(text()).toContain('Legacy Cleanup');
+      expect(text()).not.toContain('Ledger Migration');
+    });
 
     // The completed read replaced what is on screen rather than being merged into it: the open
     // projects are gone, which they could not be if both answers shared one entry.
@@ -457,17 +537,26 @@ describe('ProjectsPage — search', () => {
 
     // The phrase is only present once `**Ship**` has become `Ship` — the raw goal does not
     // contain "ship the new marketing site" anywhere, so a search over the source text fails this.
-    await type(searchBox(), 'ship the new marketing site');
+    await type(searchBox(), 'ship the new marketing site', () => {
+      expect(text()).toContain('Website Revamp');
+      expect(text()).not.toContain('Ledger Migration');
+    });
     expect(text()).toContain('Website Revamp');
     expect(text()).not.toContain('Ledger Migration');
 
     // Same again across a heading and an inline-code span, in the other project's goal.
-    await type(searchBox(), 'move the ledger to postgres');
+    await type(searchBox(), 'move the ledger to postgres', () => {
+      expect(text()).toContain('Ledger Migration');
+      expect(text()).not.toContain('Website Revamp');
+    });
     expect(text()).toContain('Ledger Migration');
     expect(text()).not.toContain('Website Revamp');
 
     // Titles too, since that is what most searches actually are.
-    await type(searchBox(), 'revamp');
+    await type(searchBox(), 'revamp', () => {
+      expect(text()).toContain('Website Revamp');
+      expect(text()).not.toContain('Ledger Migration');
+    });
     expect(text()).toContain('Website Revamp');
     expect(text()).not.toContain('Ledger Migration');
 
@@ -482,17 +571,28 @@ describe('ProjectsPage — search', () => {
       '/projects?status=DONE': [CLEANUP],
     });
     await mount();
-    await click(button('History'));
+    await click(button('History'), () => {
+      expect(currentLocation()).toBe('/projects?status=DONE');
+      expect(text()).toContain('Legacy Cleanup');
+    });
     const before = reads().length;
 
-    await type(searchBox(), 'retire the old admin');
+    await type(searchBox(), 'retire the old admin', () => {
+      expect(text()).toContain('Legacy Cleanup');
+      expect(text()).not.toContain('Website Revamp');
+    });
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
 
     // A miss offers to clear only the local search. It must not silently jump lifecycle states.
-    await type(searchBox(), 'nothing in completed history');
+    await type(searchBox(), 'nothing in completed history', () => {
+      expect(text()).toContain('No completed projects match “nothing in completed history”');
+    });
     expect(text()).toContain('No completed projects match “nothing in completed history”');
-    await click(button('Clear search'));
+    await click(button('Clear search'), () => {
+      expect(searchBox().value).toBe('');
+      expect(text()).toContain('Legacy Cleanup');
+    });
     expect(searchBox().value).toBe('');
     expect(segment('Completed').checked).toBe(true);
     expect(text()).toContain('Legacy Cleanup');
@@ -503,20 +603,30 @@ describe('ProjectsPage — search', () => {
   it('intersects search with an Open work view and clearing search preserves that view', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, READY] });
     await mount();
-    await click(segment('Ready'));
+    await click(segment('Ready'), () => {
+      expect(currentLocation()).toBe('/projects?view=READY');
+      expect(segment('Ready').checked).toBe(true);
+    });
     const before = reads().length;
 
-    await type(searchBox(), 'revamp');
+    await type(searchBox(), 'revamp', () => {
+      expect(text()).toContain('No ready projects match “revamp”');
+    });
     expect(text()).toContain('No ready projects match “revamp”');
     // Counts describe the whole Open scope, so typing does not make the tabs jump around.
     expect(
-      [...container.querySelectorAll('.ant-segmented-item')].map((el) => el.textContent?.trim()),
+      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+        el.textContent?.trim(),
+      ),
     ).toEqual(['All', 'Running 1', 'Ready 1']);
 
-    await click(button('Clear search'));
+    await click(button('Clear search'), () => {
+      expect(searchBox().value).toBe('');
+      expect(text()).toContain('Ready Rollout');
+    });
     expect(searchBox().value).toBe('');
     expect(segment('Ready').checked).toBe(true);
-    expect(landedOn).toBe('/projects?view=READY');
+    expect(currentLocation()).toBe('/projects?view=READY');
     expect(text()).toContain('Ready Rollout');
     expect(text()).not.toContain('Website Revamp');
     expect(reads().length).toBe(before);
@@ -528,16 +638,22 @@ describe('ProjectsPage — empty states', () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
 
-    await type(searchBox(), 'zzzz');
+    await type(searchBox(), 'zzzz', () => {
+      expect(text()).toContain('No open projects match “zzzz”');
+    });
     // The account HAS projects, so the sentence that says otherwise would be a lie — and the
     // control it comes with (create a project) would be the one thing that does not help.
     expect(text()).toContain('No open projects match “zzzz”');
     expect(text()).not.toContain('No projects yet');
     // And nothing of the list survives beside it — every section is a header counting zero.
-    expect(container.querySelector('section')).toBeNull();
+    expect(mountedContainer().querySelector('section')).toBeNull();
 
     // The way out is the search that caused it, not a new project.
-    await click(button('Clear search'));
+    await click(button('Clear search'), () => {
+      expect(searchBox().value).toBe('');
+      expect(text()).toContain('Website Revamp');
+      expect(text()).toContain('Ledger Migration');
+    });
     expect(searchBox().value).toBe('');
     expect(text()).toContain('Website Revamp');
     expect(text()).toContain('Ledger Migration');
@@ -546,13 +662,19 @@ describe('ProjectsPage — empty states', () => {
   it('names the filter when that is what emptied the list', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER], '/projects?status=DONE': [] });
     await mount();
-    await click(button('History'));
+    await click(button('History'), () => {
+      expect(currentLocation()).toBe('/projects?status=DONE');
+      expect(text()).toContain('No completed projects');
+    });
 
     expect(text()).toContain('No completed projects');
     expect(text()).not.toContain('No projects yet');
 
     // A terminal dead end returns to the actionable Open list.
-    await click(button('Show open projects'));
+    await click(button('Show open projects'), () => {
+      expect(segment('All').checked).toBe(true);
+      expect(text()).toContain('Website Revamp');
+    });
     expect(segment('All').checked).toBe(true);
     expect(text()).toContain('Website Revamp');
   });
@@ -560,19 +682,26 @@ describe('ProjectsPage — empty states', () => {
   it('names an empty Open work view and returns to All without offering project creation', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
-    await click(segment('Ready'));
+    await click(segment('Ready'), () => {
+      expect(currentLocation()).toBe('/projects?view=READY');
+      expect(text()).toContain('No ready projects');
+    });
 
     expect(text()).toContain('No ready projects');
     expect(text()).not.toContain('No open projects');
-    const empty = container.querySelector('.ant-empty')!;
+    const empty = mountedContainer().querySelector('.ant-empty')!;
     expect(button('Show all open projects', empty)).toBeTruthy();
     expect(
       [...empty.querySelectorAll('button')].some((candidate) =>
         candidate.textContent?.trim() === 'New project'),
     ).toBe(false);
 
-    await click(button('Show all open projects', empty));
-    expect(landedOn).toBe('/projects');
+    await click(button('Show all open projects', empty), () => {
+      expect(currentLocation()).toBe('/projects');
+      expect(text()).toContain('Website Revamp');
+      expect(text()).toContain('Ledger Migration');
+    });
+    expect(currentLocation()).toBe('/projects');
     expect(segment('All').checked).toBe(true);
     expect(text()).toContain('Website Revamp');
     expect(text()).toContain('Ledger Migration');
@@ -584,13 +713,15 @@ describe('ProjectsPage — empty states', () => {
 
     // An Open-scoped read cannot claim the account has no project history at all.
     expect(text()).toContain('No open projects');
-    const empty = container.querySelector('.ant-empty')!;
+    const empty = mountedContainer().querySelector('.ant-empty')!;
     // In the empty state itself, not only up in the toolbar: a reader who has never seen this page
     // is looking at the middle of it, and that is where the dead end used to be.
     const cta = button('New project', empty);
-    await click(cta);
+    await click(cta, () => {
+      expect(currentLocation()).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+    });
     // The empty-state CTA is wired to the same project-intent compose as the toolbar button.
-    expect(landedOn).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+    expect(currentLocation()).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
   });
 });
 
@@ -611,9 +742,11 @@ describe('ProjectsPage — starting a project', () => {
     );
     await mount();
 
-    await click(button('New project', container));
+    await click(button('New project', mountedContainer()), () => {
+      expect(currentLocation()).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+    });
 
-    expect(landedOn).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+    expect(currentLocation()).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
   });
 
   it('routes to runner guidance when every workspace runner is offline', async () => {
@@ -629,9 +762,11 @@ describe('ProjectsPage — starting a project', () => {
     );
     await mount();
 
-    await click(button('New project', container));
+    await click(button('New project', mountedContainer()), () => {
+      expect(currentLocation()).toBe('/runners');
+    });
 
-    expect(landedOn).toBe('/runners');
+    expect(currentLocation()).toBe('/runners');
   });
 
   it.each([
@@ -650,8 +785,10 @@ describe('ProjectsPage — starting a project', () => {
     );
     await mount();
 
-    await click(button('New project', container));
+    await click(button('New project', mountedContainer()), () => {
+      expect(currentLocation()).toBe(expected);
+    });
 
-    expect(landedOn).toBe(expected);
+    expect(currentLocation()).toBe(expected);
   });
 });
