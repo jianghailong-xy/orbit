@@ -205,7 +205,7 @@ SELECT e.id::text,
        t.id::text,
        t.status::text,
        COALESCE(t.verdict::text, ''),
-       COALESCE(t.superseded_by_task_id::text, '')
+       COALESCE(t.superseded_by_task_id::text, 'NONE')
   FROM task_completion_evidence e
   JOIN task t ON t.id = e.task_id
  WHERE e.evidence_digest = '${inventory.immutableVerifier.evidenceDigest}'::char(64)
@@ -222,7 +222,7 @@ const observedVerifier = {
   taskId: uuidToBase62(verifierColumns[3]),
   status: verifierColumns[4],
   verdict: verifierColumns[5],
-  supersededByTaskDatabaseId: verifierColumns[6] || null,
+  supersededByTaskDatabaseId: verifierColumns[6] === 'NONE' ? null : verifierColumns[6],
 };
 assert.equal(observedVerifier.evidenceId, inventory.immutableVerifier.evidenceId);
 assert.equal(observedVerifier.evidenceDigest, inventory.immutableVerifier.evidenceDigest);
@@ -344,4 +344,3 @@ mkdirSync(path.dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(JSON.stringify(manifest, null, 2));
 console.log(`authoritative-target manifest=${outputPath} target=${target} candidates=${candidates.length} entrypoints=${entrypoints.length}`);
-

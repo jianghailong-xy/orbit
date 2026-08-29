@@ -26,4 +26,3 @@ git -C "$CHECKOUT" fetch --quiet origin refs/heads/main:refs/remotes/origin/main
 
 mkdir -p "$(dirname "$MANIFEST")"
 node "$CHECKOUT/scripts/outcome-reconciler-authoritative-target.mjs" "$MANIFEST"
-
