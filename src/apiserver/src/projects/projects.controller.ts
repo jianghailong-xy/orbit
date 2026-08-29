@@ -7,6 +7,7 @@ import {
   Get,
   Header,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -125,7 +126,9 @@ export class ProjectsController {
   decideCompletionAckOwnerDecision(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Param('requestId', PublicIdPipe) requestId: string,
+    // requestId is an opaque request/fence identity, not a public row address. In particular it
+    // must not be Base62-decoded before the database compares it with the bound request.
+    @Param('requestId', ParseUUIDPipe) requestId: string,
     @Body() dto: DecideCompletionAckOwnerDecisionDto,
   ) {
     return this.projects.decideCompletionAckOwnerDecision(

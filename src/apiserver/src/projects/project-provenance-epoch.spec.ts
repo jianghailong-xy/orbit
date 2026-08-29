@@ -162,6 +162,8 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'renders completion-evidence source provenance on the human review face; grants no project authority',
   'src/apiserver/src/runner-api/runner-task-completion-evidence.controller.ts':
     'forwards the authenticated runner session as completion-evidence provenance',
+  'src/apiserver/src/runner-api/runner-api.controller.ts':
+    'records and de-duplicates legacy turn-complete evidence by its source Session; does not read Task provenance',
   // Unit L7, the far side of the API. These render what the surface sent and are the reason the
   // rule has to travel IN the payload rather than in a comment: a client is where "I found this
   // here" would most plausibly be mistaken for "so it belongs here", and the card prints the

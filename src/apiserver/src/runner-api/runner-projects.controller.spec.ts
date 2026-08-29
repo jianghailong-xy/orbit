@@ -576,10 +576,16 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     'listProjectHandoffs',
     'openAcceptanceRun',
     'projectAcceptance',
+    // Read-only canonical projection. The actor is fixed to AGENT by the controller, so this
+    // reveals the standing obligation/CTA without turning the runner into its owner.
+    'projectOutcome',
     'projectRatification',
     'ratifyProjectFromPreapproval',
     'recordMergeEvidence',
     'removeProject',
+    // A machine may file the exact owner-only question its current authenticated delivery calls
+    // for; PostgreSQL binds runner + Session + delivery revision. It cannot answer that question.
+    'requestCompletionAckOwnerDecision',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -599,10 +605,12 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     listProjectHandoffs: RequestMethod.GET,
     openAcceptanceRun: RequestMethod.POST,
     projectAcceptance: RequestMethod.GET,
+    projectOutcome: RequestMethod.GET,
     projectRatification: RequestMethod.GET,
     ratifyProjectFromPreapproval: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    requestCompletionAckOwnerDecision: RequestMethod.POST,
     updateProject: RequestMethod.PATCH,
   });
 });
