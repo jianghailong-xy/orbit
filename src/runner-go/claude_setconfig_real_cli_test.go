@@ -156,8 +156,10 @@ func TestRealClaudeAcceptsASetModel(t *testing.T) {
 	if !isString {
 		t.Fatalf("the model-switch echo carries content of type %T, want a bare string: %v", msg["content"], echo)
 	}
-	if want := "<local-command-stdout>Set model to " + realClaudeTargetModel + "</local-command-stdout>"; content != want {
-		t.Errorf("the model-switch echo says\n\t%q\nwant\n\t%q", content, want)
+	plain := "<local-command-stdout>Set model to " + realClaudeTargetModel + "</local-command-stdout>"
+	inlineCode := "<local-command-stdout>Set model to `" + realClaudeTargetModel + "`</local-command-stdout>"
+	if content != plain && content != inlineCode {
+		t.Errorf("the model-switch echo says\n\t%q\nwant exactly one of\n\t%q\n\t%q", content, plain, inlineCode)
 	}
 }
 
