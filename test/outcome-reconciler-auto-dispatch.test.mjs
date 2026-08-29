@@ -95,6 +95,14 @@ const evidence = {
     noManualProductionStart: true,
     productionWrites: false,
   },
+  results: {
+    immediate: null,
+    sweepRecovery: null,
+    rollingV1Replay: null,
+    concurrentDelivery: null,
+    policyRefusal: null,
+    capacityRefusal: null,
+  },
 };
 
 function realtime() {
@@ -339,7 +347,13 @@ test('dependency completion immediate trigger commits exactly one Session inside
   await tasks.dispatchDependentsAfterCompletion(fixture.ownerId, fixture.predecessorId);
   const measured = Date.now() - started;
   assert.ok(measured <= IMMEDIATE_WINDOW_MS, `immediate dispatch took ${measured}ms`);
-  assertExactlyOneDispatch(await counts(fixture.taskId));
+  const snapshot = await counts(fixture.taskId);
+  assertExactlyOneDispatch(snapshot);
+  evidence.results.immediate = {
+    activeSessions: snapshot.active,
+    totalSessions: snapshot.total,
+    dispatchAttempt: Number(snapshot.task.dispatchAttempt),
+  };
   evidence.observationWindow.immediate.measuredMilliseconds = measured;
   evidence.samples.immediate += 1;
   evidence.coverage.immediateExactlyOne = true;
@@ -359,7 +373,13 @@ test('the periodic READY sweep recovers a deliberately lost completion trigger',
   await sweep();
   const measured = Date.now() - started;
   assert.ok(measured <= SWEEP_WINDOW_MS, `one delivered periodic sweep took ${measured}ms`);
-  assertExactlyOneDispatch(await counts(fixture.taskId));
+  const snapshot = await counts(fixture.taskId);
+  assertExactlyOneDispatch(snapshot);
+  evidence.results.sweepRecovery = {
+    activeSessions: snapshot.active,
+    totalSessions: snapshot.total,
+    dispatchAttempt: Number(snapshot.task.dispatchAttempt),
+  };
   evidence.observationWindow.periodicSweep.measuredMilliseconds = measured;
   evidence.samples.sweepRecovery += 1;
   evidence.coverage.sweepRecoversLostTrigger = true;
@@ -451,20 +471,29 @@ test('rolling-upgrade v1 completion ACK replay releases one successor and stays 
     callback,
   );
   assert.equal(first.ok, true);
-  assertExactlyOneDispatch(await counts(fixture.taskId));
+  const firstSnapshot = await counts(fixture.taskId);
+  assertExactlyOneDispatch(firstSnapshot);
   const replay = await api.turnComplete(
     { id: fixture.runnerId },
     fixture.sessionId,
     callback,
   );
   assert.equal(replay.ok, true);
-  assertExactlyOneDispatch(await counts(fixture.taskId));
+  const replaySnapshot = await counts(fixture.taskId);
+  assertExactlyOneDispatch(replaySnapshot);
   assert.equal(
     await db.taskJudgmentRequest.count({ where: { taskId: fixture.predecessorId } }),
     1,
   );
   evidence.samples.rollingV1Replay += 1;
   evidence.coverage.rollingV1ReplayIdempotent = true;
+  evidence.results.rollingV1Replay = {
+    firstActiveSessions: firstSnapshot.active,
+    replayActiveSessions: replaySnapshot.active,
+    firstDispatchAttempt: Number(firstSnapshot.task.dispatchAttempt),
+    replayDispatchAttempt: Number(replaySnapshot.task.dispatchAttempt),
+    judgmentRequests: 1,
+  };
 });
 
 test('concurrent immediate trigger and periodic sweep cannot create two active Sessions', async () => {
@@ -474,7 +503,8 @@ test('concurrent immediate trigger and periodic sweep cannot create two active S
     tasks.dispatchDependentsAfterCompletion(fixture.ownerId, fixture.predecessorId),
     sweep(),
   ]);
-  assertExactlyOneDispatch(await counts(fixture.taskId));
+  const snapshot = await counts(fixture.taskId);
+  assertExactlyOneDispatch(snapshot);
   assert.equal(
     await db.taskRunRequest.count({ where: { ownerId: fixture.ownerId } }),
     1,
@@ -482,6 +512,12 @@ test('concurrent immediate trigger and periodic sweep cannot create two active S
   );
   evidence.samples.concurrentDeliveries += 2;
   evidence.coverage.concurrentTriggerSweepExactlyOne = true;
+  evidence.results.concurrentDelivery = {
+    deliveredSignals: 2,
+    activeSessions: snapshot.active,
+    totalSessions: snapshot.total,
+    runRequests: 1,
+  };
 });
 
 test('policy refusal exposes a revision/watermark-bound obligation and persistent wakeup', async () => {
@@ -527,6 +563,13 @@ test('policy refusal exposes a revision/watermark-bound obligation and persisten
   evidence.samples.policyRefusal += 1;
   evidence.coverage.typedPolicyObligation = true;
   evidence.coverage.persistentPolicyWakeup = true;
+  evidence.results.policyRefusal = {
+    reasonCode: obligation.reasonCode,
+    dispatchAttempt: Number(blocked.dispatchAttempt),
+    canonicalObligations: blocked.controlPlaneObligations.length,
+    wakeupStateBeforeRecovery: obligation.wakeup?.state,
+    activeSessionsAfterWakeup: (await counts(fixture.taskId)).active,
+  };
 });
 
 test('capacity admission refusal records a typed reason, attempt and durable next delivery', async () => {
@@ -566,6 +609,13 @@ test('capacity admission refusal records a typed reason, attempt and durable nex
   assert.equal(obligation.wakeup?.state, 'PENDING');
   evidence.samples.admissionRefusal += 1;
   evidence.coverage.typedAdmissionObligation = true;
+  evidence.results.capacityRefusal = {
+    reasonCode: obligation.reasonCode,
+    dispatchAttempt: Number(snapshot.task.dispatchAttempt),
+    canonicalObligations: blocked.controlPlaneObligations.length,
+    wakeupState: obligation.wakeup?.state,
+    activeSessions: snapshot.active,
+  };
 });
 
 test('READY automatic work with available assignee, runner, budget and capacity is never silent', async () => {

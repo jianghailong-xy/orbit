@@ -93,6 +93,43 @@ for (const [name, count] of Object.entries(evidence.samples)) {
 for (const [name, proven] of Object.entries(evidence.coverage)) {
   assert.equal(proven, name === 'productionWrites' ? false : true, `${name} was not proven`);
 }
+assert.deepEqual(evidence.results.immediate, {
+  activeSessions: 1,
+  totalSessions: 1,
+  dispatchAttempt: 1,
+});
+assert.deepEqual(evidence.results.sweepRecovery, {
+  activeSessions: 1,
+  totalSessions: 1,
+  dispatchAttempt: 1,
+});
+assert.deepEqual(evidence.results.rollingV1Replay, {
+  firstActiveSessions: 1,
+  replayActiveSessions: 1,
+  firstDispatchAttempt: 1,
+  replayDispatchAttempt: 1,
+  judgmentRequests: 1,
+});
+assert.deepEqual(evidence.results.concurrentDelivery, {
+  deliveredSignals: 2,
+  activeSessions: 1,
+  totalSessions: 1,
+  runRequests: 1,
+});
+assert.deepEqual(evidence.results.policyRefusal, {
+  reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+  dispatchAttempt: 1,
+  canonicalObligations: 1,
+  wakeupStateBeforeRecovery: 'PENDING',
+  activeSessionsAfterWakeup: 1,
+});
+assert.deepEqual(evidence.results.capacityRefusal, {
+  reasonCode: 'RUNNER_OR_LIST_CAPACITY_EXHAUSTED',
+  dispatchAttempt: 1,
+  canonicalObligations: 1,
+  wakeupState: 'PENDING',
+  activeSessions: 0,
+});
 
 const sources = [
   'package.json',
@@ -135,6 +172,7 @@ const manifest = {
   postgres: evidence.postgres,
   samples: evidence.samples,
   coverage: evidence.coverage,
+  results: evidence.results,
   fixture: {
     disposable: true,
     cleanedBeforeManifest: true,
