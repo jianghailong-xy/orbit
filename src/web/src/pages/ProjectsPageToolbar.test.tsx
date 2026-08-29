@@ -296,7 +296,12 @@ async function type(
 const searchBox = () =>
   mountedContainer().querySelector('input[aria-label="Search projects"]') as HTMLInputElement;
 
-describe('ProjectsPage — status filter', () => {
+// Cold clean-CI scheduling put the real ProjectsPage/AntD cases between 7.524s and 8.103s before
+// a 5s timeout left their act open and cascaded through the file. Keep one file-local 12s ceiling
+// around the 8s observable waits below; this neither changes Vitest globally nor waits by time.
+const PROJECTS_ANTD_TEST_TIMEOUT = 12_000;
+
+describe('ProjectsPage — status filter', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
   it('restores a terminal lifecycle directly from a deep link without first reading Open', async () => {
     serve({ '/projects?status=CANCELLED': [ABANDONED] });
     await mount('/projects?status=CANCELLED');
@@ -422,11 +427,10 @@ describe('ProjectsPage — status filter', () => {
     expect(cancelled.querySelector('h3')).toBeNull();
     expect(cancelled.querySelector('button')).toBeNull();
     expect(cancelled.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
-  }, 10_000);
+  });
 
-  // This three-navigation AntD case peaked at 5.035s in the loaded suite. Its local 10s budget is
-  // bounded to that observed integration cost; every transition below still waits on its URL and
-  // rendered row rather than on elapsed time.
+  // This three-navigation case also peaked at 5.035s in a warm loaded suite. Every transition
+  // below still waits on its URL and rendered row rather than on elapsed time.
   it('returns from a completed project detail to the same URL-owned lifecycle view', async () => {
     const projectId = encodeId(P2);
     serve({
@@ -469,7 +473,7 @@ describe('ProjectsPage — status filter', () => {
     expect(segment('Completed').checked).toBe(true);
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
-  }, 10_000);
+  });
 
   it('returns from project detail to the same URL-owned Open work view', async () => {
     const projectId = encodeId(P1);
@@ -529,7 +533,7 @@ describe('ProjectsPage — status filter', () => {
   });
 });
 
-describe('ProjectsPage — search', () => {
+describe('ProjectsPage — search', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
   it('matches the goal with its Markdown removed, which is what the row shows', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
@@ -633,7 +637,7 @@ describe('ProjectsPage — search', () => {
   });
 });
 
-describe('ProjectsPage — empty states', () => {
+describe('ProjectsPage — empty states', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
   it('tells "you have no projects" apart from "nothing here matches", and offers the way out of each', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
@@ -725,7 +729,7 @@ describe('ProjectsPage — empty states', () => {
   });
 });
 
-describe('ProjectsPage — starting a project', () => {
+describe('ProjectsPage — starting a project', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
   it('opens project-intent compose in firstOpenableWorkspace order', async () => {
     serve(
       { '/projects?status=OPEN': [REVAMP] },
