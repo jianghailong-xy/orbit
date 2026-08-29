@@ -275,6 +275,12 @@ const finishedAt = new Date().toISOString();
 const elapsedMilliseconds = Date.parse(finishedAt) - Date.parse(startedAt);
 const deadlineSeconds = Number(process.env.OUTCOME_WATCHDOG_DEADLINE_SECONDS);
 assert.equal(deadlineSeconds, 1200, 'Watchdog acceptance did not retain the negotiated deadline');
+const migrationCount = Number(process.env.OUTCOME_WATCHDOG_MIGRATIONS);
+assert.ok(Number.isInteger(migrationCount) && migrationCount > 0,
+  'OUTCOME_WATCHDOG_MIGRATIONS is required');
+const lastMigration = process.env.OUTCOME_WATCHDOG_LAST_MIGRATION;
+assert.match(lastMigration ?? '', /^\d{4}_[a-z0-9_]+$/u,
+  'OUTCOME_WATCHDOG_LAST_MIGRATION is required');
 assert.ok(elapsedMilliseconds > 0 && elapsedMilliseconds < deadlineSeconds * 1_000,
   'Watchdog acceptance elapsed time is outside its admitted deadline');
 assert.equal(process.env.OUTCOME_WATCHDOG_FIXTURE_CLEANED, 'true',
@@ -303,7 +309,11 @@ const body = {
   collectorSha: evidence.collectorSha,
   targetBranch: execFileSync('git', ['branch', '--show-current'], { cwd: ROOT, encoding: 'utf8' }).trim(),
   ...summary,
-  postgres: evidence.postgres,
+  postgres: {
+    ...evidence.postgres,
+    migrations: migrationCount,
+    lastMigration,
+  },
   proofs: {
     independence: evidence.independence,
     faults: evidence.faults,

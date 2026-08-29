@@ -59,6 +59,16 @@ function positiveTestSamples(value, at = '$', found = []) {
     if ((key === 'tests' || key === 'executions') && typeof child === 'number' && child > 0) {
       found.push({ path: `${at}.${key}`, value: child });
     }
+    if (
+      key === 'tests'
+      && child !== null
+      && typeof child === 'object'
+      && !Array.isArray(child)
+      && typeof child.count === 'number'
+      && child.count > 0
+    ) {
+      found.push({ path: `${at}.${key}.count`, value: child.count });
+    }
     positiveTestSamples(child, `${at}.${key}`, found);
   }
   return found;

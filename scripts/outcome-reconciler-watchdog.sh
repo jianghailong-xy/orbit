@@ -113,7 +113,10 @@ echo "==> outcome-watchdog: applying every Prisma migration"
   "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
 MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
   'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
-echo "==> outcome-watchdog: migrations=$MIGRATIONS system_identifier=$SYSTEM_ID port=$PORT"
+LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+  'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
+  | tr -d '[:space:]')"
+echo "==> outcome-watchdog: migrations=$MIGRATIONS last_migration=$LAST_MIGRATION system_identifier=$SYSTEM_ID port=$PORT"
 
 echo "==> outcome-watchdog: running independent fault, SLO, capacity and security matrix"
 set +e
@@ -148,6 +151,8 @@ echo "==> outcome-watchdog: validating zero-skip evidence and writing manifests"
 OUTCOME_WATCHDOG_STARTED_AT="$STARTED_AT" \
 OUTCOME_WATCHDOG_DEADLINE_SECONDS="$TIMEOUT_SECONDS" \
 OUTCOME_WATCHDOG_FIXTURE_CLEANED=true \
+OUTCOME_WATCHDOG_MIGRATIONS="$MIGRATIONS" \
+OUTCOME_WATCHDOG_LAST_MIGRATION="$LAST_MIGRATION" \
 node \
   "$REPO/scripts/outcome-reconciler-watchdog-manifest.mjs" \
   "$TAP" "$EVIDENCE" "$CONTRACT" "$MANIFEST" "$CAPACITY_MANIFEST" \
