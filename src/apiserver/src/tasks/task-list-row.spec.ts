@@ -5,6 +5,7 @@ import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { TasksController } from './tasks.controller';
 import { TASK_LIST_SELECT, TasksService } from './tasks.service';
+import { recordingQueryRaw } from './query-raw-test-helper';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -36,8 +37,7 @@ test('GET tasks/:id/row forwards the authenticated owner to the lightweight read
 test('listRow reuses the page select and restricts live overlays to the one owned task', async () => {
   let taskRead: any;
   let busyRead: any;
-  let runnableSql = '';
-  let runnableBindings: unknown[] = [];
+  const raw = recordingQueryRaw(() => [{ id: TASK_ID }]);
   const stored = {
     id: TASK_ID,
     title: 'incremental row',
@@ -58,17 +58,7 @@ test('listRow reuses the page select and restricts live overlays to the one owne
       },
     },
     taskDependency: { findMany: async () => [] },
-    $queryRaw: async (query: { text?: string; values?: unknown[] } | TemplateStringsArray, ...bindings: unknown[]) => {
-      if (Array.isArray(query)) {
-        runnableSql = (query as unknown as TemplateStringsArray).join('?');
-        runnableBindings = bindings;
-      } else {
-        const rendered = query as { text?: string; values?: unknown[] };
-        runnableSql = rendered.text ?? '';
-        runnableBindings = rendered.values ?? [];
-      }
-      return [{ id: TASK_ID }];
-    },
+    $queryRaw: raw.$queryRaw,
   };
   const service = new TasksService(prisma as never, {} as never, {} as never);
 
@@ -86,8 +76,10 @@ test('listRow reuses the page select and restricts live overlays to the one owne
   assert.equal(row.dependencyState, 'NONE');
   assert.equal(row.blocked, false);
   assert.equal(row.runnable, true);
-  assert.match(runnableSql, /SELECT t\.id[\s\S]*t\.id IN/);
-  assert.deepEqual(runnableBindings.slice(0, 2), [OWNER_ID, TASK_ID]);
+  assert.equal(raw.statements.length, 1, 'one shared predicate read covers the row');
+  assert.equal(raw.statements[0].invocation, 'sql-object');
+  assert.match(raw.statements[0].text, /SELECT t\.id/);
+  assert.deepEqual(raw.statements[0].values.slice(0, 2), [OWNER_ID, TASK_ID]);
 });
 
 test('listRow returns 404 before reading overlays for an unknown or cross-tenant id', async () => {

@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   canonicalOutcomeJson,
@@ -51,64 +52,83 @@ export interface OutcomeVersionedReductionReceipt {
  */
 @Injectable()
 export class OutcomeVersioningService {
+  private readonly logger = new Logger(OutcomeVersioningService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async replaceBindingAndReevaluate(
     input: OutcomeBindingReplacementInput,
   ): Promise<OutcomeVersionedReductionReceipt> {
-    return this.prisma.$transaction(async (transaction) => {
-      const [registered] = await transaction.$queryRaw<Array<{ registered: Prisma.JsonValue }>>(
-        Prisma.sql`
-          SELECT outcome_register_fact_binding(
-            ${input.tenantId}::uuid,
-            ${input.projectId}::uuid,
-            ${JSON.stringify(input.binding)}::jsonb
-          ) AS registered
-        `,
-      );
-      if (!registered) throw new Error('Binding registration returned no receipt');
-      const bindingReceipt = registered.registered as JsonRecord;
-      const bindingDigest = String(bindingReceipt.bindingDigest ?? '');
-      for (const fact of input.facts ?? []) {
-        this.assertFactScope(input, fact.context, fact.draft);
-        await this.append(transaction, fact.context, fact.draft);
-      }
-      return this.reduce(transaction, input, bindingDigest, String(bindingReceipt.bindingEpoch ?? ''));
-    }, {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 10_000,
-      timeout: 60_000,
-    });
+    return withTransactionRetry(
+      this.prisma,
+      async (transaction) => {
+        const [registered] = await transaction.$queryRaw<Array<{ registered: Prisma.JsonValue }>>(
+          Prisma.sql`
+            SELECT outcome_register_fact_binding(
+              ${input.tenantId}::uuid,
+              ${input.projectId}::uuid,
+              ${JSON.stringify(input.binding)}::jsonb
+            ) AS registered
+          `,
+        );
+        if (!registered) throw new Error('Binding registration returned no receipt');
+        const bindingReceipt = registered.registered as JsonRecord;
+        const bindingDigest = String(bindingReceipt.bindingDigest ?? '');
+        for (const fact of input.facts ?? []) {
+          this.assertFactScope(input, fact.context, fact.draft);
+          await this.append(transaction, fact.context, fact.draft);
+        }
+        return this.reduce(
+          transaction,
+          input,
+          bindingDigest,
+          String(bindingReceipt.bindingEpoch ?? ''),
+        );
+      },
+      loggedRetry(this.logger, 'outcomeVersioning.replaceBindingAndReevaluate', {
+        transaction: {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10_000,
+          timeout: 60_000,
+        },
+      }),
+    );
   }
 
   async appendFactAndReevaluate(
     input: OutcomeFactReevaluationInput,
   ): Promise<OutcomeVersionedReductionReceipt> {
     this.assertFactScope(input, input.context, input.draft);
-    return this.prisma.$transaction(async (transaction) => {
-      await this.append(transaction, input.context, input.draft);
-      const [binding] = await transaction.$queryRaw<Array<{
-        bindingDigest: string;
-        bindingEpoch: bigint;
-      }>>(Prisma.sql`
-        SELECT binding_digest::text AS "bindingDigest", binding_epoch AS "bindingEpoch"
-          FROM outcome_fact_binding
-         WHERE tenant_id = ${input.tenantId}::uuid
-           AND project_id = ${input.projectId}::uuid
-         ORDER BY binding_epoch DESC LIMIT 1
-      `);
-      if (!binding) throw new Error('Current binding disappeared during fact append');
-      return this.reduce(
-        transaction,
-        input,
-        binding.bindingDigest,
-        binding.bindingEpoch.toString(),
-      );
-    }, {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 10_000,
-      timeout: 60_000,
-    });
+    return withTransactionRetry(
+      this.prisma,
+      async (transaction) => {
+        await this.append(transaction, input.context, input.draft);
+        const [binding] = await transaction.$queryRaw<Array<{
+          bindingDigest: string;
+          bindingEpoch: bigint;
+        }>>(Prisma.sql`
+          SELECT binding_digest::text AS "bindingDigest", binding_epoch AS "bindingEpoch"
+            FROM outcome_fact_binding
+           WHERE tenant_id = ${input.tenantId}::uuid
+             AND project_id = ${input.projectId}::uuid
+           ORDER BY binding_epoch DESC LIMIT 1
+        `);
+        if (!binding) throw new Error('Current binding disappeared during fact append');
+        return this.reduce(
+          transaction,
+          input,
+          binding.bindingDigest,
+          binding.bindingEpoch.toString(),
+        );
+      },
+      loggedRetry(this.logger, 'outcomeVersioning.appendFactAndReevaluate', {
+        transaction: {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10_000,
+          timeout: 60_000,
+        },
+      }),
+    );
   }
 
   private assertFactScope(

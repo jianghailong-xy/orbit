@@ -332,6 +332,47 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // by accident.
   'wakeId',
   'raisedBlockerId',
+  // Outcome v2's immutable rows and row references. These are durable audit addresses a caller
+  // can receive and follow; snapshots retain the same address semantics after the live relation
+  // moves or disappears. Lease ROW ids belong here too — the separate leaseToken is the opaque
+  // equality capability and is deliberately classified below.
+  'wakeupId',
+  'evaluationId',
+  'firstEvaluationId',
+  'actionIntentId',
+  'receiptId',
+  'diagnosticId',
+  'coordinationId',
+  'leaseId',
+  'externalWaitId',
+  'deliveryId',
+  'resultId',
+  'completionDeliveryReceiptId',
+  'waitId',
+  'planId',
+  'affectedSessionId',
+  'originLeaseId',
+  'deliveryReceiptId',
+  'recordedLeaseId',
+  'wakeIdSnapshot',
+  'sessionIdSnapshot',
+  'adoptionId',
+  'actionId',
+  'sourceSessionIdSnapshot',
+  'taskIdSnapshot',
+  'taskProjectIdSnapshot',
+  'lastDeliveryReceiptId',
+  'bindingId',
+  'runnerIdSnapshot',
+  'deliveryBindingId',
+  'attestationId',
+  'verificationId',
+  'transitionId',
+  'predecessorEvaluationId',
+  'successorEvaluationId',
+  // The authenticated runner that ingested a RunEvent is audit provenance and can be followed to
+  // that runner. The lease generation beside it is a fence and is classified in the denylist.
+  'ingestedByRunnerId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
@@ -356,6 +397,15 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'mergeOperationOwner',
   'commitOperationId',
   'commitOperationOwner',
+  // Deployment and coordinator epochs are equality identities, not rows with a public lookup
+  // surface. Translating one would make a heartbeat bind to another expectation or let a logical
+  // clock/RunEvent appear to belong to a different lease generation.
+  'expectationGeneration',
+  'clockId',
+  'ingestedUnderLeaseGeneration',
+  // The capability half of outcome action/coordinator leasing. Unlike leaseId, this value is
+  // echoed only to prove possession and must survive byte-for-byte.
+  'leaseToken',
   // The manual Project trigger's effect marker (`task_run_manual_trigger`, migration 0137). It
   // names no row a caller can ask for: it is `taskRunManualTriggerId(pressToken, projectId)`, a
   // value derived from the press so the marker and the outbox signal agree byte-for-byte about

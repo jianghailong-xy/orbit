@@ -18,14 +18,15 @@ import {
  *
  * WHAT THIS PROVES, AND WHAT IT DELIBERATELY DOES NOT
  * ---------------------------------------------------
- * Every entry in `TRANSACTION_UNITS` reaches the database through the same loop, so the thing that
- * varies per unit is not the loop — it is the ATTEMPT BUDGET the unit chose and the fact that its
- * exhausted conflict leaves as something the boundary will answer 503 rather than 500. That is
- * what is checked here, per unit, from the inventory's own declaration: run the unit's budget
- * against a runner that fails on demand, and assert the closure was re-run whole, that the result
- * is the winning attempt's, that exhaustion happens after exactly the declared number of attempts,
+ * Every `TX_RETRIED` entry in `TRANSACTION_UNITS` reaches the database through the same loop, so
+ * the thing that varies per unit is not the loop — it is the ATTEMPT BUDGET the unit chose and the
+ * fact that its exhausted conflict leaves as something the boundary will answer 503 rather than
+ * 500. That is what is checked here, per unit, from the inventory's own declaration: run the
+ * unit's budget against a runner that fails on demand, and assert the closure was re-run whole,
+ * that the result is the winning attempt's, that exhaustion happens after exactly the declared number of attempts,
  * and that what comes out is the original error with the shared classifier still calling it
- * transient — which is the single fact the global boundary turns into a 503.
+ * transient — which is the single fact the global boundary turns into a 503. `TX_BARE` entries
+ * are separately pinned to one attempt and deliberately omitted from recovery scenarios.
  *
  * It does NOT re-run each service's own closure. A test that did would need every one of those
  * services stood up with mocks, and what it would then be asserting is the loop again. The
@@ -83,7 +84,9 @@ const SRC = path.resolve(__dirname, '../../src');
 /** Nothing waits in these tests; the backoff itself is `transaction-retry.spec.ts`'s subject. */
 const NO_WAIT = { sleep: async () => undefined };
 
-for (const unit of TRANSACTION_UNITS.filter((candidate) => candidate.shape === 'TX_RETRIED')) {
+const RETRIED_TRANSACTION_UNITS = TRANSACTION_UNITS.filter((unit) => unit.shape === 'TX_RETRIED');
+
+for (const unit of RETRIED_TRANSACTION_UNITS) {
   test(`${unit.at} · commits after one 40P01`, async () => {
     const { runner, clients } = flaky(1, deadlock);
     const seen: object[] = [];
@@ -146,17 +149,12 @@ test('the attempt budgets the inventory declares are the ones the code asks for'
   // is enough: a file only contains `maxAttempts` when a unit in it is capped, and the inventory
   // has to name that unit for the sets to match.
   const capped = new Set(
-    TRANSACTION_UNITS.filter(
-      (unit) => unit.shape === 'TX_RETRIED'
-        && unit.attempts !== DEFAULT_TRANSACTION_MAX_ATTEMPTS,
-    ).map(
-      (unit) => unit.at.split('#')[0],
-    ),
+    RETRIED_TRANSACTION_UNITS.filter(
+      (unit) => unit.attempts !== DEFAULT_TRANSACTION_MAX_ATTEMPTS,
+    ).map((unit) => unit.at.split('#')[0]),
   );
   const asks = new Set(
-    [...new Set(TRANSACTION_UNITS
-      .filter((unit) => unit.shape === 'TX_RETRIED')
-      .map((unit) => unit.at.split('#')[0]))].filter((rel) =>
+    [...new Set(RETRIED_TRANSACTION_UNITS.map((unit) => unit.at.split('#')[0]))].filter((rel) =>
       /maxAttempts:/.test(readFileSync(path.join(SRC, rel), 'utf8')),
     ),
   );
@@ -165,8 +163,11 @@ test('the attempt budgets the inventory declares are the ones the code asks for'
     [...capped].sort(),
     'a file caps its retry budget without the inventory saying so, or the other way round',
   );
-  for (const unit of TRANSACTION_UNITS) {
+  for (const unit of RETRIED_TRANSACTION_UNITS) {
     assert.ok(unit.attempts >= 1, `${unit.at} declares a budget of ${unit.attempts}`);
+  }
+  for (const unit of TRANSACTION_UNITS.filter((candidate) => candidate.shape === 'TX_BARE')) {
+    assert.equal(unit.attempts, 1, `${unit.at} is bare but declares a retry budget`);
   }
 });
 
@@ -174,17 +175,16 @@ test('a unit that declares a non-default isolation really asks for it', () => {
   for (const unit of TRANSACTION_UNITS) {
     if (!unit.isolation) continue;
     const [rel] = unit.at.split('#');
-    const expected = unit.isolation === 'SERIALIZABLE'
-      ? /isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/
-      : /isolationLevel: Prisma\.TransactionIsolationLevel\.RepeatableRead/;
+    const prismaIsolation = unit.isolation === 'REPEATABLE READ'
+      ? 'RepeatableRead'
+      : unit.isolation === 'SERIALIZABLE'
+        ? 'Serializable'
+        : null;
+    assert.ok(prismaIsolation, `${unit.at} declares unknown isolation ${unit.isolation}`);
     assert.match(
       readFileSync(path.join(SRC, rel), 'utf8'),
-      expected,
+      new RegExp(`isolationLevel: Prisma\\.TransactionIsolationLevel\\.${prismaIsolation}`),
       `${unit.at} declares ${unit.isolation} and ${rel} does not ask for it`,
-    );
-    assert.ok(
-      unit.isolation === 'REPEATABLE READ' || unit.isolation === 'SERIALIZABLE',
-      `${unit.at} declares an isolation nothing here sets`,
     );
   }
 });

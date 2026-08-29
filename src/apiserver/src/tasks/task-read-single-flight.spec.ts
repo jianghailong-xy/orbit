@@ -23,6 +23,15 @@ function serviceWith(prisma: unknown): TasksService {
   } as never, {} as never, {} as never);
 }
 
+function detailServiceWith(task: unknown): TasksService {
+  return serviceWith({
+    task,
+    // An edge-free detail still asks the dependency reader once; no successor or verification
+    // delegates are needed after this narrow, truthful answer.
+    taskDependency: { findMany: async () => [] },
+  });
+}
+
 test('concurrent identical task pages execute one underlying query group', async () => {
   const rows = deferred<never[]>();
   const calls = { findMany: 0, count: 0, groupBy: 0, raw: 0 };
@@ -225,12 +234,10 @@ function detailRow() {
 test('concurrent reads of the same task detail hydrate it once', async () => {
   const row = deferred<ReturnType<typeof detailRow>>();
   let reads = 0;
-  const service = serviceWith({
-    task: {
-      findFirst: async () => {
-        reads += 1;
-        return row.promise;
-      },
+  const service = detailServiceWith({
+    findFirst: async () => {
+      reads += 1;
+      return row.promise;
     },
   });
 
@@ -247,12 +254,10 @@ test('concurrent reads of the same task detail hydrate it once', async () => {
 test('task detail single-flight isolates owners even for the same task id', async () => {
   const row = deferred<ReturnType<typeof detailRow>>();
   let reads = 0;
-  const service = serviceWith({
-    task: {
-      findFirst: async () => {
-        reads += 1;
-        return row.promise;
-      },
+  const service = detailServiceWith({
+    findFirst: async () => {
+      reads += 1;
+      return row.promise;
     },
   });
 
@@ -267,13 +272,11 @@ test('task detail single-flight isolates owners even for the same task id', asyn
 
 test('a failed task detail read is removed from single-flight and can be retried', async () => {
   let reads = 0;
-  const service = serviceWith({
-    task: {
-      findFirst: async () => {
-        reads += 1;
-        if (reads === 1) throw new Error('detail read failed');
-        return detailRow();
-      },
+  const service = detailServiceWith({
+    findFirst: async () => {
+      reads += 1;
+      if (reads === 1) throw new Error('detail read failed');
+      return detailRow();
     },
   });
 
