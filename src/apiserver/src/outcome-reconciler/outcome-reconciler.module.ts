@@ -7,12 +7,14 @@ import {
 import { OutcomeEvaluatorService } from './outcome-evaluator.service';
 import { OutcomeFactIngressService } from './outcome-fact-ingress.service';
 import { OutcomeProjectionService } from './outcome-projection.service';
+import { DeliveryAttestationService } from './delivery-attestation.service';
 
 @Module({
   providers: [
     OutcomeFactIngressService,
     OutcomeEvaluatorService,
     OutcomeProjectionService,
+    DeliveryAttestationService,
     ActionCapabilityRegistry,
     ActionExecutorService,
     OutcomeCoordinatorResolverRegistry,
@@ -22,6 +24,7 @@ import { OutcomeProjectionService } from './outcome-projection.service';
     OutcomeFactIngressService,
     OutcomeEvaluatorService,
     OutcomeProjectionService,
+    DeliveryAttestationService,
     ActionCapabilityRegistry,
     ActionExecutorService,
     OutcomeCoordinatorResolverRegistry,

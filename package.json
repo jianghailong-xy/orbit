@@ -26,6 +26,7 @@
     "test:outcome-reconciler:projection": "bash scripts/outcome-reconciler-projection.sh",
     "test:outcome-reconciler:done-gate": "bash scripts/outcome-reconciler-done-gate.sh",
     "test:outcome-reconciler:actions": "bash scripts/outcome-reconciler-actions.sh",
+    "test:outcome-reconciler:delivery": "bash scripts/outcome-reconciler-delivery.sh",
     "test:outcome-reconciler:coordinator": "bash scripts/outcome-reconciler-coordinator.sh",
     "test:outcome-reconciler:watchdog": "bash scripts/outcome-reconciler-watchdog.sh",
     "test:outcome-reconciler:acceptance-runtime": "bash scripts/executable-acceptance-runtime.sh",

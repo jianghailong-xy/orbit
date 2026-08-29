@@ -255,6 +255,27 @@ async function seedScope(label, options = {}) {
     createdAtLogicalTime: '1',
     dueLogicalTime: null,
   };
+  // The projection reducer is installed by the sibling canonical-obligation stack and runs on
+  // every evaluator-result insert.  Keep this Action Executor fixture a structurally valid
+  // canonical result so the two first-class subsystems compose; `{}` used to work only when the
+  // projection migration was absent from the database.
+  const projectionProofDigest = digest(`proof:${label}`);
+  const projectionResult = {
+    schemaVersion: 1,
+    evaluatorVersion: 'action-test/2.0.0',
+    evaluatorDigest: binding.evaluatorDigest,
+    bindingDigest,
+    evaluatedThroughLogicalTime: '1',
+    proof: {
+      proofDigest: projectionProofDigest,
+      dimensions: [],
+      modelGaps: [],
+      closedClauseResults: {},
+    },
+    proofGraph: {},
+    activeMandatoryObligations: [sourceObligation],
+    closed: false,
+  };
   await pool.query(`
     INSERT INTO outcome_evaluation_cut (
       cut_id, tenant_id, project_id, binding_digest, watermark_logical_time,
@@ -268,20 +289,6 @@ async function seedScope(label, options = {}) {
     cutId, tenantId, projectId, bindingDigest, digest(`fact-set:${label}`),
     `cut:${label}`, digest(`cut-request:${label}`),
   ]);
-  const proofDigest = digest(`proof:${label}`);
-  const evaluatorResult = {
-    schemaVersion: 1,
-    evaluatorVersion: 'action-test/2.0.0',
-    evaluatorDigest: binding.evaluatorDigest,
-    bindingDigest,
-    evaluatedThroughLogicalTime: '1',
-    proof: { proofDigest },
-    proofGraph: {},
-    activeMandatoryObligations: [sourceObligation],
-    attempts: [],
-    rejectedFacts: [],
-    closed: false,
-  };
   await pool.query(`
     INSERT INTO outcome_evaluator_result (
       evaluation_id, tenant_id, project_id, subject_type, subject_id, binding_digest,
@@ -293,8 +300,8 @@ async function seedScope(label, options = {}) {
     )
   `, [
     evaluationId, tenantId, projectId, bindingDigest, cutId,
-    binding.evaluatorDigest, digest(`evaluation:${label}`), proofDigest,
-    canonicalDigest(evaluatorResult), JSON.stringify(evaluatorResult),
+    binding.evaluatorDigest, digest(`evaluation:${label}`), projectionProofDigest,
+    digest(`result:${label}`), JSON.stringify(projectionResult),
   ]);
   await pool.query(`
     INSERT INTO outcome_obligation_revision (
