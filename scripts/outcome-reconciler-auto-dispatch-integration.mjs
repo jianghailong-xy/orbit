@@ -17,6 +17,7 @@ const mode = process.argv[2] ?? 'verify';
 // that can truthfully appear as source_sha in a merge receipt.
 const DECLARED_SOURCE_SHA = '38cd86d35040a4fd5a9ce08cfaf43331d1ce2d99';
 const FIX_COMMIT_SHA = '577a71b266219014ad8a4ee44e8ab4ee75c4c179';
+const INITIAL_MERGE_TARGET_SHA = '4fbbe8c9fda8108ebb397df71dcf8c68b24408c1';
 const SOURCE_BRANCH = 'orbit/ready-autorun-successor-28d986';
 const SOURCE_SESSION_ID = '5k9Ewp4pfylzIRFWgQmJx3';
 const SOURCE_TASK_ID = '34FGd24hax5lmOVKTY1ZS';
@@ -160,7 +161,7 @@ function containerRuntimeFiles(containerName) {
   return { files, digest: digestObject(files) };
 }
 
-function receiptEvidence(targetShaAfter) {
+function receiptEvidence() {
   return oneDatabaseRow(`
     SELECT id::text, result, source_branch, source_sha, target_branch,
            COALESCE(target_sha_before, ''), COALESCE(target_sha_after, ''),
@@ -170,7 +171,28 @@ function receiptEvidence(targetShaAfter) {
      WHERE source_sha = '${FIX_COMMIT_SHA}'
        AND target_branch = '${TARGET_BRANCH}'
        AND target_sha_before = '${DECLARED_SOURCE_SHA}'
+       AND target_sha_after = '${INITIAL_MERGE_TARGET_SHA}'
+       AND result = 'MERGED'
+     ORDER BY created_at DESC
+     LIMIT 1
+  `, [
+    'databaseId', 'result', 'sourceBranch', 'sourceSha', 'targetBranch',
+    'targetShaBefore', 'targetShaAfter', 'rebaseBaseSha', 'recordedBy', 'createdAt',
+  ]);
+}
+
+function containmentReceiptEvidence(targetShaAfter) {
+  return oneDatabaseRow(`
+    SELECT id::text, result, source_branch, source_sha, target_branch,
+           COALESCE(target_sha_before, ''), COALESCE(target_sha_after, ''),
+           COALESCE(rebase_base_sha, ''), recorded_by,
+           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+      FROM session_merge_receipt
+     WHERE source_sha = '${FIX_COMMIT_SHA}'
+       AND target_branch = '${TARGET_BRANCH}'
+       AND target_sha_before = '${INITIAL_MERGE_TARGET_SHA}'
        AND target_sha_after = '${targetShaAfter}'
+       AND result = 'ALREADY_MERGED'
      ORDER BY created_at DESC
      LIMIT 1
   `, [
@@ -342,6 +364,7 @@ function collectDeployment(targetSha) {
       status: postgres.State.Status,
       health: postgres.State.Health?.Status ?? null,
     },
+    productionMigration: migrationEvidence(),
   };
 }
 
@@ -386,16 +409,26 @@ function verifyCurrentState(attestation, { generating = false } = {}) {
   assert.deepEqual(regression, attestation.regression.manifest);
   validateRegression(regression, attestation.repository.targetShaAfter);
 
-  const receipt = receiptEvidence(attestation.repository.targetShaAfter);
-  assert.deepEqual(receipt, attestation.mergeReceipt.databaseRecord);
-  assert.equal(attestation.mergeReceipt.publicId.length > 0, true);
+  const receipt = receiptEvidence();
+  assert.deepEqual(receipt, attestation.mergeReceipt.initial.databaseRecord);
+  assert.equal(attestation.mergeReceipt.initial.publicId.length > 0, true);
   assert.equal(receipt.result, 'MERGED');
   assert.equal(receipt.sourceBranch, SOURCE_BRANCH);
   assert.equal(receipt.sourceSha, FIX_COMMIT_SHA);
   assert.equal(receipt.targetBranch, TARGET_BRANCH);
   assert.equal(receipt.targetShaBefore, DECLARED_SOURCE_SHA);
-  assert.equal(receipt.targetShaAfter, attestation.repository.targetShaAfter);
+  assert.equal(receipt.targetShaAfter, INITIAL_MERGE_TARGET_SHA);
   assert.equal(receipt.rebaseBaseSha, '');
+  const containmentReceipt = containmentReceiptEvidence(attestation.repository.targetShaAfter);
+  assert.deepEqual(containmentReceipt, attestation.mergeReceipt.finalContainment.databaseRecord);
+  assert.equal(attestation.mergeReceipt.finalContainment.publicId.length > 0, true);
+  assert.equal(containmentReceipt.result, 'ALREADY_MERGED');
+  assert.equal(containmentReceipt.sourceBranch, SOURCE_BRANCH);
+  assert.equal(containmentReceipt.sourceSha, FIX_COMMIT_SHA);
+  assert.equal(containmentReceipt.targetBranch, TARGET_BRANCH);
+  assert.equal(containmentReceipt.targetShaBefore, INITIAL_MERGE_TARGET_SHA);
+  assert.equal(containmentReceipt.targetShaAfter, attestation.repository.targetShaAfter);
+  assert.equal(containmentReceipt.rebaseBaseSha, '');
 
   const deployment = collectDeployment(attestation.repository.targetShaAfter);
   assert.deepEqual(deployment, attestation.deployment);
@@ -441,9 +474,12 @@ function verifyCurrentState(attestation, { generating = false } = {}) {
 
 function generate() {
   const receiptPublicId = process.env.AUTO_DISPATCH_MERGE_RECEIPT_PUBLIC_ID;
+  const containmentReceiptPublicId = process.env.AUTO_DISPATCH_CONTAINMENT_RECEIPT_PUBLIC_ID;
   const postgresIdBefore = process.env.AUTO_DISPATCH_POSTGRES_CONTAINER_ID_BEFORE;
   const postgresStartedBefore = process.env.AUTO_DISPATCH_POSTGRES_STARTED_AT_BEFORE;
   assert.ok(receiptPublicId, 'AUTO_DISPATCH_MERGE_RECEIPT_PUBLIC_ID is required');
+  assert.ok(containmentReceiptPublicId,
+    'AUTO_DISPATCH_CONTAINMENT_RECEIPT_PUBLIC_ID is required');
   assert.match(postgresIdBefore ?? '', /^[0-9a-f]{64}$/);
   assert.ok(Number.isFinite(Date.parse(postgresStartedBefore ?? '')),
     'AUTO_DISPATCH_POSTGRES_STARTED_AT_BEFORE is required');
@@ -461,11 +497,10 @@ function generate() {
   const deployment = collectDeployment(targetShaAfter);
   assert.equal(deployment.postgres.containerId, postgresIdBefore);
   assert.equal(deployment.postgres.startedAt, postgresStartedBefore);
-  deployment.productionMigration = migrationEvidence();
-
   const provider = providerEvidence();
   assert.equal(provider.providerIdentity, EXPECTED_PROVIDER);
-  const receipt = receiptEvidence(targetShaAfter);
+  const receipt = receiptEvidence();
+  const containmentReceipt = containmentReceiptEvidence(targetShaAfter);
   const verifiedAt = new Date().toISOString();
   const deployedAt = deployment.apiserver.container.startedAt;
 
@@ -499,8 +534,14 @@ function generate() {
       proof: `git merge-base --is-ancestor ${FIX_COMMIT_SHA} ${targetShaAfter}`,
     },
     mergeReceipt: {
-      publicId: receiptPublicId,
-      databaseRecord: receipt,
+      initial: {
+        publicId: receiptPublicId,
+        databaseRecord: receipt,
+      },
+      finalContainment: {
+        publicId: containmentReceiptPublicId,
+        databaseRecord: containmentReceipt,
+      },
     },
     regression: {
       command: 'npm run test:outcome-reconciler:auto-dispatch',
