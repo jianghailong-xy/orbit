@@ -367,6 +367,33 @@ async function ensureLegacyExecutableJudgmentRequest(
 ) {
   const criterion = completionCriterionSnapshot(input.task);
   const criterionRevision = completionDigest(criterion);
+  // Evidence submitted before the legacy callback may already have named its evaluator. An OPEN
+  // request without a result is authoritative even though the v1 wire payload cannot carry its
+  // evidence digest. A request with a result is reusable only when every result byte matches this
+  // callback; otherwise it is a stale evidence version and must remain OPEN while the exact
+  // callback gets its own request below.
+  const standingRequests = await tx.taskJudgmentRequest.findMany({
+    where: {
+      taskId: input.task.id,
+      criterionRevision,
+      kind: 'EXECUTABLE',
+      recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
+      status: 'OPEN',
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: { executableResult: true },
+  });
+  const standingRequest = standingRequests.find((request) => {
+    const result = request.executableResult;
+    return result == null || (
+      result.command === input.command
+      && result.expectedExitCode === input.expectedExitCode
+      && result.actualExitCode === input.actualExitCode
+      && result.rawOutput === input.rawOutput
+      && result.recordedById === input.runnerId
+    );
+  });
+  if (standingRequest) return standingRequest;
   // The legacy identity stays explicit. In particular, this is not an EXITED typed-attempt fact:
   // it is a canonical observation of the original v1 callback and its exact persisted turn.
   const evidence = normalizeCompletionEvidence({

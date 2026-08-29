@@ -131,7 +131,7 @@ MIGRATION_COUNT="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABA
 LAST_MIGRATION="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABASE" -tAc \
   'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
   | tr -d '[:space:]')"
-[ "$LAST_MIGRATION" = '0207_verification_subject_dispatch_guard' ] || {
+[ "$LAST_MIGRATION" = '0208_coordinator_context_lifecycle' ] || {
   echo "!! migration frontier is $LAST_MIGRATION" >&2
   exit 1
 }
