@@ -42,7 +42,8 @@
     "test:outcome-reconciler:watchdog-current-binding:regression": "bash scripts/outcome-reconciler-watchdog-current-binding-regression.sh",
     "test:outcome-reconciler:watchdog-current-binding": "bash scripts/outcome-reconciler-watchdog-current-binding.sh",
     "test:outcome-reconciler:owner-ratification-ui": "bash scripts/outcome-reconciler-owner-ratification-ui.sh",
-    "test:outcome-reconciler:replay": "bash scripts/outcome-reconciler-replay.sh"
+    "test:outcome-reconciler:replay": "bash scripts/outcome-reconciler-replay.sh",
+    "test:outcome-reconciler:canary": "bash scripts/outcome-reconciler-canary.sh"
   },
   "engines": {
     "node": ">=26.0.0"
