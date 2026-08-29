@@ -7,13 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import {
-  projectAcceptanceConfirmationPath,
   projectAcceptanceOverviewPath,
   projectAcceptanceReviewPath,
   projectAcceptanceVerdictPath,
   type ProjectAcceptanceOverview,
   type ProjectAcceptanceRun,
 } from '../lib/projectAcceptance';
+import { ownerRatificationReviewPath } from '../lib/outcomeSurfaces';
 import { ProjectAcceptanceReviewPage } from './ProjectAcceptanceReviewPage';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -121,24 +121,34 @@ const overview: ProjectAcceptanceOverview = {
   audit: [],
 };
 
-let container: HTMLDivElement;
-let root: Root;
-let client: QueryClient;
+let container: HTMLDivElement | undefined;
+let root: Root | undefined;
+let client: QueryClient | undefined;
 
-async function flush(): Promise<void> {
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+function mountedContainer(): HTMLDivElement {
+  if (!container) throw new Error('project acceptance review is not mounted');
+  return container;
+}
+
+async function waitForUi(assertion: () => void): Promise<void> {
+  await act(async () => {
+    await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
+  });
 }
 
 async function mount(): Promise<void> {
-  client = new QueryClient({
+  const nextClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
   await act(async () => {
-    root.render(
-      <QueryClientProvider client={client}>
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[projectAcceptanceReviewPath(PROJECT, RUN)]}>
           <Routes>
             <Route
@@ -150,12 +160,13 @@ async function mount(): Promise<void> {
       </QueryClientProvider>,
     );
   });
-  await flush();
-  await flush();
+  await waitForUi(() => {
+    expect(nextContainer.querySelector('.project-acceptance-review-page')).not.toBeNull();
+  });
 }
 
 function submitButton(): HTMLButtonElement {
-  const found = [...container.querySelectorAll('button')].find((candidate) =>
+  const found = [...mountedContainer().querySelectorAll('button')].find((candidate) =>
     candidate.textContent?.includes('提交 1 条人工判定'),
   );
   expect(found).toBeTruthy();
@@ -163,15 +174,17 @@ function submitButton(): HTMLButtonElement {
 }
 
 async function choose(cardIndex: number, verdict: string): Promise<void> {
-  const card = container.querySelectorAll('.project-acceptance-criterion-card')[cardIndex];
+  const card = mountedContainer().querySelectorAll('.project-acceptance-criterion-card')[cardIndex];
   const found = [...card.querySelectorAll('button')].find((candidate) => candidate.textContent === verdict);
   expect(found).toBeTruthy();
   await act(async () => (found as HTMLButtonElement).click());
-  await flush();
+  await waitForUi(() => {
+    expect((found as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+  });
 }
 
 async function typeInput(selector: string, value: string): Promise<void> {
-  const input = container.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
+  const input = mountedContainer().querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
   const prototype = input instanceof HTMLTextAreaElement
     ? HTMLTextAreaElement.prototype
     : HTMLInputElement.prototype;
@@ -180,7 +193,10 @@ async function typeInput(selector: string, value: string): Promise<void> {
     setter.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await flush();
+  await waitForUi(() => {
+    const current = mountedContainer().querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
+    expect(current.value).toBe(value);
+  });
 }
 
 beforeEach(() => {
@@ -189,46 +205,66 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  if (root) await act(async () => root.unmount());
-  client?.clear();
-  container?.remove();
+  const mountedRoot = root;
+  const mountedClient = client;
+  const mountedNode = container;
+  root = undefined;
+  client = undefined;
+  container = undefined;
+  try {
+    if (mountedRoot) await act(async () => mountedRoot.unmount());
+  } finally {
+    try {
+      if (mountedClient) {
+        await mountedClient.cancelQueries();
+        mountedClient.clear();
+      }
+    } finally {
+      mountedNode?.remove();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  }
 });
 
-describe('project acceptance review', () => {
+// The loaded-suite peak observed for the first real AntD mount was 5.5s. Keep a local 12s case
+// budget around the 8s observable UI wait; neither changes the global timeout nor sleeps blindly.
+describe('project acceptance review', { timeout: 12_000 }, () => {
   it('shows assertion, verificationMethod, current verdict and supporting evidence per criterion', async () => {
     apiMock.mockResolvedValue(overview);
     await mount();
+    const page = mountedContainer();
 
     expect(apiMock).toHaveBeenCalledWith(projectAcceptanceOverviewPath(PROJECT));
-    expect(container.textContent).toContain('项目验收判定');
-    expect(container.textContent).toContain('N20 project-level acceptance');
-    expect(container.textContent).toContain('自动派发确实发生');
-    expect(container.textContent).toContain('运行 coordinator pg spec，并要求退出码为 0。');
-    expect(container.textContent).toContain('没有新增定时器');
-    expect(container.textContent).toContain('运行 grep 断言与对应 spec。');
-    expect(container.textContent).toContain('当前 verdictUNDECIDED');
-    expect(container.textContent).toContain(TASK);
-    expect(container.textContent).toContain(SESSION);
-    expect(container.textContent).toContain('npm test -w @orbit/apiserver');
-    expect(container.textContent).toContain('退出码0');
-    expect(container.querySelectorAll('.project-acceptance-criterion-card')).toHaveLength(2);
-    expect(container.querySelector('.project-acceptance-audit')?.hasAttribute('open')).toBe(false);
+    expect(page.textContent).toContain('项目验收判定');
+    expect(page.textContent).toContain('N20 project-level acceptance');
+    expect(page.textContent).toContain('自动派发确实发生');
+    expect(page.textContent).toContain('运行 coordinator pg spec，并要求退出码为 0。');
+    expect(page.textContent).toContain('没有新增定时器');
+    expect(page.textContent).toContain('运行 grep 断言与对应 spec。');
+    expect(page.textContent).toContain('当前 verdictUNDECIDED');
+    expect(page.textContent).toContain(TASK);
+    expect(page.textContent).toContain(SESSION);
+    expect(page.textContent).toContain('npm test -w @orbit/apiserver');
+    expect(page.textContent).toContain('退出码0');
+    expect(page.querySelectorAll('.project-acceptance-criterion-card')).toHaveLength(2);
+    expect(page.querySelector('.project-acceptance-audit')?.hasAttribute('open')).toBe(false);
   });
 
   it('requires only HUMAN_SIGNOFF and leaves automatic criteria read-only', async () => {
     apiMock.mockResolvedValue(overview);
     await mount();
+    const page = mountedContainer();
 
-    expect(container.textContent).toContain('人工标准已回答 0/1；尚有 1 条');
-    expect(container.textContent).toContain('还需回答判据：2');
-    expect(container.textContent).toContain('EXECUTABLE 由服务端自动求值');
-    expect(container.querySelectorAll('.project-acceptance-criterion-card')[0]
+    expect(page.textContent).toContain('人工标准已回答 0/1；尚有 1 条');
+    expect(page.textContent).toContain('还需回答判据：2');
+    expect(page.textContent).toContain('EXECUTABLE 由服务端自动求值');
+    expect(page.querySelectorAll('.project-acceptance-criterion-card')[0]
       .querySelectorAll('.project-acceptance-verdict-option')).toHaveLength(0);
     expect(submitButton().disabled).toBe(true);
 
     await choose(1, 'FAIL');
-    expect(container.textContent).toContain('人工标准已回答 1/1；尚有 0 条');
-    expect(container.textContent).toContain('全部判据已回答');
+    expect(page.textContent).toContain('人工标准已回答 1/1；尚有 0 条');
+    expect(page.textContent).toContain('全部判据已回答');
     expect(submitButton().disabled).toBe(false);
     expect(apiMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
   });
@@ -258,6 +294,7 @@ describe('project acceptance review', () => {
       return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
     });
     await mount();
+    const page = mountedContainer();
     await choose(1, 'INCONCLUSIVE');
     await typeInput(`#project-acceptance-criterion-2-task`, TASK);
     await typeInput(`#project-acceptance-criterion-2-session`, SESSION);
@@ -266,8 +303,11 @@ describe('project acceptance review', () => {
     await typeInput(`#project-acceptance-criterion-2-summary`, '没有足够证据判定为 PASS。');
 
     await act(async () => submitButton().click());
-    await flush();
-    await flush();
+    await waitForUi(() => {
+      expect(page.textContent).toContain('此项目验收已由服务端推导为 INCONCLUSIVE');
+      expect(apiMock.mock.calls.filter(([path, options]) =>
+        path === projectAcceptanceOverviewPath(PROJECT) && !options?.method).length).toBeGreaterThan(1);
+    });
 
     const post = apiMock.mock.calls.find(([, options]) => options?.method === 'POST')!;
     expect(post[0]).toBe(projectAcceptanceVerdictPath(PROJECT, RUN));
@@ -283,14 +323,11 @@ describe('project acceptance review', () => {
       evidenceTaskId: TASK,
       evidenceSessionId: SESSION,
     });
-    expect(container.textContent).toContain('此项目验收已由服务端推导为 INCONCLUSIVE');
     expect(submitButton().disabled).toBe(false, 'append-only human conclusions may be revised');
-    expect(apiMock.mock.calls.filter(([path, options]) =>
-      path === projectAcceptanceOverviewPath(PROJECT) && !options?.method).length).toBeGreaterThan(1);
   });
 
-  it('confirms the standard set once before enabling human criteria', async () => {
-    let current: ProjectAcceptanceOverview = {
+  it('routes an unratified contract to Owner Ratification without enabling human criteria', async () => {
+    const current: ProjectAcceptanceOverview = {
       ...overview,
       criteriaConfirmation: {
         confirmed: false,
@@ -298,29 +335,21 @@ describe('project acceptance review', () => {
         confirmation: null,
       },
     };
-    apiMock.mockImplementation((path: string, options?: { method?: string }) => {
-      if (path === projectAcceptanceConfirmationPath(PROJECT) && options?.method === 'POST') {
-        current = { ...overview };
-        return Promise.resolve({ current: true }) as Promise<never>;
-      }
-      if (path === projectAcceptanceOverviewPath(PROJECT)) {
-        return Promise.resolve(current) as Promise<never>;
-      }
-      return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
-    });
+    apiMock.mockResolvedValue(current);
     await mount();
+    const page = mountedContainer();
 
-    expect(container.textContent).toContain('先确认这套标准算数');
+    expect(page.textContent).toContain('当前项目合约尚未 Owner Ratification');
+    expect(page.textContent).toContain('Owner Ratification 是项目合约的价值与授权决定');
     expect(submitButton().disabled).toBe(true);
-    const confirmation = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('确认当前标准集')) as HTMLButtonElement;
-    await act(async () => confirmation.click());
-    await flush();
-    await flush();
-
-    expect(apiMock).toHaveBeenCalledWith(projectAcceptanceConfirmationPath(PROJECT), {
-      method: 'POST',
-    });
-    expect(container.textContent).toContain('当前标准集已确认');
+    expect((page.querySelector('.project-acceptance-verdict-field') as HTMLFieldSetElement).disabled)
+      .toBe(true);
+    const ratification = [...page.querySelectorAll('a')].find((link) =>
+      link.textContent?.includes('前往 Owner Ratification')) as HTMLAnchorElement;
+    expect(ratification).toBeTruthy();
+    expect(ratification.getAttribute('href')).toBe(ownerRatificationReviewPath(PROJECT));
+    expect([...page.querySelectorAll('button')].some((button) =>
+      button.textContent?.includes('确认当前标准集'))).toBe(false);
+    expect(apiMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
   });
 });
