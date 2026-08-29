@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, ProjectStatus, RunStatus, TaskStatus } from '@prisma/client';
+import {
+  CreatorType, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
+  SessionDispatchOrigin, TaskStatus,
+} from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -27,11 +30,13 @@ import { prismaClientFor } from '../prisma/prisma-client';
  */
 
 const URL = process.env.COORDINATOR_PG_URL;
-const ZEROES = { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 };
+const ZEROES = {
+  running: 0, ready: 0, blocked: 0, awaitingVerification: 0, done: 0, failed: 0, cancelled: 0,
+};
 
 interface Listed {
   id: string;
-  buckets: { running: number; ready: number; blocked: number; done: number; cancelled: number };
+  buckets: typeof ZEROES;
   lastActivityAt: Date | null;
   _count: { tasks: number };
 }
@@ -41,8 +46,22 @@ async function makeUser(db: PrismaClient): Promise<string> {
   await db.user.create({
     data: { id, email: `audit-${id}@audit.invalid`, name: 'audit', passwordHash: 'x' },
   });
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  await db.runner.create({
+    data: {
+      id: runnerId, ownerId: id, name: `audit runner ${id}`, tokenHash: `audit-${runnerId}`,
+      status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
+    },
+  });
+  await db.workspace.create({
+    data: { id: workspaceId, ownerId: id, runnerId, name: `audit workspace ${id}`, enabled: true },
+  });
+  workspaceByOwner.set(id, workspaceId);
   return id;
 }
+
+const workspaceByOwner = new Map<string, string>();
 
 async function makeProject(
   db: PrismaClient,
@@ -71,8 +90,13 @@ async function makeTask(
   status: TaskStatus,
 ): Promise<string> {
   const id = randomUUID();
+  const assigneeId = workspaceByOwner.get(ownerId);
+  if (!assigneeId) throw new Error(`no fixture workspace for ${ownerId}`);
   await db.task.create({
-    data: { id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId, status },
+    data: {
+      id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId,
+      assigneeId, status,
+    },
   });
   return id;
 }
@@ -88,7 +112,10 @@ async function makeSession(
   status: RunStatus,
 ): Promise<void> {
   await db.session.create({
-    data: { ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status },
+    data: {
+      ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+      dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+    },
   });
 }
 
@@ -179,18 +206,27 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       assert.equal(rows.length, 4, 'exactly the four projects are listed');
 
       // pA: t1 blocked, t2 ready, t3 blocked, t4 blocked, t5 ready, t6 running.
-      assert.deepEqual(byId.get(pA)!.buckets, { running: 1, ready: 2, blocked: 3, done: 0, cancelled: 0 },
+      assert.deepEqual(byId.get(pA)!.buckets, {
+        running: 1, ready: 2, blocked: 3, awaitingVerification: 0,
+        done: 0, failed: 0, cancelled: 0,
+      },
         'cross-project and cross-owner prerequisites block; DONE ones do not');
       // pB: b-open ready, b-done done, b-in-progress running.
-      assert.deepEqual(byId.get(pB)!.buckets, { running: 1, ready: 1, blocked: 0, done: 1, cancelled: 0 });
-      // pC: c1 cancelled; f1 FAILED in no bucket; c2 ready; c3 blocked; c4 ready; c5 ready.
-      assert.deepEqual(byId.get(pC)!.buckets, { running: 0, ready: 3, blocked: 1, done: 0, cancelled: 1 },
-        'CANCELLED and FAILED prerequisites free their dependents');
+      assert.deepEqual(byId.get(pB)!.buckets, {
+        running: 1, ready: 1, blocked: 0, awaitingVerification: 0,
+        done: 1, failed: 0, cancelled: 0,
+      });
+      // pC: c1 cancelled; f1 failed; c2 ready; c3 blocked; c4 ready; c5 ready.
+      assert.deepEqual(byId.get(pC)!.buckets, {
+        running: 0, ready: 1, blocked: 3, awaitingVerification: 0,
+        done: 0, failed: 1, cancelled: 1,
+      },
+        'CANCELLED and FAILED prerequisites keep dependents outside executable Ready');
       assert.equal(byId.get(pC)!._count.tasks, 6, 'FAILED still counts toward the total');
-      assert.equal(Object.values(byId.get(pC)!.buckets).reduce((s, n) => s + n, 0), 5,
-        'the one task the buckets omit is exactly the FAILED one');
+      assert.equal(Object.values(byId.get(pC)!.buckets).reduce((s, n) => s + n, 0), 6,
+        'the exhaustive buckets include the FAILED task');
       // pE: empty.
-      assert.deepEqual(byId.get(pE)!.buckets, ZEROES, 'empty project is five zeroes');
+      assert.deepEqual(byId.get(pE)!.buckets, ZEROES, 'empty project is seven zeroes');
       assert.equal(byId.get(pE)!.lastActivityAt, null);
       assert.equal(byId.get(pE)!._count.tasks, 0);
       for (const key of Object.keys(ZEROES)) {
@@ -207,7 +243,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
         assert.equal(row.buckets.running, inProgressCount, `${pid}: running must equal the IN_PROGRESS tasks`);
       }
 
-      // ---- and the same five numbers the project page reports ----------------------------------
+      // ---- and the same seven numbers the project page reports ---------------------------------
       for (const pid of [pA, pB, pC, pE]) {
         const { buckets } = await plain.panorama(owner, pid);
         assert.deepEqual(byId.get(pid)!.buckets, buckets, `index vs page for ${pid}`);
@@ -232,7 +268,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
         const taskIds: string[] = [];
 
         for (let p = 0; p < projectCount; p += 1) {
-          const status = rnd() < 0.2 ? ProjectStatus.DONE : ProjectStatus.OPEN;
+          const status = rnd() < 0.2 ? ProjectStatus.CANCELLED : ProjectStatus.OPEN;
           const pid = await makeProject(db, owner, `a${round}p${p}`, status);
           projectIds.push(pid);
           const taskCount = Math.floor(rnd() * 14);
@@ -333,9 +369,15 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
 
       const byId = new Map(((await svc.list(owner)) as unknown as Listed[]).map((r) => [r.id, r]));
 
-      assert.deepEqual(byId.get(pLive)!.buckets, { running: 2, ready: 2, blocked: 1, done: 1, cancelled: 0 },
+      assert.deepEqual(byId.get(pLive)!.buckets, {
+        running: 2, ready: 2, blocked: 1, awaitingVerification: 0,
+        done: 1, failed: 0, cancelled: 0,
+      },
         'a RUNNING and a PENDING session each hold their OPEN task; a SUCCEEDED one does not');
-      assert.deepEqual(byId.get(pQuiet)!.buckets, { running: 1, ready: 1, blocked: 0, done: 0, cancelled: 0 },
+      assert.deepEqual(byId.get(pQuiet)!.buckets, {
+        running: 1, ready: 1, blocked: 0, awaitingVerification: 0,
+        done: 0, failed: 0, cancelled: 0,
+      },
         'a project with no sessions is bucketed exactly as before');
 
       // ---- the two invariants, in their corrected form ---------------------------------------
@@ -361,7 +403,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
         );
       }
 
-      // ---- and the page still reports the same five numbers -----------------------------------
+      // ---- and the page still reports the same seven numbers ----------------------------------
       for (const pid of [pLive, pQuiet]) {
         const { buckets } = await plain.panorama(owner, pid);
         assert.deepEqual(byId.get(pid)!.buckets, buckets, `index vs page for ${pid}`);
@@ -378,7 +420,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      assert.equal(rawQueries, 2, 'one task rollup and one blocker rollup for the whole page');
+      assert.equal(rawQueries, 6, 'one bounded set of page-wide canonical aggregates');
     });
   } finally {
     await db.$disconnect();

@@ -463,6 +463,14 @@ export function taskFenceConflictMessage(error: unknown): string | null {
     return 'this task is completed by aggregating its subtasks, so it has no work of its own to '
       + 'run — run its subtasks, or set its completion policy to MANUAL';
   }
+  if (/TASK_VERIFICATION_SUBJECT_LIVE_SESSION/.test(message)) {
+    return 'this task still has live task-work, so its completion cannot be handed to an '
+      + 'independent verifier yet — let that run reach a terminal status first';
+  }
+  if (/TASK_VERIFICATION_SUBJECT:/.test(message)) {
+    return 'this task is completed by its independent verifier, so it has no work of its own to '
+      + 'run — wait for or repair the verifier instead';
+  }
   if (/SESSION_TASK_MOVED/.test(message)) {
     return 'this task changed project while the request was being prepared — nothing was changed; '
       + 'retry';

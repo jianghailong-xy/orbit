@@ -144,6 +144,16 @@ describe('the task panel’s header action', () => {
     expect(primaryAction(renderPanel(task()))!.disabled).toBe(false);
   });
 
+  it('replaces Run now with the verification state on a completion-owned subject', () => {
+    const out = renderPanel(task({
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      verifiesTaskId: null,
+    }));
+    expect(primaryAction(out)).toEqual({ label: 'Awaiting verification', disabled: true });
+    expect(out).not.toContain('>Run now</span>');
+  });
+
   it('mounts the Start at editor on the server’s own schedule and project', () => {
     const out = inTimeZone(SHANGHAI, () =>
       renderPanel(task({ runAt: '2026-09-01T01:00:00.000Z', projectId: PROJECT_ID })),
@@ -182,6 +192,9 @@ describe('runNowHint — what the header button says on hover', () => {
     // Each of these is also a reason the button cannot be pressed, so the tooltip is the only
     // place the reader is told why — a schedule is irrelevant to a task that cannot start.
     const scheduled = { scheduledLocal: 'Sep 1, 9:00 AM' };
+    expect(runNowHint({ ...runnable, ...scheduled, completionOwned: true })).toBe(
+      'Awaiting verification — subject work cannot be started',
+    );
     expect(runNowHint({ ...runnable, ...scheduled, blocked: true })).toBe('Waiting for prerequisites');
     expect(
       runNowHint({ ...runnable, ...scheduled, blocked: true, dependencyState: 'BLOCKED_FAILED' }),

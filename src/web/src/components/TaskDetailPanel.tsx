@@ -16,6 +16,7 @@ import {
 } from '../lib/workspaceDefaults';
 import { encodeId } from '../lib/idCodec';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
+import { taskStartOwnedByCompletionDeclaration } from '../lib/taskFilters';
 import { providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
@@ -151,12 +152,15 @@ const rehypeMentions = (names: string[]) => () => (tree: any) => {
  * `aria-describedby` pointing at markup that does not exist until the pointer arrives.
  */
 export function runNowHint({
+  completionOwned,
   blocked,
   dependencyState,
   canExecute,
   running,
   scheduledLocal,
 }: {
+  /** This row is completed by a verifier/aggregate and has no task_start work of its own. */
+  completionOwned?: boolean;
   blocked: boolean;
   dependencyState?: string | null;
   canExecute: boolean;
@@ -164,6 +168,7 @@ export function runNowHint({
   /** The scheduled start in the viewer's own wall clock, absent on an unscheduled task. */
   scheduledLocal?: string | null;
 }): string {
+  if (completionOwned) return 'Awaiting verification — subject work cannot be started';
   if (blocked) {
     return dependencyState === 'BLOCKED_FAILED'
       ? 'Prerequisite cancelled — resolve it first'
@@ -709,16 +714,21 @@ export function TaskDetailPanel({
     .map((t: any) => ({ value: t.id, label: t.title }));
   // Need a responsible workspace to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
+  // A verification subject is an outcome row, not executable work. The API execute gate is
+  // authoritative; this direct declaration check keeps the button honest during a rolling
+  // deployment and before any verifier result arrives.
+  const completionOwned = taskStartOwnedByCompletionDeclaration(q.data ?? {});
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
   // session. The button shows this state and stays disabled throughout — which also
   // debounces it against repeated clicks (no second trigger until the current run ends).
   const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s));
   // Blocked tasks can't run until prerequisites clear; mirror the backend's execute gate.
-  const executeDisabled = !canExecute || running || blocked;
+  const executeDisabled = completionOwned || !canExecute || running || blocked;
   // The schedule the server holds, if any — read here as well as in the editor below, because
   // pressing Run now is how a reader loses one and the button is where they need to be told.
   const scheduled = scheduledStart(q.data?.runAt);
   const executeHint = runNowHint({
+    completionOwned,
     blocked,
     dependencyState,
     canExecute,
@@ -790,7 +800,7 @@ export function TaskDetailPanel({
                 onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
                 style={executeDisabled ? { pointerEvents: 'none' } : undefined}
               >
-                {running ? 'Running' : 'Run now'}
+                {running ? 'Running' : completionOwned ? 'Awaiting verification' : 'Run now'}
               </Button>
             </span>
           </Tooltip>

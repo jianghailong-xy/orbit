@@ -319,12 +319,7 @@ export function verificationEpochGate(
  * the same project" and hold every one of them.
  */
 export function verificationEpochOpenSql(alias = 't', dependent?: string): string {
-  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   const subject = `COALESCE(${alias}."verifies_task_id", ${alias}."id")`;
-  /** §3 SC6: a check only answers for a subject it shares an owner and a project with. */
-  const sameScope = (check: string, subjectAlias: string) =>
-    `${check}."owner_id" = ${subjectAlias}."owner_id"
-         AND ${check}."project_id" IS NOT DISTINCT FROM ${subjectAlias}."project_id"`;
   // `IS NOT DISTINCT FROM`, never `=`. An ordinary dependent has a NULL `verifies_task_id`, and a
   // bare `=` would make this disjunct NULL rather than FALSE — which propagates out of the whole
   // fragment and, in an aggregate that is not inside a WHERE, fails OPEN. `subject` is COALESCEd
@@ -343,7 +338,7 @@ export function verificationEpochOpenSql(alias = 't', dependent?: string): strin
       SELECT 1 FROM "task" epoch_any
         JOIN "task" epoch_any_subject ON epoch_any_subject."id" = ${subject}
        WHERE epoch_any."verifies_task_id" = ${subject}
-         AND ${sameScope('epoch_any', 'epoch_any_subject')}
+         AND ${verificationCheckSameScopeSql('epoch_any', 'epoch_any_subject')}
          AND NOT EXISTS (
                SELECT 1 FROM "task_judgment_request" epoch_any_request
                 WHERE epoch_any_request."id" = epoch_any."id"
@@ -378,78 +373,108 @@ export function verificationEpochOpenSql(alias = 't', dependent?: string): strin
          AND EXISTS (
            SELECT 1 FROM "task" epoch_check
             WHERE epoch_check."id" = (
-                    SELECT epoch_newest."id" FROM "task" epoch_newest
-                      LEFT JOIN "task_judgment_request" epoch_newest_request
-                        ON epoch_newest_request."id" = epoch_newest."id"
-                       AND epoch_newest_request."task_id" = epoch_subject."id"
-                       AND epoch_newest_request."kind" = 'VERIFICATION'
-                       AND epoch_newest_request."recipient_type" = 'VERIFIER_TASK'
-                       AND epoch_newest_request."recipient_id" = epoch_newest."id"::text
-                     WHERE epoch_newest."verifies_task_id" = epoch_subject."id"
-                       -- Before the ordering, not after it: an out-of-scope row must not be able to
-                       -- BE the newest check and then be discarded, because a discarded winner is
-                       -- an epoch with no check at all rather than the epoch its real check states.
-                       AND ${sameScope('epoch_newest', 'epoch_subject')}
-                       AND epoch_newest."status" <> 'CANCELLED'
-                       AND ${taskNotRetiredSql('epoch_newest')}
-                       AND epoch_newest_request."status" IS DISTINCT FROM 'SUPERSEDED'
-                     ORDER BY COALESCE(epoch_newest_request."created_at", epoch_newest."created_at") DESC,
-                              epoch_newest."id" DESC
-                     LIMIT 1
+                    ${latestLiveVerificationCheckIdSql('epoch_subject')}
                   )
-              AND (
-                    -- N11: the transition guard only permits this decision after the recipient
-                    -- Task carries the matching verifier verdict. It is already the settled fact;
-                    -- no legacy worker-run/action fallback is required for this parallel route.
-                    EXISTS (
-                      SELECT 1 FROM "task_judgment_request" epoch_request
-                       WHERE epoch_request."id" = epoch_check."id"
-                         AND epoch_request."task_id" = epoch_subject."id"
-                         AND epoch_request."kind" = 'VERIFICATION'
-                         AND epoch_request."recipient_type" = 'VERIFIER_TASK'
-                         AND epoch_request."recipient_id" = epoch_check."id"::text
-                         AND epoch_request."status" = 'DECIDED'
-                         AND epoch_request."decision" = 'PASS'
-                    )
-                    OR (
-                      -- Legacy verification remains unchanged for checks with no N11 request.
-                      NOT EXISTS (
-                        SELECT 1 FROM "task_judgment_request" epoch_legacy_request
-                         WHERE epoch_legacy_request."id" = epoch_check."id"
-                           AND epoch_legacy_request."kind" = 'VERIFICATION'
-                           AND epoch_legacy_request."recipient_type" = 'VERIFIER_TASK'
-                      )
-                      AND epoch_check."status" = 'DONE'
-                      AND epoch_check."verdict" = 'PASS'
-                      AND epoch_check."verdict_revision" > 0
-                      AND NOT EXISTS (
-                            SELECT 1 FROM "session" epoch_live
-                             WHERE epoch_live."task_id" = epoch_check."id"
-                               AND epoch_live."deleted_at" IS NULL
-                               AND epoch_live."status"::text IN (${occupying})
-                          )
-                      AND EXISTS (
-                            SELECT 1 FROM "session" epoch_run
-                             WHERE epoch_run."task_id" = epoch_check."id"
-                               AND epoch_run."deleted_at" IS NULL
-                               AND epoch_run."status"::text = '${RunStatus.SUCCEEDED}'
-                               AND epoch_run."end_reason" = '${VERIFICATION_RUN_END_REASON}'
-                               AND (epoch_run."completed_at" IS NOT NULL
-                                    OR epoch_run."archived_at" IS NOT NULL)
-                          )
-                      AND (epoch_check."project_id" IS NULL OR EXISTS (
-                            SELECT 1 FROM "project_action" epoch_action
-                             WHERE epoch_action."project_id" = epoch_check."project_id"
-                               AND epoch_action."type"::text = 'APPLY_VERIFICATION_VERDICT'
-                               AND epoch_action."status"::text = 'APPLIED'
-                               AND epoch_action."subject_id" = epoch_check."id"
-                               AND epoch_action."idempotency_key"
-                                   = ${verificationVerdictActionKeySqlExpr('epoch_check')}
-                          ))
-                    )
-                  )
+              AND ${verificationCheckPassedSql('epoch_check', 'epoch_subject')}
          )
     ))`;
+}
+
+/** §3 SC6 in its reusable SQL spelling: a check only answers inside its subject's scope. */
+export function verificationCheckSameScopeSql(check: string, subject: string): string {
+  return `${check}."owner_id" = ${subject}."owner_id"
+         AND ${check}."project_id" IS NOT DISTINCT FROM ${subject}."project_id"`;
+}
+
+/**
+ * The canonical newest live verifier selector, shared by dependency release and work-overview.
+ *
+ * Keep the scope and retirement filters before ordering. An invalid newer row must not hide the
+ * real current verifier, and UUIDv4 request-backed ids make creation time the primary chronology.
+ */
+export function latestLiveVerificationCheckIdSql(subject: string): string {
+  return `SELECT newest_check."id" FROM "task" newest_check
+      LEFT JOIN "task_judgment_request" newest_request
+        ON newest_request."id" = newest_check."id"
+       AND newest_request."task_id" = ${subject}."id"
+       AND newest_request."kind" = 'VERIFICATION'
+       AND newest_request."recipient_type" = 'VERIFIER_TASK'
+       AND newest_request."recipient_id" = newest_check."id"::text
+     WHERE newest_check."verifies_task_id" = ${subject}."id"
+       AND ${verificationCheckSameScopeSql('newest_check', subject)}
+       AND newest_check."status" <> 'CANCELLED'
+       AND ${taskNotRetiredSql('newest_check')}
+       AND newest_request."status" IS DISTINCT FROM 'SUPERSEDED'
+     ORDER BY COALESCE(newest_request."created_at", newest_check."created_at") DESC,
+              newest_check."id" DESC
+     LIMIT 1`;
+}
+
+/**
+ * The positive half of `verificationEpochGate`, for a check already selected as canonical.
+ *
+ * This deliberately excludes the subject-status clause; `verificationSubjectPassedSql` owns it.
+ * The dependency predicate also supplies that clause in its enclosing subject query. Keeping the
+ * request and legacy routes here prevents Work overview from calling a bare verdict a PASS while
+ * the dispatcher correctly waits for the natural run and applied action.
+ */
+export function verificationCheckPassedSql(check: string, subject: string): string {
+  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
+  return `(
+    EXISTS (
+      SELECT 1 FROM "task_judgment_request" passed_request
+       WHERE passed_request."id" = ${check}."id"
+         AND passed_request."task_id" = ${subject}."id"
+         AND passed_request."kind" = 'VERIFICATION'
+         AND passed_request."recipient_type" = 'VERIFIER_TASK'
+         AND passed_request."recipient_id" = ${check}."id"::text
+         AND passed_request."status" = 'DECIDED'
+         AND passed_request."decision" = 'PASS'
+    )
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM "task_judgment_request" passed_legacy_request
+         WHERE passed_legacy_request."id" = ${check}."id"
+           AND passed_legacy_request."kind" = 'VERIFICATION'
+           AND passed_legacy_request."recipient_type" = 'VERIFIER_TASK'
+      )
+      AND ${check}."status" = 'DONE'
+      AND ${check}."verdict" = 'PASS'
+      AND ${check}."verdict_revision" > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM "session" passed_live
+         WHERE passed_live."task_id" = ${check}."id"
+           AND passed_live."deleted_at" IS NULL
+           AND passed_live."status"::text IN (${occupying})
+      )
+      AND EXISTS (
+        SELECT 1 FROM "session" passed_run
+         WHERE passed_run."task_id" = ${check}."id"
+           AND passed_run."deleted_at" IS NULL
+           AND passed_run."status"::text = '${RunStatus.SUCCEEDED}'
+           AND passed_run."end_reason" = '${VERIFICATION_RUN_END_REASON}'
+           AND (passed_run."completed_at" IS NOT NULL OR passed_run."archived_at" IS NOT NULL)
+      )
+      AND (${check}."project_id" IS NULL OR EXISTS (
+        SELECT 1 FROM "project_action" passed_action
+         WHERE passed_action."project_id" = ${check}."project_id"
+           AND passed_action."type"::text = 'APPLY_VERIFICATION_VERDICT'
+           AND passed_action."status"::text = 'APPLIED'
+           AND passed_action."subject_id" = ${check}."id"
+           AND passed_action."idempotency_key" = ${verificationVerdictActionKeySqlExpr(check)}
+      ))
+    )
+  )`;
+}
+
+/** A subject is canonically verified only when its current newest live check opens its PASS epoch. */
+export function verificationSubjectPassedSql(subject: string): string {
+  return `${subject}."status" = 'DONE'
+    AND EXISTS (
+      SELECT 1 FROM "task" passed_check
+       WHERE passed_check."id" = (${latestLiveVerificationCheckIdSql(subject)})
+         AND ${verificationCheckPassedSql('passed_check', subject)}
+    )`;
 }
 
 /**

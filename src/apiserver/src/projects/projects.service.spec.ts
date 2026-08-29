@@ -266,9 +266,11 @@ test('the index buckets every project in one aggregate, not one query per projec
       }
       // Two of the three projects grouped; `c3` has no tasks and so has no row here at all.
       return [
-        { projectId: 'a1', taskCount: 15, running: 1, ready: 2, blocked: 3, done: 4, cancelled: 5,
+        { projectId: 'a1', taskCount: 15, running: 1, ready: 2, blocked: 3,
+          awaitingVerification: 0, done: 4, failed: 0, cancelled: 5,
           lastActivityAt: new Date('2026-08-01T00:00:00.000Z') },
-        { projectId: 'b2', taskCount: 9, running: 0, ready: 0, blocked: 0, done: 9, cancelled: 0,
+        { projectId: 'b2', taskCount: 9, running: 0, ready: 0, blocked: 0,
+          awaitingVerification: 0, done: 9, failed: 0, cancelled: 0,
           lastActivityAt: new Date('2026-08-02T00:00:00.000Z') },
       ];
     },
@@ -279,11 +281,15 @@ test('the index buckets every project in one aggregate, not one query per projec
   // Two page-wide aggregates: one over tasks, one over open blockers. Neither grows with the
   // number of projects; looping the per-project readers would make this 6 — and 36 in production.
   assert.equal(rawQueries, 2);
-  assert.deepEqual(rows[0].buckets, { running: 1, ready: 2, blocked: 3, done: 4, cancelled: 5 });
+  assert.deepEqual(rows[0].buckets, {
+    running: 1, ready: 2, blocked: 3, awaitingVerification: 0, done: 4, failed: 0, cancelled: 5,
+  });
   assert.deepEqual(rows[0].lastActivityAt, new Date('2026-08-01T00:00:00.000Z'));
-  // A project the aggregate had nothing to say about is five zeroes and no activity, never a row
+  // A project the aggregate had nothing to say about is seven zeroes and no activity, never a row
   // missing the fields: one shape for every element, so no client has to handle two.
-  assert.deepEqual(rows[2].buckets, { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 });
+  assert.deepEqual(rows[2].buckets, {
+    running: 0, ready: 0, blocked: 0, awaitingVerification: 0, done: 0, failed: 0, cancelled: 0,
+  });
   assert.equal(rows[2].lastActivityAt, null);
   assert.deepEqual(rows[0].attention, {
     userBlockers: 2,

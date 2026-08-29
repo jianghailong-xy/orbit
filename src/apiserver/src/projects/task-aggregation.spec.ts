@@ -7,6 +7,7 @@ import {
   TaskCompletionPolicyValue,
   TaskVerdictValue,
   planTaskAggregation,
+  taskStartOwnedByCompletion,
 } from './task-aggregation';
 
 /**
@@ -38,6 +39,21 @@ function task(
 function moves(plan: { aggregations: PlannedTaskAggregation[] }): string[] {
   return plan.aggregations.map((one) => `${one.taskId}:${one.from}->${one.to}`);
 }
+
+test('task_start is owned by an independent verifier even on a childless subject', () => {
+  assert.equal(taskStartOwnedByCompletion({
+    completionPolicy: 'VERIFICATION_PASSED',
+    completionCriterion: 'VERIFICATION',
+    verifiesTaskId: null,
+    hasDirectChildren: false,
+  }), true);
+  assert.equal(taskStartOwnedByCompletion({
+    completionPolicy: 'MANUAL',
+    completionCriterion: 'VERIFICATION',
+    verifiesTaskId: 'subject',
+    hasDirectChildren: false,
+  }), false, 'the independent verifier is executable work');
+});
 
 interface Case {
   name: string;

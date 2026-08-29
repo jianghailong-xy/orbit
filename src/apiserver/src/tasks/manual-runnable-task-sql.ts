@@ -8,7 +8,8 @@ import { taskNotObsoleteSql } from './task-supersession';
  * "Ready to run" surface have to agree with the execute gate. A task is manually runnable when
  * it is not done, is not paused, has an enabled workspace backed by a runner, has no busy work
  * run or unresolved completion-ACK repair, has satisfied every prerequisite, is not an
- * aggregate-only parent, and has not been retired by supersession. A diagnostic surface may set
+ * completion-owned task (aggregate parent or independent-verification subject), and has not been
+ * retired by supersession. A diagnostic surface may set
  * `requireUnheld` false to ask the useful
  * narrower question "would this be runnable if its task list were resumed?"; that surface must
  * still check `dispatch_hold = true` itself and must never pass the resulting row to Execute as
@@ -40,6 +41,10 @@ export function manualRunnableTaskSql(
     WHERE completion_ack.task_id = ${alias}.id
   )
   AND ${dependenciesSatisfiedSql(alias)}
+  AND NOT (
+    ${alias}.completion_criterion = 'VERIFICATION'::task_completion_criterion
+    AND ${alias}.verifies_task_id IS NULL
+  )
   AND (
     ${alias}.completion_policy = 'MANUAL'::task_completion_policy
     OR NOT EXISTS (

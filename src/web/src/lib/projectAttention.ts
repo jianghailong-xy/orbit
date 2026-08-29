@@ -81,7 +81,7 @@ const SECTIONS: ReadonlyArray<{
   {
     key: 'waiting',
     title: 'Waiting',
-    note: 'Only dependency-blocked work remains · oldest task activity first',
+    note: 'Dependency-blocked or verification-gated work remains · oldest task activity first',
   },
   {
     key: 'definition',
@@ -136,13 +136,17 @@ function autoRemediationBlockerCount(project: AttentionProject): number {
 }
 
 /**
- * FAILED is deliberately absent from the five panorama buckets. `_count.tasks` is the complete
- * task count, so the remainder is exactly the FAILED count under the current closed TaskStatus
- * enum. Clamp at zero so a temporarily inconsistent aggregate never invents failed work.
+ * Current servers report FAILED explicitly. The remainder is retained only as rolling-deploy
+ * compatibility with an older server, and still keeps failed work in the denominator.
  */
 export function failedTaskCount(project: AttentionProject): number {
+  if (project.buckets.failed != null) return project.buckets.failed;
   const { running, ready, blocked, done, cancelled } = project.buckets;
-  return Math.max(0, project._count.tasks - running - ready - blocked - done - cancelled);
+  const awaitingVerification = project.buckets.awaitingVerification ?? 0;
+  return Math.max(
+    0,
+    project._count.tasks - running - ready - blocked - awaitingVerification - done - cancelled,
+  );
 }
 
 /** Whole quiet days, or null when the timestamp is missing, invalid, future, or still fresh. */
@@ -174,7 +178,11 @@ export function attentionReasonOf(project: AttentionProject, now: number): Atten
   }
 
   const { running, ready, blocked, done, cancelled } = project.buckets;
-  if (running + ready + blocked === 0 && done + cancelled > 0) return 'ready-to-close';
+  const awaitingVerification = project.buckets.awaitingVerification ?? 0;
+  if (
+    running + ready + blocked + awaitingVerification + failedTaskCount(project) === 0
+    && done + cancelled > 0
+  ) return 'ready-to-close';
   return null;
 }
 
@@ -198,11 +206,13 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
   if (reason) return 'attention';
   if (project._count.tasks === 0) return 'definition';
   if (project.buckets.ready > 0) return 'ready';
-  if (project.buckets.blocked > 0) return 'waiting';
+  if (project.buckets.blocked > 0 || (project.buckets.awaitingVerification ?? 0) > 0) {
+    return 'waiting';
+  }
 
-  // TaskStatus is closed and FAILED is the only status outside the five buckets, so reaching this
-  // fallback means an inconsistent payload. It is safer to ask for definition than to claim work
-  // is running or waiting when neither fact exists.
+  // Current payloads are exhaustive, so reaching this fallback means an inconsistent or mixed-
+  // version payload. It is safer to ask for definition than to claim work is running or waiting
+  // when neither fact exists.
   return 'definition';
 }
 
@@ -342,10 +352,12 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
 
   if (reason === 'ready-to-close') {
     const { running, ready, blocked, done, cancelled } = project.buckets;
+    const awaitingVerification = project.buckets.awaitingVerification ?? 0;
+    const failed = failedTaskCount(project);
     const settled = done + cancelled;
     return {
       tone: 'brand',
-      text: `${settled}/${running + ready + blocked + settled} settled · still open`,
+      text: `${settled}/${running + ready + blocked + awaitingVerification + failed + settled} settled · still open`,
     };
   }
 

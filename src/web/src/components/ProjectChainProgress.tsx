@@ -1,6 +1,12 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
 import { api } from '../api';
+import type {
+  ProjectPanoramaBuckets,
+  ProjectPanoramaShape,
+} from './ProjectPanoramaHeader';
+
+export type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './ProjectPanoramaHeader';
 
 /**
  * A chain-shaped project as one line: which step it is on, and what comes after.
@@ -21,9 +27,9 @@ import { api } from '../api';
  * and still reads `/ 118`, because a step number the reader cannot match to the task list is worse
  * than no step number.
  *
- * CANCELLED COUNTS AS SETTLED. A cancelled step is one the chain does not wait for, so it is
- * behind the frontier exactly like a finished one. Counting only DONE would park the reading at a
- * step nobody will ever complete.
+ * TERMINAL TASKS COUNT AS SETTLED. FAILED and CANCELLED steps no longer hold dependency work, so
+ * both sit behind the frontier exactly like DONE. Omitting FAILED here would make the chain's
+ * denominator say 25 while its progress silently accounted for only 24 of those tasks.
  *
  * WHERE THE TWO NAMES COME FROM. The blocking ranking, which is the same read the leaderboard card
  * makes (identical key, so mounting both costs one request). On a chain that ranking IS the
@@ -39,25 +45,6 @@ import { api } from '../api';
  * reported there in full — a second error strip would be one failure said twice, and a skeleton
  * would flash a chain widget onto a project that turns out to be a mesh.
  */
-
-/** @see `ProjectPanoramaBuckets` in `src/apiserver/src/projects/project-panorama.ts`. */
-export interface ProjectPanoramaBuckets {
-  running: number;
-  ready: number;
-  blocked: number;
-  done: number;
-  cancelled: number;
-}
-
-/** The project's dependency graph as three numbers and the verdict drawn from them. */
-export interface ProjectPanoramaShape {
-  taskCount: number;
-  edgeCount: number;
-  ratio: number;
-  /** Length in EDGES of the longest dependency path, so a 10-task chain reports 9. */
-  maxDepth: number;
-  form: 'chain' | 'mesh';
-}
 
 export interface ProjectPanorama {
   buckets: ProjectPanoramaBuckets;
@@ -129,7 +116,7 @@ export function chainPosition(buckets: ProjectPanoramaBuckets, shape: ProjectPan
   const total = shape.taskCount;
   // Clamped because the two numbers come from one row of one aggregate but the render outlives it:
   // a step count above the total is the one thing this strip must never print.
-  const settled = Math.min(total, buckets.done + buckets.cancelled);
+  const settled = Math.min(total, buckets.done + (buckets.failed ?? 0) + buckets.cancelled);
   const complete = total > 0 && settled >= total;
   return { total, settled, position: complete ? total : settled + 1, complete };
 }

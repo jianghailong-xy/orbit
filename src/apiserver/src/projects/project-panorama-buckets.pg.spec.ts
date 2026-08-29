@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
+import {
+  CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskStatus,
+} from '@prisma/client';
 import { NotFoundException } from '@nestjs/common';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
@@ -62,6 +64,22 @@ async function fixture(
   await db.user.create({
     data: { id: ownerId, email: `${label}-${ownerId}@panorama.invalid`, name: label, passwordHash: 'x' },
   });
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  await db.runner.create({
+    data: {
+      id: runnerId,
+      ownerId,
+      name: `${label} runner`,
+      tokenHash: `panorama-${runnerId}`,
+      status: RunnerStatus.ONLINE,
+      capabilities: [],
+      capabilitiesReportedAt: new Date(),
+    },
+  });
+  await db.workspace.create({
+    data: { id: workspaceId, ownerId, runnerId, name: `${label} workspace`, enabled: true },
+  });
   await db.project.create({ data: { id: projectId, ownerId, title: label } });
 
   const ids: Record<string, string> = {};
@@ -75,6 +93,7 @@ async function fixture(
         title: `${label}-${name}`,
         creatorType: CreatorType.USER,
         creatorId: ownerId,
+        assigneeId: workspaceId,
         status: one.status ?? TaskStatus.OPEN,
       },
     });
@@ -109,6 +128,8 @@ async function session(
       title: `run of ${taskId}`,
       prompt: 'do the thing',
       status,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
     },
   });
 }
@@ -149,7 +170,10 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
 
       await t.test('the buckets match the hand count and partition OPEN exactly', async () => {
         const { buckets } = await projects.panorama(a.ownerId, a.projectId);
-        assert.deepEqual(buckets, { running: 1, ready: 1, blocked: 5, done: 3, cancelled: 0 });
+        assert.deepEqual(buckets, {
+          running: 1, ready: 1, blocked: 5, awaitingVerification: 0,
+          done: 3, failed: 0, cancelled: 0,
+        });
 
         // Not a restatement of the line above: `ready` and `blocked` are two independent counts,
         // and the failure this catches is one of them double-counting or dropping a task — which
@@ -160,7 +184,7 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
         assert.equal(buckets.ready + buckets.blocked, open, 'ready + blocked covers OPEN once each');
         const total = await db.task.count({ where: { projectId: a.projectId } });
         assert.equal(
-          buckets.running + buckets.ready + buckets.blocked + buckets.done + buckets.cancelled,
+          Object.values(buckets).reduce((sum, value) => sum + value, 0),
           total,
         );
       });
@@ -202,7 +226,10 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
       await t.test('an empty project answers in zeroes with a definite form', async () => {
         const empty = await fixture(db, 'empty-c', {});
         const panorama = await projects.panorama(empty.ownerId, empty.projectId);
-        assert.deepEqual(panorama.buckets, { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 });
+        assert.deepEqual(panorama.buckets, {
+          running: 0, ready: 0, blocked: 0, awaitingVerification: 0,
+          done: 0, failed: 0, cancelled: 0,
+        });
         assert.deepEqual(panorama.shape, {
           taskCount: 0,
           edgeCount: 0,
@@ -214,7 +241,7 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
       });
 
       // ---- D: a prerequisite that was called off -----------------------------------------------
-      await t.test('a CANCELLED prerequisite settles its dependent into ready, not blocked',
+      await t.test('a CANCELLED prerequisite is a failed dependency, not executable work',
         async () => {
           const d = await fixture(db, 'cancelled-d', {
             t1: { status: TaskStatus.CANCELLED },
@@ -222,10 +249,12 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
             t3: { dependsOn: ['t2'] },
           });
           const { buckets } = await projects.panorama(d.ownerId, d.projectId);
-          // t2 waits on a task that will never run again: nothing is owed to it, so what stands
-          // between it and a run is a person, which is what `ready` means here. t3 waits on t2,
-          // which is OPEN and still owes the work — that one really is blocked.
-          assert.deepEqual(buckets, { running: 0, ready: 1, blocked: 1, done: 0, cancelled: 1 });
+          // task_start refuses a cancelled prerequisite until a person resolves/replaces it. The
+          // exact execute predicate therefore keeps both OPEN rows out of Ready.
+          assert.deepEqual(buckets, {
+            running: 0, ready: 0, blocked: 2, awaitingVerification: 0,
+            done: 0, failed: 0, cancelled: 1,
+          });
         });
 
       // ---- F: the dispatched work the status column does not carry ------------------------------
@@ -248,10 +277,13 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
 
         const { buckets } = await projects.panorama(f.ownerId, f.projectId);
 
-        assert.deepEqual(buckets, { running: 2, ready: 1, blocked: 1, done: 1, cancelled: 0 });
+        assert.deepEqual(buckets, {
+          running: 2, ready: 1, blocked: 1, awaitingVerification: 0,
+          done: 1, failed: 0, cancelled: 0,
+        });
         const total = await db.task.count({ where: { projectId: f.projectId } });
         assert.equal(
-          buckets.running + buckets.ready + buckets.blocked + buckets.done + buckets.cancelled,
+          Object.values(buckets).reduce((sum, value) => sum + value, 0),
           total,
           'the buckets still partition the project exactly once',
         );
@@ -264,7 +296,10 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
 
         const { buckets } = await projects.panorama(mine.ownerId, mine.projectId);
 
-        assert.deepEqual(buckets, { running: 0, ready: 1, blocked: 0, done: 0, cancelled: 0 });
+        assert.deepEqual(buckets, {
+          running: 0, ready: 1, blocked: 0, awaitingVerification: 0,
+          done: 0, failed: 0, cancelled: 0,
+        });
       });
 
       // ---- The size the deployment actually reaches --------------------------------------------
@@ -275,7 +310,10 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
         assert.equal(shape.edgeCount, 117);
         assert.equal(shape.maxDepth, 117);
         assert.equal(shape.form, 'chain', '117/118 is under the mesh ratio and over the task cap');
-        assert.deepEqual(buckets, { running: 0, ready: 1, blocked: 116, done: 1, cancelled: 0 });
+        assert.deepEqual(buckets, {
+          running: 0, ready: 1, blocked: 116, awaitingVerification: 0,
+          done: 1, failed: 0, cancelled: 0,
+        });
       });
 
       // ---- The door, not just the query --------------------------------------------------------

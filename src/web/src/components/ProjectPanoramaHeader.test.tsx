@@ -47,7 +47,16 @@ function render(qc: QueryClient, projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED') 
 
 /** The deployment's own numbers, from the report this card was specified against. */
 const panorama = (over: Partial<ProjectPanorama['buckets']> = {}, shape: Partial<ProjectPanorama['shape']> = {}): ProjectPanorama => ({
-  buckets: { running: 0, ready: 4, blocked: 30, done: 5, cancelled: 0, ...over },
+  buckets: {
+    running: 0,
+    ready: 4,
+    blocked: 30,
+    awaitingVerification: 0,
+    done: 5,
+    failed: 0,
+    cancelled: 0,
+    ...over,
+  },
   shape: { taskCount: 39, edgeCount: 41, ratio: 41 / 39, maxDepth: 12, form: 'chain', ...shape },
 });
 
@@ -70,10 +79,18 @@ describe('ProjectPanoramaHeader', () => {
     const html = render(qc);
 
     // Every bucket's own label, as text...
-    for (const label of ['Running', 'Ready', 'Blocked', 'Done']) expect(html).toContain(label);
+    for (const label of [
+      'Running',
+      'Ready',
+      'Blocked',
+      'Awaiting verification',
+      'Done',
+      'Failed',
+      'Cancelled',
+    ]) expect(html).toContain(label);
     // ...and every number, as visible text in its cell rather than only inside the meter's label.
     const cells = [...html.matchAll(/font-size:28px[^"]*">(\d+)<\/div>/g)].map((m) => m[1]);
-    expect(cells).toEqual(['0', '4', '30', '5']);
+    expect(cells).toEqual(['0', '4', '30', '0', '5', '0', '0']);
 
     // The whole point of the card: 4 and 30 are two numbers, and the 34 that today's `OPEN` tally
     // would report in their place appears nowhere.
@@ -98,7 +115,7 @@ describe('ProjectPanoramaHeader', () => {
     expect(stalledOnReady(panorama().buckets)).toBe(true);
   });
 
-  it('separates the four buckets by shape, not by colour alone', () => {
+  it('separates every exhaustive bucket by shape, not by colour alone', () => {
     const qc = newClient();
     // Something is running so the dispatch banner does not add its own triangle to this assertion
     // about the four bucket marks.
@@ -106,18 +123,18 @@ describe('ProjectPanoramaHeader', () => {
     const html = render(qc);
 
     const marks = glyphs(html);
-    expect(marks).toHaveLength(4);
+    expect(marks).toHaveLength(7);
     // Pairwise distinct as whole marks — a repeated shape in a different colour would collapse here.
-    expect(new Set(marks).size).toBe(4);
+    expect(new Set(marks).size).toBe(7);
     // ...and distinct in the shape channel specifically, which is what survives CVD and greyscale.
     const shapes = marks.map((mark) => mark.match(/data-glyph="([^"]*)"/)![1]);
-    expect(shapes).toEqual(['disc', 'triangle', 'square', 'check']);
+    expect(shapes).toEqual(['disc', 'triangle', 'square', 'hourglass', 'check', 'cross', 'slash']);
     // The geometry backs each name: a filled disc, a right-pointing triangle, a HOLLOW square
     // (stroked, not filled — the one pair that could otherwise read alike at 12px), and a check.
     expect(marks[0]).toContain('<circle');
     expect(marks[1]).toContain('<polygon');
     expect(marks[2]).toMatch(/<rect[^>]*fill="none"/);
-    expect(marks[3]).toContain('<path');
+    for (const mark of marks.slice(3)) expect(mark).toContain('<path');
 
     // Colour is a SECOND channel and the tokens are the measured ones: Done wears --success (not
     // --success-solid, ΔE 2.4 from amber under protanopia) and Blocked wears a neutral.
@@ -125,11 +142,14 @@ describe('ProjectPanoramaHeader', () => {
       'var(--brand)',
       'var(--warning-solid)',
       'var(--text-3)',
+      'var(--brand)',
       'var(--success)',
+      'var(--error)',
+      'var(--text-4)',
     ]);
-    expect(new Set(PANORAMA_BUCKETS.map((bucket) => bucket.color)).size).toBe(4);
+    expect(new Set(PANORAMA_BUCKETS.map((bucket) => bucket.glyph)).size).toBe(7);
     // Each bucket's accessible name is its own word, so the four cells never rely on the swatch.
-    expect(new Set(PANORAMA_BUCKETS.map((bucket) => bucket.label)).size).toBe(4);
+    expect(new Set(PANORAMA_BUCKETS.map((bucket) => bucket.label)).size).toBe(7);
   });
 
   it('gives the meter a role and an aria-label carrying all four numbers', () => {
@@ -138,7 +158,9 @@ describe('ProjectPanoramaHeader', () => {
     const html = render(qc);
 
     expect(meterAttr(html, 'role')).toBe('img');
-    expect(meterAttr(html, 'aria-label')).toBe('Task status: 0 running, 4 ready, 30 blocked, 5 done');
+    expect(meterAttr(html, 'aria-label')).toBe(
+      'Task status: 0 running, 4 ready, 30 blocked, 0 awaiting verification, 5 done, 0 failed, 0 cancelled',
+    );
 
     // The segments are in proportion, and the empty bucket has no sliver: a hairline of colour for
     // zero is exactly the value this card exists to make visible.
@@ -161,7 +183,9 @@ describe('ProjectPanoramaHeader', () => {
     );
     const html = render(qc);
 
-    expect(meterAttr(html, 'aria-label')).toBe('Task status: 0 running, 0 ready, 0 blocked, 0 done');
+    expect(meterAttr(html, 'aria-label')).toBe(
+      'Task status: 0 running, 0 ready, 0 blocked, 0 awaiting verification, 0 done, 0 failed, 0 cancelled',
+    );
     expect(html).toContain('var(--fill-muted)');
     expect(html).toContain('no tasks yet'); // not "NaN% of 0"
     expect(html).not.toContain('NaN');

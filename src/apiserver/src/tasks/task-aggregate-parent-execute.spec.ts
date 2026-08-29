@@ -25,8 +25,8 @@ const TASK = uuid('5');
  * `runWorkspaceOnTask` itself — so the rule has to be in both, and both are asserted here against
  * the real service rather than against the predicate they share.
  *
- * The database guard behind them (migration 0132) has its own coverage against real PostgreSQL in
- * `task-aggregate-parent-dispatch.pg.spec.ts`; what this file is about is that the two service
+ * The database guards behind them (0132/0207) have their own coverage against real PostgreSQL;
+ * what this file is about is that the two service
  * doors refuse BEFORE reaching it, so a person gets a sentence instead of a constraint violation.
  */
 
@@ -34,6 +34,8 @@ type Row = {
   id: string;
   title: string;
   completionPolicy: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'VERIFICATION_PASSED';
+  completionCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  verifiesTaskId: string | null;
   children: Array<{ id: string }>;
   isForeman?: boolean;
 };
@@ -55,6 +57,7 @@ function row(overrides: Partial<Row> & Pick<Row, 'id'>): Record<string, unknown>
     supersededByTaskId: null,
     terminalReason: null,
     completionPolicy: 'MANUAL',
+    completionCriterion: 'HUMAN_SIGNOFF',
     children: [],
     verifies: null,
     list: null,
@@ -62,6 +65,27 @@ function row(overrides: Partial<Row> & Pick<Row, 'id'>): Record<string, unknown>
     ...overrides,
   };
 }
+
+test('Run Now refuses a childless independent-verification subject', async () => {
+  const { service, started } = serviceFor([
+    row({
+      id: TASK,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      verifiesTaskId: null,
+      children: [],
+    }),
+  ]);
+  await assert.rejects(
+    () => service.execute('owner-1', TASK),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException, 'a readable 409, not a dispatched Session');
+      assert.match(String((error as Error).message), /independent verifier/);
+      return true;
+    },
+  );
+  assert.deepEqual(started, []);
+});
 
 type Select = Record<string, unknown>;
 
@@ -172,17 +196,28 @@ test('Run Now still starts the three compatibility boundaries', async () => {
 });
 
 test('bulk Run classifies an aggregate parent as skipped and still runs its siblings', async () => {
+  const subject = uuid('6');
   const { service, started } = serviceFor([
     row({ id: PARENT, completionPolicy: 'ALL_CHILDREN_DONE', children: [{ id: LEAF }] }),
+    row({
+      id: subject,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      verifiesTaskId: null,
+    }),
     row({ id: LEAF }),
     row({ id: CHILDLESS, completionPolicy: 'ALL_CHILDREN_DONE' }),
   ]);
-  const result = await service.batchExecute('owner-1', [PARENT, LEAF, CHILDLESS]);
+  const result = await service.batchExecute('owner-1', [PARENT, subject, LEAF, CHILDLESS]);
   assert.deepEqual(started.sort(), [LEAF, CHILDLESS].sort(),
     'the work runs; only the roll-up node is held back');
   const skipped = result.skipped.find((s: { id: string }) => s.id === PARENT);
   assert.ok(skipped, 'and the parent is REPORTED, not silently dropped');
   assert.match(skipped!.reason, /aggregating its subtasks/);
+  assert.match(
+    result.skipped.find((item: { id: string }) => item.id === subject)?.reason ?? '',
+    /Awaiting independent verification/,
+  );
 });
 
 test("the database guard's refusals are translated into readable 409s, not 500s", () => {
@@ -195,6 +230,8 @@ test("the database guard's refusals are translated into readable 409s, not 500s"
     ['TASK_AGGREGATE_PROJECT_BUSY: project x is being reconciled', /being reconciled right now/],
     ['TASK_AGGREGATE_PARENT_BUSY: this task\'s parent is being written', /parent is being written/],
     ['TASK_AGGREGATE_SCOPE_MOVED: a task involved in this write', /changed project/],
+    ['TASK_VERIFICATION_SUBJECT: task x has no work to run', /independent verifier/],
+    ['TASK_VERIFICATION_SUBJECT_LIVE_SESSION: task x has live work', /live task-work/],
   ];
   for (const [message, expected] of cases) {
     const translated = taskFenceConflictMessage(new Error(message));
@@ -207,7 +244,7 @@ test("the database guard's refusals are translated into readable 409s, not 500s"
 
 
 for (const door of ['execute', 'batchExecute'] as const) {
-  test(`${door} actually SELECTs the two facts the gate reads`, async () => {
+  test(`${door} actually SELECTs every completion-owner fact the gate reads`, async () => {
     // The projection above only bites if the query asks for them, and this is the assertion that it
     // does. Without it, deleting `completionPolicy` from the production select would leave the gate
     // reading `undefined` — permanently permissive — with every behavioural test still green.
@@ -217,6 +254,8 @@ for (const door of ['execute', 'batchExecute'] as const) {
     const asked = selects.find((select) => 'completionPolicy' in select);
     assert.ok(asked, `${door} must select completionPolicy`);
     assert.equal(asked!.completionPolicy, true);
+    assert.equal(asked!.completionCriterion, true);
+    assert.equal(asked!.verifiesTaskId, true);
     assert.ok(asked!.children, `${door} must select children`);
   });
 }

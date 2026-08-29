@@ -16,7 +16,21 @@ export interface ProjectTaskMark extends TaskDependencyGraphNode {
   kind: 'TASK';
   taskId: string;
   parentTaskId: string | null;
+  workState?: ProjectTaskWorkState;
+  verificationState?: ProjectTaskVerificationState | null;
 }
+
+export type ProjectTaskWorkState =
+  | 'RUNNING'
+  | 'READY'
+  | 'BLOCKED'
+  | 'AWAITING_VERIFICATION'
+  | 'DONE'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export type ProjectTaskVerificationState =
+  | 'PENDING' | 'BLOCKED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'MISSING';
 
 /** How many tasks of each status sit behind one folded mark. */
 export type MarkStatusCounts = Record<string, number>;
@@ -29,7 +43,15 @@ export interface ProjectRunMark {
   taskCount: number;
   statusCounts: MarkStatusCounts;
   parentTaskId: string | null;
-  members: Array<{ taskId: string; title: string; status: string; running?: boolean; queued?: boolean }>;
+  members: Array<{
+    taskId: string;
+    title: string;
+    status: string;
+    running?: boolean;
+    queued?: boolean;
+    workState?: ProjectTaskWorkState;
+    verificationState?: ProjectTaskVerificationState | null;
+  }>;
   /** False when the run is longer than the response carries members for. */
   expandable: boolean;
 }
@@ -44,7 +66,15 @@ export interface ProjectMotifMark {
   statusCounts: MarkStatusCounts;
   parentTaskId: null;
   /** A few of the real tasks behind it, failures and running work first. */
-  samples: Array<{ taskId: string; title: string; status: string; running?: boolean; queued?: boolean }>;
+  samples: Array<{
+    taskId: string;
+    title: string;
+    status: string;
+    running?: boolean;
+    queued?: boolean;
+    workState?: ProjectTaskWorkState;
+    verificationState?: ProjectTaskVerificationState | null;
+  }>;
 }
 
 /**
@@ -638,6 +668,8 @@ export function expandRunMarks(
         status: member.status,
         running: member.running,
         queued: member.queued,
+        workState: member.workState,
+        verificationState: member.verificationState,
         parentTaskId: run.parentTaskId,
       });
       if (index > 0) {

@@ -274,5 +274,17 @@ describe('ProjectChainProgress', () => {
       form: 'chain',
     });
     expect(chainSegments(short)).toEqual({ count: 10, done: 5, current: 5 });
+
+    const withFailedHistory = chainPosition({
+      running: 1, ready: 0, blocked: 3, awaitingVerification: 0,
+      done: 5, failed: 1, cancelled: 0,
+    }, {
+      taskCount: 10,
+      edgeCount: 9,
+      ratio: 0.9,
+      maxDepth: 9,
+      form: 'chain',
+    });
+    expect(withFailedHistory).toMatchObject({ settled: 6, position: 7, complete: false });
   });
 });

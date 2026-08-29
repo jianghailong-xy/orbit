@@ -41,7 +41,19 @@ export interface FilterableTask {
   running?: boolean;
   queued?: boolean;
   blocked?: boolean;
+  /** Exact server task_start predicate. Present on current paged/list-row responses. */
+  runnable?: boolean;
+  completionCriterion?: string | null;
+  completionPolicy?: string | null;
+  verifiesTaskId?: string | null;
   assignee?: { runner?: { id?: string | null } | null } | null;
+}
+
+/** Browser-side fail-closed mirror of the immutable verification-subject shape. */
+export function taskStartOwnedByCompletionDeclaration(task: FilterableTask): boolean {
+  return task.completionCriterion === 'VERIFICATION'
+    && task.completionPolicy === 'VERIFICATION_PASSED'
+    && task.verifiesTaskId == null;
 }
 
 /**
@@ -52,6 +64,12 @@ export interface FilterableTask {
  * this low-level dispatch check does not either.
  */
 export function canDispatchTask(task: FilterableTask): boolean {
+  if (typeof task.runnable === 'boolean') {
+    return task.runnable && !task.running && !task.queued && !task.blocked;
+  }
+  // Rolling compatibility must fail closed for a completion-owned subject. DependencyState alone
+  // cannot distinguish it from executable work, which is the bug Work overview is repairing.
+  if (taskStartOwnedByCompletionDeclaration(task)) return false;
   return !!task.assignee?.runner?.id && !task.running && !task.queued && !task.blocked;
 }
 

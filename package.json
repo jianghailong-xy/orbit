@@ -34,6 +34,7 @@
     "test:outcome-reconciler:fact-ingress": "bash scripts/outcome-reconciler-fact-ingress.sh",
     "test:outcome-reconciler:ratification": "bash scripts/outcome-reconciler-ratification.sh",
     "test:outcome-reconciler:auto-dispatch": "bash scripts/outcome-reconciler-auto-dispatch.sh",
+    "test:outcome-reconciler:work-overview-readiness": "bash scripts/outcome-reconciler-work-overview-readiness.sh",
     "test:outcome-reconciler:auto-dispatch:integration": "bash scripts/outcome-reconciler-auto-dispatch-integration.sh",
     "test:outcome-reconciler:watchdog-current-binding:regression": "bash scripts/outcome-reconciler-watchdog-current-binding-regression.sh",
     "test:outcome-reconciler:watchdog-current-binding": "bash scripts/outcome-reconciler-watchdog-current-binding.sh"

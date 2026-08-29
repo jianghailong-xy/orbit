@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, ProjectStatus, RunStatus, TaskStatus } from '@prisma/client';
+import {
+  CreatorType, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
+  SessionDispatchOrigin, TaskStatus,
+} from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -13,7 +16,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * INDEPENDENT acceptance of the `GET /projects` bucket rollup: written against the CONTRACT
- * (`readProjectPanorama`'s five numbers), not against the delivered spec's fixtures.
+ * (`readProjectPanorama`'s seven numbers), not against the delivered spec's fixtures.
  *
  * Two things the delivered spec does not do, and this one does:
  *   - a CANCELLED prerequisite. The delivered fixture cancels a task nothing depends on, so a
@@ -26,11 +29,13 @@ import { prismaClientFor } from '../prisma/prisma-client';
  */
 
 const URL = process.env.COORDINATOR_PG_URL;
-const ZEROES = { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 };
+const ZEROES = {
+  running: 0, ready: 0, blocked: 0, awaitingVerification: 0, done: 0, failed: 0, cancelled: 0,
+};
 
 interface Listed {
   id: string;
-  buckets: { running: number; ready: number; blocked: number; done: number; cancelled: number };
+  buckets: typeof ZEROES;
   lastActivityAt: Date | null;
   _count: { tasks: number };
 }
@@ -40,8 +45,22 @@ async function makeUser(db: PrismaClient): Promise<string> {
   await db.user.create({
     data: { id, email: `acc-${id}@acc.invalid`, name: 'acc', passwordHash: 'x' },
   });
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  await db.runner.create({
+    data: {
+      id: runnerId, ownerId: id, name: `acceptance runner ${id}`, tokenHash: `acceptance-${runnerId}`,
+      status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
+    },
+  });
+  await db.workspace.create({
+    data: { id: workspaceId, ownerId: id, runnerId, name: `acceptance workspace ${id}`, enabled: true },
+  });
+  workspaceByOwner.set(id, workspaceId);
   return id;
 }
+
+const workspaceByOwner = new Map<string, string>();
 
 async function makeProject(
   db: PrismaClient,
@@ -70,8 +89,13 @@ async function makeTask(
   status: TaskStatus,
 ): Promise<string> {
   const id = randomUUID();
+  const assigneeId = workspaceByOwner.get(ownerId);
+  if (!assigneeId) throw new Error(`no fixture workspace for ${ownerId}`);
   await db.task.create({
-    data: { id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId, status },
+    data: {
+      id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId,
+      assigneeId, status,
+    },
   });
   return id;
 }
@@ -87,7 +111,10 @@ async function makeSession(
   status: RunStatus,
 ): Promise<void> {
   await db.session.create({
-    data: { ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status },
+    data: {
+      ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+      dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+    },
   });
 }
 
@@ -162,7 +189,7 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
       const byId = new Map(rows.map((r) => [r.id, r]));
 
       // --- hand counts -------------------------------------------------------------------
-      assert.deepEqual(byId.get(pEmpty)!.buckets, ZEROES, 'empty project is five zeroes');
+      assert.deepEqual(byId.get(pEmpty)!.buckets, ZEROES, 'empty project is seven zeroes');
       assert.equal(byId.get(pEmpty)!.lastActivityAt, null);
       assert.equal(byId.get(pEmpty)!._count.tasks, 0);
       for (const key of Object.keys(ZEROES)) {
@@ -171,29 +198,32 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
 
       assert.deepEqual(
         byId.get(pCross)!.buckets,
-        { running: 0, ready: 1, blocked: 2, done: 0, cancelled: 0 },
+        { running: 0, ready: 1, blocked: 2, awaitingVerification: 0,
+          done: 0, failed: 0, cancelled: 0 },
         'a prerequisite in another project — or another OWNER’s project — still blocks',
       );
 
       assert.deepEqual(
         byId.get(pCancelled)!.buckets,
-        { running: 0, ready: 2, blocked: 1, done: 0, cancelled: 1 },
-        'CANCELLED prerequisite frees its dependent; a second OPEN prerequisite still holds it',
+        { running: 0, ready: 1, blocked: 2, awaitingVerification: 0,
+          done: 0, failed: 0, cancelled: 1 },
+        'task_start refuses CANCELLED prerequisites as well as a still-OPEN prerequisite',
       );
 
       assert.deepEqual(
         byId.get(pFailed)!.buckets,
-        { running: 1, ready: 1, blocked: 0, done: 1, cancelled: 1 },
-        'FAILED is in no bucket and a FAILED prerequisite frees its dependent',
+        { running: 1, ready: 0, blocked: 1, awaitingVerification: 0,
+          done: 1, failed: 1, cancelled: 1 },
+        'FAILED is explicit and its dependent remains non-executable',
       );
       assert.equal(byId.get(pFailed)!._count.tasks, 5, 'FAILED still counts toward the total');
       assert.equal(
         Object.values(byId.get(pFailed)!.buckets).reduce((s, n) => s + n, 0),
-        4,
-        'the one task the buckets omit is exactly the FAILED one',
+        5,
+        'the exhaustive buckets include the FAILED task',
       );
 
-      // --- and the same five numbers the project page reports ----------------------------
+      // --- and the same seven numbers the project page reports ---------------------------
       for (const projectId of [pEmpty, pCross, pUp, pCancelled, pFailed]) {
         const { buckets } = await svc.panorama(owner, projectId);
         assert.deepEqual(byId.get(projectId)!.buckets, buckets, `index vs page for ${projectId}`);
@@ -235,11 +265,14 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
       const held = await makeTask(db, owner, pLive, 'held', TaskStatus.OPEN);
       const closed = await makeTask(db, owner, pLive, 'closed', TaskStatus.DONE);
       await db.taskDependency.create({ data: { taskId: waiting, dependsOnTaskId: free } });
-      await db.taskDependency.create({ data: { taskId: held, dependsOnTaskId: free } });
       await makeSession(db, owner, dispatched, RunStatus.RUNNING);
       await makeSession(db, owner, queued, RunStatus.PENDING);
       await makeSession(db, owner, ended, RunStatus.SUCCEEDED);
+      // Admit the run while the task is executable, then change the graph underneath it. This is
+      // the real race the classifier must report as RUNNING; current database admission correctly
+      // refuses constructing an already-blocked run from scratch.
       await makeSession(db, owner, held, RunStatus.RUNNING);
+      await db.taskDependency.create({ data: { taskId: held, dependsOnTaskId: free } });
       await makeSession(db, owner, closed, RunStatus.RUNNING);
 
       // p_stranger: a live session under ANOTHER owner. The contract scopes `live` by owner, and
@@ -252,7 +285,8 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
 
       assert.deepEqual(
         byId.get(pLive)!.buckets,
-        { running: 3, ready: 2, blocked: 1, done: 1, cancelled: 0 },
+        { running: 3, ready: 2, blocked: 1, awaitingVerification: 0,
+          done: 1, failed: 0, cancelled: 0 },
         'a live session promotes its OPEN task out of ready — and out of blocked — into running',
       );
       // Named on its own, because the deepEqual above is exactly what the OLD definition would
@@ -275,7 +309,10 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
         assert.deepEqual(byId.get(pid)!.buckets, buckets, `index vs page for ${pid}`);
       }
       const theirs = ((await svc.list(other)) as unknown as Listed[]).find((r) => r.id === pStranger)!;
-      assert.deepEqual(theirs.buckets, { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+      assert.deepEqual(theirs.buckets, {
+        running: 1, ready: 0, blocked: 0, awaitingVerification: 0,
+        done: 0, failed: 0, cancelled: 0,
+      },
         'the same session DOES promote the task it actually points at');
       assert.deepEqual(theirs.buckets, (await svc.panorama(other, pStranger)).buckets);
     });
@@ -297,7 +334,7 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
         const taskIds: string[] = [];
 
         for (let p = 0; p < projectCount; p += 1) {
-          const status = rnd() < 0.25 ? ProjectStatus.DONE : ProjectStatus.OPEN;
+          const status = rnd() < 0.25 ? ProjectStatus.CANCELLED : ProjectStatus.OPEN;
           const pid = await makeProject(db, owner, `r${round}p${p}`, status);
           projectIds.push(pid);
           const taskCount = Math.floor(rnd() * 12);

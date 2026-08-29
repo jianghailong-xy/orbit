@@ -54,6 +54,9 @@ const task = (over: Record<string, unknown> = {}) => ({
   blocksCount: 0,
   topoLevel: 0,
   dependencyState: 'READY',
+  workState: 'READY',
+  verificationState: null,
+  autoRunWhenReady: false,
   ...over,
 });
 
@@ -95,23 +98,22 @@ function band(out: string, key: string): string {
 const rowCount = (markup: string) => (markup.match(/data-glyph=/g) ?? []).length;
 
 describe('ProjectTasks — topological bands', () => {
-  it('bands the page by level, ascending, and puts the level’s size beside its name', () => {
+  it('keeps canonically blocked work in topology levels and counts each band', () => {
     const { out } = withPage([
-      task({ id: T1, title: 'Draft the schema', topoLevel: 0 }),
-      task({ id: T2, title: 'Pick the palette', topoLevel: 0 }),
-      task({ id: T3, title: 'Wire the endpoint', topoLevel: 1 }),
-      task({ id: T4, title: 'Ship the page', topoLevel: 2 }),
+      task({ id: T1, title: 'Draft the schema', topoLevel: 0, workState: 'BLOCKED' }),
+      task({ id: T2, title: 'Pick the palette', topoLevel: 0, workState: 'BLOCKED' }),
+      task({ id: T3, title: 'Wire the endpoint', topoLevel: 1, workState: 'BLOCKED' }),
+      task({ id: T4, title: 'Ship the page', topoLevel: 2, workState: 'BLOCKED' }),
     ]);
 
     expect(bandKeys(out)).toEqual(['level-0', 'level-1', 'level-2']);
 
-    // The heading is the whole message: level 0 is what nothing in this project is holding up,
-    // and every level after it names what it is queued behind. Read as a predicate rather than as
-    // a fixed sentence — the wording of level 0's half is free to change, what it claims is not.
-    expect(band(out, 'level-0')).toMatch(/Level 0\b/);
-    expect(band(out, 'level-0')).toMatch(/\bready\b/i);
-    expect(out).toContain('Level 1 · waits on level 0');
-    expect(out).toContain('Level 2 · waits on level 1');
+    // Topology remains useful inside the canonical BLOCKED lane, but no level is allowed to mint
+    // a Ready claim from indegree alone.
+    expect(band(out, 'level-0')).toContain('Blocked · no executable work at this level');
+    expect(out).toContain('Blocked · topology level 1');
+    expect(out).toContain('Blocked · topology level 2');
+    expect(out).not.toMatch(/can start now/i);
 
     // Two tasks at level 0 means two tasks that can be started right now, side by side — which is
     // the only thing this sort is for, and the number beside the heading is where it is legible.
@@ -123,34 +125,24 @@ describe('ProjectTasks — topological bands', () => {
     expect(out).not.toContain('1 tasks'); // the singular, spelled correctly
   });
 
-  it('says who starts level 0, and never that it is already starting', () => {
-    // Two rows, so the claim is read off a band header and not off a single task's own row.
+  it('uses the canonical READY lane to say manual work can start without claiming it started', () => {
     const { out } = withPage([
       task({ id: T1, title: 'Draft the schema', topoLevel: 0 }),
       task({ id: T2, title: 'Pick the palette', topoLevel: 0 }),
     ]);
-    const heading = band(out, 'level-0');
+    const heading = band(out, 'ready');
 
-    // The header used to read `ready now`, which promised a start nothing was going to make:
-    // tasks in a project carry dispatch_authority COORDINATOR, the auto-run sweep takes only
-    // LEGACY rows and stands down on these, and the control loop that once picked them up is
-    // gone. Unblocked, then, but not on its way — and the header has to name whose move it is.
-    expect(heading).not.toMatch(/ready now/i);
-    expect(heading).toMatch(/coordinator/i);
-
-    // Which is the same thing the coordinator card in the page head says from its side ("tasks
-    // never start on their own"). If one of the two is ever softened, they stop agreeing, and a
-    // reader is owed one answer about who starts this work rather than two.
-    expect(heading).not.toMatch(/automatic|starts itself|starting now|will start/i);
+    expect(heading).toMatch(/Ready · can start now/);
+    expect(heading).not.toMatch(/already started|starting now|will start/i);
   });
 
   it('sorts the bands but never the rows inside one', () => {
     // The page arrives out of level order and, within level 0, in an order only the server knows
     // the reason for. The bands must ascend; the rows inside a band must not be touched.
     const { out } = withPage([
-      task({ id: T3, title: 'Zebra', topoLevel: 1 }),
-      task({ id: T2, title: 'Yak', topoLevel: 0 }),
-      task({ id: T1, title: 'Xerus', topoLevel: 0 }),
+      task({ id: T3, title: 'Zebra', topoLevel: 1, workState: 'BLOCKED' }),
+      task({ id: T2, title: 'Yak', topoLevel: 0, workState: 'BLOCKED' }),
+      task({ id: T1, title: 'Xerus', topoLevel: 0, workState: 'BLOCKED' }),
     ]);
 
     expect(bandKeys(out)).toEqual(['level-0', 'level-1']);
@@ -160,9 +152,9 @@ describe('ProjectTasks — topological bands', () => {
     // Same claim, read off the partition itself rather than off the markup, so a reordering that
     // happened to render the same way still fails.
     const groups = projectTaskGroups([
-      task({ id: T3, title: 'Zebra', topoLevel: 1 }),
-      task({ id: T2, title: 'Yak', topoLevel: 0 }),
-      task({ id: T1, title: 'Xerus', topoLevel: 0 }),
+      task({ id: T3, title: 'Zebra', topoLevel: 1, workState: 'BLOCKED' }),
+      task({ id: T2, title: 'Yak', topoLevel: 0, workState: 'BLOCKED' }),
+      task({ id: T1, title: 'Xerus', topoLevel: 0, workState: 'BLOCKED' }),
     ] as never);
     expect(groups.map((g) => g.level)).toEqual([0, 1]);
     expect(groups[0].tasks.map((t) => t.title)).toEqual(['Yak', 'Xerus']);
@@ -170,16 +162,16 @@ describe('ProjectTasks — topological bands', () => {
 
   it('moves finished tasks out of their level into a dimmed band at the end', () => {
     const { out } = withPage([
-      task({ id: T1, title: 'Landed already', status: 'DONE', topoLevel: 0 }),
-      task({ id: T2, title: 'Still to do', status: 'OPEN', topoLevel: 1 }),
+      task({ id: T1, title: 'Landed already', status: 'DONE', workState: 'DONE', topoLevel: 0 }),
+      task({ id: T2, title: 'Still to do', status: 'OPEN', workState: 'BLOCKED', topoLevel: 1 }),
     ]);
 
     // Level 0 is gone: its only member has finished, and a band of finished work is not an answer
     // to "what can run now". The remaining level keeps its own number rather than being renumbered.
-    expect(bandKeys(out)).toEqual(['level-1', 'done']);
+    expect(bandKeys(out)).toEqual(['level-1', 'settled']);
     expect(out).toContain('Done');
     expect(out.indexOf('Still to do')).toBeLessThan(out.indexOf('Landed already'));
-    expect(band(out, 'done')).toContain('Landed already');
+    expect(band(out, 'settled')).toContain('Landed already');
     // Dimmed, not dropped: still the answer to "did that land?", just not to "what is next".
     expect(out).toMatch(/style="opacity:0\.55"/);
   });

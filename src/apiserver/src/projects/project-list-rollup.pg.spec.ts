@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, ProjectStatus, RunStatus, TaskStatus } from '@prisma/client';
+import {
+  CreatorType, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
+  SessionDispatchOrigin, TaskStatus,
+} from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,7 +18,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
  * `GET /projects` — the buckets and `lastActivityAt` it now carries — on real PostgreSQL.
  *
  * The claim under test is agreement, and it cannot be checked anywhere else. The list computes its
- * buckets with ONE aggregate grouped by project; the project page computes the same five numbers
+ * buckets with ONE aggregate grouped by project; the project page computes the same seven numbers
  * with a per-project recursive CTE. Two queries, one meaning: a reader who sees `blocked: 3` in the
  * index and `blocked: 2` on the page has been told the project changed while they clicked. So every
  * scenario below asserts the list's buckets against `readProjectPanorama`'s for the same project id
@@ -43,11 +46,13 @@ import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
-const ZEROES = { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 };
+const ZEROES = {
+  running: 0, ready: 0, blocked: 0, awaitingVerification: 0, done: 0, failed: 0, cancelled: 0,
+};
 
 interface Listed {
   id: string;
-  buckets: { running: number; ready: number; blocked: number; done: number; cancelled: number };
+  buckets: typeof ZEROES;
   lastActivityAt: Date | null;
   _count: { tasks: number };
 }
@@ -83,12 +88,32 @@ async function makeTask(
   title: string,
   status: TaskStatus,
 ): Promise<string> {
+  let assigneeId = workspaceByOwner.get(ownerId);
+  if (!assigneeId) {
+    const runnerId = randomUUID();
+    assigneeId = randomUUID();
+    await db.runner.create({
+      data: {
+        id: runnerId, ownerId, name: `rollup runner ${ownerId}`, tokenHash: `rollup-${runnerId}`,
+        status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
+      },
+    });
+    await db.workspace.create({
+      data: { id: assigneeId, ownerId, runnerId, name: `rollup workspace ${ownerId}`, enabled: true },
+    });
+    workspaceByOwner.set(ownerId, assigneeId);
+  }
   const id = randomUUID();
   await db.task.create({
-    data: { id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId, status },
+    data: {
+      id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId,
+      assigneeId, status,
+    },
   });
   return id;
 }
+
+const workspaceByOwner = new Map<string, string>();
 
 test('the project index buckets every project in one pass and agrees with the project page',
   { skip: !URL, timeout: 300_000 }, async (t) => {
@@ -133,7 +158,7 @@ test('the project index buckets every project in one pass and agrees with the pr
       const crossId = await makeProject(db, ownerId, 'cross-project prerequisites');
       // Filed DONE so the `?status=` narrowing has something to select, and so the cross-project
       // edge below points INTO a project the unfiltered index still has to look through.
-      const failedId = await makeProject(db, ownerId, 'a run that broke', ProjectStatus.DONE);
+      const failedId = await makeProject(db, ownerId, 'a run that broke', ProjectStatus.CANCELLED);
       const emptyId = await makeProject(db, ownerId, 'nothing filed yet');
 
       const b1 = await makeTask(db, ownerId, failedId, 'b1', TaskStatus.OPEN);
@@ -177,21 +202,23 @@ test('the project index buckets every project in one pass and agrees with the pr
           // it is blocked — a bucket that called it ready would send a reader hunting for a
           // dispatch refusal that does not exist.
           assert.deepEqual(listed.get(crossId)!.buckets,
-            { running: 1, ready: 1, blocked: 2, done: 1, cancelled: 1 });
+            { running: 1, ready: 1, blocked: 2, awaitingVerification: 0,
+              done: 1, failed: 0, cancelled: 1 });
 
-          // b2 FAILED is in no bucket, and b3 — whose only prerequisite is that FAILED task —
-          // reads `ready`, not `blocked`: nothing is owed to it any more.
+          // b2 is explicit in FAILED, and task_start refuses b3 until that failed prerequisite is
+          // explicitly resolved or replaced.
           assert.deepEqual(listed.get(failedId)!.buckets,
-            { running: 0, ready: 2, blocked: 0, done: 1, cancelled: 0 });
+            { running: 0, ready: 1, blocked: 1, awaitingVerification: 0,
+              done: 1, failed: 1, cancelled: 0 });
           assert.equal(listed.get(failedId)!._count.tasks, 4, 'FAILED still counts toward the total');
           assert.equal(
             Object.values(listed.get(failedId)!.buckets).reduce((sum, n) => sum + n, 0),
-            3,
-            'the buckets need not sum to the total, and the difference is exactly the FAILED task',
+            4,
+            'the exhaustive buckets include the FAILED task in the project denominator',
           );
         });
 
-      await t.test('an empty project reports five zeroes and no activity, not missing fields',
+      await t.test('an empty project reports seven zeroes and no activity, not missing fields',
         async () => {
           const empty = (await byId()).get(emptyId)!;
           assert.deepEqual(empty.buckets, ZEROES);
@@ -215,12 +242,12 @@ test('the project index buckets every project in one pass and agrees with the pr
           }
         });
 
-      await t.test('the whole index costs three page-wide reads, not one per project', async () => {
+      await t.test('the whole index has a constant page-wide read count, not one per project', async () => {
         rawQueries = 0;
         const rows = await projects.list(ownerId);
         assert.equal(rows.length, 3);
-        assert.equal(rawQueries, 3,
-          'one task rollup, one blocker rollup and one canonical obligation view for the page');
+        assert.equal(rawQueries, 6,
+          'canonical task lanes, blockers and control-plane obligations stay page-wide');
       });
 
       await t.test('lastActivityAt is the latest task write, and Project.updatedAt is not',
@@ -253,16 +280,20 @@ test('the project index buckets every project in one pass and agrees with the pr
           // And the buckets followed the same write: a2 left OPEN/blocked for IN_PROGRESS,
           // while a6 stayed blocked on a3, which is still running.
           assert.deepEqual(after.buckets,
-            { running: 2, ready: 1, blocked: 1, done: 1, cancelled: 1 });
+            { running: 2, ready: 1, blocked: 1, awaitingVerification: 0,
+              done: 1, failed: 0, cancelled: 1 });
         });
 
       await t.test('?status= narrows the projects and still buckets the ones it returns',
         async () => {
-          const done = (await projects.list(ownerId, ProjectStatus.DONE)) as unknown as Listed[];
+          const done = (await projects.list(ownerId, ProjectStatus.CANCELLED)) as unknown as Listed[];
           assert.deepEqual(done.map((row) => row.id), [failedId]);
           // The narrowed aggregate scopes which projects it groups, never which tasks a
           // prerequisite may be looked up in: b3's FAILED prerequisite is still found.
-          assert.deepEqual(done[0].buckets, { running: 0, ready: 2, blocked: 0, done: 1, cancelled: 0 });
+          assert.deepEqual(done[0].buckets, {
+            running: 0, ready: 1, blocked: 1, awaitingVerification: 0,
+            done: 1, failed: 1, cancelled: 0,
+          });
           assert.deepEqual(done[0].buckets, (await page.panorama(ownerId, failedId)).buckets);
 
           const open = (await projects.list(ownerId, ProjectStatus.OPEN)) as unknown as Listed[];
@@ -274,7 +305,10 @@ test('the project index buckets every project in one pass and agrees with the pr
         assert.equal(mine.has(strangerProject), false);
         const theirs = (await projects.list(strangerId)) as unknown as Listed[];
         assert.deepEqual(theirs.map((row) => row.id), [strangerProject]);
-        assert.deepEqual(theirs[0].buckets, { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 });
+        assert.deepEqual(theirs[0].buckets, {
+          running: 1, ready: 0, blocked: 0, awaitingVerification: 0,
+          done: 0, failed: 0, cancelled: 0,
+        });
       });
     } finally {
       await db.$disconnect();
@@ -313,7 +347,10 @@ test('a dispatched task is running in the index rather than ready, and the page 
     /** A session on a task — the only place a dispatched run is written down. */
     const session = async (ownerId: string, taskId: string, status: RunStatus): Promise<void> => {
       await db.session.create({
-        data: { ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status },
+        data: {
+          ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+          dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+        },
       });
     };
 
@@ -349,7 +386,10 @@ test('a dispatched task is running in the index rather than ready, and the page 
 
       await t.test('a live session moves its task out of ready and into running', async () => {
         const row = (await listed(ownerId)).get(liveId)!;
-        assert.deepEqual(row.buckets, { running: 2, ready: 2, blocked: 1, done: 1, cancelled: 0 });
+        assert.deepEqual(row.buckets, {
+          running: 2, ready: 2, blocked: 1, awaitingVerification: 0,
+          done: 1, failed: 0, cancelled: 0,
+        });
         // Stated separately from the line above, because it is the claim that matters and the
         // deepEqual would still read plausibly with both numbers wrong by one in opposite
         // directions: NOT ONE of the six tasks is IN_PROGRESS, so under the old definition this
@@ -365,8 +405,7 @@ test('a dispatched task is running in the index rather than ready, and the page 
       await t.test('the buckets still partition the project exactly once', async () => {
         const row = (await listed(ownerId)).get(liveId)!;
         const total = await db.task.count({ where: { projectId: liveId } });
-        const sum = row.buckets.running + row.buckets.ready + row.buckets.blocked
-          + row.buckets.done + row.buckets.cancelled;
+        const sum = Object.values(row.buckets).reduce((total, value) => total + value, 0);
         assert.equal(sum, total, 'six tasks, counted once each');
         // The OPEN population is now split THREE ways, not two: a dispatched OPEN task left
         // ready/blocked for running. An invariant that still read `ready + blocked = OPEN` would
@@ -376,7 +415,7 @@ test('a dispatched task is running in the index rather than ready, and the page 
           'ready + blocked + the dispatched OPEN tasks covers OPEN once each');
       });
 
-      await t.test('the index and the project page report the same five numbers', async () => {
+      await t.test('the index and the project page report the same seven numbers', async () => {
         const row = (await listed(ownerId)).get(liveId)!;
         const { buckets } = await projects.panorama(ownerId, liveId);
         // The whole point: `readProjectPanorama` has counted live sessions since the definition
@@ -396,11 +435,13 @@ test('a dispatched task is running in the index rather than ready, and the page 
         await session(strangerId, s1, RunStatus.RUNNING);
 
         assert.deepEqual((await listed(ownerId)).get(mineId)!.buckets,
-          { running: 0, ready: 1, blocked: 0, done: 0, cancelled: 0 },
+          { running: 0, ready: 1, blocked: 0, awaitingVerification: 0,
+            done: 0, failed: 0, cancelled: 0 },
           'a live session in somebody else’s project does not promote my task');
         // And the join is not simply dead: the same session DOES promote the task it points at.
         assert.deepEqual((await listed(strangerId)).get(theirsId)!.buckets,
-          { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 });
+          { running: 1, ready: 0, blocked: 0, awaitingVerification: 0,
+            done: 0, failed: 0, cancelled: 0 });
         assert.deepEqual((await listed(strangerId)).get(theirsId)!.buckets,
           (await projects.panorama(strangerId, theirsId)).buckets);
       });

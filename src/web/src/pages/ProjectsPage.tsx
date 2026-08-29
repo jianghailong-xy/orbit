@@ -26,6 +26,7 @@ import {
   Glyph,
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
+  panoramaBucketValue,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
 import {
@@ -542,9 +543,9 @@ export function ProjectsPage() {
 }
 
 /**
- * Where one project's work stands, as a 6px bar and the four figures behind it.
+ * Where one project's work stands, as a 6px bar and the exhaustive figures behind it.
  *
- * Everything about the buckets — which four, in what order, which shape and which token — comes
+ * Everything about the buckets — which lanes, in what order, which shape and which token — comes
  * from `PANORAMA_BUCKETS`, the table the project page's own header is drawn from. Not copied:
  * imported, so a bucket that is amber there cannot be anything else here, and the meter is that
  * page's `BucketMeter` at a row's height rather than a second bar that agrees for now.
@@ -552,7 +553,7 @@ export function ProjectsPage() {
  * COLOUR IS NOT CARRYING ANY OF THIS ALONE. Amber `--warning-solid` and neutral `--text-3` sit at
  * 2.32:1 and 2.94:1 against the row's background — below the 3:1 a non-text channel needs — so
  * each bucket brings its shape and its number too, and the bar, which has room for neither, spells
- * all four numbers into its `aria-label`.
+ * every lane into its `aria-label`.
  *
  * A bucket at zero draws no segment and prints no figure: this list is read to find the project
  * that is stuck, and a zero drawn as a hairline of colour is the value hardest to un-see.
@@ -561,15 +562,15 @@ function ProjectRowMeter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
   return (
     <div className="project-row-meter">
       <BucketMeter buckets={buckets} height={6} />
-      {/* `aria-hidden` because the bar directly above already reads out all four numbers, named:
+      {/* `aria-hidden` because the bar directly above already reads out every lane, named:
           this line is the same fact for the eye, and a screen reader should hear it once. The
           shape is what tells a reader which bucket a figure belongs to, and `title` names it for
           a pointer. */}
       <div className="project-row-buckets" aria-hidden="true">
-        {PANORAMA_BUCKETS.filter((bucket) => buckets[bucket.key] > 0).map((bucket) => (
+        {PANORAMA_BUCKETS.filter((bucket) => panoramaBucketValue(buckets, bucket.key) > 0).map((bucket) => (
           <span key={bucket.key} title={bucket.label}>
             <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
-            <b>{buckets[bucket.key].toLocaleString('en-US')}</b>
+            <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
           </span>
         ))}
       </div>
@@ -1077,6 +1078,20 @@ interface ProjectTask {
   /** The same three words the task list uses, with `NONE` collapsed onto `READY` by the endpoint —
    *  a task nothing holds back and a task with no prerequisites at all read identically here. */
   dependencyState: 'READY' | 'BLOCKED' | 'BLOCKED_FAILED';
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  completionPolicy?: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'ANY_CHILD_DONE' | 'VERIFICATION_PASSED';
+  verifiesTaskId?: string | null;
+  /** Canonical task-start/completion lane supplied by the shared server classifier. */
+  workState?:
+    | 'RUNNING'
+    | 'READY'
+    | 'BLOCKED'
+    | 'AWAITING_VERIFICATION'
+    | 'DONE'
+    | 'FAILED'
+    | 'CANCELLED';
+  verificationState?: 'PENDING' | 'BLOCKED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'MISSING' | null;
+  autoRunWhenReady?: boolean;
 }
 
 /** A task has a status a project does not (IN_PROGRESS), so it gets its own map rather than a
@@ -1110,6 +1125,63 @@ const TASK_STATUS_MARK: Record<ProjectTask['status'], { glyph: TaskStatusGlyph; 
 // API payloads outlive any one web bundle. If the server grows another status before a cached
 // client refreshes, keep the row renderable with a neutral mark instead of taking down the page.
 const UNKNOWN_TASK_STATUS_MARK = { glyph: 'ring', color: 'var(--text-3)' } as const;
+
+/** The server's canonical work lane, translated once for every desktop/phone task row. */
+export function projectTaskWorkLabel(task: ProjectTask): { text: string; color: string } | null {
+  switch (projectTaskWorkStateOf(task)) {
+    case 'READY':
+      return {
+        text: task.autoRunWhenReady ? 'Ready · automatic dispatch' : 'Ready · can start now',
+        color: 'gold',
+      };
+    case 'RUNNING':
+      return { text: 'Running', color: 'processing' };
+    case 'BLOCKED':
+      return { text: 'Blocked', color: 'default' };
+    case 'AWAITING_VERIFICATION': {
+      const text = task.verificationState === 'FAILED'
+        ? 'Verification failed'
+        : task.verificationState === 'MISSING'
+          ? 'Missing verifier'
+          : task.verificationState === 'RUNNING'
+            ? 'Awaiting verification · verifier running'
+            : task.verificationState === 'BLOCKED'
+              ? 'Awaiting verification · verifier blocked'
+              : task.verificationState === 'PASSED'
+                ? 'Awaiting verification · applying result'
+                : 'Awaiting verification';
+      return { text, color: task.verificationState === 'FAILED' ? 'red' : 'purple' };
+    }
+    case 'FAILED':
+      return { text: 'Failed · needs recovery', color: 'red' };
+    case 'DONE':
+    case 'CANCELLED':
+    default:
+      return null;
+  }
+}
+
+/**
+ * Consume the server lane without recreating readiness in the browser.
+ *
+ * The fallback exists only for a rolling deployment with an older API. It is deliberately
+ * fail-closed: lifecycle terminals stay recognizable and a declared verification subject stays
+ * Awaiting verification, but an OPEN row is never promoted to READY from dependency/topology
+ * fields. Only the canonical server classifier is allowed to make the "can start now" claim.
+ */
+export function projectTaskWorkStateOf(task: ProjectTask): NonNullable<ProjectTask['workState']> {
+  if (task.workState) return task.workState;
+  if (
+    task.completionCriterion === 'VERIFICATION'
+    && task.completionPolicy === 'VERIFICATION_PASSED'
+    && task.verifiesTaskId == null
+  ) return 'AWAITING_VERIFICATION';
+  if (task.status === 'DONE' || task.status === 'CANCELLED' || task.status === 'FAILED') {
+    return task.status;
+  }
+  if (task.status === 'IN_PROGRESS') return 'RUNNING';
+  return 'BLOCKED';
+}
 
 /** `aria-hidden` on purpose: the row's own status Tag already spells the status out, so a second
  *  reading of it is noise. The shape is here for the eye — the text is what the screen reader
@@ -1199,35 +1271,54 @@ export interface ProjectTaskGroup {
  */
 export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
   const byLevel = new Map<number, ProjectTask[]>();
-  const done: ProjectTask[] = [];
+  const running: ProjectTask[] = [];
+  const ready: ProjectTask[] = [];
+  const awaitingVerification: ProjectTask[] = [];
+  const failed: ProjectTask[] = [];
+  const settled: ProjectTask[] = [];
   for (const task of items) {
-    if (task.status === 'DONE') {
-      done.push(task);
-      continue;
+    const workState = projectTaskWorkStateOf(task);
+    if (workState === 'RUNNING') running.push(task);
+    else if (workState === 'READY') ready.push(task);
+    else if (workState === 'AWAITING_VERIFICATION') awaitingVerification.push(task);
+    else if (workState === 'FAILED') failed.push(task);
+    else if (workState === 'DONE' || workState === 'CANCELLED') settled.push(task);
+    else {
+      const band = byLevel.get(task.topoLevel);
+      if (band) band.push(task);
+      else byLevel.set(task.topoLevel, [task]);
     }
-    const band = byLevel.get(task.topoLevel);
-    if (band) band.push(task);
-    else byLevel.set(task.topoLevel, [task]);
   }
 
-  const groups: ProjectTaskGroup[] = [...byLevel.entries()]
+  const groups: ProjectTaskGroup[] = [];
+  if (running.length > 0) {
+    groups.push({ key: 'running', level: 0, heading: 'Running', tasks: running });
+  }
+  if (ready.length > 0) {
+    groups.push({ key: 'ready', level: 0, heading: 'Ready · can start now', tasks: ready });
+  }
+  if (awaitingVerification.length > 0) {
+    groups.push({
+      key: 'awaiting-verification',
+      level: 0,
+      heading: 'Awaiting verification · subject work must not be started',
+      tasks: awaitingVerification,
+    });
+  }
+  if (failed.length > 0) {
+    groups.push({ key: 'failed', level: 0, heading: 'Failed · needs recovery', tasks: failed });
+  }
+  groups.push(...[...byLevel.entries()]
     .sort(([a], [b]) => a - b)
     .map(([level, tasks]) => ({
       key: `level-${level}`,
       level,
-      // "ready" is a fact about the graph — nothing in this project is holding these up. It is not
-      // a fact about what happens next, and the heading must not let it be read as one: tasks here
-      // are dispatched by the coordinator (dispatch_authority COORDINATOR), the auto-run sweep
-      // takes only LEGACY and stands down on these, so a level 0 band left alone runs never. The
-      // page head's coordinator card makes the same claim from the other side — "tasks never start
-      // on their own" — and these two sentences have to keep agreeing.
-      heading:
-        level === 0
-          ? 'Level 0 · ready — the coordinator starts these'
-          : `Level ${level} · waits on level ${level - 1}`,
+      heading: level === 0 ? 'Blocked · no executable work at this level' : `Blocked · topology level ${level}`,
       tasks,
-    }));
-  if (done.length > 0) groups.push({ key: 'done', level: null, heading: 'Done', tasks: done });
+    })));
+  if (settled.length > 0) {
+    groups.push({ key: 'settled', level: null, heading: 'Done / Cancelled', tasks: settled });
+  }
   return groups;
 }
 
@@ -1351,9 +1442,14 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
 function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectTask }) {
   const [expanded, setExpanded] = useState(false);
   const starts = scheduledStart(task.runAt);
+  const workLabel = projectTaskWorkLabel(task);
 
   return (
-    <List.Item className="project-task-row" style={{ display: 'block' }}>
+    <List.Item
+      className="project-task-row"
+      data-work-state={projectTaskWorkStateOf(task)}
+      style={{ display: 'block' }}
+    >
       <div className="project-task-row-layout">
         {/* Own this flex item rather than asking AntD's Meta to negotiate directly with the two
             fixed controls beside it. The wrapper supplies the missing min-width:0 boundary; on a
@@ -1367,6 +1463,11 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
               <span className="project-task-row-title">
                 <TaskStatusMark status={task.status} /> {task.title}{' '}
                 <Tag color={TASK_STATUS_COLOR[task.status] ?? 'default'}>{task.status}</Tag>
+                {workLabel ? (
+                  <Tag data-testid="project-task-work-state" color={workLabel.color}>
+                    {workLabel.text}
+                  </Tag>
+                ) : null}
                 {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
                     real project have nothing on either side, and a list where every row carries two
                     zeroes is a list where the rows that do carry a number stop standing out. */}

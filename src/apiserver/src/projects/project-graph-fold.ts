@@ -1,4 +1,8 @@
 import { TaskStatus } from '@prisma/client';
+import type {
+  ProjectTaskVerificationState,
+  ProjectTaskWorkState,
+} from './project-task-work-state';
 
 /**
  * Folding a project's dependency graph down to something a screen can actually hold.
@@ -62,6 +66,9 @@ export interface FoldTask {
   parentTaskId: string | null;
   running?: boolean;
   queued?: boolean;
+  /** Canonical project work lane; never recomputed from graph indegree by the client. */
+  workState?: ProjectTaskWorkState;
+  verificationState?: ProjectTaskVerificationState | null;
 }
 
 /** The live half of a task, carried onto every mark that names one. */
@@ -86,6 +93,8 @@ export interface TaskMark extends LiveTaskState {
   title: string;
   status: TaskStatus;
   parentTaskId: string | null;
+  workState?: ProjectTaskWorkState;
+  verificationState?: ProjectTaskVerificationState | null;
 }
 
 /** A straight run of tasks, drawn as one mark. `members` is the run in order. */
@@ -96,7 +105,13 @@ export interface RunMark {
   taskCount: number;
   statusCounts: MarkStatusCounts;
   parentTaskId: string | null;
-  members: Array<{ taskId: string; title: string; status: TaskStatus } & LiveTaskState>;
+  members: Array<{
+    taskId: string;
+    title: string;
+    status: TaskStatus;
+    workState?: ProjectTaskWorkState;
+    verificationState?: ProjectTaskVerificationState | null;
+  } & LiveTaskState>;
   /** False when the run is longer than one response carries its members for. */
   expandable: boolean;
 }
@@ -111,7 +126,13 @@ export interface MotifMark {
   statusCounts: MarkStatusCounts;
   parentTaskId: null;
   /** A few real tasks behind the mark, failures and running work first. */
-  samples: Array<{ taskId: string; title: string; status: TaskStatus } & LiveTaskState>;
+  samples: Array<{
+    taskId: string;
+    title: string;
+    status: TaskStatus;
+    workState?: ProjectTaskWorkState;
+    verificationState?: ProjectTaskVerificationState | null;
+  } & LiveTaskState>;
 }
 
 export type ProjectGraphMark = TaskMark | RunMark | MotifMark;
@@ -337,7 +358,8 @@ export function foldProjectGraph(
   const motifByTitle = new Map<string, MotifMark>();
   for (const [title, group] of byTitle) {
     if (group.length < options.motifMinInstances) continue;
-    if (group.some((task) => boxIds.has(task.id))) continue;
+    if (group.some((task) =>
+      boxIds.has(task.id) || task.workState === 'AWAITING_VERIFICATION')) continue;
     const components = new Set(group.map((task) => componentOf.get(task.id)!));
     if (components.size < options.motifMinInstances) continue;
     motifIndex += 1;
@@ -356,7 +378,14 @@ export function foldProjectGraph(
       samples: [...group]
         .sort((a, b) => sampleRank(liveStatus(a)) - sampleRank(liveStatus(b)))
         .slice(0, options.maxMotifSamples)
-        .map((task) => ({ taskId: task.id, title: task.title, status: task.status, ...live(task) })),
+        .map((task) => ({
+          taskId: task.id,
+          title: task.title,
+          status: task.status,
+          workState: task.workState,
+          verificationState: task.verificationState,
+          ...live(task),
+        })),
     };
     motifByTitle.set(title, mark);
     marks.push(mark);
@@ -371,7 +400,12 @@ export function foldProjectGraph(
     out: (outgoing.get(id) ?? []).length,
   });
   const foldable = (task: FoldTask) => {
-    if (frontierIds.has(task.id) || demandsAttention(liveStatus(task)) || boxIds.has(task.id)) {
+    if (
+      frontierIds.has(task.id)
+      || demandsAttention(liveStatus(task))
+      || task.workState === 'AWAITING_VERIFICATION'
+      || boxIds.has(task.id)
+    ) {
       return false;
     }
     const degree = degreeOf(task.id);
@@ -464,6 +498,8 @@ function taskMark(task: FoldTask): TaskMark {
     title: task.title,
     status: task.status,
     parentTaskId: task.parentTaskId,
+    workState: task.workState,
+    verificationState: task.verificationState,
     ...live(task),
   };
 }
@@ -483,6 +519,8 @@ function runMark(id: string, run: FoldTask[], options: FoldOptions): RunMark {
       taskId: task.id,
       title: task.title,
       status: task.status,
+      workState: task.workState,
+      verificationState: task.verificationState,
       ...live(task),
     })),
     expandable: run.length <= options.maxRunMembers,

@@ -10,13 +10,11 @@ import { api } from '../api';
  *
  * Three parts, in one card because they answer one question between them:
  *
- *  1. **Four buckets.** Running / Ready / Blocked / Done. `Ready` and `Blocked` are the two halves
- *     of the single `OPEN` tally the rest of the app reports, and splitting them is the whole
- *     point of this card: on the measured deployment that one number is 233 tasks waiting on a
- *     prerequisite and 29 that could start right now. No combined count can say "this project is
- *     stalled", because a big OPEN number looks the same either way.
- *  2. **A stacked meter.** The same four numbers as one 9px bar, so the proportion is readable
- *     without doing arithmetic on four figures.
+ *  1. **Exhaustive work lanes.** Running / Ready / Blocked / Awaiting verification / Done /
+ *     Failed / Cancelled. Ready means the server's task_start predicate accepts the row; the
+ *     explicit terminal lanes keep every task in the denominator.
+ *  2. **A stacked meter.** The same lanes as one 9px bar, so the proportion is readable without
+ *     doing arithmetic on seven figures.
  *  3. **A stalled banner.** Rendered only when `ready > 0 && running === 0` — work that could
  *     start and nothing starting it — carrying the dispatch ledger's own account of why.
  *
@@ -44,8 +42,12 @@ export interface ProjectPanoramaBuckets {
   running: number;
   ready: number;
   blocked: number;
+  /** Optional only for one rolling-deploy window; the current server always reports it. */
+  awaitingVerification?: number;
   done: number;
-  /** Reported by the endpoint and deliberately not a KPI cell: a decision, not work in flight. */
+  /** Optional only for one rolling-deploy window; older servers hid FAILED in the remainder. */
+  failed?: number;
+  /** A distinct terminal decision, kept visible so every task reconciles with the total. */
   cancelled: number;
 }
 
@@ -81,9 +83,9 @@ export const projectPanoramaQuery = (projectId: string) =>
   });
 
 /** The shapes, in the order they are drawn. Names describe the mark, not the status it stands for. */
-export type BucketGlyph = 'disc' | 'triangle' | 'square' | 'check';
+export type BucketGlyph = 'disc' | 'triangle' | 'square' | 'hourglass' | 'check' | 'cross' | 'slash';
 
-type BucketKey = 'running' | 'ready' | 'blocked' | 'done';
+type BucketKey = keyof ProjectPanoramaBuckets;
 
 /**
  * One row per bucket, in reading order: what it is called, which shape carries it, and which token
@@ -99,8 +101,21 @@ export const PANORAMA_BUCKETS: ReadonlyArray<{
   { key: 'running', label: 'Running', glyph: 'disc', color: 'var(--brand)' },
   { key: 'ready', label: 'Ready', glyph: 'triangle', color: 'var(--warning-solid)' },
   { key: 'blocked', label: 'Blocked', glyph: 'square', color: 'var(--text-3)' },
+  {
+    key: 'awaitingVerification',
+    label: 'Awaiting verification',
+    glyph: 'hourglass',
+    color: 'var(--brand)',
+  },
   { key: 'done', label: 'Done', glyph: 'check', color: 'var(--success)' },
+  { key: 'failed', label: 'Failed', glyph: 'cross', color: 'var(--error)' },
+  { key: 'cancelled', label: 'Cancelled', glyph: 'slash', color: 'var(--text-4)' },
 ];
+
+/** Rolling compatibility without letting an absent new field become NaN in a meter. */
+export function panoramaBucketValue(buckets: ProjectPanoramaBuckets, key: BucketKey): number {
+  return buckets[key] ?? 0;
+}
 
 /**
  * Work that could start, and nothing starting it.
@@ -144,6 +159,12 @@ export function Glyph({
         <polygon points="2.5,1 11,6 2.5,11" fill="currentColor" />
       ) : shape === 'square' ? (
         <rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" />
+      ) : shape === 'hourglass' ? (
+        <path d="M2 1.5 H10 M2 10.5 H10 M3 2 C3 4 5 4.6 6 6 C7 4.6 9 4 9 2 M3 10 C3 8 5 7.4 6 6 C7 7.4 9 8 9 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      ) : shape === 'cross' ? (
+        <path d="M2.2 2.2 L9.8 9.8 M9.8 2.2 L2.2 9.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      ) : shape === 'slash' ? (
+        <path d="M2 10 L10 2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       ) : (
         <path
           d="M1.5 6.4 L4.6 9.5 L10.5 2.6"
@@ -224,7 +245,7 @@ function segmentRadius(index: number, total: number): string {
  * The bar carries no shape channel, so `role="img"` plus every number in the label is what makes
  * it readable at all without colour — including the buckets that have no segment.
  *
- * Exported because the projects list draws the same four buckets in the same order from the same
+ * Exported because the projects list draws the same buckets in the same order from the same
  * table, differing only in how tall the bar is: two implementations of this would be two answers
  * to "is this project blocked?", and the list is where that question gets asked first.
  */
@@ -235,11 +256,14 @@ export function BucketMeter({
   buckets: ProjectPanoramaBuckets;
   height?: number;
 }) {
-  const drawn = PANORAMA_BUCKETS.map((bucket) => ({ ...bucket, value: buckets[bucket.key] })).filter(
+  const drawn = PANORAMA_BUCKETS.map((bucket) => ({
+    ...bucket,
+    value: panoramaBucketValue(buckets, bucket.key),
+  })).filter(
     (segment) => segment.value > 0,
   );
   const label = `Task status: ${PANORAMA_BUCKETS.map(
-    (bucket) => `${buckets[bucket.key]} ${bucket.label.toLowerCase()}`,
+    (bucket) => `${panoramaBucketValue(buckets, bucket.key)} ${bucket.label.toLowerCase()}`,
   ).join(', ')}`;
 
   return (
@@ -408,21 +432,28 @@ export function ProjectPanoramaHeader({
 
   const { shape } = panorama.data;
   const loaded = panorama.data.buckets;
+  const awaitingVerification = loaded.awaitingVerification ?? 0;
+  const failed = loaded.failed ?? 0;
   const settled = loaded.done + loaded.cancelled;
   const wrappingUp =
     projectStatus === 'OPEN'
     && loaded.running === 0
     && loaded.ready === 0
     && loaded.blocked === 0
+    && awaitingVerification === 0
+    && failed === 0
     && settled > 0;
   const footnotes: Record<BucketKey, string> = {
     running: 'active sessions',
     ready: 'can start now',
     blocked: 'waiting on dependencies',
+    awaitingVerification: 'verifier must conclude',
     done:
       shape.taskCount > 0
         ? `${Math.round((loaded.done / shape.taskCount) * 100)}% complete`
         : 'no tasks yet',
+    failed: 'needs recovery',
+    cancelled: 'closed without completion',
   };
 
   return (
@@ -446,7 +477,7 @@ export function ProjectPanoramaHeader({
           <Kpi
             key={bucket.key}
             label={bucket.label}
-            value={loaded[bucket.key]}
+            value={panoramaBucketValue(loaded, bucket.key)}
             footnote={footnotes[bucket.key]}
             glyph={bucket.glyph}
             color={bucket.color}

@@ -66,8 +66,8 @@ import {
 } from '../workspaces/workspace-provider';
 import {
   foremanPolicyConflict,
-  isAggregateParent,
   planTaskAggregation,
+  taskStartOwnedByCompletion,
 } from '../projects/task-aggregation';
 import {
   AGGREGATION_SCOPE_MAX_TASKS,
@@ -5376,13 +5376,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const hasMore = rows.length > limit;
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
-    const [withRun, states, activeObligations] = await Promise.all([
+    const [withRun, states, activeObligations, runnableIds] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
       readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         taskIds: pageTasks.map((task) => task.id),
       }),
+      this.runnableTaskIds(ownerId, pageTasks.map((task) => task.id)),
     ]);
     const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const items = withRun.map((task) => {
@@ -5392,6 +5393,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...task,
         dependencyState,
         blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
+        runnable: runnableIds.has(task.id),
         controlPlaneObligations,
       };
     });
@@ -5528,13 +5530,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.prisma.task.count({ where }),
     ]);
 
-    const [withRun, states, activeObligations] = await Promise.all([
+    const [withRun, states, activeObligations, runnableIds] = await Promise.all([
       this.withRunning(ownerId, rows, true),
       this.dependencyStatesFor(ownerId, rows.map((task) => task.id)),
       readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         taskIds: rows.map((task) => task.id),
       }),
+      this.runnableTaskIds(ownerId, rows.map((task) => task.id)),
     ]);
     const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const items = withRun.map((task) => {
@@ -5544,6 +5547,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...task,
         dependencyState,
         blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
+        runnable: runnableIds.has(task.id),
         controlPlaneObligations,
       };
     });
@@ -5681,14 +5685,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /** The Ready-tab predicate for one owned row, used by the incremental list-row endpoint. */
   private async runnableTask(ownerId: string, id: string): Promise<boolean> {
-    const [row] = await this.prisma.$queryRaw<{ runnable: boolean }[]>`
-      SELECT EXISTS (
-        SELECT 1 FROM task t
-        WHERE t.owner_id = ${ownerId}::uuid
-          AND t.id = ${id}::uuid
-          AND ${RUNNABLE_TASK_SQL}
-      ) AS runnable`;
-    return row?.runnable ?? false;
+    return (await this.runnableTaskIds(ownerId, [id])).has(id);
+  }
+
+  /** Exact task_start eligibility for one bounded response page, in one shared-predicate read. */
+  private async runnableTaskIds(ownerId: string, ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT t.id
+        FROM task t
+       WHERE t.owner_id = ${ownerId}::uuid
+         AND t.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+         AND ${RUNNABLE_TASK_SQL}`);
+    return new Set(rows.map((row) => row.id));
   }
 
   /**
@@ -11591,6 +11600,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // §13.1 AG6's two columns, plus the existence of one direct child. `take: 1` because the
         // question is existence, not a count — the parent of a hundred subtasks reads one row.
         completionPolicy: true,
+        completionCriterion: true,
         children: { where: { ownerId }, select: { id: true }, take: 1 },
         // §13.6 SU6's derived half: a check of replaced work is obsolete even when the check itself
         // is healthy. Read here so the refusal is a sentence, not a raw constraint violation from
@@ -11695,8 +11705,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // An automatic caller SKIPS, like every other automatic stand-down here; a person gets a 409
     // with the sentence, because a manual Run on an aggregate parent is a real request that cannot
     // be honoured rather than a sweep that has nothing to do.
-    if (isAggregateParent({
+    if (taskStartOwnedByCompletion({
       completionPolicy: task.completionPolicy,
+      completionCriterion: task.completionCriterion,
+      verifiesTaskId: task.verifiesTaskId,
       hasDirectChildren: task.children.length > 0,
     })) {
       if (auto) {
@@ -11704,10 +11716,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           lease, { ok: false as const, skipped: 'aggregate-parent' as const },
         );
       }
+      const completionOwner = task.completionCriterion === 'VERIFICATION'
+        && task.verifiesTaskId == null
+        ? 'its independent verifier'
+        : `aggregating its subtasks (${task.completionPolicy})`;
       throw new ConflictException(
-        `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
-        + `(${task.completionPolicy}), so it has no work of its own to run — `
-        + 'run its subtasks, or set its completion policy to MANUAL',
+        `task ${uuidToBase62(id)}: this task is completed by ${completionOwner}, `
+        + 'so it has no work of its own to run',
       );
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
@@ -12092,6 +12107,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
         // about whether a row is work. Owner-scoped like every other reader of this predicate.
         completionPolicy: true,
+        completionCriterion: true,
         children: { where: { ownerId }, select: { id: true }, take: 1 },
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { instructions: true } },
@@ -12187,8 +12203,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 : 'Abandoned')
             : 'Obsolete: it checks work that was replaced',
         });
-      } else if (isAggregateParent({
+      } else if (taskStartOwnedByCompletion({
         completionPolicy: t.completionPolicy,
+        completionCriterion: t.completionCriterion,
+        verifiesTaskId: t.verifiesTaskId,
         hasDirectChildren: t.children.length > 0,
       })) {
         // §13.1 AG6, second and in the same position `execute` puts it: after the two answers about
@@ -12198,7 +12216,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         skipped.push({
           id: t.id,
           title: t.title,
-          reason: `Completed by aggregating its subtasks (${t.completionPolicy}) — run those instead`,
+          reason: t.completionCriterion === 'VERIFICATION' && t.verifiesTaskId == null
+            ? 'Awaiting independent verification — the subject has no work of its own to run'
+            : `Completed by aggregating its subtasks (${t.completionPolicy}) — run those instead`,
         });
       } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId)

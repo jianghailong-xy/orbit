@@ -8,7 +8,10 @@ import {
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { postgresSqlState, taskRetirement } from '../tasks/task-supersession';
-import { TaskCompletionPolicyValue, isAggregateParent } from '../projects/task-aggregation';
+import {
+  TaskCompletionPolicyValue,
+  taskStartOwnedByCompletion,
+} from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
@@ -378,13 +381,16 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           const [current] = await this.prisma.$queryRaw<Array<{
             terminalReason: string | null; supersededByTaskId: string | null;
             subjectTerminalReason: string | null; subjectSupersededByTaskId: string | null;
-            completionPolicy: string; hasDirectChildren: boolean; startsTaskWork: boolean;
+            completionPolicy: string; completionCriterion: string; verifiesTaskId: string | null;
+            hasDirectChildren: boolean; startsTaskWork: boolean;
           }>>(Prisma.sql`
             SELECT t."terminal_reason" AS "terminalReason",
                    t."superseded_by_task_id" AS "supersededByTaskId",
                    subject."terminal_reason" AS "subjectTerminalReason",
                    subject."superseded_by_task_id" AS "subjectSupersededByTaskId",
                    t."completion_policy"::text AS "completionPolicy",
+                   t."completion_criterion"::text AS "completionCriterion",
+                   t."verifies_task_id" AS "verifiesTaskId",
                    EXISTS (SELECT 1 FROM "task" c
                             WHERE c."parent_task_id" = t."id" AND c."owner_id" = t."owner_id")
                      AS "hasDirectChildren",
@@ -412,8 +418,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // the attempt it spent. Re-read rather than matched on the message, exactly as the
           // supersession branch is and for the same reason: a refusal that merely mentions the words
           // must not be able to end a retry.
-          const aggregateNow = current != null && current.startsTaskWork && isAggregateParent({
+          const aggregateNow = current != null && current.startsTaskWork && taskStartOwnedByCompletion({
             completionPolicy: current.completionPolicy as TaskCompletionPolicyValue,
+            completionCriterion: current.completionCriterion as 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF',
+            verifiesTaskId: current.verifiesTaskId,
             hasDirectChildren: current.hasDirectChildren,
           });
           if (!retiredNow && !aggregateNow && !(session.startsTaskWork && session.taskId)) {
@@ -845,10 +853,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         const [task] = await tx.$queryRaw<Array<{ projectId: string | null; aggregate: boolean }>>(
           Prisma.sql`
             SELECT t."project_id" AS "projectId",
-                   (t."completion_policy"::text <> 'MANUAL'
-                    AND EXISTS (SELECT 1 FROM "task" c
-                                 WHERE c."parent_task_id" = t."id"
-                                   AND c."owner_id" = t."owner_id")) AS "aggregate"
+                   ((t."completion_criterion"::text = 'VERIFICATION'
+                     AND t."verifies_task_id" IS NULL)
+                    OR (t."completion_policy"::text <> 'MANUAL'
+                        AND EXISTS (SELECT 1 FROM "task" c
+                                     WHERE c."parent_task_id" = t."id"
+                                       AND c."owner_id" = t."owner_id"))) AS "aggregate"
               FROM "task" t WHERE t."id" = ${taskId}::uuid
           `,
         );

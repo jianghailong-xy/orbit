@@ -106,7 +106,7 @@ interface TaskNodeData extends Record<string, unknown> {
   hasIncoming: boolean;
   hasOutgoing: boolean;
   vertical: boolean;
-  /** Prerequisites of this task that have not released it yet. Zero means it can start now. */
+  /** Structural wait count only; task-start eligibility comes from task.workState. */
   waitingOn: number;
 }
 
@@ -156,14 +156,32 @@ const INTERACTIVE_NODE_STYLE = { pointerEvents: 'all' } as const;
 function TaskNode({ data }: NodeProps<TaskFlowNode>) {
   const state = getTaskDependencyVisualState(data.task);
   const status = taskStatusLabel(data.task.status, data.task.running, data.task.queued);
-  // 'pending' is the palette's word for a plain open task; whether it can START is not a status,
-  // it is a fact about its prerequisites, which is what this canvas is drawn to report.
-  const tone = state === 'pending' ? (data.waitingOn > 0 ? 'blocked' : 'ready') : state;
+  const canonical = data.task.workState;
+  // The graph supplies topology, but never re-derives execution eligibility from indegree. The
+  // same canonical lane rendered by the mobile task card decides both label and ready tally.
+  const tone = state === 'pending'
+    ? canonical === 'READY'
+      ? 'ready'
+      : 'blocked'
+    : state;
+  const verificationMeta = data.task.verificationState === 'FAILED'
+    ? 'Verification failed'
+    : data.task.verificationState === 'MISSING'
+      ? 'Missing verifier'
+      : data.task.verificationState === 'RUNNING'
+        ? 'Awaiting verification · verifier running'
+        : data.task.verificationState === 'BLOCKED'
+          ? 'Awaiting verification · verifier blocked'
+          : data.task.verificationState === 'PASSED'
+            ? 'Awaiting verification · applying result'
+            : 'Awaiting verification';
   const meta =
-    tone === 'ready'
+    canonical === 'AWAITING_VERIFICATION'
+      ? verificationMeta
+      : tone === 'ready'
       ? 'Ready to run'
       : tone === 'blocked'
-        ? `Waiting on ${data.waitingOn}`
+        ? data.waitingOn > 0 ? `Waiting on ${data.waitingOn}` : 'Blocked'
         : status;
   return (
     <div className={`pdg-task is-${tone}`}>
@@ -548,7 +566,7 @@ export function buildProjectFlowElements(
     const mark = placement.task;
     const state = stateById.get(mark.id);
     if (state === 'complete') tally.done += markTaskCount(mark);
-    else if (mark.kind === 'TASK' && state === 'pending' && !waitingOn.has(mark.id)) {
+    else if (mark.kind === 'TASK' && mark.workState === 'READY') {
       tally.ready += 1;
     }
   }

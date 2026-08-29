@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { projectTaskDependencyFactsSql } from './project-dependency-facts';
+import { projectTaskWorkStateSql } from './project-task-work-state';
 
 /**
  * Which picture this project's graph is worth drawing as.
@@ -18,7 +19,7 @@ const MESH_EDGE_RATIO = 1.5;
 const MESH_MAX_TASKS = 30;
 
 /**
- * How this project's work is distributed, with `OPEN` split into the three things it conflates.
+ * How this project's work is distributed by the canonical task-start/completion semantics.
  *
  * `tasksByStatus` (see `ProjectsService.get`) reports one OPEN number, and across the deployment
  * that number is 233 tasks waiting on a prerequisite and 29 that could start right now — the same
@@ -32,16 +33,18 @@ const MESH_MAX_TASKS = 30;
  * exists to say the queue is not being served. A task with a live Session is counted here and is
  * therefore NOT in `ready`, whose card reads "unblocked, not dispatched".
  *
- * A task in status FAILED is in none of these buckets, deliberately: it is neither work in flight
- * nor work settled, and folding it into `cancelled` would report a run that broke as a decision
- * somebody made. `shape.taskCount` still counts it, so the buckets need not sum to the total.
+ * FAILED and CANCELLED are separate terminal lanes. They are both explicit so this interface is an
+ * exhaustive partition: every bucket sum equals `shape.taskCount`; failures can never disappear
+ * from the denominator or be mistaken for a cancellation.
  */
 export interface ProjectPanoramaBuckets {
   /** Work in flight: a task with a live Session on it, or one the row itself calls IN_PROGRESS. */
   running: number;
   ready: number;
   blocked: number;
+  awaitingVerification: number;
   done: number;
+  failed: number;
   cancelled: number;
 }
 
@@ -66,7 +69,9 @@ interface PanoramaRow {
   running: number;
   ready: number;
   blocked: number;
+  awaitingVerification: number;
   done: number;
+  failed: number;
   cancelled: number;
   taskCount: number;
   edgeCount: number;
@@ -81,12 +86,11 @@ export function topologyForm(taskCount: number, ratio: number): ProjectTopologyF
 /**
  * Both halves of the project page's header, in one round trip.
  *
- * Every number is aggregated database-side over `projectTaskDependencyFactsSql`, which is the one
- * place a prerequisite is judged: `ready` and `blocked` partition the OPEN tasks on that judgment
- * alone, so they cannot double-count and cannot leave one out. A prerequisite that was CANCELLED
- * makes its dependent `ready` rather than `blocked` — nothing is owed to it any more, and the
- * thing standing between it and a run is a person, which is what `ready` with nothing running
- * means everywhere else on this page.
+ * Shape is aggregated over `projectTaskDependencyFactsSql`; lifecycle lanes come from
+ * `projectTaskWorkStateSql`, the same classifier the project list, task cards and topology read.
+ * In particular READY embeds the execute predicate rather than reinterpreting OPEN + graph shape,
+ * and an independent-verification subject remains AWAITING_VERIFICATION until its canonical newest
+ * verifier opens a PASS epoch.
  *
  * `edgeCount` is summed from each task's in-project prerequisite count rather than counted in a
  * second query, so "an edge inside this project" has one definition rather than two.
@@ -97,50 +101,30 @@ export async function readProjectPanorama(
   projectId: string,
 ): Promise<ProjectPanorama> {
   const facts = projectTaskDependencyFactsSql(ownerId, projectId);
+  const workState = Prisma.raw(projectTaskWorkStateSql('task_row'));
   // An aggregate with no GROUP BY returns exactly one row over zero input rows, which is what
   // makes an empty project a row of zeroes rather than an empty result to guess at.
   //
-  // `live` is the dispatch half of `running`, and the join is a derived table rather than an
-  // `EXISTS` per task so a 23,442-task project costs one small index scan instead of 23,442
-  // probes: `session_task_execution_claim_idx` is partial over exactly these statuses, so the
-  // subquery reads the live sessions and nothing else.
-  //
-  // PENDING counts with RUNNING — both mean a session holds this task, which is what `ready`'s
-  // "not dispatched" denies — and the pair is the same one `TasksService.withRunning` derives, so
-  // the header, the task list and the project graph cannot disagree about a running task. Only an
-  // OPEN task is promoted: a re-run opened against a task that is already DONE must not take it
-  // back out of `done`, which is what the chain strip counts progress with.
   const [row] = await prisma.$queryRaw<PanoramaRow[]>(Prisma.sql`
-    SELECT (count(*) FILTER (WHERE (f."status" = 'IN_PROGRESS'
-                                OR (f."status" = 'OPEN' AND live.task_id IS NOT NULL))
-                               AND completion_ack.task_id IS NULL))::int AS "running",
-           (count(*) FILTER (WHERE f."status" = 'OPEN' AND live.task_id IS NULL
-                               AND f."unmetCount" = 0
-                               AND f."abandonedCount" = 0
-                               AND completion_ack.task_id IS NULL))::int AS "ready",
-           (count(*) FILTER (WHERE f."status" = 'OPEN'
-                               AND ((live.task_id IS NULL
-                                 AND (f."unmetCount" > 0 OR f."abandonedCount" > 0))
-                                 OR completion_ack.task_id IS NOT NULL)))::int AS "blocked",
-           (count(*) FILTER (WHERE f."status" = 'DONE'))::int AS "done",
-           (count(*) FILTER (WHERE f."status" = 'CANCELLED'))::int AS "cancelled",
+    WITH work AS MATERIALIZED (
+      SELECT task_row."id" AS "taskId", (${workState})::text AS "workState"
+        FROM "task" task_row
+       WHERE task_row."owner_id" = ${ownerId}::uuid
+         AND task_row."project_id" = ${projectId}::uuid
+    )
+    SELECT (count(*) FILTER (WHERE work."workState" = 'RUNNING'))::int AS "running",
+           (count(*) FILTER (WHERE work."workState" = 'READY'))::int AS "ready",
+           (count(*) FILTER (WHERE work."workState" = 'BLOCKED'))::int AS "blocked",
+           (count(*) FILTER (WHERE work."workState" = 'AWAITING_VERIFICATION'))::int
+             AS "awaitingVerification",
+           (count(*) FILTER (WHERE work."workState" = 'DONE'))::int AS "done",
+           (count(*) FILTER (WHERE work."workState" = 'FAILED'))::int AS "failed",
+           (count(*) FILTER (WHERE work."workState" = 'CANCELLED'))::int AS "cancelled",
            count(*)::int AS "taskCount",
            coalesce(sum(f."projectPrerequisiteCount"), 0)::int AS "edgeCount",
            coalesce(max(f."topoLevel"), 0)::int AS "maxDepth"
       FROM (${facts}) f
-      LEFT JOIN (
-        SELECT DISTINCT s.task_id
-          FROM session s
-         WHERE s.owner_id = ${ownerId}::uuid
-           AND s.status IN ('PENDING', 'RUNNING')
-           AND s.task_id IS NOT NULL
-      ) live ON live.task_id = f."taskId"
-      LEFT JOIN (
-        SELECT DISTINCT active.task_id
-          FROM completion_ack_active_obligation active
-         WHERE active.tenant_id = ${ownerId}::uuid
-           AND active.project_id = ${projectId}::uuid
-      ) completion_ack ON completion_ack.task_id = f."taskId"`);
+      JOIN work ON work."taskId" = f."taskId"`);
 
   const taskCount = row?.taskCount ?? 0;
   const edgeCount = row?.edgeCount ?? 0;
@@ -150,7 +134,9 @@ export async function readProjectPanorama(
       running: row?.running ?? 0,
       ready: row?.ready ?? 0,
       blocked: row?.blocked ?? 0,
+      awaitingVerification: row?.awaitingVerification ?? 0,
       done: row?.done ?? 0,
+      failed: row?.failed ?? 0,
       cancelled: row?.cancelled ?? 0,
     },
     shape: { taskCount, edgeCount, ratio, maxDepth: row?.maxDepth ?? 0, form: topologyForm(taskCount, ratio) },

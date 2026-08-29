@@ -613,9 +613,18 @@ describe('readiness', () => {
   const twoPrerequisites = (first: string, second: string): ProjectDependencyGraphResponse => ({
     ...chain(3, 0),
     marks: [
-      { kind: 'TASK', id: 'a', taskId: 'a', title: 'A', status: first, parentTaskId: null },
-      { kind: 'TASK', id: 'b', taskId: 'b', title: 'B', status: second, parentTaskId: null },
-      { kind: 'TASK', id: 'c', taskId: 'c', title: 'C', status: 'OPEN', parentTaskId: null },
+      {
+        kind: 'TASK', id: 'a', taskId: 'a', title: 'A', status: first, parentTaskId: null,
+        workState: first === 'DONE' ? 'DONE' : 'READY',
+      },
+      {
+        kind: 'TASK', id: 'b', taskId: 'b', title: 'B', status: second, parentTaskId: null,
+        workState: second === 'DONE' ? 'DONE' : 'READY',
+      },
+      {
+        kind: 'TASK', id: 'c', taskId: 'c', title: 'C', status: 'OPEN', parentTaskId: null,
+        workState: first === 'DONE' && second === 'DONE' ? 'READY' : 'BLOCKED',
+      },
     ],
     edges: [
       { sourceMarkId: 'a', targetMarkId: 'c' },

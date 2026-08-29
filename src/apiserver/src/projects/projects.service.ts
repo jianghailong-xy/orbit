@@ -77,6 +77,7 @@ import {
   readProjectBlockingLeaderboard,
 } from './project-panorama-blocking';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
+import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -177,6 +178,7 @@ export const PROJECT_TASK_TREE_SELECT = {
   completionPolicy: true,
   verdict: true,
   verifiesTaskId: true,
+  autoRunWhenReady: true,
   assignee: { select: { id: true, name: true } },
 } satisfies Prisma.TaskSelect;
 
@@ -1393,7 +1395,7 @@ export class ProjectsService {
     ]);
     const obligationsByProject = controlPlaneObligationsBy(activeObligations, 'projectId');
     return projects.map((project) => {
-      // A project with no tasks has no group in the aggregate. It reports a zero total, five zero
+      // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
       // buckets and no activity rather than making every client handle two shapes.
       const { taskCount, ...rollup } = rollups.get(project.id) ?? emptyProjectListRollup();
       return {
@@ -1698,8 +1700,14 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, activeObligations] = await Promise.all([
+    const [dependencies, workStates, activeObligations] = await Promise.all([
       this.taskDependencyFields(
+        ownerId,
+        projectId,
+        page.map((task) => task.id),
+      ),
+      readProjectTaskWorkStates(
+        this.prisma,
         ownerId,
         projectId,
         page.map((task) => task.id),
@@ -1713,9 +1721,14 @@ export class ProjectsService {
     const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
+      const work = workStates.get(task.id) ?? {
+        workState: 'BLOCKED' as const,
+        verificationState: null,
+      };
       const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
       return {
         ...task,
+        ...work,
         childCount: _count.children,
         // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
         // carries all four keys, because an absent key reads to a client as "this endpoint does not
@@ -1886,10 +1899,25 @@ export class ProjectsService {
     });
     const overCeiling = rows.length > PROJECT_GRAPH_MAX_TASKS;
     const rowsInGraph = overCeiling ? rows.slice(0, PROJECT_GRAPH_MAX_TASKS) : rows;
-    const liveByTaskId = rowsInGraph.length
-      ? await this.liveTaskState(ownerId, projectId)
-      : new Map<string, { running: boolean; queued: boolean }>();
-    const tasks = rowsInGraph.map((task) => ({ ...task, ...(liveByTaskId.get(task.id) ?? {}) }));
+    const [liveByTaskId, workStates] = rowsInGraph.length
+      ? await Promise.all([
+          this.liveTaskState(ownerId, projectId),
+          readProjectTaskWorkStates(
+            this.prisma,
+            ownerId,
+            projectId,
+            rowsInGraph.map((task) => task.id),
+          ),
+        ])
+      : [
+          new Map<string, { running: boolean; queued: boolean }>(),
+          new Map(),
+        ];
+    const tasks = rowsInGraph.map((task) => ({
+      ...task,
+      ...(liveByTaskId.get(task.id) ?? {}),
+      ...(workStates.get(task.id) ?? {}),
+    }));
 
     // Scoped by the two ends' project rather than by a list of task ids: the id list would be as
     // long as the project, and a 23,442-element `IN` is a query plan nobody wants.

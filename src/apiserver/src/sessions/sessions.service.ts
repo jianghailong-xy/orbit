@@ -122,7 +122,7 @@ import {
 } from '../common/session-inbox-fence';
 import {
   TaskCompletionPolicyValue,
-  isAggregateParent,
+  taskStartOwnedByCompletion,
 } from '../projects/task-aggregation';
 import { truncatePayload } from './truncate-payload';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
@@ -4510,8 +4510,7 @@ export class SessionsService {
    * shared constant is the only version of that which cannot drift from what is thrown.
    */
   static readonly AGGREGATE_PARENT_REFUSAL =
-    'this task is completed by aggregating its subtasks, so it has no work of its own to run — '
-    + 'run its subtasks, or set its completion policy to MANUAL';
+    'this task is completed by its declared completion owner, so it has no work of its own to run';
 
   /**
    * @param startsTaskWork whether the operation being judged is the TASK's work.
@@ -4541,13 +4540,13 @@ export class SessionsService {
     // lines of prose in the middle pushed `FOR SHARE OF t` out of view and this method stopped
     // counting as a lock site the inventory could see.
     const [facts] = await db.$queryRaw<Array<TaskWorkFacts & {
-      completionPolicy: string; hasDirectChildren: boolean;
+      completionPolicy: string; completionCriterion: string; verifiesTaskId: string | null;
+      hasDirectChildren: boolean;
     }>>(Prisma.sql`
-      SELECT t."terminal_reason" AS "terminalReason",
-             t."superseded_by_task_id" AS "supersededByTaskId",
-             subject."terminal_reason" AS "subjectTerminalReason",
-             subject."superseded_by_task_id" AS "subjectSupersededByTaskId",
-             t."completion_policy"::text AS "completionPolicy",
+      SELECT t."terminal_reason" AS "terminalReason", t."superseded_by_task_id" AS "supersededByTaskId",
+             subject."terminal_reason" AS "subjectTerminalReason", subject."superseded_by_task_id" AS "subjectSupersededByTaskId",
+             t."completion_policy"::text AS "completionPolicy", t."completion_criterion"::text AS "completionCriterion",
+             t."verifies_task_id" AS "verifiesTaskId",
              EXISTS (SELECT 1 FROM "task" c
                       WHERE c."parent_task_id" = t."id" AND c."owner_id" = t."owner_id")
                AS "hasDirectChildren"
@@ -4557,8 +4556,10 @@ export class SessionsService {
        ${locked ? Prisma.sql`FOR SHARE OF t` : Prisma.empty}
     `);
     if (!facts) return null;
-    if (startsTaskWork && isAggregateParent({
+    if (startsTaskWork && taskStartOwnedByCompletion({
       completionPolicy: facts.completionPolicy as TaskCompletionPolicyValue,
+      completionCriterion: facts.completionCriterion as 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF',
+      verifiesTaskId: facts.verifiesTaskId,
       hasDirectChildren: facts.hasDirectChildren,
     })) {
       return SessionsService.AGGREGATE_PARENT_REFUSAL;

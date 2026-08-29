@@ -212,10 +212,19 @@ const task = (over: Record<string, unknown> = {}) => ({
 // reports five zeroes and a null rather than dropping them — so a row fixture without them would
 // be testing a payload nobody sends. Named for what it answers: where this project stands.
 const standing = (
-  buckets: Partial<Record<'running' | 'ready' | 'blocked' | 'done' | 'cancelled', number>> = {},
+  buckets: Partial<Record<'running' | 'ready' | 'blocked' | 'awaitingVerification' | 'done' | 'failed' | 'cancelled', number>> = {},
   lastActivityAt: string | null = '2026-01-02T00:00:00Z',
 ) => ({
-  buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...buckets },
+  buckets: {
+    running: 0,
+    ready: 0,
+    blocked: 0,
+    awaitingVerification: 0,
+    done: 0,
+    failed: 0,
+    cancelled: 0,
+    ...buckets,
+  },
   lastActivityAt,
 });
 
@@ -416,7 +425,7 @@ describe('ProjectsPage', () => {
 
     // The bar has no room for a shape, so its label is where the buckets get named — all four of
     // them, including the one with no segment.
-    expect(meter).toContain('aria-label="Task status: 1 running, 0 ready, 17324 blocked, 6117 done"');
+    expect(meter).toContain('aria-label="Task status: 1 running, 0 ready, 17324 blocked, 0 awaiting verification, 6117 done, 0 failed, 0 cancelled"');
 
     // Beside it, a figure per drawn bucket, each with its own shape: amber --warning-solid and
     // neutral --text-3 are 2.32:1 and 2.94:1 against this background, so nothing here may rest on
@@ -444,8 +453,16 @@ describe('ProjectsPage', () => {
         goal: null,
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
-        _count: { tasks: 10 },
-        ...standing({ running: 1, ready: 2, blocked: 3, done: 4 }),
+        _count: { tasks: 28 },
+        ...standing({
+          running: 1,
+          ready: 2,
+          blocked: 3,
+          awaitingVerification: 4,
+          done: 5,
+          failed: 6,
+          cancelled: 7,
+        }),
       },
     ]);
     const html = renderPage(qc);

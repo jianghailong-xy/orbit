@@ -100,6 +100,23 @@ describe('task filters', () => {
     expect(canStartTask({ ...runnable, status: 'CANCELLED' })).toBe(true);
   });
 
+  it('uses the server task_start verdict and fails closed for a verification subject', () => {
+    expect(canStartTask({ ...runnable, runnable: false })).toBe(false);
+    expect(canStartTask({
+      ...runnable,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      verifiesTaskId: null,
+    })).toBe(false);
+    // A verifier task names its subject and remains ordinary executable work.
+    expect(canStartTask({
+      ...runnable,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'MANUAL',
+      verifiesTaskId: 'subject-1',
+    })).toBe(true);
+  });
+
   it.each([
     ['unassigned', { assignee: null }],
     ['without a runner', { assignee: { runner: null } }],
