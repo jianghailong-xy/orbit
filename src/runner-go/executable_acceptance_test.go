@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ func TestExecutableAcceptanceAdvertisesExactHardMaxAndSource(t *testing.T) {
 }
 
 func TestExecutableAcceptanceShortProcessesProduceTypedFacts(t *testing.T) {
+	const nonTimeoutDeadline = 5 * time.Second
 	tests := []struct {
 		name       string
 		command    string
@@ -39,16 +41,20 @@ func TestExecutableAcceptanceShortProcessesProduceTypedFacts(t *testing.T) {
 		wantKind   string
 		wantExit   *int
 	}{
-		{name: "exited", command: "exit 7", deadlineIn: time.Second, wantKind: "EXITED", wantExit: intPtr(7)},
-		{name: "timed out", command: "while :; do :; done", deadlineIn: 40 * time.Millisecond, wantKind: "TIMED_OUT"},
-		{name: "cancelled", command: "while :; do :; done", deadlineIn: time.Second, cancelIn: 40 * time.Millisecond, wantKind: "CANCELLED"},
-		{name: "signaled", command: "kill -TERM $$", deadlineIn: time.Second, wantKind: "SIGNALED"},
-		{name: "start failed", command: "true", execDir: "/orbit/acceptance/does-not-exist", deadlineIn: time.Second, wantKind: "START_FAILED"},
+		{name: "exited", command: "exit 7", deadlineIn: nonTimeoutDeadline, wantKind: "EXITED", wantExit: intPtr(7)},
+		{name: "timed out", command: "while :; do :; done", deadlineIn: 250 * time.Millisecond, wantKind: "TIMED_OUT"},
+		{name: "cancelled", command: "while :; do :; done", deadlineIn: nonTimeoutDeadline, cancelIn: 100 * time.Millisecond, wantKind: "CANCELLED"},
+		{name: "signaled", command: "kill -TERM $$", deadlineIn: nonTimeoutDeadline, wantKind: "SIGNALED"},
+		{name: "start failed", command: "true", execDir: "/orbit/acceptance/does-not-exist", deadlineIn: nonTimeoutDeadline, wantKind: "START_FAILED"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			execDir := tc.execDir
+			if execDir == "" {
+				execDir = t.TempDir()
+			}
 			deadline := time.Now().Add(tc.deadlineIn).UTC()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasSuffix(r.URL.Path, "/executable-acceptance/admission/start") {
@@ -66,21 +72,24 @@ func TestExecutableAcceptanceShortProcessesProduceTypedFacts(t *testing.T) {
 			plan := &ExecutableAcceptanceDispatchPlan{
 				AdmissionID: "admission", EvaluationPlanDigest: strings.Repeat("b", 64),
 				CommandDigest: commandSHA256(tc.command), ExpectedExitCode: 0,
-				RequestedTimeoutSeconds: 1, EffectiveTimeoutSeconds: 1,
-				EffectiveDeadline:      deadline.Format(time.RFC3339Nano),
-				RequiredSchemaRevision: 2, RequiredCapabilityRevision: 2,
+				RequestedTimeoutSeconds: int((tc.deadlineIn + time.Second - 1) / time.Second),
+				EffectiveTimeoutSeconds: int((tc.deadlineIn + time.Second - 1) / time.Second),
+				EffectiveDeadline:       deadline.Format(time.RFC3339Nano),
+				RequiredSchemaRevision:  2, RequiredCapabilityRevision: 2,
 			}
-			if tc.cancelIn > 0 {
-				time.AfterFunc(tc.cancelIn, cancel)
-			}
-			execDir := tc.execDir
-			if execDir == "" {
-				execDir = t.TempDir()
+			var cancelTimer *time.Timer
+			emit := func(kind string, _ map[string]interface{}) {
+				if kind == evToolUse && tc.cancelIn > 0 && cancelTimer == nil {
+					cancelTimer = time.AfterFunc(tc.cancelIn, cancel)
+				}
 			}
 			result, err := runExecutableAcceptance(
 				ctx, transport, "session", execDir, tc.command,
-				func(string, map[string]interface{}) {}, "turn", nil, plan,
+				emit, "turn", nil, plan,
 			)
+			if cancelTimer != nil {
+				cancelTimer.Stop()
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -94,6 +103,26 @@ func TestExecutableAcceptanceShortProcessesProduceTypedFacts(t *testing.T) {
 				t.Fatalf("result lost admission/attempt binding: %#v", result)
 			}
 		})
+	}
+}
+
+func TestExecutableAcceptanceCompletedExitOutranksLateDeadline(t *testing.T) {
+	cmd := exec.Command("bash", "-lc", "exit 7")
+	if err := cmd.Run(); err == nil {
+		t.Fatal("command unexpectedly exited zero")
+	}
+	if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != 7 {
+		t.Fatalf("process state = %#v, want concrete exit 7", cmd.ProcessState)
+	}
+
+	commandCtx, cancel := context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer cancel()
+	<-commandCtx.Done()
+	kind, actualExit, signal := classifyExecutableAcceptanceTermination(
+		context.Background(), commandCtx, cmd.ProcessState,
+	)
+	if kind != "EXITED" || !sameOptionalInt(actualExit, intPtr(7)) || signal != "" {
+		t.Fatalf("classification = (%q, %#v, %q), want (EXITED, 7, empty)", kind, actualExit, signal)
 	}
 }
 
