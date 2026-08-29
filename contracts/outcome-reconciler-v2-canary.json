@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schemaVersion": 2,
+  "contract": "orbit.outcome-reconciler.new-task-canary.v2",
+  "collector": {
+    "name": "outcome-reconciler-canary-collector",
+    "version": "2.0.0",
+    "telemetrySchemaRevision": 2,
+    "capabilityRevision": 2,
+    "evaluatorVersion": "outcome-evaluator-v2",
+    "collectorSha": "RUNTIME_REQUIRED",
+    "targetSha": "RUNTIME_REQUIRED"
+  },
+  "cohort": {
+    "population": "new tasks with a current canonical binding admitted during the fixed canary interval",
+    "selection": "unsigned first 32 bits of sha256(task_id || ':' || target_sha) modulo 10000 is below rolloutBasisPoints",
+    "rolloutBasisPoints": 1000,
+    "minimumEligibleTasks": 111000,
+    "minSampleSize": 1000,
+    "denominator": "every eligible new task selected into the immutable target-SHA cohort; a missing observation is a V2 failure when the window closes",
+    "observationWindow": {
+      "kind": "FIXED",
+      "seconds": 3600,
+      "logicalTicks": 60
+    },
+    "exclusions": [
+      "task had no current canonical binding at admission",
+      "task was explicitly opted out before admission",
+      "target SHA changed before the first observation"
+    ]
+  },
+  "diffTaxonomy": [
+    "MATCH",
+    "V1_FALSE_CLOSE",
+    "V2_FALSE_CLOSE",
+    "V1_MISSED_OBLIGATION",
+    "V2_MISSED_OBLIGATION",
+    "V1_READ_MODEL_DRIFT",
+    "V2_READ_MODEL_DRIFT",
+    "BOTH_DIFFERENT_FROM_AUTHORITY"
+  ],
+  "metrics": {
+    "falseClose": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "selected tasks reported closed while the canonical evaluation still has a blocking dimension or mandatory obligation",
+      "denominator": "selected tasks with a canonical evaluation in the observation window",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0 },
+      "abortThreshold": { "maximum": 0 }
+    },
+    "missedObligation": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "canonical mandatory obligations absent from the versioned read model",
+      "denominator": "canonical mandatory obligations expected for selected tasks in the observation window",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0 },
+      "abortThreshold": { "maximum": 0 }
+    },
+    "readModelDifference": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "selected task read models whose digest differs from the canonical expected digest",
+      "denominator": "selected task read models compared with the same canonical cut",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0 },
+      "abortThreshold": { "maximum": 0 }
+    },
+    "reconciliationLag": {
+      "unit": "MILLISECONDS",
+      "aggregation": "P99",
+      "numerator": "p99 wall-clock milliseconds between canonical fact ingestion and versioned projection evaluation",
+      "denominator": "selected task projections with both ingestion and evaluation timestamps",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 30000 },
+      "abortThreshold": { "maximum": 60000 }
+    },
+    "oldestObligation": {
+      "unit": "SECONDS",
+      "aggregation": "MAX",
+      "numerator": "maximum age in seconds of an active mandatory obligation",
+      "denominator": "active mandatory obligations observed for selected tasks",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 300 },
+      "abortThreshold": { "maximum": 600 }
+    },
+    "expiredLease": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "expired coordinator leases for selected task obligations",
+      "denominator": "claimed coordinator leases examined in the observation window",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0 },
+      "abortThreshold": { "maximum": 0 }
+    },
+    "retryCost": {
+      "unit": "COST_UNITS_PER_ATTEMPT",
+      "aggregation": "AVERAGE",
+      "numerator": "bounded retry cost units consumed by selected task attempts",
+      "denominator": "selected task attempts observed in the window",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 1.5 },
+      "abortThreshold": { "maximum": 2 }
+    },
+    "inboxAge": {
+      "unit": "SECONDS",
+      "aggregation": "P99",
+      "numerator": "p99 age in seconds of pending decision or watchdog inbox entries",
+      "denominator": "pending inbox entries for selected tasks",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 60 },
+      "abortThreshold": { "maximum": 120 }
+    },
+    "outboxFailure": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "terminal or retry-exhausted projection/coordinator outbox deliveries",
+      "denominator": "projection/coordinator outbox delivery attempts for selected tasks",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0.001 },
+      "abortThreshold": { "maximum": 0.005 }
+    },
+    "checksumDrift": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "selected projection subjects whose rowset/proof/gate/read-surface checksum differs from a source replay",
+      "denominator": "selected projection subjects independently checksummed in the window",
+      "minSampleSize": 1000,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0 },
+      "abortThreshold": { "maximum": 0 }
+    },
+    "acceptanceRuntimeDeadline": {
+      "unit": "RATIO",
+      "aggregation": "RATIO",
+      "numerator": "admitted executable acceptances clamped, stopped at the legacy cutoff, or completed after their negotiated deadline",
+      "denominator": "admitted executable acceptance traces with a version-bound requested and effective deadline",
+      "minSampleSize": 1,
+      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
+      "slo": { "maximum": 0 },
+      "abortThreshold": { "maximum": 0 }
+    }
+  },
+  "control": {
+    "initialMode": "SHADOW",
+    "abortEvaluationVersion": "V2",
+    "automaticRollback": true,
+    "consecutiveHealthyWindowsForCutover": 2,
+    "consecutiveHealthyWindowsForRollforward": 2,
+    "maximumRollbackRecoverySeconds": 60,
+    "rollback": "DISABLE_V2_NEW_TASK_ADMISSION_KEEP_APPEND_ONLY_FACTS_AND_SERVE_V1_PROJECTION",
+    "rollforward": "REBUILD_V2_FROM_APPEND_ONLY_FACTS_THEN_REENTER_IMMUTABLE_TARGET_SHA_COHORT"
+  },
+  "mixedClients": {
+    "currentProtocol": "V2",
+    "acceptedLegacyProtocols": ["V1", "V1_HEADERLESS_N_MINUS_ONE"],
+    "requiredCases": [
+      { "name": "v2-canonical-fact", "protocol": "V2", "actor": "CLIENT", "operation": "CANONICAL_FACT", "expectedDecision": "ACCEPT" },
+      { "name": "v2-read", "protocol": "V2", "actor": "CLIENT", "operation": "READ", "expectedDecision": "SERVE_V2_PROJECTION" },
+      { "name": "v1-claim", "protocol": "V1", "actor": "CLIENT", "operation": "CLAIM", "expectedDecision": "TRANSLATE_TO_APPEND_ONLY_FACT" },
+      { "name": "n-minus-one-claim", "protocol": "V1_HEADERLESS_N_MINUS_ONE", "actor": "CLIENT", "operation": "CLAIM", "expectedDecision": "TRANSLATE_TO_APPEND_ONLY_FACT" },
+      { "name": "v1-read", "protocol": "V1", "actor": "CLIENT", "operation": "READ", "expectedDecision": "SERVE_V2_PROJECTION" },
+      { "name": "legacy-direct-done", "protocol": "V1", "actor": "CLIENT", "operation": "DIRECT_DONE", "expectedDecision": "REJECT" },
+      { "name": "legacy-authority", "protocol": "V1", "actor": "CLIENT", "operation": "MINT_AUTHORITY", "expectedDecision": "REJECT" },
+      { "name": "legacy-ratification", "protocol": "V1", "actor": "CLIENT", "operation": "RATIFY", "expectedDecision": "REJECT" },
+      { "name": "legacy-projection-write", "protocol": "V1", "actor": "CLIENT", "operation": "WRITE_PROJECTION", "expectedDecision": "REJECT" },
+      { "name": "unknown-revision", "protocol": "V0", "actor": "CLIENT", "operation": "CLAIM", "expectedDecision": "REJECT" },
+      { "name": "reconciler-v2-projection-write", "protocol": "V2", "actor": "RECONCILER", "operation": "WRITE_PROJECTION", "expectedDecision": "ACCEPT" }
+    ]
+  },
+  "acceptanceRuntime": {
+    "schemaRevision": 2,
+    "capabilityRevision": 2,
+    "requestedTimeoutSeconds": 1200,
+    "ownerTimeoutCeilingSeconds": 1200,
+    "policyTimeoutCeilingSeconds": 3600,
+    "legacyCutoffSeconds": 120,
+    "maximumAttempts": 3,
+    "watchdogExpectedTests": 13,
+    "requiredTraceKinds": [
+      "ADMISSION_REJECTED",
+      "TIMED_OUT_RETRY_DIAGNOSIS_SUCCESSOR",
+      "WATCHDOG_13_OF_13"
+    ]
+  },
+  "security": {
+    "tenantAuthorization": "authenticated tenant digest must equal the stored tenant digest",
+    "rawTenantIdentifiers": "FORBIDDEN",
+    "secretRedaction": "BEFORE_TELEMETRY_APPEND",
+    "redactionReplacement": "[REDACTED]",
+    "maximumPayloadBytes": 65536,
+    "maximumRawCommandOutputBytes": 16384
+  },
+  "capacity": {
+    "tasks": 111000,
+    "maximumCohortSelectionMilliseconds": 5000,
+    "maximumTelemetryEvents": 50000
+  }
+}
