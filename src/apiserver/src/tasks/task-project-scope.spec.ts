@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
 import { TASK_LIST_SELECT, TasksService } from './tasks.service';
+import { recordingQueryRaw } from './query-raw-test-helper';
 
 /**
  * Scoping a task list to one project.
@@ -22,17 +23,6 @@ const OTHER_PROJECT_ID = '00000000-0000-7000-8000-0000000000bb';
 
 function serviceWith(prisma: unknown): TasksService {
   return new TasksService(prisma as never, {} as never, {} as never);
-}
-
-/** Renders each `$queryRaw` template the way PostgreSQL would see it, bound values included. */
-function recordingQueryRaw(rows: (sql: string) => unknown[]) {
-  const statements: { text: string; values: unknown[] }[] = [];
-  const $queryRaw = async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-    const sql = Prisma.sql(strings, ...(bound as never[]));
-    statements.push({ text: sql.text, values: sql.values });
-    return rows(sql.text);
-  };
-  return { statements, $queryRaw };
 }
 
 function harness(rows: unknown[] = []) {

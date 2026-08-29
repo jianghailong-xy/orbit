@@ -13,6 +13,9 @@ function serviceWith(prisma: unknown): TasksService {
 function harness(rows: Array<{ id: string; status?: TaskStatus }>, total = rows.length) {
   const calls: { where?: any; take?: number } = {};
   const prisma = {
+    // The strip annotates its bounded rows through the shared runnable predicate. These fixtures
+    // exercise strip membership/counting, so answer that independent overlay conservatively.
+    $queryRaw: async () => [],
     task: {
       findMany: async (args: any) => {
         calls.where = args.where;

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
@@ -11,6 +10,7 @@ import {
 } from './tasks.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
+import { recordingQueryRaw } from './query-raw-test-helper';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -31,17 +31,6 @@ function serviceWith(prisma: unknown, sessions: unknown = {}, realtime: unknown 
     publishForUser: () => undefined,
     ...(realtime as Record<string, unknown>),
   } as never);
-}
-
-/** Renders the tagged template PostgreSQL would get, like task-labels.spec's recorder. */
-function recordingQueryRaw(rows: (sql: string) => unknown[]) {
-  const statements: string[] = [];
-  const $queryRaw = async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-    const sql = Prisma.sql(strings, ...(bound as never[])).text;
-    statements.push(sql);
-    return rows(sql);
-  };
-  return { statements, $queryRaw };
 }
 
 // ---------------------------------------------------------------------------
@@ -142,14 +131,16 @@ test('the auto-run sweep will not start a task before its scheduled time', () =>
   const service = serviceWith({ $queryRaw });
 
   return (service as any).reconcileReadyTasks().then(() => {
-    assert.match(statements[0], /\(t\.run_at IS NULL OR t\.run_at <= now\(\)\)/);
+    assert.match(statements[0].text, /\(t\.run_at IS NULL OR t\.run_at <= now\(\)\)/);
   });
 });
 
 test('a prerequisite finishing does not start a task scheduled for later', async () => {
   const executed: string[] = [];
   const future = new Date(Date.now() + 60 * 60_000);
+  const raw = recordingQueryRaw(() => [{ taskId: TASK_ID }, { taskId: OTHER_TASK_ID }]);
   const service = serviceWith({
+    $queryRaw: raw.$queryRaw,
     taskDependency: { findMany: async () => [{ taskId: TASK_ID }, { taskId: OTHER_TASK_ID }] },
     task: {
       findMany: async () => [
@@ -187,11 +178,20 @@ test('a prerequisite finishing does not start a task scheduled for later', async
   // scheduled one is held — and held, not dropped: its run_at is untouched, so the sweep starts
   // it when it comes due.
   assert.deepEqual(executed, [OTHER_TASK_ID]);
+  assert.equal(raw.statements.length, 1, 'one reverse-tail read finds every released dependent');
+  assert.match(raw.statements[0].text, /dependent\."owner_id" = \$1::uuid/);
+  assert.match(
+    raw.statements[0].text,
+    /task_dependency_tail_id\(d\."depends_on_task_id"\) = \$2::uuid/,
+  );
+  assert.deepEqual(raw.statements[0].values, [OWNER_ID, 'done-task']);
 });
 
 test('a dependent whose schedule has already passed is started by its prerequisite', async () => {
   const executed: string[] = [];
+  const raw = recordingQueryRaw(() => [{ taskId: TASK_ID }]);
   const service = serviceWith({
+    $queryRaw: raw.$queryRaw,
     taskDependency: { findMany: async () => [{ taskId: TASK_ID }] },
     task: {
       findMany: async () => [
@@ -275,7 +275,7 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
 
   await f.sweep();
 
-  const sql = f.statements[0];
+  const sql = f.statements[0].text;
   // Due, and anchored on the column the partial index covers.
   assert.match(sql, /t\.run_at IS NOT NULL/);
   assert.match(sql, /t\.run_at <= now\(\)/);
@@ -284,7 +284,30 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.dispatch_hold = false/, 'a paused list must hold a schedule back');
   assert.match(sql, /a\.runner_id IS NOT NULL/, 'no runner, no dispatch');
-  assert.match(sql, /WITH RECURSIVE chain/, 'an unfinished prerequisite blocks — through its chain');
+  assert.match(
+    sql,
+    /NOT EXISTS \(\s*SELECT 1 FROM task_dependency dep[\s\S]*AND NOT EXISTS \(\s*SELECT 1\s*FROM task chain_task[\s\S]*chain_task\.id = task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+    'a missing or invalid tail remains an unfinished prerequisite',
+  );
+  assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
+  assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
+  assert.match(sql, /epoch_open_request\."status" = 'OPEN'/);
+  assert.match(
+    sql,
+    /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
+  );
+  assert.match(
+    sql,
+    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+  );
+  assert.match(
+    sql,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+  );
+  assert.match(
+    sql,
+    /epoch_check\."project_id" IS NULL OR EXISTS \(\s*SELECT 1 FROM "project_action" passed_action[\s\S]*passed_action\."status"::text = 'APPLIED'/,
+  );
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.
   assert.match(sql, /ORDER BY t\.run_at ASC, t\.id ASC/);
