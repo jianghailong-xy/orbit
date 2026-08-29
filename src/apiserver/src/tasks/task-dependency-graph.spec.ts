@@ -20,6 +20,9 @@ type TaskRow = {
   title: string;
   status: TaskStatus;
   autoRunWhenReady: boolean;
+  supersededByTaskId?: string | null;
+  terminalReason?: string | null;
+  verifiesTaskId?: string | null;
 };
 
 type StoredEdge = { taskId: string; dependsOnTaskId: string };
@@ -47,7 +50,10 @@ function graphFixture(
   taskRows: ReadonlyMap<string, TaskRow> = tasks,
 ) {
   const traversalBatches: string[][] = [];
-  const stateBatches: string[][] = [];
+  const factBatches: string[][] = [];
+  const degreeBatches: string[][] = [];
+  const successorBatches: string[][] = [];
+  const successorWheres: any[] = [];
   const boundaryChecks: string[][] = [];
   const traversalWheres: any[] = [];
   const inducedWheres: any[] = [];
@@ -56,24 +62,60 @@ function graphFixture(
   let nodeRefreshWhere: any;
   let busyWhere: any;
 
+  const graphTask = (task: TaskRow) => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    autoRunWhenReady: task.autoRunWhenReady,
+  });
+  const chainFact = (task: TaskRow) => ({
+    id: task.id,
+    status: task.status,
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  });
+
   const prisma = {
     task: {
       findFirst: async (args: any) => {
         focusLookup = args;
-        return ownsFocus && args.where.ownerId === OWNER_ID
-          ? taskRows.get(args.where.id) ?? null
-          : null;
+        const task = taskRows.get(args.where.id);
+        return ownsFocus && args.where.ownerId === OWNER_ID && task ? graphTask(task) : null;
       },
       count: async (args: any) => {
         if (args.where.ownerId !== OWNER_ID) return 0;
         return (args.where.id.in as string[]).filter((id) => taskRows.has(id)).length;
       },
       findMany: async (args: any) => {
+        if (!ownsFocus || (args.where.ownerId !== undefined && args.where.ownerId !== OWNER_ID)) {
+          return [];
+        }
+        const requested = (args.where.id?.in ?? []) as string[];
+        // Verification-epoch discovery asks only for checks or checked subjects. Every task in the
+        // base graph is ordinary, so do not let a permissive double turn all of them into epochs.
+        if (requested.length > 0 && Array.isArray(args.where.OR) && args.select?.verifiesTaskId) {
+          return requested.flatMap((id) => {
+            const task = taskRows.get(id);
+            if (!task) return [];
+            const checked = [...taskRows.values()].some((row) => row.verifiesTaskId === id);
+            return task.verifiesTaskId != null || checked
+              ? [{ id: task.id, verifiesTaskId: task.verifiesTaskId ?? null }]
+              : [];
+          });
+        }
+        if (args.select?.supersededByTaskId && args.select?.terminalReason) {
+          successorBatches.push([...requested]);
+          successorWheres.push(args.where);
+          return requested.flatMap((id) => {
+            const task = taskRows.get(id);
+            return task ? [chainFact(task)] : [];
+          });
+        }
         nodeRefreshWhere = args.where;
-        if (!ownsFocus || args.where.ownerId !== OWNER_ID) return [];
-        return (args.where.id.in as string[])
-          .map((id) => taskRows.get(id))
-          .filter((task): task is TaskRow => task !== undefined);
+        return requested.flatMap((id) => {
+          const task = taskRows.get(id);
+          return task ? [graphTask(task)] : [];
+        });
       },
     },
     taskDependency: {
@@ -127,9 +169,19 @@ function graphFixture(
           traversalTakes.push(args.take);
           return matchingEdges.map((edge) => ({
             ...edge,
-            task: taskRows.get(edge.taskId),
-            dependsOnTask: taskRows.get(edge.dependsOnTaskId),
+            task: graphTask(taskRows.get(edge.taskId)!),
+            dependsOnTask: graphTask(taskRows.get(edge.dependsOnTaskId)!),
           }));
+        }
+        if (args.select.dependsOnTask?.select?.status) {
+          const ids = (args.where.taskId?.in ?? []) as string[];
+          factBatches.push([...ids]);
+          return matchingEdges.flatMap((edge) => {
+            const prerequisite = taskRows.get(edge.dependsOnTaskId);
+            return prerequisite
+              ? [{ ...edge, dependsOnTask: chainFact(prerequisite) }]
+              : [];
+          });
         }
         inducedWheres.push(args.where);
         return matchingEdges;
@@ -139,7 +191,7 @@ function graphFixture(
         const ids = (groupedByDependent
           ? args.where.dependsOnTaskId.in
           : args.where.taskId.in) as string[];
-        if (!groupedByDependent) stateBatches.push([...ids]);
+        if (!groupedByDependent) degreeBatches.push([...ids]);
         const status = args.where.dependsOnTask?.status;
         const allowedStatuses =
           typeof status === 'string'
@@ -199,7 +251,10 @@ function graphFixture(
   return {
     service: new TasksService(prisma as never, {} as never, {} as never),
     traversalBatches,
-    stateBatches,
+    factBatches,
+    degreeBatches,
+    successorBatches,
+    successorWheres,
     boundaryChecks,
     traversalWheres,
     inducedWheres,
@@ -528,9 +583,18 @@ test('multi-level graph deduplicates diamond nodes and orients every edge prereq
   // One traversal query per breadth-first layer, not one per task.
   assert.deepEqual(fixture.traversalBatches, [[FOCUS], [TASK_B, TASK_C], [TASK_D, TASK_E]]);
   assert.deepEqual(fixture.traversalTakes, [401, 401, 401]);
-  assert.equal(fixture.stateBatches.length, 4);
+  assert.equal(fixture.factBatches.length, 1);
   assert.ok(
-    fixture.stateBatches.every(
+    fixture.factBatches.every(
+      (batch) =>
+        batch.length === 5 &&
+        new Set(batch).size === 5 &&
+        [FOCUS, TASK_B, TASK_C, TASK_D, TASK_E].every((id) => batch.includes(id)),
+    ),
+  );
+  assert.equal(fixture.degreeBatches.length, 1);
+  assert.ok(
+    fixture.degreeBatches.every(
       (batch) =>
         batch.length === 5 &&
         new Set(batch).size === 5 &&
@@ -552,6 +616,98 @@ test('multi-level graph deduplicates diamond nodes and orients every edge prereq
     new Set(fixture.busyWhere().taskId.in),
     new Set([FOCUS, TASK_B, TASK_C, TASK_D, TASK_E]),
   );
+});
+
+test('graph state follows a multi-hop successor tail without rewriting the stored edge', async () => {
+  const successorRows = new Map(tasks);
+  successorRows.set(TASK_B, {
+    ...tasks.get(TASK_B)!,
+    status: TaskStatus.FAILED,
+    supersededByTaskId: TASK_C,
+    terminalReason: 'SUPERSEDED',
+  });
+  successorRows.set(TASK_C, {
+    ...tasks.get(TASK_C)!,
+    status: TaskStatus.CANCELLED,
+    supersededByTaskId: TASK_D,
+    terminalReason: 'SUPERSEDED',
+  });
+  successorRows.set(TASK_D, {
+    ...tasks.get(TASK_D)!,
+    status: TaskStatus.DONE,
+    supersededByTaskId: null,
+    terminalReason: null,
+  });
+  const fixture = graphFixture(
+    [{ taskId: FOCUS, dependsOnTaskId: TASK_B }],
+    true,
+    successorRows,
+  );
+
+  const result = await fixture.service.dependencyGraph(OWNER_ID, FOCUS);
+
+  assert.deepEqual(result.nodes.map(({ id, dependencyState }) => ({ id, dependencyState })), [
+    { id: FOCUS, dependencyState: 'READY' },
+    { id: TASK_B, dependencyState: 'NONE' },
+  ]);
+  assert.deepEqual(result.edges, [{ sourceTaskId: TASK_B, targetTaskId: FOCUS }]);
+  assert.deepEqual(fixture.successorBatches, [[TASK_C], [TASK_D]]);
+  assert.ok(fixture.successorWheres.every((where) => where.ownerId === OWNER_ID));
+});
+
+test('missing, deleted, and cyclic successor tails keep graph state fail-closed', async () => {
+  const missing = '550e8400-e29b-41d4-a716-446655449997';
+  const cases: Array<[string, (rows: Map<string, TaskRow>) => void]> = [
+    ['missing successor row', (rows) => {
+      rows.set(TASK_B, {
+        ...tasks.get(TASK_B)!,
+        status: TaskStatus.CANCELLED,
+        supersededByTaskId: missing,
+        terminalReason: 'SUPERSEDED',
+      });
+    }],
+    ['deleted successor pointer', (rows) => {
+      rows.set(TASK_B, {
+        ...tasks.get(TASK_B)!,
+        status: TaskStatus.CANCELLED,
+        supersededByTaskId: null,
+        terminalReason: 'SUPERSEDED',
+      });
+    }],
+    ['successor cycle', (rows) => {
+      rows.set(TASK_B, {
+        ...tasks.get(TASK_B)!,
+        status: TaskStatus.CANCELLED,
+        supersededByTaskId: TASK_C,
+        terminalReason: 'SUPERSEDED',
+      });
+      rows.set(TASK_C, {
+        ...tasks.get(TASK_C)!,
+        status: TaskStatus.DONE,
+        supersededByTaskId: TASK_B,
+        terminalReason: 'SUPERSEDED',
+      });
+    }],
+  ];
+
+  for (const [name, arrange] of cases) {
+    const rows = new Map(tasks);
+    arrange(rows);
+    const fixture = graphFixture(
+      [{ taskId: FOCUS, dependsOnTaskId: TASK_B }],
+      true,
+      rows,
+    );
+    const result = await fixture.service.dependencyGraph(OWNER_ID, FOCUS);
+
+    assert.deepEqual(result.nodes.map((node) => node.id), [FOCUS, TASK_B], name);
+    assert.equal(
+      result.nodes.find((node) => node.id === FOCUS)?.dependencyState,
+      'BLOCKED',
+      name,
+    );
+    assert.ok(fixture.successorWheres.every((where) => where.ownerId === OWNER_ID), name);
+  }
 });
 
 test('both direction discovers the full weakly connected diamond from a root prerequisite', async () => {

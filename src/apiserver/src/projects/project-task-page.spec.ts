@@ -43,10 +43,11 @@ function serviceWith(opts: {
   graph?: unknown[];
   onFindMany?: (args: any) => void;
 } = {}) {
-  const calls: { findMany: any[]; parentWhere: any[]; graph: any[] } = {
+  const calls: { findMany: any[]; parentWhere: any[]; graph: any[]; overlays: any[] } = {
     findMany: [],
     parentWhere: [],
     graph: [],
+    overlays: [],
   };
   const service = new ProjectsService({
     project: { findFirst: async () => ('project' in opts ? opts.project : { id: PROJECT_ID }) },
@@ -55,8 +56,15 @@ function serviceWith(opts: {
     // here is the part that is this file's subject — that it happens once per page and that its
     // answer reaches the rows.
     $queryRaw: async (sql: unknown) => {
-      calls.graph.push(sql);
-      return opts.graph ?? [];
+      const text = (sql as { sql?: string }).sql ?? '';
+      if (text.includes('"topo" AS')) {
+        calls.graph.push(sql);
+        return opts.graph ?? [];
+      }
+      // taskPage also reads the canonical work-state overlay through the same Prisma raw-query
+      // door. Keep that independent read visible without mislabelling it as a second graph walk.
+      calls.overlays.push(sql);
+      return [];
     },
     task: {
       findFirst: async (args: any) => {
@@ -478,6 +486,7 @@ test('every row carries all four dependency fields, and the graph is read once p
   });
   // One pass for the page, not one per row — the whole reason the level is computed in SQL.
   assert.equal(calls.graph.length, 1);
+  assert.equal(calls.overlays.length, 1, 'the separate work-state overlay is still read once');
 });
 
 test('a page with no rows reads no graph at all', async () => {

@@ -41,6 +41,7 @@ function makeService(verifications = 0) {
     dependedOnBy: [],
   };
   const prisma: any = {
+    taskDependency: { findMany: async () => [] },
     task: {
       findFirst: async () => ({ ...task }),
       update: async ({ where, data }: { where: unknown; data: Record<string, unknown> }) => {

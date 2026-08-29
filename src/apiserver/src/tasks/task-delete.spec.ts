@@ -28,6 +28,7 @@ function serviceWith(
   const tx = {
     $queryRaw: async () => [],
     session: { findMany: async () => [] },
+    taskDependency: { findMany: async () => [] },
     ...prisma,
   };
   const $transaction = async (fn: (t: unknown) => unknown, options: unknown) => {
