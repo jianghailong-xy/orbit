@@ -764,7 +764,8 @@ func (ops worktreeGitOps) liveDiffStat(wt *Worktree) []ChangedFile {
 // the per-file stat summary vs base; with withPatch it also captures the per-file unified-diff
 // patches (capped). The temp index (GIT_INDEX_FILE) never touches the real index claude may be
 // using, and .gitignore is respected so node_modules/build output don't show. The index is
-// pre-seeded from base (read-tree) so a tracked-but-ignored file isn't misreported as deleted.
+// pre-seeded from HEAD so a tracked-but-ignored file isn't misreported as deleted while a file
+// HEAD intentionally stopped tracking stays deleted even if an ignored local copy remains.
 func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
 	return unboundedWorktreeGitOps.stagedLiveDiff(wt, withPatch)
 }
@@ -786,12 +787,13 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	_ = os.Remove(idx)
 	defer os.Remove(idx)
 	env := append(os.Environ(), "GIT_INDEX_FILE="+idx)
-	// Seed the temp index from base first: a file that's tracked in base but also matches a
+	// Seed the temp index from HEAD first: a file HEAD still tracks but that also matches a
 	// .gitignore rule (force-committed with `git add -f`) would otherwise be dropped by
 	// `add -A` — which honors .gitignore for paths it sees as untracked — and reported as a
-	// phantom deletion vs base. Pre-loaded as tracked, it survives and `add -A` only layers
-	// the worktree's real changes on top.
-	if _, err := ops.runEnv(wt.Path, env, "read-tree", baseSha); err != nil {
+	// phantom deletion vs base. Conversely, a path removed from HEAD is deliberately absent
+	// from this index, so an ignored copy left on disk cannot erase that committed deletion.
+	// `add -A` then layers the worktree's real uncommitted changes on top of committed HEAD.
+	if _, err := ops.runEnv(wt.Path, env, "read-tree", "HEAD"); err != nil {
 		return nil, nil
 	}
 	if _, err := ops.runEnv(wt.Path, env, "add", "-A"); err != nil {

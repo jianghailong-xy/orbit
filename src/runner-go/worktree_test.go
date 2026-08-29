@@ -146,6 +146,49 @@ func commitFile(t *testing.T, repo, name, content, msg string) {
 	mustGit(t, repo, "commit", "-m", msg)
 }
 
+// A file can intentionally remain on disk after the branch stops tracking it (for example,
+// `git rm --cached` followed by a .gitignore rule). The live diff must preserve HEAD's committed
+// deletion instead of letting the ignored local copy make the branch look unchanged. At the same
+// time, an ignored file that HEAD still tracks must not become a phantom deletion.
+func TestLiveDiffReportsCommittedDeletionWhenIgnoredCopyRemains(t *testing.T) {
+	repo := initRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("/kept-local.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "kept-local.txt"), []byte("local copy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", ".gitignore")
+	mustGit(t, repo, "add", "-f", "kept-local.txt")
+	mustGit(t, repo, "commit", "-m", "track ignored local file")
+	baseSha := mustGit(t, repo, "rev-parse", "HEAD")
+	wt := &Worktree{Path: repo, BaseSha: baseSha}
+
+	if files, _ := liveDiff(wt); len(files) != 0 {
+		t.Fatalf("tracked ignored file should not be a phantom deletion, got %+v", files)
+	}
+
+	mustGit(t, repo, "rm", "--cached", "--", "kept-local.txt")
+	mustGit(t, repo, "commit", "-m", "stop tracking local file")
+	if _, err := os.Stat(filepath.Join(repo, "kept-local.txt")); err != nil {
+		t.Fatalf("ignored local copy should remain on disk: %v", err)
+	}
+	if status := mustGit(t, repo, "status", "--porcelain"); status != "" {
+		t.Fatalf("worktree should be clean after the tracking-only deletion, got:\n%s", status)
+	}
+
+	files, patches := liveDiff(wt)
+	if len(files) != 1 {
+		t.Fatalf("expected one committed deletion, got %+v", files)
+	}
+	if got := files[0]; got.Path != "kept-local.txt" || got.Status != "D" || got.Additions != 0 || got.Deletions != 1 {
+		t.Fatalf("committed deletion reported incorrectly: %+v", got)
+	}
+	if len(patches) != 1 || patches[0].Path != "kept-local.txt" || !strings.Contains(patches[0].Patch, "deleted file mode") {
+		t.Fatalf("committed deletion patch missing or incorrect: %+v", patches)
+	}
+}
+
 // TestMergeToMainRebaseLinear: a branch forked before main advanced rebases onto main's tip,
 // leaving a linear history (no merge commit) without rewriting the session branch.
 func TestMergeToMainRebaseLinear(t *testing.T) {
