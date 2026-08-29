@@ -367,23 +367,6 @@ async function ensureLegacyExecutableJudgmentRequest(
 ) {
   const criterion = completionCriterionSnapshot(input.task);
   const criterionRevision = completionDigest(criterion);
-  // A v1 turn carries no request id, but an evidence submission may already have established the
-  // authoritative evaluator for this exact declaration. Resolve that standing request before
-  // synthesising the rolling-upgrade bridge fact. Returning it even when it names another
-  // Session is load-bearing: the caller's recipient check then refuses this callback instead of
-  // manufacturing a second request whose recipient happens to be the callback Session.
-  const standingRequest = await tx.taskJudgmentRequest.findFirst({
-    where: {
-      taskId: input.task.id,
-      criterionRevision,
-      kind: 'EXECUTABLE',
-      recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-      status: 'OPEN',
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    include: { executableResult: true },
-  });
-  if (standingRequest) return standingRequest;
   // The legacy identity stays explicit. In particular, this is not an EXITED typed-attempt fact:
   // it is a canonical observation of the original v1 callback and its exact persisted turn.
   const evidence = normalizeCompletionEvidence({
@@ -482,6 +465,11 @@ async function ensureLegacyExecutableJudgmentRequest(
     });
   }
 
+  // A v1 turn carries no request id, so the evidence digest derived from its exact persisted turn
+  // is the request identity. A same-criterion request for different output is stale evidence and
+  // must remain OPEN; selecting it would either consume the wrong fact or reject a valid rolling
+  // callback. An exact request that names another Session is still returned here and rejected by
+  // the recipient check below.
   const existing = await tx.taskJudgmentRequest.findFirst({
     where: {
       taskId: input.task.id,
