@@ -2,7 +2,8 @@
   "extends": "./tsconfig.test.json",
   "compilerOptions": {
     "paths": {
-      "@prisma/client": ["./build/node_modules/@prisma/client"]
+      "@prisma/client": ["./build/node_modules/@prisma/client"],
+      "@orbit/shared": ["../shared/dist/index.d.ts"]
     }
   }
 }
