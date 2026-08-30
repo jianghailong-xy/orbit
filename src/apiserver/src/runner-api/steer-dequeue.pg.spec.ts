@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { before, after, beforeEach, test } from 'node:test';
 import { Client } from 'pg';
 import { RunStatus } from '@prisma/client';
-import { AgentProvider, SESSION_CODEX_STEER_V1 } from '@orbit/shared';
+import {
+  AgentProvider,
+  SESSION_CODEX_STEER_V1,
+  SESSION_CURRENT_WORK_ROUTING_V1,
+} from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -13,7 +17,7 @@ import { RunnerApiController } from './runner-api.controller';
  * against real rows, which is the only way "the ordinary message is still gated" is a fact
  * rather than a regex.
  *
- * Needs a database: set ORBIT_TEST_PG_URL (any empty Postgres — the two tables the predicate
+ * Needs a database: set ORBIT_TEST_PG_URL (any empty Postgres — the three tables the predicate
  * touches are created here, not the application schema). Without it the file reports that it
  * did not run, rather than passing quietly.
  */
@@ -24,6 +28,7 @@ const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const OWNER_ID = '33333333-3333-4333-8333-333333333333';
 /** What a runner that implements codex `turn/steer` declares; irrelevant to a claude session. */
 const DECLARES_CODEX_STEER = [SESSION_CODEX_STEER_V1];
+const DECLARES_ROUTING = [SESSION_CURRENT_WORK_ROUTING_V1, SESSION_CODEX_STEER_V1];
 
 type Dequeue = (
   sessionId: string,
@@ -31,7 +36,13 @@ type Dequeue = (
   leaseGeneration: string | null,
   acceptsSteer: boolean,
   declaredCapabilities: readonly string[],
-) => Promise<{ turnId: string; kind: string; content?: string } | null>;
+) => Promise<{
+  turnId: string;
+  kind: string;
+  content?: string;
+  steerRequeue?: boolean;
+  targetTurnId?: string;
+} | null>;
 
 let client: Client;
 
@@ -39,12 +50,15 @@ before(async () => {
   if (!PG_URL) return;
   client = new Client({ connectionString: PG_URL });
   await client.connect();
+  await client.query(`CREATE SCHEMA IF NOT EXISTS steer_dequeue_test`);
+  await client.query(`SET search_path TO steer_dequeue_test, public`);
   // Only the columns the predicate reads. Deliberately not the application schema: this is a
   // test of one WHERE clause, and pulling in migrations would make it a test of those too.
   await client.query(`
-    DROP TABLE IF EXISTS "conversation_turn";
-    DROP TABLE IF EXISTS "session";
-    CREATE TABLE "session" (
+    DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn_startup_fragment";
+    DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
+    DROP TABLE IF EXISTS steer_dequeue_test."session";
+    CREATE TABLE steer_dequeue_test."session" (
       id uuid PRIMARY KEY,
       owner_id uuid,
       assigned_runner_id uuid,
@@ -56,7 +70,7 @@ before(async () => {
       status text NOT NULL,
       cancel_requested_at timestamptz
     );
-    CREATE TABLE "conversation_turn" (
+    CREATE TABLE steer_dequeue_test."conversation_turn" (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       session_id uuid NOT NULL,
       seq int NOT NULL,
@@ -67,18 +81,32 @@ before(async () => {
       delivered_at timestamptz,
       lease_deadline_at timestamptz,
       lease_generation uuid,
+      send_intent text,
+      target_turn_id uuid,
       coordinator_context_key text
+    );
+    CREATE TABLE steer_dequeue_test."conversation_turn_startup_fragment" (
+      session_id uuid NOT NULL,
+      target_turn_id uuid NOT NULL,
+      acknowledged_at timestamptz,
+      failed_at timestamptz
     );
   `);
 });
 
 after(async () => {
+  if (client) {
+    await client.query(`DROP SCHEMA IF EXISTS steer_dequeue_test CASCADE`);
+  }
   await client?.end();
 });
 
 beforeEach(async () => {
   if (!PG_URL) return;
-  await client.query(`TRUNCATE "conversation_turn"; DELETE FROM "session";`);
+  await client.query(`
+    TRUNCATE "conversation_turn_startup_fragment", "conversation_turn";
+    DELETE FROM "session";
+  `);
   await session(AgentProvider.CLAUDE);
 });
 
@@ -95,15 +123,39 @@ async function session(provider: string) {
 /** Prisma's tagged-template $queryRaw, forwarded to a real connection as $1,$2,… */
 function pgTx() {
   return {
-    $queryRaw: async (strings: readonly string[], ...values: unknown[]) => {
-      const text = strings.reduce((sql, part, i) => sql + part + (i < values.length ? `$${i + 1}` : ''), '');
+    $queryRaw: async (
+      query: readonly string[] | { strings: readonly string[]; values?: readonly unknown[] },
+      ...taggedValues: unknown[]
+    ) => {
+      // Prisma sometimes calls a transaction client as a tag and sometimes hands it a
+      // pre-built `Prisma.sql` object. Exercise both production call shapes against the real
+      // database; treating the latter as a template array made capability-gated cases fail in
+      // the harness before their predicate could run.
+      const prismaSql = Array.isArray(query)
+        ? null
+        : (query as { strings: readonly string[]; values?: readonly unknown[] });
+      const strings = prismaSql?.strings ?? (query as readonly string[]);
+      const values = prismaSql?.values ?? taggedValues;
+      const text = strings.reduce(
+        (sql, part, i) => sql + part + (i < values.length ? `$${i + 1}` : ''),
+        '',
+      );
       return (await client.query(text, values as never[])).rows;
     },
     // Everything past the predicate is stubbed: this file is about which row is chosen.
     runEvent: { findFirst: async () => null },
     attachment: { findMany: async () => [] },
     session: { findUnique: async () => null },
-    conversationTurn: { updateMany: async () => ({ count: 1 }) },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
+    },
+    // This deliberately minimal schema has no startup-fragment table. Its rows model only the
+    // legacy/steer predicate below, so the v1 stale-poller audit has no unresolved startup target.
+    conversationTurn: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 1 }),
+    },
   };
 }
 
@@ -115,8 +167,14 @@ function pgTx() {
  */
 function dequeue(
   acceptsSteer = true,
-  declared: readonly string[] = DECLARES_CODEX_STEER,
-): Promise<{ turnId: string; kind: string; content?: string } | null> {
+  declared: readonly string[] = DECLARES_ROUTING,
+): Promise<{
+  turnId: string;
+  kind: string;
+  content?: string;
+  steerRequeue?: boolean;
+  targetTurnId?: string;
+} | null> {
   const tx = pgTx();
   const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
   const controller = new RunnerApiController(
@@ -149,12 +207,21 @@ async function readTurn(content: string) {
   return rows[0];
 }
 
-async function addTurn(seq: number, kind: string, status: string, content: string, leaseMs?: number) {
+async function addTurn(
+  seq: number,
+  kind: string,
+  status: string,
+  content: string,
+  leaseMs?: number,
+  intent?: 'CURRENT_WORK' | 'NEXT_TURN',
+  targetTurnId?: string,
+) {
   const lease = leaseMs === undefined ? null : new Date(Date.now() + leaseMs);
   await client.query(
-    `INSERT INTO "conversation_turn"(session_id, seq, kind, status, content, lease_deadline_at)
-     VALUES ($1::uuid, $2, $3, $4, $5, $6)`,
-    [SESSION_ID, seq, kind, status, content, lease],
+    `INSERT INTO "conversation_turn"(
+       session_id, seq, kind, status, content, lease_deadline_at, send_intent, target_turn_id
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::uuid)`,
+    [SESSION_ID, seq, kind, status, content, lease, intent ?? null, targetTurnId ?? null],
   );
 }
 
@@ -173,6 +240,38 @@ pgTest('a steer is handed over mid-turn while the message behind it keeps waitin
   // The queued message is still gated: the running turn holds the slot, and the steer that
   // just went past it took nothing.
   assert.equal(await dequeue(), null);
+});
+
+pgTest('explicit CURRENT_WORK is exact-targeted and never advertises legacy requeue', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  const target = await client.query(
+    `SELECT id FROM "conversation_turn" WHERE content = 'rename the widget'`,
+  );
+  await addTurn(
+    2,
+    'steer',
+    'PENDING',
+    'actually, call it gadget',
+    undefined,
+    'CURRENT_WORK',
+    target.rows[0].id,
+  );
+
+  const currentWork = await dequeue();
+  assert.equal(currentWork?.kind, 'steer');
+  assert.equal(currentWork?.steerRequeue, false);
+  assert.equal(currentWork?.targetTurnId, target.rows[0].id);
+});
+
+pgTest('old poller still dequeues legacy Claude steer but withholds explicit CURRENT_WORK', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'target', 60_000);
+  const target = await client.query(`SELECT id FROM "conversation_turn" WHERE content = 'target'`);
+  await addTurn(2, 'steer', 'PENDING', 'legacy steer');
+  await addTurn(3, 'steer', 'PENDING', 'explicit current', undefined, 'CURRENT_WORK', target.rows[0].id);
+
+  assert.equal((await dequeue(true, []))?.content, 'legacy steer');
+  assert.equal(await dequeue(true, []), null);
+  assert.equal((await dequeue(true, [SESSION_CURRENT_WORK_ROUTING_V1]))?.content, 'explicit current');
 });
 
 pgTest('a steer waits while nothing is running, and the ordinary message goes first', async () => {

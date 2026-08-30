@@ -1,5 +1,12 @@
-import type { BgShell, ConversationTurnKind, SessionCapabilities } from '@orbit/shared';
+import type {
+  BgShell,
+  ConversationTurnKind,
+  SessionCapabilities,
+  SessionTurnIntent,
+  SessionTurnPlacement,
+} from '@orbit/shared';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
+import { compatibleUuid as uuid } from './lib/uuid';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -315,19 +322,6 @@ export const createInteractiveSession = (body: {
     },
   });
 
-/** UUIDv4 that also works outside a secure context (crypto.randomUUID needs https;
- *  the app is commonly served over plain http). crypto.getRandomValues is universal. */
-const uuid = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-};
-
 /** Send the next user message to a live interactive session. The returned turnId identifies
  *  it, e.g. to withdraw it with cancelQueuedTurn. `attachmentIds` are ids of images already
  *  uploaded via uploadAttachment, sent alongside the text.
@@ -336,24 +330,29 @@ const uuid = (): string => {
  *  message sent while a turn is running becomes a `steer` — written into that turn instead of
  *  queued behind it — and a steer is neither withdrawable nor waiting. See lib/steerDelivery.
  *  `placement` is the server's row-locked answer to whether this specific turn was accepted as
- *  the next executable, queued behind an earlier one, or steered into the running one. Older
- *  servers omit both response hints, so each remains optional during rolling upgrades. */
+ *  the next executable, bound to startup, queued behind an earlier one, or steered into the
+ *  running one. New Web is deployed only after every API replica supports this required receipt;
+ *  silently guessing across version skew would reintroduce the race. */
 export const sendTurn = (
   sessionId: string,
   content: string,
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
+  intent: SessionTurnIntent = 'NEXT_TURN',
+  clientTurnId: string = uuid(),
 ) =>
   api<{
     turnId: string;
     seq: number;
-    kind?: ConversationTurnKind;
-    placement?: 'accepted' | 'queued' | 'steer';
-  }>(`/sessions/${sessionId}/turns`, {
+    kind: ConversationTurnKind;
+    placement: SessionTurnPlacement;
+    targetTurnId?: string;
+  }>(`/sessions/${sessionId}/turns/current-work-routing`, {
     method: 'POST',
     body: {
-      clientTurnId: uuid(),
+      clientTurnId,
       content,
+      intent,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
     },
@@ -416,21 +415,25 @@ export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
+export interface ActiveSessionTurn {
+  turnId: string;
+  kind: ConversationTurnKind;
+  placement: SessionTurnPlacement;
+  content: string;
+  createdAt: string;
+  targetTurnId?: string;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
+  deliveryReason?: string;
+  attachments?: { id: string; mimeType: string }[];
+}
+
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
  *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
  *  its PENDING-only response for older native clients. Placement distinguishes the accepted head,
- *  queued successors, and steers; placement/createdAt stay optional for rolling upgrades. */
+ *  queued successors, startup fragments and steers. Placement is the server-owned fact. */
 export const listQueuedTurns = (sessionId: string) =>
-  api<
-    {
-      turnId: string;
-      kind?: ConversationTurnKind;
-      placement?: 'accepted' | 'queued' | 'steer';
-      content: string;
-      createdAt?: string;
-      attachments?: { id: string; mimeType: string }[];
-    }[]
-  >(`/sessions/${sessionId}/turns?view=active`);
+  api<ActiveSessionTurn[]>(`/sessions/${sessionId}/turns?view=active`);
 
 /** Revive an ended session with a new message: the runner --resumes claude's
  *  existing context. Requires the session's runner to be online. `config` re-applies
@@ -438,23 +441,24 @@ export const listQueuedTurns = (sessionId: string) =>
  *  `kind: 'shell'` revives via a `!cmd` shell turn (run on the runner, output buffered
  *  for the next message) instead of a normal prompt — claude still --resumes and idles.
  *  A true terminal revive is accepted; if the session became live before the request landed,
- *  kind/placement carry sendTurn's row-locked decision. Both hints are optional for old servers. */
+ *  kind/placement carry sendTurn's required row-locked decision. */
 export const resumeSession = (
   sessionId: string,
   content: string,
   config?: { model?: string; permissionMode?: string; effort?: string; provider?: string },
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
+  clientTurnId: string = uuid(),
 ) =>
   api<{
     turnId: string;
     seq: number;
-    kind?: ConversationTurnKind;
-    placement?: 'accepted' | 'queued' | 'steer';
+    kind: ConversationTurnKind;
+    placement: SessionTurnPlacement;
   }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
     body: {
-      clientTurnId: uuid(),
+      clientTurnId,
       content,
       ...config,
       ...(attachmentIds?.length ? { attachmentIds } : {}),

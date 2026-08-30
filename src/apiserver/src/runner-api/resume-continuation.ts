@@ -14,6 +14,19 @@ export const RUNTIME_STARTED_SYSTEM_SUBTYPE = 'step_start';
 // re-emphasizing a long instruction it should verify-then-continue rather than re-run.
 const MAX_QUOTED = 1000;
 
+/** Append-only startup envelope. Each fragment remains a separate audited database row; this
+ * deterministic rendering is the exact text the first executable receives. */
+export function appendStartupTurnFragments(
+  content: string | undefined,
+  fragments: readonly { content: string }[],
+): string | undefined {
+  if (fragments.length === 0) return content;
+  const appended = fragments
+    .map((fragment) => `[Context added while this turn was starting]\n${fragment.content}`)
+    .join('\n\n');
+  return content ? `${content}\n\n${appended}` : appended;
+}
+
 /**
  * The prompt delivered in place of a user message when its turn is re-delivered after being
  * interrupted mid-flight — its runner died/restarted before acking, so the inbox's at-least-once

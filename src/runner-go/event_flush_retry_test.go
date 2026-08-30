@@ -1,10 +1,57 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
 )
+
+func TestSessionCurrentWorkDeliveryFlushFiveHundredsRemainStickyBeforeTurnComplete(t *testing.T) {
+	rejections := 0
+	policy := eventFlushRetryPolicy(&rejections)
+	var rejected error
+	for i := 0; i < maxEventFlushServerRejections; i++ {
+		rejected = serverError(http.StatusInternalServerError)
+		if retry := policy(rejected); retry != (i+1 < maxEventFlushServerRejections) {
+			t.Fatalf("retry after rejection %d = %v", i+1, retry)
+		}
+	}
+
+	fence := &criticalEventFlushFence{}
+	dropErr := fence.recordDropped([]RunEvent{{
+		Seq:    41,
+		Type:   evUserDelivery,
+		TurnID: "current-work-1",
+		Payload: map[string]interface{}{
+			"turnId":   "current-work-1",
+			"delivery": string(deliveryAcknowledged),
+		},
+	}}, rejected)
+	if dropErr == nil {
+		t.Fatal("critical acknowledgement drop did not become sticky")
+	}
+
+	turnCompleteCalled := false
+	_, err := (&coordinatorContextFlushBarrier{}).beforeTurnComplete(
+		context.Background(),
+		func(context.Context) error {
+			// The batch has already left the queue. Its sticky fence must still make this empty
+			// flush fail instead of manufacturing ACK-before-complete success.
+			return fence.check()
+		},
+		func(context.Context) (string, error) {
+			turnCompleteCalled = true
+			return stAwaitingInput, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("empty flush hid the permanently rejected CURRENT_WORK acknowledgement")
+	}
+	if turnCompleteCalled {
+		t.Fatal("turn-complete ran without a durable CURRENT_WORK acknowledgement proof")
+	}
+}
 
 func serverError(status int) error {
 	return &transportHTTPError{method: "POST", path: "/events", statusCode: status}

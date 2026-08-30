@@ -1227,15 +1227,15 @@ function UserBubble({ node }: { node: TextNode }) {
           </div>
         )}
       </div>
-      {node.delivery === 'failed' ? (
+      {node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
         // The one thing a bubble must never do is stand there looking sent when the engine
         // never received the message. Outside the meta row on purpose: that row is hidden
         // until hover, and this is the one thing about a message nobody should have to go
         // looking for. The reason rides in the tooltip — what is needed at a glance is that
         // this message did not land.
         <div className="chat-undelivered" title={node.deliveryReason}>
-          ⚠ {steerDeliveryState('failed').label}
-          {putBack && typed && (
+          ⚠ {steerDeliveryState(node.delivery).label}
+          {node.delivery === 'failed' && putBack && typed && (
             <button type="button" className="chat-undelivered-retry" onClick={() => putBack(typed)}>
               Put back in the composer
             </button>

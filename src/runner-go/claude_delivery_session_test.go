@@ -264,6 +264,12 @@ func steerTurn(id, text string) scriptedTurn {
 	return scriptedTurn{turn: RunInboxResponse{TurnID: id, Kind: "steer", Content: text}}
 }
 
+func currentWorkSteerTurn(id, targetTurnID, text string) scriptedTurn {
+	return scriptedTurn{turn: RunInboxResponse{
+		TurnID: id, TargetTurnID: targetTurnID, Kind: "steer", Content: text,
+	}}
+}
+
 // raceySteerTurn is a steer that reaches the runner after its turn is already over.
 func raceySteerTurn(id, text string) scriptedTurn {
 	s := steerTurn(id, text)
@@ -533,6 +539,82 @@ func TestSessionWritesASteerIntoTheRunningTurn(t *testing.T) {
 	}
 	if steer.NumTurns != 0 || steer.CostUsd != 0 {
 		t.Errorf("the steer's completion claims work of its own: %+v", steer)
+	}
+}
+
+// CURRENT_WORK has stricter semantics than a legacy Claude steer: it may join A or fail, but an
+// unread stdin frame must never survive A's result and become B. When the result wins the replay
+// race, the runner fails the authored receipt and kills that exact provider generation.
+func TestSessionCurrentWorkSteerTargetFenceStopsResultBeforeReplay(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Await: "user"}, // CURRENT_WORK bytes reached stdin, but Claude has not replayed them
+			{Emit: "result", Text: "A done"},
+			{Await: "user"}, // B must never reach this fenced process
+		},
+		[]scriptedTurn{
+			messageTurn("turn-A", "do A"),
+			currentWorkSteerTurn("current-work", "turn-A", "adjust A only"),
+			messageTurn("turn-B", "do B"),
+		}, nil)
+
+	frames := run.fake.Stdin()
+	if len(frames) != 2 {
+		t.Fatalf("fenced Claude generation received %d frames, want A + CURRENT_WORK only: %v", len(frames), frames)
+	}
+	for _, frame := range frames {
+		if userFrameText(t, frame) == "do B" {
+			t.Fatal("B was written into the Claude generation fenced at A's result")
+		}
+	}
+	states := run.deliveryStates("current-work")
+	if len(states) == 0 || states[len(states)-1] != string(deliveryFailed) {
+		t.Fatalf("CURRENT_WORK delivery states = %v, want terminal failed", states)
+	}
+	if settled := run.turnResult("current-work"); settled == nil || settled.Status != stFailed || settled.Subtype != subtypeSteer {
+		t.Fatalf("CURRENT_WORK settled as %+v, want failed steer receipt", settled)
+	}
+	if settled := run.turnResult("turn-A"); settled == nil || settled.Status != stSucceeded {
+		t.Fatalf("target A settled as %+v, want its valid result preserved", settled)
+	}
+	if settled := run.turnResult("turn-B"); settled != nil {
+		t.Fatalf("B ran on the fenced generation: %+v", settled)
+	}
+}
+
+// A delayed inbox response can be selected while A is live but reach the runner after A ended and
+// B started. The local Orbit target check is the second fence after the server SQL predicate.
+func TestSessionCurrentWorkSteerTargetFenceRejectsARolloverIntoB(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "A done"},
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "tool_use", ToolUseID: "toolu_B", ToolName: "Bash", Input: map[string]interface{}{"command": "work"}},
+			{Await: "user"}, // stale A-targeted CURRENT_WORK must never be written here
+		},
+		[]scriptedTurn{
+			messageTurn("turn-A", "do A"),
+			messageTurn("turn-B", "do B"),
+			currentWorkSteerTurn("late-current-work", "turn-A", "A only, too late"),
+		},
+		func(r *deliverySession) bool { return r.turnResult("late-current-work") != nil })
+
+	frames := run.fake.Stdin()
+	if len(frames) != 2 {
+		t.Fatalf("rollover wrote %d frames, want only A and B: %v", len(frames), frames)
+	}
+	if got := run.turnResult("late-current-work"); got == nil || got.Status != stFailed {
+		t.Fatalf("late CURRENT_WORK settled as %+v, want visible failure", got)
+	}
+	for _, state := range run.deliveryStates("late-current-work") {
+		if state == string(deliveryAcknowledged) {
+			t.Fatalf("late CURRENT_WORK was acknowledged inside B: %v", run.deliveryReports())
+		}
 	}
 }
 

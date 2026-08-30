@@ -54,6 +54,15 @@ function makeService(
     seedTurnId?: string;
     /** Original, pre-delivery text keyed by conversation turn id. */
     turnContents?: Record<string, string | null>;
+    /** Routing/receipt metadata for durable turns; omitted rows are ordinary messages. */
+    turnMetadata?: Record<string, {
+      kind?: string;
+      sendIntent?: string | null;
+      targetTurnId?: string | null;
+      deliveryStatus?: string | null;
+    }>;
+    /** Append-only startup context keyed by its seeded executable turn. */
+    startupFragments?: Record<string, Array<{ id: string; content: string }>>;
     /** What the commit-race branch re-reads for this session AFTER a refused resume. */
     raceReadRow?: {
       terminalReason: string | null; supersededByTaskId: string | null;
@@ -203,16 +212,52 @@ function makeService(
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         Object.entries(opts.turnContents ?? {})
           .filter(([id]) => args.where.sessionId === 'session-1' && args.where.id.in.includes(id))
-          .map(([id, content]) => ({ id, content })),
-      findUnique: async () => (opts.seedTurnId ? { id: opts.seedTurnId } : null),
+          .map(([id, content]) => {
+            const metadata = opts.turnMetadata?.[id] ?? {};
+            const targetTurnId = metadata.targetTurnId ?? null;
+            const targetMetadata = targetTurnId ? opts.turnMetadata?.[targetTurnId] ?? {} : {};
+            return {
+              id,
+              kind: metadata.kind ?? 'message',
+              sendIntent: metadata.sendIntent ?? null,
+              targetTurnId,
+              deliveryStatus: metadata.deliveryStatus ?? null,
+              content,
+              startupFragments: opts.startupFragments?.[id] ?? [],
+              targetTurn: targetTurnId && targetTurnId in (opts.turnContents ?? {})
+                ? {
+                    id: targetTurnId,
+                    kind: targetMetadata.kind ?? 'message',
+                    sendIntent: targetMetadata.sendIntent ?? null,
+                    deliveryStatus: targetMetadata.deliveryStatus ?? null,
+                    content: opts.turnContents?.[targetTurnId] ?? null,
+                    startupFragments: opts.startupFragments?.[targetTurnId] ?? [],
+                  }
+                : null,
+            };
+          }),
+      findUnique: async () => (opts.seedTurnId ? {
+        id: opts.seedTurnId,
+        content: 'opening prompt',
+        startupFragments: opts.startupFragments?.[opts.seedTurnId] ?? [],
+      } : null),
     },
     attachment: {
       // The turn scope is the whole question — "which images went with THIS message" — so the
       // fake answers it rather than handing back everything the session ever carried.
-      findMany: async (args: { where: { sessionId: string; turnId: string } }) =>
-        attachments.filter(
-          (a) => a.sessionId === args.where.sessionId && a.turnId === args.where.turnId,
-        ),
+      findMany: async (args: {
+        where: {
+          sessionId: string;
+          turnId?: string;
+          OR?: Array<{ turnId?: string; startupFragmentId?: { in: string[] } }>;
+        };
+      }) => attachments.filter((a) => {
+        if (a.sessionId !== args.where.sessionId) return false;
+        if (args.where.turnId) return a.turnId === args.where.turnId;
+        return (args.where.OR ?? []).some((clause) =>
+          (clause.turnId != null && a.turnId === clause.turnId)
+          || (clause.startupFragmentId?.in.includes(a.startupFragmentId as string) ?? false));
+      }),
       create: async (args: { data: Record<string, unknown> }) => {
         const copy = { id: `copy-${++copied}`, turnId: null, ...args.data };
         attachments.push(copy);
@@ -499,6 +544,35 @@ test('re-sends durable user text instead of runner-appended delivery context', a
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'look at #FineWeb' }]);
 });
 
+test('an armed failed retry follows the latest CURRENT_WORK USER back to its target executable', async () => {
+  const { service, resumed } = makeService([row({ status: RunStatus.FAILED })], {
+    // Model the target USER falling outside the bounded event read: the newest event is the
+    // adjustment itself, but its exact durable target still identifies what actually failed.
+    events: [{
+      type: 'user',
+      payload: { text: 'adjustment that must never become a new turn', delivery: 'acknowledged' },
+      turnId: 'current-work-9',
+    }],
+    turnContents: {
+      'target-message-8': 'the original executable request',
+      'current-work-9': 'adjustment that must never become a new turn',
+    },
+    turnMetadata: {
+      'target-message-8': { kind: 'message', sendIntent: 'NEXT_TURN' },
+      'current-work-9': {
+        kind: 'steer',
+        sendIntent: 'CURRENT_WORK',
+        targetTurnId: 'target-message-8',
+        deliveryStatus: 'FAILED',
+      },
+    },
+  });
+
+  await service.sweep(NOW);
+
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original executable request' }]);
+});
+
 test('falls back to the opening prompt when the very first turn hit the limit', async () => {
   const { service, resumed } = makeService([row({ numTurns: 0 })], { events: [] });
   await service.sweep(NOW);
@@ -606,6 +680,33 @@ test('carries the opening prompt uploads on a first-run retry', async () => {
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'opening prompt' }]);
   assert.deepEqual(resumedAttachments, [['copy-1']]);
   assert.equal(attachments.find((a) => a.id === 'copy-1')!.fileName, 'shot.png');
+});
+
+test('retries startup fragments and their attachments as one durable authored envelope', async () => {
+  const { service, resumed, resumedAttachments, attachments } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: 'opening prompt' }, turnId: 'turn-9' }],
+    turnContents: { 'turn-9': 'opening prompt' },
+    startupFragments: {
+      'turn-9': [{ id: 'fragment-1', content: 'also verify the migration' }],
+    },
+    attachments: [
+      image({ id: 'att-base', turnId: 'turn-9' }),
+      image({ id: 'att-fragment', turnId: null, startupFragmentId: 'fragment-1' }),
+    ],
+  });
+
+  await service.sweep(NOW);
+
+  assert.deepEqual(resumed, [{
+    id: 'session-1',
+    content: 'opening prompt\n\n[Context added while this turn was starting]\nalso verify the migration',
+  }]);
+  assert.equal(resumedAttachments[0].length, 2);
+  assert.deepEqual(
+    resumedAttachments[0].map((id) =>
+      attachments.find((attachment) => attachment.id === id)?.fileName),
+    ['shot.png', 'shot.png'],
+  );
 });
 
 test('loses the claim to a user message that lands first', async () => {

@@ -42,6 +42,10 @@ const (
 // of what reached the CLI that survives a process going away mid-report.
 type messageDelivery struct {
 	turnID string
+	// targetTurnID is non-empty only for explicit CURRENT_WORK. A Claude replay must arrive
+	// before this exact executable turn's result; otherwise the provider generation is fenced
+	// off so an already-written stdin frame cannot become the next turn.
+	targetTurnID string
 	// steer: this message was written into a turn that was already running, so it has no
 	// `result` of its own. Its turn settles on the engine's echo instead — the one moment
 	// that says the message became part of the conversation it was aimed at.
@@ -130,6 +134,30 @@ func (l *deliveryLedger) fail(d *messageDelivery) bool {
 	return true
 }
 
+// failUnacknowledgedTarget atomically withdraws every CURRENT_WORK delivery whose exact target
+// just ended without replay acknowledgement. The caller must terminate the Claude generation
+// before allowing another executable turn: a frame may already be in the pipe and cannot be
+// retracted from the provider itself.
+func (l *deliveryLedger) failUnacknowledgedTarget(targetTurnID string) []*messageDelivery {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if targetTurnID == "" {
+		return nil
+	}
+	failed := make([]*messageDelivery, 0)
+	kept := l.queue[:0]
+	for _, d := range l.queue {
+		if d.steer && d.targetTurnID == targetTurnID && d.state != deliveryAcknowledged && d.state != deliveryFailed {
+			d.state = deliveryFailed
+			failed = append(failed, d)
+			continue
+		}
+		kept = append(kept, d)
+	}
+	l.queue = kept
+	return failed
+}
+
 // outstanding lists the messages still unanswered, oldest first — what a process that is
 // going away has to account for. Only the fields fixed at acceptance (the turn and its
 // receipt) may be read off the result; `state` belongs to the ledger's lock.
@@ -212,6 +240,10 @@ const subtypeSteer = "steer"
 // the gap between that decision and this delivery — and writing it anyway would open a
 // turn of its own that no queued turn is waiting to answer.
 var errNoTurnToSteer = errors.New("no turn was running to steer; send it again")
+
+// errCurrentWorkTargetEnded is terminal for one explicit steer. The process generation is also
+// stopped: even bytes already written to stdin must not survive to become the next turn.
+var errCurrentWorkTargetEnded = errors.New("the target turn ended before the engine acknowledged this CURRENT_WORK message")
 
 // settleSteerTurn closes a steer's own conversation turn. Success or failure, it settles
 // nothing else: the turn it was written into is still running, and its result — the slot,

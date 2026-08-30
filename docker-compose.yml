@@ -92,6 +92,9 @@ services:
       # Optional independent signing key for 15-minute runner/session orchestration proofs.
       # Unset derives a domain-separated key from JWT_SECRET.
       RUNNER_ORCHESTRATION_JWT_SECRET: "${RUNNER_ORCHESTRATION_JWT_SECRET:-}"
+      # Keep explicit CURRENT_WORK/NEXT_TURN writes disabled through a mixed API/runner rollout.
+      # Enable only after every API replica and active runner advertises routing-v1.
+      ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED: "${ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED:-0}"
       # Optional: access-token (JWT) lifetime (e.g. 1h, 24h, 7d). Clients auto-refresh via a
       # 30d refresh token, so this can be short; defaults to 7d. Shorten once clients ship refresh.
       ACCESS_TOKEN_TTL: "${ACCESS_TOKEN_TTL:-7d}"

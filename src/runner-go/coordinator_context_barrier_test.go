@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TestCoordinatorContextBarrierWaitsForEventsBeforeTurnComplete(t *testing.T) {
+func TestSessionCurrentWorkDeliveryFlushWaitsForAcknowledgedUserBeforeTurnComplete(t *testing.T) {
 	eventsStarted := make(chan struct{})
 	releaseEvents := make(chan struct{})
 	turnCompleteStarted := make(chan struct{}, 1)
@@ -52,7 +52,6 @@ func TestCoordinatorContextBarrierWaitsForEventsBeforeTurnComplete(t *testing.T)
 
 	transport := NewTransport(srv.URL, "token")
 	barrier := &coordinatorContextFlushBarrier{}
-	barrier.mark()
 
 	done := make(chan error, 1)
 	go func() {
@@ -61,8 +60,9 @@ func TestCoordinatorContextBarrierWaitsForEventsBeforeTurnComplete(t *testing.T)
 			func(ctx context.Context) error {
 				err := transport.postEvents(ctx, "s1", RunEventBatch{Events: []RunEvent{{
 					Seq:     1,
-					Type:    evSystem,
-					Payload: map[string]interface{}{"subtype": "context_compacted"},
+					Type:    evUserDelivery,
+					TurnID:  "current-work-1",
+					Payload: map[string]interface{}{"delivery": string(deliveryAcknowledged)},
 				}}})
 				if err == nil {
 					record("events-succeeded")
@@ -82,12 +82,12 @@ func TestCoordinatorContextBarrierWaitsForEventsBeforeTurnComplete(t *testing.T)
 	select {
 	case <-eventsStarted:
 	case <-time.After(2 * time.Second):
-		t.Fatal("compaction /events request did not start")
+		t.Fatal("acknowledgement /events request did not start")
 	}
 
 	select {
 	case <-turnCompleteStarted:
-		t.Fatal("/turn-complete started before compaction /events succeeded")
+		t.Fatal("/turn-complete started before acknowledgement /events succeeded")
 	case <-time.After(100 * time.Millisecond):
 	}
 

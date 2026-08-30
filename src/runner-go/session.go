@@ -58,11 +58,31 @@ func (b *coordinatorContextFlushBarrier) flush(
 	}
 }
 
+func (b *coordinatorContextFlushBarrier) markFlushedThrough(target uint64) {
+	for {
+		current := b.flushed.Load()
+		if current >= target || b.flushed.CompareAndSwap(current, target) {
+			return
+		}
+	}
+}
+
 func (b *coordinatorContextFlushBarrier) beforeTurnComplete(
 	ctx context.Context,
 	flushEvents func(context.Context) error,
 	turnComplete func(context.Context) (string, error),
 ) (string, error) {
+	// CURRENT_WORK terminalization treats an acknowledged USER/USER_DELIVERY receipt as the
+	// runtime ACK. Flush every ordinary batch before completion, not only compaction batches: a
+	// Claude/Codex acknowledgement can otherwise remain in the 250ms buffer while the target's
+	// completion commits FAILED for the very same receipt.
+	target := b.observed.Load()
+	if err := flushEvents(ctx); err != nil {
+		return "", err
+	}
+	b.markFlushedThrough(target)
+	// A compaction may have been emitted while that request was in flight. Drain every newer
+	// generation before the completion opens the next turn.
 	if err := b.flush(ctx, flushEvents); err != nil {
 		return "", err
 	}
@@ -79,6 +99,50 @@ const crashRespawnBackoff = 5 * time.Second
 // longer than a deploy (which fails the connection or answers 502, neither of which counts here)
 // and far shorter than forever.
 const maxEventFlushServerRejections = 30
+
+func isCriticalDeliveryAcknowledgement(event RunEvent) bool {
+	if event.Type != evUser && event.Type != evUserDelivery {
+		return false
+	}
+	delivery, _ := event.Payload["delivery"].(string)
+	return delivery == string(deliveryAcknowledged)
+}
+
+// A general transcript batch may be dropped after a sustained poison-row 500 so later output can
+// continue. A CURRENT_WORK engine-read acknowledgement is different: turn-complete relies on its
+// durability to decide FAILED versus delivered. If such a batch reaches the rejection ceiling,
+// keep a sticky fence even after the in-memory queue is empty. Every later flush (especially the
+// ACK-before-complete barrier) returns the same error, so an empty buffer can never masquerade as a
+// successful proof. Runner teardown then leaves the control plane's receipt UNCONFIRMED.
+type criticalEventFlushFence struct {
+	mu  sync.Mutex
+	err error
+}
+
+func (f *criticalEventFlushFence) recordDropped(events []RunEvent, cause error) error {
+	critical := false
+	for _, event := range events {
+		if isCriticalDeliveryAcknowledgement(event) {
+			critical = true
+			break
+		}
+	}
+	if !critical {
+		return cause
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err == nil {
+		f.err = fmt.Errorf("CURRENT_WORK delivery acknowledgement could not be persisted: %w", cause)
+	}
+	return f.err
+}
+
+func (f *criticalEventFlushFence) check() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.err
+}
 
 // Whether a failed event flush is worth replaying, counting sustained server rejections through
 // serverRejections.
@@ -449,8 +513,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	coordinatorContextBarrier := &coordinatorContextFlushBarrier{}
 	emissionGate := &eventEmissionGate{}
 	flushGate := newEventFlushGate()
+	criticalFlushFence := &criticalEventFlushFence{}
 	flushWithContext := func(ctx context.Context) error {
 		return flushGate.run(ctx, func(flushCtx context.Context) error {
+			if err := criticalFlushFence.check(); err != nil {
+				return err
+			}
 			bufMu.Lock()
 			if len(buf) == 0 {
 				bufMu.Unlock()
@@ -472,7 +540,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 					logln("dropping", len(events), "events for", sessionID,
 						fmt.Sprintf("(seq %d-%d)", events[0].Seq, events[len(events)-1].Seq),
 						"after", serverRejections, "server rejections:", err)
-					return err
+					return criticalFlushFence.recordDropped(events, err)
 				}
 				// Keep the batch available to the final flush. Requests are seq-idempotent, so
 				// restoring after a lost committed response is safe and avoids dropping the tail.
@@ -667,9 +735,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			logln("failed-turn completion handed to session supervisor for", sessionID)
 			return nil
 		}
-		// Sparse coordinator context is keyed by the durable compaction epoch. Flush only when a
-		// provider actually compacted: ordinary turns keep the existing low-latency 250ms batching,
-		// while a queued follow-up cannot cross the one boundary that would make its key stale.
+		// Every completion first flushes runtime delivery acknowledgements. The same barrier also
+		// drains every sparse-coordinator compaction generation, so neither a CURRENT_WORK receipt
+		// nor the context boundary it rode can remain behind the completion that decides its fate.
 		var permitGeneration uint64
 		next, err := coordinatorContextBarrier.beforeTurnComplete(
 			completionCtx,
@@ -917,6 +985,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 			logln(fmt.Sprintf("interactive run %s — config changed; resuming with model=%s mode=%s", job.SessionID, job.Agent.Model, job.Agent.PermissionMode))
+			continue
+		}
+		if st == sessionProcessCurrentWorkFenced {
+			// Claude had accepted a CURRENT_WORK frame whose target result won before the
+			// replay ACK. That generation was deliberately killed so the frame cannot become
+			// the next turn. It is a protocol fence, not a crash, and must not spend the crash
+			// respawn budget. If a new claim is already waiting, resume it on a clean process.
+			if !pool.isActive(live) {
+				continue
+			}
+			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "current_work_target_fence"})
+			logln(fmt.Sprintf("interactive run %s — CURRENT_WORK target fence; resuming on a clean runtime", job.SessionID))
 			continue
 		}
 		// Any unexpectedly dead engine may have taken an executable inbox
@@ -1204,6 +1284,10 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 	procCancel()
 }
 
+// Internal provider-generation outcome. It never crosses the runner API; the supervisor uses it
+// to replace a deliberately fenced Claude process without charging the crash-respawn budget.
+const sessionProcessCurrentWorkFenced = "CURRENT_WORK_TARGET_FENCED"
+
 // runClaudeSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
 // reload). ended=false means the caller should re-spawn: reload=true for a requested
@@ -1266,6 +1350,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	pending := make(chan string, 8) // message turnIds fed but not yet resulted (FIFO)
 	inflight := map[string]bool{}   // turnIds being processed (dedup lease re-delivery)
 	var inflightMu sync.Mutex
+	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
+	// transcript attribution cursor: the poller and stdout reader use it as one linearization
+	// boundary for target-bearing steer commit versus target result.
+	var activeOrbitMu sync.Mutex
+	activeOrbitTurnID := ""
 	// How far each user message got on its way into the conversation, and what the CLI's
 	// replays (--replay-user-messages) answer (claude_delivery.go).
 	deliveries := &deliveryLedger{}
@@ -1281,6 +1370,25 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 		emit(evUserDelivery, p)
 	})
+	refuseSteer := func(resp *RunInboxResponse, cause error, retryable bool) {
+		emitFor(resp.TurnID, evUser, map[string]interface{}{
+			"text": resp.Content, "delivery": string(deliveryFailed), "steer": true,
+		})
+		reportDelivery(resp.TurnID, deliveryFailed, cause.Error(), retryable)
+		settleSteerTurn(resp.TurnID, cause, job, completeTurn)
+		inflightMu.Lock()
+		delete(inflight, resp.TurnID)
+		inflightMu.Unlock()
+	}
+	steerTargetCause := func(resp *RunInboxResponse) error {
+		if rt.currentPhase() != phaseWaiting || activeOrbitTurnID == "" {
+			return errNoTurnToSteer
+		}
+		if resp.TargetTurnID != "" && resp.TargetTurnID != activeOrbitTurnID {
+			return errCurrentWorkTargetEnded
+		}
+		return nil
+	}
 	endedCh := make(chan struct{})
 	var endOnce sync.Once
 	endSession := func() {
@@ -1351,27 +1459,27 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// server decides that from the lease, and this is the same question asked of
 				// the process itself: writing into an idle engine would open a turn nobody
 				// asked for, whose `result` no queued turn is waiting to answer.
-				if steer && rt.currentPhase() != phaseWaiting {
+				activeOrbitMu.Lock()
+				preflightCause := error(nil)
+				if steer {
+					preflightCause = steerTargetCause(resp)
+				}
+				activeOrbitMu.Unlock()
+				if preflightCause != nil {
 					logln("dropping a steer for", job.SessionID, "— no turn is running on", rt.String())
 					// A refused steer is the one refusal that has to enter the transcript. A
 					// refused message fails its session, which is loud; a steer settles only
 					// itself, so with no event at all the sender is left watching their own
 					// optimistic bubble wait for something that is never coming. It goes in
 					// as the failure it is — never as a message that looks sent.
-					emitFor(resp.TurnID, evUser, map[string]interface{}{
-						"text": resp.Content, "delivery": string(deliveryFailed), "steer": true,
-					})
-					reportDelivery(resp.TurnID, deliveryFailed, errNoTurnToSteer.Error(), true)
-					settleSteerTurn(resp.TurnID, errNoTurnToSteer, job, completeTurn)
-					inflightMu.Lock()
-					delete(inflight, resp.TurnID)
-					inflightMu.Unlock()
+					refuseSteer(resp, preflightCause, true)
 					continue
 				}
 				// Opened here, where the turn is first taken on, so the interval spent
 				// assembling it below (every attachment is fetched over the network) is
 				// `pending` — pulled, promised nothing.
 				delivery := newMessageDelivery(resp.TurnID, steer)
+				delivery.targetTurnID = resp.TargetTurnID
 				// Build the claude user message by dispatching each attachment on its MIME
 				// type: images and PDFs are inlined as base64 content blocks; anything else is
 				// written to the session's uploads dir outside the worktree for claude to read
@@ -1472,6 +1580,25 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					inflightMu.Unlock()
 					continue
 				}
+				// Linearize the last target check with result handling. If A ends while the
+				// attachment fetch/reservation above is in progress, its result takes this lock
+				// first and this frame is abandoned without ever entering stdin. If commit wins,
+				// the result sees the ledger entry and fences the generation unless replay ACK won.
+				activeOrbitMu.Lock()
+				finalCause := error(nil)
+				if steer {
+					finalCause = steerTargetCause(resp)
+				}
+				if finalCause != nil {
+					activeOrbitMu.Unlock()
+					slot.abandon()
+					deliveries.fail(delivery)
+					refuseSteer(resp, finalCause, true)
+					continue
+				}
+				if !steer {
+					activeOrbitTurnID = resp.TurnID
+				}
 				// Accepted: from here the frame WILL be offered to the CLI, in this order,
 				// so everything that answers for it can be put in place before it can be
 				// answered.
@@ -1499,6 +1626,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					case pending <- resp.TurnID:
 					case <-procCtx.Done():
 						slot.abandon()
+						if activeOrbitTurnID == resp.TurnID {
+							activeOrbitTurnID = ""
+						}
+						activeOrbitMu.Unlock()
 						return
 					}
 				}
@@ -1506,6 +1637,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				if !steer {
 					rt.beginTurn() // a steer joins a turn that is already waiting
 				}
+				activeOrbitMu.Unlock()
 				// The writer answers on its own schedule — a frame behind a CLI that
 				// stopped reading stdin is accepted now and written whenever the tool
 				// finishes — so watch the receipt off to the side rather than making the
@@ -1808,6 +1940,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// A long turn is many minutes from its turn_end, so ctxPing also reports it mid-turn.
 	var contextTokens int
 	var ctxPing contextPinger
+	targetFenceTripped := false
+scanLoop:
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -1882,9 +2016,34 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			if isResumeCarrierResult(r, lastAssistantText) {
 				continue
 			}
-			// A turn boundary, not an exit: the process stays up with stdin open, which is
-			// what lets the session's next message reuse it instead of spawning again.
-			rt.endTurn()
+			var turnID string
+			select {
+			case turnID = <-pending:
+			default:
+			}
+			// A target result and a target-bearing frame commit share activeOrbitMu. If the
+			// frame committed but its replay ACK has not been observed, Claude may still have
+			// it in stdin after emitting this result. Kill this generation before any B can be
+			// fed; the durable failure belongs to the steer, while A's own result remains valid.
+			activeOrbitMu.Lock()
+			fenced := deliveries.failUnacknowledgedTarget(turnID)
+			if activeOrbitTurnID == turnID {
+				activeOrbitTurnID = ""
+			}
+			if len(fenced) > 0 {
+				targetFenceTripped = true
+				rt.markTerminal()
+				procCancel()
+			} else {
+				// A normal turn boundary, not an exit: the process stays up with stdin open,
+				// which lets the next message reuse it instead of spawning again.
+				rt.endTurn()
+			}
+			activeOrbitMu.Unlock()
+			for _, d := range fenced {
+				reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetEnded.Error(), false)
+				settleSteerTurn(d.turnID, errCurrentWorkTargetEnded, job, completeTurn)
+			}
 			turnStatus := stSucceeded
 			if r.Subtype == "error_during_execution" {
 				turnStatus = stInterrupted
@@ -1907,11 +2066,6 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				"costUsd":       r.CostUsd,
 				"contextTokens": contextTokens,
 			}, job))
-			var turnID string
-			select {
-			case turnID = <-pending:
-			default:
-			}
 			if turnID != "" {
 				// Live worktree state for the composer's status bar: what this turn left in
 				// the worktree (uncommitted), so the diff updates each turn, not just at end.
@@ -1943,6 +2097,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				inflightMu.Unlock()
 				setTurn("") // turn acked; until the next message, events are session-level
 			}
+			if len(fenced) > 0 {
+				break scanLoop
+			}
 		}
 	}
 	// stdout EOF: the CLI is on its way out. Reclaim the child (and anything it left
@@ -1962,6 +2119,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	}
 	if reloadRequested.Load() {
 		return stCancelled, false, true // config changed -> respawn with the new flags
+	}
+	if targetFenceTripped {
+		return sessionProcessCurrentWorkFenced, false, false
 	}
 	select {
 	case <-endedCh:

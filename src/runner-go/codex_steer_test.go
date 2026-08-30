@@ -244,6 +244,12 @@ func (s *codexSteerSession) steer(ctx context.Context, turnID, content string) {
 	})
 }
 
+func (s *codexSteerSession) currentWorkSteer(ctx context.Context, turnID, targetTurnID, content string) {
+	s.dispatch.deliver(ctx, &RunInboxResponse{
+		TurnID: turnID, TargetTurnID: targetTurnID, Kind: "steer", Content: content,
+	})
+}
+
 // steerFromLegacyControlPlane delivers one the way a control plane that predates `steer_requeue`
 // does: no flag on the delivery, so nothing may be re-filed through it.
 func (s *codexSteerSession) steerFromLegacyControlPlane(ctx context.Context, turnID, content string) {
@@ -560,6 +566,25 @@ func TestASteerAimedAtATurnThatIsNeverNamedSendsNothing(t *testing.T) {
 		t.Fatalf("requests = %v, want none: there was no turn id to address one to", got)
 	}
 	assertSteerRefiled(t, s, steerOrbitTurn)
+	assertRunningTurnUntouched(t, s)
+}
+
+func TestCodexCurrentWorkSteerTargetFenceRejectsARolloverBeforeTurnSteer(t *testing.T) {
+	s := newCodexSteerSession(t)
+	s.startTurn() // active Orbit turn is steerMainTurn (B)
+	s.name(steerCodexTurn)
+
+	s.currentWorkSteer(context.Background(), steerOrbitTurn, "turn-A-that-ended", "A only")
+
+	if got := s.fake.methods(); len(got) != 0 {
+		t.Fatalf("stale CURRENT_WORK sent provider requests into B: %v", got)
+	}
+	if got := s.completionFor(steerOrbitTurn); got == nil || got.Status != stFailed || got.Subtype != subtypeSteer {
+		t.Fatalf("stale CURRENT_WORK settled as %+v, want visible failed steer", got)
+	}
+	if got := s.lastDelivery(steerOrbitTurn); got["delivery"] != string(deliveryFailed) {
+		t.Fatalf("stale CURRENT_WORK delivery = %v, want failed", got)
+	}
 	assertRunningTurnUntouched(t, s)
 }
 

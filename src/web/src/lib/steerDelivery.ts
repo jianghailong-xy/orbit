@@ -51,6 +51,8 @@ export function steerDeliveryState(delivery?: string | null): SteerDeliveryState
       return { label: 'Sent into this turn', tone: 'delivered' };
     case 'failed':
       return { label: 'Not delivered', tone: 'failed' };
+    case 'unconfirmed':
+      return { label: 'Delivery could not be confirmed', tone: 'failed' };
     default:
       return { label: 'Sending…', tone: 'progress' };
   }

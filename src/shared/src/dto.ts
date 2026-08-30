@@ -934,6 +934,7 @@ export interface ApprovalDecisionResponse {
 // on the engine's echo rather than on a `result`, which belongs to the turn it joined.
 export type ConversationTurnKind =
   | 'message'
+  | 'startup_context'
   | 'interrupt'
   | 'end'
   | 'reload'
@@ -941,6 +942,11 @@ export type ConversationTurnKind =
   | 'shell'
   | 'diff'
   | 'steer';
+
+/** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
+ * server-side auto-steer/queue protocol; new clients always send one explicit value. */
+export type SessionTurnIntent = 'CURRENT_WORK' | 'NEXT_TURN';
+export type SessionTurnPlacement = 'accepted' | 'startup' | 'steer' | 'queued';
 
 /** An attachment as handed to the runner on the inbox: the id to fetch its bytes with
  *  (runner-scoped `GET /runner/sessions/:id/attachments/:attId`), its MIME type, and the
@@ -960,6 +966,9 @@ export interface RunTurnRequest {
   /** Client-supplied idempotency key (UUID); dedups double-clicks / cross-tab sends. */
   clientTurnId: string;
   content: string;
+  /** CURRENT_WORK may only join the starting message or a live, steerable message turn.
+   * NEXT_TURN is independently executable. Omission retains N-1 auto-routing. */
+  intent?: SessionTurnIntent;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments`) to send with this
    *  turn. Only the ids travel here — the bytes already live in the control plane.
    *  Omitted/empty keeps the turn text-only. */
@@ -1010,6 +1019,8 @@ export interface RunInterruptResponse {
  */
 export interface RunInboxResponse {
   turnId: string;
+  /** Exact executable turn this steer is allowed to join. Present for CURRENT_WORK only. */
+  targetTurnId?: string;
   seq: number;
   kind: ConversationTurnKind;
   content?: string;

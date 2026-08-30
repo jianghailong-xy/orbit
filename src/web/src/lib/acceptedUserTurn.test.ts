@@ -7,6 +7,7 @@ import {
   queuedTurnsOutsideTranscript,
   reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
+  transcriptEventsWithDurableDeliveryReceipts,
   type AcceptedUserTurn,
 } from './acceptedUserTurn';
 
@@ -111,42 +112,70 @@ describe('an accepted user turn before its transcript event arrives', () => {
 
   it('renders one copy when queued REST overlaps an accepted or durable user event', () => {
     const rows = [
-      { turnId: 'turn-a', content: 'ship it' },
-      { turnId: 'turn-b', content: 'follow up' },
+      { turnId: 'turn-a', content: 'ship it', placement: 'queued' as const },
+      { turnId: 'turn-b', content: 'follow up', placement: 'queued' as const },
     ];
     expect(
       queuedTurnsOutsideTranscript(rows, [acceptedUserTurnEvent(accepted(), 4.5)]),
-    ).toEqual([{ turnId: 'turn-b', content: 'follow up' }]);
+    ).toEqual([{ turnId: 'turn-b', content: 'follow up', placement: 'queued' }]);
     expect(
       queuedTurnsOutsideTranscript(rows, [
         { seq: 5, type: 'user', turnId: 'turn-a', payload: { text: 'ship it' } },
       ]),
-    ).toEqual([{ turnId: 'turn-b', content: 'follow up' }]);
+    ).toEqual([{ turnId: 'turn-b', content: 'follow up', placement: 'queued' }]);
   });
 
   it('does not let a stale REST snapshot erase a turn added after the fetch began', () => {
-    const stale = { turnId: 'turn-stale', content: 'old' };
-    const late = { turnId: 'turn-late', content: 'new' };
+    const stale = { turnId: 'turn-stale', content: 'old', placement: 'queued' as const };
+    const late = { turnId: 'turn-late', content: 'new', placement: 'queued' as const };
     expect(
       reconcileQueuedTurnSnapshot([], [stale, late], new Set(['turn-stale'])),
     ).toEqual([late]);
   });
 
   it('lets any server representation supersede a late local queued copy', () => {
-    const local = { turnId: 'turn-a', content: 'local' };
-    const server = { turnId: 'turn-a', content: 'server' };
+    const local = { turnId: 'turn-a', content: 'local', placement: 'queued' as const };
+    const server = { turnId: 'turn-a', content: 'server', placement: 'queued' as const };
     expect(reconcileQueuedTurnSnapshot([server], [local], new Set())).toEqual([server]);
     expect(
       reconcileQueuedTurnSnapshot([], [local], new Set(), new Set(['turn-a'])),
     ).toEqual([]);
   });
 
-  it('keeps a steer through the REST-empty gap until its durable user event lands', () => {
-    const steer = { turnId: 'turn-steer', content: 'adjust this', steer: true };
+  it('authoritative REST absence prunes a known steer so terminal failures cannot ghost', () => {
+    const steer = {
+      turnId: 'turn-steer',
+      targetTurnId: 'turn-running',
+      content: 'adjust this',
+      placement: 'steer' as const,
+    };
 
     expect(
       reconcileQueuedTurnSnapshot([], [steer], new Set(['turn-steer'])),
-    ).toEqual([steer]);
+    ).toEqual([]);
+  });
+
+  it('matches startup by target but a steer only by its own authored turn id', () => {
+    const startup = {
+      turnId: 'fragment-startup',
+      targetTurnId: 'turn-running',
+      content: 'startup note',
+      placement: 'startup' as const,
+    };
+    const steer = {
+      turnId: 'turn-steer',
+      targetTurnId: 'turn-running',
+      content: 'adjust this',
+      placement: 'steer' as const,
+    };
+    const targetEvent = {
+      seq: 6,
+      type: 'user',
+      turnId: 'turn-running',
+      payload: { text: 'opening' },
+    };
+
+    expect(queuedTurnsOutsideTranscript([startup, steer], [targetEvent])).toEqual([steer]);
     expect(
       queuedTurnsOutsideTranscript([steer], [
         {
@@ -157,6 +186,74 @@ describe('an accepted user turn before its transcript event arrives', () => {
         },
       ]),
     ).toEqual([]);
+  });
+
+  it('merges server-only failure into the matching USER bubble at its original position', () => {
+    const failed = {
+      turnId: 'turn-current-work',
+      targetTurnId: 'turn-running',
+      content: 'adjust this',
+      placement: 'steer' as const,
+      delivery: 'failed' as const,
+    };
+    const transcript = [
+      {
+        seq: 7,
+        type: 'user',
+        turnId: 'turn-current-work',
+        payload: { text: 'adjust this', delivery: 'written' },
+      },
+      { seq: 8, type: 'user', turnId: 'turn-b', payload: { text: 'newer B' } },
+      { seq: 9, type: 'user', turnId: 'turn-c', payload: { text: 'newer C' } },
+    ];
+    const merged = transcriptEventsWithDurableDeliveryReceipts(transcript, [{
+      ...failed,
+      deliveryReason: 'target ended',
+    }]);
+
+    expect(merged.slice(0, 3)).toEqual(transcript);
+    expect(merged[3]).toMatchObject({
+      type: 'user_delivery',
+      payload: {
+        turnId: 'turn-current-work',
+        delivery: 'failed',
+        reason: 'target ended',
+      },
+    });
+    expect(queuedTurnsOutsideTranscript([failed], merged)).toEqual([]);
+    expect(queuedTurnsOutsideTranscript([failed], [])).toEqual([failed]);
+  });
+
+  it('does not duplicate a runner-authored USER_DELIVERY failure', () => {
+    const failed = {
+      turnId: 'turn-current-work',
+      targetTurnId: 'turn-running',
+      content: 'adjust this',
+      placement: 'steer' as const,
+      delivery: 'failed' as const,
+    };
+    const optimisticOnly = [{
+      seq: 7,
+      type: 'user',
+      turnId: 'turn-current-work',
+      payload: { text: 'adjust this', delivery: 'written' },
+    }];
+
+    const runnerFailed = [
+      ...optimisticOnly,
+      {
+        seq: 8,
+        type: 'user_delivery',
+        turnId: 'turn-running',
+        payload: {
+          turnId: 'turn-current-work',
+          delivery: 'failed',
+          reason: 'target ended',
+        },
+      },
+    ];
+    expect(transcriptEventsWithDurableDeliveryReceipts(runnerFailed, [failed])).toEqual(runnerFailed);
+    expect(queuedTurnsOutsideTranscript([failed], runnerFailed)).toEqual([]);
   });
 });
 

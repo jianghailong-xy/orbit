@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { turnPlacementOf } from './turnPlacement';
 
-describe('turn placement returned by send', () => {
-  it('trusts the row-locked server decision over a stale local idle snapshot', () => {
-    expect(turnPlacementOf({ placement: 'queued', kind: 'message' }, true)).toBe('queued');
-    expect(turnPlacementOf({ placement: 'accepted', kind: 'message' }, false)).toBe(
-      'accepted',
-    );
-    expect(turnPlacementOf({ placement: 'steer', kind: 'steer' }, true)).toBe('steer');
+describe('authoritative server turn placement', () => {
+  it('accepts every protocol placement, including startup context', () => {
+    for (const placement of ['accepted', 'startup', 'queued', 'steer'] as const) {
+      expect(turnPlacementOf({ placement })).toBe(placement);
+    }
   });
 
-  it('keeps the old idle/kind fallback during a rolling upgrade', () => {
-    expect(turnPlacementOf({ kind: 'message' }, true)).toBe('accepted');
-    expect(turnPlacementOf({ kind: 'shell' }, false)).toBe('queued');
-    expect(turnPlacementOf({ kind: 'steer' }, true)).toBe('steer');
+  it('rejects missing or unknown placement instead of guessing from local state', () => {
+    expect(() => turnPlacementOf({} as never)).toThrow(/server placement/i);
+    expect(() => turnPlacementOf({ placement: 'message' } as never)).toThrow(/server placement/i);
   });
 });

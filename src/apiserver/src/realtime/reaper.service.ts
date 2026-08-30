@@ -19,6 +19,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  CURRENT_WORK_SESSION_REAPED,
+  terminalizeUndeliveredCurrentWork,
+} from '../sessions/current-work-delivery';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -308,8 +312,19 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           cancelRequestedAt: new Date(),
         },
       });
-      if (res.count === 0) return { ok: false, taskReclaimed: false };
+      if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
       await retireSessionInboxGeneration(tx, sessionId);
+      const currentWork = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+        includeInFlight: true,
+        inFlightOutcome: 'UNCONFIRMED',
+        code: CURRENT_WORK_SESSION_REAPED,
+        reason:
+          `Delivery could not be confirmed because the runner disappeared before acknowledgement; `
+          + `the session was reaped as ${status}.`,
+      });
+      const currentWorkTerminalized =
+        currentWork.steers.terminalizedTurnIds.length
+        + currentWork.startup.terminalizedTurnIds.length;
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
@@ -323,13 +338,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       if (taskId && failed && resetTaskTo === TaskStatus.FAILED) {
         await postRunFailureComment(tx, taskId, opts.failureDetail ?? reason);
       }
-      return { ok: true, taskReclaimed };
+      return { ok: true, taskReclaimed, currentWorkTerminalized };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!outcome.ok) return;
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.
     if (outcome.taskReclaimed && taskId) this.realtime.publishTaskChanged(sessionId, taskId);
+    if (outcome.currentWorkTerminalized > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+    }
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     this.realtime.publish(sessionId, {
       seq: Number.MAX_SAFE_INTEGER,

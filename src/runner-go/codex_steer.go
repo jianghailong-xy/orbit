@@ -53,6 +53,10 @@ var (
 	// to. Never observed; asserted anyway, because taking the answer on faith would file a
 	// message as delivered into a turn it did not join (§2).
 	errCodexSteerTurnMismatch = errors.New("codex steered a different turn than the one this message was addressed to")
+	// errCodexSteerTargetExpired is a runner-side fence against a stale inbox response. The
+	// control plane names the exact Orbit executable turn for CURRENT_WORK; if the resident
+	// runtime has already advanced, no turn/steer request may leave this process.
+	errCodexSteerTargetExpired = errors.New("the CURRENT_WORK target turn is no longer active")
 	// errCodexSteerDropped: Codex took the message and the turn ended without ever echoing it
 	// back. The measured cause is an interrupt landing while the steer was still buffered, which
 	// Codex discards silently — no notification, nothing in the thread (§4.4).
@@ -97,7 +101,7 @@ type codexSteerDelivery struct {
 // there is a window where a turn is running, is being interrupted, or has ended, and no Codex turn
 // id is available to address a steer to. Waiting is bounded by ctx; every way out of here without
 // an id is a message that provably never left the runner.
-func beginCodexSteer(ctx context.Context, activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, text string, attachments []map[string]interface{}) (string, error) {
+func beginCodexSteer(ctx context.Context, activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, targetTurnID, text string, attachments []map[string]interface{}) (string, error) {
 	tk := time.NewTicker(codexSteerTargetPoll)
 	defer tk.Stop()
 	for {
@@ -107,6 +111,9 @@ func beginCodexSteer(ctx context.Context, activeMu *sync.Mutex, active **codexAp
 		case a == nil || a.finishing || a.interruptRequested:
 			activeMu.Unlock()
 			return "", errNoTurnToSteer
+		case targetTurnID != "" && a.orbitTurnID != targetTurnID:
+			activeMu.Unlock()
+			return "", errCodexSteerTargetExpired
 		case a.codexTurnID != "":
 			if a.steers == nil {
 				a.steers = map[string]*codexSteerDelivery{}
@@ -284,7 +291,7 @@ func classifyCodexSteerFailure(err error) codexSteerRefusal {
 		return codexSteerRefusal{code: "E-UNSUPPORTED", retryable: true, unsupported: true, requeue: true}
 	case errors.Is(err, errNoTurnToSteer) || strings.Contains(msg, "no active turn to steer"):
 		return codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true, requeue: true}
-	case errors.Is(err, errCodexSteerTurnMismatch) || strings.Contains(msg, "expected active turn id"):
+	case errors.Is(err, errCodexSteerTurnMismatch) || errors.Is(err, errCodexSteerTargetExpired) || strings.Contains(msg, "expected active turn id"):
 		return codexSteerRefusal{code: "E-MISMATCH", retryable: true, requeue: true}
 	// The runner's own pre-flight refusals. Not a row of the table: they are §4.3a's "provably
 	// not delivered" reached before anything was sent at all.
@@ -367,7 +374,7 @@ func (d *codexSteerDispatcher) deliver(ctx context.Context, resp *RunInboxRespon
 		return
 	}
 	aimCtx, cancelAim := context.WithTimeout(ctx, codexSteerRequestTimeout)
-	codexTurnID, err := beginCodexSteer(aimCtx, d.activeMu, d.active, resp.TurnID,
+	codexTurnID, err := beginCodexSteer(aimCtx, d.activeMu, d.active, resp.TurnID, resp.TargetTurnID,
 		resp.Content, prepared.AttachmentRefs)
 	cancelAim()
 	if err != nil {

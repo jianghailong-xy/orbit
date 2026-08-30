@@ -8,7 +8,14 @@ const now = new Date();
 
 function makeService(
   overrides: Record<string, unknown> = {},
-  existingTurn: { id: string; seq: number; kind: string } | null = null,
+  existingTurn: {
+    id: string;
+    seq: number;
+    kind: string;
+    content: string;
+    attachments: { id: string }[];
+    requestFingerprint?: string | null;
+  } | null = null,
 ) {
   const session = {
     id: 'session-1',
@@ -34,6 +41,7 @@ function makeService(
   const announced: string[] = [];
   let notified = 0;
   let retired = 0;
+  const created: Array<Record<string, unknown>> = [];
   const sessionDelegate = {
     findFirst: async () => session,
     findUniqueOrThrow: async () => session,
@@ -45,7 +53,10 @@ function makeService(
   const conversationTurnDelegate = {
     findUnique: async () => existingTurn,
     findFirst: async () => ({ seq: 1 }),
-    create: async ({ data }: { data: { seq: number } }) => ({ id: 'retry-turn', ...data }),
+    create: async ({ data }: { data: { seq: number } & Record<string, unknown> }) => {
+      created.push(data);
+      return { id: 'retry-turn', ...data };
+    },
   };
   const prisma = {
     session: sessionDelegate,
@@ -73,7 +84,14 @@ function makeService(
     publishSessionUpdated: (sessionId: string) => announced.push(`updated:${sessionId}`),
   } as never;
   const service = new SessionsService(prisma, queue, realtime);
-  return { service, updates, announced, notified: () => notified, retired: () => retired };
+  return {
+    service,
+    updates,
+    created,
+    announced,
+    notified: () => notified,
+    retired: () => retired,
+  };
 }
 
 const retry = { clientTurnId: 'retry-1', content: 'send after signing in' };
@@ -169,7 +187,13 @@ test('a graceful terminal cancel remains resumable despite historical cancelRequ
 });
 
 test('a lost resume response can retry its clientTurnId after the session became PENDING', async () => {
-  const existingTurn = { id: 'already-queued-turn', seq: 7, kind: 'message' };
+  const existingTurn = {
+    id: 'already-queued-turn',
+    seq: 7,
+    kind: 'message',
+    content: retry.content,
+    attachments: [],
+  };
   const { service, updates, announced, notified, retired } = makeService(
     { status: RunStatus.PENDING },
     existingTurn,
@@ -188,6 +212,72 @@ test('a lost resume response can retry its clientTurnId after the session became
   assert.equal(notified(), 1);
   // Nothing was revived — the row was already PENDING — so there is no news to announce.
   assert.deepEqual(announced, []);
+});
+
+test('a lost resume response rejects reuse of its clientTurnId for a changed payload', async () => {
+  const existingTurn = {
+    id: 'already-queued-turn',
+    seq: 7,
+    kind: 'message',
+    content: retry.content,
+    attachments: [],
+  };
+  const { service, updates, notified, retired } = makeService(
+    { status: RunStatus.PENDING },
+    existingTurn,
+  );
+
+  await assert.rejects(
+    () => service.resume('owner-1', 'session-1', { ...retry, content: 'changed after retry' }),
+    (error: unknown) =>
+      error instanceof ConflictException
+      && error.message === 'clientTurnId was already used with a different resume payload',
+  );
+  assert.equal(updates.length, 0);
+  assert.equal(retired(), 0);
+  assert.equal(notified(), 0);
+});
+
+test('resume idempotency fingerprints model, permission mode, effort, and provider', async () => {
+  const original = {
+    ...retry,
+    model: 'model-a',
+    permissionMode: 'acceptEdits',
+    effort: 'high',
+    provider: 'codex',
+  };
+  const first = makeService();
+  await first.service.resume('owner-1', 'session-1', original);
+  const requestFingerprint = first.created[0]?.requestFingerprint;
+  assert.match(String(requestFingerprint), /^[0-9a-f]{64}$/);
+
+  const existingTurn = {
+    id: 'already-queued-turn',
+    seq: 7,
+    kind: 'message',
+    content: retry.content,
+    attachments: [],
+    requestFingerprint: String(requestFingerprint),
+  };
+  const same = makeService({ status: RunStatus.PENDING }, existingTurn);
+  assert.equal(
+    (await same.service.resume('owner-1', 'session-1', original)).turnId,
+    existingTurn.id,
+  );
+
+  for (const changed of [
+    { model: 'model-b' },
+    { permissionMode: 'bypassPermissions' },
+    { effort: 'low' },
+    { provider: 'configured-provider-b' },
+  ]) {
+    const h = makeService({ status: RunStatus.PENDING }, existingTurn);
+    await assert.rejects(
+      () => h.service.resume('owner-1', 'session-1', { ...original, ...changed }),
+      /different resume payload/,
+      `changed resume configuration was accepted: ${JSON.stringify(changed)}`,
+    );
+  }
 });
 
 for (const tc of [

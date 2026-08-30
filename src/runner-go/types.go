@@ -608,10 +608,11 @@ type AttachmentCreateResponse struct {
 // RunInboxResponse is the next user turn to feed the live runtime.
 // TurnID == "" means nothing is available (mirrors the empty-runId claim convention).
 type RunInboxResponse struct {
-	TurnID  string `json:"turnId"`
-	Seq     int    `json:"seq"`
-	Kind    string `json:"kind"`
-	Content string `json:"content,omitempty"`
+	TurnID       string `json:"turnId"`
+	TargetTurnID string `json:"targetTurnId,omitempty"`
+	Seq          int    `json:"seq"`
+	Kind         string `json:"kind"`
+	Content      string `json:"content,omitempty"`
 	// Attachments for this (message) turn; the runner fetches each blob and dispatches on
 	// its type (image/PDF → content block, else → written to the worktree). Nil if none.
 	Attachments []TurnAttachment `json:"attachments,omitempty"`

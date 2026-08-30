@@ -61,6 +61,31 @@ func TestMCPOrchestrationToolsGated(t *testing.T) {
 	}
 }
 
+func TestSessionSendCurrentWorkDescriptionNeverPromisesANextTurnQueue(t *testing.T) {
+	var description string
+	for _, tool := range toolDescriptors(false, true) {
+		if tool["name"] == "session_send" {
+			description, _ = tool["description"].(string)
+			break
+		}
+	}
+	for name, text := range map[string]string{
+		"MCP":      description,
+		"CLI help": sessionActionHelp["send"],
+		"headless": headlessActionDescription["send"],
+	} {
+		if !strings.Contains(text, "CURRENT_WORK") {
+			t.Errorf("%s session_send description omits CURRENT_WORK: %q", name, text)
+		}
+		if !strings.Contains(text, "never queue") {
+			t.Errorf("%s session_send description does not promise explicit refusal: %q", name, text)
+		}
+		if strings.Contains(text, "queued behind") || strings.Contains(text, "runs next") {
+			t.Errorf("%s session_send description still promises NEXT_TURN fallback: %q", name, text)
+		}
+	}
+}
+
 func TestMCPTaskStartIsPartOfTaskTools(t *testing.T) {
 	if !hasMCPTool(toolDescriptors(false, false), "task_start") {
 		t.Fatalf("task_start missing from the base task tools")

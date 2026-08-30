@@ -25,6 +25,9 @@ const (
 	sessionOrchestrationCredentialV1     = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1             = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1                 = "session-worktree-ops-v1"
+	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
+	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
+	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
 	// These runtimes expose an authoritative history-compaction boundary. The control plane may
 	// therefore attach full project-coordinator context once per engine/compaction epoch instead
 	// of spending it on every user message. Kimi/OpenCode intentionally do not claim this yet.
@@ -56,6 +59,7 @@ func init() {
 		sessionOrchestrationCredentialV1,
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
+		sessionCurrentWorkRoutingV1,
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
 	}, declaredSteerCapabilities()...), ",")

@@ -32,7 +32,13 @@ function harness({
    *  of this report, or one that lost the race with the turn ending. */
   requeued = 1,
   status = RunStatus.RUNNING,
-}: { isSteer?: boolean; requeued?: number; status?: RunStatus } = {}) {
+  sendIntent = null,
+}: {
+  isSteer?: boolean;
+  requeued?: number;
+  status?: RunStatus;
+  sendIntent?: 'CURRENT_WORK' | null;
+} = {}) {
   const turnState = {
     kind: isSteer ? 'steer' : 'message',
     status: 'IN_FLIGHT',
@@ -46,8 +52,10 @@ function harness({
     $executeRaw: async () => 1,
     conversationTurn: {
       findFirst: async ({ where }: { where: { kind?: string } }) =>
-        where.kind === 'steer' && turnState.kind === 'steer' ? { id: TURN_ID } : null,
-      findUnique: async () => ({ kind: turnState.kind }),
+        where.kind === 'steer' && turnState.kind === 'steer'
+          ? { id: TURN_ID, sendIntent, targetTurnId: null }
+          : null,
+      findUnique: async () => ({ kind: turnState.kind, sendIntent }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         turnWrites.push(args);
         if (args.data.kind === 'message' && args.where.kind === 'steer') {
@@ -201,6 +209,17 @@ test('an ordinary steer completion still acks, so re-filing is not what any of t
   const h = harness();
 
   await report(h, 'steer');
+
+  assert.equal(h.turnWrites.length, 1);
+  assert.equal(h.turnWrites[0].data.status, 'ANSWERED');
+  assert.equal(h.turnWrites[0].data.kind, undefined);
+  assert.deepEqual(h.inboxWakes, []);
+});
+
+test('explicit CURRENT_WORK never takes the legacy steer-requeue fallback', async () => {
+  const h = harness({ sendIntent: 'CURRENT_WORK' });
+
+  await report(h, TURN_COMPLETE_STEER_REQUEUE);
 
   assert.equal(h.turnWrites.length, 1);
   assert.equal(h.turnWrites[0].data.status, 'ANSWERED');

@@ -232,19 +232,25 @@ export class RunnerSessionsController {
       this.assertNoServiceToken(grant);
       await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     }
-    // AU3/TH3: steering somebody else's live attempt is bounded. "Keep going" is the only verb
-    // that produces activity without producing an attempt, a fingerprint or a unit of progress —
-    // which is exactly why every liveness check stayed green through the incident. Spending the
-    // budget leaves one legal next step: a fresh generation with a new hypothesis.
-    await this.attempts.chargeSteer(
-      runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
+    const actor = RunnerSessionsController.actor(callingSessionId);
     // Same idempotency key every other entry point sends. A caller that retries a request it
     // never saw the answer to (the MCP tool, the CLI, a script) can repeat the key and get the
     // turn it already filed back, instead of a second copy of the message. Minting one here
     // when none is given keeps the historical behaviour for callers that don't care.
+    const clientTurnId = dto.clientTurnId?.trim() || randomUUID();
     return this.sessions.createTurn(runner.ownerId, id, {
-      clientTurnId: dto.clientTurnId?.trim() || randomUUID(),
+      clientTurnId,
       content: dto.message,
+      // This endpoint is the orchestration "steer" verb (and is budgeted as one above), not the
+      // generic client send. It must fail if the named live attempt cannot receive the message.
+      intent: 'CURRENT_WORK',
+    }, {
+      // AU3/TH3, but only for a NEW receipt that has already passed target/runtime checks. The
+      // callback runs under createTurn's Session lock and in its transaction: a retry observes the
+      // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
+      // receipt. This is the idempotency boundary, not a preflight guess in the controller.
+      participateCurrentWorkTransaction: (tx) =>
+        this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
     });
   }
 
@@ -270,15 +276,19 @@ export class RunnerSessionsController {
     // Only the version that injects a turn is charged. A bodyless interrupt stops what is running
     // and writes no outcome, so it cannot overwrite one; an interrupt CARRYING a message is a steer
     // with more force behind it, and an unbounded loop of those is the same unbounded verb.
-    if (followUp) {
-      await this.attempts.chargeSteer(
-        runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
-    }
+    const actor = RunnerSessionsController.actor(callingSessionId);
+    const clientTurnId = dto?.clientTurnId?.trim() || randomUUID();
     return this.sessions.interrupt(
       runner.ownerId,
       id,
       followUp
-        ? { content: followUp, clientTurnId: dto?.clientTurnId?.trim() || randomUUID() }
+        ? { content: followUp, clientTurnId }
+        : undefined,
+      followUp
+        ? {
+            participateFollowUpTransaction: (tx) =>
+              this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
+          }
         : undefined,
     );
   }

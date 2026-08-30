@@ -26,6 +26,11 @@ function sweepWithOfflineRunner(taskId: string | null) {
     $executeRaw: async () => 1,
     conversationTurn: { updateMany: async () => ({ count: 1 }),
       findFirst: async () => null,
+      findMany: async () => [],
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
   };
   const prisma = {

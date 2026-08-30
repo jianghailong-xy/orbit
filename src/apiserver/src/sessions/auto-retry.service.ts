@@ -20,6 +20,7 @@ import {
   loggedRetry,
   withTransactionRetry,
 } from '../common/transaction-retry';
+import { appendStartupTurnFragments } from '../runner-api/resume-continuation';
 
 const SWEEP_INTERVAL_MS = 30_000;
 // How long a session armed by the reaper waits for its runner to come back. Covers the
@@ -297,7 +298,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        const { content, attachmentsOf } = await this.messageToResend(
+        const { content, attachmentsOf, startupFragmentsOf } = await this.messageToResend(
           session.id,
           session.prompt,
           session.numTurns,
@@ -355,8 +356,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // the try so a failed copy takes the ordinary backoff instead of escaping the sweep.
         const attachmentIds: string[] = [];
         try {
-          if (attachmentsOf) {
-            attachmentIds.push(...(await this.copyAttachments(session.id, attachmentsOf)));
+          if (attachmentsOf || startupFragmentsOf.length > 0) {
+            attachmentIds.push(...(await this.copyAttachments(
+              session.id,
+              attachmentsOf,
+              startupFragmentsOf,
+            )));
           }
           await this.sessions.resume(session.ownerId, session.id, {
             content,
@@ -531,7 +536,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     prompt: string,
     numTurns: number,
-  ): Promise<{ content: string; attachmentsOf: string | null }> {
+  ): Promise<{
+    content: string;
+    attachmentsOf: string | null;
+    startupFragmentsOf: string[];
+  }> {
     // The user events themselves, not a tail of the whole stream: the latest one is near the
     // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
     // message that provoked it — 400+ on the sessions that surfaced this — so a fixed window
@@ -555,24 +564,97 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     const turns = turnIds.length > 0
       ? await this.prisma.conversationTurn.findMany({
           where: { sessionId, id: { in: turnIds } },
-          select: { id: true, content: true },
+          select: {
+            id: true,
+            kind: true,
+            sendIntent: true,
+            targetTurnId: true,
+            deliveryStatus: true,
+            content: true,
+            startupFragments: {
+              where: { failedAt: null },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: { id: true, content: true },
+            },
+            // A CURRENT_WORK USER can be the newest authored event when the executable it joined
+            // fails. That adjustment is not a new executable. Follow its durable address back to
+            // the exact message whose provider run failed, even if that message's USER fell
+            // outside the bounded event lookup.
+            targetTurn: {
+              select: {
+                id: true,
+                kind: true,
+                sendIntent: true,
+                deliveryStatus: true,
+                content: true,
+                startupFragments: {
+                  where: { failedAt: null },
+                  orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                  select: { id: true, content: true },
+                },
+              },
+            },
+          },
         })
       : [];
-    const durableContent = new Map(turns.map((turn) => [turn.id, turn.content]));
+    type RetryTurn = {
+      id: string;
+      kind: string;
+      sendIntent: string | null;
+      deliveryStatus: string | null;
+      content: string | null;
+      startupFragments?: Array<{ id: string; content: string }>;
+    };
+    const durableTurns = new Map<string, RetryTurn>();
+    for (const turn of turns) {
+      durableTurns.set(turn.id, turn);
+      if (turn.targetTurn) durableTurns.set(turn.targetTurn.id, turn.targetTurn);
+    }
+    const durableContent = new Map([...durableTurns.values()].map((turn) => {
+      // A number of retained/recovered rows and rolling test doubles predate the relation. Missing
+      // means no fragments, never that the authored base text should be discarded.
+      const fragments = turn.startupFragments ?? [];
+      return [turn.id, {
+        id: turn.id,
+        content: appendStartupTurnFragments(turn.content ?? undefined, fragments) ?? '',
+        startupFragmentIds: fragments.map((fragment) => fragment.id),
+      }];
+    }));
+
+    const executableFor = (turnId: string) => {
+      const observed = durableTurns.get(turnId);
+      if (!observed) return undefined;
+      // A steer is authored input but never an independently retryable turn. Explicit
+      // CURRENT_WORK has an exact target, so use that executable; a legacy unaddressed steer can
+      // only be skipped in favour of the preceding executable USER event.
+      const candidate = observed.kind === 'steer'
+        ? turns.find((turn) => turn.id === observed.id)?.targetTurn ?? undefined
+        : observed;
+      if (
+        !candidate
+        || candidate.kind !== 'message'
+        || candidate.sendIntent === 'CURRENT_WORK'
+        || candidate.deliveryStatus != null
+      ) return undefined;
+      return durableContent.get(candidate.id);
+    };
 
     let chosen: (typeof events)[number] | undefined;
+    let chosenDurable: { id: string; content: string; startupFragmentIds: string[] } | undefined;
     let content = '';
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
-      if (event.turnId && durableContent.has(event.turnId)) {
-        const original = durableContent.get(event.turnId);
-        if (original?.trim()) {
+      if (event.turnId && durableTurns.has(event.turnId)) {
+        const original = executableFor(event.turnId);
+        if (original?.content.trim()) {
           chosen = event;
-          content = original;
+          chosenDurable = original;
+          content = original.content;
           break;
         }
-        // The row exists and says the person supplied no words. Do not fall back to an echoed
-        // delivery block and mistake an image-only turn for authored text.
+        // The row either says the person supplied no words or identifies a non-executable
+        // CURRENT_WORK/terminal receipt. Do not fall back to its echoed delivery text and turn an
+        // adjustment into a fresh executable retry.
         continue;
       }
       // Old events can predate turn attribution, and a retained event can outlive a missing turn
@@ -584,8 +666,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         break;
       }
     }
-    if (!content && numTurns === 0 && prompt.trim()) content = prompt;
-    if (!content) return { content: '', attachmentsOf: null };
+    let seeded: {
+      id: string;
+      content: string;
+      startupFragmentIds: string[];
+      startupFragments: Array<{ content: string }>;
+    } | null = null;
+    if (!content && numTurns === 0) {
+      seeded = await this.seededTurnForRetry(sessionId);
+      const opening = appendStartupTurnFragments(
+        seeded?.content || prompt,
+        seeded?.startupFragments ?? [],
+      ) ?? '';
+      if (opening.trim()) content = opening;
+    }
+    if (!content) return { content: '', attachmentsOf: null, startupFragmentsOf: [] };
     // The turn THAT message came from, never merely the session's latest turn: pairing these words
     // with a later turn's images would re-send a message the user never wrote.
     return {
@@ -593,12 +688,18 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // No user event means the text above is the opening-prompt fallback, which the runner
       // never got to announce. Its uploads are the compose page's, and the claim parked them
       // on the seeded first turn.
-      attachmentsOf: chosen ? chosen.turnId : await this.seededTurnId(sessionId),
+      attachmentsOf: chosenDurable?.id ?? (chosen ? chosen.turnId : seeded?.id ?? null),
+      startupFragmentsOf: chosenDurable?.startupFragmentIds ?? seeded?.startupFragmentIds ?? [],
     };
   }
 
-  /** The turn the opening prompt was seeded as, found by the fixed id both seed paths use. */
-  private async seededTurnId(sessionId: string): Promise<string | null> {
+  /** Opening turn plus every append-only startup fragment, found by the fixed seed id. */
+  private async seededTurnForRetry(sessionId: string): Promise<{
+    id: string;
+    content: string;
+    startupFragmentIds: string[];
+    startupFragments: Array<{ content: string }>;
+  } | null> {
     const seed = await this.prisma.conversationTurn.findUnique({
       where: {
         sessionId_clientTurnId: {
@@ -606,9 +707,23 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           clientTurnId: SessionsService.initialTurnClientId(sessionId),
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        content: true,
+        startupFragments: {
+          where: { failedAt: null },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true, content: true },
+        },
+      },
     });
-    return seed?.id ?? null;
+    const fragments = seed?.startupFragments ?? [];
+    return seed ? {
+      id: seed.id,
+      content: seed.content ?? '',
+      startupFragmentIds: fragments.map((fragment) => fragment.id),
+      startupFragments: fragments.map((fragment) => ({ content: fragment.content })),
+    } : null;
   }
 
   /**
@@ -622,9 +737,23 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * the user's image behind that, so the failed attempt's bubble would lose its picture the
    * first time a retry was cancelled. The copies die with the session either way.
    */
-  private async copyAttachments(sessionId: string, turnId: string): Promise<string[]> {
+  private async copyAttachments(
+    sessionId: string,
+    turnId: string | null,
+    startupFragmentIds: readonly string[],
+  ): Promise<string[]> {
     const sent = await this.prisma.attachment.findMany({
-      where: { sessionId, turnId },
+      where: startupFragmentIds.length === 0 && turnId
+        ? { sessionId, turnId }
+        : {
+            sessionId,
+            OR: [
+              ...(turnId ? [{ turnId }] : []),
+              ...(startupFragmentIds.length > 0
+                ? [{ startupFragmentId: { in: [...startupFragmentIds] } }]
+                : []),
+            ],
+          },
       orderBy: { createdAt: 'asc' },
     });
     const copies: string[] = [];
@@ -650,7 +779,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   private async discardCopies(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     try {
-      await this.prisma.attachment.deleteMany({ where: { id: { in: ids }, turnId: null } });
+      await this.prisma.attachment.deleteMany({
+        where: { id: { in: ids }, turnId: null, startupFragmentId: null },
+      });
     } catch {
       // Bytes nobody will ever see, in the failure path of a retry that still has a backoff to
       // arm. Losing the cleanup must not lose that too; the session's deletion collects them.

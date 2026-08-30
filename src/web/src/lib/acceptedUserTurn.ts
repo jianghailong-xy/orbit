@@ -21,8 +21,58 @@ export interface UserTurnEvent {
 
 interface QueuedTurnLike {
   turnId: string;
-  /** A steer is already entering the running turn and cannot be withdrawn. */
-  steer?: boolean;
+  placement: 'startup' | 'steer' | 'queued';
+  /** A startup fragment is represented in the transcript by its target executable event. */
+  targetTurnId?: string;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
+  deliveryReason?: string;
+}
+
+const terminalDeliveryForEvent = (event: UserTurnEvent): string | null => {
+  if (event.type !== 'user_delivery') return null;
+  const payload = event.payload as { delivery?: unknown; turnId?: unknown } | null;
+  if (payload?.delivery !== 'failed' && payload?.delivery !== 'unconfirmed') return null;
+  const turnId = typeof payload.turnId === 'string' ? payload.turnId : event.turnId;
+  return typeof turnId === 'string' ? turnId : null;
+};
+
+/** Patch a server-owned terminal receipt onto the matching USER node without allocating a
+ * runner event sequence or painting a second tail bubble. The synthetic USER_DELIVERY is appended
+ * to the parser input, but it mutates the node indexed by turnId, so the bubble remains at the
+ * authored USER's original position even when newer B/C turns follow it. Receipts with no USER
+ * stay outside the transcript and are rendered once by the active-tail fallback. */
+export function transcriptEventsWithDurableDeliveryReceipts<T extends QueuedTurnLike>(
+  events: readonly UserTurnEvent[],
+  receipts: readonly T[],
+): UserTurnEvent[] {
+  const userTurnIds = new Set(events.flatMap((event) =>
+    event.type === 'user' && typeof event.turnId === 'string' ? [event.turnId] : []));
+  const terminalTurnIds = new Set(events.flatMap((event) => {
+    const turnId = terminalDeliveryForEvent(event);
+    return turnId ? [turnId] : [];
+  }));
+  const patches = receipts.filter((receipt) =>
+    receipt.delivery != null
+    && userTurnIds.has(receipt.turnId)
+    && !terminalTurnIds.has(receipt.turnId));
+  if (patches.length === 0) return events as UserTurnEvent[];
+  const maxSeq = events.reduce((max, event) => Math.max(max, event.seq), 0);
+  return [
+    ...events,
+    ...patches.map((receipt, index): UserTurnEvent => ({
+      seq: maxSeq + (index + 1) / (patches.length + 1),
+      type: 'user_delivery',
+      turnId: receipt.turnId,
+      payload: {
+        turnId: receipt.turnId,
+        delivery: receipt.delivery,
+        ...(receipt.deliveryCode ? { code: receipt.deliveryCode } : {}),
+        ...(receipt.deliveryReason ? { reason: receipt.deliveryReason } : {}),
+        source: 'durable-receipt',
+      },
+    })),
+  ];
 }
 
 /** Whether the server-backed event that replaces this optimistic turn has arrived. */
@@ -141,7 +191,27 @@ export function queuedTurnsOutsideTranscript<T extends QueuedTurnLike>(
       event.type === 'user' && typeof event.turnId === 'string' ? [event.turnId] : [],
     ),
   );
-  return queued.filter((turn) => !renderedTurnIds.has(turn.turnId));
+  const renderedTerminalDeliveryIds = new Set(events.flatMap((event) => {
+    const turnId = terminalDeliveryForEvent(event);
+    return turnId ? [turnId] : [];
+  }));
+  return queued.filter((turn) => {
+    // Startup context is rendered as part of its target's opening user event. A live steer has
+    // its own authored USER event and must never disappear merely because the target event was
+    // already in the transcript before it was sent.
+    // A durable terminal receipt sharing a USER's turnId is merged into that existing bubble by
+    // transcriptEventsWithDurableDeliveryReceipts. Never paint a second copy at the tail. With no
+    // USER at all the receipt remains the one fallback bubble.
+    if (turn.delivery != null) {
+      return !renderedTerminalDeliveryIds.has(turn.turnId)
+        && !renderedTurnIds.has(turn.turnId);
+    }
+    if (turn.placement === 'startup') {
+      return !renderedTurnIds.has(turn.turnId)
+        && !renderedTurnIds.has(turn.targetTurnId ?? turn.turnId);
+    }
+    return !renderedTurnIds.has(turn.turnId);
+  });
 }
 
 /** Reconcile a REST queue snapshot without letting an older in-flight fetch erase turns that were
@@ -156,15 +226,9 @@ export function reconcileQueuedTurnSnapshot<T extends QueuedTurnLike>(
   const next = [...snapshot];
   const included = new Set(snapshot.map((turn) => turn.turnId));
   for (const turn of current) {
-    // A steer can leave the active-turn endpoint when turnComplete wins just before the buffered
-    // durable `user` event is flushed. REST absence cannot mean cancellation (steers are not
-    // cancellable), so keep its local bubble until that matching event removes it. A server row
-    // still supersedes it through representedTurnIds, e.g. if a refresh updates its metadata.
-    if (turn.steer && !representedTurnIds.has(turn.turnId)) {
-      if (!included.has(turn.turnId)) next.push(turn);
-      included.add(turn.turnId);
-      continue;
-    }
+    // A successful active snapshot is authoritative. Startup/steer rows that were already known
+    // and are now absent have either landed or reached a durable terminal receipt; preserving
+    // them unconditionally would resurrect a ghost after transcript tail reseeding.
     if (
       knownBefore.has(turn.turnId) ||
       representedTurnIds.has(turn.turnId) ||

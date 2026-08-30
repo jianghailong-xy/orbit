@@ -21,12 +21,23 @@ const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 
 type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<unknown>;
 
+function queryText(query: unknown): string {
+  if (Array.isArray(query)) return (query as readonly string[]).join('?');
+  const strings = (query as { strings?: readonly string[] } | null)?.strings;
+  if (strings) return strings.join('?');
+  return String(query);
+}
+
 function leaseSQL() {
   const rawCalls: unknown[][] = [];
   const tx = {
+    // The v1 poller gate audits unresolved startup receipts before evaluating the dequeue SQL.
+    // This shape-only harness has none; keep that production read explicit so the regression
+    // cannot accidentally skip the capability boundary while it captures the final query.
+    conversationTurn: { findMany: async () => [] },
     $queryRaw: async (...args: unknown[]) => {
       rawCalls.push(args);
-      const sql = (args[0] as readonly string[]).join('?');
+      const sql = queryText(args[0]);
       if (/SELECT id, "inbox_lease_generation"/.test(sql)) {
         return [
           { id: SESSION_ID, inboxLeaseGeneration: null, inboxLeaseOwner: null, status: RunStatus.RUNNING },
@@ -47,7 +58,7 @@ function leaseSQL() {
   );
   return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn
     .bind(controller)(SESSION_ID, RUNNER_ID, null)
-    .then(() => (rawCalls.at(-1)?.[0] as readonly string[]).join('?'));
+    .then(() => queryText(rawCalls.at(-1)?.[0]));
 }
 
 test('a steer is gated ON a live engine turn, and an executable turn is still gated OFF one', async () => {

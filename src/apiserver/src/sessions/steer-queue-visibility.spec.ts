@@ -24,6 +24,7 @@ const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 function makeService(
   rows: Array<Record<string, unknown>>,
   announcedTurnIds: string[] = [],
+  failedDeliveryTurnIds: string[] = [],
 ) {
   const filters: Record<string, unknown>[] = [];
   const orderings: Record<string, unknown>[] = [];
@@ -53,6 +54,7 @@ function makeService(
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }) },
+    conversationTurnStartupFragment: { findMany: async () => [] },
     conversationTurn: {
       findMany: async ({
         where,
@@ -69,10 +71,14 @@ function makeService(
     runEvent: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
         eventFilters.push(where);
-        const requested = new Set((where.turnId as { in: string[] }).in);
-        return announcedTurnIds
-          .filter((turnId) => requested.has(turnId))
-          .map((turnId) => ({ turnId }));
+        return [
+          ...announcedTurnIds.map((turnId) => ({ type: 'user', turnId, payload: {} })),
+          ...failedDeliveryTurnIds.map((turnId) => ({
+            type: 'user_delivery',
+            turnId: 'running-target',
+            payload: { turnId, delivery: 'failed' },
+          })),
+        ];
       },
     },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
@@ -90,20 +96,36 @@ const row = (
   id: string,
   kind: string,
   content: string,
-  opts: { seq?: number; status?: string; clientTurnId?: string } = {},
+  opts: {
+    seq?: number;
+    status?: string;
+    clientTurnId?: string;
+    targetTurnId?: string;
+    sendIntent?: string;
+    deliveryStatus?: string;
+    deliveryFailureCode?: string;
+    deliveryFailureReason?: string;
+  } = {},
 ) => ({
-    id,
-    seq: opts.seq ?? 1,
-    clientTurnId: opts.clientTurnId ?? `client-${id}`,
-    kind,
-    status: opts.status ?? 'PENDING',
-    content,
-    createdAt: CREATED_AT,
-    attachments: [],
-  });
+  id,
+  seq: opts.seq ?? 1,
+  clientTurnId: opts.clientTurnId ?? `client-${id}`,
+  kind,
+  targetTurnId: opts.targetTurnId ?? null,
+  sendIntent: opts.sendIntent ?? null,
+  deliveryStatus: opts.deliveryStatus ?? null,
+  deliveryFailureCode: opts.deliveryFailureCode ?? null,
+  deliveryFailureReason: opts.deliveryFailureReason ?? null,
+  status: opts.status ?? 'PENDING',
+  content,
+  createdAt: CREATED_AT,
+  attachments: [],
+});
 
 test('a still-pending steer is listed, so a reload can still see it', async () => {
-  const h = makeService([row('t1', 'steer', 'actually, call it gadget')]);
+  const h = makeService([
+    row('t1', 'steer', 'actually, call it gadget', { targetTurnId: 'target-running' }),
+  ]);
 
   const listed = await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active');
 
@@ -113,6 +135,7 @@ test('a still-pending steer is listed, so a reload can still see it', async () =
   // it as on its way rather than as waiting, and offers no withdraw for it.
   assert.equal(listed[0].kind, 'steer');
   assert.equal(listed[0].placement, 'steer');
+  assert.equal(listed[0].targetTurnId, 'target-running');
   assert.equal(listed[0].content, 'actually, call it gadget');
   assert.equal(listed[0].createdAt, CREATED_AT.toISOString());
 });
@@ -124,11 +147,15 @@ test('one ordered snapshot asks for every active row needed to classify the queu
 
   const where = h.filters[0] as {
     kind: { in: string[] };
-    status: { in: string[] };
+    OR: Array<{ status?: { in: string[] }; sendIntent?: string; deliveryStatus?: string }>;
     clientTurnId?: unknown;
   };
   assert.deepEqual([...where.kind.in].sort(), ['message', 'shell', 'steer']);
-  assert.deepEqual([...where.status.in].sort(), ['IN_FLIGHT', 'PENDING']);
+  assert.deepEqual([...where.OR[0].status!.in].sort(), ['IN_FLIGHT', 'PENDING']);
+  assert.deepEqual(where.OR[1], {
+    sendIntent: 'CURRENT_WORK',
+    deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
+  });
   assert.equal(
     where.clientTurnId,
     undefined,
@@ -196,8 +223,10 @@ test('an announced hidden initial prompt remains the head and makes a follow-up 
   assert.deepEqual(h.eventFilters, [
     {
       sessionId: SESSION_ID,
-      type: 'user',
-      turnId: { in: ['initial', 'follow-up'] },
+      OR: [
+        { type: 'user', turnId: { in: ['initial', 'follow-up'] } },
+        { type: 'user_delivery', payload: { path: ['delivery'], equals: 'failed' } },
+      ],
     },
   ]);
 });
@@ -240,10 +269,96 @@ test('an announced IN_FLIGHT head is omitted without promoting its queued succes
   assert.deepEqual(h.eventFilters, [
     {
       sessionId: SESSION_ID,
-      type: 'user',
-      turnId: { in: ['running', 'steer', 'next'] },
+      OR: [
+        { type: 'user', turnId: { in: ['running', 'steer', 'next'] } },
+        { type: 'user_delivery', payload: { path: ['delivery'], equals: 'failed' } },
+      ],
     },
   ]);
+});
+
+test('USER(enqueued) returns the durable CURRENT_WORK failure Web merges onto that bubble', async () => {
+  const h = makeService(
+    [
+      row('current-work', 'steer', 'adjust it', {
+        status: 'ANSWERED',
+        targetTurnId: 'running-target',
+        sendIntent: 'CURRENT_WORK',
+        deliveryStatus: 'FAILED',
+        deliveryFailureCode: 'CURRENT_WORK_TARGET_COMPLETED',
+        deliveryFailureReason: 'The target completed before the engine acknowledged this message.',
+      }),
+    ],
+    // The runner may have already emitted optimistic USER(enqueued/written). It is not an ACK.
+    ['current-work'],
+  );
+
+  const listed = await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active');
+
+  assert.deepEqual(listed, [{
+    turnId: 'current-work',
+    kind: 'steer',
+    placement: 'steer',
+    targetTurnId: 'running-target',
+    delivery: 'failed',
+    deliveryCode: 'CURRENT_WORK_TARGET_COMPLETED',
+    deliveryReason: 'The target completed before the engine acknowledged this message.',
+    content: 'adjust it',
+    createdAt: CREATED_AT.toISOString(),
+    attachments: [],
+  }]);
+});
+
+test('runner-loss ambiguity remains visible as UNCONFIRMED even after USER(written)', async () => {
+  const h = makeService(
+    [
+      row('current-work', 'steer', 'adjust it', {
+        status: 'ANSWERED',
+        targetTurnId: 'running-target',
+        sendIntent: 'CURRENT_WORK',
+        deliveryStatus: 'UNCONFIRMED',
+        deliveryFailureCode: 'CURRENT_WORK_SESSION_REAPED',
+        deliveryFailureReason: 'Delivery could not be confirmed after runner loss.',
+      }),
+    ],
+    ['current-work'],
+  );
+
+  assert.deepEqual(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'), [{
+    turnId: 'current-work',
+    kind: 'steer',
+    placement: 'steer',
+    targetTurnId: 'running-target',
+    delivery: 'unconfirmed',
+    deliveryCode: 'CURRENT_WORK_SESSION_REAPED',
+    deliveryReason: 'Delivery could not be confirmed after runner loss.',
+    content: 'adjust it',
+    createdAt: CREATED_AT.toISOString(),
+    attachments: [],
+  }]);
+});
+
+test('runner USER_DELIVERY(failed) suppresses the duplicate durable failure overlay', async () => {
+  const h = makeService(
+    [
+      row('current-work', 'steer', 'adjust it', {
+        status: 'ANSWERED',
+        targetTurnId: 'running-target',
+        sendIntent: 'CURRENT_WORK',
+        deliveryStatus: 'FAILED',
+        deliveryFailureCode: 'CURRENT_WORK_RUNTIME_REJECTED',
+        deliveryFailureReason: 'The runtime rejected the adjustment.',
+      }),
+    ],
+    ['current-work'],
+    ['current-work'],
+  );
+
+  assert.deepEqual(
+    await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'),
+    [],
+    'the transcript owns the one terminal Not delivered bubble after reload',
+  );
 });
 
 test('the default view excludes a PENDING accepted head old clients would mislabel as queued', async () => {

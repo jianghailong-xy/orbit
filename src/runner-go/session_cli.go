@@ -115,17 +115,18 @@ Usage:
 Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
 long-lived session has finished the turn it was given.
 `,
-	"send": `orbit session send — send a follow-up message to a session
+	"send": `orbit session send — add a message to a session's current work
 
 Usage:
   orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
 
 --message-file accepts only '-' (stdin), so the CLI never opens an arbitrary path.
 
-The reply's "kind" says what the server did with the message: "steer" means it is being
-written into the turn already running (no reply of its own, and not withdrawable), while
-"message" means it is queued behind that turn. --client-turn-id makes the send idempotent:
-repeating a key returns the turn already filed instead of queueing a second message.
+This is CURRENT_WORK only. Success is "startup_context" bound to the not-yet-started opening
+turn or "steer" bound to the exact live turn; it has no independent reply and cannot be
+withdrawn. If there is no eligible current work, the boundary was missed, or the runtime cannot
+prove acknowledged delivery, the command fails and never queues the message for a later turn.
+--client-turn-id makes an uncertain-response retry idempotent for the same payload.
 `,
 	"interrupt": `orbit session interrupt — interrupt a session's current turn
 
@@ -296,7 +297,7 @@ var sessionActionScope = map[string]string{
 var headlessActionDescription = map[string]string{
 	"list":   "List the sessions this runner hosts. Sessions on other runners are not listed; a token pinned to an agent sees only that agent's.",
 	"get":    "Get one session's status, numTurns, lastTurnAt and latest output — enough for a headless poller to tell whether a long-lived session finished its turn. Limited to sessions this runner hosts.",
-	"send":   "Queue a follow-up message for a session this runner hosts, as the runner owner. It neither spawns nor ends a session.",
+	"send":   "Add CURRENT_WORK to the exact starting or live turn of a session this runner hosts. Unsupported or missed boundaries fail explicitly and never queue a later turn. It neither spawns nor ends a session.",
 	"create": "Start a session for the agent this service token is pinned to, on this runner. Requires a minted token with the session:create scope; the runner credential alone cannot spawn.",
 }
 
