@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma } from '@prisma/client';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -8,6 +7,7 @@ import {
   TasksService,
 } from './tasks.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import { recordingQueryRaw } from './query-raw-test-helper';
 
 interface FailureHistory {
   taskId: string;
@@ -372,14 +372,12 @@ test('a runner that reports no disk figure is not gated on disk', async () => {
 });
 
 test('a held task is filtered out of the candidate scan, without reading its list', async () => {
-  let sql = '';
+  const raw = recordingQueryRaw();
   const prisma = {
-    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-      sql = Prisma.sql(strings, ...(bound as never[])).text;
-      return [];
-    },
+    $queryRaw: raw.$queryRaw,
   } as never;
   await sweep(new TasksService(prisma, {} as never, {} as never));
+  const sql = raw.statements[0].text;
   // In the scan, not only in execute(): a paused 500-task list would otherwise throw once per
   // task per minute for as long as the pause lasted.
   assert.match(sql, /t\.dispatch_hold = false/);
@@ -393,24 +391,45 @@ test('a held task is filtered out of the candidate scan, without reading its lis
 });
 
 test('the sweep selects candidates on all five READY conditions, anchored on HAVING prerequisites', async () => {
-  let sql = '';
+  const raw = recordingQueryRaw();
   const prisma = {
-    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-      sql = Prisma.sql(strings, ...(bound as never[])).text;
-      return [];
-    },
+    $queryRaw: raw.$queryRaw,
   } as never;
   await sweep(new TasksService(prisma, {} as never, {} as never));
+  const sql = raw.statements[0].text;
 
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.auto_run_when_ready = true/);
   assert.match(sql, /EXISTS \(SELECT 1 FROM workspace a[\s\S]*a\.runner_id IS NOT NULL\)/);
-  // §13.6 SU9: an edge is satisfied by the END of its supersession chain. The database function
-  // is the bounded, fail-closed resolver shared with the commit guard, so a prerequisite replaced
-  // and re-done under a new id remains satisfiable.
+  // §13.6 SU9 now resolves the END of the supersession chain through the database function shared
+  // with Run Now and the commit trigger. The double anti-join is load-bearing: NULL from a missing,
+  // cross-owner, cyclic or over-depth chain finds no DONE row, so the edge remains unsatisfied.
   assert.match(
     sql,
-    /NOT EXISTS \([\s\S]*task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+    /NOT EXISTS \(\s*SELECT 1 FROM task_dependency dep[\s\S]*AND NOT EXISTS \(\s*SELECT 1\s*FROM task chain_task[\s\S]*chain_task\.id = task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+  );
+  // DONE is not enough while a verification epoch is open. Scope equality prevents another
+  // tenant/project's check from inventing an epoch, and an OPEN request closes an older PASS.
+  assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
+  assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
+  assert.match(sql, /epoch_open_request\."status" = 'OPEN'/);
+  assert.match(
+    sql,
+    /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
+  );
+  // The legacy PASS route is fail-closed too: no occupying run, one successful task_done run, and
+  // (inside a project) an applied verdict action are all required before it releases the edge.
+  assert.match(
+    sql,
+    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+  );
+  assert.match(
+    sql,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+  );
+  assert.match(
+    sql,
+    /epoch_check\."project_id" IS NULL OR EXISTS \(\s*SELECT 1 FROM "project_action" passed_action[\s\S]*passed_action\."status"::text = 'APPLIED'/,
   );
   // Load-bearing despite being logically implied by the two clauses around it: it is the only
   // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
