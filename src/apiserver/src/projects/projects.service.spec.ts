@@ -251,8 +251,10 @@ test('the index buckets every project in one aggregate, not one query per projec
   let rawQueries = 0;
   const service = serviceWith({
     project: { findMany: async () => listed },
-    $queryRaw: async () => {
+    $queryRaw: async (sql: any) => {
       rawQueries += 1;
+      const rendered = sql.strings?.join(' ') ?? sql.sql ?? String(sql);
+      if (rendered.includes('failure_continuation_obligation')) return [];
       if (rawQueries === 2) {
         return [{
           projectId: 'a1',
@@ -278,9 +280,9 @@ test('the index buckets every project in one aggregate, not one query per projec
 
   const rows: any[] = await service.list(OWNER_ID);
 
-  // Two page-wide aggregates: one over tasks, one over open blockers. Neither grows with the
-  // number of projects; looping the per-project readers would make this 6 — and 36 in production.
-  assert.equal(rawQueries, 2);
+  // Three page-wide overlays: task rollup, open blockers and canonical failure coordination.
+  // None grows with the number of projects.
+  assert.equal(rawQueries, 3);
   assert.deepEqual(rows[0].buckets, {
     running: 1, ready: 2, blocked: 3, awaitingVerification: 0, done: 4, failed: 0, cancelled: 5,
   });
@@ -336,11 +338,15 @@ test('concurrent identical project indexes share one aggregate without caching i
   assert.equal(projectReads, 1);
   found.resolve([{ id: PROJECT_ID, members: [], runtime: { coordinatorGeneration: 0n } }]);
   await Promise.all([first, second]);
-  assert.equal(aggregateReads, 2, 'one task rollup and one blocker rollup for both callers');
+  assert.equal(
+    aggregateReads,
+    3,
+    'one task rollup, one blocker rollup and one failure overlay for both callers',
+  );
 
   await service.list(OWNER_ID, ProjectStatus.OPEN as never);
   assert.equal(projectReads, 2, 'settlement removes the promise; the next request reads fresh state');
-  assert.equal(aggregateReads, 4);
+  assert.equal(aggregateReads, 6);
 });
 
 test('the detail read reports progress without loading the project’s tasks', async () => {

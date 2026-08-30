@@ -735,7 +735,8 @@ describe('ProjectsPage — sections', () => {
       buckets: { blocked: 4 },
       lastActivityAt: ago(8 * QUIET_MS),
     }),
-    // One task is outside the five buckets: TaskStatus.FAILED.
+    // One task is outside the legacy buckets: TaskStatus.FAILED. Without a canonical escalation
+    // it remains an automatic continuation in Waiting, never a synthetic Needs you signal.
     listRow(P10, 'Failed release', { _count: { tasks: 3 }, buckets: { done: 2 } }),
     // A run that has emitted no task activity for two days is an exception, not healthy Running.
     listRow(P11, 'Zombie run', {
@@ -788,7 +789,7 @@ describe('ProjectsPage — sections', () => {
     const attention = sectionOf(html, 'attention');
     const running = sectionOf(html, 'running');
     expect(attention).not.toContain('Needs approval');
-    expect(attention).toContain('Failed release');
+    expect(attention).not.toContain('Failed release');
     expect(attention).toContain('Zombie run');
     expect(attention).toContain('Inbox Redesign');
     expect(running).toContain('Needs approval');
@@ -798,6 +799,7 @@ describe('ProjectsPage — sections', () => {
     expect(sectionOf(html, 'ready')).toContain('FineWeb Corpus');
     expect(sectionOf(html, 'ready')).toContain('Ledger Migration');
     expect(sectionOf(html, 'waiting')).toContain('Waiting on upstream');
+    expect(sectionOf(html, 'waiting')).toContain('Failed release');
     expect(sectionOf(html, 'definition')).toContain('Brand Refresh');
     // Even if a stale/mixed cache entry carries terminal rows, Open never repeats that history
     // below its attention lanes. The dedicated filters are their only list surface.
@@ -820,16 +822,15 @@ describe('ProjectsPage — sections', () => {
 
   it('orders Needs attention by issue severity before age', () => {
     const attention = sectionOf(renderMixed(), 'attention');
-    expect(attention.indexOf('Failed release')).toBeLessThan(attention.indexOf('Zombie run'));
     expect(attention.indexOf('Zombie run')).toBeLessThan(attention.indexOf('Inbox Redesign'));
   });
 
   it('counts each section in its own header', () => {
     const html = renderMixed();
-    expect(sectionOf(html, 'attention')).toMatch(/Needs attention<\/h3>.*?>3</);
+    expect(sectionOf(html, 'attention')).toMatch(/Needs attention<\/h3>.*?>2</);
     expect(sectionOf(html, 'running')).toMatch(/Running<\/h3>.*?>3</);
     expect(sectionOf(html, 'ready')).toMatch(/Ready<\/h3>.*?>2</);
-    expect(sectionOf(html, 'waiting')).toMatch(/Waiting<\/h3>.*?>1</);
+    expect(sectionOf(html, 'waiting')).toMatch(/Waiting<\/h3>.*?>2</);
     expect(sectionOf(html, 'definition')).toMatch(/Needs definition<\/h3>.*?>1</);
   });
 
@@ -849,7 +850,7 @@ describe('ProjectsPage — sections', () => {
     expect(html).not.toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
     expect(html).not.toContain('Legacy Cleanup');
     expect(html).not.toContain('Abandoned Rewrite');
-    expect(sectionOf(html, 'attention')).toContain('The goal of Failed release');
+    expect(sectionOf(html, 'waiting')).toContain('The goal of Failed release');
   });
 
   it('leaves out a section with nothing in it', () => {

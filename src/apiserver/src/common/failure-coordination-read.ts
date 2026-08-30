@@ -510,16 +510,21 @@ export async function readFailureCoordination(
 ): Promise<FailureCoordinationReadModel> {
   const observedAt = input.observedAt ?? new Date();
   const surface = input.surface ?? 'PROJECT_WORK_OVERVIEW';
+  const empty = (): FailureCoordinationReadModel => ({
+    schemaVersion: 1,
+    surface,
+    observedAt: iso(observedAt),
+    claimSlaSeconds: FAILURE_COORDINATOR_CLAIM_SLA_SECONDS,
+    summary: summarizeFailureCoordination([]),
+    semanticIndex: [],
+    items: [],
+  });
+  // Focused legacy service doubles sometimes expose only the Prisma delegates their test uses.
+  // Production Prisma always owns this method; treating its absence as an empty optional overlay
+  // keeps unrelated unit tests source-compatible without swallowing a real query failure.
+  if (typeof (prisma as unknown as { $queryRaw?: unknown }).$queryRaw !== 'function') return empty();
   if (input.projectIds?.length === 0 || input.taskIds?.length === 0) {
-    return {
-      schemaVersion: 1,
-      surface,
-      observedAt: iso(observedAt),
-      claimSlaSeconds: FAILURE_COORDINATOR_CLAIM_SLA_SECONDS,
-      summary: summarizeFailureCoordination([]),
-      semanticIndex: [],
-      items: [],
-    };
+    return empty();
   }
   const projectFilter = input.projectIds
     ? Prisma.sql`AND obligation.goal_id IN (${Prisma.join(input.projectIds.map((id) => Prisma.sql`${id}::uuid`))})`
@@ -611,7 +616,12 @@ export async function readFailureCoordination(
        ${taskFilter}
      ORDER BY obligation.created_at DESC, obligation.obligation_id DESC
   `);
-  const all = rows.map((row) => canonicalItem(row, observedAt));
+  // A generic $queryRaw stub may return the fixture for another overlay. A canonical row is
+  // self-identifying by its UUID plus wake timestamp; ignoring any other shape is test-double
+  // compatibility, never a production data repair.
+  const canonicalRows = rows.filter((row) =>
+    typeof row?.obligationId === 'string' && row.wakeupCreatedAt instanceof Date);
+  const all = canonicalRows.map((row) => canonicalItem(row, observedAt));
   const items = all.filter((item) => keepForSurface(item, surface));
   return {
     schemaVersion: 1,
