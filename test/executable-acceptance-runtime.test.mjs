@@ -2634,15 +2634,20 @@ test('external dead-man marks a registered generation missing when it never hear
       expected.module_graph_digest, expected.heartbeat_digest],
     ['STARTING', 'STARTING', sourceSha, watchdogModuleGraphDigest, null],
   );
+  const duringGraceAt = new Date(
+    new Date(expected.startup_deadline_at).getTime() - 1,
+  ).toISOString();
+  // Force the database wall clock past the deadline before the scan connects. The scan must be
+  // classified at its captured start time, not at an arbitrary later point in connection setup.
+  await waitPast(expected.startup_deadline_at);
   const duringGrace = runDeadman([
     '--component', component, '--instance-id', instanceId, '--generation', generation,
+    '--now', duringGraceAt,
   ]);
   assert.deepEqual(
     [duringGrace.starting, duringGrace.missing, duringGrace.events.length],
     [1, 0, 0],
   );
-
-  await waitPast(expected.startup_deadline_at);
   const missing = runDeadman([
     '--component', component, '--instance-id', instanceId, '--generation', generation,
   ]);
@@ -2677,6 +2682,7 @@ test('external dead-man marks a registered generation missing when it never hear
   assert.deepEqual([live.state, live.active_obligation_count], ['WATCHDOG_STALE', 1]);
   Object.assign(evidence.watchdog, {
     neverHeartbeatedGenerationDetected: true,
+    scanStartBound: true,
     startupGraceSeconds: 1,
     missingEventExactlyOnce: true,
   });

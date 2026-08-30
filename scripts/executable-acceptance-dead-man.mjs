@@ -76,10 +76,19 @@ try {
     process.stdout.write(`${JSON.stringify(registered.rows[0].result)}\n`);
   } else {
     const expected = await client.query(`
-      SELECT component, instance_id, generation, expectation_digest,
-             startup_deadline_at, heartbeat_digest, observed_at, deadline_at,
-             heartbeat_ingested_at, last_event_kind, state, condition_code
-        FROM executable_runtime_expected_liveness
+      SELECT expected.component, expected.instance_id, expected.generation,
+             expected.expectation_digest, expected.startup_deadline_at,
+             expected.heartbeat_digest, expected.observed_at, expected.deadline_at,
+             expected.heartbeat_ingested_at, expected.last_event_kind,
+             event.checked_at AS last_event_checked_at
+        FROM executable_runtime_expected_liveness expected
+        LEFT JOIN LATERAL (
+          SELECT candidate.checked_at
+            FROM executable_dead_man_event candidate
+           WHERE candidate.expectation_generation = expected.generation
+           ORDER BY candidate.checked_at DESC, candidate.created_at DESC, candidate.id DESC
+           LIMIT 1
+        ) event ON true
        WHERE component = $1
          AND ($2::text IS NULL OR instance_id = $2)
          AND ($3::uuid IS NULL OR generation = $3)
@@ -98,22 +107,27 @@ try {
       for (const row of expected.rows) {
         let kind = null;
         let heartbeatDigest = row.heartbeat_digest;
-        if (row.state === 'STARTING') {
+        const hasHeartbeat = heartbeatDigest !== null;
+        const heartbeatExpired = hasHeartbeat
+          && checkedAt.getTime() > new Date(row.deadline_at).getTime();
+        const priorFailureStillCurrent = hasHeartbeat
+          && ['WATCHDOG_STALE', 'WATCHDOG_MISSING'].includes(row.last_event_kind)
+          && new Date(row.last_event_checked_at).getTime()
+            >= new Date(row.heartbeat_ingested_at).getTime();
+        const starting = !hasHeartbeat
+          && checkedAt.getTime() <= new Date(row.startup_deadline_at).getTime();
+        if (starting) {
           summary.starting += 1;
           continue;
         }
-        if (row.condition_code === 'WATCHDOG_MISSING') {
+        if (!hasHeartbeat) {
           summary.missing += 1;
           kind = row.last_event_kind === 'WATCHDOG_MISSING' ? null : 'WATCHDOG_MISSING';
           heartbeatDigest = null;
-        } else if (row.state === 'WATCHDOG_STALE') {
+        } else if (heartbeatExpired || priorFailureStillCurrent) {
           summary.stale += 1;
-          kind = row.last_event_kind === 'WATCHDOG_STALE' ? null : 'WATCHDOG_STALE';
-        } else if (
-          row.state === 'HEALTHY'
-          && (row.last_event_kind === 'WATCHDOG_STALE'
-            || row.last_event_kind === 'WATCHDOG_MISSING')
-        ) {
+          kind = priorFailureStillCurrent ? null : 'WATCHDOG_STALE';
+        } else if (['WATCHDOG_STALE', 'WATCHDOG_MISSING'].includes(row.last_event_kind)) {
           kind = 'WATCHDOG_RECOVERED';
         }
         if (!kind) continue;
