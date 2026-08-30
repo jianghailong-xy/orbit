@@ -4053,6 +4053,88 @@ model TaskExecutableDiagnosis {
   @@map("task_executable_diagnosis")
 }
 
+/// Immutable snapshot of one admitted typed attempt's non-success termination.  The row is
+/// inserted by PostgreSQL in the same transaction as TaskExecutableAttempt.terminationKind.
+model FailureContinuationAttemptReceipt {
+  receiptId             String   @id @default(dbgenerated("gen_random_uuid()")) @map("receipt_id") @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  goalId                String   @map("goal_id") @db.Uuid
+  taskId                String   @map("task_id") @db.Uuid
+  attemptId             String   @unique @map("attempt_id") @db.Uuid
+  sessionId             String   @map("session_id") @db.Uuid
+  bindingRevision       BigInt   @map("binding_revision")
+  attemptGeneration     BigInt   @map("attempt_generation")
+  evaluationPlanDigest  String   @map("evaluation_plan_digest") @db.Char(64)
+  terminationKind       ExecutableAcceptanceTerminationKind @map("termination_kind")
+  expectedExitCode      Int      @map("expected_exit_code")
+  actualExitCode        Int?     @map("actual_exit_code")
+  signal                String?
+  failureFingerprint    String   @map("failure_fingerprint") @db.Char(64)
+  outputDigest          String   @map("output_digest") @db.Char(64)
+  outputTruncated       Boolean  @map("output_truncated")
+  terminatedAt          DateTime @map("terminated_at") @db.Timestamptz(6)
+  receiptDigest         String   @unique @map("receipt_digest") @db.Char(64)
+  recordedAt            DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([goalId, taskId, bindingRevision, attemptGeneration, failureFingerprint], map: "failure_continuation_receipt_identity_idx")
+  @@index([tenantId, goalId, recordedAt, receiptId], map: "failure_continuation_receipt_tenant_goal_idx")
+  @@map("failure_continuation_attempt_receipt")
+}
+
+/// Canonical, append-only identity of one ACTIVE goal-actionable DIAGNOSIS continuation.
+model FailureContinuationObligation {
+  obligationId       String   @id @default(dbgenerated("gen_random_uuid()")) @map("obligation_id") @db.Uuid
+  receiptId          String   @unique @map("receipt_id") @db.Uuid
+  continuationId     String   @unique @map("continuation_id") @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  goalId             String   @map("goal_id") @db.Uuid
+  taskId             String   @map("task_id") @db.Uuid
+  bindingRevision    BigInt   @map("binding_revision")
+  attemptGeneration  BigInt   @map("attempt_generation")
+  failureFingerprint String   @map("failure_fingerprint") @db.Char(64)
+  idempotencyKey     String   @unique @map("idempotency_key") @db.Char(64)
+  kind               String   @default("DIAGNOSIS")
+  reasonCode         String   @map("reason_code")
+  owner              String   @default("PROJECT_COORDINATOR")
+  capability         String   @default("failure-continuation.diagnose")
+  goalActionable     Boolean  @default(true) @map("goal_actionable")
+  state              String   @default("ACTIVE")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, goalId, taskId, createdAt, obligationId], map: "failure_continuation_obligation_active_idx")
+  @@map("failure_continuation_obligation")
+}
+
+/// Mutable transport projection for at-least-once coordinator delivery.  The immutable
+/// obligation and its plannedSessionId make every lease generation converge on one active claim.
+model FailureContinuationWakeupOutbox {
+  outboxId             String    @id @default(dbgenerated("gen_random_uuid()")) @map("outbox_id") @db.Uuid
+  obligationId         String    @unique @map("obligation_id") @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  goalId               String    @map("goal_id") @db.Uuid
+  taskId               String    @map("task_id") @db.Uuid
+  idempotencyKey       String    @unique @map("idempotency_key") @db.Char(64)
+  plannedSessionId     String    @unique @default(dbgenerated("gen_random_uuid()")) @map("planned_session_id") @db.Uuid
+  state                String    @default("PENDING")
+  availableAt          DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  leaseOwner           String?   @map("lease_owner")
+  leaseToken           String?   @map("lease_token") @db.Uuid
+  leaseGeneration      BigInt    @default(0) @map("lease_generation")
+  leasedUntil          DateTime? @map("leased_until") @db.Timestamptz(6)
+  deliveryAttempts     Int       @default(0) @map("delivery_attempts")
+  coordinatorWakeId    String?   @map("coordinator_wake_id") @db.Uuid
+  coordinatorSessionId String?   @map("coordinator_session_id") @db.Uuid
+  deliveredAt          DateTime? @map("delivered_at") @db.Timestamptz(6)
+  cancelledAt          DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  lastErrorCode        String?   @map("last_error_code")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([state, availableAt, leasedUntil, createdAt, outboxId], map: "failure_continuation_outbox_due_idx")
+  @@index([tenantId, goalId, state, createdAt, outboxId], map: "failure_continuation_outbox_tenant_goal_idx")
+  @@map("failure_continuation_wakeup_outbox")
+}
+
 /// Append-only liveness pulse. The digest chains previousDigest + sourceSha + deadline + payload,
 /// so a heartbeat cannot be copied to another build or observation window without detection.
 model ExecutableRuntimeHeartbeat {

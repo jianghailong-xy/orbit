@@ -95,6 +95,8 @@ export const COORDINATOR_WAKE_EVENTS = [
   'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
   /** A terminal result is durable but the control plane has not committed its completion ACK. */
   'COMPLETION_ACK_STALE',
+  /** A failed typed EXECUTABLE attempt left an ACTIVE diagnosis the agent must continue. */
+  'FAILURE_CONTINUATION_ACTIONABLE',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];

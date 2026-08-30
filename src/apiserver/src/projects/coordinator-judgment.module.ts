@@ -5,6 +5,7 @@ import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
+import { FailureContinuationService } from './failure-continuation.service';
 
 /**
  * The clock-independent fact → judgment reducer, shared by synchronous producers and the
@@ -21,12 +22,14 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
     CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
+    FailureContinuationService,
   ],
   exports: [
     CoordinatorWakeService,
     CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
+    FailureContinuationService,
   ],
 })
 export class CoordinatorJudgmentModule {}

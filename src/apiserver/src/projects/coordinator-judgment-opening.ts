@@ -91,9 +91,44 @@ export function describeWakeFact(fact: WakeFact): string {
         + `由项目 coordinator 负责，原因是 ${reason}。`
       );
       }
+    case 'FAILURE_CONTINUATION_ACTIONABLE':
+      {
+        const binding = detail.binding && typeof detail.binding === 'object'
+          && !Array.isArray(detail.binding)
+          ? detail.binding as Record<string, unknown>
+          : {};
+        const reason = detail.reason && typeof detail.reason === 'object'
+          && !Array.isArray(detail.reason)
+          ? detail.reason as Record<string, unknown>
+          : {};
+        return (
+          `任务 ${uuidToBase62(fact.subjectId)} 的 typed EXECUTABLE attempt 已失败并保留为 FAILED；`
+          + `ACTIVE DIAGNOSIS obligation ${String(detail.obligationId ?? '未知')} / `
+          + `${fact.subjectVersion} 等待协调。binding revision `
+          + `${String(binding.bindingRevision ?? '未知')}、attempt generation `
+          + `${String(binding.attemptGeneration ?? '未知')}，原因 `
+          + `${String(reason.code ?? '未知')}。`
+        );
+      }
     default:
       return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
   }
+}
+
+/** Failure continuation is autonomous diagnosis, never an implicit rerun or owner question. */
+export function failureContinuationProtocol(): string {
+  return (
+    '\n\n这条 FAILURE_CONTINUATION_ACTIONABLE 是 Agent-owned diagnosis obligation。你要自动推进，但必须保留失败事实：\n'
+    + '1. 先读取 project_get 与 task_get，并核对 opening 中同一个 obligationId/revision、binding revision、'
+    + 'attempt generation、failure fingerprint 和 receipt digest；聊天文本不是新的失败事实。\n'
+    + '2. 原任务的 FAILED 是本次 attempt 的真实结果：不得把它改回 OPEN/IN_PROGRESS/DONE，不得原样重跑它的 '
+    + 'acceptanceCommand，也不得伪造新的成功 receipt。\n'
+    + '3. 分析失败证据；若仍需工程动作，创建有不同身份和明确验收的 diagnosis/repair/successor task，并用原失败任务的 '
+    + 'supersession/依赖语义衔接。重复 delivery 必须复用已有 successor，不能产生第二个 active claim。\n'
+    + '4. 代码缺陷、测试、部署与普通诊断由 Agent 处理，不创建 owner decision。只有确实遇到 '
+    + 'GOAL_DECISION、RISK_ACCEPTANCE、NEW_AUTHORIZATION 或 EXTERNAL_IDENTITY 才能走结构化 owner-decision 协议；'
+    + '不得用 HUMAN_SIGNOFF 或评论冒充。'
+  );
 }
 
 /** A code/control-plane defect is ordinary autonomous engineering work, not a human judgment. */
@@ -182,6 +217,7 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'
     + (fact.event === 'PROJECT_TASKS_SETTLED' ? settledAcceptanceProtocol(projectId) : '')
     + (fact.event === 'COMPLETION_ACK_STALE' ? completionAckRemediationProtocol() : '')
+    + (fact.event === 'FAILURE_CONTINUATION_ACTIONABLE' ? failureContinuationProtocol() : '')
     + '\n\n'
     + '同一个项目还有一条人点开的协调会话，长期开着、由人驱动。它和这次判断读库里同一份事实，不共享上下文；'
     + '这次判断不会动它，它也不会动这次判断。'

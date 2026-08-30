@@ -52,7 +52,7 @@ const TAKES_LOCK = /FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE|pg_advisory/;
  */
 const WRITES_ROWS = /\b(INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|CREATE\s+|DROP\s+|ALTER\s+|TRUNCATE\b)/i;
 /** Stored procedures whose SELECT-shaped API appends rows after validating their bound payload. */
-const CALLS_WRITE_FUNCTION = /\bSELECT\s+(?:outcome_(?:register_delivery_binding|record_delivery_attestation|record_delivery_verification)|completion_ack_(?:request|decide)_owner_decision)\s*\(/i;
+const CALLS_WRITE_FUNCTION = /(?:\bSELECT\s+(?:outcome_(?:register_delivery_binding|record_delivery_attestation|record_delivery_verification)|completion_ack_(?:request|decide)_owner_decision|failure_continuation_(?:sweep|ack_wakeup|retry_wakeup|cancel_wakeup))|\bFROM\s+failure_continuation_claim_wakeups)\s*\(/i;
 
 type Shape = 'TX_RETRIED' | 'TX_BARE' | 'INHERITED' | 'AUTOCOMMIT';
 

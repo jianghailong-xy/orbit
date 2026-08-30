@@ -110,6 +110,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
+import { FailureContinuationService } from '../projects/failure-continuation.service';
 import {
   appendCoordinatorDeliveryContext,
   buildCoordinatorDeliveryContextKey,
@@ -769,6 +770,8 @@ export class RunnerApiController {
      * fixtures; RunnerApiModule imports the one shared TasksService instance in production.
      */
     private readonly tasks?: TasksService,
+    /** Durable typed-failure outbox courier. Optional only for direct controller fixtures. */
+    private readonly failureContinuations?: FailureContinuationService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -4151,6 +4154,15 @@ export class RunnerApiController {
           + `${error instanceof Error ? error.message : error}`,
         ),
       );
+    }
+    if (
+      'acceptanceAttemptTerminatedId' in finalized
+      && finalized.acceptanceAttemptTerminatedId
+      && this.failureContinuations
+    ) {
+      // The trigger committed the immutable receipt, obligation and outbox with the attempt. This
+      // is only the low-latency nudge; a lost process edge is recovered by the service's sweep.
+      void this.failureContinuations.kick();
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound

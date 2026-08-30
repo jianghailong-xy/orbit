@@ -375,6 +375,16 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // which request already happened. Decoding it on the way in would make that comparison lie, and
   // it appears in no request and no response.
   'requestId',
+  // Failure-continuation receipt, obligation, and wakeup-outbox identities (migration 0210) are
+  // private ledger links and delivery fences. They have no public lookup surface; in particular,
+  // plannedSessionId and coordinatorWakeId must keep their exact UUID spelling across an
+  // at-least-once delivery replay so the preplanned effect is adopted instead of duplicated.
+  'goalId',
+  'obligationId',
+  'continuationId',
+  'outboxId',
+  'plannedSessionId',
+  'coordinatorWakeId',
   // One-shot Owner Ratification capabilities. They authorize/commit an exact pending operation
   // and are compared byte-for-byte; exposing them as public row addresses would silently break
   // stale/duplicate CTA and action-commit fencing.
