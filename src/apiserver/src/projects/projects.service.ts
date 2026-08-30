@@ -28,6 +28,12 @@ import {
   controlPlaneObligationsBy,
   readControlPlaneObligations,
 } from '../common/control-plane-obligation';
+import {
+  failureCoordinationByProject,
+  failureCoordinationByTask,
+  readFailureCoordination,
+  summarizeFailureCoordination,
+} from '../common/failure-coordination-read';
 import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
@@ -1402,7 +1408,7 @@ export class ProjectsService {
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    const [rollups, attention, activeObligations, ownerRatifications] = await Promise.all([
+    const [rollups, attention, activeObligations, ownerRatifications, failureCoordination] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
       readControlPlaneObligations(this.prisma, {
@@ -1413,8 +1419,14 @@ export class ProjectsService {
         ownerId,
         projects.map((project) => project.id),
       ),
+      readFailureCoordination(this.prisma, {
+        tenantId: ownerId,
+        projectIds: projects.map((project) => project.id),
+        surface: 'PROJECT_WORK_OVERVIEW',
+      }),
     ]);
     const obligationsByProject = controlPlaneObligationsBy(activeObligations, 'projectId');
+    const failuresByProject = failureCoordinationByProject(failureCoordination);
     const ratificationsByProject = new Map(
       ownerRatifications.map((reference) => [reference.projectId, reference]),
     );
@@ -1432,6 +1444,8 @@ export class ProjectsService {
         // The same total shape for a project with no open blockers: clients never have to infer
         // whether an absent field means "none" or "this server did not compute attention".
         attention: attention.get(project.id) ?? emptyProjectListAttention(),
+        failureCoordination:
+          failuresByProject.get(project.id)?.summary ?? summarizeFailureCoordination([]),
         controlPlaneObligations: obligationsByProject.get(project.id) ?? [],
         // Secret-free and built by the same adapter as `/judgments` and project detail. A CTA is
         // never selected for this read, so a list cache cannot accidentally become authority.
@@ -1462,7 +1476,13 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, acceptance, controlPlaneObligations, ownerRatifications] = await Promise.all([
+    const [
+      byStatus,
+      acceptance,
+      controlPlaneObligations,
+      ownerRatifications,
+      failureCoordination,
+    ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId: id },
@@ -1471,11 +1491,17 @@ export class ProjectsService {
       this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
       readControlPlaneObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
       this.pendingOwnerRatificationReferences(ownerId, [id]),
+      readFailureCoordination(this.prisma, {
+        tenantId: ownerId,
+        projectIds: [id],
+        surface: 'PROJECT_WORK_OVERVIEW',
+      }),
     ]);
     return withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
       acceptance,
+      failureCoordination,
       controlPlaneObligations,
       ownerRatification: ownerRatifications[0] ?? null,
     });
@@ -1600,7 +1626,15 @@ export class ProjectsService {
    */
   async panorama(ownerId: string, projectId: string): Promise<ProjectPanorama> {
     await this.assertOwned(ownerId, projectId);
-    return readProjectPanorama(this.prisma, ownerId, projectId);
+    const [panorama, failureCoordination] = await Promise.all([
+      readProjectPanorama(this.prisma, ownerId, projectId),
+      readFailureCoordination(this.prisma, {
+        tenantId: ownerId,
+        projectIds: [projectId],
+        surface: 'PROJECT_WORK_OVERVIEW',
+      }),
+    ]);
+    return { ...panorama, failureCoordination };
   }
 
   /**
@@ -1729,7 +1763,7 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates, activeObligations] = await Promise.all([
+    const [dependencies, workStates, activeObligations, failureCoordination] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -1746,8 +1780,15 @@ export class ProjectsService {
         projectIds: [projectId],
         taskIds: page.map((task) => task.id),
       }),
+      readFailureCoordination(this.prisma, {
+        tenantId: ownerId,
+        projectIds: [projectId],
+        taskIds: page.map((task) => task.id),
+        surface: 'TASK_DETAIL',
+      }),
     ]);
     const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
+    const failuresByTask = failureCoordinationByTask(failureCoordination);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
       const work = workStates.get(task.id) ?? {
@@ -1765,6 +1806,7 @@ export class ProjectsService {
         ...dependency,
         blocked: dependency.dependencyState !== 'READY' || controlPlaneObligations.length > 0,
         controlPlaneObligations,
+        failureCoordination: failuresByTask.get(task.id) ?? [],
       };
     });
     return {

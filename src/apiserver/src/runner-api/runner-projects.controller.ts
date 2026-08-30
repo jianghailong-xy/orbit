@@ -151,6 +151,20 @@ export class RunnerProjectsController {
     });
   }
 
+  /** Canonical failure queue is independent from the generic outcome projection's availability. */
+  @Get('projects/:id/failure-coordination')
+  projectFailureCoordination(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('surface') requestedSurface = 'AGENT_QUEUE',
+  ) {
+    return this.outcomeSurfaces.readFailureProjectSurface(
+      runner.ownerId,
+      id,
+      this.outcomeSurfaces.parseFailureSurface(requestedSurface),
+    );
+  }
+
   @Get('projects/:id/acceptance')
   projectAcceptance(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.acceptance.overview(runner.ownerId, id);

@@ -34,6 +34,19 @@ export class OutcomeSurfacesController {
     });
   }
 
+  @Get('projects/:id/failure-coordination/:surface')
+  readFailureCoordination(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) projectId: string,
+    @Param('surface') surface: string,
+  ) {
+    return this.surfaces.readFailureProjectSurface(
+      user.userId,
+      projectId,
+      this.surfaces.parseFailureSurface(surface),
+    );
+  }
+
   @Get('decisions/:requestId')
   decision(
     @CurrentUser() user: AuthUser,

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { projectTaskDependencyFactsSql } from './project-dependency-facts';
 import { projectTaskWorkStateSql } from './project-task-work-state';
+import type { FailureCoordinationReadModel } from '../common/failure-coordination-read';
 
 /**
  * Which picture this project's graph is worth drawing as.
@@ -63,6 +64,7 @@ export interface ProjectPanoramaShape {
 export interface ProjectPanorama {
   buckets: ProjectPanoramaBuckets;
   shape: ProjectPanoramaShape;
+  failureCoordination?: FailureCoordinationReadModel;
 }
 
 interface PanoramaRow {

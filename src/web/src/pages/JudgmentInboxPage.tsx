@@ -15,11 +15,14 @@ import {
 } from '../lib/projectAcceptance';
 import {
   isRatificationInboxItem,
+  isFailureOwnerInboxItem,
   outcomeDecisionReviewPath,
   outcomeInboxPath,
   type CanonicalOwnerInboxItem,
   type OutcomeHumanInbox,
 } from '../lib/outcomeSurfaces';
+import { FailureCoordinationCard } from '../components/FailureCoordinationCard';
+import { encodeId } from '../lib/idCodec';
 import {
   isActiveOwnerRatificationReference,
   ownerRatificationInboxPath,
@@ -47,11 +50,14 @@ export function JudgmentInboxPage() {
     queryFn: () => api<OwnerRatificationInboxPage>(ownerRatificationInboxPath(100)),
   });
   const genericOutcomeItems = (outcomeInbox.data?.items ?? [])
-    .filter((item): item is CanonicalOwnerInboxItem => !isRatificationInboxItem(item));
+    .filter((item): item is CanonicalOwnerInboxItem =>
+      !isRatificationInboxItem(item) && !isFailureOwnerInboxItem(item));
+  const failureOutcomeItems = (outcomeInbox.data?.items ?? []).filter(isFailureOwnerInboxItem);
   const activeRatifications = (ratificationInbox.data?.items ?? [])
     .filter(isActiveOwnerRatificationReference);
   const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0)
     + genericOutcomeItems.length
+    + failureOutcomeItems.length
     + activeRatifications.length;
   const entries = [
     ...(taskInbox.data?.items ?? []).map((item) => ({
@@ -87,7 +93,7 @@ export function JudgmentInboxPage() {
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>任务级 HUMAN_SIGNOFF、项目验收与 Owner Ratification 共用一个收件箱；这里也只出现四类目标/风险/授权/身份请求，机械标准只展示结果。</p>
+          <p>任务级 HUMAN_SIGNOFF、项目验收与 Owner Ratification 共用一个收件箱；Failure Continuation 只在 owner-only 决策时进入这里，普通工程故障由 coordinator 自动处理。</p>
         </div>
         {hasAnyData
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>
@@ -119,7 +125,7 @@ export function JudgmentInboxPage() {
             </Button>
           )}
         />
-      ) : entries.length === 0 && genericOutcomeItems.length === 0 ? (
+      ) : entries.length === 0 && genericOutcomeItems.length === 0 && failureOutcomeItems.length === 0 ? (
         <Empty description="没有待判定的证据" />
       ) : (
         <ul className="judgment-inbox-list" aria-label="Open human decisions">
@@ -146,6 +152,24 @@ export function JudgmentInboxPage() {
               </li>
             );
           })}
+          {failureOutcomeItems.map((item) => (
+            <li
+              key={`failure:${item.obligationId}`}
+              className="judgment-inbox-card failure-continuation-inbox-card"
+              data-obligation-id={item.obligationId}
+              data-obligation-revision={item.obligationRevision}
+              data-binding-digest={item.bindingDigest}
+              data-reason={String(item.canonicalReason.code ?? '')}
+            >
+              <Tag color="volcano">Owner-only failure decision</Tag>
+              <div className="judgment-inbox-title">{item.projectTitle}</div>
+              <div className="judgment-inbox-project">{item.sourceTaskTitle}</div>
+              <FailureCoordinationCard item={item} compact />
+              <Link className="judgment-inbox-open" to={`/tasks/${encodeId(item.sourceTaskId)}`}>
+                Review bound failure and decide →
+              </Link>
+            </li>
+          ))}
           {entries.map((entry) => entry.kind === 'TASK' ? (
             <li key={`task:${entry.item.requestId}`} className="judgment-inbox-card">
               <Link to={judgmentReviewPath(entry.item.requestId)}>

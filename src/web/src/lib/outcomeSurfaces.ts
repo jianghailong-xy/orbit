@@ -1,5 +1,6 @@
 import { encodeId } from './idCodec';
 import type { OwnerRatificationEligibility } from './ownerRatification';
+import type { CanonicalFailureCoordination } from './failureCoordination';
 
 export type OutcomeDecisionType = 'OWNER_RATIFICATION' | 'HUMAN_SIGNOFF'
   | 'GOAL_DECISION' | 'RISK_ACCEPTANCE' | 'NEW_AUTHORIZATION' | 'EXTERNAL_IDENTITY';
@@ -65,12 +66,25 @@ export interface RatificationInboxItem {
   cta: OutcomeCta;
 }
 
+export interface FailureOwnerInboxItem extends CanonicalFailureCoordination {
+  itemType: 'FAILURE_CONTINUATION_OWNER_DECISION';
+  decisionType: 'FAILURE_CONTINUATION_OWNER_DECISION';
+  projectTitle: string;
+}
+
 export interface OutcomeHumanInbox {
   schemaVersion: 2;
   surface: 'HUMAN_DECISION_INBOX';
   actor: 'OWNER';
   total: number;
-  items: Array<CanonicalOwnerInboxItem | RatificationInboxItem>;
+  items: Array<CanonicalOwnerInboxItem | RatificationInboxItem | FailureOwnerInboxItem>;
+  failureContinuationIndex?: Array<{
+    obligationId: string;
+    obligationRevision: string;
+    bindingDigest: string;
+    binding: Record<string, unknown>;
+    reason: Record<string, unknown>;
+  }>;
 }
 
 export interface OutcomeDecisionView {
@@ -128,7 +142,13 @@ export const ownerRatificationDecisionPath = (requestId: string) =>
   `/outcomes/ratifications/${encodeURIComponent(encodeId(requestId))}`;
 
 export function isRatificationInboxItem(
-  item: CanonicalOwnerInboxItem | RatificationInboxItem,
+  item: CanonicalOwnerInboxItem | RatificationInboxItem | FailureOwnerInboxItem,
 ): item is RatificationInboxItem {
   return 'decisionType' in item && item.decisionType === 'OWNER_RATIFICATION';
+}
+
+export function isFailureOwnerInboxItem(
+  item: CanonicalOwnerInboxItem | RatificationInboxItem | FailureOwnerInboxItem,
+): item is FailureOwnerInboxItem {
+  return 'itemType' in item && item.itemType === 'FAILURE_CONTINUATION_OWNER_DECISION';
 }

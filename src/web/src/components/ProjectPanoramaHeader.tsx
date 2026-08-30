@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Alert, Button, Spin, Typography } from 'antd';
 import { Link } from 'react-router-dom';
+import type { FailureCoordinationReadModel } from '../lib/failureCoordination';
 import { api } from '../api';
 
 /**
@@ -64,6 +65,64 @@ export interface ProjectPanoramaShape {
 export interface ProjectPanorama {
   buckets: ProjectPanoramaBuckets;
   shape: ProjectPanoramaShape;
+  failureCoordination?: FailureCoordinationReadModel;
+}
+
+export function FailureCoordinationOverview({
+  model,
+}: {
+  model: FailureCoordinationReadModel;
+}) {
+  const stages = [
+    ['自动诊断', model.summary.automaticDiagnosis],
+    ['自动修复', model.summary.automaticRepair],
+    ['自动重验', model.summary.automaticRevalidation],
+    ['外部等待', model.summary.externalWait],
+    ['Needs you', model.summary.needsYou],
+  ] as const;
+  if (model.summary.active === 0) return null;
+  return (
+    <div
+      data-testid="failure-coordination-overview"
+      style={{
+        marginTop: 14,
+        padding: 12,
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <strong>Failure coordination</strong>
+        <span style={{ color: 'var(--text-2)', fontSize: 12 }}>
+          {model.summary.active} active · coordinator claim SLA {model.claimSlaSeconds}s
+        </span>
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(108px, 1fr))',
+          gap: 6,
+        }}
+      >
+        {stages.map(([label, count]) => (
+          <div
+            key={label}
+            data-stage={label}
+            style={{
+              padding: '8px 10px',
+              borderRadius: 6,
+              background: label === 'Needs you' && count > 0
+                ? 'var(--warning-bg)'
+                : 'var(--fill-muted)',
+            }}
+          >
+            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{count}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -452,7 +511,7 @@ export function ProjectPanoramaHeader({
       shape.taskCount > 0
         ? `${Math.round((loaded.done / shape.taskCount) * 100)}% complete`
         : 'no tasks yet',
-    failed: 'needs recovery',
+    failed: 'coordinated continuation',
     cancelled: 'closed without completion',
   };
 
@@ -492,6 +551,10 @@ export function ProjectPanoramaHeader({
       <div style={{ marginTop: 14 }}>
         <BucketMeter buckets={loaded} />
       </div>
+
+      {panorama.data.failureCoordination ? (
+        <FailureCoordinationOverview model={panorama.data.failureCoordination} />
+      ) : null}
 
       {stalled ? (
         <StalledBanner buckets={loaded} />

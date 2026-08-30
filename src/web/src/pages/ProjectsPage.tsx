@@ -65,6 +65,7 @@ import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { JudgmentRequestSummary } from '../components/JudgmentRequestSummary';
 import { OwnerRatificationSummary } from '../components/OwnerRatificationSummary';
+import { FailureCoordinationCard } from '../components/FailureCoordinationCard';
 import {
   isActiveOwnerRatificationReference,
   type OwnerRatificationReference,
@@ -74,6 +75,11 @@ import {
   modelOptionsForProvider,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
+import {
+  FAILURE_STAGE_LABEL,
+  type CanonicalFailureCoordination,
+  type FailureCoordinationSummary,
+} from '../lib/failureCoordination';
 
 // Re-exported, not re-implemented: the conversion between an instant and the viewer's wall clock
 // now belongs to lib/taskSchedule, shared with the task panel's own Start at editor. This page
@@ -97,6 +103,8 @@ interface Project {
   lastActivityAt: string | null;
   /** Open blocker ownership: the durable signal for whether a person must act next. */
   attention: ProjectAttentionSummary;
+  /** Canonical failure stages; only `needsYou` is eligible for Project Attention. */
+  failureCoordination?: FailureCoordinationSummary;
   /** Secret-free pending owner decision; identical to the inbox/detail reference. */
   ownerRatification?: OwnerRatificationReference | null;
 }
@@ -1121,6 +1129,7 @@ interface ProjectTask {
     | 'CANCELLED';
   verificationState?: 'PENDING' | 'BLOCKED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'MISSING' | null;
   autoRunWhenReady?: boolean;
+  failureCoordination?: CanonicalFailureCoordination[];
 }
 
 /** A task has a status a project does not (IN_PROGRESS), so it gets its own map rather than a
@@ -1182,7 +1191,12 @@ export function projectTaskWorkLabel(task: ProjectTask): { text: string; color: 
       return { text, color: task.verificationState === 'FAILED' ? 'red' : 'purple' };
     }
     case 'FAILED':
-      return { text: 'Failed · needs recovery', color: 'red' };
+      return task.failureCoordination?.[0]
+        ? {
+            text: `Failed · ${FAILURE_STAGE_LABEL[task.failureCoordination[0].stage]}`,
+            color: task.failureCoordination[0].stage === 'NEEDS_YOU' ? 'red' : 'purple',
+          }
+        : { text: 'Failed · coordination pending', color: 'purple' };
     case 'DONE':
     case 'CANCELLED':
     default:
@@ -1335,7 +1349,12 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
     });
   }
   if (failed.length > 0) {
-    groups.push({ key: 'failed', level: 0, heading: 'Failed · needs recovery', tasks: failed });
+    groups.push({
+      key: 'failed',
+      level: 0,
+      heading: 'Failed · coordinated continuation',
+      tasks: failed,
+    });
   }
   groups.push(...[...byLevel.entries()]
     .sort(([a], [b]) => a - b)
@@ -1554,6 +1573,10 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
           </Button>
         ) : null}
       </div>
+
+      {(task.failureCoordination ?? []).map((item) => (
+        <FailureCoordinationCard key={item.obligationId} item={item} compact />
+      ))}
 
       {expanded ? (
         <div className="project-task-children">

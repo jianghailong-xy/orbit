@@ -9,6 +9,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OutcomeProjectionService } from './outcome-projection.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
+  FAILURE_COORDINATION_SURFACES,
+  failureCoordinationByProject,
+  readFailureCoordination,
+  type FailureCoordinationReadModel,
+  type FailureCoordinationSurface,
+} from '../common/failure-coordination-read';
+import {
   OUTCOME_SURFACES,
   OUTCOME_SURFACE_LIMITS,
   assertOutcomeDecisionProtocol,
@@ -116,12 +123,22 @@ export class OutcomeSurfaceService {
     return surface;
   }
 
+  parseFailureSurface(value: string): FailureCoordinationSurface {
+    const surface = value.toUpperCase() as FailureCoordinationSurface;
+    if (!FAILURE_COORDINATION_SURFACES.includes(surface)) {
+      throw new BadRequestException(
+        `surface must be one of ${FAILURE_COORDINATION_SURFACES.join(', ')}`,
+      );
+    }
+    return surface;
+  }
+
   async readProjectSurface(input: {
     tenantId: string;
     projectId: string;
     surface: OutcomeSurface;
     actor: OutcomeSurfaceActor;
-  }): Promise<DerivedOutcomeSurface> {
+  }): Promise<DerivedOutcomeSurface & { failureContinuations: FailureCoordinationReadModel }> {
     await this.assertProjectTenant(input.tenantId, input.projectId);
     let projection: Prisma.JsonValue;
     try {
@@ -145,8 +162,9 @@ export class OutcomeSurfaceService {
     const requests = await this.currentDecisionRequests(input.tenantId, input.projectId);
     const logicalNow = requests[0]?.logicalNow.toString()
       ?? String(record(record(projection).canonicalIdentity).evaluatedThroughLogicalTime ?? '0');
+    let derived: DerivedOutcomeSurface;
     try {
-      return deriveOutcomeSurface({
+      derived = deriveOutcomeSurface({
         projection: projection as unknown as OutcomeProjectionInput,
         surface: input.surface,
         actor: input.actor,
@@ -160,6 +178,32 @@ export class OutcomeSurfaceService {
         code: error instanceof Error ? error.message : 'OUTCOME_SURFACE_INVALID',
       });
     }
+    const failureContinuations = await this.readFailureProjectSurface(
+      input.tenantId,
+      input.projectId,
+      input.surface === 'AGENT_QUEUE'
+        ? 'AGENT_QUEUE'
+        : input.surface === 'PROJECT_ATTENTION'
+          ? 'PROJECT_ATTENTION'
+          : input.surface === 'OWNER_DECISION_INBOX'
+            ? 'OWNER_DECISION_INBOX'
+            : 'PROJECT_WORK_OVERVIEW',
+    );
+    return { ...derived, failureContinuations };
+  }
+
+  /** Failure Continuations remain readable even when a project has no generic outcome stream. */
+  async readFailureProjectSurface(
+    tenantId: string,
+    projectId: string,
+    surface: FailureCoordinationSurface,
+  ): Promise<FailureCoordinationReadModel> {
+    await this.assertProjectTenant(tenantId, projectId);
+    return readFailureCoordination(this.prisma, {
+      tenantId,
+      projectIds: [projectId],
+      surface,
+    });
   }
 
   /** A fail-closed, bounded human surface. Ratification is tagged separately and never masquerades
@@ -175,7 +219,21 @@ export class OutcomeSurfaceService {
       take: limit,
     });
     const canonical: Array<Record<string, unknown>> = [];
+    const failureInbox = await readFailureCoordination(this.prisma, {
+      tenantId,
+      projectIds: projects.map((project) => project.id),
+      surface: 'OWNER_DECISION_INBOX',
+    });
+    const failuresByProject = failureCoordinationByProject(failureInbox);
     for (const project of projects) {
+      for (const item of failuresByProject.get(project.id)?.items ?? []) {
+        canonical.push({
+          itemType: 'FAILURE_CONTINUATION_OWNER_DECISION',
+          decisionType: 'FAILURE_CONTINUATION_OWNER_DECISION',
+          projectTitle: project.title,
+          ...item,
+        });
+      }
       // Select from the durable binding, not the projection. If a bound project is
       // stale or has no materialized row yet, readProjectSurface must return the
       // explicit stale envelope instead of letting the inbox look empty.
@@ -227,6 +285,7 @@ export class OutcomeSurfaceService {
       total,
       items,
       truncated: items.length < total,
+      failureContinuationIndex: failureInbox.semanticIndex,
       decisionTypeSeparation: {
         ownerRatification: 'OWNER_RATIFICATION',
         perItemSignoff: 'HUMAN_SIGNOFF',

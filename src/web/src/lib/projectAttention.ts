@@ -4,6 +4,7 @@ import {
   isActiveOwnerRatificationReference,
   type OwnerRatificationReference,
 } from './ownerRatification';
+import type { FailureCoordinationSummary } from './failureCoordination';
 
 /**
  * The projects index is an execution-and-attention router, not a second activity feed.
@@ -35,6 +36,8 @@ export interface AttentionProject {
   attention?: ProjectAttentionSummary;
   /** Exact owner decision projected by the server without its CTA capability. */
   ownerRatification?: OwnerRatificationReference | null;
+  /** Canonical failure routing. Raw FAILED counts never imply human attention. */
+  failureCoordination?: FailureCoordinationSummary;
 }
 
 export interface ProjectAttentionSummary {
@@ -58,7 +61,7 @@ export type AttentionReason =
   | 'owner-ratification'
   | 'needs-user'
   | 'auto-remediation'
-  | 'failed'
+  | 'failure-needs-you'
   | 'no-activity-running'
   | 'no-activity-ready'
   | 'ready-to-close';
@@ -73,7 +76,7 @@ const SECTIONS: ReadonlyArray<{
     key: 'attention',
     title: 'Needs attention',
     note:
-      'Needs you, auto-remediation, failures, quiet work, or closure · reason/severity first, then oldest signal',
+      'Owner-only decisions, stale coordination, non-convergence, quiet work, or closure · reason/severity first, then oldest signal',
   },
   {
     key: 'running',
@@ -167,17 +170,16 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
 /**
  * Why an OPEN project needs a visible attention signal.
  *
- * A coordinator/system blocker is checked first because its automatic repair must stay visible
- * even when the same project also carries a user decision. Between projects, the rank below still
- * puts purely USER-owned decisions first because nobody else can clear them. An observed failure
- * is stronger evidence than silence; closing settled work is useful but not an operational fault.
+ * A failed engineering attempt remains coordinator-owned while diagnosis/repair/revalidation is
+ * progressing. Only the canonical read model may promote it here: owner-only work, a missed claim
+ * SLA, or convergence failure. Raw FAILED counts are evidence, never a human-attention rule.
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
   if (isActiveOwnerRatificationReference(project.ownerRatification)) return 'owner-ratification';
+  if ((project.failureCoordination?.needsYou ?? 0) > 0) return 'failure-needs-you';
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
-  if (failedTaskCount(project) > 0) return 'failed';
 
   const quiet = quietDays(project.lastActivityAt, now);
   if (project.buckets.running > 0 && quiet !== null) return 'no-activity-running';
@@ -217,6 +219,8 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
   if (project.buckets.blocked > 0 || (project.buckets.awaitingVerification ?? 0) > 0) {
     return 'waiting';
   }
+  // A normal failure is waiting on its automatic continuation, not waiting on the owner.
+  if (failedTaskCount(project) > 0) return 'waiting';
 
   // Current payloads are exhaustive, so reaching this fallback means an inconsistent or mixed-
   // version payload. It is safer to ask for definition than to claim work is running or waiting
@@ -227,8 +231,8 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
 const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
   'owner-ratification': 0,
   'needs-user': 1,
-  'auto-remediation': 2,
-  failed: 3,
+  'failure-needs-you': 2,
+  'auto-remediation': 3,
   'no-activity-running': 4,
   'no-activity-ready': 5,
   'ready-to-close': 6,
@@ -373,9 +377,16 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
     };
   }
 
-  if (reason === 'failed') {
-    const failed = failedTaskCount(project);
-    return { tone: 'warning', text: `${failed} failed task${failed === 1 ? '' : 's'}` };
+  if (reason === 'failure-needs-you') {
+    const summary = project.failureCoordination!;
+    const reasons = Object.entries(summary.byAttentionReason ?? {})
+      .filter(([, count]) => (count ?? 0) > 0)
+      .map(([name, count]) => `${name} ${count}`)
+      .join(' · ');
+    return {
+      tone: 'warning',
+      text: `Needs you · ${summary.needsYou} failure continuation${summary.needsYou === 1 ? '' : 's'}${reasons ? ` · ${reasons}` : ''}`,
+    };
   }
 
   if (reason === 'ready-to-close') {

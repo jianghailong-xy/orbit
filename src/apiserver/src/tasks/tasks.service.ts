@@ -51,6 +51,7 @@ import {
   controlPlaneObligationsBy,
   readControlPlaneObligations,
 } from '../common/control-plane-obligation';
+import { readFailureCoordination } from '../common/failure-coordination-read';
 import {
   AUTO_DISPATCH_WAKE_DELAY_MS,
   autoDispatchAttemptingDisposition,
@@ -6933,10 +6934,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Read the same successor-tail facts as task_list, Run Now, both automatic starters and the
     // commit gate. The relation above intentionally remains the stored audit edge (W); readiness
     // is answered by the current work holder at the trusted chain tail (S).
-    const [dependencyFacts, supersession, controlPlaneObligations] = await Promise.all([
+    const [
+      dependencyFacts,
+      supersession,
+      controlPlaneObligations,
+      failureCoordination,
+    ] = await Promise.all([
       this.dependencyFactsFor(ownerId, [id]),
       this.supersession(ownerId, task),
       readControlPlaneObligations(this.prisma, { tenantId: ownerId, taskIds: [id] }),
+      readFailureCoordination(this.prisma, {
+        tenantId: ownerId,
+        taskIds: [id],
+        surface: 'TASK_DETAIL',
+      }),
     ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -6948,6 +6959,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       blocked: !canRun(dependencyState) || controlPlaneObligations.length > 0,
       ...supersession,
       controlPlaneObligations,
+      failureCoordination,
     };
   }
 
