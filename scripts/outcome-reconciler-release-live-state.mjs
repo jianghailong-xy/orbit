@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -35,6 +35,36 @@ function canonical(value) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function hashCommandOutput(file, args, cwd = repo) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const child = spawn(file, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stderr = [];
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+
+    child.stdout.on('data', (chunk) => hash.update(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    child.on('error', (error) => finish(() => reject(error)));
+    child.on('close', (code, signal) => finish(() => {
+      if (code !== 0) {
+        reject(new Error(
+          `${file} ${args.join(' ')} exited with ${code ?? signal}: ${Buffer.concat(stderr).toString('utf8').trim()}`,
+        ));
+        return;
+      }
+      resolve(hash.digest('hex'));
+    }));
+  });
 }
 
 function fileEvidence(relative) {
@@ -104,7 +134,10 @@ assert.equal(git(['status', '--porcelain', '--untracked-files=no'],
   contract.repository.deploymentCheckout), '', 'deployment checkout has tracked modifications');
 assert.equal(git(['branch', '--show-current'], contract.repository.deploymentCheckout),
   contract.repository.targetBranch);
-const targetContentDigest = sha256(execFileSync('git', ['archive', targetSha], { cwd: repo }));
+// A release archive is intentionally much larger than child_process's default
+// one-megabyte synchronous output buffer. Hash the stream so repository growth
+// cannot turn an otherwise valid release into an ENOBUFS failure.
+const targetContentDigest = await hashCommandOutput('git', ['archive', targetSha]);
 const targetDigest = sha256(canonical({
   repositoryProvider: contract.repository.provider,
   repositoryId: contract.repository.id,
