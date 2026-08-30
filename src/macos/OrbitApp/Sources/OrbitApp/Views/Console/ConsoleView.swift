@@ -31,6 +31,21 @@ struct ConsoleView: View {
     #endif
 
     var body: some View {
+        #if os(iOS)
+        // A custom `.principal` toolbar item is measured at its ideal width instead of being given
+        // the space left between the navigation buttons. Measure the actual detail column here so
+        // the title gets a finite proposal on iPhone, after rotation, and in an iPad split view.
+        // Reserve 80 points on each side for navigation chrome; 260 keeps it title-like in wide
+        // columns instead of turning the navigation bar into another content row.
+        GeometryReader { geometry in
+            consoleBody(navTitleWidth: min(max(geometry.size.width - 160, 0), 260))
+        }
+        #else
+        consoleBody(navTitleWidth: 0)
+        #endif
+    }
+
+    private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
@@ -95,7 +110,11 @@ struct ConsoleView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 let session = appModel.session(id: sessionID)
-                let title = ConsoleNavTitle(session: session, console: registry.peek(sessionID))
+                let title = ConsoleNavTitle(
+                    session: session,
+                    console: registry.peek(sessionID),
+                    availableWidth: navTitleWidth
+                )
                 // Tap to rename, matching web's double-click-the-header-title. A trashed session is
                 // not renamable there either, and a row we haven't loaded yet has no title to seed
                 // the field with — both fall back to the plain, non-interactive title.
@@ -138,6 +157,9 @@ struct ConsoleView: View {
 private struct ConsoleNavTitle: View {
     let session: Session?
     let console: ConsoleModel?
+    /// The navigation bar's centre budget, derived from the current detail-column width. Unlike a
+    /// plain `lineLimit`, this gives both text rows a finite proposal they can actually truncate in.
+    let availableWidth: CGFloat
 
     var body: some View {
         VStack(spacing: 1) {
@@ -145,12 +167,19 @@ private struct ConsoleNavTitle: View {
                 Text(SessionHeader.title(for: session, fallbackAgent: console?.agentName))
                     .font(.headline)
                     .lineLimit(1).truncationMode(.tail)
-                if let session { SessionCoordinatorBadge(session: session) }
+                if let session {
+                    SessionCoordinatorBadge(session: session)
+                        .layoutPriority(1)
+                }
             }
             Text(subtitle)
                 .font(.caption2).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.tail)
         }
+        .frame(width: availableWidth)
+        // SwiftUI views do not clip to their layout frame by default. Keep a fixed-size badge (or a
+        // future title child) from ever painting over the trailing Share button again.
+        .clipped()
     }
 
     private var subtitle: String {
