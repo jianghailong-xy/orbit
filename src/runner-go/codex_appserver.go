@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,6 +58,9 @@ type codexAppServer struct {
 	mu      sync.Mutex
 	nextID  int64
 	pending map[string]chan codexRPCMessage
+	// stdoutErr is set before done/pending are closed so a request interrupted by a
+	// framing or pipe error reports that cause instead of the generic process closure.
+	stdoutErr error
 
 	notifications chan codexRPCMessage
 	done          chan struct{}
@@ -1329,7 +1334,7 @@ func (a *codexAppServer) request(ctx context.Context, method string, params map[
 	select {
 	case msg, ok := <-ch:
 		if !ok {
-			return nil, fmt.Errorf("codex app-server closed")
+			return nil, a.closedError()
 		}
 		if msg.Error != nil {
 			return nil, fmt.Errorf("%s: %s", method, msg.Error.Message)
@@ -1340,8 +1345,29 @@ func (a *codexAppServer) request(ctx context.Context, method string, params map[
 		return nil, ctx.Err()
 	case <-a.done:
 		a.forget(id)
-		return nil, fmt.Errorf("codex app-server closed")
+		return nil, a.closedError()
 	}
+}
+
+func (a *codexAppServer) closedError() error {
+	a.mu.Lock()
+	err := a.stdoutErr
+	a.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("codex app-server stdout: %w", err)
+	}
+	return fmt.Errorf("codex app-server closed")
+}
+
+func (a *codexAppServer) recordStdoutError(err error) {
+	if err == nil || errors.Is(err, io.EOF) {
+		return
+	}
+	a.mu.Lock()
+	if a.stdoutErr == nil {
+		a.stdoutErr = err
+	}
+	a.mu.Unlock()
 }
 
 func (a *codexAppServer) notify(method string, params map[string]interface{}) error {
@@ -1375,42 +1401,53 @@ func (a *codexAppServer) write(msg map[string]interface{}) error {
 }
 
 func (a *codexAppServer) readLoop(r io.Reader) {
-	defer a.closeDone()
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
+	var readErr error
+	defer func() {
+		a.recordStdoutError(readErr)
+		a.closeDone()
+	}()
+
+	// App-server speaks one JSON-RPC message per line. Responses can include an
+	// entire resumed thread and legitimately exceed Scanner's fixed token limit, so
+	// use a dynamically growing line reader instead of imposing a framing ceiling.
+	rd := bufio.NewReaderSize(r, 64*1024)
+	for {
+		line, err := rd.ReadBytes('\n')
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			if err != nil {
+				readErr = err
+				return
+			}
 			continue
 		}
 		var msg codexRPCMessage
-		if json.Unmarshal([]byte(line), &msg) != nil {
-			continue
-		}
-		if msg.Method != "" && msg.ID != nil {
-			a.handleServerRequest(msg)
-			continue
-		}
-		if msg.ID != nil {
-			a.deliverResponse(msg)
-			continue
-		}
-		if msg.Method != "" {
-			// Never lose this state transition even if the high-volume notification
-			// channel is full; the next turn must restore compacted instructions. The
-			// durable system event is the control plane's matching boundary for sparse
-			// project-coordinator context, emitted only once when two protocol shapes
-			// describe the same compaction before another turn starts.
-			if codexNotificationCompacted(msg) {
-				if a.markInstructionContextForRefresh() && a.emit != nil {
-					a.emit(evSystem, map[string]interface{}{"subtype": "context_compacted"})
+		if json.Unmarshal(line, &msg) == nil {
+			if msg.Method != "" && msg.ID != nil {
+				a.handleServerRequest(msg)
+			} else if msg.ID != nil {
+				a.deliverResponse(msg)
+			} else if msg.Method != "" {
+				// Never lose this state transition even if the high-volume notification
+				// channel is full; the next turn must restore compacted instructions. The
+				// durable system event is the control plane's matching boundary for sparse
+				// project-coordinator context, emitted only once when two protocol shapes
+				// describe the same compaction before another turn starts.
+				if codexNotificationCompacted(msg) {
+					if a.markInstructionContextForRefresh() && a.emit != nil {
+						a.emit(evSystem, map[string]interface{}{"subtype": "context_compacted"})
+					}
+				}
+				select {
+				case a.notifications <- msg:
+				default:
+					logln("codex app-server notification dropped:", msg.Method)
 				}
 			}
-			select {
-			case a.notifications <- msg:
-			default:
-				logln("codex app-server notification dropped:", msg.Method)
-			}
+		}
+		if err != nil {
+			readErr = err
+			return
 		}
 	}
 }

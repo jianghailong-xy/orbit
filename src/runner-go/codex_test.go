@@ -1,16 +1,34 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
+	"time"
 	"unicode/utf8"
 )
+
+type codexTestWriteCloser struct {
+	bytes.Buffer
+	wrote chan struct{}
+	once  sync.Once
+}
+
+func (w *codexTestWriteCloser) Write(p []byte) (int, error) {
+	n, err := w.Buffer.Write(p)
+	w.once.Do(func() { close(w.wrote) })
+	return n, err
+}
+
+func (w *codexTestWriteCloser) Close() error { return nil }
 
 func TestNormalizeCodexReasoningEffort(t *testing.T) {
 	tests := []struct {
@@ -264,6 +282,98 @@ func TestCodexCompactionEmitsOneDurableCoordinatorBoundary(t *testing.T) {
 
 	if len(events) != 1 || events[0].typ != evSystem || events[0].payload["subtype"] != "context_compacted" {
 		t.Fatalf("compaction boundary events = %#v", events)
+	}
+}
+
+func TestCodexAppServerReadLoopAcceptsResponseLargerThan16MiB(t *testing.T) {
+	const scannerLimit = 16 * 1024 * 1024
+	payload := strings.Repeat("x", scannerLimit)
+	wire, err := json.Marshal(map[string]interface{}{
+		"id":     "large-response",
+		"result": map[string]interface{}{"payload": payload},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wire) <= scannerLimit {
+		t.Fatalf("test frame is %d bytes, want more than %d", len(wire), scannerLimit)
+	}
+	followupWire, err := json.Marshal(map[string]interface{}{
+		"id":     "followup-response",
+		"result": map[string]interface{}{"payload": "still-reading"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	largeResponse := make(chan codexRPCMessage, 1)
+	followupResponse := make(chan codexRPCMessage, 1)
+	app := &codexAppServer{
+		pending: map[string]chan codexRPCMessage{
+			"large-response":    largeResponse,
+			"followup-response": followupResponse,
+		},
+		notifications: make(chan codexRPCMessage, 1),
+		done:          make(chan struct{}),
+	}
+	// A malformed frame must still be ignored without preventing the following
+	// oversized response or the ordinary response after it from reaching their requests.
+	stream := bytes.NewBufferString("not-json\n")
+	stream.Write(wire)
+	stream.WriteByte('\n')
+	stream.Write(followupWire)
+	app.readLoop(stream)
+
+	msg, ok := <-largeResponse
+	if !ok {
+		t.Fatal("large response channel closed without a message")
+	}
+	got := firstString(rawObject(msg.Result), "payload")
+	if got != payload {
+		t.Fatalf("large response payload length = %d, want %d", len(got), len(payload))
+	}
+	followup, ok := <-followupResponse
+	if !ok {
+		t.Fatal("followup response channel closed without a message")
+	}
+	if got, want := firstString(rawObject(followup.Result), "payload"), "still-reading"; got != want {
+		t.Fatalf("followup response payload = %q, want %q", got, want)
+	}
+}
+
+func TestCodexAppServerRequestReportsStdoutReadError(t *testing.T) {
+	writer := &codexTestWriteCloser{wrote: make(chan struct{})}
+	app := &codexAppServer{
+		ctx:           context.Background(),
+		stdin:         writer,
+		pending:       map[string]chan codexRPCMessage{},
+		notifications: make(chan codexRPCMessage, 1),
+		done:          make(chan struct{}),
+	}
+	requestErr := make(chan error, 1)
+	go func() {
+		_, err := app.request(context.Background(), "thread/resume", map[string]interface{}{"threadId": "thread-1"})
+		requestErr <- err
+	}()
+
+	select {
+	case <-writer.wrote:
+	case <-time.After(time.Second):
+		t.Fatal("request was not written")
+	}
+
+	stdoutErr := errors.New("synthetic stdout failure")
+	app.readLoop(iotest.ErrReader(stdoutErr))
+	select {
+	case err := <-requestErr:
+		if !errors.Is(err, stdoutErr) {
+			t.Fatalf("request error = %v, want wrapped stdout error", err)
+		}
+		if got, want := err.Error(), "codex app-server stdout: synthetic stdout failure"; got != want {
+			t.Fatalf("request error = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("request did not return after stdout failed")
 	}
 }
 
