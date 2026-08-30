@@ -21,6 +21,7 @@ const MALFORMED_LEGACY_ID = '77777777-7777-4777-8777-777777777777';
 const MISSING_TARGET_ID = '78888888-8888-4888-8888-888888888888';
 const FK_STEER_ID = '79999999-9999-4999-8999-999999999999';
 const UNCONFIRMED_STEER_ID = '70000000-0000-4000-8000-000000000007';
+const CROSS_SESSION_FRAGMENT_ID = '70000000-0000-4000-8000-000000000008';
 const OTHER_SESSION_ID = '70000000-0000-4000-8000-000000000001';
 const OTHER_TURN_ID = '70000000-0000-4000-8000-000000000002';
 const FIRST_GENERATION = '70000000-0000-4000-8000-000000000003';
@@ -85,6 +86,23 @@ async function seedStartingWindow(): Promise<void> {
        id, session_id, seq, client_turn_id, kind, content, status
      ) VALUES ($1::uuid, $2::uuid, 1, $3, 'message', 'opening prompt', 'PENDING')`,
     [TURN_ID, SESSION_ID, SessionsService.initialTurnClientId(SESSION_ID)],
+  );
+}
+
+async function seedCrossSessionTarget(): Promise<void> {
+  await seedStartingWindow();
+  await admin.query(`DELETE FROM "session" WHERE id = $1::uuid`, [OTHER_SESSION_ID]);
+  await admin.query(
+    `INSERT INTO "session"(
+       id, title, prompt, owner_id, creator_id, status, num_turns, updated_at
+     ) VALUES ($1::uuid, 'other', 'other', $2::uuid, $2::uuid, 'RUNNING', 1, clock_timestamp())`,
+    [OTHER_SESSION_ID, OWNER_ID],
+  );
+  await admin.query(
+    `INSERT INTO "conversation_turn"(
+       id, session_id, seq, client_turn_id, kind, content, status
+     ) VALUES ($1::uuid, $2::uuid, 1, 'other-target', 'message', 'other', 'IN_FLIGHT')`,
+    [OTHER_TURN_ID, OTHER_SESSION_ID],
   );
 }
 
@@ -665,29 +683,6 @@ pgTest('database constraints reject malformed intent/target rows and preserve st
   await admin.query(`DELETE FROM "conversation_turn" WHERE id = $1::uuid`, [UNCONFIRMED_STEER_ID]);
 
   await admin.query(
-    `INSERT INTO "session"(
-       id, title, prompt, owner_id, creator_id, status, num_turns, updated_at
-     ) VALUES ($1::uuid, 'other', 'other', $2::uuid, $2::uuid, 'RUNNING', 1, clock_timestamp())`,
-    [OTHER_SESSION_ID, OWNER_ID],
-  );
-  await admin.query(
-    `INSERT INTO "conversation_turn"(
-       id, session_id, seq, client_turn_id, kind, content, status
-     ) VALUES ($1::uuid, $2::uuid, 1, 'other-target', 'message', 'other', 'IN_FLIGHT')`,
-    [OTHER_TURN_ID, OTHER_SESSION_ID],
-  );
-  await admin.query('BEGIN');
-  await admin.query(
-    `INSERT INTO "conversation_turn"(
-       id, session_id, seq, client_turn_id, kind, content, status, send_intent, target_turn_id
-     ) VALUES ($1::uuid, $2::uuid, 2, 'cross-session-target', 'steer', 'bad', 'PENDING',
-               'CURRENT_WORK', $3::uuid)`,
-    [FK_STEER_ID, SESSION_ID, OTHER_TURN_ID],
-  );
-  await assert.rejects(admin.query('COMMIT'), /conversation_turn_target_turn_id_fkey/);
-  await admin.query('ROLLBACK').catch(() => undefined);
-
-  await admin.query(
     `INSERT INTO "conversation_turn_startup_fragment"(
        id, session_id, target_turn_id, client_turn_id, content
      ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'audit-fragment', 'keep this')`,
@@ -708,3 +703,39 @@ pgTest('database constraints reject malformed intent/target rows and preserve st
   );
   assert.equal(retained.rows[0].n, '1');
 });
+
+pgTest(
+  'same-session FK rejects a CURRENT_WORK steer targeting an existing turn in another session',
+  async () => {
+    await seedCrossSessionTarget();
+    await admin.query('BEGIN');
+    await admin.query(
+      `INSERT INTO "conversation_turn"(
+         id, session_id, seq, client_turn_id, kind, content, status, send_intent, target_turn_id
+       ) VALUES ($1::uuid, $2::uuid, 2, 'cross-session-steer', 'steer', 'bad', 'PENDING',
+                 'CURRENT_WORK', $3::uuid)`,
+      [FK_STEER_ID, SESSION_ID, OTHER_TURN_ID],
+    );
+    await assert.rejects(admin.query('COMMIT'), /conversation_turn_target_turn_id_fkey/);
+    await admin.query('ROLLBACK').catch(() => undefined);
+  },
+);
+
+pgTest(
+  'same-session FK rejects a startup fragment targeting an existing turn in another session',
+  async () => {
+    await seedCrossSessionTarget();
+    await admin.query('BEGIN');
+    await admin.query(
+      `INSERT INTO "conversation_turn_startup_fragment"(
+         id, session_id, target_turn_id, client_turn_id, content
+       ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'cross-session-startup', 'bad')`,
+      [CROSS_SESSION_FRAGMENT_ID, SESSION_ID, OTHER_TURN_ID],
+    );
+    await assert.rejects(
+      admin.query('COMMIT'),
+      /conversation_turn_startup_fragment_target_turn_id_fkey/,
+    );
+    await admin.query('ROLLBACK').catch(() => undefined);
+  },
+);
