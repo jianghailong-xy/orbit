@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { Tooltip } from 'antd';
 import { AgentProvider } from '@orbit/shared';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CONFIG_FIELDS,
   appliesMidTurn,
@@ -32,14 +32,51 @@ import { runtimeForProvider } from './workspaceDefaults';
  * about its field, or say nothing where the runtime is not known, and it goes red.
  */
 
+const activeMounts = new Set<{ container: HTMLDivElement; root: Root }>();
+
+async function waitForTooltips(container: HTMLDivElement): Promise<void> {
+  await act(async () => {
+    await vi.waitFor(
+      () => {
+        for (const field of CONFIG_FIELDS) {
+          expect(
+            container.querySelector(`[data-field="${field}"] [role="tooltip"]`)?.textContent,
+            `the ${field} pill rendered no tooltip at all`,
+          ).toBeTruthy();
+        }
+      },
+      { timeout: 8_000, interval: 20 },
+    );
+  });
+}
+
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   // antd's trigger measures its child. jsdom has no layout and no observer to report it with.
-  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+
+afterEach(async () => {
+  try {
+    for (const mounted of [...activeMounts]) {
+      try {
+        await act(async () => mounted.root.unmount());
+      } finally {
+        mounted.container.remove();
+        activeMounts.delete(mounted);
+      }
+    }
+  } finally {
+    vi.unstubAllGlobals();
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  }
 });
 
 const LIVE_CLAUDE: ConfigPillState = {
@@ -63,35 +100,43 @@ async function copyForEachField(state: ConfigPillState): Promise<Record<ConfigFi
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <>
-        {CONFIG_FIELDS.map((field) => (
-          <div key={field} data-field={field}>
-            <Tooltip
-              title={hints[field]}
-              open
-              getPopupContainer={(node) => node.parentElement ?? document.body}
-            >
-              <span className="composer-pill">{field}</span>
-            </Tooltip>
-          </div>
-        ))}
-      </>,
-    );
-  });
-  const out = {} as Record<ConfigField, string>;
-  for (const field of CONFIG_FIELDS) {
-    // The tooltip's own body, found the way a screen reader finds it (`role="tooltip"`) rather
-    // than by an antd class name that a version bump renames.
-    const shown =
-      container.querySelector(`[data-field="${field}"] [role="tooltip"]`)?.textContent ?? '';
-    expect(shown, `the ${field} pill rendered no tooltip at all`).not.toBe('');
-    out[field] = shown;
+  const mounted = { container, root };
+  activeMounts.add(mounted);
+  try {
+    await act(async () => {
+      root.render(
+        <>
+          {CONFIG_FIELDS.map((field) => (
+            <div key={field} data-field={field}>
+              <Tooltip
+                title={hints[field]}
+                open
+                getPopupContainer={(node) => node.parentElement ?? document.body}
+              >
+                <span className="composer-pill">{field}</span>
+              </Tooltip>
+            </div>
+          ))}
+        </>,
+      );
+    });
+    await waitForTooltips(container);
+    const out = {} as Record<ConfigField, string>;
+    for (const field of CONFIG_FIELDS) {
+      // The tooltip's own body, found the way a screen reader finds it (`role="tooltip"`) rather
+      // than by an antd class name that a version bump renames.
+      out[field] =
+        container.querySelector(`[data-field="${field}"] [role="tooltip"]`)?.textContent ?? '';
+    }
+    return out;
+  } finally {
+    try {
+      await act(async () => root.unmount());
+    } finally {
+      activeMounts.delete(mounted);
+      container.remove();
+    }
   }
-  await act(async () => root.unmount());
-  container.remove();
-  return out;
 }
 
 /**
@@ -106,7 +151,9 @@ function promisedTiming(copy: string): boolean | null {
   return midTurn ? true : nextTurn ? false : null;
 }
 
-describe('what the config pills promise about when a change lands', () => {
+// The loaded-suite peak for one real AntD tooltip mount was 5.241s. Keep a local 12s case budget
+// around the 8s role=tooltip wait; it changes no global timeout and introduces no blind delay.
+describe('what the config pills promise about when a change lands', { timeout: 12_000 }, () => {
   it('tells the control-channel half from the spawn-only half on a Claude session', async () => {
     const copy = await copyForEachField(LIVE_CLAUDE);
 

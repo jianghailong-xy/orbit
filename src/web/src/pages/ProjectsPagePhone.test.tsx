@@ -67,14 +67,24 @@ const CANCELLED_PROJECT = {
   lastActivityAt: '2026-01-03T00:00:00Z',
 };
 
-let container: HTMLDivElement;
-let root: Root;
-let landedOn = '';
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+let client: QueryClient | null = null;
+
+function mountedContainer(): HTMLDivElement {
+  if (!container) throw new Error('ProjectsPage is not mounted');
+  return container;
+}
+
+async function waitForUi(assertion: () => void): Promise<void> {
+  await act(async () => {
+    await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
+  });
+}
 
 function RouteProbe() {
   const location = useLocation();
-  landedOn = `${location.pathname}${location.search}`;
-  return null;
+  return <output data-testid="location">{location.pathname + location.search}</output>;
 }
 
 /** `matches` for the projects breakpoint only — everything else answers false, which is what
@@ -95,7 +105,6 @@ function stubViewport(phone: boolean): void {
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
-  landedOn = '';
   const answers: Record<string, unknown[]> = {
     '/projects?status=OPEN': [OPEN_PROJECT],
     '/projects?status=DONE': [DONE_PROJECT],
@@ -119,19 +128,41 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
+  const mountedRoot = root;
+  const mountedClient = client;
+  const mountedNode = container;
+  root = null;
+  client = null;
+  container = null;
+  try {
+    if (mountedRoot) await act(async () => mountedRoot.unmount());
+  } finally {
+    try {
+      if (mountedClient) {
+        await mountedClient.cancelQueries();
+        mountedClient.clear();
+      }
+    } finally {
+      mountedNode?.remove();
+      vi.unstubAllGlobals();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  }
 });
 
 async function mount(): Promise<void> {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+  const nextClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  });
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
   await act(async () => {
-    root.render(
-      <QueryClientProvider client={client}>
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={['/projects']}>
           <ProjectsPage />
           <RouteProbe />
@@ -139,35 +170,33 @@ async function mount(): Promise<void> {
       </QueryClientProvider>,
     );
   });
-  // One macrotask: an `await act` alone drains microtasks, which is not where react-query settles.
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitForUi(() => {
+    expect(nextContainer.querySelector('.project-row-title')?.textContent).toBe('Row folding');
+    expect(nextContainer.querySelector('[data-testid="location"]')?.textContent).toBe('/projects');
   });
 }
 
-async function flush(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+function currentLocation(): string | null {
+  return mountedContainer().querySelector('[data-testid="location"]')?.textContent ?? null;
 }
 
 function segment(label: string): HTMLInputElement {
-  const item = [...container.querySelectorAll('.ant-segmented-item')].find((el) =>
+  const item = [...mountedContainer().querySelectorAll('.ant-segmented-item')].find((el) =>
     el.textContent?.trim().startsWith(label),
   );
   expect(item, `segment ${label}`).toBeTruthy();
   return item!.querySelector('input')! as HTMLInputElement;
 }
 
-async function click(element: HTMLElement): Promise<void> {
+async function click(element: HTMLElement, assertion: () => void): Promise<void> {
   await act(async () => {
     element.click();
   });
-  await flush();
+  await waitForUi(assertion);
 }
 
 function button(label: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll('button')].find(
+  const found = [...mountedContainer().querySelectorAll('button')].find(
     (candidate) => candidate.textContent?.trim() === label,
   );
   expect(found, `button ${label}`).toBeTruthy();
@@ -177,23 +206,29 @@ function button(label: string): HTMLButtonElement {
 /** The tags inside project ROWS. Scoped to the row head so a status word appearing in a section
  *  header or a pill cannot answer for the badge this is about. */
 const rowTags = (): string[] =>
-  [...container.querySelectorAll('.project-row-head .ant-tag')].map((el) =>
+  [...mountedContainer().querySelectorAll('.project-row-head .ant-tag')].map((el) =>
     (el.textContent ?? '').trim(),
   );
 
 const createButton = (): HTMLButtonElement =>
-  container.querySelector('.projects-new-button') as HTMLButtonElement;
+  mountedContainer().querySelector('.projects-new-button') as HTMLButtonElement;
 
-describe('projects list on a phone', () => {
+// The loaded-suite peak observed for the first ProjectsPage/AntD case was 6.3s (8.23s for all six
+// targeted cases). Keep this local 12s case budget around the 8s observable UI wait; it neither
+// changes the global timeout nor sleeps blindly.
+describe('projects list on a phone', { timeout: 12_000 }, () => {
   it('drops the OPEN tag the section header already states', async () => {
     stubViewport(true);
     await mount();
 
-    expect(container.querySelectorAll('.project-row').length).toBeGreaterThan(0);
-    expect(rowTags()).toEqual([]);
+    await waitForUi(() => {
+      expect(rowTags()).toEqual([]);
+      expect(createButton().textContent).toBe('');
+    });
+    expect(mountedContainer().querySelectorAll('.project-row').length).toBeGreaterThan(0);
     // The row itself is intact — only the badge went.
-    expect(container.querySelector('.project-row-title')?.textContent).toBe('Row folding');
-    expect(landedOn).toBe('/projects');
+    expect(mountedContainer().querySelector('.project-row-title')?.textContent).toBe('Row folding');
+    expect(currentLocation()).toBe('/projects');
     expect(apiMock).toHaveBeenCalledWith('/projects?status=OPEN');
   });
 
@@ -201,38 +236,50 @@ describe('projects list on a phone', () => {
     stubViewport(false);
     await mount();
 
-    expect(rowTags()).toEqual(['OPEN']);
+    await waitForUi(() => expect(rowTags()).toEqual(['OPEN']));
   });
 
   it('shows completed history flat without repeating its lifecycle in a header or row tag', async () => {
     stubViewport(true);
     await mount();
-    await click(button('History'));
-    await click(segment('Completed'));
+    await click(button('History'), () => expect(segment('Completed')).toBeTruthy());
+    await click(segment('Completed'), () => {
+      expect(
+        mountedContainer().querySelector('section[data-section="completed"] .project-row-title')
+          ?.textContent,
+      ).toBe('Shipped work');
+      expect(currentLocation()).toBe('/projects?status=DONE');
+    });
 
-    const terminal = container.querySelector('section[data-section="completed"]')!;
+    const terminal = mountedContainer().querySelector('section[data-section="completed"]')!;
     expect(terminal).toBeTruthy();
     expect(terminal.querySelector('h3')).toBeNull();
     expect(terminal.querySelector('button')).toBeNull();
     expect(terminal.querySelector('.project-row-title')?.textContent).toBe('Shipped work');
     expect(rowTags()).toEqual([]);
-    expect(landedOn).toBe('/projects?status=DONE');
+    expect(currentLocation()).toBe('/projects?status=DONE');
     expect(apiMock).toHaveBeenCalledWith('/projects?status=DONE');
   });
 
   it('gives cancelled history the same flat, non-repeating phone treatment', async () => {
     stubViewport(true);
     await mount();
-    await click(button('History'));
-    await click(segment('Cancelled'));
+    await click(button('History'), () => expect(segment('Cancelled')).toBeTruthy());
+    await click(segment('Cancelled'), () => {
+      expect(
+        mountedContainer().querySelector('section[data-section="cancelled"] .project-row-title')
+          ?.textContent,
+      ).toBe('Discarded work');
+      expect(currentLocation()).toBe('/projects?status=CANCELLED');
+    });
 
-    const terminal = container.querySelector('section[data-section="cancelled"]')!;
+    const terminal = mountedContainer().querySelector('section[data-section="cancelled"]')!;
     expect(terminal).toBeTruthy();
     expect(terminal.querySelector('h3')).toBeNull();
     expect(terminal.querySelector('button')).toBeNull();
     expect(terminal.querySelector('.project-row-title')?.textContent).toBe('Discarded work');
     expect(rowTags()).toEqual([]);
-    expect(landedOn).toBe('/projects?status=CANCELLED');
+    expect(currentLocation()).toBe('/projects?status=CANCELLED');
     expect(apiMock).toHaveBeenCalledWith('/projects?status=CANCELLED');
   });
 
@@ -240,6 +287,7 @@ describe('projects list on a phone', () => {
     stubViewport(true);
     await mount();
 
+    await waitForUi(() => expect(createButton().textContent).toBe(''));
     const btn = createButton();
     expect(btn.textContent).toBe('');
     expect(btn.getAttribute('aria-label')).toBe('New project');
@@ -251,6 +299,7 @@ describe('projects list on a phone', () => {
     stubViewport(false);
     await mount();
 
+    await waitForUi(() => expect(createButton().textContent).toContain('New project'));
     const btn = createButton();
     expect(btn.textContent).toContain('New project');
     expect(btn.getAttribute('aria-label')).toBeNull();

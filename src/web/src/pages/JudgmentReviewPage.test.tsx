@@ -283,27 +283,40 @@ function staleReview(): JudgmentReview {
   };
 }
 
-let container: HTMLDivElement;
-let root: Root;
-let client: QueryClient;
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+let client: QueryClient | null = null;
 let clipboardWrite: ReturnType<typeof vi.fn>;
 
-async function flush(): Promise<void> {
+function mountedContainer(): HTMLDivElement {
+  if (!container) throw new Error('judgment review is not mounted');
+  return container;
+}
+
+async function waitForUi(assertion: () => void): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(assertion, { timeout: 6_000, interval: 20 });
   });
 }
 
 async function mount(): Promise<void> {
-  client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  const nextClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      // The client is cleared explicitly in afterEach; Infinity prevents a mutation GC timer from
+      // being scheduled between React's observer unmount and that deterministic teardown.
+      mutations: { retry: false, gcTime: Infinity },
+    },
   });
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
   await act(async () => {
-    root.render(
-      <QueryClientProvider client={client}>
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[judgmentReviewPath(REQUEST)]}>
           <Routes>
             <Route path="/judgments/:id" element={<JudgmentReviewPage />} />
@@ -312,11 +325,14 @@ async function mount(): Promise<void> {
       </QueryClientProvider>,
     );
   });
-  await flush();
+  await waitForUi(() => {
+    expect(nextContainer.querySelector('.judgment-review-page')).not.toBeNull();
+    expect(nextContainer.querySelector('.judgment-task-title')?.textContent).toBe(baseReview.task.title);
+  });
 }
 
 function button(label: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll('button')].find((candidate) =>
+  const found = [...mountedContainer().querySelectorAll('button')].find((candidate) =>
     candidate.textContent?.includes(label),
   );
   expect(found, `button ${label}`).toBeTruthy();
@@ -324,7 +340,7 @@ function button(label: string): HTMLButtonElement {
 }
 
 function details(label: string): HTMLDetailsElement {
-  const found = [...container.querySelectorAll('details')].find((candidate) =>
+  const found = [...mountedContainer().querySelectorAll('details')].find((candidate) =>
     candidate.querySelector(':scope > summary')?.textContent?.includes(label),
   );
   expect(found, `details ${label}`).toBeTruthy();
@@ -336,17 +352,21 @@ async function toggleDetails(label: string): Promise<void> {
   await act(async () => target.querySelector(':scope > summary')!.dispatchEvent(
     new MouseEvent('click', { bubbles: true }),
   ));
-  await flush();
+  await waitForUi(() => expect(target.open).toBe(true));
 }
 
 async function typeNote(value: string): Promise<void> {
-  const textarea = container.querySelector('#judgment-decision-note') as HTMLTextAreaElement;
+  const textarea = mountedContainer().querySelector('#judgment-decision-note') as HTMLTextAreaElement;
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
   await act(async () => {
     setter.call(textarea, value);
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await flush();
+  await waitForUi(() => {
+    expect(textarea.value).toBe(value);
+    expect(button('批准此证据版本').disabled).toBe(false);
+    expect(button('要求补充证据').disabled).toBe(false);
+  });
 }
 
 beforeEach(() => {
@@ -375,76 +395,102 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  if (root) await act(async () => root.unmount());
-  client?.clear();
-  container?.remove();
-  vi.unstubAllGlobals();
-  delete (window.navigator as Navigator & { clipboard?: Clipboard }).clipboard;
+  const mountedRoot = root;
+  const mountedClient = client;
+  const mountedNode = container;
+  root = null;
+  client = null;
+  container = null;
+  try {
+    if (mountedRoot) await act(async () => mountedRoot.unmount());
+  } finally {
+    try {
+      if (mountedClient) {
+        await mountedClient.cancelQueries();
+        mountedClient.clear();
+      }
+    } finally {
+      mountedNode?.remove();
+      vi.unstubAllGlobals();
+      delete (window.navigator as Navigator & { clipboard?: Clipboard }).clipboard;
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  }
 });
 
-describe('criterion-driven human evidence review', () => {
+// Cold clean-CI scheduling put the first real DOM/AntD case at 5.610s (1.980s standalone).
+// Keep this suite-local 8s ceiling around the 6s observable UI wait; no global timeout or sleep.
+describe('criterion-driven human evidence review', { timeout: 8_000 }, () => {
   it('starts with task/currentness, evidence identity, then criterion cards without JSON dumps', async () => {
     apiMock.mockResolvedValue(baseReview);
     await mount();
+    const page = mountedContainer();
 
-    expect(container.textContent).toContain('审阅完成证据');
-    expect(container.textContent).toContain(baseReview.task.title);
-    expect(container.textContent).toContain('人工签字（HUMAN_SIGNOFF）');
-    expect(container.textContent).toContain('当前版本 · 待审批');
-    expect(container.textContent).toContain('证据 r3');
-    expect(container.textContent).toContain('current r3');
-    expect(container.textContent).toContain('N15 implementer');
-    expect(container.textContent).toContain('0123456789ab…');
-    expect(container.textContent).toContain(shortDigest(DIGEST));
-    expect(container.textContent).toContain(CRITERION_ONE);
-    expect(container.textContent).toContain(CRITERION_TWO);
-    expect(container.textContent).toContain('提交者结论');
-    expect(container.textContent).toContain('声称通过（PASS）');
-    expect(container.textContent).toContain('2/2 项提交者声称通过');
-    expect(container.querySelectorAll('.judgment-criterion-card')).toHaveLength(2);
-    expect(container.querySelector('.judgment-criterion-card img')).toBeNull();
-    expect(container.querySelector('pre')).toBeNull();
-    expect(container.textContent).not.toContain('schemaVersion');
-    expect(container.textContent).not.toContain(FULL_OUTPUT_MARKER);
-    expect(container.textContent).not.toContain(TEST_SUMMARY_MARKER);
-    expect(container.textContent).not.toContain(CRITERION_RAW_MARKER);
+    expect(page.textContent).toContain('审阅完成证据');
+    expect(page.textContent).toContain(baseReview.task.title);
+    expect(page.textContent).toContain('人工签字（HUMAN_SIGNOFF）');
+    expect(page.textContent).toContain('当前版本 · 待审批');
+    expect(page.textContent).toContain('证据 r3');
+    expect(page.textContent).toContain('current r3');
+    expect(page.textContent).toContain('N15 implementer');
+    expect(page.textContent).toContain('0123456789ab…');
+    expect(page.textContent).toContain(shortDigest(DIGEST));
+    expect(page.textContent).toContain(CRITERION_ONE);
+    expect(page.textContent).toContain(CRITERION_TWO);
+    expect(page.textContent).toContain('提交者结论');
+    expect(page.textContent).toContain('声称通过（PASS）');
+    expect(page.textContent).toContain('2/2 项提交者声称通过');
+    expect(page.querySelectorAll('.judgment-criterion-card')).toHaveLength(2);
+    expect(page.querySelector('.judgment-criterion-card img')).toBeNull();
+    expect(page.querySelector('pre')).toBeNull();
+    expect(page.textContent).not.toContain('schemaVersion');
+    expect(page.textContent).not.toContain(FULL_OUTPUT_MARKER);
+    expect(page.textContent).not.toContain(TEST_SUMMARY_MARKER);
+    expect(page.textContent).not.toContain(CRITERION_RAW_MARKER);
 
-    const identity = container.querySelector('.judgment-evidence-identity') as HTMLElement;
-    const criteria = container.querySelector('.judgment-criteria') as HTMLElement;
+    const identity = page.querySelector('.judgment-evidence-identity') as HTMLElement;
+    const criteria = page.querySelector('.judgment-criteria') as HTMLElement;
     expect(identity.compareDocumentPosition(criteria) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    const firstCard = container.querySelector('.judgment-criterion-card') as HTMLElement;
+    const firstCard = page.querySelector('.judgment-criterion-card') as HTMLElement;
     expect(firstCard.textContent).not.toContain('账户所有者已批准');
     expect((document.activeElement as HTMLElement)?.textContent).toContain('审阅完成证据');
 
-    const textarea = container.querySelector('#judgment-decision-note') as HTMLTextAreaElement;
-    expect(container.querySelector(`label[for="${textarea.id}"]`)).toBeTruthy();
+    const textarea = page.querySelector('#judgment-decision-note') as HTMLTextAreaElement;
+    expect(page.querySelector(`label[for="${textarea.id}"]`)).toBeTruthy();
     expect(textarea.required).toBe(true);
     expect(button('批准此证据版本').disabled).toBe(true);
     expect(button('要求补充证据').disabled).toBe(true);
 
     await act(async () => button('复制完整 digest').click());
-    expect(clipboardWrite).toHaveBeenCalledWith(DIGEST);
+    await waitForUi(() => {
+      expect(clipboardWrite).toHaveBeenCalledWith(DIGEST);
+      expect(page.querySelector('[aria-label="复制完整 digest已复制"]')).not.toBeNull();
+    });
   });
 
   it('lazily reveals related commands, full output, and exact raw audit JSON', async () => {
     apiMock.mockResolvedValue(baseReview);
     await mount();
+    const page = mountedContainer();
 
-    expect(container.textContent).not.toContain('npm test -w @orbit/web');
+    expect(page.textContent).not.toContain('npm test -w @orbit/web');
     await toggleDetails('查看关联命令与产物（2）');
-    expect(container.textContent).toContain('npm test -w @orbit/web');
-    expect(container.textContent).toContain('exit 0');
-    expect(container.textContent).toContain('390x844 overflow=false');
-    expect(container.textContent).toContain('after-390x844.png');
-    expect(container.textContent).not.toContain(FULL_OUTPUT_MARKER);
+    await waitForUi(() => expect(page.textContent).toContain('npm test -w @orbit/web'));
+    expect(page.textContent).toContain('exit 0');
+    expect(page.textContent).toContain('390x844 overflow=false');
+    expect(page.textContent).toContain('after-390x844.png');
+    expect(page.textContent).not.toContain(FULL_OUTPUT_MARKER);
 
     await toggleDetails('查看完整原始输出');
-    expect(container.textContent).toContain(FULL_OUTPUT_MARKER);
-    expect(container.querySelector('.judgment-audit-panel pre')).toBeNull();
+    await waitForUi(() => expect(page.textContent).toContain(FULL_OUTPUT_MARKER));
+    expect(page.querySelector('.judgment-audit-panel pre')).toBeNull();
 
     await toggleDetails('技术与审计详情 · 原始 JSON');
-    const raw = [...container.querySelectorAll('.judgment-audit-panel .judgment-json')];
+    await waitForUi(() => {
+      expect(page.querySelectorAll('.judgment-audit-panel .judgment-json')).toHaveLength(4);
+    });
+    const raw = [...page.querySelectorAll('.judgment-audit-panel .judgment-json')];
     expect(raw).toHaveLength(4);
     expect(raw[0].textContent).toBe(JSON.stringify(baseReview.criterion, null, 2));
     expect(raw[1].textContent).toBe(JSON.stringify(baseReview.evidence.structured, null, 2));
@@ -452,7 +498,10 @@ describe('criterion-driven human evidence review', () => {
     expect(raw[3].textContent).toBe(JSON.stringify(baseReview.history, null, 2));
 
     await act(async () => button('复制structured evidence 原始 JSON').click());
-    expect(clipboardWrite).toHaveBeenCalledWith(JSON.stringify(baseReview.evidence.structured, null, 2));
+    await waitForUi(() => {
+      expect(clipboardWrite).toHaveBeenCalledWith(JSON.stringify(baseReview.evidence.structured, null, 2));
+      expect(page.querySelector('[aria-label="复制structured evidence 原始 JSON已复制"]')).not.toBeNull();
+    });
   });
 
   it('uses an explicit compatibility fallback without parsing prose or inventing conclusions', async () => {
@@ -469,24 +518,26 @@ describe('criterion-driven human evidence review', () => {
     };
     apiMock.mockResolvedValue(unsupported);
     await mount();
+    const page = mountedContainer();
 
-    expect(container.textContent).toContain('此 evidence 暂不能按判据展示');
-    expect(container.textContent).toContain('不会拆解 acceptanceCriteria 散文');
-    expect(container.querySelector('.judgment-criterion-card')).toBeNull();
-    expect(container.querySelector('pre')).toBeNull();
-    expect(container.textContent).not.toContain('SHOULD_NOT_SPLIT');
+    expect(page.textContent).toContain('此 evidence 暂不能按判据展示');
+    expect(page.textContent).toContain('不会拆解 acceptanceCriteria 散文');
+    expect(page.querySelector('.judgment-criterion-card')).toBeNull();
+    expect(page.querySelector('pre')).toBeNull();
+    expect(page.textContent).not.toContain('SHOULD_NOT_SPLIT');
 
     await act(async () => button('通用审计查看器').click());
-    await flush();
-    expect(container.querySelectorAll('.judgment-audit-panel .judgment-json')).toHaveLength(4);
-    expect(container.textContent).toContain('SHOULD_NOT_SPLIT');
+    await waitForUi(() => {
+      expect(page.querySelectorAll('.judgment-audit-panel .judgment-json')).toHaveLength(4);
+      expect(page.textContent).toContain('SHOULD_NOT_SPLIT');
+    });
   });
 
   it('renders only the server-authored approval impact and never predicts downstream readiness', async () => {
     apiMock.mockResolvedValue(baseReview);
     await mount();
 
-    const impact = container.querySelector('.judgment-impact') as HTMLElement;
+    const impact = mountedContainer().querySelector('.judgment-impact') as HTMLElement;
     expect(impact.querySelector('[data-authority="SERVER"]')).toBeTruthy();
     expect(impact.textContent).toContain('派生为 DONE');
     expect(impact.textContent).toContain('DECIDED · PASS');
@@ -501,7 +552,7 @@ describe('criterion-driven human evidence review', () => {
     apiMock.mockResolvedValue({ ...baseReview, approvalImpact: undefined });
     await mount();
 
-    const impact = container.querySelector('.judgment-impact') as HTMLElement;
+    const impact = mountedContainer().querySelector('.judgment-impact') as HTMLElement;
     expect(impact.querySelector('[data-testid="no-authoritative-impact"]')).toBeTruthy();
     expect(impact.textContent).not.toContain('派生为 DONE');
     expect(impact.textContent).not.toContain('DECIDED · PASS');
@@ -529,8 +580,10 @@ describe('criterion-driven human evidence review', () => {
     const approve = button('批准此证据版本');
     expect(approve.disabled).toBe(false);
     await act(async () => approve.click());
-    await flush();
-    expect(approve.disabled).toBe(true);
+    await waitForUi(() => {
+      expect(approve.disabled).toBe(true);
+      expect(apiMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+    });
     approve.click();
     expect(apiMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
 
@@ -546,10 +599,12 @@ describe('criterion-driven human evidence review', () => {
       options?.method === 'PATCH' || String(path).includes('/status'))).toBe(false);
 
     await act(async () => release());
-    await flush();
-    await flush();
-    expect(container.textContent).toContain('账户所有者已批准');
-    const impact = container.querySelector('.judgment-impact') as HTMLElement;
+    await waitForUi(() => {
+      expect(mountedContainer().textContent).toContain('账户所有者已批准');
+      expect(apiMock.mock.calls.filter(([path, options]) =>
+        path === `/judgments/${REQUEST}` && !options?.method).length).toBeGreaterThan(1);
+    });
+    const impact = mountedContainer().querySelector('.judgment-impact') as HTMLElement;
     expect(impact.textContent).toContain('taskDONE');
     expect(impact.textContent).toContain('requestDECIDED · PASS');
     expect(impact.textContent).toContain('signal已关闭');
@@ -573,8 +628,11 @@ describe('criterion-driven human evidence review', () => {
     const note = '请补充完整键盘焦点轨迹。';
     await typeNote(note);
     await act(async () => button('要求补充证据').click());
-    await flush();
-    await flush();
+    await waitForUi(() => {
+      expect(mountedContainer().textContent).toContain('等待补充证据');
+      expect(button('批准此证据版本').disabled).toBe(true);
+      expect(button('要求补充证据').disabled).toBe(true);
+    });
 
     const postCall = apiMock.mock.calls.find(([, options]) => options?.method === 'POST')!;
     expect(postCall[1]?.body).toEqual({
@@ -583,7 +641,7 @@ describe('criterion-driven human evidence review', () => {
       action: 'REQUEST_MORE_EVIDENCE',
       note,
     });
-    expect(container.textContent).toContain('等待补充证据');
+    expect(mountedContainer().textContent).toContain('等待补充证据');
     expect(button('批准此证据版本').disabled).toBe(true);
     expect(button('要求补充证据').disabled).toBe(true);
   });
@@ -602,35 +660,43 @@ describe('criterion-driven human evidence review', () => {
     await mount();
     await typeNote('这个点击与新 evidence revision 发生竞争。');
     await act(async () => button('批准此证据版本').click());
-    await flush();
-    await flush();
+    await waitForUi(() => {
+      const error = mountedContainer().querySelector('.judgment-inline-error');
+      expect(error?.textContent).toContain(refusal);
+      expect(document.activeElement).toBe(error);
+      expect(mountedContainer().textContent).toContain('打开 current evidence r4');
+    });
 
-    const inline = container.querySelector('.judgment-inline-error') as HTMLElement;
+    const inline = mountedContainer().querySelector('.judgment-inline-error') as HTMLElement;
     expect(inline).toBeTruthy();
     expect(inline.textContent).toContain(refusal);
     expect(document.activeElement).toBe(inline);
-    expect(container.textContent).toContain('已被新版本替代');
-    expect(container.textContent).toContain('打开 current evidence r4');
-    expect(container.textContent).toContain(shortDigest(NEW_DIGEST));
+    expect(mountedContainer().textContent).toContain('已被新版本替代');
+    expect(mountedContainer().textContent).toContain('打开 current evidence r4');
+    expect(mountedContainer().textContent).toContain(shortDigest(NEW_DIGEST));
     expect(button('批准此证据版本').disabled).toBe(true);
     expect(button('要求补充证据').disabled).toBe(true);
 
     await act(async () => button('关闭错误').click());
-    await flush();
-    expect(container.querySelector('.judgment-inline-error')).toBeNull();
-    expect(document.activeElement?.textContent).toContain('打开 current evidence r4');
+    await waitForUi(() => {
+      expect(mountedContainer().querySelector('.judgment-inline-error')).toBeNull();
+      expect(document.activeElement?.textContent).toContain('打开 current evidence r4');
+    });
   });
 
   it('keeps history human-readable and collapsed until requested', async () => {
     apiMock.mockResolvedValue(approvedReview());
     await mount();
 
-    expect(container.querySelector('.judgment-history-entry')).toBeNull();
+    expect(mountedContainer().querySelector('.judgment-history-entry')).toBeNull();
     expect(details('历史版本').open).toBe(false);
     await toggleDetails('历史版本');
-    expect(container.textContent).toContain('证据 r3');
-    expect(container.textContent).toContain('决定说明：Reviewed the exact revision');
-    expect(container.querySelector('.judgment-history pre')).toBeNull();
+    await waitForUi(() => {
+      expect(mountedContainer().querySelector('.judgment-history-entry')).not.toBeNull();
+      expect(mountedContainer().textContent).toContain('决定说明：Reviewed the exact revision');
+    });
+    expect(mountedContainer().textContent).toContain('证据 r3');
+    expect(mountedContainer().querySelector('.judgment-history pre')).toBeNull();
     expect(button('批准此证据版本').disabled).toBe(true);
   });
 });

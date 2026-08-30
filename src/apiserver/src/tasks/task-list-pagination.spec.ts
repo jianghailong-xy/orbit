@@ -1,32 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma, RunStatus } from '@prisma/client';
+import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
 import { TasksService } from './tasks.service';
+import { recordingQueryRaw } from './query-raw-test-helper';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 
 function serviceWith(prisma: unknown): TasksService {
   return new TasksService(prisma as never, {} as never, {} as never);
-}
-
-/**
- * Capture the statement each `$queryRaw` call would send to PostgreSQL. The runnable (Ready)
- * predicate is built as nested `Prisma.sql` fragments, so re-tagging the template is what
- * splices them back into one statement the assertions can read. `.text` (not `.sql`) is the
- * PostgreSQL rendering, with `$1` placeholders rather than `?`.
- */
-function recordingQueryRaw(rows: (sql: string) => unknown[]) {
-  const statements: string[] = [];
-  const $queryRaw = async (query: Prisma.Sql | TemplateStringsArray, ...bound: unknown[]) => {
-    const rendered = Array.isArray(query)
-      ? Prisma.sql(query as unknown as TemplateStringsArray, ...(bound as never[]))
-      : query as Prisma.Sql;
-    const sql = rendered.text;
-    statements.push(sql);
-    return rows(sql);
-  };
-  return { statements, $queryRaw };
 }
 
 test('legacy list handles more than PostgreSQL bind limit without a giant task-id query', async () => {
@@ -69,7 +51,8 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
   let findManyArgs: any;
   const countWheres: any[] = [];
   const raw = recordingQueryRaw((sql) =>
-    sql.includes('count(*)') ? [{ count: 3 }] : rows.map(({ id }) => ({ id })));
+    sql.includes('count(*)') ? [{ count: 3 }] : rows.map(({ id }) => ({ id })),
+  );
   const service = serviceWith({
     $queryRaw: raw.$queryRaw,
     task: {
@@ -125,12 +108,16 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
     queued: 2,
     runnable: 3,
   });
-  // Filtered total + running + queued stay Prisma counts. Raw SQL serves the scope-wide runnable
-  // badge and the bounded per-row runnable overlay; neither is inferred from Task.status.
+  // Filtered total + running + queued stay Prisma counts. Raw SQL is exactly one scope-wide Ready
+  // badge plus one bounded overlay for every row on this page — never one query per row.
   assert.equal(countWheres.length, 3);
   assert.equal(raw.statements.length, 2);
-  assert.equal(raw.statements.filter((sql) => /count\(\*\)::int/.test(sql)).length, 1);
-  assert.equal(raw.statements.filter((sql) => /t\.id IN/.test(sql)).length, 1);
+  assert.equal(raw.statements.filter(({ text }) => /count\(\*\)::int/.test(text)).length, 1);
+  assert.equal(raw.statements.filter(({ text }) => /t\.id IN \(/.test(text)).length, 1);
+  assert.deepEqual(
+    raw.statements.map(({ invocation }) => invocation),
+    ['tagged-template', 'sql-object'],
+  );
 });
 
 test('runnable filter is applied before pagination with the same rules as the Run action', async () => {
@@ -147,7 +134,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
   // flight, no outstanding prerequisite, and no aggregate-only parent. Spelled as NOT EXISTS so
   // PostgreSQL can short-circuit per row.
   assert.equal(raw.statements.length, 2);
-  for (const sql of raw.statements) {
+  for (const { text: sql } of raw.statements) {
     assert.match(sql, /t\.owner_id = \$\d+::uuid/);
     assert.match(sql, /t\.status <> 'DONE'::task_status/);
     assert.match(sql, /t\.dispatch_hold = false/);
@@ -159,16 +146,39 @@ test('runnable filter is applied before pagination with the same rules as the Ru
       sql,
       /NOT EXISTS \([\s\S]*FROM session s[\s\S]*s\.deleted_at IS NULL[\s\S]*s\.starts_task_work = true[\s\S]*'PENDING'::run_status, 'RUNNING'::run_status/,
     );
+    // A missing/cross-owner/cyclic tail returns NULL. The inner NOT EXISTS then remains true and
+    // the outer anti-join blocks the task, so malformed dependency data cannot fail open.
     assert.match(
       sql,
-      /NOT EXISTS \([\s\S]*FROM task_dependency dep[\s\S]*task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+      /NOT EXISTS \(\s*SELECT 1 FROM task_dependency dep[\s\S]*AND NOT EXISTS \(\s*SELECT 1\s*FROM task chain_task[\s\S]*chain_task\.id = task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
+    );
+    // A DONE tail releases only inside the current verification epoch and scope.
+    assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
+    assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
+    assert.match(sql, /epoch_open_request\."status" = 'OPEN'/);
+    assert.match(
+      sql,
+      /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
+    );
+    // Legacy PASS remains fail-closed on live/successful run evidence and application in-project.
+    assert.match(
+      sql,
+      /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+    );
+    assert.match(
+      sql,
+      /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+    );
+    assert.match(
+      sql,
+      /epoch_check\."project_id" IS NULL OR EXISTS \(\s*SELECT 1 FROM "project_action" passed_action[\s\S]*passed_action\."status"::text = 'APPLIED'/,
     );
     assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
     assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);
   }
   const [page, badge] = raw.statements;
-  assert.match(page, /ORDER BY t\.created_at DESC, t\.id DESC/);
-  assert.match(badge, /count\(\*\)::int/);
+  assert.match(page.text, /ORDER BY t\.created_at DESC, t\.id DESC/);
+  assert.match(badge.text, /count\(\*\)::int/);
 });
 
 test('runnable page ranks ids in SQL, then hydrates those rows in ranked order', async () => {
@@ -224,7 +234,7 @@ test('runnable tab counts the runnable predicate once and reuses it as the filte
   const result = await service.listPage(OWNER_ID, { status: 'RUNNABLE' });
 
   // Two raw statements: the page ranking and ONE badge count — not one per number.
-  assert.equal(raw.statements.filter((sql) => sql.includes('count(*)')).length, 1);
+  assert.equal(raw.statements.filter(({ text }) => text.includes('count(*)')).length, 1);
   assert.equal(result.total, 42);
   assert.equal(result.counts?.runnable, 42);
   // The running/queued tallies are unrelated to the Ready predicate and still run.

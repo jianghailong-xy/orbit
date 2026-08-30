@@ -218,7 +218,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'actionIntentId',
   'receiptId',
   'diagnosticId',
-  'clockId',
   'coordinationId',
   'leaseId',
   'externalWaitId',
@@ -356,17 +355,21 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'mergeOperationOwner',
   'commitOperationId',
   'commitOperationOwner',
+  // Deployment and coordinator epochs are equality identities, not rows with a public lookup
+  // surface. Translating one would make a heartbeat bind to another expectation or let a logical
+  // clock/RunEvent appear to belong to a different lease generation.
+  'expectationGeneration',
+  'clockId',
+  'ingestedUnderLeaseGeneration',
+  // The capability half of outcome action/coordinator leasing. Unlike leaseId, this value is
+  // echoed only to prove possession and must survive byte-for-byte.
+  'leaseToken',
   // The manual Project trigger's effect marker (`task_run_manual_trigger`, migration 0137). It
   // names no row a caller can ask for: it is `taskRunManualTriggerId(pressToken, projectId)`, a
   // value derived from the press so the marker and the outbox signal agree byte-for-byte about
   // which request already happened. Decoding it on the way in would make that comparison lie, and
   // it appears in no request and no response.
   'requestId',
-  // UUID-shaped generations are compare-and-swap fences. Encoding one would make the runner's
-  // exact echo fail even though the underlying lease/expectation had not changed.
-  'ingestedUnderLeaseGeneration',
-  'expectationGeneration',
-  'leaseToken',
   // One-shot Owner Ratification capabilities. They authorize/commit an exact pending operation
   // and are compared byte-for-byte; exposing them as public row addresses would silently break
   // stale/duplicate CTA and action-commit fencing.

@@ -28,8 +28,15 @@ import { createHash } from 'node:crypto';
  * declaration. The criteria revision is the unordered set of stable definition id, monotone
  * revision, and semantic content hash, so an edit — including edit-then-revert — cannot continue
  * using a confirmation issued for the former standard set.
+ *
+ * Version 6: a current-plan, typed EXECUTABLE attempt termination wired to a criterion is an
+ * acceptance fact. Its stable identity and output digest advance the evidence version without
+ * importing Task status or the rest of the task backlog into the definition of project DONE.
  */
-export const ACCEPTANCE_DIGEST_VERSION = 5;
+export const ACCEPTANCE_DIGEST_VERSION = 6;
+
+export const EXECUTABLE_ATTEMPT_COLLECTOR_VERSION =
+  'project-acceptance-executable-attempt-v1';
 
 /** The routing rule shared by DONE refusals and settled-project write refusals. */
 export const ACCEPTANCE_FINDING_ROUTING =
@@ -61,6 +68,16 @@ export interface AcceptanceFacts {
   criteriaRevision: string;
   /** (requirementId, targetBranch, contentHash, refGeneration) — §13.4 AE9's authoritative row. */
   mergeEvidence: Array<[string, string, string, string]>;
+  /**
+   * (collectorVersion, definitionId, definitionRevision, evidenceTaskId, attemptId, admissionId,
+   * evaluationPlanDigest, expectedExitCode, terminationKind, actualExitCode|null, outputDigest,
+   * outputTruncated, terminatedAt). The latest exact current-plan typed attempt per EXECUTABLE
+   * criterion is a bounded projection; the attempt rows themselves remain append-only history.
+   */
+  executableAttempts: Array<[
+    string, string, string, string, string, string, string,
+    string, string, string, string, string, string,
+  ]>;
 }
 
 export function sha256(value: string): string {
@@ -99,6 +116,7 @@ export function acceptanceDigest(projectId: string, facts: AcceptanceFacts): str
       projectId,
       criteriaRevision: facts.criteriaRevision,
       mergeEvidence: sortTuples(facts.mergeEvidence),
+      executableAttempts: sortTuples(facts.executableAttempts),
     }),
   );
 }

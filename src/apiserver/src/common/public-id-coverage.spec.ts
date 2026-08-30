@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { BadRequestException, Param, Query } from '@nestjs/common';
+import { BadRequestException, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -49,8 +49,12 @@ import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-tas
 // They key by their own columns and must stay unpiped.
 // Deliberately a DENYLIST, and deliberately not replaced by PUBLIC_ID_FIELDS below: a route
 // param IS the address, so the rule that fails safe is "every param is an id unless this list
-// says otherwise". An allowlist would let a param nobody classified through unchecked.
+// says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
+// exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
+// future public request-row addresses.
 const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version']);
+
+const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 
 // Query filters, on the other hand, are a mixed bag of ids and ordinary filters, so those do
 // read the shared classification — one list, so a name can't be an id on the way out and a
@@ -102,10 +106,14 @@ const [PARAM, QUERY] = (() => {
 // the class would push a route that declares a sentinel back into `missing`.
 const resolvesPublicId = (pipes: unknown[]) =>
   pipes.some((p) => p === PublicIdPipe || p instanceof PublicIdPipe);
+const validatesOpaqueUuid = (pipes: unknown[]) =>
+  pipes.some((p) => p === ParseUUIDPipe || p instanceof ParseUUIDPipe);
 
 function inspect(controller: new (...args: never[]) => unknown) {
   const seen: string[] = [];
   const missing: string[] = [];
+  const opaque: string[] = [];
+  const opaqueUnvalidated: string[] = [];
   // Every name this controller resolves through the pipe, whether or not the rule wanted it —
   // the input to the "a fence token is never translated" check below.
   const piped: string[] = [];
@@ -118,14 +126,20 @@ function inspect(controller: new (...args: never[]) => unknown) {
       const name = arg.data;
       if (typeof name !== 'string') continue;
       if (resolvesPublicId(arg.pipes ?? [])) piped.push(name);
+      const routeArg = `${controller.name}.${method}(${name})`;
+      if (kind === PARAM && OPAQUE_PARAM_ROUTES[routeArg]) {
+        opaque.push(routeArg);
+        if (!validatesOpaqueUuid(arg.pipes ?? [])) opaqueUnvalidated.push(routeArg);
+      }
       const wanted =
-        (kind === PARAM && !NON_ID_PARAMS.has(name)) || (kind === QUERY && ID_QUERIES.has(name));
+        (kind === PARAM && !NON_ID_PARAMS.has(name) && !OPAQUE_PARAM_ROUTES[routeArg])
+        || (kind === QUERY && ID_QUERIES.has(name));
       if (!wanted) continue;
       seen.push(`${method}(${name})`);
       if (!resolvesPublicId(arg.pipes ?? [])) missing.push(`${method}(${name})`);
     }
   }
-  return { seen, missing, piped };
+  return { seen, missing, opaque, opaqueUnvalidated, piped };
 }
 
 for (const controller of CONTROLLERS) {
@@ -135,6 +149,15 @@ for (const controller of CONTROLLERS) {
     assert.deepEqual(missing, []);
   });
 }
+
+test('opaque UUID route exceptions are exact, live, and use a non-translating UUID validator', () => {
+  const live = CONTROLLERS.flatMap((controller) => inspect(controller as never).opaque).sort();
+  assert.deepEqual(live, Object.keys(OPAQUE_PARAM_ROUTES).sort());
+  const unvalidated = CONTROLLERS.flatMap(
+    (controller) => inspect(controller as never).opaqueUnvalidated,
+  );
+  assert.deepEqual(unvalidated, []);
+});
 
 // ── The classification is exhaustive ──────────────────────────────────────────────────────────
 // The point of failing here rather than in review: the cost of a misclassified id is not a 400

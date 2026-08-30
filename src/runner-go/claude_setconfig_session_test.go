@@ -270,7 +270,7 @@ func TestSessionSettlesASetConfigTurnOnEveryPath(t *testing.T) {
 				{Await: "user"}, {Emit: "replay_user"},
 				{Await: "control_request", Subtype: ctrlSetPermissionMode},
 				{Emit: "control_response"},
-				{Emit: "result", Text: "done"}, {Emit: "eof"},
+				{Emit: "result", Text: "done"},
 			},
 			wantResult: "applied to the running engine",
 		},
@@ -292,7 +292,7 @@ func TestSessionSettlesASetConfigTurnOnEveryPath(t *testing.T) {
 			turn: setConfigTurn("cfg-1", "claude-opus-5", "acceptEdits"),
 			script: []fakeStep{
 				{Await: "user"}, {Emit: "replay_user"},
-				{Emit: "result", Text: "done"}, {Emit: "eof"},
+				{Emit: "result", Text: "done"},
 			},
 			wantResult: "nothing to change",
 		},
@@ -304,14 +304,15 @@ func TestSessionSettlesASetConfigTurnOnEveryPath(t *testing.T) {
 			},
 			script: []fakeStep{
 				{Await: "user"}, {Emit: "replay_user"},
-				{Emit: "result", Text: "done"}, {Emit: "eof"},
+				{Emit: "result", Text: "done"},
 			},
 			wantResult: "unreadable payload",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			run := runDeliverySession(t, tc.script,
-				[]scriptedTurn{messageTurn("turn-1", "start something long"), tc.turn}, nil)
+				[]scriptedTurn{messageTurn("turn-1", "start something long"), tc.turn},
+				func(r *deliverySession) bool { return r.turnResult("cfg-1") != nil })
 
 			got := run.turnResult("cfg-1")
 			if got == nil {

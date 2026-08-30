@@ -151,14 +151,14 @@ function tasks(sessions = {}) {
   return new TasksService(db, sessions, realtime());
 }
 
-function controller(completionAckMonitor) {
+function controller(completionAckMonitor, projectAcceptance) {
   return new RunnerApiController(
     db,
     { notifySessionQueued() {} },
     realtime(),
     {}, {}, {},
     { appendFor: async (_tx, _sessionId, content) => content },
-    undefined, undefined, undefined, completionAckMonitor,
+    undefined, undefined, projectAcceptance, completionAckMonitor,
   );
 }
 
@@ -242,7 +242,7 @@ async function dequeue(
 
 async function admitAndStart(label, options = {}) {
   const fixture = await executableFixture(label, options);
-  const api = controller();
+  const api = controller(undefined, options.projectAcceptance);
   await queueAcceptance(api, fixture);
   const delivery = await dequeue(api, fixture, options.hardMaxSeconds ?? 3600);
   assert.ok(delivery?.acceptancePlan, `${label} was not admitted`);
@@ -631,7 +631,12 @@ test('typed timeout/cancel/signal/start-failure/infrastructure-loss keep real ta
 test('typed EXITED alone derives DONE or FAILED from the expected code', async () => {
   await empty();
   for (const [actualExitCode, expectedStatus] of [[0, TaskStatus.DONE], [9, TaskStatus.FAILED]]) {
-    const { fixture, api, delivery, started } = await admitAndStart(`exited-${actualExitCode}`);
+    const reconciledTaskIds = [];
+    const { fixture, api, delivery, started } = await admitAndStart(`exited-${actualExitCode}`, {
+      projectAcceptance: {
+        reconcileForEvidenceTask: async (taskId) => reconciledTaskIds.push(taskId),
+      },
+    });
     await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, {
       turnId: delivery.turnId, status: RunStatus.SUCCEEDED, subtype: 'shell', shellOutput: 'output',
       acceptanceAdmissionId: delivery.acceptancePlan.admissionId,
@@ -646,6 +651,11 @@ test('typed EXITED alone derives DONE or FAILED from the expected code', async (
     assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 0);
     assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 1);
     assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 1);
+    assert.deepEqual(
+      reconciledTaskIds,
+      [fixture.taskId],
+      'the committed typed attempt is delivered to project acceptance without a judgment result',
+    );
   }
 });
 

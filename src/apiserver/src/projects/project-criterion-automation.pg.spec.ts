@@ -4,9 +4,13 @@ import { test } from 'node:test';
 
 import {
   CreatorType,
+  ExecutableAcceptanceAdmissionDecision,
+  ExecutableAcceptanceTerminationKind,
   PrismaClient,
   ProjectAcceptanceVerdict,
   ProjectStatus,
+  RunStatus,
+  RunnerStatus,
   TaskCompletionCriterion,
   TaskJudgmentDecision,
   TaskJudgmentRecipientType,
@@ -25,6 +29,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { EXECUTABLE_ATTEMPT_COLLECTOR_VERSION } from './project-acceptance';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -182,6 +187,227 @@ async function declare(
     acceptanceCriteriaItems: [item],
   } as never);
 }
+
+async function recordTypedExecutableSuccess(
+  db: PrismaClient,
+  target: { ownerId: string },
+  runnerId: string,
+  taskId: string,
+  sequence: number,
+) {
+  const executable = await db.task.findUniqueOrThrow({
+    where: { id: taskId },
+    select: {
+      acceptanceTimeoutSeconds: true,
+      acceptanceOwnerTimeoutCeilingSeconds: true,
+      acceptancePolicyTimeoutCeilingSeconds: true,
+      acceptanceSchemaRevision: true,
+      acceptanceCapabilityRevision: true,
+      acceptanceCommandDigest: true,
+      acceptanceEvaluationPlanDigest: true,
+      acceptanceExpectedExitCode: true,
+    },
+  });
+  assert.ok(executable.acceptanceTimeoutSeconds);
+  assert.ok(executable.acceptanceOwnerTimeoutCeilingSeconds);
+  assert.ok(executable.acceptancePolicyTimeoutCeilingSeconds);
+  assert.ok(executable.acceptanceSchemaRevision);
+  assert.ok(executable.acceptanceCapabilityRevision);
+  assert.ok(executable.acceptanceCommandDigest);
+  assert.ok(executable.acceptanceEvaluationPlanDigest);
+  assert.notEqual(executable.acceptanceExpectedExitCode, null);
+
+  const sessionId = randomUUID();
+  const turnId = randomUUID();
+  await db.session.create({
+    data: {
+      id: sessionId,
+      ownerId: target.ownerId,
+      creatorId: target.ownerId,
+      taskId,
+      assignedRunnerId: runnerId,
+      title: `late executable evidence ${sequence}`,
+      prompt: 'Record the declared acceptance command result.',
+      provider: 'codex',
+      status: RunStatus.AWAITING_INPUT,
+    },
+  });
+  const deadline = new Date(`2026-08-29T20:0${sequence}:00.000Z`);
+  const admission = await db.taskExecutableAdmission.create({
+    data: {
+      id: randomUUID(),
+      taskId,
+      sessionId,
+      turnId,
+      runnerId,
+      evaluationPlanDigest: executable.acceptanceEvaluationPlanDigest,
+      commandDigest: executable.acceptanceCommandDigest,
+      expectedExitCode: executable.acceptanceExpectedExitCode!,
+      requestedTimeoutSeconds: executable.acceptanceTimeoutSeconds,
+      ownerTimeoutCeilingSeconds: executable.acceptanceOwnerTimeoutCeilingSeconds,
+      policyTimeoutCeilingSeconds: executable.acceptancePolicyTimeoutCeilingSeconds,
+      requiredSchemaRevision: executable.acceptanceSchemaRevision,
+      requiredCapabilityRevision: executable.acceptanceCapabilityRevision,
+      runnerSchemaRevision: executable.acceptanceSchemaRevision,
+      runnerCapabilityRevision: executable.acceptanceCapabilityRevision,
+      runnerHardMaxSeconds: executable.acceptanceOwnerTimeoutCeilingSeconds,
+      runnerSha: sequence.toString(16).repeat(40).slice(0, 40),
+      decision: ExecutableAcceptanceAdmissionDecision.ADMITTED,
+      effectiveTimeoutSeconds: executable.acceptanceTimeoutSeconds,
+      effectiveDeadline: deadline,
+      decidedAt: new Date(`2026-08-29T19:0${sequence}:00.000Z`),
+    },
+  });
+  const attempt = await db.taskExecutableAttempt.create({
+    data: {
+      id: randomUUID(),
+      admissionId: admission.id,
+      taskId,
+      sessionId,
+      turnId,
+      evaluationPlanDigest: executable.acceptanceEvaluationPlanDigest,
+      expectedExitCode: executable.acceptanceExpectedExitCode,
+      deadlineAt: deadline,
+      startedAt: new Date(`2026-08-29T19:1${sequence}:00.000Z`),
+    },
+  });
+  const terminated = await db.taskExecutableAttempt.update({
+    where: { id: attempt.id },
+    data: {
+      terminatedAt: new Date(`2026-08-29T19:2${sequence}:00.000Z`),
+      terminationKind: ExecutableAcceptanceTerminationKind.EXITED,
+      actualExitCode: executable.acceptanceExpectedExitCode,
+      rawOutput: `typed attempt ${sequence}: all assertions passed`,
+    },
+  });
+  await db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
+  return terminated;
+}
+
+test('late typed attempts advance the evidence version and back all four wired EXECUTABLE criteria',
+  { skip }, async () => {
+    const { db, acceptance, projects } = await connect();
+    try {
+      const target = await base(db, 'late-typed-attempts');
+      const runner = await db.runner.create({
+        data: {
+          id: randomUUID(),
+          ownerId: target.ownerId,
+          name: 'late-typed-attempts-runner',
+          tokenHash: randomUUID(),
+          status: RunnerStatus.ONLINE,
+          acceptanceRuntimeSchemaRevision: 2,
+          acceptanceRuntimeCapabilityRevision: 2,
+          acceptanceRuntimeHardMaxSeconds: 300,
+          acceptanceRuntimeReportedAt: new Date('2026-08-29T19:00:00.000Z'),
+        },
+      });
+      const declarations = [
+        ['npm test -w @orbit/shared', 0],
+        ['npm test -w @orbit/apiserver', 0],
+        ['cd src/runner-go && go test ./...', 0],
+        ['cd src/macos/OrbitKit && swift test', 0],
+      ] as const;
+      const sources = [];
+      for (const [index, [command, expectedExitCode]] of declarations.entries()) {
+        sources.push(await task(db, target, `evidence task ${index + 1}`, {
+          completionCriterion: TaskCompletionCriterion.EXECUTABLE,
+          acceptanceCommand: command,
+          acceptanceExpectedExitCode: expectedExitCode,
+          acceptanceTimeoutSeconds: 120,
+          acceptanceOwnerTimeoutCeilingSeconds: 300,
+          acceptancePolicyTimeoutCeilingSeconds: 300,
+          acceptanceSchemaRevision: 2,
+          acceptanceCapabilityRevision: 2,
+        }));
+      }
+      await projects.update(target.ownerId, target.projectId, {
+        acceptanceCriteriaItems: sources.map((source, index) => ({
+          text: `Executable criterion ${index + 1} is satisfied`,
+          verificationMethod: 'Read the exact typed attempt termination and raw output.',
+          completionCriterion: TaskCompletionCriterion.EXECUTABLE,
+          acceptanceCommand: declarations[index]![0],
+          acceptanceExpectedExitCode: declarations[index]![1],
+          evidenceTaskId: source.id,
+        })),
+      } as never);
+      await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
+        actorType: 'USER', actorId: target.ownerId,
+      });
+
+      const openedBeforeEvidence = await acceptance.openRun(
+        target.ownerId,
+        target.projectId,
+        { decidedBy: 'USER' },
+      );
+      assert.equal(openedBeforeEvidence.evidenceVersion, '0');
+      await acceptance.reconcile(target.ownerId, target.projectId);
+      let overview = await acceptance.overview(target.ownerId, target.projectId);
+      assert.deepEqual(
+        overview.runs[0]?.criteria.map((criterion) => criterion.verdict),
+        Array(4).fill(ProjectAcceptanceVerdict.INCONCLUSIVE),
+      );
+      assert.deepEqual(
+        (overview.ownerRatification.evaluationPlan as { collectorVersions?: string[] })
+          .collectorVersions,
+        [EXECUTABLE_ATTEMPT_COLLECTOR_VERSION],
+      );
+      const criteriaRevision = overview.runs[0]!.criteriaRevision;
+      const criteriaDigest = overview.criteriaDigest;
+      const initialConclusionIds = new Set(overview.runs[0]!.conclusions.map((event) => event.id));
+
+      const attempts = [];
+      for (const [index, source] of sources.entries()) {
+        attempts.push(await recordTypedExecutableSuccess(
+          db, target, runner.id, source.id, index + 1,
+        ));
+        assert.equal(
+          await db.taskExecutableJudgmentResult.count({
+            where: { request: { taskId: source.id } },
+          }),
+          0,
+          'the typed attempt is canonical without manufacturing a legacy judgment result',
+        );
+        await acceptance.reconcileForEvidenceTask(source.id);
+        overview = await acceptance.overview(target.ownerId, target.projectId);
+        assert.equal(overview.runs[0]?.evidenceVersion, String(index + 1));
+        assert.equal(overview.runs[0]?.criteriaRevision, criteriaRevision);
+        assert.equal(
+          overview.runs[0]?.criteria.filter(
+            (criterion) => criterion.verdict === ProjectAcceptanceVerdict.PASS,
+          ).length,
+          index + 1,
+        );
+      }
+
+      const latest = overview.runs[0]!;
+      assert.deepEqual(
+        latest.criteria.map((criterion) => criterion.verdict),
+        Array(4).fill(ProjectAcceptanceVerdict.PASS),
+      );
+      assert.deepEqual(
+        latest.criteria.map((criterion) => {
+          const evidence = criterion.evidence as {
+            kind?: string; collectorVersion?: string; attemptId?: string;
+          };
+          return [evidence.kind, evidence.collectorVersion, evidence.attemptId];
+        }),
+        attempts.map((attempt) => [
+          'EXECUTABLE_ATTEMPT', EXECUTABLE_ATTEMPT_COLLECTOR_VERSION, attempt.id,
+        ]),
+      );
+      assert.equal(overview.criteriaDigest, criteriaDigest, 'attempt facts do not rewrite criteria');
+      assert.equal(overview.runs.length, 5, 'version 0 plus one immutable version per later fact');
+      assert.ok(overview.runs.slice(1).every((run) => run.supersededAt instanceof Date));
+      assert.ok(
+        [...initialConclusionIds].every((id) => latest.conclusions.some((event) => event.id === id)),
+        'the version-0 INCONCLUSIVE events remain in the append-only ledger',
+      );
+      assert.equal(overview.status, ProjectStatus.OPEN, 'canonical DONE proof remains fail-closed');
+    } finally {
+      await db.$disconnect();
+    }
+  });
 
 test('EXECUTABLE is declared explicitly and follows the matching command exit code', { skip }, async () => {
   const { db, acceptance, projects } = await connect();

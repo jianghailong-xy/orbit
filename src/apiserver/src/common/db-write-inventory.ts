@@ -49,8 +49,8 @@
  * ISOLATION
  * ---------
  * The deployment default is READ COMMITTED, so `isolation` is blank except where a unit asks for
- * something else. The three that ask for REPEATABLE READ are the ones that can take a 40001 at all
- * — under READ COMMITTED the only transient conflict PostgreSQL produces here is 40P01.
+ * something else. REPEATABLE READ and SERIALIZABLE units declare that exact choice here because
+ * either can raise 40001; under READ COMMITTED the ordinary transient conflict is 40P01.
  */
 
 /** How a write reaches the database. */
@@ -194,10 +194,10 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     at: 'projects/project-acceptance.service.ts#reconcile',
     shape: 'TX_RETRIED',
     locks: 'project FOR UPDATE (rank 40), then reads evidence Task rows (rank 50) and writes project_acceptance_run / _criterion / _conclusion / _audit children (rank 60). The final project DONE write is against the rank-40 row already held.',
-    identity: 'The locked project plus its current criteria digest and durable evidence versions. Automatic conclusion events are omitted when the same evidence source already stands; DONE binds the one current acceptance run.',
+    identity: 'The locked project plus its current criteria digest, merge facts and exact current-plan typed-attempt identities. Automatic conclusion events are omitted when the same attempt/result/verdict source already stands; DONE binds the one current acceptance run.',
     isolation: '',
     attempts: 4,
-    replay: 'Every declaration, confirmation, evidence result and current conclusion is re-read inside the closure after the project lock. A victim exposes no event or DONE; a retry derives against the committed winner and either emits only newer facts or returns the standing answer.',
+    replay: 'Every declaration, confirmation, exact admitted typed attempt (with legacy result fallback) and current conclusion is re-read inside the closure after the project lock. A victim exposes no event or DONE; a retry derives against the committed winner and either emits only newer facts or returns the standing answer.',
     effects: 'None.',
     answer: 'Typed 503 from the global boundary. Ordinary unmet gates are returned as their typed acceptance refusal code, not retried or surfaced as an infrastructure failure.',
   },
@@ -864,28 +864,6 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
   },
   {
-    at: 'outcome-reconciler/outcome-versioning.service.ts#replaceBindingAndReevaluate',
-    shape: 'TX_BARE',
-    locks: 'outcome_fact_stream FOR UPDATE through outcome_register_fact_binding, followed by the append-only authority/fact/cut/evaluator rows for that project. The binding-transition trigger may obsolete the previous reduction and enqueue its successor while the same stream mutex is held.',
-    identity: 'The canonical binding digest plus the caller-provided idempotency key. Binding registration returns the standing epoch for an identical current binding; every fact has its own ingress idempotency key and the sealed cut uses `<idempotencyKey>:cut`.',
-    isolation: 'SERIALIZABLE',
-    attempts: 1,
-    replay: 'Deliberately not retried inside this service. A serialization victim commits none of the binding, facts, cut, reduction, obsolescence or successor rows. The caller can repeat the whole request with the same binding and idempotency keys and receives the one standing immutable cut.',
-    effects: 'None. Evaluation is pure and every effect in the closure is an append-only PostgreSQL row.',
-    answer: 'The database conflict escapes to the global typed 503 boundary; a caller retry replays the same immutable identities rather than inventing a second semantic transition.',
-  },
-  {
-    at: 'outcome-reconciler/outcome-versioning.service.ts#appendFactAndReevaluate',
-    shape: 'TX_BARE',
-    locks: 'outcome_fact_stream FOR UPDATE through outcome_ingest_canonical_fact, then the current binding read and append-only cut/evaluator reduction for the same project. Matching-fact invalidation runs beneath the stream lock before the successor evaluation is committed.',
-    identity: 'The fact draft idempotency key and payload digest, plus the caller-provided reduction idempotency key whose cut identity is `<idempotencyKey>:cut`.',
-    isolation: 'SERIALIZABLE',
-    attempts: 1,
-    replay: 'Deliberately not retried inside this service. A serialization victim exposes neither the fact nor its cut/evaluation. Repeating the request reuses the canonical ingress and cut identities and therefore cannot duplicate the fact or publish a competing reduction.',
-    effects: 'None. The evaluator is pure and all writes stay inside the transaction.',
-    answer: 'The database conflict escapes to the global typed 503 boundary; the same request is safe for an explicit caller retry because every durable identity is stable.',
-  },
-  {
     at: 'outcome-reconciler/action-executor.service.ts#executeNext',
     shape: 'TX_BARE',
     locks: 'outcome_fact_stream FOR UPDATE (the project serialization fence), then outcome_action_intent FOR UPDATE and outcome_action_budget_account FOR UPDATE; executor obligation/event children are appended after those parents. Authority revocation, binding replacement, precondition replacement and evaluator publication take the same fact-stream row first, so provider commit and every authority-changing fact are totally ordered.',
@@ -895,6 +873,28 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: 'Deliberately not retried in process. The provider may already have committed when PostgreSQL rejects or loses the transaction, so replaying this closure would be unsafe. Rollback restores CLAIMED; durable logical lease expiry moves it through bounded BACKOFF, and a later claim invokes the provider with the same idempotency key to recover the standing receipt. Attempt and cost budgets make that recovery finite.',
     effects: 'The provider action and, only for a reported partial/wrong effect, its compensator run inside this one-attempt transaction while the project fact-stream fence is held. Non-read-only adapters must assert that fence immediately before committing and must enforce the idempotency key. A timeout/partial/wrong receipt becomes an executor remediation obligation; a process/database ambiguity remains leased until the bounded recovery pass.',
     answer: 'A commit-time authorization/binding/precondition refusal is persisted as its canonical obligation. A database conflict is not absorbed: it escapes the unit, the lease remains the durable recovery fact after rollback, and the next bounded claim recovers by provider-idempotent replay.',
+  },
+  {
+    at: 'outcome-reconciler/outcome-versioning.service.ts#replaceBindingAndReevaluate',
+    shape: 'TX_RETRIED',
+    locks: 'outcome_fact_stream FOR UPDATE is first and remains the one project-wide serialization fence through binding replacement, optional fact appends, cut sealing and evaluation commit. Binding/fact invalidation triggers re-enter that row and then retire outcome_active_obligation children and append transition, obsolescence, successor and obligation-event children; evaluation publication takes the same stream first before rebuilding active obligations. Concurrent units for one project therefore serialize at the stream, while different projects touch disjoint child keys.',
+    identity: 'The canonical binding digest, each optional fact draft idempotency key, and the caller idempotency key whose `:cut` suffix names the sealed cut. The evaluator commit is additionally unique by the immutable binding/watermark/evaluator tuple.',
+    isolation: 'SERIALIZABLE',
+    attempts: 4,
+    replay: 'Every database decision is made again inside the closure after reacquiring the stream fence. Binding registration, fact ingestion and cut sealing return an exact committed replay only when their request digests agree; a rolled-back SERIALIZABLE attempt exposes none of them. The evaluator is pure over the binding and facts read in that attempt, and a committed equal input must reproduce the same semantic digest or PostgreSQL fails closed.',
+    effects: 'None outside the database. Binding/fact validation and canonical evaluation are in-process pure computation; no provider, queue, realtime or notification call occurs in the closure.',
+    answer: 'Typed 503 from the global boundary if serialization/deadlock conflicts outlive four attempts; semantic digest, authority and stale-binding refusals retain their database verdict.',
+  },
+  {
+    at: 'outcome-reconciler/outcome-versioning.service.ts#appendFactAndReevaluate',
+    shape: 'TX_RETRIED',
+    locks: 'outcome_ingest_canonical_fact takes outcome_fact_stream FOR UPDATE first; its invalidation trigger and the later cut/evaluation functions keep that same project fence before touching outcome_active_obligation and the append-only invalidation, cut, evaluator and obligation children. This is the same stream-first direction as binding replacement and action authorization, so the newly installed invalidation triggers add no reverse edge.',
+    identity: 'The fact draft idempotency key and exact request digest, plus the caller idempotency key whose `:cut` suffix names the cut. Evaluation publication is unique by the immutable binding/watermark/evaluator tuple.',
+    isolation: 'SERIALIZABLE',
+    attempts: 4,
+    replay: 'A retry revalidates the fact against the then-current binding under the stream fence, re-reads that binding, seals the same logical cut identity and recomputes the pure evaluation. An aborted attempt leaves no fact, cut, invalidation or reduction; a previously committed exact fact/cut is returned rather than duplicated, while a changed replay fails closed.',
+    effects: 'None outside the database. Canonical evaluation is pure local computation and all durable effects are rows in this transaction.',
+    answer: 'Typed 503 from the global boundary if serialization/deadlock conflicts outlive four attempts; stale binding, authority and idempotency mismatches remain explicit refusals.',
   },
   {
     at: 'workspaces/workspaces.service.ts#reorder',

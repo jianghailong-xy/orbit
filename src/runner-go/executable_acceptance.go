@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -109,6 +110,34 @@ func (b *executableOutputBuffer) Write(p []byte) (int, error) {
 	return written, nil
 }
 
+func classifyExecutableAcceptanceTermination(
+	ctx context.Context,
+	commandCtx context.Context,
+	processState *os.ProcessState,
+) (string, *int, string) {
+	// Wait can observe a completed leader before copied output or process-tree cleanup finishes.
+	// Once that leader has a concrete exit code, a deadline or cancellation observed during the
+	// remaining cleanup cannot rewrite the process fact. A signaled process has no such exit fact,
+	// so its context still decides whether the runner timed it out or cancelled it.
+	if processState != nil {
+		exitCode := processState.ExitCode()
+		if exitCode >= 0 {
+			return "EXITED", &exitCode, ""
+		}
+	}
+
+	switch {
+	case errors.Is(commandCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil:
+		return "TIMED_OUT", nil, ""
+	case ctx.Err() != nil:
+		return "CANCELLED", nil, ""
+	case processState != nil:
+		return "SIGNALED", nil, processState.String()
+	default:
+		return "INFRASTRUCTURE_LOST", nil, ""
+	}
+}
+
 // runExecutableAcceptance crosses the persisted start boundary before cmd.Start and returns one
 // typed process fact. Every termination is reported with turn status SUCCEEDED: the shell
 // transport worked and the typed fact, not generic session failure, owns what happens next.
@@ -170,21 +199,9 @@ func runExecutableAcceptance(
 			runErr = err
 		} else {
 			runErr = waitSessionProcessTree(cmd)
-			switch {
-			case errors.Is(commandCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil:
-				termination = "TIMED_OUT"
-			case ctx.Err() != nil:
-				termination = "CANCELLED"
-			case cmd.ProcessState != nil && cmd.ProcessState.ExitCode() >= 0:
-				termination = "EXITED"
-				exitCode := cmd.ProcessState.ExitCode()
-				actualExit = &exitCode
-			case cmd.ProcessState != nil && cmd.ProcessState.ExitCode() < 0:
-				termination = "SIGNALED"
-				signal = cmd.ProcessState.String()
-			default:
-				termination = "INFRASTRUCTURE_LOST"
-			}
+			termination, actualExit, signal = classifyExecutableAcceptanceTermination(
+				ctx, commandCtx, cmd.ProcessState,
+			)
 		}
 		output = combined.buffer.Bytes()
 		if combined.truncated {

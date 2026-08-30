@@ -68,7 +68,7 @@ function definition(id: string, ordinal: number, text: string, revision = 1) {
   };
 }
 
-test('acceptance facts have no task delegate and read only criteria plus merge evidence', async () => {
+test('acceptance facts omit task state while retaining an empty mechanical-evidence projection', async () => {
   const definitions = [definition(CRITERION_A_ID, 1, 'Build succeeds')];
   const prisma = {
     project: { findUnique: async () => ({ acceptanceCriteria: '1. Build succeeds' }) },
@@ -79,7 +79,8 @@ test('acceptance facts have no task delegate and read only criteria plus merge e
       contentHash: 'a'.repeat(64),
       refGeneration: 2n,
     }],
-    // Intentionally no `task` delegate: adding task state back to `facts()` makes this spec fail.
+    // No EXECUTABLE criterion means no task delegate is needed. Adding task backlog/status state
+    // back to `facts()` would still make this spec fail.
   };
 
   const result = await new ProjectAcceptanceService(prisma as never)
@@ -88,6 +89,7 @@ test('acceptance facts have no task delegate and read only criteria plus merge e
   assert.deepEqual(result, {
     criteriaRevision: criteriaSemanticRevision(definitions),
     mergeEvidence: [['release-artifact', 'main', 'a'.repeat(64), '2']],
+    executableAttempts: [],
   });
 });
 
