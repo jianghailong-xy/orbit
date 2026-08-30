@@ -905,6 +905,7 @@ const (
 	evThinking      = "thinking"
 	evThinkingDelta = "thinking_delta"
 	evToolUse       = "tool_use"
+	evToolOutput    = "tool_output"
 	evToolResult    = "tool_result"
 	evError         = "error"
 	// Interactive sessions (Route B)

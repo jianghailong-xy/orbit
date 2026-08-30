@@ -33,6 +33,8 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertEqual(SessionLifecycleState.completed.rawValue, "COMPLETED")
         XCTAssertEqual(PermissionMode.bypass.rawValue, "bypassPermissions")
         XCTAssertEqual(RunEventType.toolResult.rawValue, "tool_result")
+        XCTAssertEqual(RunEventType.toolOutput.rawValue, "tool_output")
+        XCTAssertFalse(RunEventType.toolOutput.isDurable)
         XCTAssertEqual(TaskStatus.inProgress.rawValue, "IN_PROGRESS")
     }
 

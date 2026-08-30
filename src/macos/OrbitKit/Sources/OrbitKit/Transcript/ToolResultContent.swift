@@ -14,7 +14,7 @@ public enum ToolResultContent {
     /// text of its own falls back to its own JSON, as it does on web.
     ///
     /// nil, not "", when nothing came of it: an image-only result must not open an empty OUTPUT
-    /// panel under its picture, and `closeTool` reads a nil `result` as "this card is still open".
+    /// panel under its picture. Card completion is tracked independently by `ToolStatus`.
     public static func text(_ v: JSONValue?) -> String? {
         guard let v else { return nil }
         let flat: String

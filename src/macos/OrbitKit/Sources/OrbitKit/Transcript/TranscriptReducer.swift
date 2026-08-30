@@ -66,13 +66,14 @@ public struct TranscriptState: Equatable, Sendable, Codable {
 ///  - durable events (real `seq`) are deduped via `seen` and advance `maxSeq`;
 ///  - `text_delta`/`thinking_delta` are animation only — appended to the open bubble,
 ///    never deduped, never advancing `maxSeq`;
-///  - `approval_*` and `background_output` ride seq 0 and bypass dedup entirely.
+///  - live-only events bypass dedup/cursor bookkeeping even when the runner assigns them a
+///    nonzero seq (`tool_output` and `background_output` do).
 ///
 /// `Codable` so the entire reducer — including the dedup set, the open-bubble cursors, and the
 /// synthetic id counter — can be snapshotted to disk and rehydrated verbatim. Restoring the whole
 /// reducer (not just `state`) makes a resumed `?sinceSeq=maxSeq` stream behave bit-for-bit as if
-/// the reducer had never been torn down: no duplicate bubbles, no id collisions. The synthesized
-/// conformance is module-internal (only `FileTranscriptStore` round-trips it).
+/// the reducer had never been torn down: no duplicate bubbles, no id collisions. The conformance
+/// is module-internal in practice (only `FileTranscriptStore` round-trips it).
 public struct TranscriptReducer: Sendable, Codable {
     public private(set) var state = TranscriptState()
 
@@ -101,9 +102,44 @@ public struct TranscriptReducer: Sendable, Codable {
     /// before it existed still decode; a rehydrated session simply starts folding afresh.
     private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
 
+    /// Latest broadcast-only foreground-shell snapshot, including the runner's monotonic version.
+    /// Keeping this beside (rather than inside) ``TranscriptState`` lets an output that beats its
+    /// durable tool_use wait here, and lets a reordered replica notification be rejected. It is
+    /// deliberately absent from `CodingKeys`: reconnect/replay can restore durable transcript state,
+    /// but must never turn transient shell animation into history.
+    private struct LiveToolOutputSnapshot: Sendable {
+        var snapshotSeq: Int?
+        var content: String
+    }
+    private var liveToolOutputs: [String: LiveToolOutputSnapshot] = [:]
+    /// IDs whose live stream has crossed an authoritative boundary. Tool ids are unique per turn;
+    /// retaining this small tombstone prevents a delayed NOTIFY from reviving a settled/background
+    /// card, or a foreground card stranded by turn/run termination. Also transient and unencoded.
+    private var suppressedLiveToolIDs = Set<String>()
+
     private enum CodingKeys: String, CodingKey { case state, seen, openAssistant, openThinking, idSeq }
 
     public init() {}
+
+    /// Persist the durable fold without baking a broadcast-only shell preview into its running
+    /// card. The in-memory state still carries `result` so existing views render without a second
+    /// side channel; the private cache identifies exactly which running results are transient.
+    public func encode(to encoder: Encoder) throws {
+        var persistedState = state
+        for idx in persistedState.items.indices {
+            guard case .toolCall(var card) = persistedState.items[idx], card.status == .running,
+                  liveToolOutputs[card.id] != nil else { continue }
+            card.result = nil
+            persistedState.items[idx] = .toolCall(card)
+        }
+
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(persistedState, forKey: .state)
+        try c.encode(seen, forKey: .seen)
+        try c.encodeIfPresent(openAssistant, forKey: .openAssistant)
+        try c.encodeIfPresent(openThinking, forKey: .openThinking)
+        try c.encode(idSeq, forKey: .idSeq)
+    }
 
     public mutating func apply(_ ev: RunEvent) {
         // `sentinelSeq` is a live-only terminal broadcast wearing a durable type — it must move
@@ -131,6 +167,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "")
         case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq)
         case .toolUse:        openTool(ev)
+        case .toolOutput:     applyToolOutput(ev)
         case .toolResult:     closeTool(ev)
         case .turnEnd:        endTurn(ev)
         case .user:           appendUser(ev)
@@ -144,7 +181,9 @@ public struct TranscriptReducer: Sendable, Codable {
         case .backgroundTask:   upsertBackground(ev)
         case .backgroundOutput: applyBackgroundOutput(ev)
         case .status, .result:  applyStatus(ev)
-        case .system:           appendEngineStderr(ev)
+        case .system:
+            if str(ev, "subtype") == "resumed" { clearLiveToolOutputsAtBoundary() }
+            appendEngineStderr(ev)
         // An order to the consume loop, not transcript content: it can't re-fetch anything from
         // in here, so it acts on `resetForResync()` + a fresh tail page (see `ConsoleModel.run()`).
         case .resync:           break
@@ -163,6 +202,9 @@ public struct TranscriptReducer: Sendable, Codable {
     /// because clearing those would blank live UI the re-seed cannot restore. Web's `reseed`
     /// draws the same line: it resets `events`/`seen`/`oldestSeq`/`lastSeq` and nothing else.
     public mutating func resetForResync() {
+        // Retire any running shell before discarding its card. Otherwise a delayed notification
+        // from the spent stream could be cached as an apparent output-before-tool_use after reseed.
+        clearLiveToolOutputsAtBoundary()
         state.items = []
         state.maxSeq = 0
         state.oldestSeq = nil
@@ -543,6 +585,7 @@ public struct TranscriptReducer: Sendable, Codable {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id") ?? nextID()
         let name = str(ev, "name") ?? str(ev, "toolName") ?? "tool"
         let input = ev.payload["input"] ?? .null
+        let foregroundShell = id.hasPrefix("shell-") && input["run_in_background"]?.boolValue != true
         // A background shell launch: remember its command AND human description so the (command-less)
         // background_* events can title the tray row (description preferred, like web) while still
         // surfacing the raw command in the expanded body.
@@ -551,12 +594,29 @@ public struct TranscriptReducer: Sendable, Codable {
             let desc = input["description"]?.stringValue
             bgLaunch[id] = (command: command, description: desc?.isEmpty == false ? desc : nil)
         }
-        state.items.append(.toolCall(ToolCard(id: id, name: name, input: input, result: nil, status: .running,
-                                              inputSeq: ev.seq, inputTruncated: ev.truncated)))
+        // A transient broadcast can cross replicas faster than the durable tool_use. Keep it
+        // waiting until this card proves that the id belongs to a foreground shell. Conversely,
+        // learning that it is a background shell permanently retires this side channel: its output
+        // belongs in `background_output` / the tray.
+        var card = ToolCard(id: id, name: name, input: input, result: nil, status: .running,
+                            inputSeq: ev.seq, inputTruncated: ev.truncated)
+        if foregroundShell, !suppressedLiveToolIDs.contains(id), let snapshot = liveToolOutputs[id] {
+            card.result = snapshot.content
+        } else if id.hasPrefix("shell-"), !foregroundShell {
+            liveToolOutputs.removeValue(forKey: id)
+            suppressedLiveToolIDs.insert(id)
+        }
+        state.items.append(.toolCall(card))
     }
 
     private mutating func closeTool(_ ev: RunEvent) {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id")
+        // The durable result is authoritative even if it races ahead of the matching card. Retire
+        // its transient channel before folding so a later NOTIFY cannot overwrite/revive it.
+        if let id, id.hasPrefix("shell-") {
+            liveToolOutputs.removeValue(forKey: id)
+            suppressedLiveToolIDs.insert(id)
+        }
         let isError = ev.payload["isError"]?.boolValue ?? ev.payload["is_error"]?.boolValue ?? false
         // `content` is a string, a block array, or a whole MCP CallToolResult wrapper — flattened
         // the one way web flattens it. `result` is the older runners' key for the same thing.
@@ -579,7 +639,11 @@ public struct TranscriptReducer: Sendable, Codable {
             state.background.append(BackgroundProc(id: id, command: launch.command, description: launch.description, status: "running", outputTail: "", startedAt: ev.ts))
         }
         for idx in stride(from: state.items.count - 1, through: 0, by: -1) {
-            if case .toolCall(var card) = state.items[idx], card.result == nil, id == nil || card.id == id {
+            // A live `tool_output` snapshot may already occupy `result` while this card is still
+            // running. Match on status, not an empty result, so the durable tool_result always
+            // replaces that preview and settles the card.
+            if case .toolCall(var card) = state.items[idx], card.status == .running,
+               id == nil || card.id == id {
                 card.result = result
                 card.resultImages = images
                 card.resultHasImage = hasImage
@@ -587,15 +651,101 @@ public struct TranscriptReducer: Sendable, Codable {
                 card.resultSeq = ev.seq
                 card.resultTruncated = ev.truncated
                 state.items[idx] = .toolCall(card)
+                if card.id.hasPrefix("shell-") {
+                    liveToolOutputs.removeValue(forKey: card.id)
+                    suppressedLiveToolIDs.insert(card.id)
+                }
                 return
             }
         }
+    }
+
+    /// Replace the visible output snapshot of one still-running user shell. This event is
+    /// broadcast-only and carries the whole capped snapshot, so assignment (not append) both avoids
+    /// duplicate prefixes and lets a shorter/reset snapshot clear older text. Agent background Bash
+    /// calls keep using `background_output` + `BackgroundProc`; requiring a `shell-…` id while
+    /// excluding `run_in_background` preserves that separate tray behavior.
+    private mutating func applyToolOutput(_ ev: RunEvent) {
+        guard let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id"), id.hasPrefix("shell-"),
+              let content = str(ev, "content"), !state.status.isTerminal,
+              !suppressedLiveToolIDs.contains(id) else { return }
+
+        // New control planes always preserve the runner's original event seq here while forcing
+        // the live event's top-level seq to zero. Keep legacy missing-version compatibility, but a
+        // malformed explicit version is never safe to treat as an arrival-ordered snapshot.
+        let version: Int?
+        if let rawVersion = ev.payload["snapshotSeq"] {
+            guard let parsed = rawVersion.intValue, parsed >= 0 else { return }
+            version = parsed
+        } else {
+            version = nil
+        }
+
+        // A known card decides eligibility before the cache changes. This makes settled and
+        // background cards reject late output even if their transient tombstone was not restored
+        // from disk.
+        let cardIndex = state.items.lastIndex { item in
+            if case .toolCall(let card) = item { return card.id == id }
+            return false
+        }
+        if let cardIndex, case .toolCall(let card) = state.items[cardIndex],
+           card.status != .running || card.input["run_in_background"]?.boolValue == true {
+            liveToolOutputs.removeValue(forKey: id)
+            suppressedLiveToolIDs.insert(id)
+            return
+        }
+
+        if let previous = liveToolOutputs[id] {
+            switch (previous.snapshotSeq, version) {
+            case let (.some(old), .some(new)) where new <= old:
+                return
+            case (.some, .none):
+                // Once the versioned contract is observed, an unversioned notification cannot be
+                // ordered relative to it and therefore cannot safely replace it.
+                return
+            case (.none, .none) where previous.content == content:
+                return
+            default:
+                break
+            }
+        }
+
+        let snapshot = LiveToolOutputSnapshot(snapshotSeq: version, content: content)
+        liveToolOutputs[id] = snapshot
+        // No card yet is the legitimate output-before-tool_use race: leave the snapshot cached and
+        // let `openTool` apply it once it has proved this is a foreground shell.
+        guard let cardIndex, case .toolCall(var card) = state.items[cardIndex] else { return }
+        card.result = snapshot.content
+        state.items[cardIndex] = .toolCall(card)
+    }
+
+    /// Clear broadcast-only shell animation when an event or authoritative REST snapshot says its
+    /// turn/run is over. Public so the app can apply the same boundary when a final SSE broadcast
+    /// was missed but session polling has already observed AWAITING_INPUT/terminal.
+    @discardableResult
+    public mutating func clearLiveToolOutputsAtBoundary() -> Bool {
+        var changed = false
+        suppressedLiveToolIDs.formUnion(liveToolOutputs.keys)
+        liveToolOutputs.removeAll()
+        for idx in state.items.indices {
+            guard case .toolCall(var card) = state.items[idx], card.id.hasPrefix("shell-"),
+                  card.status == .running,
+                  card.input["run_in_background"]?.boolValue != true else { continue }
+            suppressedLiveToolIDs.insert(card.id)
+            if card.result != nil {
+                card.result = nil
+                state.items[idx] = .toolCall(card)
+                changed = true
+            }
+        }
+        return changed
     }
 
     // MARK: - turn / user / interrupt / error
 
     private mutating func endTurn(_ ev: RunEvent) {
         flushStreaming()
+        clearLiveToolOutputsAtBoundary()
         if let s = str(ev, "status"), let st = RunStatus(rawValue: s) {
             setStatus(st)
         } else {
@@ -615,6 +765,7 @@ public struct TranscriptReducer: Sendable, Codable {
     private mutating func setStatus(_ status: RunStatus) {
         state.status = status
         guard status.isTerminal else { return }
+        clearLiveToolOutputsAtBoundary()
         for i in state.items.indices {
             guard case .user(var b) = state.items[i], b.pending else { continue }
             b.pending = false

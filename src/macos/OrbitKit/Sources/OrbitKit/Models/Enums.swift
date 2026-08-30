@@ -195,6 +195,9 @@ public enum RunEventType: String, Codable, Sendable {
     case thinking
     case thinkingDelta = "thinking_delta"
     case toolUse = "tool_use"
+    /// Live-only snapshot of a still-running foreground shell's captured output. The runner sends
+    /// the whole capped snapshot each time (rather than a delta), correlated by `toolUseId`.
+    case toolOutput = "tool_output"
     case toolResult = "tool_result"
     case status
     case error
@@ -228,13 +231,13 @@ public enum RunEventType: String, Codable, Sendable {
         self = RunEventType(rawValue: raw) ?? .unknown
     }
 
-    /// Durable events carry a real per-session `seq`: they are persisted, replayed on
-    /// reconnect, and deduped by seq. The animation/live-only types below never are —
-    /// deltas are broadcast-only, and approvals/background-output/resync ride seq 0.
+    /// Durable events are persisted, replayed on reconnect, and deduped by seq. The
+    /// animation/live-only types below never are. Do not infer durability from a zero seq:
+    /// runner-emitted tool/background output snapshots can carry a nonzero counter value.
     public var isDurable: Bool {
         switch self {
-        case .textDelta, .thinkingDelta, .approvalRequest, .approvalResolved, .queuedTurnsChanged,
-             .backgroundOutput, .resync:
+        case .textDelta, .thinkingDelta, .toolOutput, .approvalRequest, .approvalResolved,
+             .queuedTurnsChanged, .backgroundOutput, .resync:
             return false
         default:
             return true

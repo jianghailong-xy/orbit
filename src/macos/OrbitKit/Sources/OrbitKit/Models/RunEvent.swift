@@ -4,7 +4,9 @@ import Foundation
 /// src/shared/src/events.ts). The runner assigns `seq`; the control plane persists durable
 /// events and replays them over SSE.
 public struct RunEvent: Codable, Equatable, Sendable {
-    /// Monotonic per-session sequence (0 for live-only nudges: deltas, approvals, bg output).
+    /// Monotonic per-session sequence. Some live-only events use 0, while runner-emitted
+    /// `tool_output`/`background_output` snapshots may carry a real counter value despite never
+    /// being persisted; `RunEventType.isDurable`, not this number, controls cursor bookkeeping.
     public let seq: Int
     public let type: RunEventType
     /// ISO-8601 timestamp from the runner.

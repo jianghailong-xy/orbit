@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -123,6 +125,111 @@ func TestExecutableAcceptanceCompletedExitOutranksLateDeadline(t *testing.T) {
 	)
 	if kind != "EXITED" || !sameOptionalInt(actualExit, intPtr(7)) || signal != "" {
 		t.Fatalf("classification = (%q, %#v, %q), want (EXITED, 7, empty)", kind, actualExit, signal)
+	}
+}
+
+func TestExecutableAcceptanceStreamsLiveOutputWithoutChangingItsTypedFact(t *testing.T) {
+	execDir := t.TempDir()
+	gate := execDir + "/release"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func() { _ = os.WriteFile(gate, []byte("release"), 0o644) }()
+	deadline := time.Now().Add(5 * time.Second).UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(ExecutableAttemptStartResponse{
+			AttemptID: "00000000-0000-4000-8000-000000000002", DeadlineAt: deadline.Format(time.RFC3339Nano), AttemptNumber: 1,
+		})
+	}))
+	defer server.Close()
+	transport := &Transport{baseURL: server.URL, token: "test", client: server.Client()}
+	command := "printf acceptance-live; while [ ! -f release ]; do sleep 0.02; done; printf done"
+	plan := &ExecutableAcceptanceDispatchPlan{
+		AdmissionID: "admission", EvaluationPlanDigest: strings.Repeat("b", 64),
+		CommandDigest: commandSHA256(command), ExpectedExitCode: 0,
+		RequestedTimeoutSeconds: 5, EffectiveTimeoutSeconds: 5,
+		EffectiveDeadline:      deadline.Format(time.RFC3339Nano),
+		RequiredSchemaRevision: 2, RequiredCapabilityRevision: 2,
+	}
+
+	var mu sync.Mutex
+	var kinds []string
+	live := make(chan struct{}, 1)
+	emit := func(kind string, _ map[string]interface{}) {
+		mu.Lock()
+		kinds = append(kinds, kind)
+		mu.Unlock()
+		if kind == evToolOutput {
+			select {
+			case live <- struct{}{}:
+			default:
+			}
+		}
+	}
+	type result struct {
+		completion TurnCompleteRequest
+		err        error
+	}
+	done := make(chan result, 1)
+	go func() {
+		completion, err := runExecutableAcceptance(
+			ctx, transport, "session", execDir, command, emit, "turn", nil, plan,
+		)
+		done <- result{completion: completion, err: err}
+	}()
+
+	select {
+	case <-live:
+	case <-time.After(3 * time.Second):
+		cancel()
+		t.Fatal("acceptance shell produced no live tool_output")
+	}
+	mu.Lock()
+	runningKinds := append([]string(nil), kinds...)
+	mu.Unlock()
+	for _, kind := range runningKinds {
+		if kind == evToolResult {
+			t.Fatal("acceptance shell emitted tool_result before its typed process fact existed")
+		}
+	}
+	if err := os.WriteFile(gate, []byte("release"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var got result
+	select {
+	case got = <-done:
+	case <-time.After(3 * time.Second):
+		cancel()
+		t.Fatal("acceptance shell did not finish after release")
+	}
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.completion.AcceptanceTerminationKind != "EXITED" ||
+		got.completion.AcceptanceActualExitCode == nil || *got.completion.AcceptanceActualExitCode != 0 ||
+		got.completion.ShellOutput == nil || *got.completion.ShellOutput != "acceptance-livedone" {
+		t.Fatalf("typed acceptance fact changed: %#v", got.completion)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(kinds) < 3 || kinds[0] != evToolUse || kinds[len(kinds)-1] != evToolResult {
+		t.Fatalf("acceptance event order = %v", kinds)
+	}
+}
+
+func TestExecutableAcceptanceKeepsCurrentLiveTailPastDurableCaptureCap(t *testing.T) {
+	var output executableOutputBuffer
+	prefix := strings.Repeat("p", executableAcceptanceOutputMaxBytes)
+	tail := strings.Repeat("t", foregroundShellOutputCap)
+	if _, err := output.Write([]byte(prefix + tail)); err != nil {
+		t.Fatal(err)
+	}
+	durable, truncated := output.output()
+	if !truncated || len(durable) != executableAcceptanceOutputMaxBytes || string(durable[:16]) != strings.Repeat("p", 16) {
+		t.Fatalf("durable acceptance capture = %d bytes, truncated=%v", len(durable), truncated)
+	}
+	if got := output.snapshot(foregroundShellOutputCap); got != tail {
+		t.Fatalf("live tail froze at the durable cap: got %d bytes", len(got))
 	}
 }
 

@@ -51,6 +51,7 @@ import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { SameOriginLink } from './SameOriginLink';
+import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -593,6 +594,13 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
  * `StreamingDrafts` itself, leaving the memo intact.
  */
 export const StreamingDraftsCtx = createContext<{ text: string; think: string } | null>(null);
+
+/**
+ * Whole-output snapshots for user-run foreground shells. Like streaming drafts, these events are
+ * broadcast-only and can update frequently, so the context lets the tiny output leaf re-render
+ * without invalidating the memoized transcript tree.
+ */
+export const LiveToolOutputsCtx = createContext<LiveToolOutputs>(EMPTY_LIVE_TOOL_OUTPUTS);
 
 function StreamingDrafts() {
   const drafts = useContext(StreamingDraftsCtx);
@@ -1949,6 +1957,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {node.result && !node.result.isError && !hideResult && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
+          {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
         </div>
       )}
     </div>
@@ -2133,7 +2142,19 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
   if (isShell) {
-    return { label: 'Shell', icon: <ConsoleSqlOutlined />, tone: 'exec', summary: String(i.command ?? ''), summaryMono: true };
+    const command = String(i.command ?? '');
+    return {
+      label: 'Shell',
+      icon: <ConsoleSqlOutlined />,
+      tone: 'exec',
+      summary: command,
+      summaryMono: true,
+      // The folded summary is ellipsized on narrow screens. Keep the complete command behind the
+      // disclosure from the moment a foreground tool_use arrives, before any output/result exists.
+      // A user shell launched with `&` stays result-only: its durable command/output surface is the
+      // Background processes tray, and duplicating the body here would make two live consoles.
+      body: i.run_in_background === true ? undefined : <Pre text={command} prompt />,
+    };
   }
   switch (name) {
     case 'Bash': {
@@ -2326,6 +2347,14 @@ function ToolResult({
       )}
     </div>
   );
+}
+
+/** The live shell snapshot disappears as soon as ToolView receives the durable result. */
+function LiveShellOutput({ toolUseId, seq }: { toolUseId: string; seq: number }) {
+  const outputs = useContext(LiveToolOutputsCtx);
+  const output = outputs.get(toolUseId);
+  if (!output) return null;
+  return <ToolResult seq={seq} content={output.content} compact />;
 }
 
 // ── primitives ──────────────────────────────────────────────────────────────

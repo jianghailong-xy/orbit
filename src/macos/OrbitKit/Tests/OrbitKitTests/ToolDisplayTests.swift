@@ -102,6 +102,17 @@ final class ToolDisplayTests: XCTestCase {
         XCTAssertEqual(d.tone, .exec)
         XCTAssertTrue(d.autoOpen)
         XCTAssertEqual(d.summary, "ls -la")
+        XCTAssertEqual(d.body, .command("ls -la"))
+    }
+
+    func testBackgroundShellKeepsItsExistingResultOnlyBody() {
+        let d = ToolDisplay.describe(name: "Bash",
+                                     input: obj(["command": .string("npm test"),
+                                                 "run_in_background": .bool(true)]),
+                                     status: .running, id: "shell-background")
+        XCTAssertEqual(d.summary, "npm test")
+        XCTAssertEqual(d.body, .none)
+        XCTAssertTrue(d.autoOpen)
     }
 
     func testTaskRendersPromptAsMarkdown() {

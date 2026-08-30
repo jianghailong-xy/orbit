@@ -293,6 +293,8 @@ export enum RunEventType {
   THINKING = 'thinking',
   THINKING_DELTA = 'thinking_delta',
   TOOL_USE = 'tool_use',
+  /** Live, broadcast-only output snapshot for an in-flight foreground tool. */
+  TOOL_OUTPUT = 'tool_output',
   TOOL_RESULT = 'tool_result',
   STATUS = 'status',
   ERROR = 'error',

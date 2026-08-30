@@ -1,5 +1,19 @@
 import { RunEventType } from './enums';
 
+/**
+ * Maximum UTF-8 bytes in a foreground tool's transient output snapshot.
+ *
+ * Unlike a durable tool_result, tool_output has no database row for another API replica to
+ * fetch. Keeping its content at 1 KiB guarantees that even the JSON worst case (every byte
+ * escaped as `\\u00xx`) fits inside the control plane's 7 KB PostgreSQL NOTIFY envelope.
+ * The runner mirrors this value; the API enforces it again at ingress and broadcasts the event
+ * with top-level seq 0 so clients never mistake the non-durable snapshot for a resumable cursor.
+ * Its canonical payload is `{ toolUseId, content, snapshotSeq }`; snapshotSeq is the runner's
+ * original monotonic seq and orders live snapshots only. While a foreground shell is running,
+ * unchanged non-empty content is replayed every five seconds so a reconnect can recover it.
+ */
+export const TOOL_OUTPUT_SNAPSHOT_MAX_BYTES = 1024;
+
 /** Token usage as reported by Claude Code (`result.usage`). */
 export interface TokenUsage {
   input_tokens: number;
@@ -23,7 +37,7 @@ export interface ModelUsage {
  * the control plane persists it (run_events), and the UI replays it over SSE.
  */
 export interface NormalizedRunEvent {
-  /** Monotonic per-run sequence, assigned by the runner. */
+  /** Monotonic per-run sequence assigned by the runner; live-only synthesized events use 0. */
   seq: number;
   type: RunEventType;
   /** ISO-8601 timestamp from the runner. */

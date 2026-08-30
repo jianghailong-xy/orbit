@@ -27,7 +27,7 @@ function makeController(
     toolCreate: [] as any[],
     toolUpdate: [] as any[],
   };
-  let published = 0;
+  const publishedEvents: any[] = [];
   const tx = {
     $queryRaw: async () => [{ id: 'session-1', leaseOwnerMatches: true }],
     $executeRaw: async (strings: TemplateStringsArray, ..._values: unknown[]) => {
@@ -80,10 +80,11 @@ function makeController(
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   };
-  const realtime = { publish: () => published++ };
+  const realtime = { publish: (_sessionId: string, event: any) => publishedEvents.push(event) };
   return {
     calls,
-    published: () => published,
+    published: () => publishedEvents.length,
+    publishedEvents: () => publishedEvents,
     controller: new RunnerApiController(prisma as never, {} as never, realtime as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
   };
 }
@@ -691,6 +692,28 @@ test('terminal sessions reject empty and streaming-only batches too', async () =
     assert.equal(calls.updateMany.length, 0);
     assert.equal(published(), 0);
   }
+});
+
+test('tool_output is broadcast at live-only seq 0 but never persisted or treated as a tool result', async () => {
+  const { calls, controller, published, publishedEvents } = makeController(RunStatus.RUNNING);
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 46,
+        type: RunEventType.TOOL_OUTPUT,
+        ts: '2026-08-30T12:03:00.000Z',
+        turnId: 'turn-1',
+        payload: { toolUseId: 'shell-turn-1', content: 'still running' },
+      },
+    ],
+  });
+  assert.equal(calls.createMany.length, 0);
+  assert.equal(calls.toolUpdate.length, 0, 'live output must not complete the tool_call row');
+  assert.equal(calls.updateMany.length, 0, 'live output must not move session durable state');
+  assert.equal(published(), 1);
+  assert.equal(publishedEvents()[0].seq, 0, 'old clients must not advance their durable cursor');
+  assert.equal(publishedEvents()[0].payload.content, 'still running');
+  assert.equal(publishedEvents()[0].payload.snapshotSeq, 46, 'clients can order live snapshots separately');
 });
 
 /** A controller wired only for the read path: session ownership plus one raw query. */

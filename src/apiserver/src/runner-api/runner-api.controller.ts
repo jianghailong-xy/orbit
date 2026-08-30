@@ -137,6 +137,7 @@ import { runtimeInitSessionId } from './runtime-init';
 import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
+import { normalizeToolOutputEvent } from './tool-output';
 import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
@@ -4070,19 +4071,25 @@ export class RunnerApiController {
     // every write below — run_event.payload, tool_call, the denormalized preview columns — is
     // derived from this array, and one NUL in one tool_result used to fail the batch and wedge
     // the session's stream behind it for good. See strip-nul.ts.
-    const events = stripNul(batch?.events ?? []);
+    // tool_output is normalized after sanitization: besides bounding its transient payload, this
+    // replaces the runner's top-level monotonic seq with the live-only seq 0 sentinel (retaining
+    // it as payload.snapshotSeq for snapshot ordering). An older client that ignores the unknown
+    // event therefore cannot advance its durable resume cursor past an event we never store.
+    const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent);
 
     // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
     // text_delta / thinking_delta are streaming-animation increments: broadcast them
     // live (below) but DON'T persist them — the full reply is durably saved as the
     // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
     // text without piling up rows. background_output is the live tail of a background
-    // shell's file — same deal (ephemeral animation; the durable record is the workspace's
-    // own Read snapshots + the background_task completion event).
+    // shell's file, and tool_output is the current output snapshot of an in-flight foreground
+    // shell — same deal (ephemeral animation; their durable records are background_task / the
+    // final tool_result respectively).
     const durable = events.filter(
       (e) =>
         e.type !== RunEventType.TEXT_DELTA &&
         e.type !== RunEventType.THINKING_DELTA &&
+        e.type !== RunEventType.TOOL_OUTPUT &&
         e.type !== RunEventType.BACKGROUND_OUTPUT,
     );
     // Retried whole. This is the durable event batch, and it is the clearest case for a retry there

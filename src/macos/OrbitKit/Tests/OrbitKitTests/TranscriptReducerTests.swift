@@ -88,6 +88,278 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(s.maxSeq, 10)
     }
 
+    /// A foreground `!` shell publishes whole, capped output snapshots while it runs. Native keeps
+    /// those on the matching card (without advancing the durable cursor), replaces rather than
+    /// appends each snapshot, then lets the durable result replace the preview and settle it.
+    func testForegroundShellLiveOutputIsReplacedByFinalResult() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 4, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-abc"), "name": .string("Bash"),
+            "input": .object(["command": .string("npm run test:outcome-reconciliation")])
+        ])))
+
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-abc"), "content": .string("first snapshot"),
+            "snapshotSeq": .int(900)
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "first snapshot")
+        XCTAssertEqual(r.state.items.last?.asTool?.status, .running)
+        XCTAssertEqual(r.state.maxSeq, 4, "live output must not advance the replay cursor")
+
+        // The whole-snapshot contract includes an explicit empty snapshot, which clears an older
+        // preview instead of being ignored.
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-abc"), "content": .string(""),
+            "snapshotSeq": .int(901)
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "")
+        XCTAssertEqual(r.state.maxSeq, 4)
+
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-abc"), "content": .string("whole newer snapshot"),
+            "snapshotSeq": .int(902)
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "whole newer snapshot")
+
+        r.apply(RunEvent(seq: 5, type: .toolResult, payload: .object([
+            "toolUseId": .string("shell-abc"), "content": .string("final complete output")
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "final complete output")
+        XCTAssertEqual(r.state.items.last?.asTool?.status, .ok)
+        XCTAssertEqual(r.state.items.last?.asTool?.resultSeq, 5)
+
+        // A delayed live broadcast cannot regress a settled card back to stale preview output.
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-abc"), "content": .string("late stale snapshot"),
+            "snapshotSeq": .int(903)
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "final complete output")
+    }
+
+    /// `tool_output` belongs only to foreground user shells. Background Bash output retains its
+    /// existing `background_output` route and an unrelated id cannot overwrite the active shell.
+    func testForegroundShellLiveOutputDoesNotAffectBackgroundBashOrAnotherCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-background"), "name": .string("Bash"),
+            "input": .object(["command": .string("npm test"), "run_in_background": .bool(true)])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-right"), "name": .string("Bash"),
+            "input": .object(["command": .string("swift test")])
+        ])))
+
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-background"), "content": .string("must stay in tray path"),
+            "snapshotSeq": .int(10)
+        ])))
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-wrong"), "content": .string("wrong card"),
+            "snapshotSeq": .int(11)
+        ])))
+        XCTAssertNil(r.state.items[0].asTool?.result)
+        XCTAssertNil(r.state.items[1].asTool?.result)
+
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-right"), "content": .string("right card"),
+            "snapshotSeq": .int(12)
+        ])))
+        XCTAssertNil(r.state.items[0].asTool?.result)
+        XCTAssertEqual(r.state.items[1].asTool?.result, "right card")
+        XCTAssertTrue(r.state.background.isEmpty,
+                      "tool_output must not manufacture or update a background tray row")
+    }
+
+    func testForegroundShellLiveOutputRejectsReorderedSnapshots() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 4, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-order"), "name": .string("Bash"),
+            "input": .object(["command": .string("swift test")])
+        ])))
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-order"), "content": .string("newest"),
+            "snapshotSeq": .int(12)
+        ])))
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-order"), "content": .string("older"),
+            "snapshotSeq": .int(11)
+        ])))
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-order"), "content": .string("conflicting duplicate"),
+            "snapshotSeq": .int(12)
+        ])))
+
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "newest",
+                       "an equal/older cross-replica notification must not roll the card back")
+        XCTAssertEqual(r.state.maxSeq, 4, "snapshotSeq is not the durable replay cursor")
+    }
+
+    func testForegroundShellLiveOutputWaitsForToolUseAndRejectsBackgroundOnceKnown() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-early"), "content": .string("arrived first"),
+            "snapshotSeq": .int(20)
+        ])))
+        XCTAssertTrue(r.state.items.isEmpty, "an early snapshot waits off-transcript")
+
+        r.apply(RunEvent(seq: 7, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-early"), "name": .string("Bash"),
+            "input": .object(["command": .string("npm test")])
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "arrived first")
+
+        var background = TranscriptReducer()
+        background.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-bg-early"), "content": .string("wrong channel"),
+            "snapshotSeq": .int(30)
+        ])))
+        background.apply(RunEvent(seq: 8, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-bg-early"), "name": .string("Bash"),
+            "input": .object(["command": .string("npm test"), "run_in_background": .bool(true)])
+        ])))
+        background.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-bg-early"), "content": .string("late wrong channel"),
+            "snapshotSeq": .int(31)
+        ])))
+        XCTAssertNil(background.state.items.last?.asTool?.result,
+                     "learning that the shell is background drops and retires its early preview")
+    }
+
+    func testForegroundShellLiveOutputIsClearedAndRetiredAtRunBoundaries() {
+        let boundaries: [(String, RunEvent)] = [
+            ("turn_end", RunEvent(seq: 6, type: .turnEnd,
+                                  payload: .object(["status": .string("AWAITING_INPUT")]))),
+            ("terminal status", RunEvent(seq: RunEvent.sentinelSeq, type: .status,
+                                         payload: .object(["status": .string("FAILED"),
+                                                           "final": .bool(true)]))),
+            ("system resumed", RunEvent(seq: 6, type: .system,
+                                        payload: .object(["subtype": .string("resumed")]))),
+        ]
+
+        for (name, boundary) in boundaries {
+            var r = TranscriptReducer()
+            let id = "shell-boundary-\(name)"
+            r.apply(RunEvent(seq: 4, type: .toolUse, payload: .object([
+                "toolUseId": .string(id), "name": .string("Bash"),
+                "input": .object(["command": .string("sleep 30")])
+            ])))
+            r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+                "toolUseId": .string(id), "content": .string("live preview"),
+                "snapshotSeq": .int(40)
+            ])))
+            XCTAssertEqual(r.state.items.last?.asTool?.result, "live preview", name)
+
+            r.apply(boundary)
+            XCTAssertNil(r.state.items.last?.asTool?.result, "\(name) clears the stranded preview")
+            r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+                "toolUseId": .string(id), "content": .string("late preview"),
+                "snapshotSeq": .int(41)
+            ])))
+            XCTAssertNil(r.state.items.last?.asTool?.result, "\(name) rejects delayed output")
+        }
+
+        // A boundary must clear output that arrived even before its durable tool_use; opening the
+        // delayed card afterwards must not resurrect that cached preview.
+        var pending = TranscriptReducer()
+        pending.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-pending-boundary"), "content": .string("early stale"),
+            "snapshotSeq": .int(50)
+        ])))
+        pending.apply(RunEvent(seq: 1, type: .turnEnd))
+        pending.apply(RunEvent(seq: 2, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-pending-boundary"), "name": .string("Bash"),
+            "input": .object(["command": .string("echo done")])
+        ])))
+        XCTAssertNil(pending.state.items.last?.asTool?.result)
+
+        // Terminal is session-wide: an unknown id arriving only after finalization must not even
+        // enter the output-before-tool_use cache.
+        var terminal = TranscriptReducer()
+        terminal.apply(RunEvent(seq: RunEvent.sentinelSeq, type: .status,
+                                payload: .object(["status": .string("FAILED"), "final": .bool(true)])))
+        terminal.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-after-terminal"), "content": .string("too late"),
+            "snapshotSeq": .int(51)
+        ])))
+        terminal.apply(RunEvent(seq: 2, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-after-terminal"), "name": .string("Bash"),
+            "input": .object(["command": .string("echo too late")])
+        ])))
+        XCTAssertNil(terminal.state.items.last?.asTool?.result)
+    }
+
+    func testForegroundShellLiveOutputIsVisibleButNotEncoded() throws {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-transient"), "name": .string("Bash"),
+            "input": .object(["command": .string("echo transient")])
+        ])))
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-transient"), "content": .string("never persist me"),
+            "snapshotSeq": .int(60)
+        ])))
+        XCTAssertEqual(r.state.items.last?.asTool?.result, "never persist me",
+                       "the in-memory card still renders the live snapshot")
+
+        let data = try JSONEncoder().encode(r)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("never persist me"))
+        let restored = try JSONDecoder().decode(TranscriptReducer.self, from: data)
+        XCTAssertNil(restored.state.items.last?.asTool?.result,
+                     "broadcast-only card output must not survive reducer rehydration")
+    }
+
+    func testPublicLiveOutputBoundarySupportsAuthoritativeRESTFallback() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("shell-rest-boundary"), "name": .string("Bash"),
+            "input": .object(["command": .string("sleep 30")])
+        ])))
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-rest-boundary"), "content": .string("still running"),
+            "snapshotSeq": .int(70)
+        ])))
+
+        XCTAssertTrue(r.clearLiveToolOutputsAtBoundary())
+        XCTAssertNil(r.state.items.last?.asTool?.result)
+        r.apply(RunEvent(seq: 0, type: .toolOutput, payload: .object([
+            "toolUseId": .string("shell-rest-boundary"), "content": .string("late after poll"),
+            "snapshotSeq": .int(71)
+        ])))
+        XCTAssertNil(r.state.items.last?.asTool?.result,
+                     "a delayed SSE notification cannot undo the REST-observed boundary")
+        XCTAssertFalse(r.clearLiveToolOutputsAtBoundary(), "repeated idle polls are idempotent")
+    }
+
+    /// A foreground Shell is already expanded when its result arrives, so expansion alone cannot
+    /// drive the view's `.task(id:)`. The truncated result seq must enter the key; live snapshots,
+    /// which change only `result`, deliberately leave it stable and cause no repeated refetches.
+    func testToolPayloadResolutionKeyChangesWhenExpandedShellGetsFinalResult() {
+        let running = ToolCard(
+            id: "shell-key", name: "Bash",
+            input: .object(["command": .string("npm test")]),
+            result: "live snapshot", status: .running,
+            inputSeq: 4, inputTruncated: false
+        )
+        let liveKey = ToolPayloadResolutionKey(card: running, expanded: true)
+
+        var newerLive = running
+        newerLive.result = "newer live snapshot"
+        XCTAssertEqual(ToolPayloadResolutionKey(card: newerLive, expanded: true), liveKey)
+
+        var final = newerLive
+        final.result = "clipped final preview"
+        final.status = .ok
+        final.resultSeq = 9
+        final.resultTruncated = true
+        let finalKey = ToolPayloadResolutionKey(card: final, expanded: true)
+        XCTAssertNotEqual(finalKey, liveKey)
+        XCTAssertEqual(finalKey.resultSeq, 9)
+
+        XCTAssertNil(ToolPayloadResolutionKey(card: final, expanded: false).resultSeq)
+        XCTAssertEqual(ToolPayloadResolutionKey(card: final, expanded: true).resultSeq, 9,
+                       "reopening a clipped card must make the full-result fetch eligible again")
+    }
+
     /// An AskUserQuestion arrives as BOTH a `tool_use` (read-only tool card) and an `approval_request`
     /// (interactive card). While the question is pending, only the interactive card should show — the
     /// read-only card is suppressed to avoid double-displaying the question (web parity); once answered

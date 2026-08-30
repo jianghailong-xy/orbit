@@ -7,6 +7,7 @@ import {
   type AutoRetryHelp,
   AuthErrorCtx,
   ExportCtx,
+  LiveToolOutputsCtx,
   MD,
   type RunEvent,
   Transcript,
@@ -1038,6 +1039,84 @@ describe('Bash folded row', () => {
     const html = bashRow({ command: 'grep -rn x src/', description: 'Find x' });
 
     expect(html).toContain('<span class="chat-tool-summary">Find x</span>');
+  });
+});
+
+describe('foreground Shell card', () => {
+  const toolUse: RunEvent = {
+    seq: 1,
+    type: 'tool_use',
+    payload: {
+      id: 'shell-turn-1',
+      name: 'Bash',
+      input: { command: 'npm run test:outcome-reconciler -- --verbose' },
+    },
+  };
+  const renderShell = (events: RunEvent[], output?: string) =>
+    renderToStaticMarkup(
+      <LiveToolOutputsCtx.Provider
+        value={
+          output === undefined
+            ? new Map()
+            : new Map([['shell-turn-1', { content: output, snapshotSeq: 1 }]])
+        }
+      >
+        <Transcript events={events} live />
+      </LiveToolOutputsCtx.Provider>,
+    );
+
+  it('has an expandable full-command body before a result exists', () => {
+    const html = renderShell([toolUse]);
+
+    expect(html).toContain('chat-tool-card chat-tone-exec is-open');
+    expect(html).toContain('class="chat-tool-row"');
+    expect(html).not.toContain('chat-tool-row no-detail');
+    expect(html).toContain('chat-tool-detail');
+    expect(html).toContain('<span class="chat-cmd-prompt">$ </span>');
+    expect(html).toContain('npm run test:outcome-reconciler -- --verbose');
+  });
+
+  it('keeps a background user shell result-only for the Background tray', () => {
+    const html = renderShell([
+      {
+        ...toolUse,
+        payload: {
+          ...toolUse.payload,
+          input: { command: 'npm run worker', run_in_background: true },
+        },
+      },
+    ]);
+
+    expect(html).toContain('chat-tool-row no-detail');
+    expect(html).not.toContain('chat-tool-detail');
+    expect(html).not.toContain('chat-cmd-prompt');
+  });
+
+  it('shows the current live-output snapshot while still running', () => {
+    const html = renderShell([toolUse], 'suite one passed\nsuite two running');
+
+    expect(html).toContain('suite one passed');
+    expect(html).toContain('suite two running');
+    expect(html).toContain('<div class="chat-result-label">output</div>');
+    expect(html).toContain('chat-tool-status running');
+  });
+
+  it('lets the final tool_result supersede a stale live snapshot', () => {
+    const html = renderShell(
+      [
+        toolUse,
+        {
+          seq: 2,
+          type: 'tool_result',
+          payload: { toolUseId: 'shell-turn-1', content: 'authoritative final output' },
+        },
+      ],
+      'stale partial output',
+    );
+
+    expect(html).toContain('authoritative final output');
+    expect(html).not.toContain('stale partial output');
+    expect(html).toContain('chat-tool-status ok');
   });
 });
 

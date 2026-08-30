@@ -162,7 +162,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
@@ -198,6 +198,12 @@ import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
 import { loadTranscript, saveTranscript } from '../lib/transcriptStore';
+import {
+  clearLiveToolOutputsForSession,
+  EMPTY_LIVE_TOOL_OUTPUTS,
+  reduceLiveToolOutputs,
+  type SessionLiveToolOutputs,
+} from '../lib/liveToolOutputs';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
 import {
   acceptedUserTurnEvent,
@@ -1166,6 +1172,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [replyTo, setReplyTo] = useState<{ id: string; question: string } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
+  const [liveToolOutputState, setLiveToolOutputState] = useState<SessionLiveToolOutputs>({
+    sessionId: selectedId,
+    outputs: EMPTY_LIVE_TOOL_OUTPUTS,
+  });
   // The seq the stream was at when the current stretch of generation began, so the transcript can
   // render the drafts where they started rather than always last. A ref, not state: it only ever
   // moves alongside a draft update, so the render that shows the new text already reads the new
@@ -2256,6 +2266,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     () => (eventsSessionId === selectedId ? events : []),
     [events, eventsSessionId, selectedId],
   );
+  const scopedLiveToolOutputs =
+    liveToolOutputState.sessionId === selectedId
+      ? liveToolOutputState.outputs
+      : EMPTY_LIVE_TOOL_OUTPUTS;
   const visibleAcceptedUserTurns = useMemo(
     () =>
       acceptedUserTurns.filter(
@@ -2347,6 +2361,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Live/ephemeral drafts belong to the previous selection — clear them at once.
     setStreamingText('');
     setStreamingThink('');
+    setLiveToolOutputState((current) =>
+      current.sessionId === selectedId && current.outputs.size === 0
+        ? current
+        : { sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS },
+    );
     streamAnchorRef.current = null;
     setApprovals([]);
     setReplyTo(null);
@@ -2516,6 +2535,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       writeCache();
       setEvents(accRef.current);
     };
+    const applyLiveToolEvent = (ev: RunEvent): void => {
+      setLiveToolOutputState((current) => {
+        const base =
+          current.sessionId === selectedId ? current.outputs : EMPTY_LIVE_TOOL_OUTPUTS;
+        const outputs = reduceLiveToolOutputs(base, ev);
+        return current.sessionId === selectedId && outputs === current.outputs
+          ? current
+          : { sessionId: selectedId, outputs };
+      });
+    };
     /**
      * Throw the loaded window away and start over from a tail page, exactly as a cold open does.
      *
@@ -2531,6 +2560,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const reseed = async (): Promise<void> => {
       accRef.current = [];
       seen.current = new Set();
+      setLiveToolOutputState({ sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS });
       oldestSeqRef.current = null;
       hasMoreOlderRef.current = false;
       lastSeq = 0;
@@ -2581,6 +2611,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         if (ev.type === 'queued_turns_changed') {
           refreshQueued();
           return;
+        }
+        // Whole-output snapshots for a foreground `!` shell are live animation, like the text
+        // deltas below: replace their side-channel value and return before advancing lastSeq,
+        // entering `seen`, or writing the transcript cache. A runner restart/reconnect must never
+        // turn one into durable history or make its ephemeral seq the resume cursor.
+        if (ev.type === 'tool_output') {
+          applyLiveToolEvent(ev);
+          return;
+        }
+        // The durable result wins in the same render that appends it. Clearing here also releases
+        // the potentially large snapshot once the result has entered the ordinary transcript.
+        if (
+          ev.type === 'tool_result' ||
+          ev.type === 'turn_end' ||
+          ev.payload?.final ||
+          (ev.type === 'system' && ev.payload?.subtype === 'resumed')
+        ) {
+          applyLiveToolEvent(ev);
         }
         if (typeof ev.seq === 'number' && ev.seq !== Number.MAX_SAFE_INTEGER) {
           lastSeq = Math.max(lastSeq, ev.seq);
@@ -2885,9 +2933,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // behind the turn it is waiting for.
   const runTerminal = !!selectedSession && isSessionTerminal(selectedSession);
   useEffect(() => {
-    if (runStatus === 'AWAITING_INPUT') setIdle(true);
-    else if (runStatus === 'RUNNING') setIdle(false);
-    else if (runTerminal) setIdle(true);
+    // The normalized terminal outcome wins over a stale raw runStatus on rolling-upgrade payloads.
+    // AWAITING_INPUT is equally conclusive here: the foreground command has returned, even if its
+    // result/turn_end SSE was the event this tab missed.
+    if (runTerminal || runStatus === 'AWAITING_INPUT') {
+      setIdle(true);
+      // SSE `tool_result`/`turn_end`/`final` normally clear this first. This is the missed-event
+      // fallback: once the REST/control-plane poll observes idle/terminal, no live output is real.
+      setLiveToolOutputState((current) =>
+        clearLiveToolOutputsForSession(current, selectedId),
+      );
+    } else if (runStatus === 'RUNNING') setIdle(false);
   }, [runStatus, runTerminal, selectedId]);
 
   // A finalized session can be resumed in place (same selectedId, so the SSE effect above
@@ -2920,6 +2976,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     transcriptEvents,
     streamingText,
     streamingThink,
+    scopedLiveToolOutputs,
     approvals,
     visibleQueuedTurns,
     localStatusCards,
@@ -5245,15 +5302,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <AuthErrorCtx.Provider value={authErrorHelp}>
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
-                        <StreamingDraftsCtx.Provider value={streamingDrafts}>
-                          <Transcript
-                            events={transcriptEvents}
-                            live={live}
-                            turnImages={turnImages}
-                            artifactSessionId={selectedId}
-                            streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
-                          />
-                        </StreamingDraftsCtx.Provider>
+                        <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
+                          <StreamingDraftsCtx.Provider value={streamingDrafts}>
+                            <Transcript
+                              events={transcriptEvents}
+                              live={live}
+                              turnImages={turnImages}
+                              artifactSessionId={selectedId}
+                              streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
+                            />
+                          </StreamingDraftsCtx.Provider>
+                        </LiveToolOutputsCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>

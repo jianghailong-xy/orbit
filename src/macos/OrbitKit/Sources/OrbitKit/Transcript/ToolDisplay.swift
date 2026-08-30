@@ -69,9 +69,13 @@ public struct ToolDisplay: Equatable, Sendable {
         let isShell = id.hasPrefix("shell-")
 
         if isShell {
+            let command = input["command"]?.stringValue ?? ""
+            let isBackground = input["run_in_background"]?.boolValue == true
             return ToolDisplay(label: "Shell", symbol: "terminal", tone: .exec,
-                               summary: input["command"]?.stringValue ?? "", summaryMono: true,
-                               path: nil, meta: nil, body: .none, autoOpen: true)
+                               summary: command, summaryMono: true,
+                               path: nil, meta: nil,
+                               body: command.isEmpty || isBackground ? .none : .command(command),
+                               autoOpen: true)
         }
 
         switch name {

@@ -53,6 +53,7 @@ test('controlTypeFor drops transcript/data-plane events', () => {
     RunEventType.THINKING_DELTA,
     RunEventType.ASSISTANT,
     RunEventType.TOOL_USE,
+    RunEventType.TOOL_OUTPUT,
     RunEventType.TOOL_RESULT,
     RunEventType.SYSTEM,
     RunEventType.USER,

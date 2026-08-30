@@ -65,6 +65,9 @@ struct ToolCardView: View {
         return p
     }
     private var needsWholeResult: Bool { card.name == "mcp__orbit__session_create" }
+    private var resolutionKey: ToolPayloadResolutionKey {
+        ToolPayloadResolutionKey(card: card, expanded: expanded, needsWholeResult: needsWholeResult)
+    }
 
     var body: some View {
         Group {
@@ -76,7 +79,7 @@ struct ToolCardView: View {
                 defaultBody
             }
         }
-        .task(id: expanded) { await resolveFull() }
+        .task(id: resolutionKey) { await resolveFull() }
     }
 
     /// Refetch whatever this card had clipped, once it's open (or immediately for a card that

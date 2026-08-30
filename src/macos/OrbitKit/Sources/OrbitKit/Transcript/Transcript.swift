@@ -260,6 +260,22 @@ public struct ToolCard: Equatable, Sendable, Codable {
     }
 }
 
+/// The pieces of a tool card that can make its view need another untrimmed-payload fetch.
+///
+/// Kept UI-free so the trigger is directly testable: a foreground Shell starts expanded, meaning
+/// `expanded` itself does not change when its final result arrives. A newly available truncated
+/// result must still produce a different task identity, while live output snapshots (which change
+/// only `result`) must not restart the fetch task four times a second.
+public struct ToolPayloadResolutionKey: Equatable, Sendable {
+    public let inputSeq: Int?
+    public let resultSeq: Int?
+
+    public init(card: ToolCard, expanded: Bool, needsWholeResult: Bool = false) {
+        inputSeq = expanded && card.inputTruncated ? card.inputSeq : nil
+        resultSeq = (expanded || needsWholeResult) && card.resultTruncated ? card.resultSeq : nil
+    }
+}
+
 /// A background shell the agent launched with Bash(run_in_background).
 public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     public let id: String

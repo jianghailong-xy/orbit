@@ -15,7 +15,7 @@ import {
 /**
  * The coarse subset of per-session run events the control plane forwards, and the control-event
  * type each maps to. Everything else (transcript bodies: text/thinking deltas, assistant,
- * tool_use/result, background_output, ...) returns null and is dropped before the (async) owner
+ * tool_use/output/result, background_output, ...) returns null and is dropped before the (async) owner
  * resolution, keeping the always-on connection cheap.
  */
 export function controlTypeFor(t: RunEventType): ControlEventType | null {

@@ -847,6 +847,14 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         serverCapabilities = session.capabilities
+        // The final SSE notification is intentionally live-only and can be missed while this app
+        // is disconnected. REST is authoritative too: once it observes an idle/terminal run, drop
+        // any stranded foreground-shell preview and publish the reducer immediately instead of
+        // leaving the card looking active until another transcript event happens to arrive.
+        if session.effectiveRunStatus == .awaitingInput || session.effectiveRunStatus.isTerminal {
+            let cleared = reducer.clearLiveToolOutputsAtBoundary()
+            if cleared || state != reducer.state { publishStateNow() }
+        }
     }
 
     /// Re-read the authoritative lifecycle + capabilities from REST (lighter than loadContext).

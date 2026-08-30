@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -91,12 +92,19 @@ func cappedExecutableOutput(out []byte) (string, bool) {
 }
 
 type executableOutputBuffer struct {
+	mu        sync.Mutex
 	buffer    bytes.Buffer
+	liveTail  []byte
 	truncated bool
 }
 
 func (b *executableOutputBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	written := len(p)
+	// The durable acceptance fact remains the first 4 MiB, exactly as before. Keep a separate
+	// rolling tail so live output still advances after that authoritative prefix reaches its cap.
+	b.liveTail = appendCappedTail(b.liveTail, p, foregroundShellOutputCap)
 	remaining := executableAcceptanceOutputMaxBytes - b.buffer.Len()
 	if remaining <= 0 {
 		b.truncated = b.truncated || written > 0
@@ -108,6 +116,18 @@ func (b *executableOutputBuffer) Write(p []byte) (int, error) {
 	}
 	_, _ = b.buffer.Write(p)
 	return written, nil
+}
+
+func (b *executableOutputBuffer) snapshot(limit int) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(cappedUTF8Tail(b.liveTail, limit))
+}
+
+func (b *executableOutputBuffer) output() ([]byte, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.buffer.Bytes()...), b.truncated
 }
 
 func classifyExecutableAcceptanceTermination(
@@ -198,13 +218,16 @@ func runExecutableAcceptance(
 			termination = "START_FAILED"
 			runErr = err
 		} else {
-			runErr = waitSessionProcessTree(cmd)
+			runErr = waitWithForegroundShellOutput(
+				func() error { return waitSessionProcessTree(cmd) }, &combined, emit, toolUseID,
+			)
 			termination, actualExit, signal = classifyExecutableAcceptanceTermination(
 				ctx, commandCtx, cmd.ProcessState,
 			)
 		}
-		output = combined.buffer.Bytes()
-		if combined.truncated {
+		var captureTruncated bool
+		output, captureTruncated = combined.output()
+		if captureTruncated {
 			output = append(output, []byte("\n[OUTPUT_TRUNCATED_AT_4_MIB]")...)
 		}
 	}
