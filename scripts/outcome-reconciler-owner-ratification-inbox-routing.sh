@@ -18,11 +18,17 @@ EVIDENCE="$BUILD/api-evidence.json"
 FIXTURE="$BUILD/seeded-fixtures.json"
 MANIFEST="$REPO/build/outcome-reconciler-owner-ratification-inbox-routing-manifest.json"
 MIGRATION_STAGE=''
+API_SHARED_LINK="$API/src/node_modules/@orbit/shared"
+API_SHARED_LINK_CREATED=0
 
 cleanup() {
   docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
   if [ -n "$MIGRATION_STAGE" ] && [ -d "$MIGRATION_STAGE" ]; then
     rm -rf -- "$MIGRATION_STAGE"
+  fi
+  if [ "$API_SHARED_LINK_CREATED" -eq 1 ]; then
+    rm -f -- "$API_SHARED_LINK"
+    rmdir "$API/src/node_modules/@orbit" "$API/src/node_modules" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -38,6 +44,21 @@ link_modules() {
 link_modules "$REPO/node_modules" /root/orbit/node_modules
 link_modules "$API/node_modules" /root/orbit/src/apiserver/node_modules
 link_modules "$WEB/node_modules" /root/orbit/src/web/node_modules
+
+# A retained worktree can borrow dependency binaries from /root/orbit while its workspace package
+# symlink still resolves to that checkout's stale dist. Put the current shared package closer to
+# API sources so TypeScript always compiles against this worktree, without rewriting the fallback.
+EXPECTED_SHARED="$(readlink -f "$REPO/src/shared")"
+if [ -e "$API_SHARED_LINK" ] || [ -L "$API_SHARED_LINK" ]; then
+  [ "$(readlink -f "$API_SHARED_LINK")" = "$EXPECTED_SHARED" ] || {
+    echo "!! $API_SHARED_LINK does not resolve to the current workspace shared package" >&2
+    exit 1
+  }
+else
+  mkdir -p "$(dirname "$API_SHARED_LINK")"
+  ln -s "$EXPECTED_SHARED" "$API_SHARED_LINK"
+  API_SHARED_LINK_CREATED=1
+fi
 
 NODE_PATH_PARTS=()
 for candidate in "$API/node_modules" "$WEB/node_modules" "$REPO/node_modules" \
