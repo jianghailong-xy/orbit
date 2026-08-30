@@ -14,6 +14,7 @@ import {
   ownerRatificationPath,
   ownerRatificationReviewPath,
   splitOwnerRatificationCapability,
+  type OwnerRatificationEligibility,
   type OwnerRatificationPrivateRead,
   type OwnerRatificationReference,
 } from '../lib/ownerRatification';
@@ -44,6 +45,33 @@ const OBLIGATION_REVISION = 'c'.repeat(64);
 const BINDING = 'd'.repeat(64);
 const CTA = '019fcda0-d021-72a2-a914-2f4de38f4aff';
 
+const eligibility: OwnerRatificationEligibility = {
+  schemaVersion: 1,
+  eligible: true,
+  requiresOwnerNow: true,
+  state: 'ACTIVE',
+  reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+  reason: 'An OPEN Project has a canonical automatic action blocked on the exact current contract.',
+  projectStatus: 'OPEN',
+  bindingStatus: 'MISSING',
+  currentContractDigest: CONTRACT,
+  currentContractRevision: '11',
+  decisionRequestId: REQUEST,
+  requestGeneration: '7',
+  requestRoutingState: 'ACTIONABLE',
+  requestRoutingReasonCode: 'OWNER_RATIFICATION_BLOCKING_ACTION_OBSERVED',
+  activationSource: 'AUTO_DISPATCH',
+  linkedObligations: [{
+    obligationSource: 'AUTO_DISPATCH',
+    obligationId: OBLIGATION,
+    obligationRevision: OBLIGATION_REVISION,
+    bindingDigest: BINDING,
+    evaluatedThroughWatermark: '29',
+    taskId: TASK,
+    reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+  }],
+};
+
 const reference: OwnerRatificationReference = {
   kind: 'OWNER_RATIFICATION',
   status: 'PENDING',
@@ -56,7 +84,7 @@ const reference: OwnerRatificationReference = {
   obligationSource: 'AUTO_DISPATCH',
   contractDigest: CONTRACT,
   contractRevision: '11',
-  reason: 'OWNER_RATIFICATION_REQUIRED',
+  reason: eligibility.reason,
   reasonCode: 'OWNER_RATIFICATION_REQUIRED',
   owner: 'OWNER',
   ownerId: OWNER,
@@ -64,14 +92,9 @@ const reference: OwnerRatificationReference = {
   createdAt: '2026-08-29T01:00:00.000Z',
   expiresAt: '2099-09-05T01:00:00.000Z',
   expired: false,
-  linkedObligations: [{
-    obligationId: OBLIGATION,
-    obligationRevision: OBLIGATION_REVISION,
-    bindingDigest: BINDING,
-    evaluatedThroughWatermark: '29',
-    taskId: TASK,
-    reasonCode: 'OWNER_RATIFICATION_REQUIRED',
-  }],
+  eligible: true,
+  eligibility,
+  linkedObligations: eligibility.linkedObligations,
 };
 
 const criteria = Array.from({ length: 14 }, (_, index) => ({
@@ -94,6 +117,8 @@ const review: OwnerRatificationPrivateRead = {
   riskPolicyDigest: '5'.repeat(64),
   ratified: false,
   ratification: null,
+  eligibility,
+  auditRequests: [],
   semanticContract: {
     goal: '在 guarded authority 内自动完成项目，且所有副作用可审计。',
     criteria,
@@ -284,6 +309,8 @@ describe('Owner Ratification canonical UI', () => {
       expect(html).toContain(`data-obligation-revision="${OBLIGATION_REVISION}"`);
       expect(html).toContain(`data-contract-digest="${CONTRACT}"`);
       expect(html).toContain('data-reason="OWNER_RATIFICATION_REQUIRED"');
+      expect(html).toContain('data-eligibility-reason="OWNER_RATIFICATION_REQUIRED"');
+      expect(html).toContain('data-binding-status="MISSING"');
       expect(html).toContain('data-owner="OWNER"');
       expect(html).toContain('data-evaluated-through-watermark="29"');
       expect(html).not.toContain(CTA);
@@ -300,6 +327,47 @@ describe('Owner Ratification canonical UI', () => {
     inboxClient.clear();
     projectsClient.clear();
     detailClient.clear();
+  });
+
+  it('fails closed when a mixed-version payload contains a non-actionable audit request', () => {
+    const inactive = {
+      ...reference,
+      eligible: false,
+      eligibility: {
+        ...eligibility,
+        eligible: false,
+        requiresOwnerNow: false,
+        state: 'DEFERRED',
+        reasonCode: 'OWNER_RATIFICATION_DEFERRED_NO_BLOCKING_ACTION',
+        reason: 'Retained for audit; no current action is blocked.',
+        activationSource: null,
+        linkedObligations: [],
+      },
+      linkedObligations: [],
+    } as unknown as OwnerRatificationReference;
+    const inboxClient = client();
+    inboxClient.setQueryData(['judgments', 'open'], { total: 0, items: [] });
+    inboxClient.setQueryData(['project-acceptance', 'pending'], { total: 0, items: [] });
+    inboxClient.setQueryData(['outcomes', 'inbox'], { total: 0, items: [] });
+    inboxClient.setQueryData(['owner-ratification', 'pending'], { total: 1, items: [inactive] });
+    const inbox = renderToStaticMarkup(
+      <QueryClientProvider client={inboxClient}>
+        <MemoryRouter><JudgmentInboxPage /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const inactiveProject = { ...projectRow(), ownerRatification: inactive };
+    const summary = renderToStaticMarkup(
+      <MemoryRouter><OwnerRatificationSummary reference={inactive} /></MemoryRouter>,
+    );
+
+    expect(inbox).not.toContain('owner-ratification-inbox-card');
+    expect(inbox).not.toContain(`data-decision-request-id="${REQUEST}"`);
+    expect(summary).toBe('');
+    expect(attentionReasonOf(inactiveProject as never, Date.parse('2026-08-29T02:00:00Z')))
+      .not.toBe('owner-ratification');
+    expect(attentionSectionOf(inactiveProject as never, Date.parse('2026-08-29T02:00:00Z')))
+      .toBe('running');
+    inboxClient.clear();
   });
 
   it('shows all 14 criteria and the complete guarded decision envelope without exposing CTA', async () => {

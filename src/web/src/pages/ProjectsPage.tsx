@@ -65,7 +65,10 @@ import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { JudgmentRequestSummary } from '../components/JudgmentRequestSummary';
 import { OwnerRatificationSummary } from '../components/OwnerRatificationSummary';
-import type { OwnerRatificationReference } from '../lib/ownerRatification';
+import {
+  isActiveOwnerRatificationReference,
+  type OwnerRatificationReference,
+} from '../lib/ownerRatification';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -492,17 +495,22 @@ export function ProjectsPage() {
             // quiet, or that it is finished and still open. Null on most rows, which is the point
             // (see attentionChipOf).
             const chip = attentionChipOf(p, now);
+            const ratification = isActiveOwnerRatificationReference(p.ownerRatification)
+              ? p.ownerRatification
+              : null;
             return (
               <List.Item
                 className="project-row"
                 style={{ padding: '11px 10px' }}
-                data-decision-request-id={p.ownerRatification?.decisionRequestId}
-                data-obligation-id={p.ownerRatification?.obligationId}
-                data-obligation-revision={p.ownerRatification?.obligationRevision}
-                data-contract-digest={p.ownerRatification?.contractDigest}
-                data-reason={p.ownerRatification?.reasonCode}
-                data-owner={p.ownerRatification?.owner}
-                data-evaluated-through-watermark={p.ownerRatification?.evaluatedThroughWatermark}
+                data-decision-request-id={ratification?.decisionRequestId}
+                data-obligation-id={ratification?.obligationId}
+                data-obligation-revision={ratification?.obligationRevision}
+                data-contract-digest={ratification?.contractDigest}
+                data-reason={ratification?.reasonCode}
+                data-eligibility-reason={ratification?.eligibility.reasonCode}
+                data-binding-status={ratification?.eligibility.bindingStatus}
+                data-owner={ratification?.owner}
+                data-evaluated-through-watermark={ratification?.evaluatedThroughWatermark}
               >
                 {/* One link spanning the whole row — meta and count alike — so the entire row is a
                     single click and a single tab stop, rather than a title-sized target with dead
@@ -529,12 +537,12 @@ export function ProjectsPage() {
                       ) : null}
                     </div>
                     <div className="project-row-goal">{goal}</div>
-                    {p.ownerRatification ? (
+                    {ratification ? (
                       <div className="project-row-ratification">
-                        Request r{p.ownerRatification.requestRevision} ·{' '}
-                        {p.ownerRatification.decisionRequestId} · digest{' '}
-                        {p.ownerRatification.contractDigest.slice(0, 10)}… · watermark{' '}
-                        {p.ownerRatification.evaluatedThroughWatermark}
+                        Request r{ratification.requestRevision} ·{' '}
+                        {ratification.decisionRequestId} · digest{' '}
+                        {ratification.contractDigest.slice(0, 10)}… · watermark{' '}
+                        {ratification.evaluatedThroughWatermark}
                       </div>
                     ) : null}
                   </div>

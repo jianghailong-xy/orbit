@@ -1,12 +1,35 @@
 import { encodeId } from './idCodec';
 
 export interface OwnerRatificationLinkedObligation {
+  obligationSource: 'AUTO_DISPATCH' | 'CANONICAL_OUTCOME' | 'CONSTRAINED_ACTION';
   obligationId: string;
   obligationRevision: string;
   bindingDigest: string;
   evaluatedThroughWatermark: string;
-  taskId: string;
+  taskId?: string;
+  actionIntentId?: string;
   reasonCode: string;
+  sourceReasonCode?: string;
+  reason?: unknown;
+}
+
+export interface OwnerRatificationEligibility {
+  schemaVersion: number;
+  eligible: boolean;
+  requiresOwnerNow: boolean;
+  state: 'ACTIVE' | 'DEFERRED' | 'INELIGIBLE';
+  reasonCode: string;
+  reason: string;
+  projectStatus: string | null;
+  bindingStatus: 'MISSING' | 'STALE' | 'EFFECTIVE';
+  currentContractDigest?: string | null;
+  currentContractRevision?: string | null;
+  decisionRequestId?: string | null;
+  requestGeneration?: string | null;
+  requestRoutingState?: 'ACTIONABLE' | 'DEFERRED' | null;
+  requestRoutingReasonCode?: string | null;
+  activationSource?: string | null;
+  linkedObligations: OwnerRatificationLinkedObligation[];
 }
 
 /** Secret-free canonical identity used verbatim by inbox, Project Attention and detail. */
@@ -19,7 +42,11 @@ export interface OwnerRatificationReference {
   requestRevision: string;
   obligationId: string;
   obligationRevision: string;
-  obligationSource: 'AUTO_DISPATCH' | 'OWNER_DECISION_REQUEST';
+  obligationSource:
+    | 'AUTO_DISPATCH'
+    | 'CANONICAL_OUTCOME'
+    | 'CONSTRAINED_ACTION'
+    | 'OWNER_DECISION_REQUEST';
   contractDigest: string;
   contractRevision: string;
   reason: string;
@@ -30,6 +57,8 @@ export interface OwnerRatificationReference {
   createdAt: string;
   expiresAt: string;
   expired: boolean;
+  eligible: true;
+  eligibility: OwnerRatificationEligibility;
   linkedObligations: OwnerRatificationLinkedObligation[];
 }
 
@@ -77,6 +106,27 @@ export interface OwnerRatificationDecisionRequestView {
   requestGeneration: string;
   semanticDiff: Record<string, unknown>;
   status: string;
+  routingState?: 'ACTIONABLE' | 'DEFERRED';
+  eligibility?: OwnerRatificationEligibility;
+}
+
+export interface OwnerRatificationAuditRequest {
+  id: string;
+  kind: 'OWNER_RATIFICATION';
+  status: string;
+  contractDigest: string;
+  contractRevision: string;
+  requestGeneration: string;
+  reasonCode: string;
+  previousContractDigest?: string | null;
+  semanticDiff: Record<string, unknown>;
+  decisionPayload?: Record<string, unknown>;
+  routingState: 'ACTIONABLE' | 'DEFERRED';
+  routingReasonCode: string;
+  deferredAt?: string | null;
+  createdAt: string;
+  expiresAt: string;
+  eligibility: OwnerRatificationEligibility;
 }
 
 export interface OwnerRatificationReview {
@@ -94,6 +144,8 @@ export interface OwnerRatificationReview {
   riskPolicyDigest: string;
   ratified: boolean;
   ratification: Record<string, unknown> | null;
+  eligibility: OwnerRatificationEligibility;
+  auditRequests: OwnerRatificationAuditRequest[];
   semanticContract: OwnerRatificationSemanticContract;
   evaluationPlan: Record<string, unknown>;
   decisionRequest: OwnerRatificationDecisionRequestView | null;
@@ -171,4 +223,16 @@ export function ownerRatificationReferenceKey(reference: OwnerRatificationRefere
     reference.ownerId,
     reference.evaluatedThroughWatermark,
   ].join(':');
+}
+
+/** Rolling/mixed payloads fail closed: only the server's current eligibility may create a CTA. */
+export function isActiveOwnerRatificationReference(
+  reference: OwnerRatificationReference | null | undefined,
+): reference is OwnerRatificationReference {
+  return reference?.status === 'PENDING'
+    && reference.eligible === true
+    && reference.eligibility?.eligible === true
+    && reference.eligibility.requiresOwnerNow === true
+    && reference.eligibility.state === 'ACTIVE'
+    && reference.eligibility.projectStatus === 'OPEN';
 }

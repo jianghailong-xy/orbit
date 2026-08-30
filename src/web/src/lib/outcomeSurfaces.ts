@@ -1,4 +1,5 @@
 import { encodeId } from './idCodec';
+import type { OwnerRatificationEligibility } from './ownerRatification';
 
 export type OutcomeDecisionType = 'OWNER_RATIFICATION' | 'HUMAN_SIGNOFF'
   | 'GOAL_DECISION' | 'RISK_ACCEPTANCE' | 'NEW_AUTHORIZATION' | 'EXTERNAL_IDENTITY';
@@ -53,6 +54,12 @@ export interface RatificationInboxItem {
   requestRevision: string;
   contractDigest: string;
   reasonCode: string;
+  reason: string;
+  obligationId: string;
+  obligationRevision: string;
+  bindingDigest: string;
+  evaluatedThroughWatermark: string;
+  eligibility: OwnerRatificationEligibility;
   semanticDiff: unknown;
   protocol: HumanDecisionProtocol;
   cta: OutcomeCta;

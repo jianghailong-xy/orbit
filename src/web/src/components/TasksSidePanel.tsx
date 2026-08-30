@@ -50,6 +50,7 @@ import {
   type OutcomeHumanInbox,
 } from '../lib/outcomeSurfaces';
 import {
+  isActiveOwnerRatificationReference,
   ownerRatificationInboxPath,
   type OwnerRatificationInboxPage,
 } from '../lib/ownerRatification';
@@ -256,7 +257,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const openJudgmentCount = (judgments.data?.total ?? 0)
     + (projectAcceptance.data?.total ?? 0)
     + genericOutcomeCount
-    + (ownerRatification.data?.total ?? 0);
+    + (ownerRatification.data?.items ?? []).filter(isActiveOwnerRatificationReference).length;
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =

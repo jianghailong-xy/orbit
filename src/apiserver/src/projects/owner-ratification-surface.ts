@@ -20,7 +20,11 @@ export interface OwnerRatificationReference {
   requestRevision: string;
   obligationId: string;
   obligationRevision: string;
-  obligationSource: 'AUTO_DISPATCH' | 'OWNER_DECISION_REQUEST';
+  obligationSource:
+    | 'AUTO_DISPATCH'
+    | 'CANONICAL_OUTCOME'
+    | 'CONSTRAINED_ACTION'
+    | 'OWNER_DECISION_REQUEST';
   contractDigest: string;
   contractRevision: string;
   reason: string;
@@ -31,16 +35,41 @@ export interface OwnerRatificationReference {
   createdAt: string;
   expiresAt: string;
   expired: boolean;
+  eligible: true;
+  eligibility: OwnerRatificationEligibility;
   linkedObligations: OwnerRatificationLinkedObligation[];
 }
 
 export interface OwnerRatificationLinkedObligation {
+  obligationSource: 'AUTO_DISPATCH' | 'CANONICAL_OUTCOME' | 'CONSTRAINED_ACTION';
   obligationId: string;
   obligationRevision: string;
   bindingDigest: string;
   evaluatedThroughWatermark: string;
-  taskId: string;
+  taskId?: string;
+  actionIntentId?: string;
   reasonCode: string;
+  sourceReasonCode?: string;
+  reason?: unknown;
+}
+
+export interface OwnerRatificationEligibility {
+  schemaVersion: number;
+  eligible: boolean;
+  requiresOwnerNow: boolean;
+  state: 'ACTIVE' | 'DEFERRED' | 'INELIGIBLE';
+  reasonCode: string;
+  reason: string;
+  projectStatus: string | null;
+  bindingStatus: 'MISSING' | 'STALE' | 'EFFECTIVE';
+  currentContractDigest?: string | null;
+  currentContractRevision?: string | null;
+  decisionRequestId?: string | null;
+  requestGeneration?: string | null;
+  requestRoutingState?: 'ACTIONABLE' | 'DEFERRED' | null;
+  requestRoutingReasonCode?: string | null;
+  activationSource?: string | null;
+  linkedObligations: OwnerRatificationLinkedObligation[];
 }
 
 export interface OwnerRatificationReferenceInput {
@@ -55,6 +84,7 @@ export interface OwnerRatificationReferenceInput {
   createdAt: Date | string;
   expiresAt: Date | string;
   linkedObligations?: unknown;
+  eligibility?: unknown;
 }
 
 function iso(value: Date | string): string {
@@ -75,18 +105,77 @@ function linked(value: unknown): OwnerRatificationLinkedObligation[] {
       ? row.evaluatedThroughWatermark
       : null;
     const taskId = typeof row.taskId === 'string' ? row.taskId : null;
+    const actionIntentId = typeof row.actionIntentId === 'string' ? row.actionIntentId : null;
     const reasonCode = typeof row.reasonCode === 'string' ? row.reasonCode : null;
+    const obligationSource = typeof row.obligationSource === 'string'
+      && ['AUTO_DISPATCH', 'CANONICAL_OUTCOME', 'CONSTRAINED_ACTION'].includes(row.obligationSource)
+      ? row.obligationSource as OwnerRatificationLinkedObligation['obligationSource']
+      : taskId ? 'AUTO_DISPATCH' : null;
     if (!obligationId || !obligationRevision || !bindingDigest
-        || !evaluatedThroughWatermark || !taskId || !reasonCode) return [];
+        || !evaluatedThroughWatermark || !reasonCode || !obligationSource) return [];
     return [{
+      obligationSource,
       obligationId,
       obligationRevision,
       bindingDigest,
       evaluatedThroughWatermark,
-      taskId,
+      ...(taskId ? { taskId } : {}),
+      ...(actionIntentId ? { actionIntentId } : {}),
       reasonCode,
+      ...(typeof row.sourceReasonCode === 'string'
+        ? { sourceReasonCode: row.sourceReasonCode }
+        : {}),
+      ...('reason' in row ? { reason: row.reason } : {}),
     }];
   });
+}
+
+function eligibility(
+  value: unknown,
+  input: OwnerRatificationReferenceInput,
+  linkedObligations: OwnerRatificationLinkedObligation[],
+): OwnerRatificationEligibility {
+  const row = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const eligible = row.eligible === undefined ? true : row.eligible === true;
+  const reasonCode = typeof row.reasonCode === 'string'
+    ? row.reasonCode
+    : input.reasonCode;
+  const state = row.state === 'DEFERRED' || row.state === 'INELIGIBLE'
+    ? row.state
+    : 'ACTIVE';
+  const bindingStatus = row.bindingStatus === 'STALE' || row.bindingStatus === 'EFFECTIVE'
+    ? row.bindingStatus
+    : 'MISSING';
+  return {
+    schemaVersion: typeof row.schemaVersion === 'number' ? row.schemaVersion : 1,
+    eligible,
+    requiresOwnerNow: row.requiresOwnerNow === undefined ? eligible : row.requiresOwnerNow === true,
+    state,
+    reasonCode,
+    reason: typeof row.reason === 'string' ? row.reason : reasonCode,
+    projectStatus: typeof row.projectStatus === 'string' ? row.projectStatus : 'OPEN',
+    bindingStatus,
+    currentContractDigest: typeof row.currentContractDigest === 'string'
+      ? row.currentContractDigest
+      : input.contractDigest,
+    currentContractRevision: typeof row.currentContractRevision === 'string'
+      ? row.currentContractRevision
+      : String(input.contractRevision),
+    decisionRequestId: typeof row.decisionRequestId === 'string'
+      ? row.decisionRequestId
+      : input.requestId,
+    requestGeneration: typeof row.requestGeneration === 'string'
+      ? row.requestGeneration
+      : String(input.requestGeneration),
+    requestRoutingState: row.requestRoutingState === 'DEFERRED' ? 'DEFERRED' : 'ACTIONABLE',
+    requestRoutingReasonCode: typeof row.requestRoutingReasonCode === 'string'
+      ? row.requestRoutingReasonCode
+      : null,
+    activationSource: typeof row.activationSource === 'string' ? row.activationSource : null,
+    linkedObligations,
+  };
 }
 
 export function ownerRatificationReference(
@@ -95,9 +184,19 @@ export function ownerRatificationReference(
 ): OwnerRatificationReference {
   const requestRevision = String(input.requestGeneration);
   const contractRevision = String(input.contractRevision);
-  const linkedObligations = linked(input.linkedObligations);
+  const rawEligibility = input.eligibility && typeof input.eligibility === 'object'
+    && !Array.isArray(input.eligibility)
+    ? input.eligibility as Record<string, unknown>
+    : {};
+  const linkedObligations = linked(
+    input.linkedObligations ?? rawEligibility.linkedObligations,
+  );
+  const activeEligibility = eligibility(input.eligibility, input, linkedObligations);
+  if (input.eligibility !== undefined && !activeEligibility.eligible) {
+    throw new Error('OWNER_RATIFICATION_REFERENCE_NOT_ELIGIBLE');
+  }
   const observed = linkedObligations[0] ?? null;
-  const reasonCode = observed?.reasonCode ?? input.reasonCode;
+  const reasonCode = activeEligibility.reasonCode;
   const expiresAt = iso(input.expiresAt);
   return {
     kind: 'OWNER_RATIFICATION',
@@ -108,10 +207,10 @@ export function ownerRatificationReference(
     requestRevision,
     obligationId: observed?.obligationId ?? input.requestId,
     obligationRevision: observed?.obligationRevision ?? requestRevision,
-    obligationSource: observed ? 'AUTO_DISPATCH' : 'OWNER_DECISION_REQUEST',
+    obligationSource: observed?.obligationSource ?? 'OWNER_DECISION_REQUEST',
     contractDigest: input.contractDigest,
     contractRevision,
-    reason: reasonCode,
+    reason: activeEligibility.reason,
     reasonCode,
     owner: 'OWNER',
     ownerId: input.ownerId,
@@ -119,6 +218,8 @@ export function ownerRatificationReference(
     createdAt: iso(input.createdAt),
     expiresAt,
     expired: Date.parse(expiresAt) <= now,
+    eligible: true,
+    eligibility: { ...activeEligibility, eligible: true, state: 'ACTIVE' },
     linkedObligations,
   };
 }
