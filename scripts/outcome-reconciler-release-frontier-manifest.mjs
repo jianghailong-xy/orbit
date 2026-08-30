@@ -254,6 +254,9 @@ const body = {
     : 'orbit.outcome-reconciler.release-frontier-prebinding-manifest',
   phase,
   outcome: 'PASS',
+  projectId: contract.project.publicId,
+  taskId: contract.task.publicId,
+  sessionId: contract.session.publicId,
   targetSha,
   targetRef: contract.repository.targetRef,
   declared: {

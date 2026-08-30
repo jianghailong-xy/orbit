@@ -124,6 +124,9 @@ try {
   assert.equal(evidence.evidenceDigest, releaseEvidenceDigest);
   assert.equal(evidence.sourceSessionId, contract.session.databaseId);
   assert.equal(evidence.evidence.kind, 'orbit.outcome-reconciler.release-frontier-prebinding');
+  assert.equal(evidence.evidence.projectId, contract.project.publicId);
+  assert.equal(evidence.evidence.taskId, contract.task.publicId);
+  assert.equal(evidence.evidence.sessionId, contract.session.publicId);
   assert.equal(evidence.evidence.targetSha, targetSha);
   assert.equal(evidence.evidence.targetRef, contract.repository.targetRef);
   assert.equal(evidence.evidence.targetContentDigest, targetContentDigest);
