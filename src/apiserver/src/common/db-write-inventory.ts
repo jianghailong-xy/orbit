@@ -721,13 +721,13 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'tasks/tasks.service.ts#create',
     shape: 'TX_RETRIED',
-    locks: 'user FOR UPDATE (rank 10, only when it links), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40, only when it retires a predecessor), then the task INSERT and its edges (50/60).',
-    identity: 'The idempotency key built from `(session, turn, title, description)` above the closure, so a retry re-inserts the same row rather than a second one.',
+    locks: 'user FOR UPDATE (rank 10, whenever it restructures), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40 when it retires a predecessor), then the successor/source task rows (50), dependency edges plus immutable failure-successor receipt/current binding/rebind rows (60), and dependency revision triggers (70).',
+    identity: 'Ordinary create uses the key built from `(session, turn, title, description)` above the closure. A routed failure takeover additionally binds the immutable obligation revision and route-decision digest; its one obligation row and source-task lock select exactly one successor/current generation, and a racing or lost-response caller adopts that winner.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything the closure decides is re-read under the locks it takes; `data` and its key are computed once, outside.',
-    effects: 'The realtime publish, outside the loop, after the attempt that committed.',
-    answer: 'Typed 503 from the global boundary.',
+    replay: 'Everything the closure decides is re-read under the locks it takes; `data`, the ordinary key and exact failure-handoff comparison values are computed once outside. The stored function retires the FAILED source, advances current binding, rebinds every downstream edge, resolves its continuation and arms `run_at` in the same transaction; rollback leaves none of them, and a committed concurrent winner is read back instead of inserting another Task.',
+    effects: 'Realtime publication and the best-effort immediate scheduled-door dispatch nudge are outside the loop, after commit. `run_at` is the durable recovery fact, so a process crash before or during that nudge is consumed by the periodic scheduled sweep with the same dispatch-epoch token.',
+    answer: 'Typed 503 from the global boundary after transient retry exhaustion; an exact committed failure-handoff replay returns its current successor, while mismatched provenance is a typed conflict.',
   },
   {
     // Unit L7 split the door from the pass: `createMany` (write) and `previewPlan` (dry run) both
@@ -979,6 +979,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceComment', under: 'runnerApi.turnComplete — after the rank-40 project and rank-50 task are locked; the first conversation-turn ACK owns both the derived status and its evidence comment' },
   { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceUnavailableComment', under: 'runnerApi.turnComplete — after the reserved shell turn is ACKed and the rank-50 task is locked; it is the durable needs-human branch mutually exclusive with a comparable result and status derivation' },
   { at: 'tasks/tasks.service.ts#linkSupersededBy', under: 'tasks.create, tasks.update' },
+  { at: 'tasks/tasks.service.ts#commitFailureSuccessorHandoff', under: 'tasks.create — after the rank-10 graph mutex, ordered Session/Project locks and successor INSERT; migration 0212 atomically writes the current binding, FAILED-source supersession, continuation resolution, downstream edge rebind receipts and durable run_at trigger' },
   { at: 'tasks/tasks.service.ts#lockTaskForSupersessionWrite', under: 'tasks.update' },
   // Unit L3's effect-time fence. Rank 40 only — the project row its callers already take at that
   // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the
@@ -1284,6 +1285,9 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"failure_continuation_attempt_receipt","trigger":"failure_continuation_attempt_receipt_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0210_failure_continuation_trigger","takes":[]},
   {"table":"failure_continuation_obligation","trigger":"failure_continuation_obligation_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0210_failure_continuation_trigger","takes":[]},
   {"table":"failure_continuation_route_decision","trigger":"failure_continuation_route_decision_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0211_failure_continuation_routing","takes":[]},
+  {"table":"failure_successor_current_binding","trigger":"failure_successor_current_binding_monotonic","event":"BEFORE INSERT OR UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0212_failure_successor_handoff","takes":[]},
+  {"table":"failure_successor_dependency_rebind","trigger":"failure_successor_dependency_rebind_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0212_failure_successor_handoff","takes":[]},
+  {"table":"failure_successor_handoff","trigger":"failure_successor_handoff_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0212_failure_successor_handoff","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_opencode_guard_delete","event":"BEFORE DELETE","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_opencode_guard_rename","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
   {"table":"outcome_action_attempt","trigger":"outcome_action_attempt_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
@@ -1387,6 +1391,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"session","trigger":"session_verification_subject_guard_update","event":"BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\", \"starts_task_work\"","kind":"ROW/STATEMENT","since":"0207_verification_subject_dispatch_guard","takes":[]},
   {"table":"session_merge_receipt","trigger":"session_merge_receipt_checkpoint_accepted_trg","event":"BEFORE INSERT OR UPDATE","kind":"ROW/STATEMENT","since":"0152_task_checkpoint","takes":[]},
   {"table":"session_merge_receipt","trigger":"session_merge_receipt_immutable_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0128_task_supersession_merge_receipt","takes":[]},
+  {"table":"task","trigger":"failure_successor_task_binding_immutable","event":"BEFORE UPDATE OF status, superseded_by_task_id, superseded_at, terminal_reason","kind":"ROW/STATEMENT","since":"0212_failure_successor_handoff","takes":[]},
   {"table":"task","trigger":"task_aggregate_parent_child_delete_touch","event":"BEFORE DELETE","kind":"ROW/STATEMENT","since":"0134_task_aggregate_parent_dispatch_guard","takes":["project LOCK"]},
   {"table":"task","trigger":"task_aggregate_parent_shape_guard","event":"BEFORE INSERT OR UPDATE OF \"parent_task_id\", \"completion_policy\", \"is_foreman\", \"owner_id\"","kind":"ROW/STATEMENT","since":"0134_task_aggregate_parent_dispatch_guard","takes":["project LOCK"]},
   {"table":"task","trigger":"task_claimed_project_move_guard","event":"BEFORE UPDATE OF \"project_id\"","kind":"ROW/STATEMENT","since":"0122_project_dispatch_boundary","takes":[]},

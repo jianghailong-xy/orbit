@@ -112,6 +112,7 @@ import {
   CreateTaskDto,
   CreateTasksBatchDto,
   DAG_PREVIEW_TITLES,
+  type FailureSuccessorHandoffDto,
   MAX_DAG_OPS,
   SignoffTaskDto,
   TASK_BATCH_CREATE_MAX,
@@ -907,6 +908,20 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   -- fail-closed guard against revocation or a semantic change racing dispatch.
   AND (
     t.project_id IS NULL
+    -- A routed failure takeover is already a bounded, immutable continuation decision. Its
+    -- handoff receipt says both that no owner decision is required and that the exact required
+    -- capability was available. This is the durable crash-recovery door for that decision, not a
+    -- general way around project ratification; only the one current successor can match it.
+    OR EXISTS (
+      SELECT 1
+        FROM failure_successor_current_binding current_binding
+        JOIN failure_successor_handoff handoff
+          ON handoff.handoff_id = current_binding.handoff_id
+       WHERE current_binding.current_successor_task_id = t.id
+         AND handoff.successor_task_id = t.id
+         AND handoff.auto_dispatch_requested = true
+         AND handoff.requires_owner = false
+    )
     OR EXISTS (
       SELECT 1
         FROM project_completion_contract ratified_contract
@@ -1044,6 +1059,30 @@ export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
 export interface AutoDispatch {
   /** `task_dispatch_epoch.epoch` as the candidate scan read it, and the epoch its token names. */
   observedEpoch: bigint;
+}
+
+interface FailureSuccessorCommitReceipt {
+  handoffId: string;
+  obligationId: string;
+  sourceTaskId: string;
+  successorTaskId: string;
+  bindingGeneration: string;
+  bindingDigest: string;
+  autoDispatchRequested: boolean;
+  requiresOwner: boolean;
+  replayed?: boolean;
+}
+
+interface FailureSuccessorWinner {
+  task: Task;
+  receipt: FailureSuccessorCommitReceipt;
+}
+
+/** Throwing this from the create transaction deliberately removes its unadopted Task candidate. */
+class FailureSuccessorWinnerCommitted extends Error {
+  constructor(readonly successorTaskId: string) {
+    super(`FAILURE_SUCCESSOR_ALREADY_CURRENT:${successorTaskId}`);
+  }
 }
 
 /**
@@ -2324,6 +2363,104 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Read the winner of a failure-successor handoff without re-deciding it.
+   *
+   * This is both the lost-response path and the concurrency loser path. The four caller-carried
+   * comparison values must still match the immutable receipt; knowing an obligation id is not a
+   * licence to turn a different decision into its successor. The predecessor link is checked too,
+   * so a damaged half-state is never returned as a successful replay.
+   */
+  private async failureSuccessorWinner(
+    db: Prisma.TransactionClient | PrismaService,
+    ownerId: string,
+    input: FailureSuccessorHandoffDto,
+  ): Promise<FailureSuccessorWinner | null> {
+    const handoff = await db.failureSuccessorHandoff.findUnique({
+      where: { obligationId: input.obligationId },
+      select: {
+        handoffId: true,
+        obligationId: true,
+        obligationRevision: true,
+        routeDecisionId: true,
+        routeDecisionDigest: true,
+        tenantId: true,
+        sourceTaskId: true,
+        successorTaskId: true,
+        bindingGeneration: true,
+        bindingDigest: true,
+        autoDispatchRequested: true,
+        requiresOwner: true,
+      },
+    });
+    if (!handoff) return null;
+    if (
+      handoff.tenantId !== ownerId
+      || handoff.obligationRevision !== input.obligationRevision
+      || handoff.routeDecisionId !== input.routeDecisionId
+      || handoff.routeDecisionDigest !== input.routeDecisionDigest
+    ) {
+      throw new ConflictException('FAILURE_SUCCESSOR_HANDOFF_REPLAY_MISMATCH');
+    }
+    const [task, source] = await Promise.all([
+      db.task.findFirst({ where: { id: handoff.successorTaskId, ownerId } }),
+      db.task.findFirst({
+        where: { id: handoff.sourceTaskId, ownerId },
+        select: { status: true, supersededByTaskId: true, terminalReason: true },
+      }),
+    ]);
+    if (
+      !task || !source || source.status !== TaskStatus.FAILED
+      || source.supersededByTaskId !== handoff.successorTaskId
+      || source.terminalReason !== 'SUPERSEDED'
+    ) {
+      throw new ConflictException('FAILURE_SUCCESSOR_HANDOFF_COMMITTED_STATE_DAMAGED');
+    }
+    return {
+      task,
+      receipt: {
+        handoffId: handoff.handoffId,
+        obligationId: handoff.obligationId,
+        sourceTaskId: handoff.sourceTaskId,
+        successorTaskId: handoff.successorTaskId,
+        bindingGeneration: handoff.bindingGeneration.toString(),
+        bindingDigest: handoff.bindingDigest,
+        autoDispatchRequested: handoff.autoDispatchRequested,
+        requiresOwner: handoff.requiresOwner,
+        replayed: true,
+      },
+    };
+  }
+
+  /** Transaction participant: migration 0212 owns every handoff mutation in one statement. */
+  private async commitFailureSuccessorHandoff(
+    tx: Prisma.TransactionClient,
+    input: FailureSuccessorHandoffDto,
+    sourceTaskId: string,
+    successorTaskId: string,
+    coordinatorSessionId: string,
+    observedAt: Date,
+  ): Promise<FailureSuccessorCommitReceipt> {
+    const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
+      SELECT failure_successor_handoff_commit(
+        ${input.obligationId}::uuid,
+        ${input.obligationRevision},
+        ${input.routeDecisionId}::uuid,
+        ${input.routeDecisionDigest},
+        ${sourceTaskId}::uuid,
+        ${successorTaskId}::uuid,
+        ${coordinatorSessionId}::uuid,
+        ${observedAt}
+      ) AS result
+    `);
+    if (!row?.result) throw new Error('FAILURE_SUCCESSOR_HANDOFF_RETURNED_NO_RECEIPT');
+    const receipt = row.result as unknown as FailureSuccessorCommitReceipt;
+    if (receipt.successorTaskId !== successorTaskId) {
+      throw new FailureSuccessorWinnerCommitted(receipt.successorTaskId);
+    }
+    return receipt;
+  }
+
+  /**
    * §13.6 SU8: an attempt somebody is RUNNING right now may not be retired.
    *
    * The other direction of the race 0130's Session guard closes, and it is reachable without any
@@ -2567,6 +2704,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
+    const failureHandoff = dto.failureSuccessorHandoff;
+    if (failureHandoff && !dto.supersedesTaskId) {
+      throw new BadRequestException(
+        'failureSuccessorHandoff requires supersedesTaskId for the failed source task',
+      );
+    }
+    if (failureHandoff && (dto.dependsOnTaskIds ?? []).includes(dto.supersedesTaskId!)) {
+      throw new BadRequestException(
+        'a failure successor cannot depend on the failed source task it is taking over',
+      );
+    }
     const completionCriterion = this.assertCompletionDeclaration(dto);
     this.assertCriterionShape(dto, completionCriterion);
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
@@ -2578,6 +2726,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // would otherwise fail the FK insert.
     const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
     const sessionId = origin?.sessionId;
+    if (failureHandoff && !sessionId) {
+      throw new BadRequestException(
+        'failureSuccessorHandoff requires the current coordinator Session',
+      );
+    }
+    // A committed handoff outranks every mutable creation gate below. This is a read of the exact
+    // immutable decision, not a new admission: a coordinator retry after a lost response must be
+    // able to learn which successor already won even if its Session or project scope has moved.
+    if (failureHandoff) {
+      const standing = await this.failureSuccessorWinner(this.prisma, ownerId, failureHandoff);
+      if (standing) {
+        if (standing.receipt.sourceTaskId !== dto.supersedesTaskId) {
+          throw new ConflictException('FAILURE_SUCCESSOR_HANDOFF_SOURCE_MISMATCH');
+        }
+        return standing.task;
+      }
+    }
     // Best-effort idempotency: a redelivered turn re-runs and re-creates the same tasks. A key is
     // only formed inside a live turn; without one this stays exactly the old create path. Checking
     // first lets the common (sequential) re-run return the original task without a write attempt.
@@ -2619,7 +2784,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (winner) {
       // SU7-c: "already created" may not stand in for "already linked". See
       // `assertSupersessionAlreadyRecorded`.
-      if (dto.supersedesTaskId) {
+      if (failureHandoff) {
+        const standing = await this.failureSuccessorWinner(this.prisma, ownerId, failureHandoff);
+        if (!standing || standing.task.id !== winner.id
+            || standing.receipt.sourceTaskId !== dto.supersedesTaskId) {
+          throw new ConflictException(
+            'the idempotent task exists without the declared failure-successor handoff',
+          );
+        }
+      } else if (dto.supersedesTaskId) {
         await this.assertSupersessionAlreadyRecorded(
           this.prisma, ownerId, dto.supersedesTaskId, winner.id,
         );
@@ -2734,8 +2907,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // the attempt that actually committed. A conflict that outlives the attempts is rethrown
     // unchanged for the global boundary to answer 503 (common/transient-db-conflict.filter).
     let task: Task;
+    let failureHandoffReceipt: FailureSuccessorCommitReceipt | null = null;
     try {
-      task = await withTransactionRetry(
+      const committed = await withTransactionRetry(
         this.prisma,
         async (tx) => {
           // Rank 10 only when this write actually restructures the graph. A plain create
@@ -2824,6 +2998,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           await this.assertDependencyCrossingsAtEffect(
             tx, ownerId, dependencyCrossings.edges, now,
           );
+          // Reuse ordinary supersession's effect-time fence. A Session INSERT takes the source
+          // Task and then Project; this transaction already holds Project, so NOWAIT is what
+          // prevents a lock cycle. Once held, the live-session read closes the tiny execute race
+          // where a retry Session committed while its Task still says FAILED.
+          if (failureHandoff) {
+            await this.lockTaskForSupersessionWrite(tx, dto.supersedesTaskId!);
+            await this.assertNotRunningBeforeRetiring(tx, ownerId, dto.supersedesTaskId!);
+          }
           const created = await tx.task.create({ data });
           // Unit L4's `APPLY`: the yes is spent on this task, in the transaction that wrote it. A
           // second application updates no row, throws, and takes this task with it — which is what
@@ -2858,46 +3040,83 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // state the two-step entrance produced by accident. Safe under retry for the same
           // reason: the CAS below only fires against a predecessor still unlinked, and an
           // aborted attempt left it exactly that way.
-          if (dto.supersedesTaskId) {
+          let handoffReceipt: FailureSuccessorCommitReceipt | null = null;
+          if (failureHandoff) {
+            handoffReceipt = await this.commitFailureSuccessorHandoff(
+              tx,
+              failureHandoff,
+              dto.supersedesTaskId!,
+              created.id,
+              sessionId!,
+              now,
+            );
+            if (handoffReceipt.sourceTaskId !== dto.supersedesTaskId) {
+              throw new BadRequestException('FAILURE_SUCCESSOR_HANDOFF_SOURCE_MISMATCH');
+            }
+          } else if (dto.supersedesTaskId) {
             await this.linkSupersededBy(
               tx, ownerId, dto.supersedesTaskId,
               { id: created.id, projectId: created.projectId }, new Date(),
             );
           }
-          return created;
+          return { task: created, handoffReceipt };
         },
         this.transientWriteRetry('tasks.create'),
       );
+      task = committed.task;
+      failureHandoffReceipt = committed.handoffReceipt;
     } catch (e) {
-      // §13.1 AG6's activation guard, FIRST, because it is the one refusal here that is not about
-      // this write racing itself. 0132 refuses a child whose arrival would hand a RUNNING parent's
-      // completion to its subtasks, and left untranslated that reaches the caller as a raw
-      // `check_violation` — an unreadable 500 for a request the product deliberately refused.
-      // Ahead of the idempotency branch on purpose: a refused write created no row, so there is no
-      // winner to read back, and `isDuplicateKey` would not match this error anyway.
-      const fenced = taskFenceConflictMessage(e);
-      if (fenced) throw new ConflictException(fenced);
-      // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
-      // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
-      if (idempotentWrite && this.isDuplicateKey(e)) {
-        // Through the SAME validator the pre-read uses. A read-back that trusted the index is a
-        // validator the concurrent path skips — and the concurrent path is the one a fault or a
-        // forged row is reached through on purpose.
-        const existing = await this.idempotencyWinner(this.prisma, ownerId, idempotentWrite);
-        if (existing) {
-          // The concurrent half of the same rule: this transaction rolled back, so whatever link it
-          // was going to write does not exist. The winner's row is the only authority on whether
-          // the supersession happened, and it is read rather than assumed.
-          if (dto.supersedesTaskId) {
-            await this.assertSupersessionAlreadyRecorded(
-              this.prisma, ownerId, dto.supersedesTaskId, existing.id,
-            );
+      // A concurrent coordinator may have committed while this transaction was waiting on the
+      // failed source row. Its typed winner marker deliberately aborted our just-created Task;
+      // read and adopt the immutable winner instead of surfacing a conflict or leaving an orphan.
+      if (failureHandoff) {
+        const standing = await this.failureSuccessorWinner(
+          this.prisma,
+          ownerId,
+          failureHandoff,
+        );
+        if (standing) {
+          if (standing.receipt.sourceTaskId !== dto.supersedesTaskId) {
+            throw new ConflictException('FAILURE_SUCCESSOR_HANDOFF_SOURCE_MISMATCH');
           }
-          return existing;
+          task = standing.task;
+          failureHandoffReceipt = standing.receipt;
+        } else if (e instanceof FailureSuccessorWinnerCommitted) {
+          throw new ConflictException(e.message);
+        } else {
+          throw e;
         }
+      } else {
+        // §13.1 AG6's activation guard, FIRST, because it is the one refusal here that is not about
+        // this write racing itself. 0132 refuses a child whose arrival would hand a RUNNING parent's
+        // completion to its subtasks, and left untranslated that reaches the caller as a raw
+        // `check_violation` — an unreadable 500 for a request the product deliberately refused.
+        // Ahead of the idempotency branch on purpose: a refused write created no row, so there is no
+        // winner to read back, and `isDuplicateKey` would not match this error anyway.
+        const fenced = taskFenceConflictMessage(e);
+        if (fenced) throw new ConflictException(fenced);
+        // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
+        // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
+        if (idempotentWrite && this.isDuplicateKey(e)) {
+          // Through the SAME validator the pre-read uses. A read-back that trusted the index is a
+          // validator the concurrent path skips — and the concurrent path is the one a fault or a
+          // forged row is reached through on purpose.
+          const existing = await this.idempotencyWinner(this.prisma, ownerId, idempotentWrite);
+          if (existing) {
+            // The concurrent half of the same rule: this transaction rolled back, so whatever link it
+            // was going to write does not exist. The winner's row is the only authority on whether
+            // the supersession happened, and it is read rather than assumed.
+            if (dto.supersedesTaskId) {
+              await this.assertSupersessionAlreadyRecorded(
+                this.prisma, ownerId, dto.supersedesTaskId, existing.id,
+              );
+            }
+            return existing;
+          }
+        }
+        // And the project's own pre-check has the same shape of gap — see translateProjectFk.
+        throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
       }
-      // And the project's own pre-check has the same shape of gap — see translateProjectFk.
-      throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     }
     // AG3 in the direction that is easy to forget: a task ARRIVING is as much a change to its
     // parent's children as one completing. Without this, filing a subtask under a parent that
@@ -2922,12 +3141,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // new row is fetchable; filing it under a parent changes that parent's aggregate-only runnable
     // gate, and a supersession also rewrites the predecessor plus every dependency whose chain now
     // reaches the successor. Verification-family dependents are expanded by the same bounded read.
+    // The database armed `run_at` in the atomic handoff. Use the scheduled door for the latency
+    // nudge too, so a crash after Session commit and the periodic sweep both replay the exact same
+    // request token rather than creating two first-run identities.
+    if (failureHandoffReceipt?.autoDispatchRequested) {
+      const epoch = await this.dispatchEpochOf(task.id);
+      await this.execute(
+        ownerId,
+        task.id,
+        { observedEpoch: epoch },
+        TASK_RUN_TRIGGER.scheduled(task.id, epoch),
+      ).catch((error) => this.logger.warn(
+        `failure successor ${task.id} remains durably scheduled after immediate dispatch failed: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
+    }
     await this.publishAffectedTaskRows(
       ownerId,
       [task.id, task.parentTaskId, dto.supersedesTaskId],
       [dto.supersedesTaskId, task.verifiesTaskId],
     );
-    return task;
+    // The handoff function may have added required capabilities, a hold or a one-shot schedule
+    // after Prisma returned the INSERT row; return the committed projection, not that stale image.
+    return failureHandoffReceipt
+      ? (await this.prisma.task.findFirst({ where: { id: task.id, ownerId } }) ?? task)
+      : task;
   }
 
   /**
@@ -3043,6 +3281,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
     for (const item of items) {
+      if (item.failureSuccessorHandoff) {
+        throw new BadRequestException(
+          'failureSuccessorHandoff is accepted only by task_create, not task_create_batch',
+        );
+      }
       const completionCriterion = this.assertCompletionDeclaration({
         ...item,
         verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,

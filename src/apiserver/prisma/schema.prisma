@@ -4188,6 +4188,77 @@ model FailureContinuationRouteDecision {
   @@map("failure_continuation_route_decision")
 }
 
+/// Immutable receipt for the transaction that turns one routed failed continuation into the
+/// successor Task currently carrying its goal. The failed source Task and executable-attempt
+/// evidence remain unchanged and are addressed explicitly from this row.
+model FailureSuccessorHandoff {
+  handoffId                    String   @id @default(dbgenerated("gen_random_uuid()")) @map("handoff_id") @db.Uuid
+  obligationId                 String   @unique @map("obligation_id") @db.Uuid
+  routeDecisionId             String   @unique @map("route_decision_id") @db.Uuid
+  sourceReceiptId             String   @unique @map("source_receipt_id") @db.Uuid
+  sourceAttemptId             String   @unique @map("source_attempt_id") @db.Uuid
+  sourceContinuationId        String   @unique @map("source_continuation_id") @db.Uuid
+  tenantId                    String   @map("tenant_id") @db.Uuid
+  goalId                      String   @map("goal_id") @db.Uuid
+  lineageRootTaskId           String   @map("lineage_root_task_id") @db.Uuid
+  sourceTaskId                String   @unique @map("source_task_id") @db.Uuid
+  successorTaskId             String   @unique @map("successor_task_id") @db.Uuid
+  sourceBindingRevision       BigInt   @map("source_binding_revision")
+  sourceAttemptGeneration     BigInt   @map("source_attempt_generation")
+  bindingGeneration           BigInt   @map("binding_generation")
+  failureFingerprint          String   @map("failure_fingerprint") @db.Char(64)
+  requiredCapabilities        String[] @default([]) @map("required_capabilities")
+  requiresOwner               Boolean  @map("requires_owner")
+  autoDispatchRequested       Boolean  @map("auto_dispatch_requested")
+  continuationDisposition     String   @default("RESOLVED_TO_SUCCESSOR") @map("continuation_disposition")
+  dependencyRebindCount       Int      @map("dependency_rebind_count")
+  obligationRevision          String   @map("obligation_revision") @db.Char(64)
+  routeDecisionDigest         String   @map("route_decision_digest") @db.Char(64)
+  bindingDigest               String   @unique @map("binding_digest") @db.Char(64)
+  idempotencyKey              String   @unique @map("idempotency_key") @db.Char(64)
+  committedBySessionId        String   @map("committed_by_session_id") @db.Uuid
+  committedAt                 DateTime @default(now()) @map("committed_at") @db.Timestamptz(6)
+
+  @@unique([lineageRootTaskId, bindingGeneration], map: "failure_successor_handoff_generation_key")
+  @@index([tenantId, goalId, committedAt, handoffId], map: "failure_successor_handoff_goal_idx")
+  @@index([lineageRootTaskId, bindingGeneration(sort: Desc)], map: "failure_successor_handoff_lineage_idx")
+  @@map("failure_successor_handoff")
+}
+
+/// The one mutable pointer for a successor lineage. Every generation it names is an immutable
+/// FailureSuccessorHandoff; the database guard only permits exact +1 advances.
+model FailureSuccessorCurrentBinding {
+  lineageRootTaskId      String   @id @map("lineage_root_task_id") @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  goalId                 String   @map("goal_id") @db.Uuid
+  handoffId              String   @unique @map("handoff_id") @db.Uuid
+  currentSuccessorTaskId String   @unique @map("current_successor_task_id") @db.Uuid
+  bindingGeneration      BigInt   @map("binding_generation")
+  bindingDigest          String   @map("binding_digest") @db.Char(64)
+  updatedAt              DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("failure_successor_current_binding")
+}
+
+/// Append-only proof for every downstream dependency edge physically moved to a successor. The
+/// edge id remains evidence even when that edge is legitimately deleted later.
+model FailureSuccessorDependencyRebind {
+  rebindId           String   @id @default(dbgenerated("gen_random_uuid()")) @map("rebind_id") @db.Uuid
+  handoffId          String   @map("handoff_id") @db.Uuid
+  edgeId             String   @map("edge_id") @db.Uuid
+  dependentTaskId    String   @map("dependent_task_id") @db.Uuid
+  sourceTaskId       String   @map("source_task_id") @db.Uuid
+  successorTaskId    String   @map("successor_task_id") @db.Uuid
+  bindingGeneration  BigInt   @map("binding_generation")
+  action              String
+  replacementEdgeId  String?  @map("replacement_edge_id") @db.Uuid
+  recordedAt          DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([handoffId, edgeId], map: "failure_successor_rebind_once")
+  @@index([dependentTaskId, bindingGeneration, rebindId], map: "failure_successor_rebind_dependent_idx")
+  @@map("failure_successor_dependency_rebind")
+}
+
 /// Append-only liveness pulse. The digest chains previousDigest + sourceSha + deadline + payload,
 /// so a heartbeat cannot be copied to another build or observation window without detection.
 model ExecutableRuntimeHeartbeat {

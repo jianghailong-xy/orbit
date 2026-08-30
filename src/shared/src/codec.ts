@@ -336,6 +336,22 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // by accident.
   'wakeId',
   'raisedBlockerId',
+  // Failure-successor takeover exposes an inspectable chain from the failed attempt to the
+  // current Task and every dependency edge it replaced. These are row addresses (and the route
+  // decision is accepted back by task_create), never lease capabilities. The continuation's
+  // obligation/wakeup identities remain in NEVER_PUBLIC_ID_FIELDS below because those are the
+  // at-least-once delivery comparison values.
+  'routeDecisionId',
+  'sourceReceiptId',
+  'sourceContinuationId',
+  'lineageRootTaskId',
+  'successorTaskId',
+  'committedBySessionId',
+  'currentSuccessorTaskId',
+  'rebindId',
+  'edgeId',
+  'dependentTaskId',
+  'replacementEdgeId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
