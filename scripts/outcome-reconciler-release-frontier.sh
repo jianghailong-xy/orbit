@@ -251,12 +251,11 @@ core_lane() {
     build/outcome-reconciler-owner-ratification-ui-manifest.json
 }
 
-backend_lane() {
+runtime_lane() {
   local worker="$1"
   trap - EXIT INT TERM
   set +e
-  # Canary consumes immutable Watchdog evidence, so both execute in this lane before the complete
-  # API matrix. The API job count remains bounded below the machine's eight logical CPUs.
+  # Canary consumes immutable Watchdog evidence, so the runtime proofs stay serial in this lane.
   run_worker_npm "$worker" backend watchdog test:outcome-reconciler:watchdog \
     build/outcome-reconciler-v2-watchdog-manifest.json \
     build/outcome-reconciler-v2-watchdog-capacity-manifest.json
@@ -265,8 +264,17 @@ backend_lane() {
     build/executable-acceptance-runtime-manifest.json
   run_worker_npm "$worker" backend canary test:outcome-reconciler:canary \
     build/outcome-reconciler-v2-canary-manifest.json
-  OUTCOME_RELEASE_API_JOBS="${OUTCOME_RELEASE_API_JOBS:-5}" \
-    run_worker_npm "$worker" backend full-api test:outcome-reconciler:full-api \
+}
+
+api_lane() {
+  local worker="$1"
+  trap - EXIT INT TERM
+  set +e
+  # The complete API matrix has no evidence dependency on Watchdog/Canary. Starting it immediately
+  # removes that twenty-minute false edge while four case workers keep the whole DAG bounded to the
+  # machine's eight logical CPUs.
+  OUTCOME_RELEASE_API_JOBS="${OUTCOME_RELEASE_API_JOBS:-4}" \
+    run_worker_npm "$worker" api full-api test:outcome-reconciler:full-api \
       build/outcome-reconciler-full-api-manifest.json
 }
 
@@ -281,15 +289,19 @@ clients_lane() {
 set -e
 prepare_worker core
 CORE_WORKER="$PREPARED_WORKER"
-prepare_worker backend
-BACKEND_WORKER="$PREPARED_WORKER"
+prepare_worker runtime
+RUNTIME_WORKER="$PREPARED_WORKER"
+prepare_worker api
+API_WORKER="$PREPARED_WORKER"
 prepare_worker clients
 CLIENTS_WORKER="$PREPARED_WORKER"
 
-echo "==> release-frontier [$PHASE]: execute bounded DAG target=$TARGET_SHA lanes=3 apiJobs=${OUTCOME_RELEASE_API_JOBS:-5}"
+echo "==> release-frontier [$PHASE]: execute bounded DAG target=$TARGET_SHA lanes=4 apiJobs=${OUTCOME_RELEASE_API_JOBS:-4}"
 (trap - EXIT INT TERM; core_lane "$CORE_WORKER") &
 LANE_PIDS+=("$!")
-(trap - EXIT INT TERM; backend_lane "$BACKEND_WORKER") &
+(trap - EXIT INT TERM; runtime_lane "$RUNTIME_WORKER") &
+LANE_PIDS+=("$!")
+(trap - EXIT INT TERM; api_lane "$API_WORKER") &
 LANE_PIDS+=("$!")
 (trap - EXIT INT TERM; clients_lane "$CLIENTS_WORKER") &
 LANE_PIDS+=("$!")
