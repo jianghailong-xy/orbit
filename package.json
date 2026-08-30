@@ -42,6 +42,7 @@
     "test:outcome-reconciler:watchdog-current-binding:regression": "bash scripts/outcome-reconciler-watchdog-current-binding-regression.sh",
     "test:outcome-reconciler:watchdog-current-binding": "bash scripts/outcome-reconciler-watchdog-current-binding.sh",
     "test:outcome-reconciler:failure-continuation-trigger": "bash scripts/outcome-reconciler-failure-continuation-trigger.sh",
+    "test:outcome-reconciler:failure-routing": "bash scripts/outcome-reconciler-failure-routing.sh",
     "test:outcome-reconciler:owner-ratification-ui": "bash scripts/outcome-reconciler-owner-ratification-ui.sh",
     "test:outcome-reconciler:owner-ratification-inbox-routing": "bash scripts/outcome-reconciler-owner-ratification-inbox-routing.sh",
     "test:outcome-reconciler:replay": "bash scripts/outcome-reconciler-replay.sh",

@@ -101,13 +101,20 @@ export function describeWakeFact(fact: WakeFact): string {
           && !Array.isArray(detail.reason)
           ? detail.reason as Record<string, unknown>
           : {};
+        const route = detail.route && typeof detail.route === 'object'
+          && !Array.isArray(detail.route)
+          ? detail.route as Record<string, unknown>
+          : {};
         return (
           `任务 ${uuidToBase62(fact.subjectId)} 的 typed EXECUTABLE attempt 已失败并保留为 FAILED；`
           + `ACTIVE DIAGNOSIS obligation ${String(detail.obligationId ?? '未知')} / `
           + `${fact.subjectVersion} 等待协调。binding revision `
           + `${String(binding.bindingRevision ?? '未知')}、attempt generation `
           + `${String(binding.attemptGeneration ?? '未知')}，原因 `
-          + `${String(reason.code ?? '未知')}。`
+          + `${String(reason.code ?? '未知')}。确定路由 `
+          + `${String(route.failureDomain ?? '待诊断')} / `
+          + `${String(route.diagnosticPath ?? '待诊断')}，deadline `
+          + `${String(route.deadlineAt ?? '待生成')}。`
         );
       }
     default:
@@ -120,10 +127,13 @@ export function failureContinuationProtocol(): string {
   return (
     '\n\n这条 FAILURE_CONTINUATION_ACTIONABLE 是 Agent-owned diagnosis obligation。你要自动推进，但必须保留失败事实：\n'
     + '1. 先读取 project_get 与 task_get，并核对 opening 中同一个 obligationId/revision、binding revision、'
-    + 'attempt generation、failure fingerprint 和 receipt digest；聊天文本不是新的失败事实。\n'
-    + '2. 原任务的 FAILED 是本次 attempt 的真实结果：不得把它改回 OPEN/IN_PROGRESS/DONE，不得原样重跑它的 '
-    + 'acceptanceCommand，也不得伪造新的成功 receipt。\n'
-    + '3. 分析失败证据；若仍需工程动作，创建有不同身份和明确验收的 diagnosis/repair/successor task，并用原失败任务的 '
+    + 'attempt generation、failure fingerprint 和 receipt digest；同时使用 route.decisionDigest 下已经持久化的 '
+    + 'canonical reason、evidence sources、next action 与 deadline，不得从聊天文本重新分类。\n'
+    + '2. 原任务的 FAILED 是本次 attempt 的真实结果：不得把它改回 OPEN/IN_PROGRESS/DONE，不得在原任务上重跑，'
+    + '也不得伪造新的成功 receipt。只有 route.nextAction 明确给出 RETRY_UNCHANGED_ONCE 且 '
+    + 'allowsUnchangedRetry=true 时，才能通过不同身份的 revalidation successor 做恰好一次无变化重验；其余路径必须改变。\n'
+    + '3. 按 route.diagnosticPath 执行有界计划；若仍需工程动作，创建有不同身份和明确验收的 '
+    + 'diagnosis/repair/successor task，并用原失败任务的 '
     + 'supersession/依赖语义衔接。重复 delivery 必须复用已有 successor，不能产生第二个 active claim。\n'
     + '4. 代码缺陷、测试、部署与普通诊断由 Agent 处理，不创建 owner decision。只有确实遇到 '
     + 'GOAL_DECISION、RISK_ACCEPTANCE、NEW_AUTHORIZATION 或 EXTERNAL_IDENTITY 才能走结构化 owner-decision 协议；'

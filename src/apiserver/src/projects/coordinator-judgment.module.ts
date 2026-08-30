@@ -5,6 +5,7 @@ import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
+import { FailureContinuationControllerService } from './failure-continuation-controller.service';
 import { FailureContinuationService } from './failure-continuation.service';
 
 /**
@@ -22,6 +23,7 @@ import { FailureContinuationService } from './failure-continuation.service';
     CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
+    FailureContinuationControllerService,
     FailureContinuationService,
   ],
   exports: [
@@ -29,6 +31,7 @@ import { FailureContinuationService } from './failure-continuation.service';
     CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
+    FailureContinuationControllerService,
     FailureContinuationService,
   ],
 })

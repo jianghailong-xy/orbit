@@ -4135,6 +4135,59 @@ model FailureContinuationWakeupOutbox {
   @@map("failure_continuation_wakeup_outbox")
 }
 
+/// One immutable deterministic diagnosis/route for a claimed canonical Failure Continuation.
+/// The database reducer owns fingerprint generation and convergence counters; process memory and
+/// Project.sessionBudgetPerDay are deliberately not inputs.
+model FailureContinuationRouteDecision {
+  decisionId                     String   @id @default(dbgenerated("gen_random_uuid()")) @map("decision_id") @db.Uuid
+  obligationId                   String   @unique @map("obligation_id") @db.Uuid
+  continuationId                 String   @unique @map("continuation_id") @db.Uuid
+  receiptId                      String   @unique @map("receipt_id") @db.Uuid
+  tenantId                       String   @map("tenant_id") @db.Uuid
+  goalId                         String   @map("goal_id") @db.Uuid
+  taskId                         String   @map("task_id") @db.Uuid
+  lineageDigest                  String   @map("lineage_digest") @db.Char(64)
+  bindingDigest                  String   @map("binding_digest") @db.Char(64)
+  routeGeneration                BigInt   @map("route_generation")
+  contractDigest                 String?  @map("contract_digest") @db.Char(64)
+  attemptEvaluationPlanDigest    String   @map("attempt_evaluation_plan_digest") @db.Char(64)
+  taskEvaluationPlanDigest       String?  @map("task_evaluation_plan_digest") @db.Char(64)
+  projectEvaluationPlanDigest    String?  @map("project_evaluation_plan_digest") @db.Char(64)
+  ratifiedEvaluationPlanDigest   String?  @map("ratified_evaluation_plan_digest") @db.Char(64)
+  contractRatificationState      String   @map("contract_ratification_state")
+  taskEvaluationPlanChanged      Boolean  @map("task_evaluation_plan_changed")
+  projectEvaluationPlanChanged   Boolean  @map("project_evaluation_plan_changed")
+  failureDomain                  String   @map("failure_domain")
+  failureNode                    String   @map("failure_node")
+  ownerReason                    String?  @map("owner_reason")
+  failureFingerprint             String   @map("failure_fingerprint") @db.Char(64)
+  fingerprintOccurrence          Int      @map("fingerprint_occurrence")
+  evidenceNovel                  Boolean  @map("evidence_novel")
+  unchangedEvidenceGenerations   Int      @map("unchanged_evidence_generations")
+  diagnosticPath                 String   @map("diagnostic_path")
+  reasonCode                     String   @map("reason_code")
+  canonicalReason                Json     @map("canonical_reason")
+  canonicalReasonDigest          String   @map("canonical_reason_digest") @db.Char(64)
+  evidence                       Json
+  evidenceDigest                 String   @map("evidence_digest") @db.Char(64)
+  evidenceSources                Json     @map("evidence_sources")
+  nextAction                     Json     @map("next_action")
+  nextActionDigest               String   @map("next_action_digest") @db.Char(64)
+  deadlineAt                     DateTime @map("deadline_at") @db.Timestamptz(6)
+  projectAttention               Boolean  @default(false) @map("project_attention")
+  requestDigest                  String   @map("request_digest") @db.Char(64)
+  decisionDigest                 String   @unique @map("decision_digest") @db.Char(64)
+  idempotencyKey                 String   @unique @map("idempotency_key") @db.Char(64)
+  decidedAt                      DateTime @map("decided_at") @db.Timestamptz(6)
+  recordedAt                     DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, lineageDigest, routeGeneration])
+  @@index([tenantId, goalId, recordedAt(sort: Desc), decisionId], map: "failure_continuation_route_goal_idx")
+  @@index([tenantId, lineageDigest, failureFingerprint, routeGeneration(sort: Desc)], map: "failure_continuation_route_fingerprint_idx")
+  @@index([tenantId, projectAttention, deadlineAt, recordedAt(sort: Desc)], map: "failure_continuation_route_attention_idx")
+  @@map("failure_continuation_route_decision")
+}
+
 /// Append-only liveness pulse. The digest chains previousDigest + sourceSha + deadline + payload,
 /// so a heartbeat cannot be copied to another build or observation window without detection.
 model ExecutableRuntimeHeartbeat {

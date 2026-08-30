@@ -3,6 +3,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +11,7 @@ import { hostname } from 'node:os';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
+import { FailureContinuationControllerService } from './failure-continuation-controller.service';
 import {
   FailureContinuationWakeClaim,
   failureContinuationWakeFact,
@@ -54,6 +56,8 @@ implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
+    @Optional()
+    private readonly controller?: FailureContinuationControllerService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -169,7 +173,12 @@ implements OnApplicationBootstrap, OnModuleDestroy {
       );
     }
 
-    const fact = failureContinuationWakeFact(claim);
+    // Route before opening the coordinator Session. The decision is append-only and keyed by the
+    // obligation, so a crash after this call but before wake ACK replays the exact same plan.
+    const route = this.controller
+      ? await this.controller.routeClaim(claim, observedAt)
+      : null;
+    const fact = failureContinuationWakeFact(claim, route);
     const outcome = await this.judgments.wakePlanned(
       fact,
       async () => {

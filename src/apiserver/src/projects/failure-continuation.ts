@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { WakeFact } from './coordinator-wake';
+import type { FailureContinuationRouteDecision } from './failure-continuation-controller';
 
 export const FAILURE_CONTINUATION_WAKE_EVENT = 'FAILURE_CONTINUATION_ACTIONABLE' as const;
 export const FAILURE_CONTINUATION_CAPABILITY = 'failure-continuation.diagnose' as const;
@@ -49,6 +50,7 @@ export function failureContinuationIdempotencyKey(
 /** One immutable obligation always replays as the same project-coordinator wake fact. */
 export function failureContinuationWakeFact(
   claim: FailureContinuationWakeClaim,
+  route?: FailureContinuationRouteDecision | null,
 ): WakeFact {
   return {
     event: FAILURE_CONTINUATION_WAKE_EVENT,
@@ -75,10 +77,29 @@ export function failureContinuationWakeFact(
         actualExitCode: claim.actualExitCode,
         signal: claim.signal,
       },
-      nextAction: 'DIAGNOSE_FAILURE_AND_CREATE_A_DISTINCT_SUCCESSOR_IF_NEEDED',
+      route: route ? {
+        decisionId: route.decisionId,
+        decisionDigest: route.decisionDigest,
+        failureDomain: route.failureDomain,
+        failureNode: route.failureNode,
+        ownerReason: route.ownerReason,
+        fingerprintOccurrence: route.fingerprintOccurrence,
+        evidenceNovel: route.evidenceNovel,
+        unchangedEvidenceGenerations: route.unchangedEvidenceGenerations,
+        diagnosticPath: route.diagnosticPath,
+        canonicalReason: route.canonicalReason,
+        evidence: route.evidence,
+        evidenceSources: route.evidenceSources,
+        nextAction: route.nextAction,
+        deadlineAt: route.deadlineAt,
+        projectAttention: route.projectAttention,
+      } : null,
+      nextAction: route?.nextAction
+        ?? 'DIAGNOSE_FAILURE_AND_CREATE_A_DISTINCT_SUCCESSOR_IF_NEEDED',
       prohibitedActions: [
         'REWRITE_FAILED_TASK',
-        'RETRY_ORIGINAL_COMMAND_VERBATIM',
+        'RETRY_FAILED_TASK_IN_PLACE',
+        'RETRY_UNCHANGED_WITHOUT_ROUTE_ALLOWANCE',
         'CREATE_OWNER_DECISION_WITHOUT_OWNER_ONLY_REASON',
       ],
     },
