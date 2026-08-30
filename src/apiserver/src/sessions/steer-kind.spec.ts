@@ -1,89 +1,114 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
+import { SESSION_CURRENT_WORK_ROUTING_V1 } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
-
-/**
- * Which kind a sent message is filed as, decided by the server at enqueue.
- *
- * No client asks to steer. A message sent while the engine is mid-turn IS a steer, and one
- * sent to an idle session is an ordinary turn — so every entry point (web, native, MCP, CLI)
- * gets mid-turn delivery without any of them knowing the word. The decision is made under
- * the same Session row lock the inbox dequeues under, which is what keeps it from racing the
- * turn it is about.
- */
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 const RUNNER_ID = '33333333-3333-4333-8333-333333333333';
+const CLIENT_ID = '44444444-4444-4444-8444-444444444444';
+const TARGET_ID = '55555555-5555-4555-8555-555555555555';
 
-function makeService(
-  inFlight: number,
-  status: RunStatus = RunStatus.RUNNING,
-  provider: { provider: string; providerBuiltin: boolean; customRuntime?: string } = {
-    provider: 'claude',
-    providerBuiltin: true,
-  },
-  /** What the runner holding this session declared on its last heartbeat — `null` for a
-   *  session with no runner assigned at all. */
-  runnerCapabilities: string[] | null = [],
-  /** A row already filed under the clientTurnId being sent — what a retried send finds. */
-  existingTurn: Record<string, unknown> | null = null,
-) {
+process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED = '1';
+
+interface HarnessOptions {
+  status?: RunStatus;
+  numTurns?: number;
+  liveLeaseChecks?: boolean[];
+  expiredLease?: boolean;
+  provider?: string;
+  capabilities?: string[];
+  earlierExecutable?: boolean;
+  existingTurn?: Record<string, unknown> | null;
+  existingFragment?: Record<string, unknown> | null;
+  startingTurn?: Record<string, unknown> | null;
+  startupFragmentContents?: string[];
+  startupAttachmentCount?: number;
+  startupAttachmentBytes?: number;
+}
+
+function harness(options: HarnessOptions = {}) {
   const created: Record<string, unknown>[] = [];
-  const countFilters: Record<string, unknown>[] = [];
-  /** Sessions the other clients were told to re-read the queue for. */
+  const fragments: Record<string, unknown>[] = [];
   const queueChanges: string[] = [];
+  const liveLeaseChecks = [...(options.liveLeaseChecks ?? [true, true, true])];
+  let rawCall = 0;
   const session = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
-    provider: provider.provider,
-    providerBuiltin: provider.providerBuiltin,
-    assignedRunnerId: runnerCapabilities === null ? null : RUNNER_ID,
-    status,
+    provider: options.provider ?? 'claude',
+    providerBuiltin: true,
+    assignedRunnerId: RUNNER_ID,
+    status: options.status ?? RunStatus.RUNNING,
     cancelRequestedAt: null,
+    deletedAt: null,
     prompt: 'opening prompt',
-    numTurns: 1,
+    numTurns: options.numTurns ?? 1,
     mergeStatus: null,
     mergeOperationId: null,
     mergeOperationOwner: null,
+    mergeRequestedAt: null,
     commitStatus: null,
     commitOperationId: null,
     commitOperationOwner: null,
+    commitRequestedAt: null,
   };
   const tx = {
-    $queryRaw: async () => [{ id: SESSION_ID }],
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [{ id: SESSION_ID }];
+      return (liveLeaseChecks.shift() ?? false) ? [{ id: TARGET_ID }] : [];
+    },
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
       update: async () => ({ ...session }),
     },
+    conversationTurnStartupFragment: {
+      findUnique: async () => options.existingFragment ?? null,
+      findMany: async () => (options.startupFragmentContents ?? []).map((content) => ({ content })),
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        fragments.push(data);
+        return { id: 'fragment-new', ...data };
+      },
+    },
     conversationTurn: {
-      findUnique: async () => existingTurn,
+      findUnique: async ({ where }: { where: { sessionId_clientTurnId?: { clientTurnId: string } } }) => {
+        const key = where.sessionId_clientTurnId?.clientTurnId;
+        if (key === CLIENT_ID) return options.existingTurn ?? null;
+        if (key === SessionsService.initialTurnClientId(SESSION_ID)) {
+          return options.startingTurn ?? null;
+        }
+        return null;
+      },
       findFirst: async () => ({ seq: 1 }),
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
         return { id: 'turn-new', seq: 2, ...data };
       },
-      count: async ({ where }: { where: Record<string, unknown> }) => {
-        countFilters.push(where);
-        return inFlight;
-      },
+      count: async ({ where }: { where: { kind?: unknown } }) =>
+        typeof where.kind === 'string'
+          ? (options.expiredLease ? 1 : 0)
+          : (options.earlierExecutable === false ? 0 : 1),
     },
-    attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
-    // Only consulted for a configured (BYOK) provider, which borrows a built-in runtime.
-    modelProvider: {
-      findFirst: async () =>
-        provider.customRuntime ? { runtime: provider.customRuntime, enabled: true } : null,
+    attachment: {
+      findMany: async () => [],
+      aggregate: async () => ({
+        _count: { _all: options.startupAttachmentCount ?? 0 },
+        _sum: { sizeBytes: options.startupAttachmentBytes ?? null },
+      }),
+      updateMany: async () => ({ count: 0 }),
     },
-    // What the machine that will execute this turn last said it can do.
+    modelProvider: { findFirst: async () => null },
     runner: {
-      findUnique: async () =>
-        runnerCapabilities === null ? null : { capabilities: runnerCapabilities },
+      findUnique: async () => ({
+        capabilities: options.capabilities ?? [SESSION_CURRENT_WORK_ROUTING_V1],
+      }),
     },
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }), findUnique: async () => ({ ...session }) },
-    $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
+    $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(
     prisma,
@@ -93,273 +118,207 @@ function makeService(
       publishQueuedTurnsChanged: (id: string) => queueChanges.push(id),
     } as never,
   );
-  return { service, created, countFilters, queueChanges };
+  return { service, created, fragments, queueChanges };
 }
 
-const send = (h: ReturnType<typeof makeService>, kind?: 'shell') =>
-  h.service.createTurn(OWNER_ID, SESSION_ID, {
-    clientTurnId: '44444444-4444-4444-8444-444444444444',
-    content: 'actually, call it gadget',
-    ...(kind ? { kind } : {}),
-  });
+const send = (
+  h: ReturnType<typeof harness>,
+  intent?: 'CURRENT_WORK' | 'NEXT_TURN',
+  clientTurnId = CLIENT_ID,
+  participateCurrentWorkTransaction?: (tx: Prisma.TransactionClient) => Promise<void>,
+) => h.service.createTurn(OWNER_ID, SESSION_ID, {
+  clientTurnId,
+  content: 'actually, call it gadget',
+  ...(intent ? { intent } : {}),
+}, { participateCurrentWorkTransaction });
 
-test('a message sent while the engine is mid-turn is filed as a steer', async () => {
-  const h = makeService(1);
-
-  await send(h);
-
-  assert.equal(h.created.length, 1);
-  assert.equal(h.created[0].kind, 'steer');
-  assert.equal(h.created[0].content, 'actually, call it gadget');
-  // Same row as any other turn: its own seq, and the caller's idempotency key. The kind is
-  // the only thing that was ever about timing.
-  assert.equal(h.created[0].clientTurnId, '44444444-4444-4444-8444-444444444444');
-  assert.equal(h.created[0].status, 'PENDING');
+test('legacy omission retains N-1 auto-routing and its nullable protocol row', async () => {
+  const h = harness();
+  const result = await send(h);
+  assert.equal(result.kind, 'steer');
+  assert.equal(result.placement, 'steer');
+  assert.equal(h.created[0].sendIntent, undefined);
+  assert.equal(h.created[0].targetTurnId, undefined);
 });
 
-test('the running turn is looked for by a live lease, and only among engine turns', async () => {
-  const h = makeService(1);
+test('gate-off rejects explicit routing without writes while legacy omission remains compatible', async () => {
+  const previous = process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED;
+  delete process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED;
+  try {
+    const legacy = harness();
+    const accepted = await send(legacy);
+    assert.equal(accepted.kind, 'steer', 'gate-off new API matches an N-1 API replica');
+    assert.equal(legacy.created[0].sendIntent, undefined);
+    assert.equal(legacy.created.length, 1);
 
-  await send(h);
-
-  const probe = h.countFilters.at(-1) as { kind: unknown; status: unknown; leaseDeadlineAt: unknown };
-  // Messages only: a `!cmd` shell turn holds the same slot with the engine idle beside it.
-  assert.equal(probe.kind, 'message');
-  assert.equal(probe.status, 'IN_FLIGHT');
-  // An expired lease belongs to an engine that stopped answering — nothing to steer.
-  assert.ok((probe.leaseDeadlineAt as { gt?: Date })?.gt instanceof Date);
-});
-
-test('a message sent to an idle session is an ordinary turn, and queues as one', async () => {
-  const h = makeService(0, RunStatus.AWAITING_INPUT);
-
-  await send(h);
-
-  assert.equal(h.created[0].kind, 'message');
-});
-
-test('a client cannot claim the kind: asking to steer an idle session files a message', async () => {
-  const h = makeService(0, RunStatus.AWAITING_INPUT);
-
-  // `kind` is a whitelist of what a caller may REQUEST — a message or a `!cmd`. If a caller could
-  // claim `steer`, it could have a message filed into a turn that is not running: the runner would
-  // refuse to write it (nothing to steer) and the message would fail for no reason the sender
-  // could see, while the dequeue gate for a steer is not the one the message needed.
-  await h.service.createTurn(OWNER_ID, SESSION_ID, {
-    clientTurnId: '55555555-5555-4555-8555-555555555555',
-    content: 'pretend this is mid-turn',
-    kind: 'steer' as never,
-  });
-
-  assert.equal(h.created[0].kind, 'message');
-});
-
-test('a `!cmd` shell turn never becomes a steer, however busy the engine is', async () => {
-  const h = makeService(1);
-
-  await send(h, 'shell');
-
-  assert.equal(h.created[0].kind, 'shell');
-});
-
-// The decision is the server's, but the sender has to be told what it decided: a steer joins the
-// running turn while a message waits for its own, and a client that cannot tell them apart shows
-// the same "Queued, Cancel" for both — offering to withdraw a message already on its way, and
-// then dropping it from the queue it was never in.
-test('the response says which kind the message was filed as', async () => {
-  const steered = await send(makeService(1));
-  assert.equal(steered.kind, 'steer');
-  assert.equal(steered.placement, 'steer');
-
-  const accepted = await send(makeService(0, RunStatus.AWAITING_INPUT));
-  assert.equal(accepted.kind, 'message');
-  assert.equal(accepted.placement, 'accepted');
-});
-
-test('the response still carries the turn id and seq it always did', async () => {
-  const accepted = await send(makeService(1));
-
-  assert.equal(accepted.turnId, 'turn-new');
-  assert.equal(accepted.seq, 2);
-});
-
-/**
- * Which engines a steer may be filed for, and on whose word.
- *
- * Filing one for an engine that cannot take a mid-turn message delivered a turn nobody
- * consumes: leased (so gone from the queued list) and never re-leased (so never coming back) —
- * the message would simply disappear. Filing one for an engine that CAN, on a runner too old to
- * do it, is not silent but is still a regression: that runner refuses every steer handed to it,
- * so a message that quietly queued yesterday fails in front of the user today. Both questions
- * are asked here, before the row is written, and either one unanswered keeps the session on the
- * behaviour it already had: an ordinary queued message.
- */
-const CODEX = { provider: 'codex', providerBuiltin: true };
-const KIMI = { provider: 'kimi', providerBuiltin: true };
-const OPENCODE = { provider: 'opencode', providerBuiltin: true };
-/** What a runner that implements codex `turn/steer` declares on its heartbeat. */
-const DECLARES_CODEX_STEER = ['session-codex-steer-v1'];
-
-test('an engine with nothing to fold a message into queues it, however capable the runner is', async () => {
-  // Codex and kimi are both driven over JSON-RPC and only codex has a call for this, so a
-  // runner's declaration cannot be read as a claim about kimi — or about a one-shot engine
-  // that exits with the turn.
-  for (const provider of [KIMI, OPENCODE]) {
-    const h = makeService(1, RunStatus.RUNNING, provider, DECLARES_CODEX_STEER);
-
-    await send(h);
-
-    assert.equal(h.created[0].kind, 'message', `${provider.provider} must not be handed a steer`);
+    for (const intent of ['CURRENT_WORK', 'NEXT_TURN'] as const) {
+      const explicit = harness();
+      await assert.rejects(
+        send(explicit, intent),
+        (error: unknown) =>
+          (error as { response?: { code?: string } }).response?.code
+            === 'SESSION_TURN_PROTOCOL_DISABLED',
+      );
+      assert.equal(explicit.created.length, 0);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED;
+    else process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED = previous;
   }
 });
 
-test('codex steers only once the runner holding the session says it can deliver one', async () => {
-  const declared = makeService(1, RunStatus.RUNNING, CODEX, DECLARES_CODEX_STEER);
-  await send(declared);
-  assert.equal(declared.created[0].kind, 'steer');
-
-  // The same session on a runner that predates `turn/steer`: it knows the kind (every runner
-  // in the field does) and answers it by refusing, so the message queues instead — a turn
-  // later, which is exactly what it does today.
-  const older = makeService(1, RunStatus.RUNNING, CODEX, ['session-worktree-ops-v1']);
-  await send(older);
-  assert.equal(older.created[0].kind, 'message');
+test('explicit NEXT_TURN is accepted when it is the first executable', async () => {
+  const h = harness({ status: RunStatus.AWAITING_INPUT, earlierExecutable: false });
+  const result = await send(h, 'NEXT_TURN');
+  assert.equal(result.placement, 'accepted');
+  assert.equal(h.created[0].kind, 'message');
 });
 
-test('a filed steer is announced to the other clients, which is how one appears on a second device', async () => {
-  // A turn has no transcript event until the runner leases it, so until then the only thing a
-  // second browser/phone can learn a steer from is the durable queue — and the only thing that
-  // tells it to go and re-read that list is this nudge. Without it the message is visible on the
-  // device that sent it and nowhere else, and a codex steer can sit PENDING for a whole poll.
-  const h = makeService(1, RunStatus.RUNNING, CODEX, DECLARES_CODEX_STEER);
-
-  const res = await send(h);
-
-  assert.equal(res.kind, 'steer');
-  assert.deepEqual(h.queueChanges, [SESSION_ID]);
+test('CURRENT_WORK with a live lease creates an exact-target steer', async () => {
+  const h = harness();
+  let charged = 0;
+  const result = await send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; });
+  assert.equal(result.kind, 'steer');
+  assert.equal(result.placement, 'steer');
+  assert.equal(result.targetTurnId, TARGET_ID);
+  assert.equal(h.created[0].sendIntent, 'CURRENT_WORK');
+  assert.equal(h.created[0].targetTurnId, TARGET_ID);
+  assert.equal(charged, 1);
 });
 
-test('a runner that has declared nothing is never read as declaring this', async () => {
-  // A machine that has not heartbeated since the column existed, and a session with no runner
-  // assigned at all. Unknown withholds the steer; it never invents one.
-  for (const capabilities of [[], null]) {
-    const h = makeService(1, RunStatus.RUNNING, CODEX, capabilities);
-
-    await send(h);
-
-    assert.equal(h.created[0].kind, 'message');
-  }
-});
-
-test('claude steers on any runner, without waiting for a declaration', async () => {
-  // Claude's mid-turn delivery shipped with the kind itself. Gating it on a new word would
-  // withdraw a working feature from the whole installed fleet the day this deployed.
-  const h = makeService(1, RunStatus.RUNNING, { provider: 'claude', providerBuiltin: true }, []);
-
-  await send(h);
-
-  assert.equal(h.created[0].kind, 'steer');
-});
-
-test('a configured provider is judged by the runtime it borrows, not by its slug', async () => {
-  // A BYOK identity on the claude runtime steers exactly like claude — the stdin is the same one.
-  const onClaude = makeService(1, RunStatus.RUNNING, {
-    provider: 'deepseek',
-    providerBuiltin: false,
-    customRuntime: 'claude',
-  });
-  await send(onClaude);
-  assert.equal(onClaude.created[0].kind, 'steer');
-
-  // …and one on the codex runtime is gated like codex, however claude-like its slug looks.
-  const onCodex = makeService(1, RunStatus.RUNNING, {
-    provider: 'some-openai-endpoint',
-    providerBuiltin: false,
-    customRuntime: 'codex',
-  });
-  await send(onCodex);
-  assert.equal(onCodex.created[0].kind, 'message');
-
-  const onCodexDeclared = makeService(
-    1,
-    RunStatus.RUNNING,
-    { provider: 'some-openai-endpoint', providerBuiltin: false, customRuntime: 'codex' },
-    DECLARES_CODEX_STEER,
-  );
-  await send(onCodexDeclared);
-  assert.equal(onCodexDeclared.created[0].kind, 'steer');
-});
-
-test('the answer tells a non-steering session what it got, so no client shows the wrong thing', async () => {
-  const accepted = await send(makeService(1, RunStatus.RUNNING, CODEX));
-
-  // 'message' is what a client renders as "Queued" with a withdraw — which is exactly what this
-  // is. A blank kind would leave every door guessing from a status it may not have caught up on.
-  assert.equal(accepted.kind, 'message');
-  assert.equal(accepted.placement, 'queued');
-});
-
-test('a steer still needs a live engine turn, not merely a runner that could deliver one', async () => {
-  // The capability says the message CAN be written into a running turn — not that there is one.
-  // An idle session, or an in-flight row whose lease has expired (an engine that stopped
-  // answering), leaves nothing to fold it into.
-  const idle = makeService(0, RunStatus.AWAITING_INPUT, CODEX, DECLARES_CODEX_STEER);
-  await send(idle);
-  assert.equal(idle.created[0].kind, 'message');
-
-  const running = makeService(1, RunStatus.RUNNING, CODEX, DECLARES_CODEX_STEER);
-  await send(running);
-  const probe = running.countFilters.at(-1) as { kind: unknown; status: unknown; leaseDeadlineAt: unknown };
-  assert.equal(probe.kind, 'message');
-  assert.equal(probe.status, 'IN_FLIGHT');
-  assert.ok((probe.leaseDeadlineAt as { gt?: Date })?.gt instanceof Date);
-});
-
-/**
- * A retried send never becomes a second message.
- *
- * This is the only de-duplication in the whole path, and everything downstream leans on it:
- * Codex does not de-duplicate on the id Orbit sends it (docs/codex-turn-steer-contract.md §0.1),
- * so a second row here is a second `turn/steer` and a second copy of the person's message in the
- * conversation — which the model reads as being asked twice. A network retry, a double-tap on
- * Send, an MCP client replaying a request: all of them arrive as the same clientTurnId.
- */
-test('sending the same clientTurnId twice mid-turn files one steer, not two', async () => {
-  const already = {
-    id: 'turn-existing',
-    seq: 2,
-    kind: 'steer',
-    clientTurnId: '44444444-4444-4444-8444-444444444444',
-    status: 'IN_FLIGHT',
-  };
-  const h = makeService(1, RunStatus.RUNNING, { provider: 'claude', providerBuiltin: true }, [], already);
-
-  const out = await send(h);
-
-  assert.equal(h.created.length, 0, 'a retry created a second row for one message');
-  assert.equal(out.turnId, 'turn-existing');
-  // Answered as the steer it already is, so the client goes on showing the delivery it was
-  // already watching rather than starting a second bubble beside it.
-  assert.equal(out.kind, 'steer');
-  assert.equal(out.placement, 'steer');
-});
-
-test('a retry does not re-decide the kind, even if the turn ended in between', async () => {
-  // The engine is idle now, so a fresh message here would be filed as an ordinary turn. The
-  // existing row is what this message IS, though — re-deciding would tell the client its
-  // in-flight steer had become a queued message and leave two things watching one row.
-  const already = {
-    id: 'turn-existing',
-    seq: 2,
-    kind: 'steer',
-    clientTurnId: '44444444-4444-4444-8444-444444444444',
-    status: 'IN_FLIGHT',
-  };
-  const h = makeService(0, RunStatus.RUNNING, { provider: 'claude', providerBuiltin: true }, [], already);
-
-  const out = await send(h);
-
+test('CURRENT_WORK rejects when there is no live target and never becomes a message', async () => {
+  const h = harness({ liveLeaseChecks: [false] });
+  await assert.rejects(send(h, 'CURRENT_WORK'), (error: unknown) =>
+    (error as { response?: { reason?: string } }).response?.reason === 'NO_CURRENT_WORK');
   assert.equal(h.created.length, 0);
-  assert.equal(out.kind, 'steer');
-  assert.equal(out.placement, 'steer');
+});
+
+test('CURRENT_WORK reports an expired lease instead of silently queueing', async () => {
+  const h = harness({ liveLeaseChecks: [false], expiredLease: true });
+  await assert.rejects(send(h, 'CURRENT_WORK'), (error: unknown) =>
+    (error as { response?: { reason?: string } }).response?.reason === 'TARGET_LEASE_EXPIRED');
+  assert.equal(h.created.length, 0);
+});
+
+test('unsupported runtime rejects CURRENT_WORK and does not charge or queue', async () => {
+  const h = harness({ provider: 'opencode' });
+  let charged = 0;
+  await assert.rejects(
+    send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; }),
+    (error: unknown) =>
+      (error as { response?: { reason?: string } }).response?.reason === 'STEER_UNSUPPORTED',
+  );
+  assert.equal(charged, 0);
+  assert.equal(h.created.length, 0);
+});
+
+test('lease is atomically rechecked after capability resolution', async () => {
+  const h = harness({ liveLeaseChecks: [true, false] });
+  let charged = 0;
+  await assert.rejects(
+    send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; }),
+    (error: unknown) =>
+      (error as { response?: { reason?: string } }).response?.reason === 'TARGET_LEASE_EXPIRED',
+  );
+  assert.equal(charged, 0);
+  assert.equal(h.created.length, 0);
+});
+
+test('a lease expiring during the atomic charge rolls back before the receipt insert', async () => {
+  const h = harness({ liveLeaseChecks: [true, true, false] });
+  let chargeAttempted = 0;
+  await assert.rejects(
+    send(h, 'CURRENT_WORK', CLIENT_ID, async () => { chargeAttempted += 1; }),
+    (error: unknown) =>
+      (error as { response?: { reason?: string } }).response?.reason === 'TARGET_LEASE_EXPIRED',
+  );
+  assert.equal(chargeAttempted, 1, 'the final assertion is after the transactional charge');
+  assert.equal(h.created.length, 0, 'no durable CURRENT_WORK receipt was inserted');
+});
+
+test('startup CURRENT_WORK binds an append-only fragment to the seeded executable', async () => {
+  const h = harness({
+    status: RunStatus.PENDING,
+    numTurns: 0,
+    startingTurn: {
+      id: TARGET_ID,
+      seq: 1,
+      kind: 'message',
+      status: 'PENDING',
+      deliveredAt: null,
+      content: 'opening prompt',
+    },
+  });
+  const result = await send(h, 'CURRENT_WORK');
+  assert.equal(result.kind, 'startup_context');
+  assert.equal(result.placement, 'startup');
+  assert.equal(result.targetTurnId, TARGET_ID);
+  assert.equal(h.fragments.length, 1);
+  assert.equal(h.fragments[0].targetTurnId, TARGET_ID);
+  assert.equal(h.created.length, 0, 'startup context created a second executable turn');
+});
+
+test('startup envelope aggregate limits are enforced under the Session lock', async () => {
+  const startingTurn = {
+    id: TARGET_ID,
+    seq: 1,
+    kind: 'message',
+    status: 'PENDING',
+    deliveredAt: null,
+    content: 'opening prompt',
+  };
+  const fragments = harness({
+    status: RunStatus.PENDING,
+    numTurns: 0,
+    startingTurn,
+    startupFragmentContents: Array.from({ length: 32 }, (_, i) => `context ${i}`),
+  });
+  await assert.rejects(send(fragments, 'CURRENT_WORK'), (error: unknown) =>
+    (error as { response?: { reason?: string } }).response?.reason === 'STARTUP_ENVELOPE_LIMIT');
+  assert.equal(fragments.fragments.length, 0);
+
+  const attachments = harness({
+    status: RunStatus.PENDING,
+    numTurns: 0,
+    startingTurn,
+    startupAttachmentCount: 21,
+  });
+  await assert.rejects(send(attachments, 'CURRENT_WORK'), (error: unknown) =>
+    (error as { response?: { reason?: string } }).response?.reason === 'STARTUP_ENVELOPE_LIMIT');
+  assert.equal(attachments.fragments.length, 0);
+});
+
+test('clientTurnId intent matching is bidirectional while legacy null remains NEXT compatible', async () => {
+  const current = harness({ existingTurn: {
+    id: 'existing', seq: 2, kind: 'steer', status: 'PENDING', sendIntent: 'CURRENT_WORK',
+    targetTurnId: TARGET_ID, content: 'actually, call it gadget', attachments: [],
+  } });
+  await assert.rejects(send(current, 'NEXT_TURN'), /already used with CURRENT_WORK/);
+
+  const next = harness({ existingTurn: {
+    id: 'existing', seq: 2, kind: 'message', status: 'PENDING', sendIntent: 'NEXT_TURN',
+    content: 'actually, call it gadget', attachments: [],
+  } });
+  await assert.rejects(send(next, 'CURRENT_WORK'), /already used with NEXT_TURN/);
+
+  const legacy = harness({ existingTurn: {
+    id: 'existing', seq: 2, kind: 'message', status: 'PENDING', sendIntent: null,
+    content: 'actually, call it gadget', attachments: [],
+  } });
+  const result = await send(legacy, 'NEXT_TURN');
+  assert.equal(result.turnId, 'existing');
+  assert.equal(legacy.created.length, 0);
+});
+
+test('idempotent CURRENT_WORK retry returns its original steer without charging again', async () => {
+  const h = harness({ existingTurn: {
+    id: 'existing', seq: 2, kind: 'steer', status: 'PENDING', sendIntent: 'CURRENT_WORK',
+    targetTurnId: TARGET_ID, content: 'actually, call it gadget', attachments: [],
+  } });
+  let charged = 0;
+  const result = await send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; });
+  assert.equal(result.turnId, 'existing');
+  assert.equal(result.placement, 'steer');
+  assert.equal(charged, 0);
+  assert.equal(h.created.length, 0);
 });

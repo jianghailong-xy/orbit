@@ -181,6 +181,17 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto);
   }
 
+  /** Versioned mutation door for Web. An N-1 API returns 404 before touching a turn, so a new
+   * explicit NEXT_TURN can never be silently interpreted by an old server as auto-steer. */
+  @Post(':id/turns/current-work-routing')
+  routedTurn(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
+  ) {
+    return this.sessions.createTurn(user.userId, id, dto);
+  }
+
   // Default stays the installed native client's queue-only contract. Web opts into `active` to
   // bridge the dequeue → first-event window and receive authoritative placement metadata.
   @Get(':id/turns')

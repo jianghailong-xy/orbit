@@ -31,8 +31,20 @@ function makeController(refuse?: { guard: 'end' | 'steer'; code: string }) {
   const guardCalls: GuardCall[] = [];
   const serviceCalls: string[] = [];
   const sessions = new Proxy({}, {
-    get: (_t, prop: string) => async () => {
+    get: (_t, prop: string) => async (...args: unknown[]) => {
       serviceCalls.push(prop);
+      if (prop === 'createTurn') {
+        const callback = (args[3] as {
+          participateCurrentWorkTransaction?: (tx: unknown) => Promise<void>;
+        } | undefined)?.participateCurrentWorkTransaction;
+        await callback?.({});
+      }
+      if (prop === 'interrupt') {
+        const callback = (args[3] as {
+          participateFollowUpTransaction?: (tx: unknown) => Promise<void>;
+        } | undefined)?.participateFollowUpTransaction;
+        await callback?.({});
+      }
       return { route: prop };
     },
   });
@@ -102,7 +114,7 @@ test('a refused end or delete never reaches the session service (AU2)', async ()
   }
 });
 
-test('a send is charged as a steer, and a refusal stops it before the turn is filed (AU3)', async () => {
+test('a send is charged inside placement, and a refusal prevents the receipt commit (AU3)', async () => {
   const d = makeController();
   await d.controller.sendMessage(
     RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET, { message: 'keep going' });
@@ -117,7 +129,11 @@ test('a send is charged as a steer, and a refusal stops it before the turn is fi
       RUNNER, undefined, COORDINATOR, CREDENTIAL, TARGET, { message: 'keep going' }),
     (error: Error) => error.message.includes('ATTEMPT_STEER_BUDGET_EXHAUSTED'),
   );
-  assert.deepEqual(refused.serviceCalls, []);
+  assert.deepEqual(
+    refused.serviceCalls,
+    ['createTurn'],
+    'placement owns the atomic charge callback; a refusal rolls its transaction back',
+  );
 });
 
 test('an interrupt CARRYING a message is a steer; a bodyless one is not', async () => {

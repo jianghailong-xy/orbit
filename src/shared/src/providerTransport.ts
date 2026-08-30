@@ -34,6 +34,22 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
  */
 export const SESSION_CODEX_STEER_V1 = 'session-codex-steer-v1';
 
+/**
+ * The runner protocol that makes CURRENT_WORK receipts decidable: startup-envelope delivery,
+ * target-aware steer delivery, and a durable USER flush before every turn-complete/finalize.
+ * API admission and inbox dequeue both require it, so a stale heartbeat cannot authorize an old
+ * poller and a mixed runner fleet fails explicitly instead of losing accepted authored input.
+ */
+export const SESSION_CURRENT_WORK_ROUTING_V1 = 'session-current-work-routing-v1';
+
+export function supportsSessionCurrentWorkRouting(
+  declaredCapabilities?: readonly string[],
+): boolean {
+  return (declaredCapabilities ?? []).some(
+    (value) => value.trim().toLowerCase() === SESSION_CURRENT_WORK_ROUTING_V1,
+  );
+}
+
 /** No declaration needed: this runtime's mid-turn delivery shipped with the `steer` kind
  *  itself, so asking for one would withdraw it from the entire installed fleet. */
 const ALWAYS = null;
@@ -79,4 +95,20 @@ export function supportsMidTurnSteer(runtime: string, declaredCapabilities?: rea
   if (required === ALWAYS) return true;
   if (required === NEVER || required === undefined) return false;
   return (declaredCapabilities ?? []).some((value) => value.trim().toLowerCase() === required);
+}
+
+/**
+ * Whether an explicit CURRENT_WORK message can be fenced to one exact executable turn.
+ *
+ * Codex app-server addresses an exact engine turn id. Claude has no provider-side address, so its
+ * routing-v1 runner binds the frame to the active Orbit turn and tears down that provider
+ * generation if the target result wins before replay acknowledgement. Runtimes with neither
+ * mechanism are rejected. This remains deliberately narrower than legacy steering support.
+ */
+export function supportsTargetBoundCurrentWorkSteer(
+  runtime: string,
+  declaredCapabilities?: readonly string[],
+): boolean {
+  return supportsSessionCurrentWorkRouting(declaredCapabilities)
+    && supportsMidTurnSteer(runtime, declaredCapabilities);
 }

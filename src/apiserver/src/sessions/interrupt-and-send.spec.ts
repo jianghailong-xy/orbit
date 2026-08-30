@@ -23,7 +23,7 @@ function makeService(opts?: {
   executableAfterDelete?: number;
   status?: RunStatus;
   /** clientTurnIds already on the session — how a retry is recognised. */
-  existing?: Record<string, { id: string; seq: number }>;
+  existing?: Record<string, { id: string; seq: number; content?: string }>;
   /** Attachment ids the owner actually has; anything else is rejected. */
   attachments?: string[];
   trashed?: boolean;
@@ -51,21 +51,42 @@ function makeService(opts?: {
       },
     },
     conversationTurn: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
       deleteMany: async () => {
         ops.push({ op: 'deleteMany' });
         return { count: 2 };
       },
       count: async () => opts?.executableAfterDelete ?? 1,
-      findUnique: async ({ where }: { where: { sessionId_clientTurnId: { clientTurnId: string } } }) =>
-        existing[where.sessionId_clientTurnId.clientTurnId] ?? null,
+      findUnique: async ({ where }: { where: { sessionId_clientTurnId: { clientTurnId: string } } }) => {
+        const clientTurnId = where.sessionId_clientTurnId.clientTurnId;
+        const row = existing[clientTurnId];
+        if (!row) return null;
+        return clientTurnId.startsWith('interrupt-') && row.content === undefined
+          ? {
+              ...row,
+              content: JSON.stringify({
+                content: 'stop — just rename the one file',
+                attachmentIds: [],
+              }),
+            }
+          : row;
+      },
       findFirst: async () => ({ seq }),
       create: async ({ data }: { data: Record<string, unknown> }) => {
         seq += 1;
         ops.push({ op: 'create', kind: data.kind, clientTurnId: data.clientTurnId });
         created.push(data);
-        return { id: `turn-${created.length}`, ...data, seq };
+        const row = { id: `turn-${created.length}`, ...data, seq };
+        existing[data.clientTurnId as string] = {
+          id: row.id as string,
+          seq,
+          ...(typeof data.content === 'string' ? { content: data.content } : {}),
+        };
+        return row;
       },
     },
+    conversationTurnStartupFragment: { findMany: async () => [] },
     attachment: {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.filter((id) => (opts?.attachments ?? []).includes(id)).map((id) => ({ id })),
@@ -136,6 +157,84 @@ test('a retried request re-files neither the interrupt nor the message', async (
 
   assert.deepEqual(result, { ok: true, turnId: 'turn-msg', seq: 5 });
   assert.deepEqual(h.ops, [], 'a retry re-ran the operation');
+});
+
+test('interrupt follow-up charge and receipt are atomic and retry spends once', async () => {
+  const h = makeService();
+  let charges = 0;
+  const request = () => h.service.interrupt(
+    OWNER_ID,
+    SESSION_ID,
+    { clientTurnId: CLIENT_TURN_ID, content: 'stop — just rename the one file' },
+    { participateFollowUpTransaction: async () => { charges++; } },
+  );
+
+  await request();
+  await request(); // committed response could have been lost; same logical operation retries
+
+  assert.equal(charges, 1);
+  assert.equal(h.created.filter((turn) => turn.kind === 'interrupt').length, 1);
+  assert.equal(h.created.filter((turn) => turn.kind === 'message').length, 1);
+});
+
+for (const boundary of [
+  { name: 'terminal', opts: { status: RunStatus.FAILED } },
+  { name: 'Trash', opts: { trashed: true } },
+] as const) {
+  test(`interrupt-and-send replays its committed receipt after the session became ${boundary.name}`, async () => {
+    const h = makeService({
+      ...boundary.opts,
+      existing: {
+        [`interrupt-${CLIENT_TURN_ID}`]: { id: 'turn-int', seq: 4 },
+        [CLIENT_TURN_ID]: { id: 'turn-msg', seq: 5 },
+      },
+    });
+    let charges = 0;
+    const result = await h.service.interrupt(
+      OWNER_ID,
+      SESSION_ID,
+      { clientTurnId: CLIENT_TURN_ID, content: 'stop — just rename the one file' },
+      { participateFollowUpTransaction: async () => { charges++; } },
+    );
+
+    assert.deepEqual(result, { ok: true, turnId: 'turn-msg', seq: 5 });
+    assert.equal(charges, 0);
+    assert.deepEqual(h.ops, [], 'receipt replay performed lifecycle writes');
+    assert.equal(h.queueWakes(), 0);
+
+    await assert.rejects(
+      h.service.interrupt(OWNER_ID, SESSION_ID, {
+        clientTurnId: CLIENT_TURN_ID,
+        content: 'different payload',
+      }),
+      /different interrupt follow-up payload/,
+      'payload conflict must win over the later lifecycle refusal',
+    );
+  });
+}
+
+test('interrupt idempotency rejects a changed payload before charging or deleting', async () => {
+  const h = makeService({
+    existing: {
+      [`interrupt-${CLIENT_TURN_ID}`]: {
+        id: 'turn-int',
+        seq: 4,
+        content: JSON.stringify({ content: 'original', attachmentIds: [] }),
+      },
+    },
+  });
+  let charges = 0;
+  await assert.rejects(
+    h.service.interrupt(
+      OWNER_ID,
+      SESSION_ID,
+      { clientTurnId: CLIENT_TURN_ID, content: 'changed' },
+      { participateFollowUpTransaction: async () => { charges++; } },
+    ),
+    /different interrupt follow-up payload/,
+  );
+  assert.equal(charges, 0);
+  assert.deepEqual(h.ops, []);
 });
 
 test('a retry is recognised by the interrupt, which no later interrupt can delete', async () => {

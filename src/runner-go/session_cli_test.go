@@ -314,22 +314,16 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 	}
 }
 
-// What the server did with a mid-turn message is the server's answer, decided under the Session
-// row lock — `steer` (being written into the turn already running: no reply of its own, and not
-// withdrawable) or `message` (queued behind it). Both headless doors hand that answer back
-// untouched, exactly as the web console and the native clients read it off POST /turns; a door
-// that dropped `kind`, or invented one from what it believed the session was doing, would leave
-// its caller waiting for a reply that the running turn is going to give to something else.
-func TestSessionSendHandsBackTheServersKindUntouched(t *testing.T) {
+// session_send is CURRENT_WORK-only. The server decides atomically whether success bound to the
+// starting envelope or the exact live turn; a later queued message is not a successful outcome.
+// Both headless doors hand that authoritative receipt back untouched.
+func TestSessionSendCurrentWorkHandsBackTheServerPlacementUntouched(t *testing.T) {
 	for _, answer := range []struct {
 		name string
 		body string
 	}{
-		{"steer", `{"ok":true,"turnId":"turn-1","seq":7,"kind":"steer"}`},
-		{"queued message", `{"ok":true,"turnId":"turn-1","seq":7,"kind":"message"}`},
-		// An apiserver from before steer existed says nothing about the kind. Neither door may
-		// fill that in: absent means the pre-steer behaviour, and it is the caller's to read.
-		{"a server that predates the kind", `{"ok":true,"turnId":"turn-1","seq":7}`},
+		{"live steer", `{"ok":true,"turnId":"turn-1","targetTurnId":"target-1","seq":7,"kind":"steer","placement":"steer"}`},
+		{"starting envelope", `{"ok":true,"turnId":"fragment-1","targetTurnId":"target-1","seq":1,"kind":"startup_context","placement":"startup"}`},
 	} {
 		t.Run(answer.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider } from './enums';
-import { PROVIDER_TRANSPORTS, SESSION_CODEX_STEER_V1, supportsMidTurnSteer } from './providerTransport';
+import {
+  PROVIDER_TRANSPORTS,
+  SESSION_CODEX_STEER_V1,
+  SESSION_CURRENT_WORK_ROUTING_V1,
+  supportsMidTurnSteer,
+  supportsTargetBoundCurrentWorkSteer,
+} from './providerTransport';
 
 /**
  * Which runtimes a message may be written INTO the running turn for, and on whose word.
@@ -54,5 +60,29 @@ describe('supportsMidTurnSteer', () => {
     // Runner.capabilities is stored lowercased and trimmed (parseRunnerCapabilities); matching
     // the same way keeps a header read and a stored read from disagreeing about one runner.
     expect(supportsMidTurnSteer(AgentProvider.CODEX, [` ${SESSION_CODEX_STEER_V1.toUpperCase()} `])).toBe(true);
+  });
+});
+
+describe('supportsTargetBoundCurrentWorkSteer', () => {
+  const ROUTING = [SESSION_CURRENT_WORK_ROUTING_V1];
+
+  it('requires routing-v1 for Claude while leaving its legacy steer capability unchanged', () => {
+    expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.CLAUDE, [])).toBe(false);
+    expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.CLAUDE, ROUTING)).toBe(true);
+    expect(supportsMidTurnSteer(AgentProvider.CLAUDE, [])).toBe(true);
+  });
+
+  it('requires both routing-v1 and native turn/steer for Codex', () => {
+    expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.CODEX, ROUTING)).toBe(false);
+    expect(supportsTargetBoundCurrentWorkSteer(
+      AgentProvider.CODEX,
+      [...ROUTING, SESSION_CODEX_STEER_V1],
+    )).toBe(true);
+  });
+
+  it('rejects runtimes without a target fence', () => {
+    const all = [...ROUTING, SESSION_CODEX_STEER_V1];
+    expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.KIMI, all)).toBe(false);
+    expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.OPENCODE, all)).toBe(false);
   });
 });

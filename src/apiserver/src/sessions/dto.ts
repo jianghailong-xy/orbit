@@ -1,4 +1,5 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import type { SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
@@ -44,6 +45,8 @@ export interface SessionTurnDto {
   /** Client-supplied idempotency key (UUID); dedups double-clicks / cross-tab sends. */
   clientTurnId: string;
   content: string;
+  /** Omitted by installed clients: preserve the N-1 server-side auto-steer/queue decision. */
+  intent?: SessionTurnIntent;
   /** 'shell' runs `content` as a raw shell command on the runner (bypassing claude) and
    *  echoes the output to the transcript; defaults to 'message' (a normal user prompt). */
   kind?: 'message' | 'shell';

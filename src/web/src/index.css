@@ -5527,6 +5527,21 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-box:focus-within {
   border-color: var(--brand);
 }
+.composer-send-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: stretch;
+}
+.composer-send-actions .composer-send-current {
+  border-radius: 6px 0 0 6px;
+}
+.composer-send-actions .composer-send-next-menu {
+  width: 22px;
+  min-width: 22px;
+  padding-inline: 0;
+  border-left-color: color-mix(in srgb, white 35%, transparent);
+  border-radius: 0 6px 6px 0;
+}
 /* `!cmd` shell mode: the whole box reads as a command line, not a message box. Unlike the
    focus ring above this holds whether or not the composer is focused — the mode is a property
    of the draft, so clicking away and back must not make it look like an ordinary message
@@ -6646,6 +6661,12 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .chat-queued-tag {
   color: var(--text-3);
+}
+
+.chat-queued-tag-failed {
+  color: var(--danger, #c53b3b);
+  border-color: color-mix(in srgb, var(--danger, #c53b3b) 35%, transparent);
+  background: color-mix(in srgb, var(--danger, #c53b3b) 8%, transparent);
 }
 /* A queued `!cmd`: shown verbatim as the shell command it will run, so it reads like
    the Bash card its output eventually lands in rather than a chat message. Red picks up

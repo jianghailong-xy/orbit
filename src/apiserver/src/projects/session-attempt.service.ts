@@ -319,13 +319,14 @@ export class SessionAttemptService {
     ownerId: string,
     sessionId: string,
     actor: SessionLifecycleActor,
+    tx: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<void> {
     if (actor.kind === 'USER') return;
-    const attempt = await this.bySessionId(this.prisma, ownerId, sessionId, true);
+    const attempt = await this.bySessionId(tx, ownerId, sessionId, true);
     if (!attempt) return;
     if (actor.sessionId === attempt.sessionId) return;
 
-    const charged = await this.prisma.$executeRaw(Prisma.sql`
+    const charged = await tx.$executeRaw(Prisma.sql`
       UPDATE "task_attempt"
          SET "coordinator_steers" = "coordinator_steers" + 1
        WHERE "id" = ${attempt.id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -337,7 +338,7 @@ export class SessionAttemptService {
     `);
     if (charged > 0) return;
 
-    const current = await this.bySessionId(this.prisma, ownerId, sessionId, true);
+    const current = await this.bySessionId(tx, ownerId, sessionId, true);
     const refusal = current
       ? authorizeSteer(actor, current, current.budget, { coordinatorSteers: current.coordinatorSteers })
       : 'ALLOWED';

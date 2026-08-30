@@ -130,6 +130,7 @@ import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
   ApiError,
+  type ActiveSessionTurn,
   type ApprovalInfo,
   armAutoRetry,
   completeSession,
@@ -168,7 +169,7 @@ import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
-import type { PlanUsageSnapshot } from '@orbit/shared';
+import type { PlanUsageSnapshot, SessionTurnIntent, SessionTurnPlacement } from '@orbit/shared';
 import {
   AgentProvider,
   derivePermissionSemantics,
@@ -192,7 +193,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { isSteerKind, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
+import { steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
@@ -213,9 +214,17 @@ import {
   queuedTurnsOutsideTranscript,
   reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
+  transcriptEventsWithDurableDeliveryReceipts,
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
+import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
+import {
+  composerDraftAfterSend,
+  logicalSendToken,
+  resolveConflictLogicalSendToken,
+  type LogicalSendToken,
+} from '../lib/composerSendState';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -238,6 +247,7 @@ import {
   queuedTitle,
   runnerSlotUsage,
 } from '../lib/runnerSlots';
+import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
 
 interface RunEvent {
   seq: number;
@@ -251,18 +261,32 @@ interface RunEvent {
 // until the current turn finishes. Tracked locally so the composer can show it and
 // offer to withdraw it before the runner picks it up. A `!cmd` shell turn queues the
 // same way, so it gets a bubble too — rendered as the command it will run.
-interface QueuedTurn {
+export interface QueuedTurn {
   turnId: string;
   content: string;
   shell?: boolean;
-  // Filed as a steer by the server: written into the turn that is already running rather
-  // than queued behind it (see lib/steerDelivery). It shares this list because it is shown
-  // in the same place until the runner leases it — but it is not waiting for anything and
-  // cannot be withdrawn, so it says so and offers no Cancel.
-  steer?: boolean;
+  /** Server receipt only: startup/current-turn/next-turn are never inferred from local status. */
+  placement: Extract<SessionTurnPlacement, 'startup' | 'steer' | 'queued'>;
+  /** For startup fragments, the executable whose durable user event replaces this bubble. */
+  targetTurnId?: string;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
+  deliveryReason?: string;
   // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
   // image-only follow-up turn — the local turnImages previews don't survive a reload.
   attachments?: { id: string; mimeType: string }[];
+}
+
+/** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
+ * represented by the optimistic/transcript bridge instead, so it deliberately has no queue row. */
+export function queuedTurnFromActiveSnapshot(row: ActiveSessionTurn): QueuedTurn | null {
+  const placement = turnPlacementOf(row);
+  if (placement === 'accepted') return null;
+  return {
+    ...row,
+    shell: row.kind === 'shell',
+    placement,
+  };
 }
 
 interface LocalStatusCard {
@@ -1004,16 +1028,35 @@ function TranscriptSkeleton() {
  * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
  * back. A steer is already on its way into the turn in progress, and the engine may be reading it
  * as we ask — the server refuses to withdraw one (409, "being written into the running turn"), so
- * offering the button would be offering one that always fails. `steer` is the server's `kind`,
- * never a local guess: see `isSteerKind` and the queued-turns list it is read from.
+ * offering the button would be offering one that always fails. `placement` is the server receipt,
+ * never a local guess.
  */
-export function QueuedTurnMeta({ steer, onCancel }: { steer?: boolean; onCancel: () => void }) {
+export function QueuedTurnMeta({
+  placement,
+  delivery,
+  deliveryReason,
+  onCancel,
+}: {
+  placement: Extract<SessionTurnPlacement, 'startup' | 'steer' | 'queued'>;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryReason?: string;
+  onCancel: () => void;
+}) {
+  const label = delivery === 'failed'
+    ? 'Not delivered'
+    : delivery === 'unconfirmed'
+      ? 'Delivery could not be confirmed'
+    : placement === 'startup'
+    ? 'Added to starting turn'
+    : placement === 'steer'
+      ? steerDeliveryState(undefined).label
+      : 'Queued for next turn';
   return (
-    <span className="chat-queued-meta">
-      <span className="chat-queued-tag">
-        {steer ? steerDeliveryState(undefined).label : 'Queued'}
+    <span className="chat-queued-meta" title={deliveryReason}>
+      <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
+        {label}
       </span>
-      {!steer && <a onClick={onCancel}>Cancel</a>}
+      {delivery == null && placement === 'queued' && <a onClick={onCancel}>Cancel</a>}
     </span>
   );
 }
@@ -1201,6 +1244,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // the throttle in the SSE effect repopulates from here (not just skips) when it's still fresh.
   const bgCacheRef = useRef<Map<string, { at: number; shells: BgShell[] }>>(new Map());
   const [images, setImages] = useState<ComposerImage[]>([]); // images staged in the composer
+  // One key per logical send, retained across an uncertain network/5xx result. A changed wire
+  // payload mints another key; a verbatim retry lets the server return its committed receipt.
+  const sendOperationRef = useRef<LogicalSendToken | null>(null);
+  const resolveConflictOperationRef = useRef<LogicalSendToken | null>(null);
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
   // so these local previews are joined back into the user bubble (and the queued bubble)
   // to show the sent image in the transcript. Object URLs are revoked on session switch.
@@ -2279,7 +2326,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ),
     [acceptedUserTurns, eventsSessionId, scopedEvents, selectedId],
   );
-  const transcriptEvents = useMemo(() => {
+  const optimisticTranscriptEvents = useMemo(() => {
     if (visibleAcceptedUserTurns.length === 0) return scopedEvents;
     const lastSeq = scopedEvents.reduce((max, event) => Math.max(max, event.seq), 0);
     return [
@@ -2295,6 +2342,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const scopedQueuedTurns = useMemo(
     () => (queuedSessionId === selectedId ? queued : []),
     [queued, queuedSessionId, selectedId],
+  );
+  const transcriptEvents = useMemo(
+    () => transcriptEventsWithDurableDeliveryReceipts(
+      optimisticTranscriptEvents,
+      scopedQueuedTurns,
+    ),
+    [optimisticTranscriptEvents, scopedQueuedTurns],
   );
   const visibleQueuedTurns = useMemo(
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
@@ -2439,7 +2493,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .then((rows) => {
           if (closed || generation !== queuedRefreshGeneration) return;
           const acceptedRows = rows.filter(
-            (row) => turnPlacementOf(row, false) === 'accepted' && row.kind !== 'shell',
+            (row) => turnPlacementOf(row) === 'accepted' && row.kind !== 'shell',
           );
           const accepted = acceptedRows
             .map((row): AcceptedUserTurn => ({
@@ -2466,16 +2520,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             ),
           );
           const serverQueued = rows.flatMap((row) => {
-            const placement = turnPlacementOf(row, false);
-            return placement === 'accepted'
-              ? []
-              : [
-                  {
-                    ...row,
-                    shell: row.kind === 'shell',
-                    steer: placement === 'steer' || isSteerKind(row.kind),
-                  },
-                ];
+            const queued = queuedTurnFromActiveSnapshot(row);
+            return queued ? [queued] : [];
           });
           const representedTurnIds = new Set(rows.map((row) => row.turnId));
           setQueued((current) =>
@@ -2566,10 +2612,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       lastSeq = 0;
       stalled = 0;
       try {
-        const page = await getSessionEventPage(selectedId, {
-          tail: TAIL_PAGE,
-          signal: seedAbort.signal,
-        });
+        const page = await reseedWithActiveSnapshot(
+          () => getSessionEventPage(selectedId, {
+            tail: TAIL_PAGE,
+            signal: seedAbort.signal,
+          }),
+          () => { if (!closed) refreshQueued(); },
+        );
         if (closed) return;
         accRef.current = page.events;
         for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
@@ -2754,7 +2803,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           // it from the local queue (no-op if it wasn't ours / already cleared). Re-fetch too:
           // an older queue request may have snapshotted this row just before the lease and could
           // otherwise arrive afterwards and resurrect it; the generation fence drops that reply.
-          if (ev.turnId) setQueued((q) => q.filter((x) => x.turnId !== ev.turnId));
+          if (ev.turnId) {
+            setQueued((q) => q.filter((x) =>
+              x.turnId !== ev.turnId
+              && !(x.placement === 'startup' && x.targetTurnId === ev.turnId),
+            ));
+          }
           refreshQueued();
         }
       };
@@ -3043,7 +3097,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   const send = useMutation({
     mutationFn: async (
-      vars: { content: string; images: ComposerImage[]; shell?: boolean },
+      vars: {
+        content: string;
+        images: ComposerImage[];
+        shell?: boolean;
+        intent?: SessionTurnIntent;
+      },
     ): Promise<{
       id: string;
       turnId?: string;
@@ -3053,8 +3112,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       provider?: string;
       /** The explicitly picked permission mode, for the same write-back. */
       permissionMode?: string;
+      clientTurnId: string;
     }> => {
       const { content, images: imgs, shell } = vars;
+      const intent: SessionTurnIntent = shell ? 'NEXT_TURN' : (vars.intent ?? 'NEXT_TURN');
       if (selectedTrashed)
         throw new Error('Restore this session to Open before sending a message');
       if (selectedMissing) throw new Error('Session not found');
@@ -3063,17 +3124,35 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // Only fully-uploaded images carry an id to reference; onSend blocks while any is
       // still uploading, so this is the complete set.
       const attachmentIds = imgs.map((im) => im.id).filter((x): x is string => !!x);
+      const operation = logicalSendToken(sendOperationRef.current, {
+        sessionId: selected?.id ?? null,
+        content,
+        attachmentIds: [...attachmentIds].sort(),
+        kind: shell ? 'shell' : 'message',
+        intent,
+        model,
+        permissionMode: MODE_TO_PERMISSION[mode],
+        effort,
+        provider: pendingResumeProvider ?? pickedProvider,
+      });
+      sendOperationRef.current = operation;
       // Continue a live session; revive an ended-but-resumable one (same row, claude
       // --resumes its context); otherwise (no selection, or unresumable) start fresh.
       // New-draft uploads are unscoped and can follow CREATE. Uploads made while viewing an
       // existing session belong to that session, so a terminal CREATE fallback blocks below
       // and keeps the chips visible instead of passing invalid attachment ids or dropping them.
       if (selected && live) {
-        const res = await sendTurn(selected.id, content, attachmentIds, shell ? 'shell' : undefined);
-        // The server decides this under the same Session row lock as enqueue/claim: accepted
-        // starts normally, queued waits behind an earlier executable turn, and steer joins the
-        // turn already running. `idle` is only a rolling-upgrade fallback for an older server.
-        const placement = turnPlacementOf(res, idle);
+        const res = await sendTurn(
+          selected.id,
+          content,
+          attachmentIds,
+          shell ? 'shell' : undefined,
+          intent,
+          operation.clientTurnId,
+        );
+        // The server decides this under the same Session row lock as enqueue/claim. Missing
+        // placement is a protocol error; local idle state is never used to infer delivery.
+        const placement = turnPlacementOf(res);
         const queuedItem =
           placement === 'accepted'
             ? undefined
@@ -3081,9 +3160,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 turnId: res.turnId,
                 content,
                 shell,
-                ...(placement === 'steer' ? { steer: true } : {}),
+                placement,
+                ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
               };
-        return { id: selected.id, turnId: res.turnId, queuedItem };
+        return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
       }
       if (selected && !live) {
         // Capabilities can change with heartbeat/context cleanup, so never POST /resume from a
@@ -3107,11 +3187,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             content,
             attachmentIds,
             shell ? 'shell' : undefined,
+            intent,
+            operation.clientTurnId,
           );
-          const placement = turnPlacementOf(
-            res,
-            sessionRunStateOf(fresh) === 'AWAITING_INPUT',
-          );
+          const placement = turnPlacementOf(res);
           const queuedItem =
             placement === 'accepted'
               ? undefined
@@ -3119,9 +3198,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   turnId: res.turnId,
                   content,
                   shell,
-                  ...(placement === 'steer' ? { steer: true } : {}),
+                  placement,
+                  ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
                 };
-          return { id: selected.id, turnId: res.turnId, queuedItem };
+          return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
         if (disposition === 'RESUME') {
           // The pills were seeded from this session's stored config, so an untouched
@@ -3152,11 +3232,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             },
             attachmentIds,
             shell ? 'shell' : undefined,
+            operation.clientTurnId,
           );
           // A genuinely terminal revive is accepted. If another client revived the row between
           // the capability read and this request, /resume routes through live createTurn and its
           // row-locked placement preserves a real queued/steer state here.
-          const placement = turnPlacementOf(res, true);
+          const placement = turnPlacementOf(res);
           const queuedItem =
             placement === 'accepted'
               ? undefined
@@ -3164,9 +3245,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   turnId: res.turnId,
                   content,
                   shell,
-                  ...(placement === 'steer' ? { steer: true } : {}),
+                  placement,
                 };
-          return { id: selected.id, turnId: res.turnId, queuedItem };
+          return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
         if (attachmentIds.length > 0)
           throw new Error(scopedAttachmentCreateBlockedMessage(attachmentIds.length));
@@ -3225,12 +3306,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         id: created.id,
         created: true,
         permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
+        clientTurnId: operation.clientTurnId,
       };
     },
     onSuccess: (
-      { id, turnId, queuedItem, created, permissionMode: sentMode },
+      { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId },
       vars,
     ) => {
+      if (sendOperationRef.current?.clientTurnId === clientTurnId) {
+        sendOperationRef.current = null;
+      }
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // For a freshly created session, prime its detail cache so the sidebar resolves
       // its workspace row synchronously. Otherwise activeWorkspaceId (TasksSidePanel) falls
@@ -3263,7 +3348,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           .catch(() => {});
       }
       navigate(`/sessions/${encodeId(id)}`);
-      setText('');
+      setText((draft) => composerDraftAfterSend(draft, true));
       setComposerRefs({});
       // Hand the sent image previews to the transcript, keyed by turnId, so they show in
       // the user bubble immediately (the runner echoes the text + attachment refs). Only
@@ -3328,7 +3413,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // session that's already back in Open.
       qc.invalidateQueries({ queryKey: ['session', id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => {
+      // In particular, a CURRENT_WORK 409 means nothing was placed. Keep the exact draft so the
+      // person can retry or explicitly choose NEXT_TURN.
+      setText((draft) => composerDraftAfterSend(draft, false));
+      message.error(e.message);
+    },
   });
   const control = useMutation({
     mutationFn: (id: string) => interruptSession(id),
@@ -3700,9 +3790,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // merge then fast-forwards cleanly. resume() clears the stale mergeStatus, so the bar offers
   // "Merge to <target>" again once the workspace finishes.
   const resolveMut = useMutation({
-    mutationFn: (vars: SessionToastTarget & { branch: string; target: string }) =>
-      resumeSession(
-        vars.id,
+    mutationFn: (vars: SessionToastTarget & { branch: string; target: string }) => {
+      const content =
         'Rebase this branch onto the latest ' +
           vars.target +
           ' and resolve any conflicts.\n\n' +
@@ -3715,9 +3804,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ' files, then git rebase --continue, repeating until the rebase completes. Do not' +
           ' push. Once the rebase finishes, the branch can be merged into ' +
           vars.target +
-          ' cleanly from the status bar above the composer.',
-      ),
+          ' cleanly from the status bar above the composer.';
+      const operation = resolveConflictLogicalSendToken(resolveConflictOperationRef.current, {
+        sessionId: vars.id,
+        branch: vars.branch,
+        target: vars.target,
+        content,
+      });
+      resolveConflictOperationRef.current = operation;
+      return resumeSession(
+        vars.id,
+        content,
+        undefined,
+        undefined,
+        undefined,
+        operation.clientTurnId,
+      );
+    },
     onSuccess: (_d, vars) => {
+      resolveConflictOperationRef.current = null;
       message.sessionNotice({
         sessionId: vars.id,
         sessionTitle: vars.title,
@@ -3935,7 +4040,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ]);
   }
 
-  const onSend = (): void => {
+  const selectedRunStatus = selected ? sessionRunStatusOf(selectedSession ?? selected) : null;
+  const selectedNumTurns = Number(
+    (selectedSession as { numTurns?: number } | undefined)?.numTurns
+      ?? (selected as { numTurns?: number } | undefined)?.numTurns
+      ?? 0,
+  );
+  const defaultSendIntent = defaultSessionTurnIntent({
+    live: !!selected && !!live,
+    status: selectedRunStatus,
+    numTurns: selectedNumTurns,
+  });
+
+  const onSend = (intentOverride?: SessionTurnIntent): void => {
+    const intent = intentOverride ?? defaultSendIntent;
     const c = text.trim();
     if (send.isPending) return;
     const commandName = slashCommandName(c);
@@ -3986,7 +4104,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setComposerRefs({});
       if (imgs.length > 0) {
         setHistIdx(-1);
-        send.mutate({ content: '', images: imgs });
+        send.mutate({ content: '', images: imgs, intent });
       }
       return;
     }
@@ -4002,11 +4120,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // session is capability-checked in the mutation; without resumable context it starts fresh.
     if (c.startsWith('!')) {
       const cmd = c.slice(1).trim();
-      if (cmd) send.mutate({ content: cmd, images: [], shell: true });
+      if (cmd) send.mutate({ content: cmd, images: [], shell: true, intent: 'NEXT_TURN' });
       else setText('');
       return;
     }
-    send.mutate({ content: materializeReferences(c, composerRefs), images: readyImages });
+    send.mutate({
+      content: materializeReferences(c, composerRefs),
+      images: readyImages,
+      intent,
+    });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
   // workspace, so resolve it from the open session (scopeWorkspaceId), then the first workspace.
@@ -5378,7 +5500,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   ) : (
                     q.content && <MD breaks>{q.content}</MD>
                   )}
-                  <QueuedTurnMeta steer={q.steer} onCancel={() => cancelQueued(q.turnId)} />
+                  <QueuedTurnMeta
+                    placement={q.placement}
+                    delivery={q.delivery}
+                    deliveryReason={q.deliveryReason}
+                    onCancel={() => cancelQueued(q.turnId)}
+                  />
                 </div>
               ))}
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
@@ -5979,16 +6106,50 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             </Tooltip>
           ) : (
-            <Tooltip title={sameSessionSendBlocked ? sameSessionSendBlockedCopy : ''}>
-              <Button
-                type="primary"
-                icon={<ArrowUpOutlined />}
-                disabled={!canSend}
-                loading={send.isPending}
-                onClick={onSend}
-                aria-label="Send"
-              />
-            </Tooltip>
+            <span className="composer-send-actions">
+              <Tooltip
+                title={
+                  sameSessionSendBlocked
+                    ? sameSessionSendBlockedCopy
+                    : defaultSendIntent === 'CURRENT_WORK'
+                      ? 'Add to current work'
+                      : 'Send as next turn'
+                }
+              >
+                <Button
+                  className={defaultSendIntent === 'CURRENT_WORK' ? 'composer-send-current' : undefined}
+                  type="primary"
+                  icon={<ArrowUpOutlined />}
+                  disabled={!canSend}
+                  loading={send.isPending}
+                  onClick={() => onSend()}
+                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+                />
+              </Tooltip>
+              {defaultSendIntent === 'CURRENT_WORK' && (
+                <Dropdown
+                  trigger={['click']}
+                  placement="topRight"
+                  menu={{
+                    items: [
+                      {
+                        key: 'next-turn',
+                        label: 'Queue for next turn',
+                        onClick: () => onSend('NEXT_TURN'),
+                      },
+                    ],
+                  }}
+                >
+                  <Button
+                    className="composer-send-next-menu"
+                    type="primary"
+                    icon={<DownOutlined />}
+                    disabled={!canSend || send.isPending}
+                    aria-label="Choose send placement"
+                  />
+                </Dropdown>
+              )}
+            </span>
           )}
         </div>
         <div className="composer-pills">

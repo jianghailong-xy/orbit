@@ -20,6 +20,9 @@ type codexTurnResult struct {
 	RuntimeSessionID string
 	Usage            *TokenUsage
 	ContextTokens    int
+	// True only after Codex reports that this concrete turn started/produced an item/completed.
+	// It is the engine-read proof used for startup CURRENT_WORK, not the earlier local USER bubble.
+	PromptAcknowledged bool
 }
 
 func codexContextTokens(usage *TokenUsage) int {
@@ -108,6 +111,11 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			if result.RuntimeSessionID != "" {
 				job.RuntimeSessionID = result.RuntimeSessionID
 				writeSessionMeta(scratchDir, job, execDir)
+			}
+			if result.PromptAcknowledged {
+				emit(evUserDelivery, map[string]interface{}{
+					"turnId": resp.TurnID, "delivery": string(deliveryAcknowledged),
+				})
 			}
 			emit(evTurnEnd, codexTurnEndPayload(result, 1, 0, job))
 			liveFiles, livePatches := liveDiff(job.WT)
@@ -482,6 +490,7 @@ func handleCodexEvent(msg map[string]interface{}, emit emitFn, result *codexTurn
 			emit(evSystem, map[string]interface{}{"subtype": "init", "sessionId": id, "provider": providerCodex})
 		}
 	case "turn.completed":
+		result.PromptAcknowledged = true
 		if usage := codexUsage(msg["usage"]); usage != nil {
 			result.Usage = usage
 		}
@@ -492,9 +501,13 @@ func handleCodexEvent(msg map[string]interface{}, emit emitFn, result *codexTurn
 		if result.Error != "" {
 			emit(evError, map[string]interface{}{"message": result.Error})
 		}
+	case "turn.started":
+		result.PromptAcknowledged = true
 	case "item.started":
+		result.PromptAcknowledged = true
 		handleCodexItem(msg, emit, result, lastAssistant, false, nil)
 	case "item.completed":
+		result.PromptAcknowledged = true
 		handleCodexItem(msg, emit, result, lastAssistant, true, nil)
 	default:
 		if strings.Contains(eventType, "delta") {

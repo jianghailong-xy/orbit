@@ -89,7 +89,9 @@ import {
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
+  supportsSessionCurrentWorkRouting,
   supportsMidTurnSteer,
+  supportsTargetBoundCurrentWorkSteer,
   TURN_COMPLETE_STEER_REQUEUE,
   AbandonedSteer,
   ActivateTurnLeasesResponse,
@@ -120,6 +122,16 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
+  CURRENT_WORK_RUNTIME_REJECTED,
+  CURRENT_WORK_RUNTIME_CAPABILITY_LOST,
+  CURRENT_WORK_SESSION_FINALIZED,
+  CURRENT_WORK_TARGET_COMPLETED,
+  acknowledgedRuntimeTurnIds,
+  terminalizePendingCurrentWorkSteers,
+  terminalizePendingStartupContexts,
+  terminalizeUndeliveredCurrentWork,
+} from '../sessions/current-work-delivery';
+import {
   postExecutableAcceptanceComment,
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
@@ -130,6 +142,7 @@ import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
   RUNTIME_STARTED_EVENT_TYPES,
   RUNTIME_STARTED_SYSTEM_SUBTYPE,
+  appendStartupTurnFragments,
   buildResumeContinuation,
 } from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
@@ -991,10 +1004,12 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
-        // Capabilities are reported by this authenticated runner process. Omission means an old
-        // binary and preserves the last snapshot; an explicit empty header retires it.
-        capabilities: reportedCapabilities,
-        capabilitiesReportedAt: reportedCapabilities === undefined ? undefined : new Date(),
+        // Capabilities belong to THIS authenticated process heartbeat, not to the machine forever.
+        // Omission is an old/downgraded process and clears the prior process's declaration; keeping
+        // the stale snapshot could admit CURRENT_WORK that the poller now owning the lease cannot
+        // acknowledge. Inbox dequeue rechecks the request header as the second fence.
+        capabilities: reportedCapabilities ?? [],
+        capabilitiesReportedAt: new Date(),
         // All-or-nothing typed snapshot. Omission is the deployed N-1 heartbeat and preserves the
         // historical row for observability; dispatch still consults the current poller's header,
         // so a downgraded process can never borrow this stale capability to gain admission.
@@ -2411,7 +2426,7 @@ export class RunnerApiController {
     // so a re-run claims from the state that actually exists rather than reporting a turn it does
     // not own. The response is built from the winning attempt's read, and nothing is sent to the
     // runner until this returns.
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -2471,13 +2486,66 @@ export class RunnerApiController {
       // runner's word about the runtime this session actually executes on. A binary that
       // knows the kind but not this engine's mid-turn call refuses every steer it is handed,
       // so withholding one here is what keeps a half-upgraded fleet on the behaviour it has
-      // today — the row stays PENDING and turn-complete re-files it as an ordinary message
-      // when the running turn ends. Resolved per poll, through the same runtime resolution
-      // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime
-      // it borrows rather than by its slug.
+      // today. A legacy steer is re-filed after the turn; explicit CURRENT_WORK instead reaches
+      // a visible failed-delivery terminal. Resolved per poll, through the same runtime resolution
+      // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime it
+      // borrows rather than by its slug.
       const execRuntime = await sessionExecRuntime(tx, owned[0]);
-      const deliverSteer =
+      const currentWorkRouting = supportsSessionCurrentWorkRouting(declaredCapabilities);
+      let capabilityLossTerminalized = 0;
+      if (!currentWorkRouting) {
+        // A newer process may have admitted startup context and then been replaced by an old
+        // poller. Do not leave the seed permanently withheld. Under the same Session lock, make
+        // every still-unacknowledged fragment visibly terminal; the original seed can then run
+        // without silently claiming that rejected context entered its envelope.
+        //
+        // PENDING is unambiguously undelivered. IN_FLIGHT is included only after two durable
+        // fences agree the former owner is gone: its database lease expired and its generation
+        // differs from the currently validated poller's generation. This closes dequeue-commit /
+        // lost-response / crash without letting a downgraded heartbeat kill a live engine whose
+        // acknowledgement is merely waiting in the runner's event batch.
+        const unsupportedTargets = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT DISTINCT target.id
+          FROM "conversation_turn" target
+          JOIN "conversation_turn_startup_fragment" fragment
+            ON fragment."session_id" = target."session_id"
+           AND fragment."target_turn_id" = target.id
+          WHERE target."session_id" = ${sessionId}::uuid
+            AND target.kind = 'message'
+            AND fragment."acknowledged_at" IS NULL
+            AND fragment."failed_at" IS NULL
+            AND (
+              target.status = 'PENDING'
+              OR (
+                target.status = 'IN_FLIGHT'
+                AND target."lease_deadline_at" < clock_timestamp()
+                AND target."lease_generation" IS DISTINCT FROM ${leaseGeneration}::uuid
+              )
+            )
+          ORDER BY target.id
+        `);
+        if (unsupportedTargets.length > 0) {
+          const failed = await terminalizePendingStartupContexts(tx, sessionId, {
+            targetTurnIds: unsupportedTargets.map((target) => target.id),
+            // The raw candidate query above, not this broad flag, proves which leased targets are
+            // abandoned. terminalizePendingStartupContexts repeats the receipt-state guards.
+            includeInFlight: true,
+            inFlightOutcome: 'UNCONFIRMED',
+            code: CURRENT_WORK_RUNTIME_CAPABILITY_LOST,
+            reason:
+              'Delivery could not be confirmed after the capable runner lease expired; the active runner no longer supports the acknowledged-delivery protocol.',
+          });
+          capabilityLossTerminalized = failed.terminalizedTurnIds.length;
+        }
+      }
+      // Legacy steer predates routing-v1 and retains its provider-specific behaviour. Explicit
+      // CURRENT_WORK is narrower: only an exact-target primitive may dequeue it, otherwise a
+      // Claude stdin frame could cross the target result boundary and become the next turn.
+      const deliverLegacySteer =
         acceptsSteer && supportsMidTurnSteer(execRuntime, declaredCapabilities);
+      const deliverCurrentWorkSteer =
+        acceptsSteer
+        && supportsTargetBoundCurrentWorkSteer(execRuntime, declaredCapabilities);
       // Only runtimes whose runner can durably report history compaction may stop repeating the
       // coordinator block on every turn. A null generation is a legacy poller and cannot prove a
       // process boundary either, so it stays on the correctness-first legacy path.
@@ -2492,6 +2560,8 @@ export class RunnerApiController {
         kind: string;
         content: string | null;
         clientTurnId: string;
+        sendIntent: string | null;
+        targetTurnId: string | null;
         coordinatorContextKey: string | null;
       }>>`
         UPDATE "conversation_turn"
@@ -2529,11 +2599,13 @@ export class RunnerApiController {
               --
               -- Delivered once and never re-leased: an expired steer lease means the runner
               -- died holding it, and re-writing a message the engine may already have acted
-              -- on is the one thing mid-turn delivery must not do. A steer left PENDING when
-              -- its turn ends is not stranded either — turn-complete files it as an ordinary
-              -- message, which is what it becomes once there is nothing to steer.
+              -- on is the one thing mid-turn delivery must not do. A legacy steer left PENDING
+              -- when its turn ends is re-filed; explicit CURRENT_WORK is terminalized visibly.
               OR (turn."kind" = 'steer' AND turn."status" = 'PENDING'
-                AND ${deliverSteer}::boolean
+                AND (
+                  (turn."send_intent" IS NULL AND ${deliverLegacySteer}::boolean)
+                  OR (turn."send_intent" = 'CURRENT_WORK' AND ${deliverCurrentWorkSteer}::boolean)
+                )
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid
@@ -2546,11 +2618,25 @@ export class RunnerApiController {
                     AND inflight."kind" = 'message'
                     AND inflight."status" = 'IN_FLIGHT'
                     AND inflight."lease_deadline_at" > now()
+                    -- New CURRENT_WORK steers name the exact turn observed while createTurn held
+                    -- this Session lock. Null retains only the rolling legacy row shape.
+                    AND (turn."target_turn_id" IS NULL OR turn."target_turn_id" = inflight.id)
                 ))
               -- User executable turns are deliverable only after claim changed the Session
               -- to RUNNING. An AWAITING_INPUT process may remain warm, but its inbox cannot
               -- bypass maxConcurrent merely because it is already resident.
               OR (turn."kind" IN ('message', 'shell')
+                AND (
+                  ${currentWorkRouting}::boolean
+                  OR NOT EXISTS (
+                    SELECT 1
+                    FROM "conversation_turn_startup_fragment" startup
+                    WHERE startup."session_id" = ${sessionId}::uuid
+                      AND startup."target_turn_id" = turn.id
+                      AND startup."acknowledged_at" IS NULL
+                      AND startup."failed_at" IS NULL
+                  )
+                )
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid
@@ -2572,6 +2658,8 @@ export class RunnerApiController {
           LIMIT 1
         )
         RETURNING id, seq, kind, content, "client_turn_id" AS "clientTurnId",
+                  "send_intent" AS "sendIntent",
+                  "target_turn_id" AS "targetTurnId",
                   "coordinator_context_key" AS "coordinatorContextKey"
       `;
       if (rows.length === 0) return null;
@@ -2701,6 +2789,21 @@ export class RunnerApiController {
       let attachments: TurnAttachment[] | undefined;
       let content = t.content ?? undefined;
       if (t.kind === 'message' || t.kind === 'steer') {
+        const startupFragments = t.kind === 'message'
+          ? await tx.conversationTurnStartupFragment.findMany({
+            where: { sessionId, targetTurnId: t.id, failedAt: null },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: {
+                id: true,
+                content: true,
+                acknowledgedAt: true,
+                attachments: {
+                  select: { id: true, mimeType: true, fileName: true, createdAt: true },
+                  orderBy: { createdAt: 'asc' },
+                },
+              },
+            })
+          : [];
         // Context derived from the Session is expanded at delivery, never written over the text
         // the person sent. Besides giving #references their tenant, this is where an existing
         // conversation promoted by project_create acquires the same user-level coordinator
@@ -2720,7 +2823,7 @@ export class RunnerApiController {
         // A message turn that already produced runtime output is a lease re-delivery.
         // Resume with a continuation nudge instead of replaying its side effects. A steer is
         // never re-delivered (its lease is not reclaimable above), so it never takes this.
-        const started = t.kind !== 'steer' && (await tx.runEvent.findFirst({
+        const runtimeStarted = t.kind !== 'steer' && (await tx.runEvent.findFirst({
           where: {
             turnId: t.id,
             OR: [
@@ -2736,20 +2839,43 @@ export class RunnerApiController {
           },
           select: { id: true },
         }));
-        if (started) {
+        const startupAcknowledged = startupFragments.some(
+          (fragment) => fragment.acknowledgedAt != null,
+        );
+        if (runtimeStarted || startupAcknowledged) {
+          // A durable startup ACK means the full combined envelope is already in the provider's
+          // conversation even if it crashed before producing assistant/tool output. Do not put
+          // acknowledged fragments (or their attachments) into the replacement prompt again;
+          // the original executable text alone is enough to orient the continuation nudge.
           content = buildResumeContinuation(t.content);
         } else {
+          content = appendStartupTurnFragments(content, startupFragments);
           const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
             select: { id: true, mimeType: true, fileName: true },
             orderBy: { createdAt: 'asc' },
           });
-          if (atts.length > 0) {
-            attachments = atts.map((a) => ({
+          const allAttachments = [
+            ...atts,
+            ...startupFragments.flatMap((fragment) => fragment.attachments),
+          ];
+          if (allAttachments.length > 0) {
+            attachments = allAttachments.map((a) => ({
               id: a.id,
               mimeType: a.mimeType,
               fileName: a.fileName ?? undefined,
             }));
+          }
+          if (startupFragments.length > 0) {
+            await tx.conversationTurnStartupFragment.updateMany({
+              where: {
+                id: { in: startupFragments.map((fragment) => fragment.id) },
+                acknowledgedAt: null,
+                deliveredAt: null,
+                failedAt: null,
+              },
+              data: { deliveredAt: new Date() },
+            });
           }
           // `#`-references become context here, at delivery, rather than when the message was
           // stored: the transcript keeps what the person typed, and the summary is computed at
@@ -2798,7 +2924,8 @@ export class RunnerApiController {
               // delivery is not treated as that opening: its content is a continuation nudge and
               // the replacement engine must receive the standing context again.
               const openingAlreadyPresent =
-                !started
+                !runtimeStarted
+                && !startupAcknowledged
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
                 && hasCoordinatorOpening(sessionContext.prompt, projectId);
@@ -2824,6 +2951,7 @@ export class RunnerApiController {
       }
       return {
         turnId: t.id,
+        targetTurnId: t.targetTurnId ?? undefined,
         seq: t.seq,
         kind: t.kind as ConversationTurnKind,
         content,
@@ -2833,14 +2961,28 @@ export class RunnerApiController {
         // is only needed while this one message is being answered for: a steer that provably
         // never reached the engine can come back here as an ordinary message (see turnComplete)
         // instead of being reported as a failure the person has to re-send by hand.
-        steerRequeue: t.kind === 'steer' ? true : undefined,
+        // Explicit CURRENT_WORK is an at-most-this-turn instruction. A runner that cannot deliver
+        // it reports the refusal and the API terminalizes this authored receipt; asking for
+        // steer_requeue would claim the row became a message even though that fallback is forbidden.
+        steerRequeue:
+          t.kind === 'steer' ? t.sendIntent !== 'CURRENT_WORK' : undefined,
         taskAcceptance:
           t.kind === 'shell' && isTaskAcceptanceClientTurnId(t.clientTurnId)
             ? true
             : undefined,
         acceptancePlan,
+        ...(capabilityLossTerminalized > 0
+          ? { __currentWorkTerminalized: capabilityLossTerminalized }
+          : {}),
       };
     }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
+    if (!outcome) return null;
+    const {
+      __currentWorkTerminalized: terminalized = 0,
+      ...turn
+    } = outcome as typeof outcome & { __currentWorkTerminalized?: number };
+    if (terminalized > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
+    return turn;
   }
 
   /**
@@ -3090,6 +3232,8 @@ export class RunnerApiController {
           kind: true,
           clientTurnId: true,
           content: true,
+          sendIntent: true,
+          targetTurnId: true,
           leaseGeneration: true,
           coordinatorContextKey: true,
         },
@@ -3193,7 +3337,7 @@ export class RunnerApiController {
       // on. The completed-turn read above serves the L0 shell path; neither query mutates the row.
       const steering = await tx.conversationTurn.findFirst({
         where: { id: dto.turnId, sessionId, kind: 'steer' },
-        select: { id: true },
+        select: { id: true, sendIntent: true, targetTurnId: true, deliveryStatus: true },
       });
       // `turnComplete` is retried when the response is lost. After the first successful
       // steer_requeue the SAME row is already a `message` (and may even have been leased for its
@@ -3222,7 +3366,11 @@ export class RunnerApiController {
       // Only for provable non-delivery, which is the runner's judgement to make (see
       // TURN_COMPLETE_STEER_REQUEUE): re-filing a message Codex may already have taken is how
       // one prompt gets run twice, and Codex does not de-duplicate.
-      if (steering && dto.subtype === TURN_COMPLETE_STEER_REQUEUE) {
+      if (
+        steering
+        && steering.sendIntent !== 'CURRENT_WORK'
+        && dto.subtype === TURN_COMPLETE_STEER_REQUEUE
+      ) {
         // Idempotent by the kind itself: the update changes one leased steer at most once. The
         // guard above is the other half of that invariant — a retry which now observes the row as
         // a message must stop here rather than settling that message as an ordinary completed turn.
@@ -3259,9 +3407,26 @@ export class RunnerApiController {
         };
       }
       if (steering) {
+        const failedCurrentWork =
+          steering.sendIntent === 'CURRENT_WORK'
+          && steering.deliveryStatus !== 'ACKNOWLEDGED'
+          && dto.status === RunStatus.FAILED;
+        const now = new Date();
         const acked = await tx.conversationTurn.updateMany({
           where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
-          data: { status: 'ANSWERED', answeredAt: new Date() },
+          data: {
+            status: 'ANSWERED',
+            answeredAt: now,
+            ...(failedCurrentWork
+              ? {
+                  deliveryStatus: 'FAILED',
+                  deliveryFailureCode: CURRENT_WORK_RUNTIME_REJECTED,
+                  deliveryFailureReason:
+                    dto.result || 'The runtime rejected CURRENT_WORK before acknowledging it.',
+                  deliveryTerminalAt: now,
+                }
+              : {}),
+          },
         });
         return {
           applied: acked.count > 0,
@@ -3697,12 +3862,27 @@ export class RunnerApiController {
       // would make a shell-first session (claude never received a message) try to --resume a
       // conversation that was never established, failing with "No conversation found".
       const turnInc = completedTurn?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
-      // A steer still queued when its turn ends has nothing left to steer, so it becomes
-      // what it would have been had it arrived a moment later: the next ordinary message.
-      // Same row, same seq, same clientTurnId — the kind is the only thing that was ever
-      // about timing. Done before the count below so it is counted as the follow-up it now is.
+      // Explicit CURRENT_WORK is never upgraded into a next-turn executable. If its exact target
+      // wins the completion boundary before dequeue, retire the steer as undelivered; the durable
+      // row still audits the refused landing and, crucially, no ordinary message is manufactured.
+      let currentWorkTerminalized = 0;
+      if (completedTurn) {
+        const terminalized = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+          targetTurnIds: [completedTurn.id],
+          // Dequeue commit is not a runtime ACK. If its HTTP response was lost, the row is
+          // IN_FLIGHT forever unless the exact target-complete boundary settles it here.
+          includeInFlight: true,
+          code: CURRENT_WORK_TARGET_COMPLETED,
+          reason: 'The target turn completed before CURRENT_WORK could be delivered.',
+        });
+        currentWorkTerminalized =
+          terminalized.steers.terminalizedTurnIds.length
+          + terminalized.startup.terminalizedTurnIds.length;
+      }
+      // Rolling legacy steers keep their historical recovery: rows with no explicit intent become
+      // an ordinary message. New clients never create this shape, and NEXT_TURN is born a message.
       await tx.conversationTurn.updateMany({
-        where: { sessionId, kind: 'steer', status: 'PENDING' },
+        where: { sessionId, kind: 'steer', status: 'PENDING', sendIntent: null },
         data: { kind: 'message' },
       });
       // If a follow-up arrived before this completion acquired the Session lock, the
@@ -3797,6 +3977,7 @@ export class RunnerApiController {
         return {
           applied: false,
           steer: false,
+          currentWorkTerminalized,
           status: latest?.status ?? current.status,
           failSession,
           retryAt: current.retryAt,
@@ -3832,6 +4013,14 @@ export class RunnerApiController {
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
       }
       if (failSession) {
+        const terminalized = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+          includeInFlight: true,
+          code: CURRENT_WORK_SESSION_FINALIZED,
+          reason: 'CURRENT_WORK was not delivered before its session turn failed.',
+        });
+        currentWorkTerminalized +=
+          terminalized.steers.terminalizedTurnIds.length
+          + terminalized.startup.terminalizedTurnIds.length;
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -3869,6 +4058,7 @@ export class RunnerApiController {
         applied: true,
         steer: false,
         requeued: false,
+        currentWorkTerminalized,
         status: nextStatus,
         failSession,
         retryAt: current.retryAt,
@@ -4017,6 +4207,9 @@ export class RunnerApiController {
     ) {
       this.realtime.publishTaskChanged(sessionId, finalized.taskId);
     }
+    if ('currentWorkTerminalized' in finalized && (finalized.currentWorkTerminalized ?? 0) > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+    }
     if (finalized.steer) {
       // Nothing about the session changed, so nothing about it is announced. The queue view
       // did change — a steer left it — and the clients read that from the durable list.
@@ -4098,7 +4291,7 @@ export class RunnerApiController {
     // `durable` and `events` are derived from the request body above, and the ONE Session write is
     // accumulated from a row re-read under its lock on every attempt. The live broadcast below is
     // outside the loop, so a retried batch is published once, after the attempt that committed.
-    const session = await withTransactionRetry(this.prisma, async (tx) => {
+    const eventOutcome = await withTransactionRetry(this.prisma, async (tx) => {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
       // outside the transaction and later deadlocking when they touch Session.
@@ -4224,6 +4417,53 @@ export class RunnerApiController {
       const userTurnIds = [...new Set(durable.flatMap((event) =>
         event.type === RunEventType.USER && event.turnId ? [event.turnId] : [],
       ))];
+      let currentWorkAcknowledged = 0;
+      const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
+      if (acknowledgedTurnIds.length > 0) {
+        const acknowledgedAt = new Date();
+        const [steers, startup] = await Promise.all([
+          tx.conversationTurn.updateMany({
+            where: {
+              sessionId,
+              id: { in: acknowledgedTurnIds },
+              kind: 'steer',
+              sendIntent: 'CURRENT_WORK',
+              OR: [
+                { deliveryStatus: null },
+                { deliveryStatus: 'UNCONFIRMED' },
+              ],
+            },
+            data: {
+              deliveryStatus: 'ACKNOWLEDGED',
+              deliveryAcknowledgedAt: acknowledgedAt,
+              // A strict engine-read ACK may arrive after a runner-loss boundary. Resolve the
+              // ambiguity rather than preserving contradictory ACK+UNCONFIRMED fields.
+              deliveryFailureCode: null,
+              deliveryFailureReason: null,
+              deliveryTerminalAt: null,
+            },
+          }),
+          tx.conversationTurnStartupFragment.updateMany({
+            where: {
+              sessionId,
+              targetTurnId: { in: acknowledgedTurnIds },
+              acknowledgedAt: null,
+              OR: [
+                { deliveryStatus: null },
+                { deliveryStatus: 'UNCONFIRMED' },
+              ],
+            },
+            data: {
+              deliveryStatus: 'ACKNOWLEDGED',
+              acknowledgedAt,
+              failedAt: null,
+              failureCode: null,
+              failureReason: null,
+            },
+          }),
+        ]);
+        currentWorkAcknowledged = steers.count + startup.count;
+      }
       const userTurns = userTurnIds.length > 0
         ? await tx.conversationTurn.findMany({
             where: { sessionId, id: { in: userTurnIds } },
@@ -4467,7 +4707,7 @@ export class RunnerApiController {
       if (Object.keys(sessionData).length > 0) {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
-      return session;
+      return { session, currentWorkAcknowledged };
     }, loggedRetry(this.logger, 'runnerApi.events'));
 
     // Broadcast to live subscribers while the session is open;
@@ -4479,7 +4719,10 @@ export class RunnerApiController {
     // AWAITING_INPUT. So that buffered batch almost always arrives here AFTER the
     // park; gating on RUNNING alone dropped every turn's tail from the live stream.
     // PENDING matters for the same reason when a new message races that buffered tail.
-    if (OPEN.includes(session.status)) {
+    if (eventOutcome.currentWorkAcknowledged > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+    }
+    if (OPEN.includes(eventOutcome.session.status)) {
       for (const e of events) {
         // Persisted above either way — but a `system` progress ping renders as nothing on every
         // client, so spending a frame on it only costs the reader bandwidth. The replay paths
@@ -4601,6 +4844,16 @@ export class RunnerApiController {
           },
         });
       }
+      const currentWork = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+        includeInFlight: true,
+        inFlightOutcome: 'UNCONFIRMED',
+        code: CURRENT_WORK_SESSION_FINALIZED,
+        reason:
+          `Delivery could not be confirmed before the runner finalized the session as ${effectiveStatus}.`,
+      });
+      const currentWorkTerminalized =
+        currentWork.steers.terminalizedTurnIds.length
+        + currentWork.startup.terminalizedTurnIds.length;
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4630,6 +4883,7 @@ export class RunnerApiController {
         retryAt,
         taskReclaimed,
         taskId: current.taskId,
+        currentWorkTerminalized,
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
@@ -4640,6 +4894,9 @@ export class RunnerApiController {
       && outcome.taskId
     ) {
       this.realtime.publishTaskChanged(sessionId, outcome.taskId);
+    }
+    if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
     }
 
     this.realtime.publish(sessionId, {

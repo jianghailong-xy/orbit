@@ -14,6 +14,7 @@ import {
   UndeliveredCtx,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
+import { transcriptEventsWithDurableDeliveryReceipts } from '../lib/acceptedUserTurn';
 
 const LIST_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 const LIST_B62 = encodeId(LIST_UUID);
@@ -300,6 +301,32 @@ describe('message delivery', () => {
 
     expect(html.split('chat-undelivered').length - 1).toBe(1);
     expect(html.indexOf('second')).toBeLessThan(html.indexOf('Not delivered'));
+  });
+
+  it('keeps a server-only terminal receipt on its original USER before newer turns', () => {
+    const events = transcriptEventsWithDurableDeliveryReceipts(
+      [
+        userEvent(1, 't-current', 'original adjustment', 'written'),
+        userEvent(2, 't-b', 'newer B'),
+        userEvent(3, 't-c', 'newer C'),
+      ],
+      [{
+        turnId: 't-current',
+        placement: 'steer',
+        delivery: 'unconfirmed',
+        deliveryReason: 'runner disappeared before acknowledgement',
+      }],
+    );
+    const html = renderToStaticMarkup(<Transcript events={events} />);
+
+    expect(html.split('original adjustment').length - 1).toBe(1);
+    expect(html.split('Delivery could not be confirmed').length - 1).toBe(1);
+    expect(html.indexOf('original adjustment')).toBeLessThan(
+      html.indexOf('Delivery could not be confirmed'),
+    );
+    expect(html.indexOf('Delivery could not be confirmed')).toBeLessThan(html.indexOf('newer B'));
+    expect(html.indexOf('newer B')).toBeLessThan(html.indexOf('newer C'));
+    expect(html).not.toContain('Put back in the composer');
   });
 
   it('leaves a transcript recorded before delivery was reported alone', () => {

@@ -2446,11 +2446,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_send",
-				"description": "Send a follow-up message to a running or queued session (e.g. steer a sub-agent that's going off track). The reply's `kind` says what the server did with it: `steer` means it is being written into the turn already running (it gets no reply of its own — the running turn's is the answer — and it cannot be withdrawn), `message` means it is queued behind that turn and runs next. Which one you get is the server's decision, not a choice: only an engine whose input stays open mid-turn can take a steer.",
+				"description": "Add a CURRENT_WORK message to a session's exact current executable (e.g. correct a sub-agent that's going off track). Success is `startup_context` bound to the not-yet-started opening turn or `steer` bound to the live turn; it gets no independent reply and cannot be withdrawn. If there is no eligible current work, the lease boundary was missed, or the runtime/runner cannot prove exact acknowledged delivery, the call fails explicitly and never queues the message for a later turn. Reuse clientTurnId after an uncertain response.",
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"message":      str,
-					"clientTurnId": map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending with the same key returns the turn already filed instead of queueing the message twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new message."},
+					"clientTurnId": map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending the same CURRENT_WORK payload with this key returns its existing receipt instead of delivering twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new logical send."},
 				}, "sessionId", "message"),
 			},
 			map[string]interface{}{

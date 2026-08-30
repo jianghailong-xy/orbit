@@ -10,12 +10,17 @@ function makeService(
     existingStatus?: string;
     earlierExecutable?: number;
     sessionOverrides?: Record<string, unknown>;
+    existingAttachmentIds?: readonly string[];
+    existingContent?: string;
+    existingKind?: string;
+    existingSendIntent?: string | null;
   } = {},
 ) {
   const session = {
     id: '11111111-1111-4111-8111-111111111111',
     ownerId: '22222222-2222-4222-8222-222222222222',
     status: initialStatus,
+    deletedAt: null,
     cancelRequestedAt: null,
     prompt: 'opening prompt',
     numTurns: 1,
@@ -39,12 +44,15 @@ function makeService(
     sessionId: session.id,
     seq: 2,
     clientTurnId: 'client-1',
-    kind: 'message',
-    content: 'follow up',
+    kind: opts.existingKind ?? 'message',
+    content: opts.existingContent ?? 'follow up',
+    sendIntent: opts.existingSendIntent,
     status: opts.existingStatus ?? 'PENDING',
+    attachments: (opts.existingAttachmentIds ?? []).map((id) => ({ id })),
   };
   const tx = {
-    $queryRaw: async () => [{ id: session.id }],
+    $queryRaw: async (query: { strings?: readonly string[] }) =>
+      query.strings?.join('').includes('conversation_turn') ? [] : [{ id: session.id }],
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
       update: async (write: { data: Record<string, unknown> }) => {
@@ -53,6 +61,9 @@ function makeService(
         session.status = write.data.status as RunStatus;
         return { ...session };
       },
+    },
+    conversationTurnStartupFragment: {
+      findUnique: async () => null,
     },
     conversationTurn: {
       findUnique: async () => (opts.existing ? turn : null),
@@ -164,12 +175,16 @@ test('the sent message becomes the row preview at enqueue', async () => {
 });
 
 test('an idempotent retry returns its linked turn before revalidating attachments', async () => {
-  const h = makeService(RunStatus.PENDING, { existing: true });
+  const attachmentId = '44444444-4444-4444-8444-444444444444';
+  const h = makeService(RunStatus.PENDING, {
+    existing: true,
+    existingAttachmentIds: [attachmentId],
+  });
 
   const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
     clientTurnId: 'client-1',
     content: 'follow up',
-    attachmentIds: ['44444444-4444-4444-8444-444444444444'],
+    attachmentIds: [attachmentId],
   });
 
   assert.deepEqual(result, {
@@ -180,7 +195,82 @@ test('an idempotent retry returns its linked turn before revalidating attachment
   });
   assert.equal(h.attachmentValidations(), 0);
   assert.deepEqual(h.statusWrites, []);
-  assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
+  assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
+  assert.equal(h.queueChanges(), 0, 'a receipt replay has no new queue side effects');
+});
+
+for (const boundary of [
+  { name: 'terminal', status: RunStatus.FAILED, deletedAt: null },
+  { name: 'Trash', status: RunStatus.PENDING, deletedAt: new Date() },
+] as const) {
+  test(`a committed send retries by key after the session became ${boundary.name}`, async () => {
+    const h = makeService(boundary.status, {
+      existing: true,
+      existingSendIntent: 'NEXT_TURN',
+      sessionOverrides: { deletedAt: boundary.deletedAt },
+    });
+    let charges = 0;
+    const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
+      clientTurnId: 'client-1',
+      content: 'follow up',
+      intent: 'NEXT_TURN',
+    }, {
+      participateCurrentWorkTransaction: async () => { charges++; },
+    });
+
+    assert.equal(result.turnId, '33333333-3333-4333-8333-333333333333');
+    assert.equal(charges, 0);
+    assert.deepEqual(h.statusWrites, []);
+    assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
+
+    await assert.rejects(
+      h.service.createTurn(h.session.ownerId, h.session.id, {
+        clientTurnId: 'client-1',
+        content: 'different payload',
+        intent: 'NEXT_TURN',
+      }),
+      /different turn payload/,
+      'payload conflict must win over the later lifecycle refusal',
+    );
+  });
+}
+
+for (const mismatch of [
+  { name: 'content', opts: { existingContent: 'first payload' }, dto: { content: 'changed payload' } },
+  { name: 'kind', opts: { existingKind: 'shell' }, dto: { content: 'follow up' } },
+  {
+    name: 'attachments',
+    opts: { existingAttachmentIds: ['44444444-4444-4444-8444-444444444444'] },
+    dto: { content: 'follow up', attachmentIds: [] as string[] },
+  },
+] as const) {
+  test(`an idempotency key cannot be replayed with different ${mismatch.name}`, async () => {
+    const h = makeService(RunStatus.PENDING, { existing: true, ...mismatch.opts });
+    await assert.rejects(
+      h.service.createTurn(h.session.ownerId, h.session.id, {
+        clientTurnId: 'client-1',
+        ...mismatch.dto,
+      }),
+      /different turn payload/,
+    );
+    assert.equal(h.attachmentValidations(), 0, 'payload conflict is decided from the durable receipt');
+  });
+}
+
+test('NEXT_TURN cannot reuse a CURRENT_WORK idempotency key', async () => {
+  const h = makeService(RunStatus.PENDING, {
+    existing: true,
+    existingKind: 'steer',
+    existingSendIntent: 'CURRENT_WORK',
+  });
+  await assert.rejects(
+    h.service.createTurn(h.session.ownerId, h.session.id, {
+      clientTurnId: 'client-1',
+      content: 'follow up',
+      intent: 'NEXT_TURN',
+    }),
+    /already used with CURRENT_WORK/,
+  );
 });
 
 test('an idempotent PENDING retry is queued only behind a lower-seq executable turn', async () => {

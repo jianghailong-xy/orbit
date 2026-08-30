@@ -487,7 +487,7 @@ func TestCodexNotificationThreadIDReadsThreadStartedShape(t *testing.T) {
 	}
 }
 
-func TestCodexAppInterruptWaitsForTurnID(t *testing.T) {
+func TestCodexCurrentWorkStartupAckFollowsExactEngineTurnStart(t *testing.T) {
 	var mu sync.Mutex
 	active := &codexAppActiveTurn{orbitTurnID: "orbit-turn-1", startSent: true}
 	if got, beforeStart := requestCodexAppInterrupt(&mu, &active); got != "" || beforeStart {
@@ -496,8 +496,15 @@ func TestCodexAppInterruptWaitsForTurnID(t *testing.T) {
 	if !active.interruptRequested {
 		t.Fatalf("interruptRequested = false, want true")
 	}
-	if got := markCodexAppTurnStarted(&mu, &active, "orbit-turn-1", "codex-turn-1"); got != "codex-turn-1" {
-		t.Fatalf("markCodexAppTurnStarted = %q, want codex-turn-1", got)
+	if got, acknowledged := markCodexAppTurnStarted(
+		&mu, &active, "orbit-turn-1", "codex-turn-1",
+	); got != "codex-turn-1" || acknowledged != "orbit-turn-1" {
+		t.Fatalf("markCodexAppTurnStarted = (%q, %q), want codex-turn-1/orbit-turn-1", got, acknowledged)
+	}
+	if _, acknowledged := markCodexAppTurnStarted(
+		&mu, &active, "orbit-turn-1", "codex-turn-1",
+	); acknowledged != "" {
+		t.Fatalf("duplicate engine start acknowledged Orbit turn %q", acknowledged)
 	}
 	if got, beforeStart := requestCodexAppInterrupt(&mu, &active); got != "" || beforeStart {
 		t.Fatalf("duplicate requestCodexAppInterrupt = %q, want empty", got)

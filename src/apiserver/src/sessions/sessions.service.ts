@@ -39,10 +39,14 @@ import {
   SessionFilingState,
   SessionLifecycleState,
   type SessionResumeBlockedReason,
+  type SessionTurnIntent,
+  type SessionTurnPlacement,
   SessionRunState,
   SessionState,
   type SessionSearchHit,
   supportsMidTurnSteer,
+  supportsSessionCurrentWorkRouting,
+  supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
 } from '@orbit/shared';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
@@ -126,6 +130,12 @@ import {
 } from '../projects/task-aggregation';
 import { truncatePayload } from './truncate-payload';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { appendStartupTurnFragments } from '../runner-api/resume-continuation';
+import {
+  CURRENT_WORK_INTERRUPTED,
+  CURRENT_WORK_SESSION_ENDED,
+  terminalizeUndeliveredCurrentWork,
+} from './current-work-delivery';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -137,6 +147,16 @@ import {
 // window a provider actually reports — a weekly quota — so a bad clock parks a session for days
 // at worst, never indefinitely.
 const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
+
+// A startup envelope is one executable input even though its authored additions remain separate
+// audit rows. Bound the aggregate, not merely each fragment, so a burst during cold start cannot
+// manufacture an unbounded first request or attachment fan-out.
+const MAX_STARTUP_CONTEXT_FRAGMENTS = 32;
+const MAX_STARTUP_CONTEXT_ATTACHMENTS = 20;
+const MAX_STARTUP_CONTEXT_ATTACHMENT_BYTES = 4 * MAX_UPLOAD_BYTES;
+// A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
+// insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
+const CURRENT_WORK_LEASE_SAFETY_MS = 1_000;
 
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
@@ -156,7 +176,7 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
  */
 export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: string | null };
 
-type TurnPlacement = 'accepted' | 'queued' | 'steer';
+type TurnPlacement = SessionTurnPlacement;
 
 interface ListedQueuedTurn {
   turnId: string;
@@ -168,6 +188,59 @@ interface ListedQueuedTurn {
 interface ListedActiveTurn extends ListedQueuedTurn {
   placement: TurnPlacement;
   createdAt: string;
+  targetTurnId?: string;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
+  deliveryReason?: string;
+}
+
+const CURRENT_WORK_UNAVAILABLE = 'CURRENT_WORK_UNAVAILABLE';
+const SESSION_TURN_PROTOCOL_DISABLED = 'SESSION_TURN_PROTOCOL_DISABLED';
+
+function assertSessionTurnProtocolEnabled(intent: SessionTurnIntent | undefined): void {
+  // Omission is the N-1 protocol, including its server-side auto-steer decision. In particular,
+  // the rollout gate must not turn one installed client's request into NEXT_TURN on a new replica
+  // while an old replica would steer the same request.
+  if (intent === undefined) return;
+  if (process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED === '1') return;
+  throw new HttpException(
+    {
+      code: SESSION_TURN_PROTOCOL_DISABLED,
+      message:
+        'explicit session turn routing is disabled until every API replica is on this protocol',
+    },
+    HttpStatus.SERVICE_UNAVAILABLE,
+  );
+}
+
+function currentWorkUnavailable(
+  reason:
+    | 'NO_CURRENT_WORK'
+    | 'TARGET_LEASE_EXPIRED'
+    | 'STEER_UNSUPPORTED'
+    | 'STARTUP_UNSUPPORTED'
+    | 'STARTUP_ENVELOPE_LIMIT',
+  message: string,
+): ConflictException {
+  return new ConflictException({ code: CURRENT_WORK_UNAVAILABLE, reason, message });
+}
+
+/** Hash every authored/configuration field that makes one resume a distinct logical operation.
+ * Undefined configuration is encoded explicitly as null, while empty strings remain authored
+ * values. Attachment order is not semantic on the wire, so normalize it before hashing. */
+function resumeRequestFingerprint(dto: SessionResumeDto): string {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      content: dto.content,
+      kind: dto.kind ?? 'message',
+      intent: dto.intent ?? null,
+      attachmentIds: [...new Set(dto.attachmentIds ?? [])].sort(),
+      model: dto.model ?? null,
+      permissionMode: dto.permissionMode ?? null,
+      effort: dto.effort ?? null,
+      provider: dto.provider ?? null,
+    }))
+    .digest('hex');
 }
 
 /**
@@ -3099,6 +3172,7 @@ export class SessionsService {
   private async ensurePromptSeeded(
     tx: Prisma.TransactionClient,
     session: { id: string; prompt: string },
+    excludedAttachmentIds: readonly string[] = [],
   ) {
     const existing = await tx.conversationTurn.findUnique({
       where: {
@@ -3118,7 +3192,12 @@ export class SessionsService {
     // Link any compose-page uploads (scoped to the session, still turn-less) to the seed
     // turn, exactly as the claim would, so they ride along with the prompt.
     await tx.attachment.updateMany({
-      where: { sessionId: session.id, turnId: null },
+      where: {
+        sessionId: session.id,
+        turnId: null,
+        startupFragmentId: null,
+        ...(excludedAttachmentIds.length > 0 ? { id: { notIn: [...excludedAttachmentIds] } } : {}),
+      },
       data: { turnId: turn.id },
     });
   }
@@ -3145,16 +3224,23 @@ export class SessionsService {
    * Called under the Session row lock that createTurn already holds, which is the same lock
    * dequeueTurn takes — so a turn cannot finish between this answer and the insert.
    */
-  private async engineTurnInFlight(tx: Prisma.TransactionClient, sessionId: string) {
-    const running = await tx.conversationTurn.count({
-      where: {
-        sessionId,
-        kind: 'message',
-        status: 'IN_FLIGHT',
-        leaseDeadlineAt: { gt: new Date() },
-      },
-    });
-    return running > 0;
+  private async liveEngineTurn(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    exactTurnId?: string,
+  ): Promise<{ id: string } | null> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id FROM "conversation_turn"
+       WHERE "session_id" = ${sessionId}::uuid
+         AND kind = 'message'
+         AND status = 'IN_FLIGHT'
+         AND "lease_deadline_at" > clock_timestamp()
+             + (${CURRENT_WORK_LEASE_SAFETY_MS} * interval '1 millisecond')
+         ${exactTurnId ? Prisma.sql`AND id = ${exactTurnId}::uuid` : Prisma.empty}
+       ORDER BY seq ASC
+       LIMIT 1
+    `);
+    return rows[0] ?? null;
   }
 
   /**
@@ -3200,8 +3286,9 @@ export class SessionsService {
    *
    * The runner is judged by what it declared on its own last heartbeat. That snapshot can
    * only be stale in one direction that matters — a machine downgraded since it last spoke —
-   * and the inbox re-asks the poller itself before handing anything over, so a steer filed
-   * on a stale yes is withheld there and becomes an ordinary message when the turn ends.
+   * and the inbox re-asks the poller itself before handing anything over. A stale legacy steer
+   * keeps its compatibility requeue; explicit CURRENT_WORK is withheld and terminalized as a
+   * visible non-delivery when its exact target ends.
    */
   private async runtimeTakesSteer(
     tx: Prisma.TransactionClient,
@@ -3221,13 +3308,66 @@ export class SessionsService {
           select: { capabilities: true },
         })
       : null;
+    return supportsTargetBoundCurrentWorkSteer(
+      await sessionExecRuntime(tx, session),
+      runner?.capabilities,
+    );
+  }
+
+  /** The pre-routing-protocol decision used only when an installed client omits `intent`.
+   * It deliberately retains Claude's legacy always-steer behaviour and Codex's existing
+   * capability gate; routing-v1 is required only for explicit, exact-target CURRENT_WORK. */
+  private async runtimeTakesLegacySteer(
+    tx: Prisma.TransactionClient,
+    session: {
+      provider: string;
+      providerBuiltin: boolean;
+      ownerId: string;
+      assignedRunnerId: string | null;
+    },
+  ): Promise<boolean> {
+    const runner = session.assignedRunnerId
+      ? await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId },
+          select: { capabilities: true },
+        })
+      : null;
     return supportsMidTurnSteer(await sessionExecRuntime(tx, session), runner?.capabilities);
+  }
+
+  /** Startup context needs an acknowledged opening-envelope receipt. Claude's replay ledger and
+   * Codex's concrete turn-start event supply that engine-read signal; other runtimes are rejected. */
+  private async runtimeTakesStartupCurrentWork(
+    tx: Prisma.TransactionClient,
+    session: {
+      provider: string;
+      providerBuiltin: boolean;
+      ownerId: string;
+      assignedRunnerId: string | null;
+    },
+  ): Promise<boolean> {
+    const runner = session.assignedRunnerId
+      ? await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId },
+          select: { capabilities: true },
+        })
+      : null;
+    const runtime = await sessionExecRuntime(tx, session);
+    return supportsSessionCurrentWorkRouting(runner?.capabilities)
+      && (runtime === AgentProvider.CLAUDE || runtime === AgentProvider.CODEX);
   }
 
   private async insertTurnLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
-    data: { kind: string; content?: string; clientTurnId: string },
+    data: {
+      kind: string;
+      content?: string;
+      clientTurnId: string;
+      requestFingerprint?: string;
+      sendIntent?: SessionTurnIntent;
+      targetTurnId?: string;
+    },
   ) {
     const existing = await tx.conversationTurn.findUnique({
       where: { sessionId_clientTurnId: { sessionId, clientTurnId: data.clientTurnId } },
@@ -3249,7 +3389,14 @@ export class SessionsService {
    */
   private async insertTurn(
     sessionId: string,
-    data: { kind: string; content?: string; clientTurnId: string },
+    data: {
+      kind: string;
+      content?: string;
+      clientTurnId: string;
+      requestFingerprint?: string;
+      sendIntent?: SessionTurnIntent;
+      targetTurnId?: string;
+    },
   ) {
     // Retried whole. The seq is allocated from a row read under the Session's own lock inside the
     // closure, so a re-run allocates from the sequence the winner left rather than reusing a number
@@ -3277,7 +3424,7 @@ export class SessionsService {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId, turnId: null },
+      where: { id: { in: ids }, ownerId, sessionId, turnId: null, startupFragmentId: null },
       select: { id: true },
     });
     if (found.length !== ids.length) {
@@ -3317,8 +3464,24 @@ export class SessionsService {
   ): Promise<void> {
     if (attachmentIds.length === 0) return;
     await tx.attachment.updateMany({
-      where: { id: { in: attachmentIds }, turnId: null },
+      where: { id: { in: attachmentIds }, turnId: null, startupFragmentId: null },
       data: { turnId },
+    });
+  }
+
+  private async linkStartupFragmentAttachments(
+    startupFragmentId: string,
+    attachmentIds: string[],
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    if (attachmentIds.length === 0) return;
+    await tx.attachment.updateMany({
+      where: {
+        id: { in: attachmentIds },
+        turnId: null,
+        startupFragmentId: null,
+      },
+      data: { startupFragmentId },
     });
   }
 
@@ -3339,10 +3502,21 @@ export class SessionsService {
        * actually take unfenced: a delivery whose lease was taken over would still commit the turn.
        */
       fence?: TaskRunEffectFence;
+      /** Orchestration's attempt charge. Invoked only for a NEW, placeable CURRENT_WORK receipt,
+       * inside this transaction after idempotency/target checks and before the receipt is written. */
+      participateCurrentWorkTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /** Full logical resume payload hash. Present only when resume delegates to this live path. */
+      requestFingerprint?: string;
     },
   ) {
     assertPromptSize(dto.content, 'message');
-    await this.getSendable(ownerId, id); // fast ownership/lifecycle validation
+    if (dto.intent !== undefined && dto.intent !== 'CURRENT_WORK' && dto.intent !== 'NEXT_TURN') {
+      throw new BadRequestException('intent must be CURRENT_WORK or NEXT_TURN');
+    }
+    // Undefined is not an alias for NEXT_TURN: it is the installed N-1 auto-routing protocol.
+    // Keep the distinction all the way to `send_intent` so mixed-version retries and dequeue can
+    // preserve the behaviour that accepted the row.
+    const intent = dto.intent;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
     // turnComplete, and every one of those decisions is taken from the Session row read under the
     // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
@@ -3370,30 +3544,108 @@ export class SessionsService {
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
-      // §13.6 SU6: a turn that carries the TASK's prompt is the task's work, whatever this row was
-      // opened for. Written in the same transaction as the turn — so 0130's guard judges the value
-      // this turn actually starts under, and a session first opened to look at a task cannot keep
-      // the salvage exemption while executing it.
-      if (opts?.startsTaskWork) {
-        await tx.session.update({ where: { id }, data: { startsTaskWork: true } });
-      }
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      // A committed operation owns its key even after its Session later ends or moves to Trash.
+      // Check both durable receipt tables while holding the Session lock before any lifecycle,
+      // protocol-gate, attachment or budget decision. Hard purge remains a 404 because there is
+      // no owner-scoped Session row (and its cascading receipts no longer exist).
+      const existingFragment = await tx.conversationTurnStartupFragment.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+        include: {
+          targetTurn: { select: { seq: true } },
+          attachments: { select: { id: true } },
+        },
+      });
+      if (existingFragment) {
+        if (intent !== 'CURRENT_WORK') {
+          throw new ConflictException('clientTurnId was already used with CURRENT_WORK');
+        }
+        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
+        const storedAttachments = (existingFragment.attachments ?? [])
+          .map((attachment) => attachment.id)
+          .sort();
+        if (
+          dto.kind === 'shell'
+          || existingFragment.content !== dto.content
+          || expectedAttachments.length !== storedAttachments.length
+          || expectedAttachments.some((attachmentId, index) => attachmentId !== storedAttachments[index])
+        ) {
+          throw new ConflictException(
+            'clientTurnId was already used with a different CURRENT_WORK payload',
+          );
+        }
+        return {
+          turn: {
+            id: existingFragment.id,
+            seq: existingFragment.targetTurn.seq,
+            kind: 'startup_context',
+            targetTurnId: existingFragment.targetTurnId,
+          },
+          placement: 'startup' as const,
+          wakeQueue: false,
+          wakeInbox: false,
+          idempotent: true,
+        };
+      }
+      const existing = await tx.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+        include: { attachments: { select: { id: true } } },
+      });
+      if (existing) {
+        if (
+          (intent === 'CURRENT_WORK' && existing.sendIntent !== 'CURRENT_WORK')
+          || (intent === 'NEXT_TURN'
+            && existing.sendIntent != null
+            && existing.sendIntent !== 'NEXT_TURN')
+          || (intent === undefined && existing.sendIntent === 'CURRENT_WORK')
+        ) {
+          throw new ConflictException(`clientTurnId was already used with ${existing.sendIntent ?? 'legacy intent'}`);
+        }
+        const expectedKinds = intent === 'CURRENT_WORK'
+          ? ['steer']
+          : dto.kind === 'shell'
+            ? ['shell']
+            : intent === 'NEXT_TURN'
+              ? ['message']
+              : ['message', 'steer'];
+        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
+        const storedAttachments = (existing.attachments ?? [])
+          .map((attachment) => attachment.id)
+          .sort();
+        if (
+          !expectedKinds.includes(existing.kind)
+          || existing.content !== dto.content
+          || expectedAttachments.length !== storedAttachments.length
+          || expectedAttachments.some((attachmentId, index) => attachmentId !== storedAttachments[index])
+          || (existing.requestFingerprint != null
+            && existing.requestFingerprint !== opts?.requestFingerprint)
+        ) {
+          throw new ConflictException(
+            'clientTurnId was already used with a different turn payload',
+          );
+        }
+        return {
+          turn: existing,
+          placement: await this.turnPlacement(tx, id, existing),
+          wakeQueue: false,
+          wakeInbox: false,
+          idempotent: true,
+        };
+      }
+      // Only a genuinely new logical operation is subject to the rollout gate and the Session's
+      // current lifecycle. A response-lost retry must replay its committed receipt, not become a
+      // new refusal because the turn completed or the user filed the Session in the meantime.
+      assertSessionTurnProtocolEnabled(intent);
       if (session.deletedAt) {
         throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
       }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new SessionNotSendable('the session has ended');
       }
-      const existing = await tx.conversationTurn.findUnique({
-        where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
-      });
-      if (existing) {
-        return {
-          turn: existing,
-          placement: await this.turnPlacement(tx, id, existing),
-          wakeQueue: session.status === RunStatus.PENDING,
-          wakeInbox: session.status === RunStatus.RUNNING,
-        };
+      // §13.6 SU6: a turn that carries the TASK's prompt is the task's work, whatever this row was
+      // opened for. Written only for a new operation, in the same transaction as the turn.
+      if (opts?.startsTaskWork) {
+        await tx.session.update({ where: { id }, data: { startsTaskWork: true } });
       }
       // Heartbeat delivery is the server-side linearization point for manual git
       // mutations. A modern UUID-bearing unclaimed request (or a stale/orphaned one)
@@ -3421,23 +3673,166 @@ export class SessionsService {
       const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds, tx);
       // A claim can race the lazy first-turn seed. While holding the same Session lock as
       // queue.buildSession, ensure an unestablished runtime cannot lose its opening prompt.
-      if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
-      // A message sent while a turn is already running is a steer: it is written into that
-      // running turn rather than queued behind its result (see ConversationTurnKind). The
-      // kind is decided here, under the same Session row lock the inbox dequeues under, so
-      // the decision cannot race the turn it is about — and it is decided by the server so
-      // every entry point behaves the same without any of them knowing about steering.
-      //
-      // Only a message steers. A `!cmd` shell turn runs on the runner, not in the engine,
-      // so there is nothing to fold it into and it keeps queuing exactly as before — and
-      // neither does a message on an engine that cannot be written to mid-turn, or one whose
-      // runner has not said it can deliver that engine's steer (see runtimeTakesSteer).
-      const kind =
-        dto.kind === 'shell'
+      if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session, attachmentIds);
+
+      let kind: 'message' | 'shell' | 'steer';
+      let targetTurnId: string | undefined;
+      if (intent === 'CURRENT_WORK') {
+        if (dto.kind === 'shell') {
+          throw currentWorkUnavailable(
+            'STARTUP_UNSUPPORTED',
+            'CURRENT_WORK is only available for a message; shell commands must use NEXT_TURN',
+          );
+        }
+        const starting = await tx.conversationTurn.findUnique({
+          where: {
+            sessionId_clientTurnId: {
+              sessionId: id,
+              clientTurnId: SessionsService.initialTurnClientId(id),
+            },
+          },
+          select: { id: true, seq: true, kind: true, status: true, deliveredAt: true, content: true },
+        });
+        if (starting?.kind === 'message' && starting.status === 'PENDING' && !starting.deliveredAt) {
+          if (!(await this.runtimeTakesStartupCurrentWork(tx, session))) {
+            throw currentWorkUnavailable(
+              'STARTUP_UNSUPPORTED',
+              'this runtime or runner cannot acknowledge CURRENT_WORK in the starting envelope',
+            );
+          }
+          const existingFragments = await tx.conversationTurnStartupFragment.findMany({
+            where: { sessionId: id, targetTurnId: starting.id },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: { content: true },
+          });
+          if (existingFragments.length + 1 > MAX_STARTUP_CONTEXT_FRAGMENTS) {
+            throw currentWorkUnavailable(
+              'STARTUP_ENVELOPE_LIMIT',
+              `the starting turn already has ${MAX_STARTUP_CONTEXT_FRAGMENTS} context fragments`,
+            );
+          }
+          const envelope = appendStartupTurnFragments(
+            // The initial message is always textual, but keep the helper's optional contract.
+            starting.content ?? undefined,
+            [...existingFragments, { content: dto.content }],
+          ) ?? '';
+          if (envelope.length > MAX_PROMPT_CHARS) {
+            throw currentWorkUnavailable(
+              'STARTUP_ENVELOPE_LIMIT',
+              `the starting-turn envelope would exceed ${MAX_PROMPT_CHARS} characters`,
+            );
+          }
+          const attachmentEnvelope = await tx.attachment.aggregate({
+            where: {
+              sessionId: id,
+              OR: [
+                { turnId: starting.id },
+                { startupFragment: { targetTurnId: starting.id } },
+                ...(attachmentIds.length > 0 ? [{ id: { in: attachmentIds } }] : []),
+              ],
+            },
+            _count: { _all: true },
+            _sum: { sizeBytes: true },
+          });
+          if (
+            attachmentEnvelope._count._all > MAX_STARTUP_CONTEXT_ATTACHMENTS
+            || (attachmentEnvelope._sum.sizeBytes ?? 0) > MAX_STARTUP_CONTEXT_ATTACHMENT_BYTES
+          ) {
+            throw currentWorkUnavailable(
+              'STARTUP_ENVELOPE_LIMIT',
+              `the starting-turn envelope exceeds ${MAX_STARTUP_CONTEXT_ATTACHMENTS} attachments or ${MAX_STARTUP_CONTEXT_ATTACHMENT_BYTES} bytes`,
+            );
+          }
+          await opts?.participateCurrentWorkTransaction?.(tx);
+          const fragment = await tx.conversationTurnStartupFragment.create({
+            data: {
+              sessionId: id,
+              targetTurnId: starting.id,
+              clientTurnId: dto.clientTurnId,
+              content: dto.content,
+            },
+          });
+          await this.linkStartupFragmentAttachments(fragment.id, attachmentIds, tx);
+          await tx.session.update({
+            where: { id },
+            data: {
+              lastTurnAt: new Date(),
+              ...(dto.content ? { lastUserText: dto.content } : {}),
+              retryAt: null,
+            },
+          });
+          return {
+            turn: {
+              id: fragment.id,
+              seq: starting.seq,
+              kind: 'startup_context',
+              targetTurnId: starting.id,
+            },
+            placement: 'startup' as const,
+            wakeQueue: session.status === RunStatus.PENDING,
+            wakeInbox: session.status === RunStatus.RUNNING,
+            idempotent: false,
+          };
+        }
+
+        const liveTarget = await this.liveEngineTurn(tx, id);
+        if (!liveTarget) {
+          // liveEngineTurn already made the acceptance decision with PostgreSQL's clock and the
+          // safety margin. This read only distinguishes its structured refusal reason; do not
+          // reintroduce an application-clock lease decision here.
+          const unusableLeaseTarget = await tx.conversationTurn.count({
+            where: {
+              sessionId: id,
+              kind: 'message',
+              status: 'IN_FLIGHT',
+            },
+          });
+          throw currentWorkUnavailable(
+            unusableLeaseTarget > 0 ? 'TARGET_LEASE_EXPIRED' : 'NO_CURRENT_WORK',
+            unusableLeaseTarget > 0
+              ? 'the current turn lease expired before this message could enter it'
+              : 'there is no starting or live message turn to receive CURRENT_WORK',
+          );
+        }
+        if (!(await this.runtimeTakesSteer(tx, session))) {
+          throw currentWorkUnavailable(
+            'STEER_UNSUPPORTED',
+            'this runtime or runner does not support acknowledged CURRENT_WORK delivery',
+          );
+        }
+        // Capability resolution may make network-free DB reads, but wall time still moves. Recheck
+        // the exact lease against the database clock immediately before charging/inserting.
+        if (!(await this.liveEngineTurn(tx, id, liveTarget.id))) {
+          throw currentWorkUnavailable(
+            'TARGET_LEASE_EXPIRED',
+            'the current turn lease expired before this message could enter it',
+          );
+        }
+        await opts?.participateCurrentWorkTransaction?.(tx);
+        // The atomic orchestration charge above may itself wait on a task-attempt row. Its write
+        // is part of this transaction, so reject after one last database-clock check and roll the
+        // charge back if the target stopped being usable while that lock was acquired.
+        if (!(await this.liveEngineTurn(tx, id, liveTarget.id))) {
+          throw currentWorkUnavailable(
+            'TARGET_LEASE_EXPIRED',
+            'the current turn lease expired before this message could enter it',
+          );
+        }
+        kind = 'steer';
+        targetTurnId = liveTarget.id;
+      } else if (intent === 'NEXT_TURN') {
+        kind = dto.kind === 'shell' ? 'shell' : 'message';
+      } else {
+        // This is the exact N-1 rule. It remains inside the Session serialization boundary, but
+        // intentionally has no target address or routing-v1 receipt: old clients sent one
+        // unqualified message and the old server chose steer vs queue from the live turn.
+        kind = dto.kind === 'shell'
           ? 'shell'
-          : (await this.engineTurnInFlight(tx, id)) && (await this.runtimeTakesSteer(tx, session))
+          : (await this.liveEngineTurn(tx, id))
+              && (await this.runtimeTakesLegacySteer(tx, session))
             ? 'steer'
             : 'message';
+      }
       // This is the authoritative queue placement: it is read before this row exists and while
       // the Session lock prevents dequeue/complete from changing its predecessors underneath it.
       // A steer takes precedence because it joins the running turn instead of waiting behind it.
@@ -3447,6 +3842,9 @@ export class SessionsService {
         kind,
         content: dto.content,
         clientTurnId: dto.clientTurnId,
+        ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
+        ...(intent ? { sendIntent: intent } : {}),
+        ...(targetTurnId ? { targetTurnId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       const nextStatus = statusAfterTurnEnqueued(session.status);
@@ -3513,13 +3911,19 @@ export class SessionsService {
         placement,
         wakeQueue: nextStatus === RunStatus.PENDING,
         wakeInbox: nextStatus === RunStatus.RUNNING,
+        idempotent: false,
       };
-    }, loggedRetry(this.logger, 'sessions.createTurn'));
+    }, loggedRetry(this.logger, 'sessions.createTurn', {
+      // This transaction deliberately waits for the Session row: dequeue and turnComplete use
+      // that lock as the routing linearization point. Prisma's 5s interactive-transaction default
+      // is shorter than a legitimate contender can hold it, so make the deadline explicit.
+      transaction: { maxWait: 10_000, timeout: 30_000 },
+    }));
     if (queued.wakeQueue) this.queue.notifySessionQueued();
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     // No transcript event exists until the runner leases this turn. Tell every focused client to
     // refresh the durable queue now, so a message queued on web appears on iOS (and vice versa).
-    this.realtime.publishQueuedTurnsChanged(id);
+    if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
     // `kind` is the server's own decision (message / shell / steer), and the only way the
     // caller learns which one it got: a steer joins the turn that is already running, while a
     // message queues behind it. Every entry point sends the same request, so this is what lets
@@ -3530,6 +3934,9 @@ export class SessionsService {
       seq: queued.turn.seq,
       kind: queued.turn.kind,
       placement: queued.placement,
+      ...('targetTurnId' in queued.turn && queued.turn.targetTurnId
+        ? { targetTurnId: queued.turn.targetTurnId }
+        : {}),
     };
   }
 
@@ -3554,7 +3961,16 @@ export class SessionsService {
    * the request is not a claim that the engine stopped: only the engine's own answer settles
    * that, and the runner reports it as an `interrupt` transcript event.
    */
-  async interrupt(ownerId: string, id: string, dto?: SessionInterruptDto) {
+  async interrupt(
+    ownerId: string,
+    id: string,
+    dto?: SessionInterruptDto,
+    opts?: {
+      /** Atomic orchestration budget participant. It runs only after a new follow-up's durable
+       * idempotency receipt and payload have been checked, inside the Session transaction. */
+      participateFollowUpTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+    },
+  ) {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     if (followUp) {
@@ -3563,7 +3979,18 @@ export class SessionsService {
         throw new BadRequestException('clientTurnId is required when interrupting with a follow-up');
       }
     }
-    await this.getLive(ownerId, id);
+    // Mint once per logical call, outside the retried transaction. Follow-ups derive both durable
+    // rows from the caller's stable key; a plain interrupt still gets one stable key if the
+    // transaction itself is replayed after a serialization failure.
+    const interruptClientTurnId = followUp
+      ? SessionsService.interruptClientId(dto!.clientTurnId!)
+      : randomUUID();
+    const interruptPayload = followUp
+      ? JSON.stringify({
+          content,
+          attachmentIds: [...new Set(dto?.attachmentIds ?? [])].sort(),
+        })
+      : undefined;
     // Retried whole: the interrupt is decided from the Session row re-read under its lock.
     const queued = await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -3572,6 +3999,34 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      // Keyed on the interrupt rather than on the message, because only the interrupt is
+      // certainly still there: a later interrupt may have dropped the follow-up, and a
+      // retry must not then re-file it. A control turn is never deleted, so its presence
+      // is the durable record that this request already ran.
+      if (followUp) {
+        const already = await tx.conversationTurn.findUnique({
+          where: {
+            sessionId_clientTurnId: { sessionId: id, clientTurnId: interruptClientTurnId },
+          },
+          select: { id: true, content: true },
+        });
+        if (already) {
+          if (already.content !== interruptPayload) {
+            throw new ConflictException(
+              'clientTurnId was already used with a different interrupt follow-up payload',
+            );
+          }
+          // A retry: everything below already happened. Re-running it would delete the
+          // follow-up this request queued and file a second interrupt behind it.
+          const turn = await tx.conversationTurn.findUnique({
+            where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto!.clientTurnId! } },
+            select: { id: true, seq: true },
+          });
+          return { turn, wakeQueue: false, wakeInbox: false, idempotent: true };
+        }
+      }
+      // A committed follow-up is returned above even if the Session later ended or was filed in
+      // Trash. Only a new operation is judged against the lifecycle it is trying to mutate.
       if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
         throw new ConflictException('the session has ended');
       }
@@ -3581,35 +4036,28 @@ export class SessionsService {
       if (followUp && session.deletedAt) {
         throw new ConflictException('the session is in Trash; restore it before sending a message');
       }
-      // Keyed on the interrupt rather than on the message, because only the interrupt is
-      // certainly still there: a later interrupt may have dropped the follow-up, and a
-      // retry must not then re-file it. A control turn is never deleted, so its presence
-      // is the durable record that this request already ran.
-      const interruptClientTurnId = followUp
-        ? SessionsService.interruptClientId(dto!.clientTurnId!)
-        : randomUUID();
-      if (followUp) {
-        const already = await tx.conversationTurn.findUnique({
-          where: {
-            sessionId_clientTurnId: { sessionId: id, clientTurnId: interruptClientTurnId },
-          },
-          select: { id: true },
-        });
-        if (already) {
-          // A retry: everything below already happened. Re-running it would delete the
-          // follow-up this request queued and file a second interrupt behind it.
-          const turn = await tx.conversationTurn.findUnique({
-            where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto!.clientTurnId! } },
-            select: { id: true, seq: true },
-          });
-          return { turn, wakeQueue: false };
-        }
-      }
       // Checked before anything is dropped, so a request that cannot be honoured leaves
       // the queue exactly as it found it.
       const attachmentIds = followUp
         ? await this.assertLinkableAttachments(ownerId, id, dto?.attachmentIds, tx)
         : [];
+      if (followUp) await opts?.participateFollowUpTransaction?.(tx);
+      // Explicit CURRENT_WORK is durable authored input, not a disposable queue row. Settle it
+      // with a visible failed-delivery receipt before removing ordinary queued work. Startup
+      // fragments keep the same append-only audit guarantee.
+      const terminalized = await terminalizeUndeliveredCurrentWork(tx, id, {
+        code: CURRENT_WORK_INTERRUPTED,
+        reason: 'CURRENT_WORK was not delivered because the session was interrupted.',
+      });
+      const protectedTargetIds = terminalized.targetTurnIds;
+      if (protectedTargetIds.length > 0) {
+        // Target FKs intentionally prevent individual deletion. Retire an undelivered seed in
+        // place so its fragments, attachments and clientTurnId receipt remain auditable.
+        await tx.conversationTurn.updateMany({
+          where: { sessionId: id, id: { in: protectedTargetIds }, status: 'PENDING' },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+      }
       // Drop queued-but-undelivered follow-ups: interrupting means "stop", so they
       // should not fire after the current turn is aborted. Queued `!cmd` shell turns go
       // too — they sit in the same "waiting behind the running turn" queue (as the
@@ -3617,7 +4065,12 @@ export class SessionsService {
       // the user had just told to stop. A queued steer goes for the same reason and one
       // more: it would be written into the very turn being stopped.
       await tx.conversationTurn.deleteMany({
-        where: { sessionId: id, kind: { in: ['message', 'shell', 'steer'] }, status: 'PENDING' },
+        where: {
+          sessionId: id,
+          kind: { in: ['message', 'shell', 'steer'] },
+          status: 'PENDING',
+          ...(protectedTargetIds.length > 0 ? { id: { notIn: protectedTargetIds } } : {}),
+        },
       });
       if (session.status === RunStatus.RUNNING) {
         const executable = await tx.conversationTurn.count({
@@ -3637,8 +4090,11 @@ export class SessionsService {
       await this.insertTurnLocked(tx, id, {
         kind: 'interrupt',
         clientTurnId: interruptClientTurnId,
+        ...(interruptPayload ? { content: interruptPayload } : {}),
       });
-      if (!followUp) return { turn: null, wakeQueue: false };
+      if (!followUp) {
+        return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false };
+      }
       // A claim can race the lazy first-turn seed, exactly as in createTurn: under this
       // same lock, make sure an unestablished runtime cannot lose its opening prompt.
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
@@ -3662,13 +4118,18 @@ export class SessionsService {
           retryAt: null,
         },
       });
-      return { turn, wakeQueue: nextStatus === RunStatus.PENDING };
+      return {
+        turn,
+        wakeQueue: nextStatus === RunStatus.PENDING,
+        wakeInbox: true,
+        idempotent: false,
+      };
     }, loggedRetry(this.logger, 'sessions.interrupt'));
     // The inbox is woken unconditionally: the interrupt turn is what it is waiting for, and
     // it is deliverable the moment this commits, whatever the follow-up's status implies.
     if (queued.wakeQueue) this.queue.notifySessionQueued();
-    this.realtime.notifyInbox(id);
-    this.realtime.publishQueuedTurnsChanged(id);
+    if (queued.wakeInbox) this.realtime.notifyInbox(id);
+    if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
     return queued.turn
       ? { ok: true as const, turnId: queued.turn.id, seq: queued.turn.seq }
       : { ok: true as const };
@@ -3722,7 +4183,12 @@ export class SessionsService {
       where: {
         sessionId: id,
         kind: { in: ['message', 'shell', 'steer'] },
-        status: { in: ['PENDING', 'IN_FLIGHT'] },
+        OR: [
+          { status: { in: ['PENDING', 'IN_FLIGHT'] } },
+          ...(view === 'active'
+            ? [{ sendIntent: 'CURRENT_WORK', deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] } }]
+            : []),
+        ],
       },
       orderBy: { seq: 'asc' },
       // Carry each queued turn's image refs so the composer can still render them after a
@@ -3732,12 +4198,42 @@ export class SessionsService {
         seq: true,
         clientTurnId: true,
         kind: true,
+        targetTurnId: true,
+        deliveryStatus: true,
+        deliveryFailureCode: true,
+        deliveryFailureReason: true,
         status: true,
         content: true,
         createdAt: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
+    const startupFragments = view === 'active'
+      ? await this.prisma.conversationTurnStartupFragment.findMany({
+          where: {
+            sessionId: id,
+            OR: [
+              {
+                failedAt: null,
+                targetTurn: { kind: 'message', status: { in: ['PENDING', 'IN_FLIGHT'] } },
+              },
+              { failedAt: { not: null } },
+            ],
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            targetTurnId: true,
+            content: true,
+            createdAt: true,
+            failedAt: true,
+            deliveryStatus: true,
+            failureCode: true,
+            failureReason: true,
+            attachments: { select: { id: true, mimeType: true } },
+          },
+        })
+      : [];
     const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
     const classified = turns
@@ -3768,25 +4264,65 @@ export class SessionsService {
     // one that commits after this query is the live event that replaces the short-lived fallback.
     // Do this only after placement is computed over ALL active turns. Filtering the announced head
     // first would promote its genuinely queued successor to `accepted`.
-    const announced = turns.length === 0
+    const announcedTargetIds = [
+      ...turns.map((turn) => turn.id),
+      ...startupFragments.map((fragment) => fragment.targetTurnId),
+      ...startupFragments.map((fragment) => fragment.id),
+    ];
+    const transcriptReceipts = announcedTargetIds.length === 0
       ? []
       : await this.prisma.runEvent.findMany({
           where: {
             sessionId: id,
-            type: RunEventType.USER,
-            turnId: { in: turns.map((turn) => turn.id) },
+            OR: [
+              { type: RunEventType.USER, turnId: { in: announcedTargetIds } },
+              {
+                type: RunEventType.USER_DELIVERY,
+                payload: { path: ['delivery'], equals: 'failed' },
+              },
+            ],
           },
-          select: { turnId: true },
+          select: { type: true, turnId: true, payload: true },
         });
     const announcedTurnIds = new Set(
-      announced.flatMap((event) => (event.turnId ? [event.turnId] : [])),
+      transcriptReceipts.flatMap((event) =>
+        event.type === RunEventType.USER && event.turnId ? [event.turnId] : []),
     );
-    return classified
-      .filter(({ turn }) => !announcedTurnIds.has(turn.id))
+    const failedDeliveryTurnIds = new Set(
+      transcriptReceipts.flatMap((event) => {
+        if (event.type !== RunEventType.USER_DELIVERY) return [];
+        const payload = event.payload as { delivery?: unknown; turnId?: unknown } | null;
+        if (payload?.delivery !== 'failed') return [];
+        const turnId = typeof payload.turnId === 'string' ? payload.turnId : event.turnId;
+        return turnId && announcedTargetIds.includes(turnId) ? [turnId] : [];
+      }),
+    );
+    const activeTurns: ListedActiveTurn[] = classified
+      // A USER(enqueued/written) is only optimistic progress. Once the durable receipt says
+      // FAILED it must remain visible and override that transcript state; no synthetic failed
+      // run_event is written by the server, so suppressing it here would strand the UI forever.
+      // Conversely, a runner-authored USER_DELIVERY(failed) already renders the terminal result;
+      // returning the row as well would paint the same Not delivered bubble twice after reload.
+      .filter(({ turn }) => {
+        if (turn.deliveryStatus === 'FAILED') return !failedDeliveryTurnIds.has(turn.id);
+        if (turn.deliveryStatus === 'UNCONFIRMED') return true;
+        return !announcedTurnIds.has(turn.id);
+      })
       .map(({ turn, placement }) => ({
         turnId: turn.id,
         kind: turn.kind,
         placement,
+        ...(turn.targetTurnId ? { targetTurnId: turn.targetTurnId } : {}),
+        ...(turn.deliveryStatus === 'FAILED' || turn.deliveryStatus === 'UNCONFIRMED'
+          ? {
+              delivery: (turn.deliveryStatus === 'FAILED' ? 'failed' : 'unconfirmed') as
+                'failed' | 'unconfirmed',
+              ...(turn.deliveryFailureCode ? { deliveryCode: turn.deliveryFailureCode } : {}),
+              ...(turn.deliveryFailureReason
+                ? { deliveryReason: turn.deliveryFailureReason }
+                : {}),
+            }
+          : {}),
         content: turn.content ?? '',
         createdAt: turn.createdAt.toISOString(),
         attachments: turn.attachments.map((attachment) => ({
@@ -3794,6 +4330,36 @@ export class SessionsService {
           mimeType: attachment.mimeType,
         })),
       }));
+    const activeStartup: ListedActiveTurn[] = startupFragments
+      .filter((fragment) => fragment.failedAt
+        ? true
+        : !announcedTurnIds.has(fragment.targetTurnId) && !announcedTurnIds.has(fragment.id))
+      .map((fragment) => ({
+        turnId: fragment.id,
+        targetTurnId: fragment.targetTurnId,
+        kind: 'startup_context',
+        placement: 'startup',
+        ...(fragment.failedAt
+          ? {
+              delivery: (fragment.deliveryStatus === 'UNCONFIRMED'
+                ? 'unconfirmed'
+                : 'failed') as 'failed' | 'unconfirmed',
+              ...(fragment.failureCode ? { deliveryCode: fragment.failureCode } : {}),
+              ...(fragment.failureReason ? { deliveryReason: fragment.failureReason } : {}),
+            }
+          : {}),
+        content: fragment.content,
+        createdAt: fragment.createdAt.toISOString(),
+        attachments: fragment.attachments.map((attachment) => ({
+          id: attachment.id,
+          mimeType: attachment.mimeType,
+        })),
+      }));
+    // ES sort is stable: equal timestamps preserve the turn query's seq order and the fragment
+    // query's (createdAt,id) order. Breaking a tie by unrelated UUID would reorder the executable
+    // head behind its queued successor in a recovered snapshot.
+    return [...activeTurns, ...activeStartup].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt));
   }
 
   /** Withdraw a queued user message or `!cmd` shell turn. Only a still-PENDING one can be
@@ -4300,6 +4866,10 @@ export class SessionsService {
           projectBound: false,
         };
       }
+      await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+        code: CURRENT_WORK_SESSION_ENDED,
+        reason: 'CURRENT_WORK was not delivered because the session ended.',
+      });
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },
@@ -4327,9 +4897,11 @@ export class SessionsService {
             endReason: reason,
           },
         });
-        // Drop queued messages so they cannot replay if the session is later revived.
-        await tx.conversationTurn.deleteMany({
+        // Retire queued messages in place. This prevents replay while preserving target FKs,
+        // attachments and clientTurnId receipts as durable audit evidence.
+        await tx.conversationTurn.updateMany({
           where: { sessionId, kind: 'message', status: 'PENDING' },
+          data: { status: 'ANSWERED', answeredAt: now },
         });
         await this.insertTurnLocked(tx, sessionId, {
           kind: 'end',
@@ -4351,13 +4923,17 @@ export class SessionsService {
   /** Emit runner/control-plane effects for a newly persisted end intent. */
   private publishEndIntent(
     sessionId: string,
-    ended: { changed: boolean; runnerId: string | null },
+    ended: {
+      changed: boolean;
+      runnerId: string | null;
+    },
   ): void {
     if (!ended.changed) return;
     // PENDING sessions settle synchronously to CANCELLED and will never receive runner STATUS.
     // The full summary carries taskId, letting task lists clear queued immediately. Live-session
     // end intents also publish safely here; their later finalize event remains authoritative.
     this.realtime.publishSessionUpdated(sessionId);
+    this.realtime.publishQueuedTurnsChanged(sessionId);
     if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
     this.realtime.notifyInbox(sessionId);
   }
@@ -4592,6 +5168,7 @@ export class SessionsService {
     },
   ) {
     assertPromptSize(dto.content, 'message');
+    const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
@@ -4680,6 +5257,7 @@ export class SessionsService {
         // `AWAITING_INPUT` and `INTERRUPTED` are both LIVE — so a fence applied only to the revive
         // below would be a fence on the branch nobody uses.
         fence: opts?.fence,
+        requestFingerprint,
       });
     }
     if (
@@ -4842,7 +5420,27 @@ export class SessionsService {
       // if the runner went offline in the meantime. Trash/ending still win above.
       const existing = await tx.conversationTurn.findUnique({
         where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+        include: { attachments: { select: { id: true } } },
       });
+      if (existing) {
+        const expectedKind = dto.kind === 'shell' ? 'shell' : 'message';
+        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
+        const storedAttachments = existing.attachments.map((attachment) => attachment.id).sort();
+        if (
+          existing.kind !== expectedKind
+          || existing.content !== dto.content
+          || (existing.requestFingerprint != null
+            && existing.requestFingerprint !== requestFingerprint)
+          || expectedAttachments.length !== storedAttachments.length
+          || expectedAttachments.some(
+            (attachmentId, index) => attachmentId !== storedAttachments[index],
+          )
+        ) {
+          throw new ConflictException(
+            'clientTurnId was already used with a different resume payload',
+          );
+        }
+      }
       if (!SessionsService.TERMINAL.includes(current.status)) {
         if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
         throw SessionsService.resumeBlocked('NOT_TERMINAL');
@@ -4891,6 +5489,7 @@ export class SessionsService {
         kind: dto.kind === 'shell' ? 'shell' : 'message',
         content: dto.content,
         clientTurnId: dto.clientTurnId,
+        requestFingerprint,
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       // A revive may also move the session to another provider on the same runtime. Unlike a live

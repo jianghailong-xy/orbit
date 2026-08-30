@@ -5,7 +5,7 @@ import {
   TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS,
   transientDbConflictBody,
 } from '@orbit/shared';
-import { ApiError, api, getSessionEventPage, listQueuedTurns } from './api';
+import { ApiError, api, getSessionEventPage, listQueuedTurns, resumeSession, sendTurn } from './api';
 
 const okJson = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as Response;
@@ -68,6 +68,79 @@ describe('listQueuedTurns', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/sessions/session-1/turns?view=active');
+  });
+});
+
+describe('sendTurn intent protocol', () => {
+  it('carries explicit CURRENT_WORK in the request body', async () => {
+    const fetchMock = vi.fn(async () => okJson({
+      turnId: 'turn-1', seq: 2, kind: 'steer', placement: 'steer', targetTurnId: 'target-1',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendTurn(
+      'session-1', 'adjust this', [], undefined, 'CURRENT_WORK', 'logical-send-1',
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/sessions/session-1/turns/current-work-routing');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      content: 'adjust this',
+      intent: 'CURRENT_WORK',
+      clientTurnId: 'logical-send-1',
+    });
+  });
+
+  it('uses the caller logical-send key for resume retries too', async () => {
+    const fetchMock = vi.fn(async () => okJson({
+      turnId: 'turn-resume', seq: 4, kind: 'message', placement: 'accepted',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resumeSession(
+      'session-1', 'resume this', { model: 'm' }, [], undefined, 'logical-resume-1',
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      clientTurnId: 'logical-resume-1',
+      content: 'resume this',
+      model: 'm',
+    });
+  });
+
+  it('uses explicit NEXT_TURN as the compatibility default', async () => {
+    const fetchMock = vi.fn(async () => okJson({
+      turnId: 'turn-2', seq: 3, kind: 'message', placement: 'queued',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendTurn('session-1', 'afterwards');
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).intent).toBe('NEXT_TURN');
+  });
+
+  it('preserves a structured CURRENT_WORK 409 for the composer to handle as non-placement', async () => {
+    const body = {
+      code: 'CURRENT_WORK_UNAVAILABLE',
+      reason: 'NO_CURRENT_WORK',
+      message: 'there is no current work',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: async () => body,
+    }) as Response));
+
+    const error = await sendTurn(
+      'session-1', 'keep this draft', [], undefined, 'CURRENT_WORK',
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(409);
+    expect((error as ApiError).body).toEqual(body);
   });
 });
 

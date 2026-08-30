@@ -80,16 +80,17 @@ type codexAppServer struct {
 }
 
 type codexAppActiveTurn struct {
-	orbitTurnID        string
-	codexTurnID        string
-	startSent          bool
-	finishing          bool
-	interruptRequested bool
-	interruptSent      bool
-	result             codexTurnResult
-	fullText           strings.Builder
-	deltaText          strings.Builder
-	thinkText          strings.Builder
+	orbitTurnID         string
+	codexTurnID         string
+	startSent           bool
+	finishing           bool
+	interruptRequested  bool
+	interruptSent       bool
+	runtimeAcknowledged bool
+	result              codexTurnResult
+	fullText            strings.Builder
+	deltaText           strings.Builder
+	thinkText           strings.Builder
 	// steers: the mid-turn messages written into this turn, keyed by the Orbit turn id sent as
 	// clientUserMessageId — the only key Codex echoes back (codex_steer.go).
 	steers map[string]*codexSteerDelivery
@@ -335,7 +336,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	}
 
 	recordCodexTurnID := func(orbitTurnID, codexTurnID string) {
-		sendInterrupt(markCodexAppTurnStarted(&activeMu, &active, orbitTurnID, codexTurnID))
+		interruptID, acknowledgedOrbitID := markCodexAppTurnStarted(
+			&activeMu, &active, orbitTurnID, codexTurnID,
+		)
+		if acknowledgedOrbitID != "" {
+			emitFor(acknowledgedOrbitID, evUserDelivery, map[string]interface{}{
+				"turnId": acknowledgedOrbitID, "delivery": string(deliveryAcknowledged),
+			})
+		}
+		sendInterrupt(interruptID)
 	}
 
 	// Resolved from the env the app-server process was spawned with, so it tracks the same
@@ -681,24 +690,29 @@ func requestCodexAppInterrupt(activeMu *sync.Mutex, active **codexAppActiveTurn)
 	return (*active).codexTurnID, false
 }
 
-func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, codexTurnID string) string {
+func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, codexTurnID string) (string, string) {
 	if codexTurnID == "" {
-		return ""
+		return "", ""
 	}
 	activeMu.Lock()
 	defer activeMu.Unlock()
 	if *active == nil || (*active).finishing {
-		return ""
+		return "", ""
 	}
 	if orbitTurnID != "" && (*active).orbitTurnID != orbitTurnID {
-		return ""
+		return "", ""
 	}
 	(*active).codexTurnID = codexTurnID
+	acknowledgedOrbitID := ""
+	if !(*active).runtimeAcknowledged {
+		(*active).runtimeAcknowledged = true
+		acknowledgedOrbitID = (*active).orbitTurnID
+	}
 	if !(*active).interruptRequested || (*active).interruptSent {
-		return ""
+		return "", acknowledgedOrbitID
 	}
 	(*active).interruptSent = true
-	return codexTurnID
+	return codexTurnID, acknowledgedOrbitID
 }
 
 func beginCodexAppTurnStart(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID string) (bool, bool) {

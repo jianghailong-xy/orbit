@@ -38,7 +38,13 @@ function doors() {
     createTurn: async (ownerId: string, id: string, dto: SessionTurnDto) => {
       turns.push({ ownerId, id, dto });
       // What every door hands back: the turn, its order, and what the server FILED it as.
-      return { turnId: 'turn-1', seq: 7, kind: 'steer' };
+      return {
+        turnId: 'turn-1',
+        seq: 7,
+        kind: 'steer',
+        placement: 'steer',
+        targetTurnId: 'target-1',
+      };
     },
     interrupt: async (ownerId: string, id: string, dto?: SessionInterruptDto) => {
       interrupts.push({ ownerId, id, dto });
@@ -58,12 +64,13 @@ const RUNNER = { ownerId: OWNER_ID } as never;
 // not what is under test here.
 const CALLER = 'caller-session';
 
-test('a send arrives at one service from either door, carrying the same fields', async () => {
+test('explicit CURRENT_WORK arrives at one service from either door with the same semantics', async () => {
   const d = doors();
 
   await d.browser.turn({ userId: OWNER_ID } as never, SESSION_ID, {
     clientTurnId: CLIENT_TURN_ID,
     content: 'do the thing',
+    intent: 'CURRENT_WORK',
   });
   await d.runner.sendMessage(RUNNER, undefined, CALLER, 'tok', SESSION_ID, {
     message: 'do the thing',
@@ -78,6 +85,16 @@ test('a send arrives at one service from either door, carrying the same fields',
   );
   assert.equal(fromRunner.dto.content, 'do the thing');
   assert.equal(fromRunner.dto.clientTurnId, CLIENT_TURN_ID);
+  assert.equal(fromRunner.dto.intent, 'CURRENT_WORK');
+});
+
+test('the public API preserves omission for legacy server-side auto-routing compatibility', async () => {
+  const d = doors();
+  await d.browser.turn({ userId: OWNER_ID } as never, SESSION_ID, {
+    clientTurnId: CLIENT_TURN_ID,
+    content: 'queue this',
+  });
+  assert.equal(d.turns[0].dto.intent, undefined);
 });
 
 test('the runner door is idempotent when the caller supplies a key, and still works without one', async () => {
@@ -112,7 +129,7 @@ test('the runner door is idempotent when the caller supplies a key, and still wo
   assert.notEqual(d.turns[3].dto.clientTurnId, d.turns[2].dto.clientTurnId);
 });
 
-test('no door lets a caller ask to steer', async () => {
+test('no door lets a caller claim the persisted steer kind', async () => {
   const d = doors();
 
   // `kind` is a whitelist of what a caller may REQUEST — a normal message or a `!cmd`. Steering
@@ -127,9 +144,10 @@ test('no door lets a caller ask to steer', async () => {
     message: 'sneak in',
   });
 
-  // The browser DTO carries whatever was sent, but createTurn only honours 'shell' (steer-kind
-  // .spec.ts pins that); the runner door has no `kind` field at all to carry one.
+  // The browser DTO carries whatever was sent, but createTurn only honours 'shell'. The runner
+  // asks for CURRENT_WORK intent but still cannot choose its storage kind or target.
   assert.equal((d.turns[1].dto as { kind?: string }).kind, undefined);
+  assert.equal(d.turns[1].dto.intent, 'CURRENT_WORK');
 });
 
 test('the answer says what the server filed the message as, from either door', async () => {
@@ -145,7 +163,13 @@ test('the answer says what the server filed the message as, from either door', a
 
   // Not an echo of what was asked: a steer joins the running turn and is not withdrawable, while
   // a message waits for its own. Both doors return it, so both can say which happened.
-  assert.deepEqual(fromBrowser, { turnId: 'turn-1', seq: 7, kind: 'steer' });
+  assert.deepEqual(fromBrowser, {
+    turnId: 'turn-1',
+    seq: 7,
+    kind: 'steer',
+    placement: 'steer',
+    targetTurnId: 'target-1',
+  });
   assert.deepEqual(fromRunner, fromBrowser);
 });
 

@@ -5,8 +5,9 @@ import { ReaperService } from './reaper.service';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 
-test('reaper terminalization retires the inbox generation before draining turns', async () => {
+test('reaper terminalization retires the generation then records leased CURRENT_WORK unconfirmed before drain', async () => {
   const order: string[] = [];
+  const receiptWrites: Array<Record<string, unknown>> = [];
   const tx = {
     session: {
       updateMany: async () => {
@@ -19,11 +20,19 @@ test('reaper terminalization retires the inbox generation before draining turns'
       return 1;
     },
     conversationTurn: {
-      updateMany: async () => {
-        order.push('drain');
+      findMany: async () => [{
+        id: 'current-work-1', targetTurnId: 'target-1', status: 'IN_FLIGHT',
+      }],
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        if (data.deliveryStatus) receiptWrites.push(data);
+        order.push(data.deliveryStatus === 'UNCONFIRMED' ? 'current-work' : 'drain');
         return { count: 1 };
       },
       findFirst: async () => null,
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
   };
   const prisma = {
@@ -32,6 +41,7 @@ test('reaper terminalization retires the inbox generation before draining turns'
   const realtime = {
     requestCancel: () => undefined,
     publish: () => undefined,
+    publishQueuedTurnsChanged: () => undefined,
   } as never;
   const service = new ReaperService(prisma, realtime);
 
@@ -46,5 +56,8 @@ test('reaper terminalization retires the inbox generation before draining turns'
     }
   ).forceFinalize(SESSION_ID, RUNNER_ID, null, 'runner offline');
 
-  assert.deepEqual(order, ['terminal', 'retire', 'drain']);
+  assert.deepEqual(order, ['terminal', 'retire', 'current-work', 'drain']);
+  assert.equal(receiptWrites[0]?.deliveryStatus, 'UNCONFIRMED');
+  assert.match(String(receiptWrites[0]?.deliveryFailureReason), /could not be confirmed/i);
+  assert.doesNotMatch(String(receiptWrites[0]?.deliveryFailureReason), /was not delivered/i);
 });

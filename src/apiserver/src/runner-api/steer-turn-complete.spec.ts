@@ -15,24 +15,53 @@ import { RunnerApiController } from './runner-api.controller';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const TURN_ID = '33333333-3333-4333-8333-333333333333';
+const CURRENT_WORK_ID = '44444444-4444-4444-8444-444444444444';
 
-function harness(kind: 'steer' | 'message') {
+function harness(kind: 'steer' | 'message', pendingCurrentWork = false) {
   const sessionWrites: Record<string, unknown>[] = [];
   const turnWrites: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
   const inboxWakes: string[] = [];
   const queueChanges: string[] = [];
+  const published: Array<{ type: string; turnId?: string; payload: Record<string, unknown> }> = [];
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
     $executeRaw: async () => 1,
     conversationTurn: {
-      findFirst: async ({ where }: { where: { kind?: string } }) =>
-        where.kind === 'steer' && kind === 'steer' ? { id: TURN_ID } : null,
+      findFirst: async ({ where }: { where: { kind?: string } }) => {
+        if (where.kind === 'steer') {
+          return kind === 'steer'
+            ? { id: TURN_ID, sendIntent: null, targetTurnId: null }
+            : null;
+        }
+        return {
+          id: TURN_ID,
+          kind,
+          clientTurnId: 'client-turn',
+          content: 'opening work',
+          sendIntent: null,
+          targetTurnId: null,
+          leaseGeneration: null,
+          coordinatorContextKey: null,
+        };
+      },
+      findMany: async () => pendingCurrentWork
+        ? [{
+            id: CURRENT_WORK_ID,
+            content: 'late adjustment',
+            targetTurnId: TURN_ID,
+            attachments: [],
+          }]
+        : [],
       findUnique: async () => ({ kind }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         turnWrites.push(args);
         return { count: 1 };
       },
       count: async () => 0,
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
     session: {
       findUniqueOrThrow: async () => ({
@@ -50,12 +79,19 @@ function harness(kind: 'steer' | 'message') {
     },
     sessionDiff: { upsert: async () => undefined },
     llmUsage: { createMany: async () => undefined },
+    runEvent: {
+      aggregate: async () => ({ _max: { seq: 10 } }),
+      createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
+        for (const event of data) published.push(event as never);
+      },
+    },
     task: { updateMany: async () => ({ count: 1 }), findUnique: async () => null },
   };
   const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
     notifyInbox: (id: string) => inboxWakes.push(id),
-    publish: () => undefined,
+    publish: (_id: string, event: { type: string; turnId?: string; payload: Record<string, unknown> }) =>
+      published.push(event),
     publishSessionUpdated: () => undefined,
     publishQueuedTurnsChanged: (id: string) => queueChanges.push(id),
   } as never;
@@ -68,7 +104,7 @@ function harness(kind: 'steer' | 'message') {
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
-  return { controller, sessionWrites, turnWrites, inboxWakes, queueChanges };
+  return { controller, sessionWrites, turnWrites, inboxWakes, queueChanges, published };
 }
 
 const complete = (h: ReturnType<typeof harness>, status: string, result?: string) =>
@@ -120,5 +156,36 @@ test('an ordinary turn still settles the session, so the steer branch is not a w
   // had it arrived a moment later.
   const promoted = h.turnWrites.find((w) => w.data.kind === 'message');
   assert.ok(promoted, 'a queued steer is not filed as a message when its turn ends');
-  assert.deepEqual(promoted.where, { sessionId: SESSION_ID, kind: 'steer', status: 'PENDING' });
+  assert.deepEqual(promoted.where, {
+    sessionId: SESSION_ID,
+    kind: 'steer',
+    status: 'PENDING',
+    sendIntent: null,
+  });
+});
+
+test('lost dequeue response then target completion terminalizes IN_FLIGHT CURRENT_WORK durably', async () => {
+  const h = harness('message', true);
+
+  await complete(h, 'SUCCEEDED');
+
+  const retired = h.turnWrites.find((write) =>
+    (write.where.id as { in?: string[] } | undefined)?.in?.includes(CURRENT_WORK_ID));
+  assert.equal(retired?.data.status, 'ANSWERED');
+  assert.equal(retired?.data.deliveryStatus, 'FAILED');
+  assert.equal(retired?.data.deliveryFailureCode, 'CURRENT_WORK_TARGET_COMPLETED');
+  assert.match(String(retired?.data.deliveryFailureReason), /target turn completed/i);
+  assert.ok(retired?.data.deliveryTerminalAt instanceof Date);
+  assert.deepEqual((retired?.where.status as { in: string[] }).in, ['PENDING', 'IN_FLIGHT']);
+  assert.equal(
+    h.published.some((event) => event.type === 'user_delivery'),
+    false,
+    'the API must not allocate or synthesize a runner delivery event',
+  );
+  assert.equal(
+    h.turnWrites.some((write) =>
+      write.where.id === CURRENT_WORK_ID && write.data.kind === 'message'),
+    false,
+    'explicit CURRENT_WORK was silently converted to an executable message',
+  );
 });
