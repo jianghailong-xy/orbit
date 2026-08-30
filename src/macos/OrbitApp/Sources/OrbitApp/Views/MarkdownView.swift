@@ -262,8 +262,8 @@ private struct MarkdownTableView: View {
     }
 }
 
-/// A fenced code block: monospaced, horizontally scrollable, with a hover-revealed copy button —
-/// the desktop analogue of the web `.md-codeblock`.
+/// A fenced code block: monospaced, horizontally scrollable, with a copy button. The button is
+/// hover-revealed on macOS and always visible on iOS, where there is no cursor to reveal it.
 private struct CodeBlockView: View {
     let language: String?
     let code: String
@@ -272,12 +272,16 @@ private struct CodeBlockView: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            // iOS: a read-only UITextView so a snippet can be selected + copied by hand (the hover copy
-            // button below never shows on iOS). It doesn't wrap — the natural width scrolls here, web
-            // parity. macOS keeps the `Text` (its drag-select works) plus the hover copy button.
+            // iOS: a read-only UITextView so a snippet can still be selected + copied by hand in
+            // addition to the always-visible whole-block copy button. It doesn't wrap — the natural
+            // width scrolls here, web parity. macOS keeps `Text` plus its hover copy button.
             #if os(iOS)
             SelectableText(text: code, role: .code, ink: .primary)
-                .padding(10)
+                // Add scrollable tail room so the last characters of a long line can move fully out
+                // from under the fixed trailing copy button.
+                .padding(.leading, 10)
+                .padding(.vertical, 10)
+                .padding(.trailing, 54)
             #else
             Text(code)
                 .font(.orbitMono)
@@ -289,20 +293,46 @@ private struct CodeBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.gray.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
         .overlay(alignment: .topTrailing) {
-            if hovering {
+            if copyButtonShown {
                 Button(action: copy) {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.orbitLabel)
+                        #if os(iOS)
+                        // Match web's small raised copy tile while keeping a HIG-sized invisible
+                        // touch target around it. The opaque tile keeps code legible as it scrolls by.
+                        .frame(width: 28, height: 28)
+                        .background(Color.editorSurface, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.18), lineWidth: 1))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        #endif
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                #if os(iOS)
+                .accessibilityLabel(copied ? "Copied" : "Copy code")
+                #else
+                .help("Copy code")
                 .padding(6)
+                #endif
             }
         }
         .onHover { hovering = $0 }
     }
 
+    /// A hover-only action is unreachable on a touch screen. Keep desktop's quiet hover treatment,
+    /// but expose the same one-tap whole-block copy action permanently on iPhone and iPad.
+    private var copyButtonShown: Bool {
+        #if os(iOS)
+        true
+        #else
+        hovering
+        #endif
+    }
+
     private func copy() {
         PlatformPasteboard.copyString(code)
+        PlatformHaptics.success()
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
     }
