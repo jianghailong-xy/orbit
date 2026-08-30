@@ -135,12 +135,13 @@ var setModelRe = regexp.MustCompile(`(?i)set model to (.+?) for this session`)
 
 // parseSetModelName pulls the friendly model name out of `claude -p "/model <alias>"` output, e.g.
 // "Set model to Opus 5 for this session only" -> "Opus 5". Returns "" when the line isn't present.
+// Newer CLIs wrap the name in backticks ("Set model to `Opus 5` …"), so strip those too.
 func parseSetModelName(out []byte) string {
 	m := setModelRe.FindSubmatch(bytes.TrimSpace(out))
 	if m == nil {
 		return ""
 	}
-	return strings.TrimSpace(string(m[1]))
+	return strings.Trim(strings.TrimSpace(string(m[1])), "`")
 }
 
 // fetchClaudeDefaultModel reads Claude Code's user-owned setting instead of launching a probe
