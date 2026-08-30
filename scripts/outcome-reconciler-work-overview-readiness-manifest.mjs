@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const [pgTapPath, webTapPath, domPath, screenshotPath, livePath, manifestPath] = process.argv.slice(2);
@@ -31,7 +31,14 @@ if (!/^[0-9a-f]{64}$/.test(sourceArchiveDigest)) throw new Error('source archive
 if (webArtifactDigest !== deployedWebArtifactDigest) {
   throw new Error('deployed Web artifact does not match the target build');
 }
-if (!(migrationCount > 0) || lastMigration !== '0208_coordinator_context_lifecycle') {
+const repositoryMigrations = readdirSync(
+  `${repo}/src/apiserver/prisma/migrations`,
+  { withFileTypes: true },
+).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+if (
+  migrationCount !== repositoryMigrations.length
+  || lastMigration !== repositoryMigrations.at(-1)
+) {
   throw new Error(`migration frontier ${lastMigration} (${migrationCount}) is not current`);
 }
 
@@ -99,8 +106,7 @@ const relevantFiles = changedFiles.filter((file) =>
   || file === 'docs/postgres-lock-order.md'
   || file.startsWith('scripts/outcome-reconciler-work-overview-readiness')
   || file === 'src/apiserver/src/common/db-write-inventory.ts'
-  || file.startsWith('src/apiserver/prisma/migrations/0207_verification_subject_dispatch_guard/')
-  || file.startsWith('src/apiserver/prisma/migrations/0208_coordinator_context_lifecycle/')
+  || file.startsWith('src/apiserver/prisma/migrations/')
   || file.startsWith('src/apiserver/src/projects/')
   || file.startsWith('src/apiserver/src/sessions/')
   || file.startsWith('src/apiserver/src/tasks/')

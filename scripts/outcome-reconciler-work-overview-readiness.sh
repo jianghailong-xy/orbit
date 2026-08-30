@@ -131,8 +131,22 @@ MIGRATION_COUNT="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABA
 LAST_MIGRATION="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABASE" -tAc \
   'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
   | tr -d '[:space:]')"
-[ "$LAST_MIGRATION" = '0208_coordinator_context_lifecycle' ] || {
-  echo "!! migration frontier is $LAST_MIGRATION" >&2
+REPOSITORY_MIGRATIONS="$(find "$API/prisma/migrations" -mindepth 1 -maxdepth 1 -type d \
+  -printf '%f\n' | LC_ALL=C sort)"
+DATABASE_MIGRATIONS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABASE" -tAc \
+  'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY migration_name')"
+REPOSITORY_MIGRATION_COUNT="$(find "$API/prisma/migrations" -mindepth 1 -maxdepth 1 -type d \
+  -printf '.\n' | wc -l | tr -d '[:space:]')"
+REPOSITORY_LAST_MIGRATION="$(printf '%s\n' "$REPOSITORY_MIGRATIONS" | tail -n 1)"
+[ "$DATABASE_MIGRATIONS" = "$REPOSITORY_MIGRATIONS" ] || {
+  echo '!! database migration set differs from the repository migration set' >&2
+  diff -u <(printf '%s\n' "$REPOSITORY_MIGRATIONS") \
+    <(printf '%s\n' "$DATABASE_MIGRATIONS") >&2 || true
+  exit 1
+}
+[ "$MIGRATION_COUNT" = "$REPOSITORY_MIGRATION_COUNT" ] \
+  && [ "$LAST_MIGRATION" = "$REPOSITORY_LAST_MIGRATION" ] || {
+  echo "!! migration frontier is $LAST_MIGRATION ($MIGRATION_COUNT), repository expects $REPOSITORY_LAST_MIGRATION ($REPOSITORY_MIGRATION_COUNT)" >&2
   exit 1
 }
 
