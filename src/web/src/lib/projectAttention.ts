@@ -1,6 +1,9 @@
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
-import type { OwnerRatificationReference } from './ownerRatification';
+import {
+  isActiveOwnerRatificationReference,
+  type OwnerRatificationReference,
+} from './ownerRatification';
 
 /**
  * The projects index is an execution-and-attention router, not a second activity feed.
@@ -171,7 +174,7 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
-  if (project.ownerRatification?.status === 'PENDING') return 'owner-ratification';
+  if (isActiveOwnerRatificationReference(project.ownerRatification)) return 'owner-ratification';
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
   if (failedTaskCount(project) > 0) return 'failed';

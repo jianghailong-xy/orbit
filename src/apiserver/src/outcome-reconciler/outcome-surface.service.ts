@@ -440,22 +440,40 @@ export class OutcomeSurfaceService {
       semanticDiff: Prisma.JsonValue;
       payload: Prisma.JsonValue;
       expiresAt: Date;
+      eligibility: Prisma.JsonValue;
     }>>(Prisma.sql`
       SELECT request.id AS "requestId", request.project_id AS "projectId",
              project.title AS "projectTitle", request.contract_digest AS "contractDigest",
              request.contract_revision AS "contractRevision",
              request.request_generation AS "requestGeneration",
-             request.reason_code AS "reasonCode", request.semantic_diff AS "semanticDiff",
-             request.decision_payload AS payload, request.expires_at AS "expiresAt"
+             routing.value->>'reasonCode' AS "reasonCode",
+             request.semantic_diff AS "semanticDiff",
+             request.decision_payload AS payload, request.expires_at AS "expiresAt",
+             routing.value AS eligibility
         FROM project_owner_decision_request request
         JOIN project ON project.id = request.project_id AND project.owner_id = ${tenantId}::uuid
+       CROSS JOIN LATERAL (
+         SELECT project_owner_ratification_eligibility(
+           request.owner_id, request.project_id, request.id
+         ) AS value
+       ) routing
        WHERE request.owner_id = ${tenantId}::uuid AND request.status = 'PENDING'
-         AND request.expires_at > clock_timestamp()
+         AND routing.value->>'eligible' = 'true'
        ORDER BY request.created_at DESC, request.id DESC
        LIMIT ${limit}
     `);
     return rows.map((row) => {
       const payload = record(redactOutcomePayload(row.payload));
+      const eligibility = record(redactOutcomePayload(row.eligibility));
+      const primary = record(array(eligibility.linkedObligations)[0]);
+      const obligationId = String(primary.obligationId ?? row.requestId);
+      const obligationRevision = String(
+        primary.obligationRevision ?? row.requestGeneration,
+      );
+      const bindingDigest = String(primary.bindingDigest ?? row.contractDigest);
+      const evaluatedThroughWatermark = String(
+        primary.evaluatedThroughWatermark ?? row.contractRevision,
+      );
       const protocol: HumanDecisionProtocol = {
         decisionType: 'OWNER_RATIFICATION',
         agentWorkCompleted: array(payload.agentWorkCompleted),
@@ -477,6 +495,12 @@ export class OutcomeSurfaceService {
         requestRevision: `${row.contractRevision}:${row.requestGeneration}`,
         contractDigest: row.contractDigest,
         reasonCode: row.reasonCode,
+        reason: eligibility.reason,
+        obligationId,
+        obligationRevision,
+        bindingDigest,
+        evaluatedThroughWatermark,
+        eligibility,
         semanticDiff: redactOutcomePayload(row.semanticDiff),
         protocol,
         cta: {
@@ -489,6 +513,11 @@ export class OutcomeSurfaceService {
             requestId: row.requestId,
             requestRevision: `${row.contractRevision}:${row.requestGeneration}`,
             contractDigest: row.contractDigest,
+            obligationId,
+            obligationRevision,
+            bindingDigest,
+            evaluatedThroughWatermark,
+            reasonCode: row.reasonCode,
             expiresAt: row.expiresAt.toISOString(),
           },
         },

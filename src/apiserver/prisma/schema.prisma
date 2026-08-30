@@ -2035,6 +2035,11 @@ model ProjectOwnerDecisionRequest {
   decisionPayload        Json      @map("decision_payload")
   ctaToken               String    @unique @map("cta_token") @db.Uuid
   expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// Audit disposition for routing. DEFERRED legacy initial backfills remain PENDING history;
+  /// current eligibility additionally observes Project status, binding and blocking obligations.
+  routingState           String    @default("ACTIONABLE") @map("routing_state")
+  routingReasonCode      String    @default("OWNER_RATIFICATION_EXPLICIT_CONTRACT_CHANGE") @map("routing_reason_code")
+  deferredAt             DateTime? @map("deferred_at") @db.Timestamptz(6)
   /// Terminal owner answer plus its replay identity. Kept on the exact request so DENY has the
   /// same recoverable network-retry semantics as an append-only APPROVE ratification.
   decision               String?

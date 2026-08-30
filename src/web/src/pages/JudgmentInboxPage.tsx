@@ -21,6 +21,7 @@ import {
   type OutcomeHumanInbox,
 } from '../lib/outcomeSurfaces';
 import {
+  isActiveOwnerRatificationReference,
   ownerRatificationInboxPath,
   ownerRatificationReviewPath,
   type OwnerRatificationInboxPage,
@@ -47,9 +48,11 @@ export function JudgmentInboxPage() {
   });
   const genericOutcomeItems = (outcomeInbox.data?.items ?? [])
     .filter((item): item is CanonicalOwnerInboxItem => !isRatificationInboxItem(item));
+  const activeRatifications = (ratificationInbox.data?.items ?? [])
+    .filter(isActiveOwnerRatificationReference);
   const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0)
     + genericOutcomeItems.length
-    + (ratificationInbox.data?.total ?? 0);
+    + activeRatifications.length;
   const entries = [
     ...(taskInbox.data?.items ?? []).map((item) => ({
       kind: 'TASK' as const,
@@ -61,7 +64,7 @@ export function JudgmentInboxPage() {
       at: item.startedAt,
       item,
     })),
-    ...(ratificationInbox.data?.items ?? []).map((item) => ({
+    ...activeRatifications.map((item) => ({
       kind: 'RATIFICATION' as const,
       at: item.createdAt,
       item,
@@ -185,6 +188,8 @@ export function JudgmentInboxPage() {
               data-obligation-revision={entry.item.obligationRevision}
               data-contract-digest={entry.item.contractDigest}
               data-reason={entry.item.reasonCode}
+              data-eligibility-reason={entry.item.eligibility.reasonCode}
+              data-binding-status={entry.item.eligibility.bindingStatus}
               data-owner={entry.item.owner}
               data-evaluated-through-watermark={entry.item.evaluatedThroughWatermark}
             >
@@ -203,6 +208,8 @@ export function JudgmentInboxPage() {
                   <div><dt>Obligation</dt><dd>{entry.item.obligationId}</dd></div>
                   <div><dt>Obligation revision</dt><dd>{entry.item.obligationRevision}</dd></div>
                   <div><dt>Contract digest</dt><dd>{shortDigest(entry.item.contractDigest)}</dd></div>
+                  <div><dt>Why now</dt><dd>{entry.item.reason}</dd></div>
+                  <div><dt>Binding</dt><dd>{entry.item.eligibility.bindingStatus}</dd></div>
                   <div><dt>Evaluated through</dt><dd>{entry.item.evaluatedThroughWatermark}</dd></div>
                   <div><dt>Expires</dt><dd>{when(entry.item.expiresAt)}</dd></div>
                 </dl>

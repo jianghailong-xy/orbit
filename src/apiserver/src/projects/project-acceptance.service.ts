@@ -197,6 +197,7 @@ interface PendingOwnerRatificationRow {
   createdAt: Date;
   expiresAt: Date;
   linkedObligations: Prisma.JsonValue;
+  eligibility: Prisma.JsonValue;
   total?: number;
 }
 
@@ -539,10 +540,10 @@ export class ProjectAcceptanceService {
   /**
    * Secret-free pending references for project list/detail and the global inbox.
    *
-   * The LATERAL observation is deterministic when several tasks are blocked by the same Project
-   * contract: all are retained in `linkedObligations`, while the oldest immutable observation is
-   * the canonical obligation identity displayed beside the one owner request. No CTA column is
-   * selected, which is stronger than selecting it and promising to redact it later.
+   * The database eligibility function is the sole routing decision used by every consumer. Its
+   * linked-obligation order is deterministic, while the oldest immutable observation is the
+   * canonical identity displayed beside the one owner request. No CTA column is selected, which
+   * is stronger than selecting it and promising to redact it later.
    */
   private async pendingOwnerRatificationRows(
     ownerId: string,
@@ -562,9 +563,10 @@ export class ProjectAcceptanceService {
              request."request_generation" AS "requestGeneration",
              request."contract_digest"::text AS "contractDigest",
              contract."contract_revision" AS "contractRevision",
-             request."reason_code" AS "reasonCode", request."created_at" AS "createdAt",
+             routing.value->>'reasonCode' AS "reasonCode", request."created_at" AS "createdAt",
              request."expires_at" AS "expiresAt",
-             COALESCE(observed.items, '[]'::jsonb) AS "linkedObligations",
+             routing.value->'linkedObligations' AS "linkedObligations",
+             routing.value AS "eligibility",
              count(*) OVER ()::int AS "total"
         FROM "project_owner_decision_request" request
         JOIN "project" project
@@ -573,29 +575,14 @@ export class ProjectAcceptanceService {
         JOIN "project_completion_contract" contract
           ON contract."project_id" = request."project_id"
          AND contract."contract_digest" = request."contract_digest"
-        LEFT JOIN LATERAL (
-          SELECT jsonb_agg(jsonb_build_object(
-                   'obligationId', revision."obligation_id"::text,
-                   'obligationRevision', revision."obligation_revision"::text,
-                   'bindingDigest', revision."binding_digest"::text,
-                   'evaluatedThroughWatermark', state."watermark"::text,
-                   'taskId', state."task_id"::text,
-                   'reasonCode', revision."reason_code"
-                 ) ORDER BY state."first_observed_at", revision."obligation_id",
-                            revision."obligation_revision") AS items
-            FROM "task_auto_dispatch_state" state
-            JOIN "task_auto_dispatch_obligation_revision" revision
-              ON revision."tenant_id" = state."tenant_id"
-             AND revision."task_id" = state."task_id"
-             AND revision."obligation_revision" = state."obligation_revision"
-           WHERE state."tenant_id" = request."owner_id"
-             AND state."project_id" = request."project_id"
-             AND state."state" = 'ACTIVE'
-             AND revision."reason_code" = 'OWNER_RATIFICATION_REQUIRED'
-             AND revision."binding"->>'contractDigest' = request."contract_digest"::text
-        ) observed ON true
+       CROSS JOIN LATERAL (
+         SELECT project_owner_ratification_eligibility(
+           request."owner_id", request."project_id", request."id"
+         ) AS value
+       ) routing
        WHERE request."owner_id" = ${ownerId}::uuid
          AND request."status" = 'PENDING'
+         AND routing.value->>'eligible' = 'true'
          ${projectFilter}
        ORDER BY request."created_at" DESC, request."id" DESC
        ${bounded}

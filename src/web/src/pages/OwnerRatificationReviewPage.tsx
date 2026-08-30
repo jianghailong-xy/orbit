@@ -9,6 +9,7 @@ import { ApiError, api } from '../api';
 import { routeId } from '../lib/idCodec';
 import { shortDigest } from '../lib/judgments';
 import {
+  isActiveOwnerRatificationReference,
   ownerRatificationDecisionPath,
   ownerRatificationPath,
   ownerRatificationReviewPath,
@@ -142,7 +143,8 @@ export function OwnerRatificationReviewPage() {
     try {
       const raw = await api<OwnerRatificationPrivateRead>(ownerRatificationPath(projectId));
       const split = splitOwnerRatificationCapability(raw);
-      const current = split.review.decisionSurface?.reference ?? null;
+      const projected = split.review.decisionSurface?.reference ?? null;
+      const current = isActiveOwnerRatificationReference(projected) ? projected : null;
       const recorded = split.review.latestDecision;
       if (recorded?.decisionRequestId === routeRequestId) {
         setReview(split.review);
@@ -324,6 +326,8 @@ export function OwnerRatificationReviewPage() {
             data-obligation-revision={reference.obligationRevision}
             data-contract-digest={reference.contractDigest}
             data-reason={reference.reasonCode}
+            data-eligibility-reason={reference.eligibility.reasonCode}
+            data-binding-status={reference.eligibility.bindingStatus}
             data-owner={reference.owner}
             data-evaluated-through-watermark={reference.evaluatedThroughWatermark}
           >
@@ -341,6 +345,8 @@ export function OwnerRatificationReviewPage() {
               <div><dt>Contract digest</dt><dd><code>{reference.contractDigest}</code></dd></div>
               <div><dt>Contract revision</dt><dd>{reference.contractRevision}</dd></div>
               <div><dt>Reason</dt><dd>{reference.reasonCode}</dd></div>
+              <div><dt>Why now</dt><dd>{reference.reason}</dd></div>
+              <div><dt>Binding</dt><dd>{reference.eligibility.bindingStatus}</dd></div>
               <div><dt>Owner</dt><dd>{reference.owner} · {reference.ownerId}</dd></div>
               <div><dt>Evaluated through watermark</dt><dd>{reference.evaluatedThroughWatermark}</dd></div>
               <div><dt>Expires</dt><dd>{when(reference.expiresAt)}</dd></div>
