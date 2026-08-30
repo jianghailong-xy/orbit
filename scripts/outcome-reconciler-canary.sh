@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/lib/outcome-reconciler-release-dag.sh"
 API="$REPO/src/apiserver"
 BUILD="$REPO/build"
 COMPILED="$BUILD/outcome-canary-ts"
@@ -55,17 +56,24 @@ node -e '
 /usr/local/bin/orbit task evidence-list "$UPSTREAM_TASK_ID" --json > "$UPSTREAM_EVIDENCE"
 /usr/local/bin/orbit task get "$UPSTREAM_TASK_ID" --json > "$UPSTREAM_TASK"
 
-echo '==> outcome-canary: compile production cohort, reducer, security and control-plane logic'
-"$TSC" \
-  "$API/src/outcome-reconciler/outcome-canary.ts" \
-  "$API/src/tasks/executable-acceptance-runtime.ts" \
-  "$API/src/outcome-watchdog/outcome-watchdog.ts" \
-  --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
-  --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+  CANARY_MODULE="$API/dist/outcome-reconciler/outcome-canary.js"
+  echo '==> outcome-canary: use exact bound production build'
+else
+  echo '==> outcome-canary: compile production cohort, reducer, security and control-plane logic'
+  "$TSC" \
+    "$API/src/outcome-reconciler/outcome-canary.ts" \
+    "$API/src/tasks/executable-acceptance-runtime.ts" \
+    "$API/src/outcome-watchdog/outcome-watchdog.ts" \
+    --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
+    --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
+  CANARY_MODULE="$COMPILED/outcome-reconciler/outcome-canary.js"
+fi
 
 echo '==> outcome-canary: generate hash-chained 111k cohort telemetry and exercise rollback/rollforward'
 set +e
-OUTCOME_CANARY_MODULE="$COMPILED/outcome-reconciler/outcome-canary.js" \
+OUTCOME_CANARY_MODULE="$CANARY_MODULE" \
 OUTCOME_CANARY_CONTRACT_PATH="$CONTRACT" \
 OUTCOME_CANARY_TELEMETRY_PATH="$TELEMETRY" \
 OUTCOME_CANARY_UPSTREAM_EVIDENCE_PATH="$UPSTREAM_EVIDENCE" \
@@ -82,7 +90,7 @@ if [ "$TEST_RC" -ne 0 ]; then
 fi
 
 echo '==> outcome-canary: reduce raw telemetry into a target-SHA-bound signed manifest'
-OUTCOME_CANARY_MODULE="$COMPILED/outcome-reconciler/outcome-canary.js" \
+OUTCOME_CANARY_MODULE="$CANARY_MODULE" \
 OUTCOME_CANARY_COLLECTOR_SHA="$COLLECTOR_SHA" \
 OUTCOME_CANARY_STARTED_AT="$STARTED_AT" \
 node "$REPO/scripts/outcome-reconciler-canary-manifest.mjs" \

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/lib/outcome-reconciler-release-dag.sh"
 API="$REPO/src/apiserver"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/orbit-bootstrap.XXXXXX")"
 CONTAINER="orbit-bootstrap-pg-$$"
@@ -14,35 +15,53 @@ MANIFEST="$REPO/build/outcome-reconciler-bootstrap-manifest.json"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 cleanup() {
-  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  if outcome_release_dag_db_enabled; then
+    outcome_release_dag_drop_database
+  else
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT
 
-echo "==> bootstrap: build shared contract and generate Prisma client"
-( cd "$REPO" && npm run build -w @orbit/shared )
-( cd "$REPO" && npm run prisma:generate -w @orbit/apiserver )
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+  echo '==> bootstrap: use exact bound Shared/Prisma build'
+else
+  echo "==> bootstrap: build shared contract and generate Prisma client"
+  ( cd "$REPO" && npm run build -w @orbit/shared )
+  ( cd "$REPO" && npm run prisma:generate -w @orbit/apiserver )
+fi
 
-echo "==> bootstrap: provision isolated PostgreSQL ($CONTAINER)"
-docker run -d --name "$CONTAINER" \
-  -e "POSTGRES_USER=$DB_USER" -e "POSTGRES_PASSWORD=$DB_PASSWORD" -e "POSTGRES_DB=$DB" \
-  -p '127.0.0.1::5432' "$IMAGE" >/dev/null
-PORT="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$CONTAINER")"
-URL="postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:$PORT/$DB"
-for _ in $(seq 1 90); do
-  docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc 'SELECT 1' >/dev/null 2>&1 && break
-  sleep 1
-done
-docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc 'SELECT 1' >/dev/null
-SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc \
-  'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
-
-echo "==> bootstrap: migrate empty database"
-( cd "$API" && DATABASE_URL="$URL" ./node_modules/.bin/prisma migrate deploy \
-  --schema prisma/schema.prisma >/dev/null )
+if outcome_release_dag_db_enabled; then
+  echo '==> bootstrap: clone the bound migrated PostgreSQL template'
+  outcome_release_dag_bind_database
+  DB="$DATABASE"
+  DB_USER="$ADMIN"
+  DB_PASSWORD="$PASSWORD"
+else
+  echo "==> bootstrap: provision isolated PostgreSQL ($CONTAINER)"
+  docker run -d --name "$CONTAINER" \
+    -e "POSTGRES_USER=$DB_USER" -e "POSTGRES_PASSWORD=$DB_PASSWORD" -e "POSTGRES_DB=$DB" \
+    -p '127.0.0.1::5432' "$IMAGE" >/dev/null
+  PORT="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$CONTAINER")"
+  URL="postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:$PORT/$DB"
+  for _ in $(seq 1 90); do
+    docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc 'SELECT 1' >/dev/null 2>&1 && break
+    sleep 1
+  done
+  docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc 'SELECT 1' >/dev/null
+  SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc \
+    'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+  echo "==> bootstrap: migrate empty database"
+  ( cd "$API" && DATABASE_URL="$URL" ./node_modules/.bin/prisma migrate deploy \
+    --schema prisma/schema.prisma >/dev/null )
+fi
 
 echo "==> bootstrap: compile server and focused acceptance tree"
-( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.test.json )
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" != 1 ]; then
+  ( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.test.json )
+fi
 
 TS_TAP="$TMP/typescript.tap"
 echo "==> bootstrap: protocol, merge fence, writer fence and inventory tests"

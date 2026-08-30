@@ -6,15 +6,15 @@
     "databaseId": "01a04416-6517-7329-b0b7-9926a89d86aa"
   },
   "task": {
-    "publicId": "34FPjTbN1Y1KM1XZzVaHx",
-    "databaseId": "01a04c3d-237d-745f-937c-3bc220a94a21",
-    "acceptanceCommand": "npm run test:outcome-reconciler:release-frontier",
+    "publicId": "34G78wVKFWCGmxuj2aLhw",
+    "databaseId": "01a05290-9f1e-756f-90bd-98d3a9354fd8",
+    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-plan",
     "expectedExitCode": 0
   },
   "session": {
-    "publicId": "3pbmdZbj29xhjM0AXepDD6",
-    "databaseId": "7debc31d-edb7-5e82-9a9f-263e60dc92a8",
-    "sourceBranch": "orbit/manifest-current-binding-dedbcc"
+    "publicId": "4sHH6oQfYvls1guZ4qOyS7",
+    "databaseId": "a0313df2-755d-59e6-b093-67c28e8fba7f",
+    "sourceBranch": "orbit/release-evaluation-dag-target-84fe31"
   },
   "repository": {
     "provider": "GITHUB",

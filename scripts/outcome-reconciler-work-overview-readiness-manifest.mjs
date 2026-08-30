@@ -19,6 +19,8 @@ const sourceArchiveDigest = requiredEnv('WORK_OVERVIEW_SOURCE_ARCHIVE_DIGEST');
 const webArtifactDigest = requiredEnv('WORK_OVERVIEW_WEB_ARTIFACT_DIGEST');
 const deployedWebArtifactDigest = requiredEnv('WORK_OVERVIEW_DEPLOYED_WEB_ARTIFACT_DIGEST');
 const provider = requiredEnv('WORK_OVERVIEW_PROVIDER');
+const evidencePhase = requiredEnv('WORK_OVERVIEW_EVIDENCE_PHASE');
+const deploymentTaskId = requiredEnv('WORK_OVERVIEW_DEPLOYMENT_TASK_ID');
 const startedAt = requiredEnv('WORK_OVERVIEW_STARTED_AT');
 const pgSystemIdentifier = requiredEnv('WORK_OVERVIEW_PG_SYSTEM_IDENTIFIER');
 const migrationCount = Number(requiredEnv('WORK_OVERVIEW_MIGRATION_COUNT'));
@@ -28,8 +30,18 @@ if (!/^[0-9a-f]{40}$/.test(baseSha) || !/^[0-9a-f]{40}$/.test(targetSha) || main
   throw new Error(`target/main SHA mismatch target=${targetSha} main=${mainSha}`);
 }
 if (!/^[0-9a-f]{64}$/.test(sourceArchiveDigest)) throw new Error('source archive digest is invalid');
-if (webArtifactDigest !== deployedWebArtifactDigest) {
+if (!/^[0-9a-f]{64}$/.test(webArtifactDigest)) throw new Error('Web artifact digest is invalid');
+if (!['PREDEPLOY_EVALUATION', 'POSTDEPLOY_CURRENT_BINDING'].includes(evidencePhase)) {
+  throw new Error(`unsupported work-overview evidence phase: ${evidencePhase}`);
+}
+if (evidencePhase === 'POSTDEPLOY_CURRENT_BINDING'
+    && webArtifactDigest !== deployedWebArtifactDigest) {
   throw new Error('deployed Web artifact does not match the target build');
+}
+if (evidencePhase === 'PREDEPLOY_EVALUATION') {
+  if (deployedWebArtifactDigest !== 'DEFERRED' || !/^[0-9A-Za-z]+$/.test(deploymentTaskId)) {
+    throw new Error('predeploy evidence does not name its bound deployment task');
+  }
 }
 const repositoryMigrations = readdirSync(
   `${repo}/src/apiserver/prisma/migrations`,
@@ -77,24 +89,31 @@ if (screenshotWidth !== 390 || screenshotHeight !== 844) {
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 const live = JSON.parse(readFileSync(livePath, 'utf8'));
-if (live.task?.id !== '34EVtIlOD1lRdPL4c5j7E') throw new Error('live evidence names the wrong root task');
-if (live.task?.workState === 'READY' || live.assertions?.taskIsNotReady !== true) {
-  throw new Error('live verification subject is still classified READY');
-}
-if (live.assertions?.noTaskWasStarted !== true || live.readOnly !== true) {
-  throw new Error('live evidence did not attest its read-only boundary');
-}
-if (
-  !Number.isInteger(live.taskWorkSessions?.before)
-  || live.taskWorkSessions.before !== live.taskWorkSessions.after
-) {
-  throw new Error('live task-work session count changed during the read-only probe');
-}
-if (live.assertions?.bucketTotalMatchesTaskCount !== true) {
-  throw new Error('live panorama buckets do not reconcile with taskCount');
-}
-if (live.assertions?.projectListMatchesPanorama !== true) {
-  throw new Error('live project-list rollup does not match panorama');
+if (evidencePhase === 'PREDEPLOY_EVALUATION') {
+  if (live.state !== 'DEFERRED_TO_BOUND_TASK' || live.taskId !== deploymentTaskId
+      || live.readOnly !== true || live.noTaskWasStarted !== true) {
+    throw new Error('predeploy live evidence boundary is incomplete');
+  }
+} else {
+  if (live.task?.id !== '34EVtIlOD1lRdPL4c5j7E') throw new Error('live evidence names the wrong root task');
+  if (live.task?.workState === 'READY' || live.assertions?.taskIsNotReady !== true) {
+    throw new Error('live verification subject is still classified READY');
+  }
+  if (live.assertions?.noTaskWasStarted !== true || live.readOnly !== true) {
+    throw new Error('live evidence did not attest its read-only boundary');
+  }
+  if (
+    !Number.isInteger(live.taskWorkSessions?.before)
+    || live.taskWorkSessions.before !== live.taskWorkSessions.after
+  ) {
+    throw new Error('live task-work session count changed during the read-only probe');
+  }
+  if (live.assertions?.bucketTotalMatchesTaskCount !== true) {
+    throw new Error('live panorama buckets do not reconcile with taskCount');
+  }
+  if (live.assertions?.projectListMatchesPanorama !== true) {
+    throw new Error('live project-list rollup does not match panorama');
+  }
 }
 
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
@@ -119,7 +138,9 @@ const sourceFiles = relevantFiles.map((path) => ({
 const sourceDigest = sha256(Buffer.from(sourceFiles.map((file) => `${file.sha256}  ${file.path}\n`).join('')));
 
 const manifest = {
-  schema: 'orbit.work-overview-readiness.manifest.v1',
+  schema: 'orbit.work-overview-readiness.manifest.v2',
+  outcome: 'PASS',
+  evidencePhase,
   repository,
   targetRef: 'refs/heads/main',
   targetSha,
@@ -150,16 +171,26 @@ const manifest = {
   },
   web: {
     artifactSha256: webArtifactDigest,
-    deployedArtifactSha256: deployedWebArtifactDigest,
-    artifactMatchesDeployment: true,
-    deployedImageId: requiredEnv('WORK_OVERVIEW_WEB_IMAGE_ID'),
-    deployedContainerCreatedAt: requiredEnv('WORK_OVERVIEW_WEB_CREATED_AT'),
-    deployedHttpReadable: true,
-    requiredLabelsInDeployedAssets: [
+    candidateArtifactVerified: true,
+    requiredLabelsInCandidateAssets: [
       'Awaiting verification',
       'Verification failed',
       'Missing verifier',
     ],
+    ...(evidencePhase === 'POSTDEPLOY_CURRENT_BINDING' ? {
+      deployedArtifactSha256: deployedWebArtifactDigest,
+      artifactMatchesDeployment: true,
+      deployedImageId: requiredEnv('WORK_OVERVIEW_WEB_IMAGE_ID'),
+      deployedContainerCreatedAt: requiredEnv('WORK_OVERVIEW_WEB_CREATED_AT'),
+      deployedHttpReadable: true,
+      requiredLabelsInDeployedAssets: [
+        'Awaiting verification',
+        'Verification failed',
+        'Missing verifier',
+      ],
+    } : {
+      deploymentVerification: { state: 'DEFERRED_TO_BOUND_TASK', taskId: deploymentTaskId },
+    }),
     phoneViewport: {
       width: screenshotWidth,
       height: screenshotHeight,
@@ -169,13 +200,18 @@ const manifest = {
       assertions: dom.assertions,
     },
   },
-  deployment: {
+  deployment: evidencePhase === 'POSTDEPLOY_CURRENT_BINDING' ? {
+    state: 'VERIFIED_CURRENT_BINDING',
     apiserverImageId: requiredEnv('WORK_OVERVIEW_API_IMAGE_ID'),
     apiserverContainerCreatedAt: requiredEnv('WORK_OVERVIEW_API_CREATED_AT'),
     webImageId: requiredEnv('WORK_OVERVIEW_WEB_IMAGE_ID'),
     webContainerCreatedAt: requiredEnv('WORK_OVERVIEW_WEB_CREATED_AT'),
     servicesHealthy: true,
     baseImagesRefreshed: false,
+  } : {
+    state: 'DEFERRED_TO_BOUND_TASK',
+    taskId: deploymentTaskId,
+    evaluatorMayDeploy: false,
   },
   liveFixture: live,
 };

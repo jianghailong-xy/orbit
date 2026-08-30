@@ -12,6 +12,17 @@ set -euo pipefail
 : "${OUTCOME_API_CASE_API:?}"
 : "${OUTCOME_API_CASE_DIR:?}"
 : "${OUTCOME_API_CASE_TOTAL:?}"
+: "${OUTCOME_API_CASE_TEMPLATE:=pccrf_frontier_template}"
+: "${OUTCOME_API_CASE_PREFIX:=pccrf}"
+
+[[ "$OUTCOME_API_CASE_TEMPLATE" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
+  echo 'OUTCOME_API_CASE_TEMPLATE must be a PostgreSQL identifier' >&2
+  exit 2
+}
+[[ "$OUTCOME_API_CASE_PREFIX" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
+  echo 'OUTCOME_API_CASE_PREFIX must be a PostgreSQL identifier prefix' >&2
+  exit 2
+}
 
 INDEX="$1"
 SPEC="$2"
@@ -23,8 +34,8 @@ PG_PORT="$OUTCOME_API_CASE_PORT"
 SYSTEM_ID="$OUTCOME_API_CASE_SYSTEM_ID"
 REPO="$OUTCOME_API_CASE_REPO"
 API="$OUTCOME_API_CASE_API"
-CASE_DB="pccrf_case_$(printf '%04d' "$INDEX")"
-EMPTY_DB="pccrf_empty_$(printf '%04d' "$INDEX")"
+CASE_DB="${OUTCOME_API_CASE_PREFIX}_case_$(printf '%04d' "$INDEX")"
+EMPTY_DB="${OUTCOME_API_CASE_PREFIX}_empty_$(printf '%04d' "$INDEX")"
 RELATIVE_SPEC="${SPEC#"$API"/}"
 LOG="$OUTCOME_API_CASE_DIR/$(printf '%04d' "$INDEX").tap"
 DATABASES_CREATED=0
@@ -43,7 +54,7 @@ trap cleanup_case EXIT
 
 echo "==> full-api [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC"
 docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-  -c "CREATE DATABASE \"$CASE_DB\" TEMPLATE \"pccrf_frontier_template\"" >/dev/null
+  -c "CREATE DATABASE \"$CASE_DB\" TEMPLATE \"$OUTCOME_API_CASE_TEMPLATE\"" >/dev/null
 docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
   -c "CREATE DATABASE \"$EMPTY_DB\" TEMPLATE template0" >/dev/null
 DATABASES_CREATED=1

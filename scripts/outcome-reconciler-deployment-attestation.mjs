@@ -11,9 +11,14 @@ const repo = path.resolve(import.meta.dirname, '..');
 const contract = JSON.parse(readFileSync(path.join(
   repo, 'contracts/outcome-reconciler-release-frontier.json',
 ), 'utf8'));
+const releaseDag = JSON.parse(readFileSync(path.join(
+  repo, 'contracts/outcome-reconciler-release-dag.json',
+), 'utf8'));
 const mode = process.argv[2];
 assert.ok(['auto-dispatch', 'watchdog-current-binding'].includes(mode),
   'usage: outcome-reconciler-deployment-attestation.mjs auto-dispatch|watchdog-current-binding');
+const predeploy = process.env.OUTCOME_RELEASE_DAG_ACTIVE === '1'
+  && process.env.OUTCOME_RELEASE_DAG_PHASE === 'PREDEPLOY_EVALUATION';
 
 function run(file, args, cwd = repo) {
   return execFileSync(file, args, {
@@ -103,6 +108,37 @@ function validateRegression(relative, expectedSuite) {
   return { manifest, file: digestFile(relative) };
 }
 
+function loadBuilderMergeReceipt(targetSha) {
+  const receipt = queryJson(`
+  SELECT jsonb_build_object(
+    'id', id::text, 'result', result, 'sourceBranch', source_branch,
+    'sourceSha', btrim(source_sha::text), 'targetBranch', target_branch,
+    'targetShaBefore', btrim(target_sha_before::text),
+    'targetShaAfter', btrim(target_sha_after::text), 'recordedBy', recorded_by,
+    'createdAt', created_at
+  )
+    FROM session_merge_receipt
+   WHERE session_id='${contract.session.databaseId}'::uuid
+     AND task_id='${contract.task.databaseId}'::uuid
+     AND source_branch='${contract.session.sourceBranch}'
+     AND source_sha='${targetSha}'::char(40)
+     AND target_branch='${contract.repository.targetBranch}'
+     AND target_sha_after='${targetSha}'::char(40)
+     AND recorded_by='AGENT'
+     AND result IN ('MERGED','ALREADY_MERGED')
+   ORDER BY created_at DESC LIMIT 1
+  `);
+  assert.ok(['MERGED', 'ALREADY_MERGED'].includes(receipt.result));
+  assert.equal(receipt.sourceBranch, contract.session.sourceBranch);
+  assert.equal(receipt.sourceSha, targetSha);
+  assert.equal(receipt.targetShaAfter, targetSha);
+  assert.match(receipt.targetShaBefore, SHA);
+  if (receipt.result === 'MERGED') assert.notEqual(receipt.targetShaBefore, targetSha);
+  else assert.equal(receipt.targetShaBefore, targetSha);
+  assert.equal(receipt.recordedBy, 'AGENT');
+  return receipt;
+}
+
 git(['fetch', '--quiet', 'origin', `${contract.repository.targetRef}:refs/remotes/origin/main`]);
 const targetSha = git(['rev-parse', 'HEAD']);
 assert.match(targetSha, SHA);
@@ -112,6 +148,109 @@ assert.equal(originMain, targetSha, 'origin/main differs from the tested checkou
 assert.equal(remoteMain, targetSha, 'remote refs/heads/main differs from the tested checkout');
 assert.equal(git(['status', '--porcelain', '--untracked-files=no']), '',
   'tested checkout has tracked modifications');
+const mergeReceipt = loadBuilderMergeReceipt(targetSha);
+
+if (predeploy) {
+  assert.equal(releaseDag.evaluator.phase, 'PREDEPLOY_EVALUATION');
+  assert.equal(releaseDag.evaluator.deploymentTaskId, process.env.OUTCOME_RELEASE_DAG_DEPLOYMENT_TASK_ID);
+  const evaluatorBranch = git(['branch', '--show-current']) || 'DETACHED_HEAD';
+  assert.equal(process.env.OUTCOME_RELEASE_DAG_TARGET_SHA, targetSha,
+    'predeploy attestation target differs from the DAG binding');
+  const receiptProof = {
+    sessionDatabaseId: releaseDag.builder.sessionDatabaseId,
+    taskDatabaseId: releaseDag.builder.taskDatabaseId,
+    result: mergeReceipt.result,
+    sourceBranch: mergeReceipt.sourceBranch,
+    sourceSha: mergeReceipt.sourceSha,
+    targetBranch: mergeReceipt.targetBranch,
+    targetShaBefore: mergeReceipt.targetShaBefore,
+    targetShaAfter: mergeReceipt.targetShaAfter,
+    recordedBy: mergeReceipt.recordedBy,
+  };
+  const receiptDigest = sha256(canonical(receiptProof));
+  assert.equal(process.env.OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST, receiptDigest,
+    'predeploy attestation received a different merge receipt');
+  const buildContextPath = process.env.OUTCOME_RELEASE_DAG_BUILD_CONTEXT;
+  assert.ok(buildContextPath, 'predeploy attestation requires the shared build context');
+  const buildContext = JSON.parse(readFileSync(buildContextPath, 'utf8'));
+  assert.equal(buildContext.targetSha, targetSha);
+  assert.equal(buildContext.bindingDigest, process.env.OUTCOME_RELEASE_DAG_BINDING_DIGEST);
+  assert.equal(buildContext.targetReceiptDigest, receiptDigest);
+
+  const regression = mode === 'auto-dispatch'
+    ? validateRegression('build/outcome-reconciler-auto-dispatch-manifest.json',
+      'outcome-reconciler-auto-dispatch')
+    : validateRegression('build/outcome-reconciler-watchdog-current-binding-manifest.json', null);
+  if (mode === 'watchdog-current-binding') {
+    const tests = Number(regression.manifest.summary?.tests ?? regression.manifest.tests);
+    assert.ok(tests >= 5, `watchdog current-binding regression was truncated: ${tests}`);
+  }
+  const sourceFiles = [
+    'contracts/outcome-reconciler-release-dag.json',
+    'scripts/outcome-reconciler-deployment-attestation.mjs',
+    mode === 'auto-dispatch'
+      ? 'scripts/outcome-reconciler-auto-dispatch-integration.sh'
+      : 'scripts/outcome-reconciler-watchdog-current-binding.sh',
+  ];
+  const sources = Object.fromEntries(sourceFiles.map((relative) => [relative, digestFile(relative)]));
+  const body = {
+    schemaVersion: 2,
+    kind: mode === 'auto-dispatch'
+      ? 'orbit.auto-dispatch.predeploy-target-attestation'
+      : 'orbit.watchdog-current-binding.predeploy-target-attestation',
+    suite: mode === 'auto-dispatch'
+      ? 'outcome-reconciler-auto-dispatch-integration'
+      : 'outcome-reconciler-watchdog-current-binding',
+    phase: 'PREDEPLOY_EVALUATION',
+    outcome: 'PASS',
+    targetSha,
+    targetRef: contract.repository.targetRef,
+    targetReceiptDigest: receiptDigest,
+    repository: {
+      remote: git(['remote', 'get-url', 'origin']),
+      evaluatorBranch,
+      builderReceiptSourceBranch: releaseDag.builder.sourceBranch,
+      originMain,
+      remoteMain,
+      testedTrackedClean: true,
+    },
+    mergeReceipt: { ...mergeReceipt, proof: receiptProof },
+    regression: {
+      path: mode === 'auto-dispatch'
+        ? 'build/outcome-reconciler-auto-dispatch-manifest.json'
+        : 'build/outcome-reconciler-watchdog-current-binding-manifest.json',
+      ...regression.file,
+      summary: regression.manifest.summary ?? {
+        tests: regression.manifest.tests,
+        passed: regression.manifest.passed,
+        failed: regression.manifest.failed,
+        skipped: regression.manifest.skipped,
+      },
+    },
+    deployment: {
+      state: 'DEFERRED_TO_BOUND_TASK',
+      taskId: releaseDag.evaluator.deploymentTaskId,
+      assertions: releaseDag.postDeploymentBoundary.assertions,
+      evaluatorMayDeploy: false,
+    },
+    runtimeCurrentBinding: {
+      state: 'DEFERRED_TO_BOUND_TASK',
+      taskId: releaseDag.evaluator.deploymentTaskId,
+    },
+    sources,
+    sourceDigest: sha256(canonical(sources)),
+    verifiedAt: new Date().toISOString(),
+  };
+  const attestation = { ...body, attestationDigest: sha256(canonical(body)) };
+  const output = path.join(repo, mode === 'auto-dispatch'
+    ? 'build/outcome-reconciler-auto-dispatch-integration-attestation.json'
+    : 'build/outcome-reconciler-watchdog-current-binding-attestation.json');
+  mkdirSync(path.dirname(output), { recursive: true });
+  writeFileSync(output, `${JSON.stringify(attestation, null, 2)}\n`);
+  console.log(JSON.stringify(attestation));
+  process.exit(0);
+}
+
 assert.equal(git(['rev-parse', 'HEAD'], contract.repository.deploymentCheckout), targetSha,
   'deployment checkout differs from the tested target');
 assert.equal(git(['branch', '--show-current'], contract.repository.deploymentCheckout),
@@ -176,29 +315,6 @@ assert.ok(Number(database.migrations) >= contract.postgres.minimumMigrations);
 assert.equal(Number(database.autoDispatchMigration), 1);
 assert.equal(Number(database.bindingMigration), 1);
 assert.match(String(database.systemIdentifier), /^\d+$/u);
-
-const mergeReceipt = queryJson(`
-  SELECT jsonb_build_object(
-    'id', id::text, 'result', result, 'sourceBranch', source_branch,
-    'sourceSha', btrim(source_sha::text), 'targetBranch', target_branch,
-    'targetShaBefore', btrim(target_sha_before::text),
-    'targetShaAfter', btrim(target_sha_after::text), 'recordedBy', recorded_by,
-    'createdAt', created_at
-  )
-    FROM session_merge_receipt
-   WHERE session_id='${contract.session.databaseId}'::uuid
-     AND source_branch='${contract.session.sourceBranch}'
-     AND source_sha='${targetSha}'::char(40)
-     AND target_branch='${contract.repository.targetBranch}'
-     AND target_sha_after='${targetSha}'::char(40)
-     AND result IN ('MERGED','ALREADY_MERGED')
-   ORDER BY created_at DESC LIMIT 1
-`);
-assert.ok(['MERGED', 'ALREADY_MERGED'].includes(mergeReceipt.result));
-assert.equal(mergeReceipt.sourceSha, targetSha);
-assert.equal(mergeReceipt.targetShaAfter, targetSha);
-assert.match(mergeReceipt.targetShaBefore, SHA);
-assert.notEqual(mergeReceipt.targetShaBefore, targetSha);
 
 const runtime = queryJson(`
   SELECT jsonb_build_object(

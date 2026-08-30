@@ -48,7 +48,9 @@
     "test:outcome-reconciler:authoritative-target": "bash scripts/outcome-reconciler-authoritative-target.sh",
     "test:outcome-reconciler:full-api": "bash scripts/outcome-reconciler-full-api.sh",
     "test:outcome-reconciler:full-clients": "bash scripts/outcome-reconciler-full-clients.sh",
-    "test:outcome-reconciler:release-frontier": "bash scripts/outcome-reconciler-release-frontier.sh"
+    "test:outcome-reconciler:release-frontier": "npm run test:outcome-reconciler:release-dag",
+    "test:outcome-reconciler:release-dag": "node scripts/outcome-reconciler-release-dag.mjs",
+    "test:outcome-reconciler:release-dag-plan": "bash scripts/outcome-reconciler-release-dag-plan.sh"
   },
   "engines": {
     "node": ">=26.0.0"

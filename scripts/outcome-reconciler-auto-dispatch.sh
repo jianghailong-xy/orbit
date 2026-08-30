@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/lib/outcome-reconciler-release-dag.sh"
 API="$REPO/src/apiserver"
 BUILD="$REPO/build"
 CONTAINER="${AUTO_DISPATCH_PG_CONTAINER:-orbit-auto-dispatch-pg-$$}"
@@ -21,7 +22,11 @@ ROOT_MODULE_LINK=0
 API_MODULE_LINK=0
 
 cleanup() {
-  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  if outcome_release_dag_db_enabled; then
+    outcome_release_dag_drop_database
+  else
+    docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  fi
   if [ "$API_MODULE_LINK" = "1" ] && [ -L "$API/node_modules" ]; then
     unlink "$API/node_modules"
   fi
@@ -70,48 +75,54 @@ node -e "require('pg')" >/dev/null 2>&1 || {
 }
 mkdir -p "$BUILD"
 
-echo '==> auto-dispatch: generate and build the exact runtime sources'
-( cd "$REPO" && npm run prisma:generate -w @orbit/apiserver >/dev/null )
-( cd "$REPO" && npm run build -w @orbit/shared >/dev/null )
-RESOLVED_SHARED_PACKAGE="$(cd "$REPO" && node -p "require.resolve('@orbit/shared/package.json')")"
-if [ "$RESOLVED_SHARED_PACKAGE" != "$REPO/src/shared/package.json" ]; then
-  ( cd "$(dirname "$RESOLVED_SHARED_PACKAGE")" && "$REPO/node_modules/.bin/tsc" -p tsconfig.json )
-fi
-( cd "$REPO" && npm run build -w @orbit/apiserver >/dev/null )
-
-echo '==> auto-dispatch: provision isolated PostgreSQL 16'
-docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
-  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  -p 127.0.0.1::5432 "$IMAGE" >/dev/null
-READY=0
-for _ in $(seq 1 45); do
-  if docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1; then
-    READY=1
-    break
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+  echo '==> auto-dispatch: use exact bound Prisma/Shared/API build'
+else
+  echo '==> auto-dispatch: generate and build the exact runtime sources'
+  ( cd "$REPO" && npm run prisma:generate -w @orbit/apiserver >/dev/null )
+  ( cd "$REPO" && npm run build -w @orbit/shared >/dev/null )
+  RESOLVED_SHARED_PACKAGE="$(cd "$REPO" && node -p "require.resolve('@orbit/shared/package.json')")"
+  if [ "$RESOLVED_SHARED_PACKAGE" != "$REPO/src/shared/package.json" ]; then
+    ( cd "$(dirname "$RESOLVED_SHARED_PACKAGE")" && "$REPO/node_modules/.bin/tsc" -p tsconfig.json )
   fi
-  sleep 1
-done
-[ "$READY" = "1" ] || {
-  echo '!! disposable PostgreSQL did not become ready' >&2
-  exit 1
-}
-docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-  -c "CREATE DATABASE $DATABASE" >/dev/null
-PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
-PORT="${PORT_LINE##*:}"
-URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
-SYSTEM_IDENTIFIER="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
-  'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+  ( cd "$REPO" && npm run build -w @orbit/apiserver >/dev/null )
+fi
 
-echo '==> auto-dispatch: deploy every migration to the disposable database'
-( cd "$API" && DATABASE_URL="$URL" node node_modules/prisma/build/index.js \
-  migrate deploy --schema prisma/schema.prisma >/dev/null )
-MIGRATION_COUNT="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
-  'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
-LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
-  'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
-  | tr -d '[:space:]')"
+if outcome_release_dag_db_enabled; then
+  echo '==> auto-dispatch: clone the bound migrated PostgreSQL template'
+  outcome_release_dag_bind_database
+else
+  echo '==> auto-dispatch: provision isolated PostgreSQL 16'
+  docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
+    -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+    -p 127.0.0.1::5432 "$IMAGE" >/dev/null
+  READY=0
+  for _ in $(seq 1 45); do
+    if docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+      psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1; then
+      READY=1
+      break
+    fi
+    sleep 1
+  done
+  [ "$READY" = "1" ] || { echo '!! disposable PostgreSQL did not become ready' >&2; exit 1; }
+  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE $DATABASE" >/dev/null
+  PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
+  PORT="${PORT_LINE##*:}"
+  URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
+  SYSTEM_IDENTIFIER="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
+    'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+  echo '==> auto-dispatch: deploy every migration to the disposable database'
+  ( cd "$API" && DATABASE_URL="$URL" node node_modules/prisma/build/index.js \
+    migrate deploy --schema prisma/schema.prisma >/dev/null )
+  MIGRATION_COUNT="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+    'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
+  LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+    'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
+    | tr -d '[:space:]')"
+fi
 REQUIRED_MIGRATION_APPLIED="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
   "SELECT count(*) FROM _prisma_migrations WHERE migration_name='0205_task_auto_dispatch_obligation' AND finished_at IS NOT NULL" \
   | tr -d '[:space:]')"
@@ -148,10 +159,14 @@ if [ "$TEST_RC" -ne 0 ]; then
 fi
 
 echo '==> auto-dispatch: remove PostgreSQL before publishing evidence'
-docker rm -fv "$CONTAINER" >/dev/null
-if docker inspect "$CONTAINER" >/dev/null 2>&1; then
-  echo '!! disposable PostgreSQL fixture survived cleanup' >&2
-  exit 1
+if outcome_release_dag_db_enabled; then
+  outcome_release_dag_drop_database
+else
+  docker rm -fv "$CONTAINER" >/dev/null
+  if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    echo '!! disposable PostgreSQL fixture survived cleanup' >&2
+    exit 1
+  fi
 fi
 
 echo '==> auto-dispatch: validate zero-skip evidence and write SHA/source-bound manifest'

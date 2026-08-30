@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/lib/outcome-reconciler-release-dag.sh"
 API="$REPO/src/apiserver"
 CONTAINER="${OUTCOME_SURFACES_PG_CONTAINER:-outcome-surfaces-pg16-$$}"
 ADMIN="${OUTCOME_SURFACES_PG_USER:-surface_admin}"
@@ -21,7 +22,11 @@ WEB_MODULE_LINK=0
 SHARED_MODULE_LINK=0
 
 cleanup() {
-  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  if outcome_release_dag_db_enabled; then
+    outcome_release_dag_drop_database
+  else
+    docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  fi
   if [ "$SHARED_MODULE_LINK" = 1 ] && [ -L "$REPO/src/shared/node_modules" ]; then unlink "$REPO/src/shared/node_modules"; fi
   if [ "$WEB_MODULE_LINK" = 1 ] && [ -L "$REPO/src/web/node_modules" ]; then unlink "$REPO/src/web/node_modules"; fi
   if [ "$API_MODULE_LINK" = 1 ] && [ -L "$API/node_modules" ]; then unlink "$API/node_modules"; fi
@@ -45,41 +50,56 @@ PRISMA="$API/node_modules/.bin/prisma"
 NODE_MODULES="$API/node_modules:$REPO/node_modules:/root/orbit/src/apiserver/node_modules:/root/orbit/node_modules"
 mkdir -p "$BUILD" "$COMPILED"
 
-echo '==> outcome-surfaces: compiling canonical production model'
-"$TSC" "$API/src/outcome-reconciler/outcome-surfaces.ts" \
-  --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
-  --typeRoots "$REPO/node_modules/@types" --outDir "$COMPILED"
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+  SURFACES_MODULE="$API/dist/outcome-reconciler/outcome-surfaces.js"
+  echo '==> outcome-surfaces: use exact bound production build'
+else
+  echo '==> outcome-surfaces: compiling canonical production model'
+  "$TSC" "$API/src/outcome-reconciler/outcome-surfaces.ts" \
+    --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
+    --typeRoots "$REPO/node_modules/@types" --outDir "$COMPILED"
+  SURFACES_MODULE="$COMPILED/outcome-surfaces.js"
+fi
 
 echo '==> outcome-surfaces: building Web actor adapter'
-npm run build -w @orbit/web >/dev/null
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+else
+  npm run build -w @orbit/web >/dev/null
+fi
 echo '==> outcome-surfaces: checking Web fixture semantic parity'
 npm run test -w @orbit/web -- src/lib/outcomeSurfaces.contract.test.ts
 
-echo '==> outcome-surfaces: provisioning disposable PostgreSQL 16'
-docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
-  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  -p 127.0.0.1::5432 "$IMAGE" >/dev/null
-for _ in $(seq 1 90); do
+if outcome_release_dag_db_enabled; then
+  echo '==> outcome-surfaces: clone the bound migrated PostgreSQL template'
+  outcome_release_dag_bind_database
+else
+  echo '==> outcome-surfaces: provisioning disposable PostgreSQL 16'
+  docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
+    -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+    -p 127.0.0.1::5432 "$IMAGE" >/dev/null
+  for _ in $(seq 1 90); do
+    docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+      psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
+    sleep 1
+  done
   docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
-  sleep 1
-done
-docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-  psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null
-docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-  -c "CREATE DATABASE $DATABASE" >/dev/null
-PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
-PORT="${PORT_LINE##*:}"
-URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
-
-echo '==> outcome-surfaces: applying every Prisma migration'
-( cd "$API" && NODE_PATH="$NODE_MODULES" DATABASE_URL="$URL" \
-  "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
+    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null
+  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE $DATABASE" >/dev/null
+  PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
+  PORT="${PORT_LINE##*:}"
+  URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
+  echo '==> outcome-surfaces: applying every Prisma migration'
+  ( cd "$API" && NODE_PATH="$NODE_MODULES" DATABASE_URL="$URL" \
+    "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
+fi
 
 echo '==> outcome-surfaces: running semantic, tenant, stale, expiry, secret and ratification matrix'
 set +e
 NODE_PATH="$NODE_MODULES" \
-OUTCOME_SURFACES_MODULE="$COMPILED/outcome-surfaces.js" \
+OUTCOME_SURFACES_MODULE="$SURFACES_MODULE" \
 OUTCOME_SURFACES_FIXTURE="$REPO/contracts/outcome-reconciler-v2.surfaces.fixture.json" \
 OUTCOME_SURFACES_PG_URL="$URL" \
 OUTCOME_SURFACES_EVIDENCE_PATH="$EVIDENCE" \

@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "taskId": "34FPjTbN1Y1KM1XZzVaHx",
-  "sourceBranch": "orbit/manifest-current-binding-dedbcc",
+  "taskId": "34G78wVKFWCGmxuj2aLhw",
+  "sourceBranch": "orbit/release-evaluation-dag-target-84fe31",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
-    "mode": "RUNTIME_EXACT_REMOTE_REF",
-    "rule": "declared target is the full SHA resolved from refs/heads/main in the clean clone and must equal HEAD, main, origin/main and ls-remote"
+    "mode": "BUILDER_AGENT_MERGE_RECEIPT",
+    "rule": "declared target is the receipt source/target-after SHA for session 4sHH6oQfYvls1guZ4qOyS7 and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
   },
   "lineage": {
-    "remoteMainObservedBeforeIntegration": "aca97577e5e57cb2d6d39e503a035115e1cedd9c",
-    "localMainIntegrationBase": "2e052c542670ae0aa8a4395623e84a69220d4119",
+    "remoteMainObservedBeforeIntegration": "0c6e2da94f27a4efa7c07a13b382d5d38c54864e",
+    "localMainIntegrationBase": "0c6e2da94f27a4efa7c07a13b382d5d38c54864e",
     "historyPolicy": "NO_FORCE_NO_RESET_NO_REWRITE"
   },
   "immutableVerifier": {
@@ -23,6 +23,7 @@
     "evidenceDigest": "50e55c8c721a0f9a79a0d22445febfe095ebc4a65747f221b890425f46289085",
     "mustRemainUnsuperseded": true
   },
+  "historicalEvidencePolicy": "ANCESTRY_INVENTORY_ONLY_NOT_CURRENT_RELEASE_EVIDENCE",
   "candidates": [
     {
       "taskId": "34FLebbbryXOpHmTLVQ9G",
@@ -422,7 +423,7 @@
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/manifest-current-binding-dedbcc",
+    "sourceBranch": "orbit/release-evaluation-dag-target-84fe31",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

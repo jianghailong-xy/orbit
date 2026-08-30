@@ -20,6 +20,8 @@ const outputPath = path.resolve(process.argv[2] ?? path.join(
   'build/outcome-reconciler-authoritative-target-manifest.json',
 ));
 const allowUnpushed = process.env.AUTHORITATIVE_TARGET_ALLOW_UNPUSHED === '1';
+const dagPredeploy = process.env.OUTCOME_RELEASE_DAG_ACTIVE === '1'
+  && process.env.OUTCOME_RELEASE_DAG_PHASE === 'PREDEPLOY_EVALUATION';
 
 function run(file, args, options = {}) {
   return execFileSync(file, args, {
@@ -80,6 +82,9 @@ function assertTracked(relative) {
 
 const inventoryPath = 'contracts/outcome-reconciler-authoritative-target.json';
 const inventory = JSON.parse(readFileSync(path.join(root, inventoryPath), 'utf8'));
+const releaseDag = JSON.parse(readFileSync(path.join(
+  root, 'contracts/outcome-reconciler-release-dag.json',
+), 'utf8'));
 const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 assert.equal(inventory.schemaVersion, 1);
 assert.equal(inventory.targetBranch, 'main');
@@ -90,12 +95,17 @@ assert.match(inventory.lineage.localMainIntegrationBase, SHA);
 assert.equal(inventory.immutableVerifier.status, 'DONE');
 assert.equal(inventory.immutableVerifier.verdict, 'FAIL');
 assert.match(inventory.immutableVerifier.evidenceDigest, DIGEST);
+assert.equal(inventory.historicalEvidencePolicy,
+  'ANCESTRY_INVENTORY_ONLY_NOT_CURRENT_RELEASE_EVIDENCE');
+assert.equal(releaseDag.builderTaskId, inventory.taskId);
+assert.equal(releaseDag.builder.sourceBranch, inventory.sourceBranch);
+assert.equal(releaseDag.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
 
 if (!allowUnpushed) git('fetch', '--quiet', 'origin', 'refs/heads/main:refs/remotes/origin/main');
 
 const target = git('rev-parse', 'HEAD');
 assert.match(target, SHA);
-const branch = git('symbolic-ref', '--short', 'HEAD');
+const branch = git('branch', '--show-current') || 'DETACHED_HEAD';
 const remoteUrl = git('config', '--get', 'remote.origin.url');
 const refs = {
   declaredTarget: target,
@@ -107,10 +117,21 @@ const refs = {
     : git('ls-remote', 'origin', inventory.targetRef).split(/\s+/u)[0],
 };
 if (!allowUnpushed) {
-  assert.equal(branch, 'main', 'clean verification checkout is not on main');
+  if (dagPredeploy) {
+    assert.equal(process.env.OUTCOME_RELEASE_DAG_TARGET_SHA, target,
+      'Release DAG target binding differs from the authoritative target');
+  } else {
+    assert.equal(branch, 'main', 'clean verification checkout is not on main');
+  }
   for (const [name, value] of Object.entries(refs)) {
     assert.match(value, SHA, `${name} is not a full SHA`);
-    assert.equal(value, target, `${name} does not equal the declared target`);
+    if (name !== 'localMain' || !dagPredeploy) {
+      assert.equal(value, target, `${name} does not equal the declared target`);
+    }
+  }
+  if (dagPredeploy) {
+    assert.ok(isAncestor(refs.localMain, target),
+      'local deployment main is not an ancestor of the frozen predeploy target');
   }
 }
 
@@ -166,6 +187,17 @@ const integrationMerges = inventory.integrationMerges.map((merge) => {
   assert.ok(parents.length >= 3, `${merge.mergeCommit} is not a merge commit`);
   return { ...merge, candidateCommit: source.candidateCommit, targetAncestor: true };
 });
+
+const integratedDeliveries = releaseDag.integratedDeliveries.map((delivery) => ({
+  ...delivery,
+  commits: delivery.commits.map((commit, index) => {
+    assert.match(commit, SHA);
+    assert.equal(git('cat-file', '-t', commit), 'commit');
+    assert.ok(isAncestor(commit, target), `${delivery.taskId}/${commit} is missing from target`);
+    assert.equal(git('show', '-s', '--format=%s', commit), delivery.requiredSubjects[index]);
+    return { sha: commit, subject: delivery.requiredSubjects[index], targetAncestor: true };
+  }),
+}));
 
 const entrypoints = inventory.requiredEntrypoints.map((entrypoint) => {
   assert.equal(packageJson.scripts?.[entrypoint.packageScript], entrypoint.command);
@@ -245,10 +277,13 @@ SELECT id::text,
        recorded_by,
        created_at::text
   FROM session_merge_receipt
- WHERE source_branch = '${lookup.sourceBranch}'
+ WHERE session_id = '${releaseDag.builder.sessionDatabaseId}'::uuid
+   AND task_id = '${releaseDag.builder.taskDatabaseId}'::uuid
+   AND source_branch = '${lookup.sourceBranch}'
    AND source_sha = '${target}'::char(40)
    AND target_branch = '${lookup.targetBranch}'
    AND target_sha_after = '${target}'::char(40)
+   AND recorded_by = '${lookup.requiredRecordedBy}'
    AND result IN ('MERGED', 'ALREADY_MERGED')
  ORDER BY created_at DESC
  LIMIT 1`;
@@ -273,15 +308,17 @@ SELECT id::text,
   assert.equal(authoritativeReceipt.targetShaAfter, target);
   assert.equal(authoritativeReceipt.recordedBy, lookup.requiredRecordedBy);
   assert.match(authoritativeReceipt.targetShaBefore, SHA);
-  assert.notEqual(authoritativeReceipt.targetShaBefore, target);
+  const strictAdvance = authoritativeReceipt.result === 'MERGED';
+  if (strictAdvance) assert.notEqual(authoritativeReceipt.targetShaBefore, target);
+  else assert.equal(authoritativeReceipt.targetShaBefore, target);
   assert.ok(
     isAncestor(authoritativeReceipt.targetShaBefore, target),
     'authoritative receipt does not describe a non-force fast-forward',
   );
-  authoritativeReceipt.mode = 'NON_FORCE_FAST_FORWARD';
+  authoritativeReceipt.mode = strictAdvance ? 'NON_FORCE_FAST_FORWARD' : 'ALREADY_CURRENT';
   authoritativeReceipt.proof = {
     remoteEqualsTarget: refs.remoteHeadsMain === target,
-    beforeIsStrictAncestor: true,
+    beforeIsStrictAncestor: strictAdvance,
     sourceEqualsTarget: true,
     targetAfterEqualsRemote: true,
   };
@@ -293,6 +330,7 @@ assert.equal(cleanAfter, '', 'verification worktree became dirty');
 const sourceFiles = [
   'package.json',
   inventoryPath,
+  'contracts/outcome-reconciler-release-dag.json',
   'scripts/outcome-reconciler-authoritative-target.sh',
   'scripts/outcome-reconciler-authoritative-target.mjs',
 ];
@@ -306,12 +344,16 @@ const manifest = {
   kind: 'orbit.outcome-reconciler.authoritative-target-attestation',
   outcome: 'PASS',
   generatedAt: new Date().toISOString(),
-  verificationMode: allowUnpushed ? 'LOCAL_PRE_PUSH_AUDIT' : 'CLEAN_REMOTE_CLONE',
+  verificationMode: allowUnpushed
+    ? 'LOCAL_PRE_PUSH_AUDIT'
+    : dagPredeploy ? 'FROZEN_PREDEPLOY_SOURCE_BRANCH' : 'CLEAN_REMOTE_CLONE',
   repository: {
     remoteUrl,
     branch,
     targetRef: inventory.targetRef,
-    cleanTemporaryClone: !allowUnpushed,
+    cleanTemporaryClone: !allowUnpushed && !dagPredeploy,
+    exactReceiptTargetCheckout: dagPredeploy,
+    builderReceiptSourceBranch: dagPredeploy ? inventory.sourceBranch : null,
   },
   refs,
   worktree: { clean: true, porcelain: cleanAfter },
@@ -329,8 +371,13 @@ const manifest = {
   },
   candidates,
   recordedMergeReceipts,
-  deploymentAndDeliveryEvidence: inventory.deploymentAndDeliveryEvidence,
+  historicalDeploymentAndDeliveryInventory: {
+    evidenceReuse: 'NONE',
+    policy: inventory.historicalEvidencePolicy,
+    entries: inventory.deploymentAndDeliveryEvidence,
+  },
   integrationMerges,
+  integratedDeliveries,
   requiredEntrypoints: entrypoints,
   nonForcePushReceipt: authoritativeReceipt ?? {
     localAuditOnly: true,

@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/lib/outcome-reconciler-release-dag.sh"
 API="$REPO/src/apiserver"
 CONTAINER="${OUTCOME_REPLAY_PG_CONTAINER:-outcome-replay-pg16-$$}"
 ADMIN="${OUTCOME_REPLAY_PG_USER:-outcome_replay_admin}"
@@ -22,7 +23,11 @@ ROOT_MODULE_LINK=0
 API_MODULE_LINK=0
 
 cleanup() {
-  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  if outcome_release_dag_db_enabled; then
+    outcome_release_dag_drop_database
+  else
+    docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  fi
   if [ "$API_MODULE_LINK" = "1" ] && [ -L "$API/node_modules" ]; then
     unlink "$API/node_modules"
   fi
@@ -84,42 +89,52 @@ if [ ! -e "$API/node_modules" ] && [ ! -L "$API/node_modules" ]; then
 fi
 
 mkdir -p "$BUILD" "$COMPILED"
-echo '==> trace-replay: compiling the production executable-acceptance runtime'
-"$TSC" "$API/src/tasks/executable-acceptance-runtime.ts" \
-  --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
-  --typeRoots "$TYPE_ROOT" --rootDir "$API/src" --outDir "$COMPILED"
-RUNTIME_MODULE="$COMPILED/tasks/executable-acceptance-runtime.js"
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+  RUNTIME_MODULE="$API/dist/tasks/executable-acceptance-runtime.js"
+  echo '==> trace-replay: use exact bound production build'
+else
+  echo '==> trace-replay: compiling the production executable-acceptance runtime'
+  "$TSC" "$API/src/tasks/executable-acceptance-runtime.ts" \
+    --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
+    --typeRoots "$TYPE_ROOT" --rootDir "$API/src" --outDir "$COMPILED"
+  RUNTIME_MODULE="$COMPILED/tasks/executable-acceptance-runtime.js"
+fi
 [ -f "$RUNTIME_MODULE" ] || {
   echo "!! compiled runtime is missing: $RUNTIME_MODULE" >&2
   exit 1
 }
 
-echo '==> trace-replay: provisioning disposable PostgreSQL 16'
-docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
-  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  -p 127.0.0.1::5432 "$IMAGE" >/dev/null
-for _ in $(seq 1 90); do
-  if docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-  psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null
-PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
-PORT="${PORT_LINE##*:}"
-SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
-  'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
-docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-  -c "CREATE DATABASE $DATABASE" >/dev/null
-URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
-
-echo '==> trace-replay: applying every Prisma migration'
-( cd "$API" && NODE_PATH="$NODE_MODULES" DATABASE_URL="$URL" \
-  "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
-MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
-  'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
+if outcome_release_dag_db_enabled; then
+  echo '==> trace-replay: clone the bound migrated PostgreSQL template'
+  outcome_release_dag_bind_database
+else
+  echo '==> trace-replay: provisioning disposable PostgreSQL 16'
+  docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
+    -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+    -p 127.0.0.1::5432 "$IMAGE" >/dev/null
+  for _ in $(seq 1 90); do
+    if docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+      psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null
+  PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
+  PORT="${PORT_LINE##*:}"
+  SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
+    'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE $DATABASE" >/dev/null
+  URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
+  echo '==> trace-replay: applying every Prisma migration'
+  ( cd "$API" && NODE_PATH="$NODE_MODULES" DATABASE_URL="$URL" \
+    "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
+  MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+    'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
+fi
 echo "==> trace-replay: migrations=$MIGRATIONS system_identifier=$SYSTEM_ID port=$PORT"
 
 echo '==> trace-replay: replaying 7+7+3 history, fault boundaries, races, and timeout recovery'
@@ -142,10 +157,14 @@ if [ "$TEST_RC" -ne 0 ]; then
 fi
 
 # A manifest claiming disposable PostgreSQL must not be signed while its fixture is still alive.
-docker rm -fv "$CONTAINER" >/dev/null
-if docker inspect "$CONTAINER" >/dev/null 2>&1; then
-  echo '!! disposable PostgreSQL fixture still exists after cleanup' >&2
-  exit 1
+if outcome_release_dag_db_enabled; then
+  outcome_release_dag_drop_database
+else
+  docker rm -fv "$CONTAINER" >/dev/null
+  if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    echo '!! disposable PostgreSQL fixture still exists after cleanup' >&2
+    exit 1
+  fi
 fi
 
 echo '==> trace-replay: validating zero-skip evidence and writing the trace manifest'

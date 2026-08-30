@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Read-only current-target integration acceptance. The isolated auto-dispatch matrix must have
-# run first; this binds it to the exact pushed and deployed target plus its merge receipt.
+# Read-only target integration acceptance. In the Release DAG it binds the completed regression to
+# the pushed target and merge receipt, then emits a typed deployment deferral. Standalone use keeps
+# the post-deployment/current-binding assertions.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

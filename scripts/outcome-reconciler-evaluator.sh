@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO/scripts/lib/outcome-reconciler-release-dag.sh"
 API="$REPO/src/apiserver"
 CONTAINER="${OUTCOME_EVALUATOR_PG_CONTAINER:-pceval-pg16-$$}"
 ADMIN="${OUTCOME_EVALUATOR_PG_USER:-pceval_admin}"
@@ -19,7 +20,11 @@ MANIFEST="$BUILD/outcome-reconciler-v2-evaluator-manifest.json"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 cleanup() {
-  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  if outcome_release_dag_db_enabled; then
+    outcome_release_dag_drop_database
+  else
+    docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
@@ -48,41 +53,52 @@ TYPE_ROOT="$REPO/node_modules/@types"
 [ -d "$TYPE_ROOT" ] || { echo '!! Node TypeScript definitions are unavailable' >&2; exit 1; }
 
 mkdir -p "$BUILD" "$COMPILED"
-echo "==> outcome-evaluator: compiling the pure production reducer"
-"$TSC" "$API/src/outcome-reconciler/outcome-evaluator.ts" \
-  --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
-  --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
+if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
+  outcome_release_dag_assert_build
+  EVALUATOR_MODULE="$API/dist/outcome-reconciler/outcome-evaluator.js"
+  echo '==> outcome-evaluator: use exact bound production build'
+else
+  echo "==> outcome-evaluator: compiling the pure production reducer"
+  "$TSC" "$API/src/outcome-reconciler/outcome-evaluator.ts" \
+    --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
+    --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
+  EVALUATOR_MODULE="$COMPILED/outcome-evaluator.js"
+fi
 
-echo "==> outcome-evaluator: provisioning disposable PostgreSQL 16"
-docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
-  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  -p 127.0.0.1::5432 "$IMAGE" >/dev/null
-for _ in $(seq 1 90); do
+if outcome_release_dag_db_enabled; then
+  echo '==> outcome-evaluator: clone the bound migrated PostgreSQL template'
+  outcome_release_dag_bind_database
+else
+  echo "==> outcome-evaluator: provisioning disposable PostgreSQL 16"
+  docker run -d --name "$CONTAINER" --tmpfs /var/lib/postgresql/data:rw,size=1g \
+    -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+    -p 127.0.0.1::5432 "$IMAGE" >/dev/null
+  for _ in $(seq 1 90); do
+    docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+      psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
+    sleep 1
+  done
   docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
-  sleep 1
-done
-docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
-  psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null
-PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
-PORT="${PORT_LINE##*:}"
-SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
-  'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
-docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-  -c "CREATE DATABASE $DATABASE" >/dev/null
-URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
-
-echo "==> outcome-evaluator: applying every Prisma migration"
-( cd "$API" && NODE_PATH="$NODE_MODULES" DATABASE_URL="$URL" \
-  "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
-MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
-  'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
+    psql -h 127.0.0.1 -U "$ADMIN" -d postgres -tAc 'SELECT 1' >/dev/null
+  PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
+  PORT="${PORT_LINE##*:}"
+  SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
+    'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE $DATABASE" >/dev/null
+  URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DATABASE"
+  echo "==> outcome-evaluator: applying every Prisma migration"
+  ( cd "$API" && NODE_PATH="$NODE_MODULES" DATABASE_URL="$URL" \
+    "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
+  MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
+    'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
+fi
 echo "==> outcome-evaluator: migrations=$MIGRATIONS system_identifier=$SYSTEM_ID port=$PORT"
 
 echo "==> outcome-evaluator: running pure tables and PostgreSQL concurrency matrix"
 set +e
 NODE_PATH="$NODE_MODULES" \
-OUTCOME_EVALUATOR_MODULE="$COMPILED/outcome-evaluator.js" \
+OUTCOME_EVALUATOR_MODULE="$EVALUATOR_MODULE" \
 OUTCOME_EVALUATOR_PG_URL="$URL" \
 OUTCOME_EVALUATOR_PG_EXPECTED_DATABASE="$DATABASE" \
 OUTCOME_EVALUATOR_PG_EXPECTED_USER="$ADMIN" \
