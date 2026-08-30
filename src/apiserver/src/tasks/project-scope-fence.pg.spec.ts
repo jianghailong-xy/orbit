@@ -345,9 +345,13 @@ test('unit L3: a rotation cannot be written past', { skip, concurrency: 1, timeo
   /**
    * Run `work` against a row that commits under `key` while `work` is parked at rank 40.
    *
-   * The rotator connection is reused for its lock, not its rotation: it takes the project row, lets
-   * `work` read a world without the competing row, blocks it, commits the row, and releases. What
-   * `work` then does is exactly what it does in production when it loses the index.
+   * The rotator connection is reused for its lock, not its rotation: it takes the project row,
+   * appends the competing row without committing it, then lets `work` read a world in which that
+   * row is still invisible. `work` parks behind the transaction and the row commits before it is
+   * released. Forging before `work` starts is important: a batch takes the dependency-graph lock
+   * before rank 40, so trying to forge only after the batch parks creates an artificial reverse
+   * lock order (project -> dependency graph) and lets PostgreSQL abort the fixture as a deadlock
+   * victim instead of exercising the production index-loss path.
    */
   async function underKeyRace<T>(
     w: World,
@@ -356,20 +360,22 @@ test('unit L3: a rotation cannot be written past', { skip, concurrency: 1, timeo
     work: () => Promise<T>,
   ): Promise<T> {
     await rotator.query('BEGIN');
-    await rotator.query(
-      'SELECT "id" FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', [w.projectId],
-    );
-    const running = work();
-    running.catch(() => undefined);
     try {
-      await awaitBlockedBy(rotatorPid, 'the write parking behind the project row');
+      await rotator.query(
+        'SELECT "id" FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', [w.projectId],
+      );
       await forge(rotator);
+      const running = work();
+      running.catch(() => undefined);
+      await awaitBlockedBy(
+        rotatorPid, 'the write parking behind the project row or uncommitted key',
+      );
       await rotator.query('COMMIT');
+      return running;
     } catch (e) {
       await rotator.query('ROLLBACK').catch(() => undefined);
       throw e;
     }
-    return running;
   }
 
   /** The service's own key template, rebuilt here so the fixture can aim at a real key. */
