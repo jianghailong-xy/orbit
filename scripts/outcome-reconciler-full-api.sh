@@ -58,9 +58,28 @@ mkdir -p "$API/build/node_modules/@orbit"
 ln -sfn "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"
 
 echo '==> full-api: provision disposable PostgreSQL 16'
-docker run -d --name "$CONTAINER" \
-  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  "$IMAGE" >/dev/null
+PG_PORT=''
+PORT_START=$((32768 + ($$ % 20000)))
+DOCKER_RUN_ERROR="$CASE_DIR/docker-run.err"
+for PORT_OFFSET in $(seq 0 255); do
+  PORT_CANDIDATE=$((PORT_START + PORT_OFFSET))
+  if [ "$PORT_CANDIDATE" -gt 60999 ]; then
+    PORT_CANDIDATE=$((32768 + PORT_CANDIDATE - 61000))
+  fi
+  if docker run -d --name "$CONTAINER" \
+    -p "127.0.0.1:$PORT_CANDIDATE:5432" \
+    -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+    "$IMAGE" > /dev/null 2>"$DOCKER_RUN_ERROR"; then
+    PG_PORT="$PORT_CANDIDATE"
+    break
+  fi
+  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
+  if ! grep -Eq 'port is already allocated|address already in use|Bind for .* failed' "$DOCKER_RUN_ERROR"; then
+    cat "$DOCKER_RUN_ERROR" >&2
+    exit 1
+  fi
+done
+[ -n "$PG_PORT" ] || { echo 'no stable loopback port was available for disposable PostgreSQL' >&2; exit 1; }
 READY=0
 for _ in $(seq 1 60); do
   if docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
@@ -73,9 +92,13 @@ done
 [ "$READY" = 1 ] || { echo 'disposable PostgreSQL did not become ready' >&2; exit 1; }
 docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
   -c "CREATE DATABASE $DATABASE" >/dev/null
-PG_HOST="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER")"
-[ -n "$PG_HOST" ] || { echo 'disposable PostgreSQL has no bridge address' >&2; exit 1; }
-URL="postgresql://$ADMIN:$PASSWORD@$PG_HOST:5432/$DATABASE"
+PG_HOST='127.0.0.1'
+ACTUAL_PG_PORT="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$CONTAINER")"
+[ "$ACTUAL_PG_PORT" = "$PG_PORT" ] || {
+  echo "disposable PostgreSQL port binding changed requested=$PG_PORT actual=$ACTUAL_PG_PORT" >&2
+  exit 1
+}
+URL="postgresql://$ADMIN:$PASSWORD@$PG_HOST:$PG_PORT/$DATABASE"
 SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
   'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
 PG_VERSION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
@@ -106,6 +129,7 @@ export OUTCOME_API_CASE_CONTAINER="$CONTAINER"
 export OUTCOME_API_CASE_ADMIN="$ADMIN"
 export OUTCOME_API_CASE_PASSWORD="$PASSWORD"
 export OUTCOME_API_CASE_HOST="$PG_HOST"
+export OUTCOME_API_CASE_PORT="$PG_PORT"
 export OUTCOME_API_CASE_SYSTEM_ID="$SYSTEM_ID"
 export OUTCOME_API_CASE_REPO="$REPO"
 export OUTCOME_API_CASE_API="$API"

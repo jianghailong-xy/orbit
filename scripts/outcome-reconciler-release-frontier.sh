@@ -251,14 +251,21 @@ core_lane() {
     build/outcome-reconciler-owner-ratification-ui-manifest.json
 }
 
-runtime_lane() {
+watchdog_lane() {
   local worker="$1"
   trap - EXIT INT TERM
   set +e
-  # Canary consumes immutable Watchdog evidence, so the runtime proofs stay serial in this lane.
   run_worker_npm "$worker" backend watchdog test:outcome-reconciler:watchdog \
     build/outcome-reconciler-v2-watchdog-manifest.json \
     build/outcome-reconciler-v2-watchdog-capacity-manifest.json
+}
+
+runtime_tail_lane() {
+  local worker="$1"
+  trap - EXIT INT TERM
+  set +e
+  # Canary consumes immutable Watchdog evidence, so these proofs begin only after Watchdog has
+  # published the current run's manifests in the same isolated worker.
   run_worker_npm "$worker" backend acceptance-runtime \
     test:outcome-reconciler:acceptance-runtime \
     build/executable-acceptance-runtime-manifest.json
@@ -296,18 +303,32 @@ API_WORKER="$PREPARED_WORKER"
 prepare_worker clients
 CLIENTS_WORKER="$PREPARED_WORKER"
 
-echo "==> release-frontier [$PHASE]: execute bounded DAG target=$TARGET_SHA lanes=4 apiJobs=${OUTCOME_RELEASE_API_JOBS:-4}"
+echo "==> release-frontier [$PHASE]: execute bounded DAG target=$TARGET_SHA lanes=4 apiJobs=${OUTCOME_RELEASE_API_JOBS:-4} clientsAfter=watchdog"
 (trap - EXIT INT TERM; core_lane "$CORE_WORKER") &
-LANE_PIDS+=("$!")
-(trap - EXIT INT TERM; runtime_lane "$RUNTIME_WORKER") &
-LANE_PIDS+=("$!")
+CORE_PID="$!"
+LANE_PIDS+=("$CORE_PID")
+(trap - EXIT INT TERM; watchdog_lane "$RUNTIME_WORKER") &
+WATCHDOG_PID="$!"
+LANE_PIDS+=("$WATCHDOG_PID")
 (trap - EXIT INT TERM; api_lane "$API_WORKER") &
-LANE_PIDS+=("$!")
+API_PID="$!"
+LANE_PIDS+=("$API_PID")
+
+# The 111k Watchdog seed is the machine's heaviest bounded phase. Web stays a complete one-worker
+# matrix, but starts after that phase so its event-loop deadlines measure the product rather than
+# CPU starvation caused by the acceptance harness itself. API and core continue independently.
+set +e
+wait "$WATCHDOG_PID"
+set -e
+(trap - EXIT INT TERM; runtime_tail_lane "$RUNTIME_WORKER") &
+RUNTIME_TAIL_PID="$!"
+LANE_PIDS+=("$RUNTIME_TAIL_PID")
 (trap - EXIT INT TERM; clients_lane "$CLIENTS_WORKER") &
-LANE_PIDS+=("$!")
+CLIENTS_PID="$!"
+LANE_PIDS+=("$CLIENTS_PID")
 
 set +e
-for LANE_PID in "${LANE_PIDS[@]}"; do
+for LANE_PID in "$CORE_PID" "$API_PID" "$RUNTIME_TAIL_PID" "$CLIENTS_PID"; do
   wait "$LANE_PID"
 done
 set -e
