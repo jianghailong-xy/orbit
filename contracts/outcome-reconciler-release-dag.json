@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "a660ba0df8638126925f8670a9d5a59d9ca64264199a09be9238e52d23a2e35b",
+  "declaredDagPlanDigest": "790f91e73178c8f08170d0451c37159b255fe4b082fff6338172319633303a73",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "builderTaskId": "34GWrlngwd6e1AfHXq4hG",
+  "builderTaskId": "34Gk8empzf00YFQ9shV6j",
   "supersededAttempt": {
     "taskId": "34GVK9T3B4GW7UpXH6kmT",
     "sessionId": "5saDXo7pdATSJ98Cd7VcdK",
@@ -108,11 +108,11 @@
     }
   ],
   "builder": {
-    "taskId": "34GWrlngwd6e1AfHXq4hG",
-    "taskDatabaseId": "01a05650-3ee0-72dc-addb-439a55e0931a",
-    "sessionId": "3muUyYwt13yMafOazMX0Kw",
-    "sessionDatabaseId": "7c7db692-6a7b-593d-89e1-2fe761c6faca",
-    "sourceBranch": "orbit/release-dag-current-work-7d7aaa",
+    "taskId": "34Gk8empzf00YFQ9shV6j",
+    "taskDatabaseId": "01a0583f-6297-711b-9df1-0316f5a83205",
+    "sessionId": "54JGaRsT7zN6f8n9JMNbbI",
+    "sessionDatabaseId": "a6919aa7-5714-582d-a7e9-4a0d7e89d3a4",
+    "sourceBranch": "orbit/release-dag-postgres-release-dag-7606c3",
     "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-regression-rebind",
     "commandDigest": "dd60f2d723df98ed4605f894751a11c0a6d63f8c128984dcdf50bb899bf80241",
     "evaluationPlanDigest": "6c852b45dedf94260b61ce17a269ed484c8c2b523b9b0ed84d999dea00853da2",
@@ -137,8 +137,8 @@
     "remoteTrackingRef": "refs/remotes/origin/main",
     "resolution": "BUILDER_AGENT_MERGE_RECEIPT",
     "requiredReceipt": {
-      "sessionDatabaseId": "7c7db692-6a7b-593d-89e1-2fe761c6faca",
-      "sourceBranch": "orbit/release-dag-current-work-7d7aaa",
+      "sessionDatabaseId": "a6919aa7-5714-582d-a7e9-4a0d7e89d3a4",
+      "sourceBranch": "orbit/release-dag-postgres-release-dag-7606c3",
       "targetBranch": "main",
       "recordedBy": "AGENT",
       "results": ["MERGED", "ALREADY_MERGED"]
@@ -287,10 +287,10 @@
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs"
     ],
     "digests": {
-      "package.json": "6a2056024c6e6dbcfb2c13f9875c4a4b91faac5d3545d0998c5bb1dbebf60095",
+      "package.json": "b4156da2deedd07041995975626f4fab0e8ffbeabd41c66ddb37d08acf476af0",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
-      "contracts/outcome-reconciler-authoritative-target.json": "0d1df5e81be57dc75b7bf023dad41f22180aebf86368bcaf7100dc4512c2e96e",
-      "contracts/outcome-reconciler-release-frontier.json": "73b89c2ee3cd463aa7fbef555f6f8e4219ab6256f87ac4c677c932336ac1215b",
+      "contracts/outcome-reconciler-authoritative-target.json": "44d15622865e92ae0429faecdfb789c5f03d3240b4677c0d1a18392656b478fd",
+      "contracts/outcome-reconciler-release-frontier.json": "2ea24b0b179ebcbee40361b34fcb9a527a8bac8b5e9eaa0676f7a838253621bd",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "9e8e01e61b58085006be331b086f939f4ea854cd2d56b48c1f775ae7f93539bd",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "c55f1a1609df3c6447626fff070b29bc5ab9627107fbd9cf3da12716337607f8",
@@ -302,7 +302,7 @@
       "scripts/outcome-reconciler-release-dag-client.sh": "1e3953f8d3340454dd9fd16716a4eca577a1dd4460817907776de3a48c13ebbb",
       "scripts/outcome-reconciler-release-dag-database.mjs": "fae8936aed8b6e089af6b6a44d9d9a68046ded94c5daf278acc65b50bdb8e69d",
       "scripts/outcome-reconciler-release-dag-lib.mjs": "b86518ec572f62ec8fb01c60f78e29d7ce8e93d51ee071ada0c0ff8253fa693b",
-      "scripts/outcome-reconciler-release-dag-prepare.sh": "e0a6bb5a0804b65148472eb2e34e6712eb6e2574f8dcf65ddc9824d3e8a9d38d",
+      "scripts/outcome-reconciler-release-dag-prepare.sh": "920de903577e6f0082ad212580aff9839aef6f08a9a761c944637cffe232391d",
       "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs": "ecd95eda1e601cae804139d5c8ba743cc3955df512de9d7cd61e4cb0d61be7c5",
       "scripts/outcome-reconciler-release-dag-regression-focus.mjs": "05de71c10bba951720af4ab948e1cd593daf4b6b20c6652ad17ea2d58b3f2fbb",
       "scripts/outcome-reconciler-release-dag-regression-rebind-manifest.mjs": "bb6c9b542a4538b5fe3bb75a8fdb12a5a18c3a84e0fdddacb8fa14acfcc1107f",

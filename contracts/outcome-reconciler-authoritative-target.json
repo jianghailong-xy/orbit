@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "taskId": "34GWrlngwd6e1AfHXq4hG",
-  "sourceBranch": "orbit/release-dag-current-work-7d7aaa",
+  "taskId": "34Gk8empzf00YFQ9shV6j",
+  "sourceBranch": "orbit/release-dag-postgres-release-dag-7606c3",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
     "mode": "BUILDER_AGENT_MERGE_RECEIPT",
-    "rule": "declared target is the receipt source/target-after SHA for session 3muUyYwt13yMafOazMX0Kw and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
+    "rule": "declared target is the receipt source/target-after SHA for session 54JGaRsT7zN6f8n9JMNbbI and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
   },
   "lineage": {
     "remoteMainObservedBeforeIntegration": "0791fa7d01ac3c5ad96b91265373440cdddd021e",
@@ -463,7 +463,7 @@
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/release-dag-current-work-7d7aaa",
+    "sourceBranch": "orbit/release-dag-postgres-release-dag-7606c3",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

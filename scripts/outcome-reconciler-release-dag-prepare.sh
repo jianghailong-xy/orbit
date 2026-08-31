@@ -185,13 +185,22 @@ case "$ACTION" in
     fi
 
     echo '==> release-dag prepare-postgres: provision one bounded PostgreSQL 16 server'
+    # The serial full-api partition hands this container to the specs that assert what survives a
+    # real server restart, so it has to still be the same server afterwards, reachable at the same
+    # address. Neither held: a `--tmpfs` PGDATA dies with the container's mount namespace, so
+    # `docker restart` came back as a freshly initdb'd cluster with every case role, case database
+    # and pccrd_template_* gone; and an ephemeral published port is re-allocated by the restart, so
+    # the URL the case was handed pointed at nothing. The anonymous volume and the pinned loopback
+    # port are the shape scripts/project-pg-matrix.sh and scripts/deadlock-barrier.sh already give
+    # every fixture that is not one-shot, and where these same specs pass. `docker rm -fv` below and
+    # in the stale sweep still takes the volume with the container.
+    PORT="${OUTCOME_RELEASE_DAG_PG_PORT:-55492}"
     docker run -d --name "$CONTAINER" \
       --label 'orbit.release-dag.managed=true' \
       --label "orbit.release-dag.binding=$OUTCOME_RELEASE_DAG_BINDING_DIGEST" \
       --cpus 2 --memory 3072m --memory-swap 3072m --pids-limit 512 \
-      --tmpfs /var/lib/postgresql/data:rw,size=3g \
       -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-      -p 127.0.0.1::5432 "$IMAGE" >/dev/null
+      -p "127.0.0.1:$PORT:5432" "$IMAGE" >/dev/null
     OBSERVED_IMAGE_ID="$(docker inspect -f '{{.Image}}' "$CONTAINER")"
     [ "$OBSERVED_IMAGE_ID" = "${OUTCOME_RELEASE_DAG_POSTGRES_IMAGE_ID:?}" ] || {
       echo "PostgreSQL image changed after admission: $OBSERVED_IMAGE_ID" >&2
@@ -208,7 +217,10 @@ case "$ACTION" in
     done
     [ "$READY" = 1 ] || { echo 'release DAG PostgreSQL did not become ready' >&2; exit 1; }
     PORT_LINE="$(docker port "$CONTAINER" 5432/tcp)"
-    PORT="${PORT_LINE##*:}"
+    [ "${PORT_LINE##*:}" = "$PORT" ] || {
+      echo "PostgreSQL published $PORT_LINE instead of the pinned $PORT" >&2
+      exit 1
+    }
     SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
       'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
     VERSION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
