@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Unique executable acceptance for runtime-v2. Logical deadlines use virtual clocks or
-# millisecond processes. The outer 240-second guard covers compilation, a rolling migration,
-# and the serial real-PostgreSQL matrix; each liveness probe retains its own tight deadline.
+# millisecond processes; each liveness probe retains its own tight deadline. The matrix runs under a
+# guard derived from the budget this node was admitted with, because the negotiated budget is the
+# only deadline this suite has: a fixed inner ceiling below it made a run that was merely slow
+# alongside the rest of the DAG into a permanent rc=124 failure with tests=0.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -129,14 +131,19 @@ if ! outcome_release_dag_db_enabled; then
 fi
 
 echo "==> executable-runtime: run zero-skip API/DB/dead-man matrix"
+# Whatever is left of the admitted budget after this script's own prologue, less the manifest that
+# still has to be generated from the matrix's raw evidence inside the same budget.
+MANIFEST_RESERVE_SECONDS=60
+outcome_release_dag_node_deadline "$SECONDS" "$MANIFEST_RESERVE_SECONDS"
 set +e
-EXECUTABLE_ACCEPTANCE_PG_URL="$URL" \
-EXECUTABLE_ACCEPTANCE_EVIDENCE_PATH="$EVIDENCE" \
-EXECUTABLE_ACCEPTANCE_ROLLING_EVIDENCE_PATH="$ROLLING_EVIDENCE" \
-EXECUTABLE_ACCEPTANCE_SOURCE_SHA="$SOURCE_SHA" \
-timeout -k 5 240 node --test --test-concurrency=1 --test-reporter=tap \
-  "$REPO/test/executable-acceptance-runtime.test.mjs" 2>&1 | tee "$TAP"
-TEST_RC=${PIPESTATUS[0]}
+outcome_release_dag_guarded_run "$TAP" \
+  env EXECUTABLE_ACCEPTANCE_PG_URL="$URL" \
+      EXECUTABLE_ACCEPTANCE_EVIDENCE_PATH="$EVIDENCE" \
+      EXECUTABLE_ACCEPTANCE_ROLLING_EVIDENCE_PATH="$ROLLING_EVIDENCE" \
+      EXECUTABLE_ACCEPTANCE_SOURCE_SHA="$SOURCE_SHA" \
+      node --test --test-concurrency=1 --test-reporter=tap \
+      "$REPO/test/executable-acceptance-runtime.test.mjs"
+TEST_RC=$?
 set -e
 if [ "$TEST_RC" -ne 0 ]; then
   echo "executable runtime acceptance failed rc=$TEST_RC" >&2

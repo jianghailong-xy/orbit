@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "790f91e73178c8f08170d0451c37159b255fe4b082fff6338172319633303a73",
+  "declaredDagPlanDigest": "7b2450f74384a9070a3505052634db1f140ade4a90c23c24e47e5f7cbd6a812e",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "builderTaskId": "34Gk8empzf00YFQ9shV6j",
+  "builderTaskId": "34GlvYGNFrhA41IVx67o0",
   "supersededAttempt": {
     "taskId": "34GVK9T3B4GW7UpXH6kmT",
     "sessionId": "5saDXo7pdATSJ98Cd7VcdK",
@@ -108,11 +108,11 @@
     }
   ],
   "builder": {
-    "taskId": "34Gk8empzf00YFQ9shV6j",
-    "taskDatabaseId": "01a0583f-6297-711b-9df1-0316f5a83205",
-    "sessionId": "54JGaRsT7zN6f8n9JMNbbI",
-    "sessionDatabaseId": "a6919aa7-5714-582d-a7e9-4a0d7e89d3a4",
-    "sourceBranch": "orbit/release-dag-postgres-release-dag-7606c3",
+    "taskId": "34GlvYGNFrhA41IVx67o0",
+    "taskDatabaseId": "01a05882-1c95-7268-9a88-40521686f2d8",
+    "sessionId": "6doG8SSeOYgG08QVxYKLFM",
+    "sessionDatabaseId": "da3d1f50-e4ea-5c2f-8a8b-be29d89823ec",
+    "sourceBranch": "orbit/executable-acceptance-runtime-240s-relea-cf54c7",
     "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-regression-rebind",
     "commandDigest": "dd60f2d723df98ed4605f894751a11c0a6d63f8c128984dcdf50bb899bf80241",
     "evaluationPlanDigest": "6c852b45dedf94260b61ce17a269ed484c8c2b523b9b0ed84d999dea00853da2",
@@ -137,8 +137,8 @@
     "remoteTrackingRef": "refs/remotes/origin/main",
     "resolution": "BUILDER_AGENT_MERGE_RECEIPT",
     "requiredReceipt": {
-      "sessionDatabaseId": "a6919aa7-5714-582d-a7e9-4a0d7e89d3a4",
-      "sourceBranch": "orbit/release-dag-postgres-release-dag-7606c3",
+      "sessionDatabaseId": "da3d1f50-e4ea-5c2f-8a8b-be29d89823ec",
+      "sourceBranch": "orbit/executable-acceptance-runtime-240s-relea-cf54c7",
       "targetBranch": "main",
       "recordedBy": "AGENT",
       "results": ["MERGED", "ALREADY_MERGED"]
@@ -287,17 +287,17 @@
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs"
     ],
     "digests": {
-      "package.json": "b4156da2deedd07041995975626f4fab0e8ffbeabd41c66ddb37d08acf476af0",
+      "package.json": "113421fc73004ac80cc53c0340d983265cbc078541c6114ec350fe1d7b7a45ea",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
-      "contracts/outcome-reconciler-authoritative-target.json": "44d15622865e92ae0429faecdfb789c5f03d3240b4677c0d1a18392656b478fd",
-      "contracts/outcome-reconciler-release-frontier.json": "2ea24b0b179ebcbee40361b34fcb9a527a8bac8b5e9eaa0676f7a838253621bd",
+      "contracts/outcome-reconciler-authoritative-target.json": "1f60c41f05d63102f5ab516894dc449511a4cab0bc07565c605a77d875b04f41",
+      "contracts/outcome-reconciler-release-frontier.json": "6f311a4c4915e476c8cf1d1a13f89d46a9434162e436d6b7e1bae47a81cc5ff9",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "9e8e01e61b58085006be331b086f939f4ea854cd2d56b48c1f775ae7f93539bd",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "c55f1a1609df3c6447626fff070b29bc5ab9627107fbd9cf3da12716337607f8",
       "src/apiserver/src/runner-api/inbox-lease-generation.spec.ts": "06579d2727dc2f315bded7652955fe22b53175f3662b7f3c2b07ec9550d0dffd",
       "src/apiserver/src/runner-api/runner-write-lease-owner.spec.ts": "4026bd62dea8cdd2be16d73d57315d7372f91f03cb874ddafa7975683274f10e",
       "src/web/src/components/ProjectReadyToRun.test.tsx": "84973ea8d2c1710e4c02e0dee7eebe414372baaa5723e4e327d33990f63ad42c",
-      "scripts/lib/outcome-reconciler-release-dag.sh": "b8bcbbf057afb9301553566b48123f6806fef2ea8fb6ce2a840bb317dfb83f3a",
+      "scripts/lib/outcome-reconciler-release-dag.sh": "5710c06e0ac173cc0d59c3b3387b122a3deb4b373df18e12a8d264d889826da8",
       "scripts/outcome-reconciler-full-api-case.sh": "1b51e134b73ff877151193e28ffa9e66cd0c8c7b6e3d8dad12ce92cbd627f662",
       "scripts/outcome-reconciler-release-dag-client.sh": "1e3953f8d3340454dd9fd16716a4eca577a1dd4460817907776de3a48c13ebbb",
       "scripts/outcome-reconciler-release-dag-database.mjs": "fae8936aed8b6e089af6b6a44d9d9a68046ded94c5daf278acc65b50bdb8e69d",
@@ -309,8 +309,8 @@
       "scripts/outcome-reconciler-release-dag-regression-rebind.sh": "4e0267d9606113c25ec6994a6f4e2a70b76aa3579f3185bbf6ac4b565a1bb2f2",
       "scripts/outcome-reconciler-release-dag-step.mjs": "2586b6b7186ddd0d8200964551ae59da9eb3c2e5c04c29806b611ac753115e88",
       "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
-      "scripts/outcome-reconciler-release-dag.mjs": "fc8b31831dffa5f43b7bf6275e665e16a744d1fc3b3110d54bd9a49c0bbdfdc6",
-      "scripts/outcome-reconciler-watchdog-manifest.mjs": "755ed62f5b0f43041385aec40e37ddcb0ff4d56e31b73751c2cdde0ae7b190de",
+      "scripts/outcome-reconciler-release-dag.mjs": "de8614d6a55bbd6f964b3d9ae556f15fd82ddb83cd5839de694e2a7e730acf98",
+      "scripts/outcome-reconciler-watchdog-manifest.mjs": "e78023213596ef9db06e08b3890702fbe4a82d590e679d3562d6a726bcf9be7c",
       "scripts/outcome-reconciler-watchdog.sh": "d04e0c8a16ce4b57c29406aa214900562b1ad7ac1337785db15536662493edde",
       "test/outcome-reconciler-release-dag-plan.test.mjs": "b90a5a09d2d6df3fa04d6043d26ce7b0152ed8ca1ee8813c080efc6cb3b56e13",
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "6c116122f5d9ff1f430df98708936adf4af29aa5540c80f69d07e515cbe9bf2a"

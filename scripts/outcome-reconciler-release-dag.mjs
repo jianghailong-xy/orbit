@@ -596,7 +596,7 @@ function postgresEnvironment(node) {
   };
 }
 
-function nodeEnvironment(node) {
+function nodeEnvironment(node, effectiveTimeoutSeconds) {
   const build = node.usesSharedBuild ? {
     OUTCOME_RELEASE_DAG_BUILD_CONTEXT: path.join(runRoot, 'build-context.json'),
     OUTCOME_RELEASE_DAG_PREPARED_BUILD: '1',
@@ -611,6 +611,9 @@ function nodeEnvironment(node) {
     OUTCOME_RELEASE_DAG_PHASE: plan.evaluator.phase,
     OUTCOME_RELEASE_DAG_DEPLOYMENT_TASK_ID: plan.evaluator.deploymentTaskId,
     OUTCOME_RELEASE_DAG_NODE_ID: node.id,
+    // The budget this admission actually enforces, so a node that guards a step of its own can
+    // derive that guard from it instead of carrying a fixed ceiling that silently undercuts it.
+    OUTCOME_RELEASE_DAG_NODE_TIMEOUT_SECONDS: String(effectiveTimeoutSeconds),
     OUTCOME_RELEASE_DAG_RUN_ROOT: runRoot,
     OUTCOME_RELEASE_DAG_TARGET_SHA: targetSha,
     OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST: binding.targetReceiptDigest,
@@ -683,7 +686,7 @@ async function executeNode(node, attemptDeadlineMs) {
   const deadlineAtMs = admittedAtMs + (effectiveTimeoutSeconds * 1000);
   const logPath = path.join(logRoot, `${node.id}.log`);
   quarantineNodeOutputs(node);
-  const environmentVariables = nodeEnvironment(node);
+  const environmentVariables = nodeEnvironment(node, effectiveTimeoutSeconds);
   const redact = redactor(environmentVariables);
   const chunks = [];
   console.log(`==> release-dag: admit ${node.id} timeout=${effectiveTimeoutSeconds}s commandDigest=${commandDigest(node.command)}`);

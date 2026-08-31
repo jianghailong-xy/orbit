@@ -160,3 +160,73 @@ outcome_release_dag_drop_database() {
   }
   OUTCOME_RELEASE_DAG_DB_BOUND=0
 }
+
+# The budget the Release DAG admitted a node with is the only ceiling anybody negotiated. An inner
+# constant lower than that budget does not bound the node, it silently replaces its deadline: a run
+# that is merely slow under load is turned into a permanent failure with no tests at all. Derive the
+# inner guard from the admitted budget instead -- what is left of it once this node's own prologue is
+# paid for and the work that still has to run after the guarded step is reserved.
+#
+# It stays an inner guard, not a removed one. It fires strictly before the DAG's own timer, so an
+# overrun is reported HERE, with the deadline, where the deadline came from, and how far the guarded
+# step actually got, instead of arriving as an opaque SIGTERM.
+#
+# Standalone invocations are admitted by nobody and have no outer timer, so they fall back to this
+# named default. It is never below the 240-second constant it replaced.
+OUTCOME_RELEASE_DAG_DEFAULT_NODE_BUDGET_SECONDS=900
+
+# outcome_release_dag_node_deadline SPENT_SECONDS RESERVED_SECONDS
+# Publishes OUTCOME_RELEASE_DAG_DEADLINE_SECONDS and the three terms it was derived from.
+outcome_release_dag_node_deadline() {
+  local spent="$1" reserved="$2" budget="${OUTCOME_RELEASE_DAG_NODE_TIMEOUT_SECONDS:-}"
+  if [ -n "$budget" ]; then
+    [[ "$budget" =~ ^[1-9][0-9]*$ ]] || {
+      echo "!! OUTCOME_RELEASE_DAG_NODE_TIMEOUT_SECONDS must be a positive whole number of seconds, got '$budget'" >&2
+      return 2
+    }
+    OUTCOME_RELEASE_DAG_BUDGET_SOURCE='env OUTCOME_RELEASE_DAG_NODE_TIMEOUT_SECONDS'
+  else
+    budget="$OUTCOME_RELEASE_DAG_DEFAULT_NODE_BUDGET_SECONDS"
+    OUTCOME_RELEASE_DAG_BUDGET_SOURCE='default OUTCOME_RELEASE_DAG_DEFAULT_NODE_BUDGET_SECONDS'
+  fi
+  [[ "$spent" =~ ^[0-9]+$ ]] && [[ "$reserved" =~ ^[0-9]+$ ]] || {
+    echo "!! release-dag deadline needs whole seconds spent/reserved, got '$spent'/'$reserved'" >&2
+    return 2
+  }
+  OUTCOME_RELEASE_DAG_BUDGET_SECONDS="$budget"
+  OUTCOME_RELEASE_DAG_SPENT_SECONDS="$spent"
+  OUTCOME_RELEASE_DAG_RESERVED_SECONDS="$reserved"
+  OUTCOME_RELEASE_DAG_DEADLINE_SECONDS=$(( budget - spent - reserved ))
+  # A budget already exhausted before the guarded step is answered at once, never waited out and
+  # never turned into "no deadline at all".
+  [ "$OUTCOME_RELEASE_DAG_DEADLINE_SECONDS" -ge 1 ] || OUTCOME_RELEASE_DAG_DEADLINE_SECONDS=1
+  echo "==> release-dag deadline: ${OUTCOME_RELEASE_DAG_DEADLINE_SECONDS}s effective" \
+    "= ${budget}s budget (source: ${OUTCOME_RELEASE_DAG_BUDGET_SOURCE})" \
+    "- ${spent}s spent - ${reserved}s reserved"
+}
+
+# outcome_release_dag_guarded_run TAP_PATH COMMAND...
+# Runs COMMAND under the deadline published above, tees its TAP, and returns the command's own exit
+# status unchanged. A deadline overrun is reported with everything needed to tell slow from wedged.
+outcome_release_dag_guarded_run() {
+  local tap="$1"; shift
+  local started="$SECONDS" rc=0 last=''
+  : "${OUTCOME_RELEASE_DAG_DEADLINE_SECONDS:?no effective deadline was derived}"
+  if timeout -k 5 "$OUTCOME_RELEASE_DAG_DEADLINE_SECONDS" "$@" 2>&1 | tee "$tap"; then
+    rc=0
+  else
+    rc="${PIPESTATUS[0]}"
+  fi
+  if [ "$rc" = 124 ]; then
+    if [ -r "$tap" ]; then
+      last="$(grep -E '^(not )?ok [0-9]+' "$tap" | tail -n 1 || true)"
+    fi
+    {
+      echo "!! the guarded step exceeded its effective deadline"
+      echo "   waited $(( SECONDS - started ))s of a ${OUTCOME_RELEASE_DAG_DEADLINE_SECONDS}s effective deadline"
+      echo "   effective deadline = ${OUTCOME_RELEASE_DAG_BUDGET_SECONDS}s budget (source: ${OUTCOME_RELEASE_DAG_BUDGET_SOURCE}) - ${OUTCOME_RELEASE_DAG_SPENT_SECONDS}s spent before it - ${OUTCOME_RELEASE_DAG_RESERVED_SECONDS}s reserved after it"
+      echo "   last completed TAP subtest: ${last:-<none: the step completed no subtest>}"
+    } >&2
+  fi
+  return "$rc"
+}
