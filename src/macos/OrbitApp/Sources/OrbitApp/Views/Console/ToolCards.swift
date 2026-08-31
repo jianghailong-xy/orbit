@@ -345,9 +345,7 @@ struct ToolBodyView: View {
         case .none:
             EmptyView()
         case .command(let cmd):
-            (Text("$ ").foregroundColor(.blue).fontWeight(.semibold) + Text(cmd))
-                .font(.orbitMono).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            CollapsibleMono(text: cmd, showsShellPrompt: true, viewerTitle: "Command")
                 .padding(8)
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.18), lineWidth: 1) }
@@ -428,27 +426,60 @@ struct DiffLineView: View {
     private var bg: Color { line.kind == .add ? Color.green.opacity(0.12) : line.kind == .del ? Color.red.opacity(0.12) : .clear }
 }
 
-/// Monospace text that collapses past a line threshold (Read/Bash output, file content) so one
-/// tool call can't flood the transcript — mirrors web's `Pre`.
+/// Monospace text with line and byte budgets (Read/Bash output, file content). Short results can
+/// expand in place; large ones leave the transcript cell capped and open in a dedicated viewer.
 struct CollapsibleMono: View {
     let text: String
+    var showsShellPrompt = false
+    var viewerTitle = "Tool output"
     @State private var open = false
-    private let threshold = 16
+    @State private var showingFullOutput = false
+
     var body: some View {
-        let lines = text.components(separatedBy: "\n")
-        let hidden = max(0, lines.count - threshold)
-        let shown = (open || hidden == 0) ? text : lines.prefix(threshold).joined(separator: "\n")
-        VStack(alignment: .leading, spacing: 4) {
-            Text(shown)
+        let layout = MonospaceOutputLayout(text: text)
+        return VStack(alignment: .leading, spacing: 4) {
+            transcriptText(layout.transcriptText(expanded: open))
                 .font(.orbitMono)
-                .foregroundStyle(Color.secondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if hidden > 0 {
-                Button(open ? "Show less" : "Show \(hidden) more lines") { open.toggle() }
+            if layout.isCollapsible {
+                if layout.requiresDedicatedViewer {
+                    Button(viewerLabel(layout)) { showingFullOutput = true }
+                        .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.blue)
+                } else {
+                    Button(inlineToggleLabel(layout)) {
+                        open.toggle()
+                    }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.blue)
+                }
             }
         }
+        .monospaceOutputViewer(isPresented: $showingFullOutput,
+                               text: layout.text,
+                               lineCount: layout.lineCount,
+                               title: viewerTitle)
+    }
+
+    @ViewBuilder
+    private func transcriptText(_ value: String) -> some View {
+        if showsShellPrompt {
+            Text("$ ").foregroundColor(.blue).fontWeight(.semibold) + Text(value)
+        } else {
+            Text(value).foregroundStyle(Color.secondary)
+        }
+    }
+
+    private func inlineToggleLabel(_ layout: MonospaceOutputLayout) -> String {
+        if open { return "Show less" }
+        guard layout.hiddenLineCount > 0 else { return "Show full output" }
+        let suffix = layout.hiddenLineCount == 1 ? "line" : "lines"
+        return "Show \(layout.hiddenLineCount) more \(suffix)"
+    }
+
+    private func viewerLabel(_ layout: MonospaceOutputLayout) -> String {
+        layout.hiddenLineCount > 0
+            ? "View all \(layout.lineCount.formatted()) lines"
+            : "View full output"
     }
 }
 
