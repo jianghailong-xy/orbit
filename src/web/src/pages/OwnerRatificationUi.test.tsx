@@ -128,17 +128,15 @@ const review: OwnerRatificationPrivateRead = {
     })),
     riskBoundary: {
       automationPolicy: 'GUARDED_AUTO',
-      authorizationRevision: '9',
       convergenceThresholds: null,
       unboundedAuthorizedBy: null,
     },
     permissions: {
       coordinatorEnabled: true,
       maxConcurrentTasks: 3,
-      authorizationRevision: '9',
     },
     recipients: { ownerId: OWNER, coordinatorAgentIds: [], members: [] },
-    budget: { sessionBudgetPerDay: null, attemptBudget: null, authorizationRevision: '9' },
+    budget: { sessionBudgetPerDay: null, attemptBudget: null },
   },
   evaluationPlan: { commands: [], environment: { instructions: 'fixture only' } },
   decisionRequest: {
