@@ -592,11 +592,17 @@ function nodeEnvironment(node) {
     OUTCOME_RELEASE_DAG_BUILD_CONTEXT: path.join(runRoot, 'build-context.json'),
     OUTCOME_RELEASE_DAG_PREPARED_BUILD: '1',
   } : {};
+  const focusedEnvironment = focusPccRebind && node.id === 'suite-watchdog-111k' ? {
+    // A focused allocator regression must not read or require the live production deployment.
+    // The formal Release DAG retains the Watchdog live-release fence unchanged.
+    OUTCOME_WATCHDOG_LIVE_RELEASE_FENCE: 'offline',
+  } : {};
   const environmentVariables = {
     ...process.env,
     PUBLIC_ORIGIN: environment.boundInputs.PUBLIC_ORIGIN,
     ...node.environment,
     ...build,
+    ...focusedEnvironment,
     ...postgresEnvironment(node),
     OUTCOME_RELEASE_DAG_ACTIVE: '1',
     OUTCOME_RELEASE_DAG_PHASE: plan.evaluator.phase,

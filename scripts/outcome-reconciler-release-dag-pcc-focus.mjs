@@ -59,6 +59,12 @@ const suiteReceipts = focusedSuiteIds.map((nodeId) => {
   }
   return receipt;
 });
+const watchdogManifest = readJson(path.join(repo, 'build',
+  'outcome-reconciler-v2-watchdog-manifest.json'));
+assert.equal(watchdogManifest.targetSha, bindingDocument.targetSha);
+assert.equal(watchdogManifest.outcome, 'PASS');
+assert.equal(watchdogManifest.liveReleaseFence.mode, 'OFFLINE_DEV_ONLY',
+  'focused pcc regression touched or depended on the live production deployment');
 assert.equal(new Set(suiteReceipts.map((receipt) => receipt.postgresIsolation.database)).size,
   suiteReceipts.length, 'focused affected suites shared a database');
 assert.equal(new Set(suiteReceipts.map((receipt) => receipt.postgresIsolation.role)).size,
@@ -217,6 +223,11 @@ const body = {
     uniqueRoles: true,
     crossTenantAccess: false,
     productionAccess: false,
+  },
+  productionFence: {
+    mode: watchdogManifest.liveReleaseFence.mode,
+    liveDeploymentRead: false,
+    formalReleaseFenceChanged: false,
   },
   failurePropagation: {
     spec: failureReceipt.spec.path,
