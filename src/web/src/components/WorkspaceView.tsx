@@ -119,6 +119,7 @@ import {
   CompletionAckObligationBanner,
   controlPlaneObligationsOf,
 } from './CompletionAckObligationBanner';
+import { SessionOwnerRatificationCard } from './SessionOwnerRatificationCard';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import {
   currentProviderChoice,
@@ -5365,6 +5366,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <CompletionAckObligationBanner
             obligations={selectedSession.controlPlaneObligations}
           />
+        )}
+
+        {/* A contract drafted by the agent in THIS conversation is confirmed in this conversation.
+            Gated on the coordinator pointer so an ordinary session issues no extra read; the card
+            itself renders nothing until the owner-scoped inbox says this session has a question. */}
+        {selectedSession?.projectId && !selectedTrashed && !composing && (
+          <SessionOwnerRatificationCard sessionId={selectedSession.id} />
         )}
 
         {stuck && (

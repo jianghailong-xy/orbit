@@ -15,6 +15,14 @@ const { uuidToBase62, toUuid } = require('@orbit/shared');
 const ROOT = path.resolve(import.meta.dirname, '..');
 const API_DIST = path.join(ROOT, 'src/apiserver/dist');
 const { ProjectsController } = require(path.join(API_DIST, 'projects/projects.controller.js'));
+const {
+  RunnerProjectsController,
+} = require(path.join(API_DIST, 'runner-api/runner-projects.controller.js'));
+const { RunnerAuthGuard } = require(path.join(API_DIST, 'runner-api/runner-auth.guard.js'));
+const {
+  OutcomeSurfaceService,
+} = require(path.join(API_DIST, 'outcome-reconciler/outcome-surface.service.js'));
+const { sha256 } = require(path.join(API_DIST, 'common/crypto.util.js'));
 const { ProjectsService } = require(path.join(API_DIST, 'projects/projects.service.js'));
 const {
   ProjectAcceptanceService,
@@ -62,6 +70,7 @@ let ownerToken;
 let otherToken;
 let canonicalFixture;
 let protectedBefore;
+let projectsService;
 
 const evidence = {
   schemaVersion: 1,
@@ -92,6 +101,18 @@ const evidence = {
     expiredReplacementCommitted: false,
     wrongCtaFailedClosed: false,
     crossOwnerNotFound: false,
+  },
+  conversational: {
+    draftedInSessionVisibleInThatSession: false,
+    renderedContractComplete: false,
+    decisionRequestExplained: false,
+    ownerCredentialDecided: false,
+    automaticResumeRearmed: false,
+    runnerSelfRatificationForbidden: false,
+    approveWhatYouSawEnforced: false,
+    noAutomaticApprovalPath: false,
+    expiredCtaReplaySafe: false,
+    inboxAndSessionSurfacesAgree: false,
   },
   protectedProductionRequest: {
     publicId: PROTECTED_PUBLIC_REQUEST,
@@ -306,21 +327,33 @@ before(async () => {
   const acceptance = new ProjectAcceptanceService(prisma);
   const projects = new ProjectsService(prisma, acceptance);
 
+  projectsService = projects;
   class OwnerRatificationUiHarnessModule {}
   Module({
     imports: [JwtModule.register({ secret: SECRET })],
-    controllers: [ProjectsController],
+    // The runner door is mounted beside the owner door on purpose: the whole question this suite
+    // now answers is what an AGENT-drafted contract does to the OWNER's surfaces, and that cannot
+    // be proven by a harness in which no agent credential exists.
+    controllers: [ProjectsController, RunnerProjectsController],
     providers: [
       JwtAuthGuard,
+      RunnerAuthGuard,
+      { provide: PrismaService, useValue: prisma },
       { provide: ProjectsService, useValue: projects },
       { provide: ProjectAcceptanceService, useValue: acceptance },
       { provide: ProjectHandoffService, useValue: {} },
       { provide: SessionAttemptService, useValue: {} },
       { provide: TaskCheckpointService, useValue: {} },
+      { provide: OutcomeSurfaceService, useValue: {} },
     ],
   })(OwnerRatificationUiHarnessModule);
 
-  app = await NestFactory.create(OwnerRatificationUiHarnessModule, { logger: harnessLogger });
+  // abortOnError: false so a wiring mistake throws here instead of Nest calling process.exit(1)
+  // behind the capturing logger, which turns a one-line DI error into an empty TAP stream.
+  app = await NestFactory.create(
+    OwnerRatificationUiHarnessModule,
+    { logger: harnessLogger, abortOnError: false },
+  );
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalInterceptors(new PublicIdInterceptor());
@@ -587,4 +620,475 @@ test('stale, expired, wrong-CTA and cross-owner submissions fail closed with rec
   evidence.transport.ctaAbsentFromLogs = true;
   evidence.transport.ctaAbsentFromErrors = true;
   evidence.transport.ctaAbsentFromTelemetry = true;
+});
+
+// ---------------------------------------------------------------------------------------------
+// The third path: an agent drafts the completion contract inside a conversation, the owner reads
+// the rendered contract on that same conversation's surface, and confirms it with their own
+// credential. Nothing below relaxes who may decide — every proof here is either "the owner can now
+// see it where it was written" or "the drafter still cannot approve its own work".
+// ---------------------------------------------------------------------------------------------
+
+/** A runner credential, its workspace, and one conversation this owner is having in it. */
+async function createConversationFixture(label) {
+  const runnerId = randomUUID();
+  const runnerToken = `runner-${randomUUID()}`;
+  const workspaceId = randomUUID();
+  const sessionId = randomUUID();
+  await pool.query(
+    `INSERT INTO "runner" ("id","name","owner_id","token_hash","enrolled_at")
+     VALUES ($1,$2,$3,$4,now())`,
+    [runnerId, `${label}-runner`, ownerId, sha256(runnerToken)],
+  );
+  await pool.query(
+    `INSERT INTO "workspace" ("id","name","owner_id","runner_id","created_at")
+     VALUES ($1,$2,$3,$4,now())`,
+    [workspaceId, `${label}-workspace`, ownerId, runnerId],
+  );
+  await pool.query(
+    `INSERT INTO "session" (
+       "id","title","prompt","owner_id","creator_id","assigned_runner_id","workspace_id",
+       "running_bg_shells","running_subagents","updated_at"
+     ) VALUES ($1,$2,$3,$4,$4,$5,$6,'{}','{}',now())`,
+    [sessionId, `${label} conversation`, `${label} prompt`, ownerId, runnerId, workspaceId],
+  );
+  return { runnerId, runnerToken, workspaceId, sessionId };
+}
+
+const DRAFTED_GOAL = '在 guarded 授权内完成会话内起草的工作，并保留全部审计线索';
+const DRAFTED_COMMAND = 'npm run test:outcome-reconciler:surfaces';
+
+/**
+ * The three criteria the agent ends up with, one per completion criterion.
+ *
+ * EXECUTABLE and VERIFICATION both require an `evidenceTaskId`, which cannot exist in the same
+ * request that creates the project — so the agent does what an agent actually does: it files the
+ * project, files the work, and then binds each criterion to the task that will answer it.
+ */
+function draftedCriteria(executableTaskId, verifierTaskId) {
+  return [
+    {
+      text: '所有对外副作用都写入可审计的 run_event',
+      verificationMethod: 'npm run test:outcome-reconciler:surfaces 退出码 0',
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: DRAFTED_COMMAND,
+      acceptanceExpectedExitCode: 0,
+      evidenceTaskId: executableTaskId,
+      completionCriterionOverrideReason: 'fixture declares each criterion shape explicitly',
+    },
+    {
+      text: 'Owner 在会话内确认过精确 contract digest',
+      verificationMethod: 'project_owner_ratification.source 为 OWNER',
+      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterionOverrideReason: 'fixture declares each criterion shape explicitly',
+    },
+    {
+      text: '每条验收标准都能被独立复核',
+      verificationMethod: '人工复核记录',
+      completionCriterion: 'VERIFICATION',
+      evidenceTaskId: verifierTaskId,
+      completionCriterionOverrideReason: 'fixture declares each criterion shape explicitly',
+    },
+  ];
+}
+const DRAFTED_CRITERIA = draftedCriteria('placeholder', 'placeholder');
+/** What a first `project_create` can say before any task exists to carry evidence. */
+const INITIAL_CRITERIA = DRAFTED_CRITERIA.map((criterion) => ({
+  text: criterion.text,
+  verificationMethod: criterion.verificationMethod,
+  completionCriterion: 'HUMAN_SIGNOFF',
+  completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+}));
+
+/**
+ * The work the drafted criteria point at. A project criterion may only name evidence whose shape
+ * matches it — an EXECUTABLE criterion needs an EXECUTABLE task with the same command and exit
+ * code, a VERIFICATION criterion needs a task that verifies something — so the fixture files both
+ * rather than pretending one task can answer every criterion.
+ */
+async function createDraftedTasks(projectId, label) {
+  const executableTaskId = randomUUID();
+  const verifierTaskId = randomUUID();
+  await pool.query(
+    `INSERT INTO "task" (
+       "id","title","status","owner_id","creator_type","creator_id","project_id",
+       "completion_criterion","acceptance_command","acceptance_expected_exit_code","updated_at"
+     ) VALUES ($1,$2,'OPEN'::"task_status",$3,'USER'::"creator_type",$3,$4,
+               'EXECUTABLE'::"task_completion_criterion",$5,0,now())`,
+    [executableTaskId, `${label} executable task`, ownerId, projectId, DRAFTED_COMMAND],
+  );
+  await pool.query(
+    `INSERT INTO "task" (
+       "id","title","status","owner_id","creator_type","creator_id","project_id",
+       "completion_criterion","verifies_task_id","updated_at"
+     ) VALUES ($1,$2,'OPEN'::"task_status",$3,'USER'::"creator_type",$3,$4,
+               'VERIFICATION'::"task_completion_criterion",$5,now())`,
+    [verifierTaskId, `${label} verification task`, ownerId, projectId, executableTaskId],
+  );
+  return { executableTaskId, verifierTaskId };
+}
+
+/** Let the drafted project block on the owner exactly as automatic dispatch would, so approving
+ *  it has something real to rearm rather than an empty UPDATE that would count zero. It is
+ *  recorded LAST: the obligation binds the contract digest it observed, and a later contract edit
+ *  would leave the rearm matching nothing. */
+async function blockOnOwnerRatification(taskId) {
+  const epoch = await pool.query(
+    'SELECT "epoch" FROM "task_dispatch_epoch" WHERE "task_id"=$1',
+    [taskId],
+  );
+  assert.equal(epoch.rows.length, 1, 'drafted task dispatch epoch was not created');
+  await pool.query(
+    `SELECT task_auto_dispatch_record(
+       $1::uuid,$2::uuid,$3::bigint,'READY_SWEEP','REFUSED',
+       'OWNER_RATIFICATION_REQUIRED',$4::jsonb,'OWNER','RATIFY_CURRENT_CONTRACT',
+       NULL,now()+interval '1 hour'
+     )`,
+    [
+      ownerId,
+      taskId,
+      epoch.rows[0].epoch,
+      JSON.stringify({
+        code: 'OWNER_RATIFICATION_REQUIRED',
+        message: 'drafted work waits for exact owner ratification',
+        nextAction: 'RATIFY_CURRENT_CONTRACT',
+      }),
+    ],
+  );
+}
+
+async function draftProjectInConversation(label) {
+  const conversation = await createConversationFixture(label);
+  const created = await http(conversation.runnerToken, '/runner/projects', {
+    method: 'POST',
+    headers: { 'x-orbit-session-id': conversation.sessionId },
+    body: {
+      title: `${label} drafted project`,
+      goal: DRAFTED_GOAL,
+      acceptanceCriteriaItems: INITIAL_CRITERIA,
+    },
+  });
+  assert.equal(created.response.status, 201, JSON.stringify(created.body));
+  // Normalize whichever spelling the boundary served, so the assertions below compare one form.
+  const projectId = toUuid(created.body.id);
+  const projectPublicId = uuidToBase62(projectId);
+  const bound = await pool.query(
+    'SELECT "coordinator_session_id" AS session FROM "project" WHERE "id"=$1',
+    [projectId],
+  );
+  assert.equal(bound.rows[0].session, conversation.sessionId,
+    'the project was not bound to the conversation that drafted it');
+  // Governance is the OWNER's, and the runner door refuses to set it — so the agent's draft lands
+  // on the schema defaults. Put the account in the state this question only arises in (automation
+  // turned on by its owner) exactly as the canonical fixture does, without letting the agent do it.
+  await pool.query(
+    `UPDATE "project" SET "coordinator_enabled"=true,
+            "automation_policy"='GUARDED_AUTO'::"project_automation_policy",
+            "max_concurrent_tasks"=3, "updated_at"=now()
+      WHERE "id"=$1`,
+    [projectId],
+  );
+  const { executableTaskId, verifierTaskId } = await createDraftedTasks(projectId, label);
+  // The agent now binds each criterion to the work that answers it. Sent headless, because the
+  // acceptance-criteria edit is a HUMAN_ONLY-labelled action when it names an acting session and
+  // this fixture is about the ratification boundary, not that label.
+  const criteriaBound = await http(conversation.runnerToken, `/runner/projects/${projectPublicId}`, {
+    method: 'PATCH',
+    body: {
+      acceptanceCriteriaItems: draftedCriteria(
+        uuidToBase62(executableTaskId), uuidToBase62(verifierTaskId),
+      ),
+    },
+  });
+  assert.equal(criteriaBound.response.status, 200, JSON.stringify(criteriaBound.body));
+  await blockOnOwnerRatification(executableTaskId);
+  return { ...conversation, projectId, projectPublicId, executableTaskId, verifierTaskId };
+}
+
+async function ratificationCount(projectId) {
+  const rows = await pool.query(
+    'SELECT count(*)::int AS count FROM "project_owner_ratification" WHERE "project_id"=$1',
+    [projectId],
+  );
+  return rows.rows[0].count;
+}
+
+test('an agent-drafted contract is pending on the conversation that drafted it', async () => {
+  const drafted = await draftProjectInConversation('conversational-visible');
+  const sessionPublicId = uuidToBase62(drafted.sessionId);
+
+  // (a) The session view resolves its own pending question from the session id alone.
+  const scoped = await http(
+    ownerToken, `/projects/ratification/pending?limit=100&sessionId=${sessionPublicId}`,
+  );
+  assert.equal(scoped.response.status, 200);
+  assert.equal(scoped.body.items.length, 1);
+  const [reference] = scoped.body.items;
+  assert.equal(reference.coordinatorSessionId, sessionPublicId);
+  assert.equal(reference.projectId, drafted.projectPublicId);
+  assert.equal(reference.status, 'PENDING');
+  assert.equal(reference.owner, 'OWNER');
+  assert.equal(reference.eligibility.requiresOwnerNow, true);
+  assert.equal(JSON.stringify(scoped.body).includes('ctaToken'), false);
+
+  // A runner credential drafting a project never ratifies it on the way in.
+  assert.equal(await ratificationCount(drafted.projectId), 0);
+
+  // (i) The same question, read from the global inbox, is byte-for-byte the same identity.
+  const inbox = await http(ownerToken, '/projects/ratification/pending?limit=100');
+  const fromInbox = inbox.body.items
+    .find((item) => item.projectId === drafted.projectPublicId);
+  assert.ok(fromInbox, 'the drafted question disappeared from the global inbox');
+  assert.deepEqual(canonicalIdentity(fromInbox), canonicalIdentity(reference));
+  assert.equal(fromInbox.contractDigest, reference.contractDigest);
+  assert.equal(fromInbox.coordinatorSessionId, sessionPublicId);
+  assert.equal(fromInbox.expiresAt, reference.expiresAt);
+
+  // Another conversation's session id selects nothing rather than widening the read.
+  const other = await createConversationFixture('conversational-unrelated');
+  const empty = await http(
+    ownerToken,
+    `/projects/ratification/pending?limit=100&sessionId=${uuidToBase62(other.sessionId)}`,
+  );
+  assert.equal(empty.response.status, 200);
+  assert.deepEqual(empty.body.items, []);
+
+  evidence.conversational.draftedInSessionVisibleInThatSession = true;
+  evidence.conversational.inboxAndSessionSurfacesAgree = true;
+  evidence.samples.conversationalReference = {
+    coordinatorSessionId: reference.coordinatorSessionId,
+    projectId: reference.projectId,
+    contractDigest: reference.contractDigest,
+  };
+});
+
+test('the conversation surface reads exactly what the agent wrote, and why it is not the agent’s call', async () => {
+  const drafted = await draftProjectInConversation('conversational-contract');
+  const read = await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`);
+  assert.equal(read.response.status, 200);
+  const contract = read.body.semanticContract;
+  const surface = read.body.decisionSurface;
+
+  // (b) Five distinct classes of drafted content, each asserted on its own.
+  assert.equal(contract.goal, DRAFTED_GOAL);
+  assert.deepEqual(
+    contract.criteria.map((criterion) => criterion.text).sort(),
+    DRAFTED_CRITERIA.map((criterion) => criterion.text).sort(),
+  );
+  const trustByHash = new Map(
+    contract.criteriaTrust.map((item) => [item.semanticHash, item.completionCriterion]),
+  );
+  const declared = new Map(contract.criteria.map(
+    (criterion) => [criterion.text, trustByHash.get(criterion.semanticHash)],
+  ));
+  for (const criterion of DRAFTED_CRITERIA) {
+    assert.equal(declared.get(criterion.text), criterion.completionCriterion,
+      `criterion "${criterion.text}" lost its completionCriterion`);
+  }
+  assert.equal(contract.riskBoundary.automationPolicy, 'GUARDED_AUTO');
+  assert.equal(contract.permissions.coordinatorEnabled, true);
+  assert.equal(Object.hasOwn(contract.budget, 'sessionBudgetPerDay'), true);
+  assert.equal(Object.hasOwn(contract.budget, 'attemptBudget'), true);
+
+  // The private read names the conversation it belongs to, so a session surface can prove the
+  // contract it rendered is the one drafted where it is embedded.
+  assert.equal(read.body.coordinatorSessionId, uuidToBase62(drafted.sessionId));
+
+  // (j) Everything acceptance criterion 8 requires a decision request to say.
+  assert.ok(String(surface.whyNotAgent ?? '').length > 0);
+  assert.deepEqual(surface.options, ['APPROVE', 'DENY']);
+  assert.ok(String(surface.impacts.APPROVE ?? '').length > 0);
+  assert.ok(String(surface.impacts.DENY ?? '').length > 0);
+  assert.ok(String(surface.recommendation ?? '').length > 0);
+  assert.ok(String(surface.noActionConsequence ?? '').length > 0);
+  assert.ok(String(surface.resumeAfterDecision ?? '').length > 0);
+  assert.ok(Date.parse(surface.reference.expiresAt) > Date.now());
+
+  evidence.conversational.renderedContractComplete = true;
+  evidence.conversational.decisionRequestExplained = true;
+});
+
+test('only the owner’s own credential decides it, and approving rearms the drafted work', async () => {
+  const drafted = await draftProjectInConversation('conversational-decide');
+
+  // (e) The credential that drafted it cannot approve it, through either machine door.
+  const selfConfirm = await http(
+    drafted.runnerToken,
+    `/runner/projects/${drafted.projectPublicId}/acceptance/criteria-confirmation`,
+    { method: 'POST', headers: { 'x-orbit-session-id': drafted.sessionId } },
+  );
+  assert.equal(selfConfirm.response.status, 403);
+  assert.equal(selfConfirm.body.code, 'OWNER_RATIFICATION_ACTOR_FORBIDDEN');
+  assert.equal(await ratificationCount(drafted.projectId), 0);
+
+  // The same refusal at the service boundary the constraint names: an atomic creation-time
+  // decision is admitted only for principal.type === 'OWNER' whose id IS the owner.
+  await assert.rejects(
+    () => projectsService.create(
+      ownerId,
+      {
+        title: 'runner tries to self-approve',
+        goal: DRAFTED_GOAL,
+        acceptanceCriteriaItems: DRAFTED_CRITERIA,
+        ownerRatification: { decision: 'APPROVE', idempotencyKey: `self:${randomUUID()}` },
+      },
+      undefined,
+      { type: 'RUNNER', id: drafted.runnerId },
+    ),
+    (error) => {
+      assert.equal(error.getStatus?.(), 403);
+      assert.equal(error.getResponse().code, 'OWNER_RATIFICATION_ACTOR_FORBIDDEN');
+      return true;
+    },
+  );
+  evidence.conversational.runnerSelfRatificationForbidden = true;
+
+  // (c) The decision itself: the owner's own authenticated connection, no token handover.
+  const read = (await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`)).body;
+  const body = privateRequestBody(read, 'APPROVE', `conversational:${randomUUID()}`);
+  const decided = await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`, {
+    method: 'POST', body,
+  });
+  assert.equal(decided.response.status, 201);
+  assert.equal(decided.body.contractDigest, body.expectedContractDigest);
+  const stored = await pool.query(
+    `SELECT "source", "ratified_by_type" AS "ratifiedByType", "contract_digest"::text AS digest
+       FROM "project_owner_ratification" WHERE "project_id"=$1`,
+    [drafted.projectId],
+  );
+  assert.equal(stored.rows.length, 1);
+  assert.equal(stored.rows[0].source, 'OWNER');
+  assert.equal(stored.rows[0].ratifiedByType, 'OWNER');
+  assert.equal(stored.rows[0].digest, body.expectedContractDigest);
+
+  // (d) Approving rearms the persistent wake in the same transaction — no second click.
+  assert.equal(decided.body.automaticResume.scheduled, true);
+  assert.ok(decided.body.automaticResume.rearmedWakeups > 0,
+    `expected a rearmed wake, saw ${decided.body.automaticResume.rearmedWakeups}`);
+  const due = await pool.query(
+    `SELECT bool_and("due_at" <= now()) AS due FROM "task_auto_dispatch_wakeup"
+      WHERE "project_id"=$1 AND "state"='PENDING'`,
+    [drafted.projectId],
+  );
+  assert.equal(due.rows[0].due, true);
+
+  // The conversation's own surface stops asking once it has been answered.
+  const after = await http(
+    ownerToken,
+    `/projects/ratification/pending?limit=100&sessionId=${uuidToBase62(drafted.sessionId)}`,
+  );
+  assert.deepEqual(after.body.items, []);
+
+  evidence.conversational.ownerCredentialDecided = true;
+  evidence.conversational.automaticResumeRearmed = true;
+  evidence.samples.conversationalDecision = {
+    source: stored.rows[0].source,
+    rearmedWakeups: decided.body.automaticResume.rearmedWakeups,
+  };
+});
+
+test('approve-what-you-saw survives the agent editing the contract after it was rendered', async () => {
+  const drafted = await draftProjectInConversation('conversational-stale');
+  const rendered = (await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`)).body;
+  const renderedDigest = rendered.contractDigest;
+
+  // The agent keeps working and changes the drafted goal after the owner read it.
+  const edited = await http(drafted.runnerToken, `/runner/projects/${drafted.projectPublicId}`, {
+    method: 'PATCH',
+    headers: { 'x-orbit-session-id': drafted.sessionId },
+    body: { goal: `${DRAFTED_GOAL}（agent 在渲染之后又改了一次）` },
+  });
+  assert.equal(edited.response.status, 200);
+
+  // (f) The decision the owner had in front of them is refused with a typed reason.
+  const stale = await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`, {
+    method: 'POST',
+    body: privateRequestBody(rendered, 'APPROVE', `stale-conversation:${randomUUID()}`),
+  });
+  assert.equal(stale.response.status, 409);
+  assert.equal(stale.body.code, 'OWNER_DECISION_STALE');
+  assert.equal(await ratificationCount(drafted.projectId), 0);
+
+  // …and re-reading yields the NEW contract, so the surface re-renders what actually changed.
+  const current = (await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`)).body;
+  assert.notEqual(current.contractDigest, renderedDigest);
+  assert.match(current.semanticContract.goal, /agent 在渲染之后又改了一次/);
+  const scoped = await http(
+    ownerToken,
+    `/projects/ratification/pending?limit=100&sessionId=${uuidToBase62(drafted.sessionId)}`,
+  );
+  assert.equal(scoped.body.items.length, 1);
+  assert.equal(scoped.body.items[0].contractDigest, current.contractDigest);
+  assert.notEqual(scoped.body.items[0].contractDigest, renderedDigest);
+
+  evidence.conversational.approveWhatYouSawEnforced = true;
+});
+
+test('no timeout, retry or replay can ratify without the owner’s credential', async () => {
+  const drafted = await draftProjectInConversation('conversational-no-auto');
+  const read = (await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`)).body;
+
+  // (g) A machine spending an authority that was never granted — repeatedly.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const preapproved = await http(
+      drafted.runnerToken, `/runner/projects/${drafted.projectPublicId}/ratification`,
+      {
+        method: 'POST',
+        body: {
+          authority: 'PREAPPROVED_TEMPLATE',
+          authorityId: uuidToBase62(randomUUID()),
+          expectedContractDigest: read.contractDigest,
+          idempotencyKey: `machine-attempt-${attempt}:${randomUUID()}`,
+        },
+      },
+    );
+    assert.ok(preapproved.response.status >= 400 && preapproved.response.status < 500,
+      `a machine preapproval answered ${preapproved.response.status}`);
+    assert.equal(await ratificationCount(drafted.projectId), 0);
+  }
+
+  // Another account's credential is not the owner's credential either.
+  const crossOwner = await http(otherToken, `/projects/${drafted.projectPublicId}/ratification`, {
+    method: 'POST',
+    body: privateRequestBody(read, 'APPROVE', `cross-owner:${randomUUID()}`),
+  });
+  assert.equal(crossOwner.response.status, 404);
+  assert.equal(await ratificationCount(drafted.projectId), 0);
+
+  // Expiry is not consent: letting the one-use CTA lapse and retrying refuses and writes nothing.
+  await pool.query(
+    `UPDATE "project_owner_decision_request" SET "expires_at"=now()-interval '1 second'
+      WHERE "id"=$1`,
+    [toUuid(read.decisionRequest.id)],
+  );
+  const lapsed = await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`, {
+    method: 'POST',
+    body: privateRequestBody(read, 'APPROVE', `lapsed:${randomUUID()}`),
+  });
+  assert.equal(lapsed.response.status, 409);
+  assert.equal(lapsed.body.code, 'OWNER_DECISION_CTA_EXPIRED');
+  assert.equal(await ratificationCount(drafted.projectId), 0);
+  evidence.conversational.noAutomaticApprovalPath = true;
+
+  // (h) The lapsed CTA replays safely: a typed refusal every time, never a bare 500, and never a
+  // second ratification once the owner has answered the request the server rotated to.
+  const current = (await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`)).body;
+  assert.notEqual(current.decisionRequest.id, read.decisionRequest.id);
+  const approved = await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`, {
+    method: 'POST',
+    body: privateRequestBody(current, 'APPROVE', `after-expiry:${randomUUID()}`),
+  });
+  assert.equal(approved.response.status, 201);
+  assert.equal(await ratificationCount(drafted.projectId), 1);
+  for (let replay = 0; replay < 2; replay += 1) {
+    const again = await http(ownerToken, `/projects/${drafted.projectPublicId}/ratification`, {
+      method: 'POST',
+      body: privateRequestBody(read, 'APPROVE', `expired-replay-${replay}:${randomUUID()}`),
+    });
+    assert.equal(again.response.status, 409);
+    assert.notEqual(again.response.status, 500);
+    assert.ok(typeof again.body.code === 'string' && again.body.code.length > 0);
+    assert.equal(await ratificationCount(drafted.projectId), 1);
+  }
+  evidence.conversational.expiredCtaReplaySafe = true;
 });

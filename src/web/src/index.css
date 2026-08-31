@@ -980,6 +980,43 @@
   margin-top: 12px;
 }
 
+/* The same contract, shown where it was drafted. The conversation is a narrow column, so the
+   review page's two-column envelope/consequence grids collapse rather than overflow. */
+.session-owner-ratification {
+  margin: 12px 16px 4px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+.session-owner-ratification-head h2 {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+.session-owner-ratification-sub {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.session-owner-ratification-review-link {
+  font-size: 12px;
+}
+.session-owner-ratification-alert {
+  margin: 12px 0;
+}
+.session-owner-ratification-loading {
+  margin: 12px 0 0;
+  color: var(--text-3);
+}
+.session-owner-ratification .judgment-review-section {
+  margin-top: 16px;
+}
+.session-owner-ratification .owner-ratification-envelope-grid,
+.session-owner-ratification .owner-ratification-consequences,
+.session-owner-ratification .owner-ratification-option-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* Project acceptance is the project-level peer in the same human-decision inbox. Its criterion
    cards reuse the evidence-review surface above, while the controls add one explicit answer and
    evidence bundle per immutable criterion snapshot. */

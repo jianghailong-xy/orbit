@@ -13,6 +13,7 @@ const OWNER = '019fcda0-d021-72a2-a914-2f4de38f4b01';
 const PROJECT = '019fcda0-d021-72a2-a914-2f4de38f4b02';
 const REQUEST = '019fcda0-d021-72a2-a914-2f4de38f4b03';
 const CTA = '019fcda0-d021-72a2-a914-2f4de38f4b04';
+const SESSION = '019fcda0-d021-72a2-a914-2f4de38f4b06';
 const CONTRACT = 'a'.repeat(64);
 
 function controller(acceptance: object): ProjectsController {
@@ -73,14 +74,53 @@ test('controller derives owner from JWT context and preserves every exact decisi
   };
 
   await api.pendingOwnerRatification({ userId: OWNER } as never, '17');
+  await api.pendingOwnerRatification({ userId: OWNER } as never, undefined, SESSION);
   await api.ownerRatification({ userId: OWNER } as never, PROJECT);
   await api.decideOwnerRatification({ userId: OWNER } as never, PROJECT, body);
   assert.deepEqual(calls, [
-    { method: 'pending', args: [OWNER, 17] },
+    { method: 'pending', args: [OWNER, 17, undefined] },
+    // The conversation filter is the only thing the session surface adds: same route, same
+    // owner-from-JWT derivation, one narrowing argument, and still no decision shortcut.
+    { method: 'pending', args: [OWNER, 100, SESSION] },
     { method: 'read', args: [OWNER, PROJECT] },
     { method: 'decide', args: [OWNER, PROJECT, body] },
   ]);
   assert.equal('actorId' in body, false, 'the client cannot choose the authenticated owner');
+});
+
+test('a session-scoped reference names the drafting conversation and still carries no capability', () => {
+  const reference = ownerRatificationReference({
+    projectId: PROJECT,
+    projectTitle: 'Drafted in a conversation',
+    coordinatorSessionId: SESSION,
+    ownerId: OWNER,
+    requestId: REQUEST,
+    requestGeneration: 3n,
+    contractDigest: CONTRACT,
+    contractRevision: 5n,
+    reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+    createdAt: '2026-08-29T00:00:00.000Z',
+    expiresAt: '2099-09-05T00:00:00.000Z',
+  });
+  assert.equal(reference.coordinatorSessionId, SESSION);
+  assert.equal(reference.owner, 'OWNER');
+  assert.equal(JSON.stringify(reference).includes(CTA), false);
+  assert.equal('ctaToken' in reference, false);
+
+  // A project nobody drafted in a session is not silently attributed to one.
+  const detached = ownerRatificationReference({
+    projectId: PROJECT,
+    projectTitle: 'Filed from the web form',
+    ownerId: OWNER,
+    requestId: REQUEST,
+    requestGeneration: 1n,
+    contractDigest: CONTRACT,
+    contractRevision: 1n,
+    reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+    createdAt: '2026-08-29T00:00:00.000Z',
+    expiresAt: '2099-09-05T00:00:00.000Z',
+  });
+  assert.equal(detached.coordinatorSessionId, null);
 });
 
 test('canonical reference keeps linked obligation revision/watermark and cannot carry CTA', () => {
