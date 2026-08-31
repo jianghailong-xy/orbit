@@ -410,6 +410,7 @@ async function seedHistoricalDiagnosis(label) {
     terminationKind: 'EXITED',
     actualExitCode: 9,
     signal: null,
+    failureSiteDigest: runtime.executableFailureSiteIdentity(RAW_OUTPUT).digest,
   });
   const continuationId = randomUUID();
   const diagnosisId = randomUUID();

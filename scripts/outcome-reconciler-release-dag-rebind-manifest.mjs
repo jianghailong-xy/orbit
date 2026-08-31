@@ -168,7 +168,7 @@ assert.doesNotMatch(focusLog, /Cannot find module 'prisma\/config'/u);
 
 assert.equal(postgres.migrations, postgres.migrationFrontier.repositoryCount);
 assert.equal(postgres.beforeMigrations, postgres.migrations - 1);
-assert.equal(postgres.lastMigration, '0212_failure_successor_handoff');
+assert.equal(postgres.lastMigration, '0213_failure_site_fingerprint');
 assert.equal(postgres.prismaFixture.packageLock.target.sha256,
   binding.environment.dependencies.targetPackageLock.sha256);
 assert.equal(postgres.prismaFixture.packageLock.installed.sha256,

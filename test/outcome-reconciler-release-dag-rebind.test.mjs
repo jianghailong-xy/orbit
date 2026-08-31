@@ -169,8 +169,8 @@ test('the current migration frontier is complete without changing owner ratifica
   const migrations = readdirSync(path.join(repo, 'src/apiserver/prisma/migrations'), {
     withFileTypes: true,
   }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-  assert.equal(migrations.length, 220);
-  assert.equal(migrations.at(-1), '0212_failure_successor_handoff');
+  assert.equal(migrations.length, 221);
+  assert.equal(migrations.at(-1), '0213_failure_site_fingerprint');
   assert.equal(frontier.ownerRatification.publicId, 'wcTYTTh2pHj6myzKLXM20');
   assert.equal(frontier.ownerRatification.contractDigest,
     '038956112d061ea7b3b0e2b9e94b6a7349af2fd3c7ca5d126b669174758bc903');

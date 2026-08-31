@@ -945,6 +945,10 @@ const attempt = {
 };
 atomicJson(path.join(runRoot, 'attempt.json'), attempt);
 console.log(JSON.stringify(attempt, null, 2));
+// The failure site identity the control plane fingerprints this attempt by. Node ids only, sorted:
+// a run that fails on the same nodes must digest the same, and nothing that varies per run (time,
+// path, pid, log body) is allowed to reach it. Printed last so a truncated head cannot fake it.
+console.log(`##orbit-failure-sites:v1 ${[...new Set([...failed, ...timedOut])].sort().join(' ')}`);
 if (focusedMode) cleanupPostgres();
 if (incomplete.length !== 0
   || ((focusPccRebind || focusRegressionRebind) && focusedRegression?.outcome !== 'PASS')) {

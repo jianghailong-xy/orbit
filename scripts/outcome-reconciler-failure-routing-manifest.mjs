@@ -10,6 +10,8 @@ assert.ok(tapPath && evidencePath && outputPath,
   'usage: outcome-reconciler-failure-routing-manifest.mjs TAP EVIDENCE OUTPUT');
 assert.equal(process.env.FAILURE_ROUTING_FIXTURE_CLEANED, 'true',
   'disposable PostgreSQL must be removed before manifest publication');
+const resourcesRemaining = Number(process.env.FAILURE_ROUTING_RESOURCES_REMAINING);
+assert.equal(resourcesRemaining, 0, 'a disposable fixture resource survived cleanup');
 
 const repo = path.resolve(import.meta.dirname, '..');
 const tap = readFileSync(tapPath, 'utf8');
@@ -59,6 +61,13 @@ assert.equal(evidence.postgres.connected, true);
 assert.ok(evidence.postgres.migrations > 0);
 assert.equal(evidence.postgres.lastMigration, expectedMigrationFrontier);
 assert.equal(evidence.postgres.requiredMigrationApplied, true);
+// The destructive-fixture safety gate every disposable coordinator suite shares: a run that is not
+// on its own pcc_* role and database cannot prove it never touched a deployed one.
+for (const identity of [evidence.postgres.user, evidence.postgres.database]) {
+  assert.match(identity, /^pcc[0-9a-z]*[_-]/, `${identity} is not a disposable pcc_* identity`);
+}
+assert.equal(`${evidence.postgres.user}/${evidence.postgres.database}`,
+  process.env.FAILURE_ROUTING_PG_IDENTITY);
 for (const [name, count] of Object.entries(evidence.samples)) {
   assert.ok(Number.isInteger(count) && count > 0, `${name} has zero samples`);
 }
@@ -93,9 +102,13 @@ assert.equal(evidence.observationWindow.durationMilliseconds, finished - started
 const sourceFiles = [
   'package.json',
   'docs/postgres-lock-order.md',
-  'src/apiserver/prisma/schema.prisma',
   'src/apiserver/prisma/migrations/0210_failure_continuation_trigger/migration.sql',
   'src/apiserver/prisma/migrations/0211_failure_continuation_routing/migration.sql',
+  'src/apiserver/prisma/migrations/0213_failure_site_fingerprint/migration.sql',
+  'src/apiserver/prisma/schema.prisma',
+  'src/apiserver/src/runner-api/runner-api.controller.ts',
+  'src/apiserver/src/tasks/executable-acceptance-runtime.ts',
+  'scripts/outcome-reconciler-release-dag.mjs',
   'src/apiserver/src/common/db-write-inventory.ts',
   'src/apiserver/src/common/db-write-inventory.spec.ts',
   'src/apiserver/src/projects/coordinator-judgment-opening.ts',
@@ -157,6 +170,7 @@ const manifest = {
   fixture: {
     disposable: true,
     cleanedBeforeManifest: true,
+    resourcesRemaining,
     productionWrites: false,
     ownerCredentialsMinted: false,
     dailyAutomationBudgetRequired: false,

@@ -168,6 +168,7 @@ import {
   evaluateExecutableAttempt,
   executableEvaluationPlan,
   executableFailureFingerprint,
+  executableFailureSiteIdentity,
   negotiateExecutableAcceptance,
   type AttemptTerminationKind,
   type RunnerExecutableAcceptanceCapability,
@@ -3554,11 +3555,16 @@ export class RunnerApiController {
             actualExitCode,
           };
           const criterion = evaluateExecutableAttempt(result);
+          // Parsed from the output that is about to be STORED, so the SQL fallback in migration
+          // 0213 reads the same bytes and reaches the same site identity.
+          const rawOutput = stripNul(dto.shellOutput);
+          const site = executableFailureSiteIdentity(rawOutput);
           const fingerprint = criterion.state === 'SATISFIED' ? null : executableFailureFingerprint({
             evaluationPlanDigest: queuedAcceptanceIdentity.evaluationPlanDigest,
             terminationKind: typedTermination,
             actualExitCode,
             signal: dto.acceptanceSignal ?? null,
+            failureSiteDigest: site.digest,
           });
           const sameFingerprintCount = fingerprint == null ? 0 : 1 + await tx.taskExecutableAttempt.count({
             where: {
@@ -3572,7 +3578,6 @@ export class RunnerApiController {
             attempt.attemptNumber,
             sameFingerprintCount,
           );
-          const rawOutput = stripNul(dto.shellOutput);
           await tx.taskExecutableAttempt.update({
             where: { id: attempt.id },
             data: {
@@ -3583,6 +3588,8 @@ export class RunnerApiController {
               rawOutput,
               outputTruncated: dto.acceptanceOutputTruncated === true,
               failureFingerprint: fingerprint,
+              failureSiteSource: fingerprint == null ? null : site.source,
+              failureSiteDigest: fingerprint == null ? null : site.digest,
             },
           });
           acceptanceAttemptTerminatedId = attempt.id;

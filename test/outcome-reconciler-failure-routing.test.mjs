@@ -43,6 +43,7 @@ const controllerContract = require(path.join(
   apiDist,
   'projects/failure-continuation-controller.js',
 ));
+const runtime = require(path.join(apiDist, 'tasks/executable-acceptance-runtime.js'));
 const {
   RunStatus,
   RunnerStatus,
@@ -86,6 +87,11 @@ const evidence = {
     evaluationPlanChanges: 0,
     replayReads: 0,
     deadlineBearingResults: 0,
+    releaseDagFailureSites: 0,
+    distinctReleaseDagFingerprints: 0,
+    siteIdentityParityCases: 0,
+    typedSiteDegradations: 0,
+    preservedHistoricalAttempts: 0,
   },
   coverage: {
     isolatedDatabase: false,
@@ -102,6 +108,11 @@ const evidence = {
     replayStable: false,
     canonicalResultComplete: false,
     immutableDecision: false,
+    fingerprintCarriesFailureSite: false,
+    siteIdentityOrderFreeAndRunInvariant: false,
+    writerAndFallbackAgree: false,
+    typedSiteDegradationObservable: false,
+    historicalFingerprintsPreserved: false,
     productionWrites: false,
   },
   results: {},
@@ -345,6 +356,107 @@ async function ratify(project, state) {
       `failure-routing-ratification:${project.projectId}`,
     ],
   )).rows[0].result;
+}
+
+/**
+ * The failing node sets of five consecutive real Release DAG acceptance attempts on this project,
+ * in order.  Their successful-node counts were 10, 25, 31, 36 and 36: the first four converged.
+ * Four of these sets are distinct and the last two are the same failure, so a fingerprint that
+ * carries where the run failed must produce four values -- and the four-constant fingerprint this
+ * suite replaces produced one.
+ */
+const RELEASE_DAG_FAILED_NODES = [
+  ['prepare-postgres'],
+  ['suite-bootstrap', 'suite-evaluator', 'suite-projection', 'suite-fact-ingress',
+    'suite-auto-dispatch', 'suite-work-overview-readiness', 'suite-watchdog-111k',
+    'full-api-shard-0', 'full-api-shard-1', 'full-api-shard-2', 'full-api-shard-3'],
+  ['full-web', 'suite-watchdog-111k',
+    'full-api-shard-0', 'full-api-shard-1', 'full-api-shard-2', 'full-api-shard-3'],
+  ['full-api-shard-0', 'full-api-shard-1', 'full-api-shard-2', 'full-api-shard-3'],
+  ['full-api-shard-0', 'full-api-shard-1', 'full-api-shard-2', 'full-api-shard-3'],
+];
+/** The one fingerprint all five of those attempts really carried before this suite. */
+const COLLIDED_FINGERPRINT =
+  '1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153';
+const SITE_MARKER = '##orbit-failure-sites:v1';
+const FIXTURE_PLAN_DIGEST = sha256('failure-routing-site-fixture-plan');
+
+function siteSummary(nodes, preamble = '') {
+  return `${preamble}${SITE_MARKER} ${nodes.join(' ')}\n`;
+}
+
+/** What the Release DAG really writes: its attempt manifest, then the site summary line. */
+function releaseDagOutput(nodes, run = 1) {
+  const attempt = {
+    kind: 'orbit.outcome-reconciler.release-dag-attempt',
+    startedAt: new Date(1_756_000_000_000 + run * 97_003).toISOString(),
+    runRoot: `/tmp/release-dag/${randomUUID()}`,
+    failedNodes: nodes,
+    timedOutNodes: [],
+  };
+  return siteSummary(nodes, `${JSON.stringify(attempt, null, 2)}\n`);
+}
+
+function siteFingerprint(rawOutput, overrides = {}) {
+  return runtime.executableFailureFingerprint({
+    evaluationPlanDigest: FIXTURE_PLAN_DIGEST,
+    terminationKind: 'EXITED',
+    actualExitCode: 1,
+    signal: null,
+    failureSiteDigest: runtime.executableFailureSiteIdentity(rawOutput).digest,
+    ...overrides,
+  });
+}
+
+async function attemptRows() {
+  return (await pool.query(`
+    SELECT id::text AS id, attempt_number, termination_kind::text AS termination_kind,
+           actual_exit_code, failure_fingerprint, failure_site_source::text AS failure_site_source,
+           failure_site_digest, raw_output
+      FROM task_executable_attempt ORDER BY id
+  `)).rows;
+}
+
+/**
+ * One admitted attempt in the shape an attempt committed BEFORE the site columns existed: the one
+ * constant fingerprint all five real Release DAG attempts carried, and nothing said about where it
+ * failed.  No production path can write this row any more, so the fixture suspends the triggers for
+ * exactly one insert inside its own transaction; every CHECK constraint still applies to it.
+ */
+async function seedPreSiteAttempt(failure) {
+  const id = randomUUID();
+  const admissionId = randomUUID();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL session_replication_role = 'replica'");
+    await client.query(`
+      INSERT INTO task_executable_admission (
+        id, task_id, session_id, turn_id, runner_id, evaluation_plan_digest, command_digest,
+        expected_exit_code, requested_timeout_seconds, owner_timeout_ceiling_seconds,
+        policy_timeout_ceiling_seconds, required_schema_revision, required_capability_revision,
+        runner_schema_revision, runner_capability_revision, runner_hard_max_seconds,
+        decision, effective_timeout_seconds, effective_deadline, spawn_count
+      ) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,0,120,120,3600,2,2,2,2,3600,
+        'ADMITTED',120,now(),1)
+    `, [admissionId, failure.taskId, failure.sessionId, randomUUID(), failure.runnerId,
+      FIXTURE_PLAN_DIGEST, sha256('pre-site-historical-command')]);
+    await client.query(`
+      INSERT INTO task_executable_attempt (
+        id, admission_id, task_id, session_id, attempt_number, evaluation_plan_digest,
+        expected_exit_code, deadline_at, started_at, terminated_at, termination_kind,
+        actual_exit_code, raw_output, output_truncated, failure_fingerprint
+      ) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,64,$5,0,now(),now(),now(),'EXITED',1,$6,false,$7)
+    `, [id, admissionId, failure.taskId, failure.sessionId, FIXTURE_PLAN_DIGEST,
+      releaseDagOutput(RELEASE_DAG_FAILED_NODES[1]), COLLIDED_FINGERPRINT]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return id;
 }
 
 function assertCompleteRoute(route) {
@@ -634,6 +746,211 @@ test('evaluation-plan-only evolution preserves contract ratification and routes 
       nextAction: route.nextAction.kind,
     };
   });
+
+test('the five real Release DAG attempts do not collapse into one fingerprint',
+  { timeout: 120_000 }, async () => {
+    await empty();
+    const project = await projectFixture('release-dag-sites');
+    const fingerprints = [];
+    for (const [index, nodes] of RELEASE_DAG_FAILED_NODES.entries()) {
+      const failure = await committedFailure(project, `release-dag-${index}`, {
+        rawOutput: releaseDagOutput(nodes, index + 1),
+      });
+      const attempt = await db.taskExecutableAttempt.findFirstOrThrow({
+        where: { taskId: failure.taskId },
+      });
+      fingerprints.push(attempt.failureFingerprint.trim());
+    }
+    // Every other fingerprint input is a constant along this chain -- same command, same plan
+    // digest, same EXITED exit code, no signal -- so anything that separates these five came from
+    // where they failed.
+    assert.equal(new Set(fingerprints).size, 4,
+      'the five attempts carry one fingerprint per distinct failing-node set, not one in total');
+    assert.equal(fingerprints[3], fingerprints[4],
+      'the fourth and fifth attempts failed on the same shards and are the same failure');
+    assert.equal(new Set(fingerprints.slice(0, 4)).size, 4);
+    for (const value of fingerprints) assert.match(value, /^[0-9a-f]{64}$/);
+    assert.ok(!fingerprints.includes(COLLIDED_FINGERPRINT));
+    evidence.samples.releaseDagFailureSites = RELEASE_DAG_FAILED_NODES.length;
+    evidence.samples.distinctReleaseDagFingerprints = new Set(fingerprints).size;
+    evidence.coverage.fingerprintCarriesFailureSite = true;
+    evidence.results.releaseDagFailureSites = RELEASE_DAG_FAILED_NODES.map((nodes, index) => ({
+      nodes: nodes.length,
+      fingerprint: fingerprints[index],
+    }));
+  });
+
+test('the site identity is order-free, repeatable and free of run-varying material', () => {
+  const nodes = RELEASE_DAG_FAILED_NODES[2];
+  const identity = runtime.executableFailureSiteIdentity(siteSummary(nodes));
+  assert.equal(identity.source, 'REPORTED');
+  assert.deepEqual(identity.sites, [...nodes].sort());
+  assert.match(identity.digest, /^[0-9a-f]{64}$/);
+
+  const shuffled = [...nodes].reverse();
+  assert.notDeepEqual(shuffled, [...nodes].sort());
+  assert.equal(siteFingerprint(siteSummary(shuffled)), siteFingerprint(siteSummary(nodes)));
+  assert.equal(siteFingerprint(siteSummary([...shuffled, nodes[0], nodes[1]])),
+    siteFingerprint(siteSummary(nodes)));
+
+  // Timestamps, paths, pids, nonces and log bodies all vary per run and none of them may reach the
+  // digest, or every attempt would be its own failure and the fingerprint would stop discriminating.
+  const noisy = (run) => siteSummary(nodes, [
+    `started 2026-08-31T0${run}:15:0${run}Z pid=${9_000 + run} nonce=${randomUUID()}`,
+    `/tmp/release-dag/${randomUUID()}/attempt-${run}.log`,
+    'assertion failed: expected 0, got 1\n'.repeat(run),
+  ].join('\n'));
+  const noisyDigests = [1, 2, 3].map((run) =>
+    runtime.executableFailureSiteIdentity(noisy(run)).digest);
+  assert.equal(new Set(noisyDigests).size, 1, 'run-varying output changed the site identity');
+  assert.equal(noisyDigests[0], identity.digest);
+
+  const repeated = [0, 1, 2].map(() =>
+    runtime.executableFailureSiteIdentity(releaseDagOutput(nodes)).digest);
+  assert.equal(new Set(repeated).size, 1);
+  assert.equal(repeated[0], identity.digest);
+
+  const other = runtime.executableFailureSiteIdentity(siteSummary(RELEASE_DAG_FAILED_NODES[3]));
+  assert.notEqual(other.digest, identity.digest);
+  evidence.coverage.siteIdentityOrderFreeAndRunInvariant = true;
+});
+
+test('the TypeScript writer and the SQL fallback digest the same input identically',
+  { timeout: 120_000 }, async () => {
+    const outputs = [
+      null,
+      '',
+      'the command never said where it failed\n',
+      siteSummary([]),
+      SITE_MARKER,
+      siteSummary(RELEASE_DAG_FAILED_NODES[0]),
+      siteSummary([...RELEASE_DAG_FAILED_NODES[1]].reverse()),
+      releaseDagOutput(RELEASE_DAG_FAILED_NODES[2]),
+      `noise\r\n${siteSummary(RELEASE_DAG_FAILED_NODES[3])}`,
+      `${siteSummary(['early-node'])}later\n${siteSummary(RELEASE_DAG_FAILED_NODES[4])}`,
+      `${SITE_MARKER}  full-web   suite-watchdog-111k \n`,
+      `${SITE_MARKER} full-web /tmp/run 17!\n`,
+      `${SITE_MARKER}suffix full-web\n`,
+    ];
+    let parityCases = 0;
+    for (const rawOutput of outputs) {
+      const identity = runtime.executableFailureSiteIdentity(rawOutput);
+      const row = (await pool.query(
+        'SELECT site_source, site_digest FROM executable_failure_site_identity($1::text)',
+        [rawOutput],
+      )).rows[0];
+      assert.equal(row.site_source, identity.source, `site source differs for ${rawOutput}`);
+      assert.equal(row.site_digest.trim(), identity.digest, `site digest differs for ${rawOutput}`);
+      parityCases += 1;
+    }
+    for (const [terminationKind, actualExitCode, signal] of [
+      ['EXITED', 1, null],
+      ['EXITED', 0, null],
+      ['TIMED_OUT', null, null],
+      ['SIGNALED', null, 'signal: killed'],
+      ['INFRASTRUCTURE_LOST', null, null],
+    ]) {
+      for (const rawOutput of outputs) {
+        const failureSiteDigest = runtime.executableFailureSiteIdentity(rawOutput).digest;
+        const written = runtime.executableFailureFingerprint({
+          evaluationPlanDigest: FIXTURE_PLAN_DIGEST,
+          terminationKind,
+          actualExitCode,
+          signal,
+          failureSiteDigest,
+        });
+        const fallback = (await pool.query(
+          'SELECT executable_failure_fingerprint($1::text,$2::text,$3::integer,$4::text,$5::text) AS value',
+          [FIXTURE_PLAN_DIGEST, terminationKind, actualExitCode, signal, failureSiteDigest],
+        )).rows[0].value.trim();
+        assert.match(written, /^[0-9a-f]{64}$/);
+        assert.equal(fallback, written,
+          `the SQL fallback disagrees with the writer on ${terminationKind}`);
+        parityCases += 1;
+      }
+    }
+    evidence.samples.siteIdentityParityCases = parityCases;
+    evidence.coverage.writerAndFallbackAgree = true;
+  });
+
+test('a committed attempt records its site identity and names every degradation',
+  { timeout: 120_000 }, async () => {
+    await empty();
+    const project = await projectFixture('failure-site-record');
+    const cases = [
+      ['shards', releaseDagOutput(RELEASE_DAG_FAILED_NODES[3]), 'REPORTED'],
+      ['web', releaseDagOutput(RELEASE_DAG_FAILED_NODES[2]), 'REPORTED'],
+      ['silent', 'the command never said where it failed\n', 'ABSENT'],
+      ['malformed', `${SITE_MARKER} full-web /tmp/run 17!\n`, 'UNPARSABLE'],
+    ];
+    const observed = [];
+    for (const [label, rawOutput, source] of cases) {
+      const failure = await committedFailure(project, `site-${label}`, { rawOutput });
+      const attempt = await db.taskExecutableAttempt.findFirstOrThrow({
+        where: { taskId: failure.taskId },
+      });
+      const identity = runtime.executableFailureSiteIdentity(rawOutput);
+      assert.equal(identity.source, source);
+      assert.equal(attempt.failureSiteSource, source, `${label} did not record a typed site source`);
+      assert.equal(attempt.failureSiteDigest.trim(), identity.digest);
+      assert.equal(attempt.failureFingerprint.trim(), runtime.executableFailureFingerprint({
+        evaluationPlanDigest: attempt.evaluationPlanDigest,
+        terminationKind: 'EXITED',
+        actualExitCode: 9,
+        signal: null,
+        failureSiteDigest: identity.digest,
+      }));
+      const receipt = (await pool.query(
+        'SELECT failure_fingerprint FROM failure_continuation_attempt_receipt WHERE attempt_id=$1::uuid',
+        [attempt.id],
+      )).rows[0];
+      assert.equal(receipt.failure_fingerprint.trim(), attempt.failureFingerprint.trim(),
+        'the database fallback reached a different value than the writer stored');
+      observed.push({ label, source, fingerprint: attempt.failureFingerprint.trim() });
+    }
+    assert.notEqual(observed[0].fingerprint, observed[1].fingerprint,
+      'two attempts that failed on different nodes share a fingerprint');
+    // A degradation is a value of its own, not a quiet fall back onto whatever was reported.
+    assert.equal(new Set(observed.map((entry) => entry.fingerprint)).size, 4);
+    assert.deepEqual(observed.map((entry) => entry.source),
+      ['REPORTED', 'REPORTED', 'ABSENT', 'UNPARSABLE']);
+    evidence.samples.typedSiteDegradations =
+      observed.filter((entry) => entry.source !== 'REPORTED').length;
+    evidence.coverage.typedSiteDegradationObservable = true;
+    evidence.results.recordedSiteSources = observed;
+  });
+
+test('no historical attempt row is backfilled or rewritten', { timeout: 120_000 }, async () => {
+  await empty();
+  const project = await projectFixture('history');
+  const seed = await committedFailure(project, 'history-seed', {
+    rawOutput: releaseDagOutput(RELEASE_DAG_FAILED_NODES[0]),
+  });
+  const historicalId = await seedPreSiteAttempt(seed);
+  const before = await attemptRows();
+  assert.equal(before.length, 2);
+
+  const next = await committedFailure(project, 'history-next', {
+    rawOutput: releaseDagOutput(RELEASE_DAG_FAILED_NODES[2]),
+  });
+  await controller.routeClaim(next.claim, next.observedAt, { failureNode: 'PRODUCT_BEHAVIOR' });
+  const after = await attemptRows();
+  assert.equal(after.length, before.length + 1);
+  const standing = new Map(after.map((row) => [row.id, row]));
+  for (const row of before) {
+    assert.deepEqual(standing.get(row.id), row, `attempt ${row.id} was rewritten`);
+  }
+  const historical = standing.get(historicalId);
+  assert.equal(historical.failure_fingerprint.trim(), COLLIDED_FINGERPRINT);
+  assert.equal(historical.failure_site_source, null,
+    'a historical attempt was backfilled with a site source it never reported');
+  assert.equal(historical.failure_site_digest, null);
+  const fresh = after.find((row) => !before.some((old) => old.id === row.id));
+  assert.equal(fresh.failure_site_source, 'REPORTED');
+  assert.notEqual(fresh.failure_fingerprint.trim(), COLLIDED_FINGERPRINT);
+  evidence.samples.preservedHistoricalAttempts = before.length;
+  evidence.coverage.historicalFingerprintsPreserved = true;
+});
 
 test('route replay is byte-stable and the persisted decision is append-only',
   { timeout: 120_000 }, async () => {

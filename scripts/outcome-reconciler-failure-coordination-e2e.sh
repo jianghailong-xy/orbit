@@ -153,7 +153,7 @@ LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc 
   'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
   | tr -d '[:space:]')"
 [ "$MIGRATION_COUNT" -gt 0 ] || { echo '!! no migrations applied' >&2; exit 1; }
-[ "$LAST_MIGRATION" = '0212_failure_successor_handoff' ] || {
+[ "$LAST_MIGRATION" = '0213_failure_site_fingerprint' ] || {
   echo "!! unexpected migration frontier $LAST_MIGRATION" >&2
   exit 1
 }

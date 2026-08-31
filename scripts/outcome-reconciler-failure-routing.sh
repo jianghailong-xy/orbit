@@ -6,10 +6,10 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API="$REPO/src/apiserver"
 BUILD="$REPO/build"
-CONTAINER="${FAILURE_ROUTING_PG_CONTAINER:-orbit-failure-routing-pg-$$}"
-ADMIN="${FAILURE_ROUTING_PG_USER:-failure_routing_admin}"
-PASSWORD="${FAILURE_ROUTING_PG_PASSWORD:-failure_routing_fixture_pw}"
-DATABASE="${FAILURE_ROUTING_PG_DATABASE:-failure_routing_$$_fixture}"
+CONTAINER="${FAILURE_ROUTING_PG_CONTAINER:-pcc-failure-routing-pg-$$}"
+ADMIN="${FAILURE_ROUTING_PG_USER:-pcc_failure_routing_admin}"
+PASSWORD="${FAILURE_ROUTING_PG_PASSWORD:-pcc_failure_routing_fixture_pw}"
+DATABASE="${FAILURE_ROUTING_PG_DATABASE:-pcc_failure_routing_$$_fixture}"
 IMAGE="${FAILURE_ROUTING_PG_IMAGE:-postgres:16-alpine}"
 TIMEOUT_SECONDS="${FAILURE_ROUTING_TEST_TIMEOUT_SECONDS:-480}"
 TAP="$BUILD/outcome-reconciler-failure-routing.tap"
@@ -17,6 +17,8 @@ EVIDENCE="$BUILD/outcome-reconciler-failure-routing-evidence.json"
 MANIFEST="$BUILD/outcome-reconciler-failure-routing-manifest.json"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 TARGET_SHA="$(git -C "$REPO" rev-parse HEAD)"
+EXPECTED_FRONTIER="$(ls -1 "$API/prisma/migrations" | grep -E '^[0-9]{4}_' | sort | tail -1)"
+REQUIRED_MIGRATION='0213_failure_site_fingerprint'
 ROOT_MODULE_LINK=0
 API_MODULE_LINK=0
 SHARED_MODULE_LINK=0
@@ -125,18 +127,18 @@ LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc 
   'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1' \
   | tr -d '[:space:]')"
 REQUIRED_MIGRATION_APPLIED="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
-  "SELECT count(*) FROM _prisma_migrations WHERE migration_name='0211_failure_continuation_routing' AND finished_at IS NOT NULL" \
+  "SELECT count(*) FROM _prisma_migrations WHERE migration_name='$REQUIRED_MIGRATION' AND finished_at IS NOT NULL" \
   | tr -d '[:space:]')"
 [ "$MIGRATION_COUNT" -gt 0 ] || {
   echo '!! zero applied migrations is forbidden' >&2
   exit 1
 }
-[ "$LAST_MIGRATION" = '0211_failure_continuation_routing' ] || {
-  echo "!! migration frontier is $LAST_MIGRATION" >&2
+[ "$LAST_MIGRATION" = "$EXPECTED_FRONTIER" ] || {
+  echo "!! migration frontier is $LAST_MIGRATION, not $EXPECTED_FRONTIER" >&2
   exit 1
 }
 [ "$REQUIRED_MIGRATION_APPLIED" = '1' ] || {
-  echo '!! required migration 0211_failure_continuation_routing is not applied exactly once' >&2
+  echo "!! required migration $REQUIRED_MIGRATION is not applied exactly once" >&2
   exit 1
 }
 
@@ -163,12 +165,16 @@ fi
 
 echo '==> failure-routing: remove PostgreSQL before publishing evidence'
 docker rm -fv "$CONTAINER" >/dev/null
-if docker inspect "$CONTAINER" >/dev/null 2>&1; then
-  echo '!! disposable PostgreSQL fixture survived cleanup' >&2
+RESOURCES_REMAINING="$(docker ps -a --filter "name=^${CONTAINER}$" --format '{{.ID}}' | wc -l \
+  | tr -d '[:space:]')"
+[ "$RESOURCES_REMAINING" = '0' ] || {
+  echo "!! disposable PostgreSQL fixture survived cleanup: $RESOURCES_REMAINING" >&2
   exit 1
-fi
+}
 
 echo '==> failure-routing: validate zero-skip evidence and publish manifest'
 FAILURE_ROUTING_FIXTURE_CLEANED=true \
+FAILURE_ROUTING_RESOURCES_REMAINING="$RESOURCES_REMAINING" \
+FAILURE_ROUTING_PG_IDENTITY="$ADMIN/$DATABASE" \
 node "$REPO/scripts/outcome-reconciler-failure-routing-manifest.mjs" \
   "$TAP" "$EVIDENCE" "$MANIFEST"

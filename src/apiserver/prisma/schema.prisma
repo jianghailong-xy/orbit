@@ -239,6 +239,17 @@ enum ExecutableAcceptanceAdmissionDecision {
   @@map("executable_acceptance_admission_decision")
 }
 
+/// Whether a failing attempt's output named where it failed. UNPARSABLE and ABSENT are the two
+/// named degradations: the fingerprint still has a stable, typed site input, and the reason it is
+/// not a real one is readable on the attempt row.
+enum ExecutableFailureSiteSource {
+  REPORTED
+  ABSENT
+  UNPARSABLE
+
+  @@map("executable_failure_site_source")
+}
+
 enum ExecutableAcceptanceTerminationKind {
   EXITED
   TIMED_OUT
@@ -4002,6 +4013,10 @@ model TaskExecutableAttempt {
   rawOutput String? @map("raw_output")
   outputTruncated Boolean @default(false) @map("output_truncated")
   failureFingerprint String? @map("failure_fingerprint") @db.Char(64)
+  /// Why the fingerprint carries the site identity it carries. Absent on a satisfied attempt and
+  /// on every attempt recorded before migration 0213; never backfilled.
+  failureSiteSource ExecutableFailureSiteSource? @map("failure_site_source")
+  failureSiteDigest String? @map("failure_site_digest") @db.Char(64)
   legacyTermination ExecutableAcceptanceLegacyTermination? @map("legacy_termination")
   legacyExitCode Int? @map("legacy_exit_code")
 
