@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "1c0e7a24156c707ab2a054b9fe97f5439486c5419739395d3feb640ad466c4dd",
+  "declaredDagPlanDigest": "89b1269e97b185ad300d6807a45119a7059e6d4013a1d36032e528948dabd908",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GWrlngwd6e1AfHXq4hG",
   "supersededAttempt": {
@@ -110,9 +110,9 @@
   "builder": {
     "taskId": "34GWrlngwd6e1AfHXq4hG",
     "taskDatabaseId": "01a05650-3ee0-72dc-addb-439a55e0931a",
-    "sessionId": "1P7b99zBOd7eHTmYVikcnP",
-    "sessionDatabaseId": "2e2ba8a5-7d77-5c09-a031-8b4eecdb7d7f",
-    "sourceBranch": "orbit/release-dag-current-work-b0429a",
+    "sessionId": "3muUyYwt13yMafOazMX0Kw",
+    "sessionDatabaseId": "7c7db692-6a7b-593d-89e1-2fe761c6faca",
+    "sourceBranch": "orbit/release-dag-current-work-7d7aaa",
     "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-regression-rebind",
     "commandDigest": "dd60f2d723df98ed4605f894751a11c0a6d63f8c128984dcdf50bb899bf80241",
     "evaluationPlanDigest": "6c852b45dedf94260b61ce17a269ed484c8c2b523b9b0ed84d999dea00853da2",
@@ -137,8 +137,8 @@
     "remoteTrackingRef": "refs/remotes/origin/main",
     "resolution": "BUILDER_AGENT_MERGE_RECEIPT",
     "requiredReceipt": {
-      "sessionDatabaseId": "2e2ba8a5-7d77-5c09-a031-8b4eecdb7d7f",
-      "sourceBranch": "orbit/release-dag-current-work-b0429a",
+      "sessionDatabaseId": "7c7db692-6a7b-593d-89e1-2fe761c6faca",
+      "sourceBranch": "orbit/release-dag-current-work-7d7aaa",
       "targetBranch": "main",
       "recordedBy": "AGENT",
       "results": ["MERGED", "ALREADY_MERGED"]
@@ -250,9 +250,9 @@
     }
   ],
   "integrationCandidate": {
-    "tip": "b2b4a513",
-    "requiredBase": "cf786a39e1b2b8eaf1f8fb62d02ff6411199c33a",
-    "strategy": "FAST_FORWARD_CURRENT_MAIN_THEN_APPEND_CURRENT_WORK_TRANSACTION_DOUBLE_REPAIR",
+    "tip": "dadd4ab0",
+    "requiredBase": "0791fa7d01ac3c5ad96b91265373440cdddd021e",
+    "strategy": "FAST_FORWARD_CURRENT_MAIN_THEN_APPEND_AUTHORITATIVE_RECEIPT_LOOKUP_REBIND",
     "duplicateCherryPicks": false
   },
   "implementationInputs": {
@@ -289,8 +289,8 @@
     "digests": {
       "package.json": "87c8cd0c6301ccc625d0dcf90432f1925f2b7803cc95f081aaf272f1aa0dc2b3",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
-      "contracts/outcome-reconciler-authoritative-target.json": "5754208cd965f772f6abaed605a99226781c7f94f51432eba48d1faaf44d395c",
-      "contracts/outcome-reconciler-release-frontier.json": "37ab4eae40d57d3c41d4311e1623ff0d893128c2947669c741f3122f4a81d3ab",
+      "contracts/outcome-reconciler-authoritative-target.json": "0d1df5e81be57dc75b7bf023dad41f22180aebf86368bcaf7100dc4512c2e96e",
+      "contracts/outcome-reconciler-release-frontier.json": "73b89c2ee3cd463aa7fbef555f6f8e4219ab6256f87ac4c677c932336ac1215b",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "9e8e01e61b58085006be331b086f939f4ea854cd2d56b48c1f775ae7f93539bd",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "c55f1a1609df3c6447626fff070b29bc5ab9627107fbd9cf3da12716337607f8",
@@ -313,7 +313,7 @@
       "scripts/outcome-reconciler-watchdog-manifest.mjs": "755ed62f5b0f43041385aec40e37ddcb0ff4d56e31b73751c2cdde0ae7b190de",
       "scripts/outcome-reconciler-watchdog.sh": "d04e0c8a16ce4b57c29406aa214900562b1ad7ac1337785db15536662493edde",
       "test/outcome-reconciler-release-dag-plan.test.mjs": "b90a5a09d2d6df3fa04d6043d26ce7b0152ed8ca1ee8813c080efc6cb3b56e13",
-      "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "b8aed8cbaf980988ea9df3975d8a058af4dae1506252404e7aeb46ec4e3b4ef3"
+      "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "6c116122f5d9ff1f430df98708936adf4af29aa5540c80f69d07e515cbe9bf2a"
     }
   },
   "environment": {

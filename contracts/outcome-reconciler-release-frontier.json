@@ -12,9 +12,9 @@
     "expectedExitCode": 0
   },
   "session": {
-    "publicId": "1P7b99zBOd7eHTmYVikcnP",
-    "databaseId": "2e2ba8a5-7d77-5c09-a031-8b4eecdb7d7f",
-    "sourceBranch": "orbit/release-dag-current-work-b0429a"
+    "publicId": "3muUyYwt13yMafOazMX0Kw",
+    "databaseId": "7c7db692-6a7b-593d-89e1-2fe761c6faca",
+    "sourceBranch": "orbit/release-dag-current-work-7d7aaa"
   },
   "repository": {
     "provider": "GITHUB",
