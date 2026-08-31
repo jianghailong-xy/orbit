@@ -188,6 +188,7 @@ export interface RatificationPrincipal {
 interface PendingOwnerRatificationRow {
   projectId: string;
   projectTitle: string;
+  coordinatorSessionId: string | null;
   ownerId: string;
   requestId: string;
   requestGeneration: bigint;
@@ -549,6 +550,7 @@ export class ProjectAcceptanceService {
     ownerId: string,
     projectIds?: readonly string[],
     limit?: number,
+    coordinatorSessionId?: string,
   ): Promise<PendingOwnerRatificationRow[]> {
     if (projectIds?.length === 0) return [];
     const projectFilter = projectIds
@@ -556,9 +558,16 @@ export class ProjectAcceptanceService {
           projectIds.map((id) => Prisma.sql`${id}::uuid`),
         )})`
       : Prisma.empty;
+    // Narrow to the conversation the contract was drafted in. It reads the project's own
+    // coordinator pointer under the owner predicate that is already on the join, so a session id
+    // belonging to somebody else selects nothing rather than widening the owner scope.
+    const sessionFilter = coordinatorSessionId
+      ? Prisma.sql`AND project."coordinator_session_id" = ${coordinatorSessionId}::uuid`
+      : Prisma.empty;
     const bounded = limit === undefined ? Prisma.empty : Prisma.sql`LIMIT ${limit}`;
     return this.prisma.$queryRaw<PendingOwnerRatificationRow[]>(Prisma.sql`
       SELECT request."project_id" AS "projectId", project."title" AS "projectTitle",
+             project."coordinator_session_id" AS "coordinatorSessionId",
              request."owner_id" AS "ownerId", request."id" AS "requestId",
              request."request_generation" AS "requestGeneration",
              request."contract_digest"::text AS "contractDigest",
@@ -584,6 +593,7 @@ export class ProjectAcceptanceService {
          AND request."status" = 'PENDING'
          AND routing.value->>'eligible' = 'true'
          ${projectFilter}
+         ${sessionFilter}
        ORDER BY request."created_at" DESC, request."id" DESC
        ${bounded}
     `);
@@ -597,14 +607,30 @@ export class ProjectAcceptanceService {
     return rows.map((row) => ownerRatificationReference(row));
   }
 
-  async pendingOwnerRatificationInbox(ownerId: string, requestedLimit = 100): Promise<{
+  /**
+   * The owner's pending questions. `coordinatorSessionId` narrows the same list to the one
+   * conversation a contract was drafted in, which is the only thing a session view needs in order
+   * to show the question where it was raised. It is a filter on an owner-scoped read, not a second
+   * authority: the rows, the eligibility function and the redaction are unchanged, and no CTA is
+   * selected here in either shape.
+   */
+  async pendingOwnerRatificationInbox(
+    ownerId: string,
+    requestedLimit = 100,
+    coordinatorSessionId?: string,
+  ): Promise<{
     total: number;
     items: OwnerRatificationReference[];
   }> {
     if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 200) {
       throw new BadRequestException('limit must be an integer from 1 through 200');
     }
-    const rows = await this.pendingOwnerRatificationRows(ownerId, undefined, requestedLimit);
+    const rows = await this.pendingOwnerRatificationRows(
+      ownerId,
+      undefined,
+      requestedLimit,
+      coordinatorSessionId,
+    );
     return {
       total: rows[0]?.total ?? 0,
       items: rows.map((row) => ownerRatificationReference(row)),
@@ -615,10 +641,12 @@ export class ProjectAcceptanceService {
   async ownerRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
     const [row] = await this.prisma.$queryRaw<Array<{
       projectTitle: string;
+      coordinatorSessionId: string | null;
       state: Prisma.JsonValue;
       latestDecision: Prisma.JsonValue | null;
     }>>(Prisma.sql`
       SELECT project."title" AS "projectTitle",
+             project."coordinator_session_id" AS "coordinatorSessionId",
              project_owner_ratification_state_json(
                ${ownerId}::uuid, ${projectId}::uuid
              ) AS state,
@@ -685,6 +713,9 @@ export class ProjectAcceptanceService {
       ...state,
       projectId,
       projectTitle: row.projectTitle,
+      // Lets a session-scoped surface prove the private read it rendered is the one belonging to
+      // the conversation it is embedded in, rather than trusting the id it navigated with.
+      coordinatorSessionId: row.coordinatorSessionId,
       owner: 'OWNER',
       ownerId,
       latestDecision: row.latestDecision ?? null,

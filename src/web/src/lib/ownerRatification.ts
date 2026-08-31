@@ -38,6 +38,9 @@ export interface OwnerRatificationReference {
   status: 'PENDING';
   projectId: string;
   projectTitle: string;
+  /** The conversation the contract was drafted in, or null. Lets the session view raise the same
+   *  question where it was written; it carries no capability and grants no authority. */
+  coordinatorSessionId: string | null;
   decisionRequestId: string;
   requestRevision: string;
   obligationId: string;
@@ -132,6 +135,8 @@ export interface OwnerRatificationAuditRequest {
 export interface OwnerRatificationReview {
   projectId: string;
   projectTitle: string;
+  /** Optional only for rolling compatibility with a control plane from before it was projected. */
+  coordinatorSessionId?: string | null;
   owner: 'OWNER';
   ownerId: string;
   budgetDigest: string;
@@ -197,6 +202,12 @@ export function splitOwnerRatificationCapability(
 
 export function ownerRatificationInboxPath(limit = 100): string {
   return `/projects/ratification/pending?limit=${limit}`;
+}
+
+/** The same owner-authenticated inbox, narrowed to one conversation's pending question. */
+export function ownerRatificationSessionInboxPath(sessionId: string, limit = 100): string {
+  return `${ownerRatificationInboxPath(limit)}&sessionId=`
+    + encodeURIComponent(encodeId(sessionId));
 }
 
 export function ownerRatificationPath(projectId: string): string {

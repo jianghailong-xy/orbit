@@ -99,7 +99,12 @@ export class ProjectsController {
     );
   }
 
-  /** Pending Owner Ratification questions, projected without their one-use CTA capability. */
+  /** Pending Owner Ratification questions, projected without their one-use CTA capability.
+   *
+   * `?sessionId=` narrows the same owner-authenticated list to the conversation a contract was
+   * drafted in, so the session view can raise the question where it was written instead of only in
+   * a separate inbox. It changes nothing about who may read or decide: the owner's JWT is still
+   * the only credential accepted here, and the decision still goes through POST :id/ratification. */
   @Get('ratification/pending')
   @Header('Cache-Control', 'private, no-store, max-age=0')
   @Header('Pragma', 'no-cache')
@@ -107,10 +112,12 @@ export class ProjectsController {
   pendingOwnerRatification(
     @CurrentUser() user: AuthUser,
     @Query('limit') limit?: string,
+    @Query('sessionId', PublicIdPipe) sessionId?: string,
   ) {
     return this.acceptance.pendingOwnerRatificationInbox(
       user.userId,
       limit === undefined ? 100 : Number(limit),
+      sessionId,
     );
   }
 

@@ -47,10 +47,29 @@ const evidence = JSON.parse(read(evidencePath));
 assert.equal(evidence.suite, 'owner-ratification-ui-api');
 assert.equal(evidence.postgres.required, true);
 assert.equal(evidence.postgres.connected, true);
+// The conversational surface is a REQUIRED group, not an optional extra: a run that produced no
+// proof that an agent-drafted contract is decidable where it was drafted has not proven this
+// suite, however green the rest of it looks.
+const CONVERSATIONAL_PROOFS = [
+  'draftedInSessionVisibleInThatSession',
+  'renderedContractComplete',
+  'decisionRequestExplained',
+  'ownerCredentialDecided',
+  'automaticResumeRearmed',
+  'runnerSelfRatificationForbidden',
+  'approveWhatYouSawEnforced',
+  'noAutomaticApprovalPath',
+  'expiredCtaReplaySafe',
+  'inboxAndSessionSurfacesAgree',
+];
+for (const name of CONVERSATIONAL_PROOFS) {
+  assert.equal(evidence.conversational?.[name], true, `conversational.${name} is not proven`);
+}
 for (const [group, values] of Object.entries({
   surfaces: evidence.surfaces,
   transport: evidence.transport,
   resilience: evidence.resilience,
+  conversational: evidence.conversational,
 })) {
   for (const [name, value] of Object.entries(values)) {
     assert.equal(value, true, `${group}.${name} is not proven`);
@@ -82,10 +101,14 @@ const sourceFiles = [
   'src/apiserver/src/projects/projects.controller.ts',
   'src/apiserver/src/projects/projects.service.ts',
   'src/web/src/App.tsx',
+  'src/web/src/components/OwnerRatificationContract.tsx',
   'src/web/src/components/OwnerRatificationSummary.tsx',
+  'src/web/src/components/SessionOwnerRatification.test.tsx',
+  'src/web/src/components/SessionOwnerRatificationCard.tsx',
   'src/web/src/components/TasksSidePanel.tsx',
   'src/web/src/index.css',
   'src/web/src/lib/ownerRatification.ts',
+  'src/web/src/lib/ownerRatificationDecision.ts',
   'src/web/src/lib/projectAttention.ts',
   'src/web/src/pages/JudgmentEntryPoints.test.tsx',
   'src/web/src/pages/JudgmentInboxPage.tsx',
