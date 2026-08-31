@@ -54,6 +54,13 @@ const evidence = {
     databaseWallUsesCanonicalGate: false,
     soleProjectionReducer: false,
     currentRebuildVersionExact: false,
+    acceptanceRunConcludes: false,
+    supersessionIsNotAConclusion: false,
+    conclusionIsMechanicallyDerived: false,
+    runStatesAreDistinguishable: false,
+    stalledRunOwesTypedObligation: false,
+    runConclusionIsNotADoneChannel: false,
+    historicalSupersessionUntouched: false,
   },
   samples: {},
 };
@@ -842,4 +849,482 @@ test('the current full rebuild stays on the same v2 reducer as incremental write
   assert.equal(versions.rows[0].schema_current, true);
   assert.equal(versions.rows[0].reducer_current, true);
   evidence.invariants.currentRebuildVersionExact = true;
+});
+
+// ------------------------------------------------------------------------------------------
+// An acceptance run that closes, and a supersession that cannot pretend to be one.
+//
+// The eight production rows of this project's own acceptance are all verdict NULL / completed_at
+// NULL: attempts 0..6 marked superseded_reason='evidence_set_advanced', attempt 7 open since
+// 2026-08-28T11:15:48Z. The only state change a run had ever undergone was being pushed out by the
+// next one. These proofs are about the closing move, about it staying distinguishable from the
+// pushing-out move, and about neither of them reaching project.status.
+// ------------------------------------------------------------------------------------------
+
+const ACCEPTANCE_WINDOW_SECONDS = 172800;
+const ATTEMPT_SEVEN_OPENED_AT = '2026-08-28T11:15:48.000Z';
+
+async function createAcceptanceProject(label, criterionCount = 1) {
+  const projectId = randomUUID();
+  await pool.query(
+    `INSERT INTO "project" (
+       "id","owner_id","title","goal","coordinator_enabled","automation_policy",
+       "max_concurrent_tasks","session_budget_per_day","updated_at"
+     ) VALUES ($1,$2,$3,$4,true,'GUARDED_AUTO'::"project_automation_policy",3,10,now())`,
+    [projectId, ownerId, `${label} project`, `${label} canonical goal`],
+  );
+  const definitions = [];
+  for (let ordinal = 1; ordinal <= criterionCount; ordinal += 1) {
+    const id = randomUUID();
+    await pool.query(
+      `INSERT INTO "project_acceptance_criterion_definition" (
+         "id","project_id","ordinal","text","verification_method","completion_criterion",
+         "content_hash"
+       ) VALUES ($1,$2,$3,$4,$5,'HUMAN_SIGNOFF'::"task_completion_criterion",$6)`,
+      [
+        id, projectId, ordinal, `${label} criterion ${ordinal}`,
+        `inspect ${label} criterion ${ordinal}`, digest(`criterion:${id}`),
+      ],
+    );
+    definitions.push({ id, ordinal, revision: 1, key: `criterion-${ordinal}` });
+  }
+  return { projectId, definitions };
+}
+
+async function openAcceptanceRun(project, { attempt = 0, startedAt = null } = {}) {
+  const runId = randomUUID();
+  await pool.query(
+    `INSERT INTO "project_acceptance_run" (
+       "id","project_id","attempt","criteria_snapshot","criteria_revision","input_digest",
+       "digest_version","decided_by","started_at"
+     ) VALUES ($1,$2,$3,$4,$5,$6,6,'USER',COALESCE($7::timestamptz, now()))`,
+    [
+      runId, project.projectId, attempt,
+      project.definitions.map((definition) => definition.key).join('\n'),
+      digest(`criteria-revision:${project.projectId}`),
+      digest(`input:${project.projectId}:${attempt}`),
+      startedAt,
+    ],
+  );
+  for (const definition of project.definitions) {
+    await pool.query(
+      `INSERT INTO "project_acceptance_criterion" (
+         "id","run_id","project_id","ordinal","criterion_key","criterion_text",
+         "definition_id","definition_revision","completion_criterion"
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'HUMAN_SIGNOFF'::"task_completion_criterion")`,
+      [
+        randomUUID(), runId, project.projectId, definition.ordinal, definition.key,
+        `criterion ${definition.ordinal}`, definition.id, definition.revision,
+      ],
+    );
+  }
+  return { runId, attempt };
+}
+
+async function decideCriterion(project, run, definition, verdict) {
+  await pool.query(
+    `INSERT INTO "project_acceptance_conclusion" (
+       "id","project_id","evidence_run_id","evidence_version","ordinal","criterion_key",
+       "criterion_text","definition_id","definition_revision","verdict","decided_by",
+       "decided_by_id","decided_at"
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::"project_acceptance_verdict",'SYSTEM',$11,now())`,
+    [
+      randomUUID(), project.projectId, run.runId, run.attempt, definition.ordinal, definition.key,
+      `criterion ${definition.ordinal}`, definition.id, definition.revision, verdict, ownerId,
+    ],
+  );
+}
+
+async function supersedeRun(runId, { reason = 'evidence_set_advanced', at = null } = {}) {
+  await pool.query(
+    `UPDATE "project_acceptance_run"
+        SET "superseded_at" = COALESCE($2::timestamptz, now()), "superseded_reason" = $3
+      WHERE "id" = $1::uuid`,
+    [runId, at, reason],
+  );
+}
+
+async function runState(runId, at = null) {
+  return jsonCall(
+    pool,
+    'SELECT project_acceptance_run_state_value($1::uuid, COALESCE($2::timestamptz, now())) AS result',
+    [runId, at],
+  );
+}
+
+async function concludeRun(runId) {
+  return jsonCall(pool, 'SELECT project_acceptance_run_conclude($1::uuid) AS result', [runId]);
+}
+
+async function deriveConclusion(runId) {
+  return jsonCall(
+    pool, 'SELECT project_acceptance_run_derive_conclusion($1::uuid) AS result', [runId],
+  );
+}
+
+async function stalledObligations(projectId, at = null) {
+  return jsonCall(
+    pool,
+    `SELECT project_acceptance_run_stalled_obligations(
+       $1::uuid, COALESCE($2::timestamptz, now())
+     ) AS result`,
+    [projectId, at],
+  );
+}
+
+async function runLedger(projectId) {
+  return (await pool.query(
+    `SELECT "attempt"::text AS attempt, "superseded_at", "superseded_reason", "started_at",
+            "completed_at", "verdict"::text AS verdict, "conclusion_basis"::text AS basis
+       FROM "project_acceptance_run" WHERE "project_id" = $1::uuid ORDER BY "attempt"`,
+    [projectId],
+  )).rows;
+}
+
+async function expectRejection(promise, pattern) {
+  const error = await promise.then(() => null, (value) => value);
+  assert.ok(error, `expected a typed rejection matching ${pattern}`);
+  assert.match(error.message, pattern);
+  return error;
+}
+
+let productionShape;
+let productionShapeBefore;
+
+test('a run whose every criterion is decided concludes and stamps completed_at', async () => {
+  const project = await createAcceptanceProject('run-concludes', 2);
+  const run = await openAcceptanceRun(project);
+
+  await decideCriterion(project, run, project.definitions[0], 'PASS');
+  const partial = await concludeRun(run.runId);
+  assert.equal(partial.wrote, false);
+  assert.equal(partial.state, 'EVALUATING');
+  assert.equal(partial.rejectionCode, 'ACCEPTANCE_RUN_CRITERIA_UNDECIDED');
+  assert.deepEqual(partial.derivation.undecidedOrdinals, [2]);
+
+  await decideCriterion(project, run, project.definitions[1], 'FAIL');
+  const concluded = await concludeRun(run.runId);
+  assert.equal(concluded.wrote, true);
+  assert.equal(concluded.state, 'CONCLUDED');
+  assert.equal(concluded.verdict, 'FAIL');
+  assert.ok(concluded.completedAt, 'a concluded run must carry its completion time');
+  assert.match(concluded.conclusionDigest, /^[0-9a-f]{64}$/);
+
+  const row = (await pool.query(
+    `SELECT "verdict"::text AS verdict, "completed_at", "conclusion_basis"::text AS basis,
+            "conclusion_digest", "conclusion_window_seconds"
+       FROM "project_acceptance_run" WHERE "id" = $1::uuid`,
+    [run.runId],
+  )).rows[0];
+  assert.equal(row.verdict, 'FAIL');
+  assert.notEqual(row.completed_at, null);
+  assert.equal(row.basis, 'CRITERION_PROJECTION_AND_DONE_GATE');
+  assert.equal(row.conclusion_digest, concluded.conclusionDigest);
+  assert.equal(row.conclusion_window_seconds, ACCEPTANCE_WINDOW_SECONDS);
+  evidence.invariants.acceptanceRunConcludes = true;
+  evidence.samples.acceptanceRunConclusionDigest = concluded.conclusionDigest;
+});
+
+test('being superseded is not a conclusion and can never be back-filled into one', async () => {
+  const project = await createAcceptanceProject('superseded-not-concluded', 1);
+  const pushedOut = await openAcceptanceRun(project, { attempt: 0 });
+  await supersedeRun(pushedOut.runId);
+  await openAcceptanceRun(project, { attempt: 1 });
+
+  const state = await runState(pushedOut.runId);
+  assert.equal(state.state, 'SUPERSEDED');
+  assert.equal(state.concluded, false);
+  assert.equal(state.verdict, null);
+  assert.equal(state.completedAt, null);
+  assert.equal(state.conclusionBasis, null);
+
+  const refused = await concludeRun(pushedOut.runId);
+  assert.equal(refused.wrote, false);
+  assert.equal(refused.state, 'SUPERSEDED');
+  assert.equal(refused.rejectionCode, 'ACCEPTANCE_RUN_SUPERSEDED_CANNOT_CONCLUDE');
+  assert.equal(refused.verdict, null);
+
+  await expectRejection(
+    pool.query(
+      `UPDATE "project_acceptance_run"
+          SET "verdict" = 'PASS'::"project_acceptance_verdict", "completed_at" = now(),
+              "conclusion_basis" =
+                'CRITERION_PROJECTION_AND_DONE_GATE'::"project_acceptance_run_conclusion_basis",
+              "conclusion_digest" = $2
+        WHERE "id" = $1::uuid`,
+      [pushedOut.runId, digest('forged-conclusion')],
+    ),
+    /ACCEPTANCE_RUN_SUPERSEDED_CANNOT_CONCLUDE/,
+  );
+
+  const after = await runState(pushedOut.runId);
+  assert.equal(after.state, 'SUPERSEDED');
+  assert.equal(after.concluded, false);
+  assert.equal(after.verdict, null);
+  assert.equal(after.completedAt, null);
+  evidence.invariants.supersessionIsNotAConclusion = true;
+});
+
+test('the conclusion is mechanically derived, repeatable, and has no free-text entry', async () => {
+  const project = await createAcceptanceProject('derived-conclusion', 2);
+  const run = await openAcceptanceRun(project);
+  for (const definition of project.definitions) {
+    await decideCriterion(project, run, definition, 'PASS');
+  }
+
+  const first = await deriveConclusion(run.runId);
+  const second = await deriveConclusion(run.runId);
+  assert.deepEqual(first, second, 'the same world must derive the same conclusion');
+  assert.equal(first.verdict, 'PASS');
+  assert.equal(first.basis, 'CRITERION_PROJECTION_AND_DONE_GATE');
+  assert.equal(first.reasonCode, 'ACCEPTANCE_RUN_CRITERION_PROJECTION_COMPLETE');
+  assert.match(first.conclusionDigest, /^[0-9a-f]{64}$/);
+  assert.ok(first.doneGate && typeof first.doneGate === 'object');
+  assert.equal(typeof first.doneGate.decision, 'string');
+  assert.equal(typeof first.doneGate.allowed, 'boolean');
+  assert.equal(typeof first.doneGate.reasonCode, 'string');
+
+  const signatures = (await pool.query(`
+    SELECT pg_get_function_arguments('project_acceptance_run_conclude(uuid)'::regprocedure)
+             AS conclude,
+           pg_get_function_arguments(
+             'project_acceptance_run_derive_conclusion(uuid)'::regprocedure) AS derive,
+           (SELECT array_agg(enumlabel::text ORDER BY enumsortorder)
+              FROM pg_enum
+              JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
+             WHERE pg_type.typname = 'project_acceptance_run_conclusion_basis') AS bases
+  `)).rows[0];
+  assert.equal(signatures.conclude, 'p_run uuid');
+  assert.equal(signatures.derive, 'p_run uuid');
+  assert.deepEqual(signatures.bases, ['CRITERION_PROJECTION_AND_DONE_GATE']);
+
+  // A hand-written basis without a derived verdict, completion time and digest is not a conclusion.
+  await expectRejection(
+    pool.query(
+      `UPDATE "project_acceptance_run"
+          SET "conclusion_basis" =
+                'CRITERION_PROJECTION_AND_DONE_GATE'::"project_acceptance_run_conclusion_basis"
+        WHERE "id" = $1::uuid`,
+      [run.runId],
+    ),
+    /project_acceptance_run_conclusion_chk/,
+  );
+
+  const written = await concludeRun(run.runId);
+  assert.equal(written.wrote, true);
+  assert.equal(written.conclusionDigest, first.conclusionDigest);
+  const repeat = await concludeRun(run.runId);
+  assert.equal(repeat.wrote, false);
+  assert.equal(repeat.state, 'CONCLUDED');
+  assert.equal(repeat.rejectionCode, 'ACCEPTANCE_RUN_ALREADY_CONCLUDED');
+  assert.equal(repeat.verdict, 'PASS');
+  assert.equal(repeat.conclusionDigest, first.conclusionDigest);
+  evidence.invariants.conclusionIsMechanicallyDerived = true;
+});
+
+test('a run still being evaluated reads as EVALUATING and nothing else', async () => {
+  const project = await createAcceptanceProject('state-evaluating', 2);
+  const run = await openAcceptanceRun(project);
+  await decideCriterion(project, run, project.definitions[0], 'PASS');
+  const state = await runState(run.runId);
+  assert.equal(state.state, 'EVALUATING');
+  assert.equal(state.evaluating, true);
+  assert.equal(state.concluded, false);
+  assert.equal(state.superseded, false);
+  assert.equal(state.verdict, null);
+  assert.equal(state.completedAt, null);
+  assert.equal(state.supersededAt, null);
+  assert.equal(state.stalled, false);
+});
+
+test('a run that concluded FAIL reads as CONCLUDED with its verdict, never as superseded', async () => {
+  const project = await createAcceptanceProject('state-concluded-fail', 2);
+  const run = await openAcceptanceRun(project);
+  await decideCriterion(project, run, project.definitions[0], 'PASS');
+  await decideCriterion(project, run, project.definitions[1], 'FAIL');
+  assert.equal((await concludeRun(run.runId)).wrote, true);
+  const state = await runState(run.runId);
+  assert.equal(state.state, 'CONCLUDED');
+  assert.equal(state.concluded, true);
+  assert.equal(state.evaluating, false);
+  assert.equal(state.superseded, false);
+  assert.equal(state.verdict, 'FAIL');
+  assert.ok(state.completedAt);
+  assert.equal(state.supersededAt, null);
+  assert.equal(state.stalled, false);
+});
+
+test('a run pushed out by the next evidence set reads as SUPERSEDED and carries no verdict', async () => {
+  const project = await createAcceptanceProject('state-superseded', 2);
+  const run = await openAcceptanceRun(project, { attempt: 0 });
+  await decideCriterion(project, run, project.definitions[0], 'PASS');
+  await supersedeRun(run.runId);
+  await openAcceptanceRun(project, { attempt: 1 });
+  const state = await runState(run.runId);
+  assert.equal(state.state, 'SUPERSEDED');
+  assert.equal(state.superseded, true);
+  assert.equal(state.concluded, false);
+  assert.equal(state.evaluating, false);
+  assert.equal(state.verdict, null);
+  assert.equal(state.completedAt, null);
+  assert.equal(state.supersededReason, 'evidence_set_advanced');
+  assert.equal(state.stalled, false);
+
+  const states = await jsonCall(
+    pool, 'SELECT project_acceptance_run_states($1::uuid) AS result', [project.projectId],
+  );
+  assert.deepEqual(states.map((item) => item.state), ['SUPERSEDED', 'EVALUATING']);
+  evidence.invariants.runStatesAreDistinguishable = true;
+});
+
+test('a run left open past its declared window owes a typed stalled obligation', async () => {
+  const project = await createAcceptanceProject('stalled-attempt-seven', 2);
+  for (let attempt = 0; attempt <= 6; attempt += 1) {
+    const superseded = await openAcceptanceRun(project, { attempt });
+    await supersedeRun(superseded.runId, {
+      reason: 'evidence_set_advanced',
+      at: new Date(Date.parse(ATTEMPT_SEVEN_OPENED_AT) - (7 - attempt) * 3600_000).toISOString(),
+    });
+  }
+  const current = await openAcceptanceRun(project, {
+    attempt: 7, startedAt: ATTEMPT_SEVEN_OPENED_AT,
+  });
+  productionShape = { project, current };
+  productionShapeBefore = await runLedger(project.projectId);
+  assert.equal(productionShapeBefore.length, 8);
+
+  const obligations = await stalledObligations(project.projectId);
+  assert.equal(obligations.length, 1, 'only the run that is still evaluating can be stalled');
+  const [obligation] = obligations;
+  assert.equal(obligation.kind, 'ACCEPTANCE_RUN_STALLED');
+  assert.equal(obligation.runId, current.runId);
+  assert.equal(obligation.attempt, '7');
+  assert.equal(obligation.state, 'EVALUATING');
+  assert.equal(obligation.windowSeconds, ACCEPTANCE_WINDOW_SECONDS);
+  assert.ok(obligation.openForSeconds > ACCEPTANCE_WINDOW_SECONDS);
+  assert.equal(
+    obligation.overdueBySeconds, obligation.openForSeconds - ACCEPTANCE_WINDOW_SECONDS,
+  );
+  assert.deepEqual(obligation.undecidedOrdinals, [1, 2]);
+  assert.equal(obligation.owner, 'COORDINATOR');
+  assert.equal(obligation.actor, 'COORDINATOR');
+  assert.equal(obligation.nextAction, 'acceptance.run.conclude-or-supersede');
+  assert.equal(obligation.blocksGate, false);
+  assert.equal((await runState(current.runId)).stalled, true);
+
+  const kinds = (await pool.query(`
+    SELECT array_agg(enumlabel::text ORDER BY enumsortorder) AS kinds
+      FROM pg_enum JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
+     WHERE pg_type.typname = 'project_acceptance_run_obligation_kind'
+  `)).rows[0];
+  assert.deepEqual(kinds.kinds, ['ACCEPTANCE_RUN_STALLED']);
+
+  // The window is declared per run, not baked into the query.
+  await pool.query(
+    `UPDATE "project_acceptance_run" SET "conclusion_window_seconds" = $2 WHERE "id" = $1::uuid`,
+    [current.runId, 60 * 60 * 24 * 30],
+  );
+  assert.deepEqual(await stalledObligations(project.projectId), []);
+  await pool.query(
+    `UPDATE "project_acceptance_run" SET "conclusion_window_seconds" = $2 WHERE "id" = $1::uuid`,
+    [current.runId, ACCEPTANCE_WINDOW_SECONDS],
+  );
+  assert.equal((await stalledObligations(project.projectId)).length, 1);
+  evidence.invariants.stalledRunOwesTypedObligation = true;
+});
+
+test('an all-PASS run conclusion is not a back door to project DONE', async () => {
+  const project = await createAcceptanceProject('pass-is-not-done', 2);
+  const run = await openAcceptanceRun(project);
+  for (const definition of project.definitions) {
+    await decideCriterion(project, run, definition, 'PASS');
+  }
+  const concluded = await concludeRun(run.runId);
+  assert.equal(concluded.wrote, true);
+  assert.equal(concluded.verdict, 'PASS');
+  assert.ok(concluded.completedAt);
+  assert.equal(concluded.projectStatusEffect, 'NONE');
+  assert.equal(concluded.projectDoneChannel, 'ACCOUNT_OWNER');
+
+  const after = (await pool.query(
+    'SELECT "status"::text AS status, "accepted_run_id" FROM "project" WHERE "id" = $1::uuid',
+    [project.projectId],
+  )).rows[0];
+  assert.equal(after.status, 'OPEN', 'a PASS conclusion must not move project.status');
+  assert.equal(after.accepted_run_id, null);
+
+  const denial = await expectRejection(
+    pool.query(
+      `UPDATE "project" SET "status" = 'DONE'::"project_status", "updated_at" = now()
+        WHERE "id" = $1::uuid`,
+      [project.projectId],
+    ),
+    /CANONICAL_DONE_GATE_BLOCKED:[A-Z_]+/,
+  );
+  assert.match(denial.message, /CANONICAL_DONE_GATE_BLOCKED:CANONICAL_FACT_STREAM_MISSING/);
+  assert.equal(
+    (await pool.query('SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid',
+      [project.projectId])).rows[0].status,
+    'OPEN',
+  );
+
+  // By construction, not only by outcome: the canonical gate, the DONE wall and the conclusion
+  // writer have no reach into each other.
+  const definitions = (await pool.query(`
+    SELECT pg_get_functiondef('project_canonical_done_gate(uuid,text,text)'::regprocedure) AS gate,
+           pg_get_functiondef('project_acceptance_done_gate()'::regprocedure) AS wall,
+           pg_get_functiondef('project_acceptance_run_conclude(uuid)'::regprocedure) AS conclude
+  `)).rows[0];
+  assert.doesNotMatch(definitions.gate, /project_acceptance_run|project_acceptance_conclusion/i);
+  assert.doesNotMatch(definitions.wall, /project_acceptance_run|project_acceptance_conclusion/i);
+  assert.doesNotMatch(definitions.conclude, /\bUPDATE\s+"project"\s/i);
+  assert.doesNotMatch(definitions.conclude, /\bINSERT\s+INTO\s+"project"\s*\(/i);
+  assert.doesNotMatch(definitions.conclude, /accepted_run_id|project_status/i);
+  evidence.invariants.runConclusionIsNotADoneChannel = true;
+});
+
+test('closing the current run rewrites none of the historical supersession records', async () => {
+  assert.ok(productionShape, 'the eight-run production shape must have been built');
+  const { project, current } = productionShape;
+  const history = productionShapeBefore.filter((row) => row.attempt !== '7');
+  assert.equal(history.length, 7);
+  for (const row of history) {
+    assert.equal(row.superseded_reason, 'evidence_set_advanced');
+    assert.notEqual(row.superseded_at, null);
+    assert.equal(row.verdict, null);
+    assert.equal(row.completed_at, null);
+  }
+
+  for (const definition of project.definitions) {
+    await decideCriterion(project, current, definition, 'PASS');
+  }
+  assert.equal((await concludeRun(current.runId)).wrote, true);
+
+  const afterLedger = await runLedger(project.projectId);
+  assert.deepEqual(
+    afterLedger.filter((row) => row.attempt !== '7'),
+    history,
+    'concluding the current run must leave every superseded row byte-identical',
+  );
+  const currentRow = afterLedger.find((row) => row.attempt === '7');
+  assert.equal(currentRow.verdict, 'PASS');
+  assert.equal(currentRow.basis, 'CRITERION_PROJECTION_AND_DONE_GATE');
+  assert.notEqual(currentRow.completed_at, null);
+  assert.equal(currentRow.superseded_at, null);
+  assert.deepEqual(await stalledObligations(project.projectId), []);
+
+  // The record of being replaced is write-once for the same reason a conclusion is: it is history.
+  await expectRejection(
+    pool.query(
+      `UPDATE "project_acceptance_run" SET "superseded_reason" = 'rewritten'
+        WHERE "project_id" = $1::uuid AND "attempt" = 0`,
+      [project.projectId],
+    ),
+    /ACCEPTANCE_RUN_SUPERSESSION_IMMUTABLE/,
+  );
+  assert.deepEqual(
+    (await runLedger(project.projectId)).filter((row) => row.attempt !== '7'),
+    history,
+  );
+  evidence.invariants.historicalSupersessionUntouched = true;
 });

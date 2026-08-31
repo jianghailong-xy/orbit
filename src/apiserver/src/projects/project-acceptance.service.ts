@@ -1004,6 +1004,21 @@ export class ProjectAcceptanceService {
     });
   }
 
+  /** Close the current evidence version, when its criterion projection is complete enough to be
+   * closed. The conclusion is derived inside the database from that projection plus the canonical
+   * DONE gate (migration 0215): this call supplies nothing but the run id, so there is no entry here
+   * for a verdict somebody typed. A run that still has an unjudged criterion, or that was already
+   * superseded or concluded, is left exactly as it is — and in every case the project's own status
+   * is untouched, because concluding a run is not a way to reach DONE. */
+  private static async concludeRunTx(
+    tx: Prisma.TransactionClient,
+    runId: string,
+  ): Promise<void> {
+    await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(
+      Prisma.sql`SELECT project_acceptance_run_conclude(${runId}::uuid) AS result`,
+    );
+  }
+
   private static projectedVerdict(
     criteria: AcceptanceRunCriterionRow[],
   ): ProjectAcceptanceVerdict | null {
@@ -1420,6 +1435,9 @@ export class ProjectAcceptanceService {
             run.criteria,
             await ProjectAcceptanceService.conclusionEvents(tx, projectId, run.attempt),
           );
+      // Independent of what the gate decides below: once every stated criterion has a verdict, this
+      // evidence version has said what it has to say and stops being an open question.
+      await ProjectAcceptanceService.concludeRunTx(tx, run.id);
       try {
         const gate = await this.assertDoneAllowed(tx, projectId);
         // Owner ratification and canonical-cut validity are checked first so their typed routing
@@ -1713,6 +1731,7 @@ export class ProjectAcceptanceService {
           },
           run.id,
         );
+        await ProjectAcceptanceService.concludeRunTx(tx, run.id);
         return this.readRun(tx, run.id);
       }
 
