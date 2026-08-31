@@ -80,6 +80,7 @@ function harness(options: HarnessOptions = {}) {
       },
     },
     conversationTurn: {
+      findMany: async () => [],
       updateMany: async () => {
         writes.push('turn-update');
         return { count: 1 };
@@ -87,6 +88,13 @@ function harness(options: HarnessOptions = {}) {
       findUnique: async () => ({ kind: 'message' }),
       count: async () => 0,
       findFirst: async () => null,
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => {
+        writes.push('startup-fragment-update');
+        return { count: 1 };
+      },
     },
   };
   const prisma = {

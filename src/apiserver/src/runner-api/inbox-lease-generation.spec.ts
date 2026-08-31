@@ -10,6 +10,13 @@ const GENERATION = '33333333-3333-4333-8333-333333333333';
 
 type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<unknown>;
 
+function queryText(query: unknown): string {
+  if (Array.isArray(query)) return (query as readonly string[]).join('?');
+  const strings = (query as { strings?: readonly string[] } | null)?.strings;
+  if (strings) return strings.join('?');
+  return String(query);
+}
+
 function harness(
   owned: boolean,
   activeGeneration: string | null = GENERATION,
@@ -21,7 +28,7 @@ function harness(
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       rawCalls.push(args);
-      const sql = (args[0] as readonly string[]).join('?');
+      const sql = queryText(args[0]);
       if (/SELECT id, "inbox_lease_generation"[\s\S]*FROM "session"/.test(sql)) {
         return owned
           ? [{
@@ -52,22 +59,25 @@ test('dequeue row-locks runner ownership and stamps the engine generation with t
   const h = harness(true);
 
   assert.equal(await h.dequeue(SESSION_ID, RUNNER_ID, GENERATION), null);
-  assert.equal(h.rawCalls.length, 3);
+  assert.equal(h.rawCalls.length, 4);
 
-  const lockSQL = (h.rawCalls[0][0] as readonly string[]).join('?');
+  const lockSQL = queryText(h.rawCalls[0][0]);
   assert.match(lockSQL, /"assigned_runner_id" = \?::uuid[\s\S]*FOR UPDATE/);
   assert.match(lockSQL, /"inbox_lease_owner" AS "inboxLeaseOwner", status/);
   assert.deepEqual(h.rawCalls[0].slice(1), [SESSION_ID, RUNNER_ID]);
 
-  const activeSQL = (h.rawCalls[1][0] as readonly string[]).join('?');
+  const activeSQL = queryText(h.rawCalls[1][0]);
   assert.match(activeSQL, /FROM "inbox_lease_generation"/);
   assert.match(activeSQL, /"lease_owner" IS NOT DISTINCT FROM \?::uuid/);
   assert.match(activeSQL, /"retired_at" IS NULL/);
 
-  const leaseSQL = (h.rawCalls[2][0] as readonly string[]).join('?');
+  const capabilitySQL = queryText(h.rawCalls[2][0]);
+  assert.match(capabilitySQL, /conversation_turn_startup_fragment/);
+
+  const leaseSQL = queryText(h.rawCalls[3][0]);
   assert.match(leaseSQL, /"lease_deadline_at" = now\(\) \+ \(\? \* interval '1 millisecond'\)/);
   assert.match(leaseSQL, /"lease_generation" = \?::uuid/);
-  assert.ok(h.rawCalls[2].slice(1).includes(GENERATION));
+  assert.ok(h.rawCalls[3].slice(1).includes(GENERATION));
 });
 
 test('an old long-poll generation cannot dequeue after release or replacement', async () => {

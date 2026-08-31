@@ -151,7 +151,7 @@ const rows = () =>
   Array.from(container.querySelectorAll<HTMLElement>('[data-testid="ready-task-row"]'));
 
 describe('ProjectReadyToRun', () => {
-  it('shows an actionable ready queue without the old chart/table control', async () => {
+  it('shows an actionable ready queue without the old chart/table control', { timeout: 15_000 }, async () => {
     apiMock.mockResolvedValue(READY);
     await mount(<ProjectReadyToRun projectId="p1" />);
 

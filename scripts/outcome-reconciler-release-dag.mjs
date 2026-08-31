@@ -287,10 +287,14 @@ const tokens = {
 };
 const focusPreparePostgres = process.argv.includes('--focus-prepare-postgres');
 const focusPccRebind = process.argv.includes('--focus-pcc-rebind');
-assert.equal(focusPreparePostgres && focusPccRebind, false,
+const focusRegressionRebind = process.argv.includes('--focus-regression-rebind');
+const focusedModeCount = [focusPreparePostgres, focusPccRebind, focusRegressionRebind]
+  .filter(Boolean).length;
+assert.ok(focusedModeCount <= 1,
   'only one focused Release DAG mode may be selected');
+const focusedMode = focusedModeCount === 1;
 const focusedNodeIds = new Set();
-if (focusPreparePostgres || focusPccRebind) {
+if (focusedMode) {
   const declaredNodes = new Map(plan.nodes.map((node) => [node.id, node]));
   const includeWithDependencies = (id) => {
     if (focusedNodeIds.has(id)) return;
@@ -300,8 +304,10 @@ if (focusPreparePostgres || focusPccRebind) {
     focusedNodeIds.add(id);
   };
   includeWithDependencies('prepare-postgres');
-  if (focusPccRebind) {
+  if (focusPccRebind || focusRegressionRebind) {
     includeWithDependencies('prepare-build');
+  }
+  if (focusPccRebind) {
     for (const id of [
       'suite-bootstrap',
       'suite-evaluator',
@@ -312,11 +318,15 @@ if (focusPreparePostgres || focusPccRebind) {
       'suite-watchdog-111k',
     ]) includeWithDependencies(id);
   }
+  if (focusRegressionRebind) {
+    includeWithDependencies('full-web');
+    includeWithDependencies('suite-watchdog-111k');
+  }
 }
 const expandedPlan = {
   ...plan,
   nodes: plan.nodes
-    .filter((node) => (!focusPreparePostgres && !focusPccRebind) || focusedNodeIds.has(node.id))
+    .filter((node) => !focusedMode || focusedNodeIds.has(node.id))
     .map((node) => expandedNode(node, tokens)),
 };
 const nodes = new Map(expandedPlan.nodes.map((node) => [node.id, node]));
@@ -592,17 +602,11 @@ function nodeEnvironment(node) {
     OUTCOME_RELEASE_DAG_BUILD_CONTEXT: path.join(runRoot, 'build-context.json'),
     OUTCOME_RELEASE_DAG_PREPARED_BUILD: '1',
   } : {};
-  const focusedEnvironment = focusPccRebind && node.id === 'suite-watchdog-111k' ? {
-    // A focused allocator regression must not read or require the live production deployment.
-    // The formal Release DAG retains the Watchdog live-release fence unchanged.
-    OUTCOME_WATCHDOG_LIVE_RELEASE_FENCE: 'offline',
-  } : {};
   const environmentVariables = {
     ...process.env,
     PUBLIC_ORIGIN: environment.boundInputs.PUBLIC_ORIGIN,
     ...node.environment,
     ...build,
-    ...focusedEnvironment,
     ...postgresEnvironment(node),
     OUTCOME_RELEASE_DAG_ACTIVE: '1',
     OUTCOME_RELEASE_DAG_PHASE: plan.evaluator.phase,
@@ -793,7 +797,7 @@ async function executeNode(node, attemptDeadlineMs) {
 function cleanupPostgres() {
   const context = path.join(runRoot, 'postgres-context.json');
   if (!existsSync(context)) {
-    if (!focusPreparePostgres && !focusPccRebind) return;
+    if (!focusedMode) return;
     const expected = `orbit-release-dag-pg-${binding.bindingDigest.slice(0, 12)}`;
     const inspected = run('docker', [
       'inspect', '--format', '{{ index .Config.Labels "orbit.release-dag.binding" }}', expected,
@@ -816,7 +820,7 @@ const attemptStartedAtMs = processStartedAtMs;
 const attemptDeadlineMs = attemptStartedAtMs + (plan.evaluator.schedulerDeadlineSeconds * 1000);
 // The focused rebind preflight is an observation, not a resumable formal attempt. It always
 // exercises the disposable PostgreSQL and isolated Prisma fixture from scratch.
-const completed = (focusPreparePostgres || focusPccRebind) ? new Map() : loadReusable();
+const completed = focusedMode ? new Map() : loadReusable();
 const attempted = new Set();
 const running = new Map();
 let inUse = {};
@@ -859,11 +863,15 @@ try {
 }
 
 let focusedRegression = null;
-if (focusPccRebind && completed.size === nodes.size) {
-  const focusedOutput = path.join(runRoot, 'pcc-focused-regression.json');
-  const focusedLog = path.join(logRoot, 'pcc-focused-regression.log');
+if ((focusPccRebind || focusRegressionRebind) && completed.size === nodes.size) {
+  const focusName = focusPccRebind ? 'pcc-focused-regression' : 'regression-rebind-focused';
+  const focusScript = focusPccRebind
+    ? 'outcome-reconciler-release-dag-pcc-focus.mjs'
+    : 'outcome-reconciler-release-dag-regression-focus.mjs';
+  const focusedOutput = path.join(runRoot, `${focusName}.json`);
+  const focusedLog = path.join(logRoot, `${focusName}.log`);
   const result = spawnSync(process.execPath, [
-    path.join(repo, 'scripts', 'outcome-reconciler-release-dag-pcc-focus.mjs'),
+    path.join(repo, 'scripts', focusScript),
     runRoot,
     focusedOutput,
   ], {
@@ -926,13 +934,21 @@ const attempt = {
   automaticRetries: 0,
   executionMode: focusPreparePostgres
     ? 'FOCUSED_PREPARE_POSTGRES_PREFLIGHT'
-    : focusPccRebind ? 'FOCUSED_PCC_DATABASE_REBIND' : 'FORMAL_RELEASE_DAG',
+    : focusPccRebind
+      ? 'FOCUSED_PCC_DATABASE_REBIND'
+      : focusRegressionRebind
+        ? 'FOCUSED_RELEASE_DAG_REGRESSION_REBIND'
+        : 'FORMAL_RELEASE_DAG',
   focusedRegression,
-  outcome: incomplete.length === 0 && (!focusPccRebind || focusedRegression?.outcome === 'PASS')
+  outcome: incomplete.length === 0
+    && (!(focusPccRebind || focusRegressionRebind) || focusedRegression?.outcome === 'PASS')
     ? 'PASS' : 'FAIL',
 };
 atomicJson(path.join(runRoot, 'attempt.json'), attempt);
 console.log(JSON.stringify(attempt, null, 2));
-if (focusPreparePostgres || focusPccRebind) cleanupPostgres();
-if (incomplete.length !== 0 || (focusPccRebind && focusedRegression?.outcome !== 'PASS')) process.exit(1);
-if (!focusPreparePostgres && !focusPccRebind) cleanupPostgres();
+if (focusedMode) cleanupPostgres();
+if (incomplete.length !== 0
+  || ((focusPccRebind || focusRegressionRebind) && focusedRegression?.outcome !== 'PASS')) {
+  process.exit(1);
+}
+if (!focusedMode) cleanupPostgres();

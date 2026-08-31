@@ -6,15 +6,15 @@
     "databaseId": "01a04416-6517-7329-b0b7-9926a89d86aa"
   },
   "task": {
-    "publicId": "34GPMWXHBT6PcxQ4KV3qO",
-    "databaseId": "01a05538-4d5b-71eb-a921-23f214c0b384",
-    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-pcc-rebind",
+    "publicId": "34GS9AILYltV03zzexrVh",
+    "databaseId": "01a055a0-2ea5-72bb-a3e9-4e8fc96e0549",
+    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-regression-rebind",
     "expectedExitCode": 0
   },
   "session": {
-    "publicId": "2dYsqAzyq3NF0dM96npo3N",
-    "databaseId": "56ae0eac-f630-517a-8fc7-f06b0f609b91",
-    "sourceBranch": "orbit/release-dag-target-bc59f8"
+    "publicId": "6HoxFms8qUlVFDHp32Oim6",
+    "databaseId": "ce95f840-9e22-5b4e-b4f7-2fce65fd0a96",
+    "sourceBranch": "orbit/release-dag-sha-api-web-target-8e6041"
   },
   "repository": {
     "provider": "GITHUB",

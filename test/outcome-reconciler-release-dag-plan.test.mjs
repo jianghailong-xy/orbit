@@ -54,7 +54,7 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
   const result = validatePlan(plan);
   assert.equal(plan.evaluator.acceptanceCommand, 'npm run test:outcome-reconciler:release-dag');
   assert.equal(plan.builder.acceptanceCommand,
-    'npm run test:outcome-reconciler:release-dag-pcc-rebind');
+    'npm run test:outcome-reconciler:release-dag-regression-rebind');
   assert.deepEqual({
     taskId: plan.supersededAttempt.taskId,
     sessionId: plan.supersededAttempt.sessionId,
@@ -63,8 +63,8 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
     failureFingerprint: plan.supersededAttempt.failureFingerprint,
     evidenceReuse: plan.supersededAttempt.evidenceReuse,
   }, {
-    taskId: '34GG81bW8miI0nbxFDqN6',
-    sessionId: '6rNh1hXjWnzeainpXADY90',
+    taskId: '34GPMWmm6WxUjmxCYvLxh',
+    sessionId: '42NqmQLttJLS4kzUl6XUmX',
     terminalState: 'EXITED',
     actualExitCode: 1,
     failureFingerprint: '1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153',
@@ -72,9 +72,9 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
   });
   assert.equal(plan.builder.timeoutSeconds, 1800);
   assert.equal(plan.builder.commandDigest,
-    '2a4c7402bf8b7adb6c692ce0eee4a046c61ada8c5354d06038fe3726e6ce3330');
+    'dd60f2d723df98ed4605f894751a11c0a6d63f8c128984dcdf50bb899bf80241');
   assert.equal(plan.builder.evaluationPlanDigest,
-    '44b25cad5d9c9a0926cfda911b667ff728fd59b34a9123856873ddb20b60d4eb');
+    '6c852b45dedf94260b61ce17a269ed484c8c2b523b9b0ed84d999dea00853da2');
   assert.equal(plan.evaluator.attemptTimeoutSeconds, 3600);
   assert.ok(plan.evaluator.schedulerDeadlineSeconds < plan.evaluator.attemptTimeoutSeconds);
   assert.equal(plan.evaluator.automaticRetries, 0);
@@ -91,10 +91,10 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
     assert.ok(node.timeoutSeconds > 0 && node.timeoutSeconds <= 3600, node.id);
     assert.ok(node.timeoutSeconds <= plan.evaluator.attemptTimeoutSeconds, node.id);
   }
-  const builderHarness = read('scripts/outcome-reconciler-release-dag-pcc-rebind.sh');
+  const builderHarness = read('scripts/outcome-reconciler-release-dag-regression-rebind.sh');
   const builderBudgets = [...builderHarness.matchAll(/timeout -k \d+ (\d+)/gu)]
     .map((match) => Number(match[1]));
-  assert.deepEqual(builderBudgets, [30, 180, 90, 1450, 30]);
+  assert.deepEqual(builderBudgets, [30, 180, 90, 1400, 45]);
   assert.ok(builderBudgets.reduce((total, seconds) => total + seconds, 0)
     < plan.builder.timeoutSeconds);
   let inUse = addResources({}, nodeById.get('prepare-postgres'));
@@ -211,6 +211,7 @@ test('there is one matrix orchestrator and one evidence-cut writer', () => {
   assert.equal(dagCommands.filter((command) => command.includes('test:outcome-reconciler:full-clients')).length, 0);
   const watchdog = nodeById.get('suite-watchdog-111k');
   assert.equal(watchdog.environment.OUTCOME_WATCHDOG_RUNTIME_CLOSURE, 'reuse');
+  assert.equal(watchdog.environment.OUTCOME_WATCHDOG_LIVE_RELEASE_FENCE, 'offline');
   assert.ok(watchdog.dependsOn.includes('suite-acceptance-runtime'));
 });
 
@@ -391,7 +392,7 @@ test('the inbox repair is integrated and frozen-target verification is mandatory
   assert.equal(plan.target.remoteMustRemainExactlyTarget, true);
   assert.equal(packageJson.scripts['test:outcome-reconciler:owner-ratification-inbox-routing'],
     'bash scripts/outcome-reconciler-owner-ratification-inbox-routing.sh');
-  assert.match(read('scripts/outcome-reconciler-release-dag-pcc-rebind.sh'),
+  assert.match(read('scripts/outcome-reconciler-release-dag-regression-rebind.sh'),
     /outcome-reconciler-release-dag-target-check\.mjs/u);
   const runner = read('scripts/outcome-reconciler-release-dag.mjs');
   assert.match(runner, /session_merge_receipt/u);
