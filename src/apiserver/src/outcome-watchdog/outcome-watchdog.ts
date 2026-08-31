@@ -15,6 +15,21 @@ export const WATCHDOG_SIGNAL_CODES = [
 
 export type WatchdogSignalCode = (typeof WATCHDOG_SIGNAL_CODES)[number];
 
+/**
+ * Conclusions are a second, deliberately separate output lane from `alerts`. Alerts say a probe
+ * crossed a threshold in this sample; conclusions say something about the *sequence* of samples,
+ * including something about the alert lane itself. Keeping them apart is not cosmetic: an
+ * alert-fatigue conclusion that were appended to `alerts` would change the very count it measures.
+ */
+export const WATCHDOG_CONCLUSION_CODES = [
+  'GOAL_PROGRESS_STALLED',
+  'ALERT_FATIGUE',
+] as const;
+
+export type WatchdogConclusionCode = (typeof WATCHDOG_CONCLUSION_CODES)[number];
+
+export type WatchdogProgressTransition = 'ADVANCED' | 'FLAT' | 'REGRESSED';
+
 export const WATCHDOG_MAX_PAYLOAD_BYTES = 65_536;
 export const WATCHDOG_MAX_RAW_COMMAND_OUTPUT_BYTES = 16_384;
 export const WATCHDOG_REDACTION = '[REDACTED]';
@@ -54,6 +69,8 @@ export interface WatchdogContract {
     maximumDetectionDeltaLogicalTicks: number;
     maximumRowsPerProbe: number;
     checksumSubjectsPerProbe: number;
+    progressUnitsPerProbe: number;
+    progressHistorySamples: number;
   };
   operationalSlo: WatchdogMetricContract & {
     name: string;
@@ -70,6 +87,11 @@ export interface WatchdogContract {
     collectorSha: 'RUNTIME_REQUIRED';
     targetSha: 'RUNTIME_REQUIRED';
     metrics: Record<string, WatchdogMetricContract>;
+  };
+  progressIndependence: {
+    rationale: string;
+    forbiddenSignalSources: string[];
+    permittedSignalSources: string[];
   };
   security: {
     maximumPayloadBytes: number;
@@ -118,6 +140,25 @@ export interface WatchdogAlert {
   code: WatchdogSignalCode;
   observed: number;
   threshold: number;
+}
+
+/**
+ * One sample's worth of goal-side progress. `settledUnits` counts work that reached a terminal
+ * *success*; `engagedUnits` counts work something is actively executing right now. A goal with
+ * nothing engaged is idle, not stalled, which is why both are carried rather than just the first.
+ */
+export interface WatchdogProgressObservation {
+  observedAt: string;
+  settledUnits: number;
+  outstandingUnits: number;
+  engagedUnits: number;
+  alertCount: number;
+}
+
+export interface WatchdogConclusion {
+  code: WatchdogConclusionCode;
+  observed: Record<string, number>;
+  threshold: Record<string, number>;
 }
 
 function canonical(value: unknown): string {
@@ -268,12 +309,23 @@ export function validateWatchdogContract(value: unknown): asserts value is Watch
       || contract.collector.maximumDetectionDeltaSeconds
         < contract.collector.pollIntervalSeconds
       || contract.collector.maximumRowsPerProbe < 2
-      || contract.collector.checksumSubjectsPerProbe < 1) {
+      || contract.collector.checksumSubjectsPerProbe < 1
+      || !Number.isInteger(contract.collector.progressUnitsPerProbe)
+      || contract.collector.progressUnitsPerProbe < 1
+      || !Number.isInteger(contract.collector.progressHistorySamples)
+      || contract.collector.progressHistorySamples < 2) {
     throw new Error('WATCHDOG_COLLECTOR_BOUND_INVALID');
   }
   metricShape(contract.operationalSlo, 'operationalSlo');
   for (const [name, metric] of Object.entries(contract.metrics ?? {})) metricShape(metric, name);
   if (Object.keys(contract.metrics ?? {}).length < 9) throw new Error('WATCHDOG_METRIC_SET_INCOMPLETE');
+  // The progress and alert-constancy metrics are named explicitly. A liveness-only metric set is
+  // exactly the state this collector was in while the goal it watches stopped moving for three days.
+  for (const required of ['goalProgress', 'alertConstancy'] as const) {
+    if (!contract.metrics?.[required]) {
+      throw new Error(`WATCHDOG_METRIC_REQUIRED:${required}`);
+    }
+  }
   if (!contract.canary || typeof contract.canary.denominator !== 'string'
       || contract.canary.denominator.trim() === '' || contract.canary.minSampleSize < 1
       || contract.canary.collectorSha !== 'RUNTIME_REQUIRED'
@@ -289,6 +341,17 @@ export function validateWatchdogContract(value: unknown): asserts value is Watch
   if (contract.security.maximumPayloadBytes !== WATCHDOG_MAX_PAYLOAD_BYTES
       || contract.security.maximumRawCommandOutputBytes !== WATCHDOG_MAX_RAW_COMMAND_OUTPUT_BYTES) {
     throw new Error('WATCHDOG_SECURITY_LIMIT_DRIFT');
+  }
+  const independence = contract.progressIndependence;
+  if (!independence || typeof independence.rationale !== 'string'
+      || !Array.isArray(independence.forbiddenSignalSources)
+      || !Array.isArray(independence.permittedSignalSources)
+      || independence.forbiddenSignalSources.length === 0
+      || independence.permittedSignalSources.length === 0
+      || independence.permittedSignalSources.some(
+        (source) => independence.forbiddenSignalSources.includes(source),
+      )) {
+    throw new Error('WATCHDOG_PROGRESS_INDEPENDENCE_DECLARATION_INVALID');
   }
   if (contract.capacity.taskScale < 100_000
       || contract.capacity.queryRowLimit !== contract.collector.maximumRowsPerProbe
@@ -345,6 +408,114 @@ export function evaluateWatchdogSnapshot(
   add(snapshot.checksumMismatchCount > threshold(contract, 'checksumDrift', 'mismatches'),
     'CHECKSUM_DRIFT', snapshot.checksumMismatchCount, 0);
   return alerts.sort((left, right) => left.code.localeCompare(right.code));
+}
+
+/**
+ * Classify each adjacent pair of a settled-work series. Nothing here reads a retry counter, a
+ * failure fingerprint or a convergence decision: the question "did completed work go up" is
+ * answerable from the settlement counts alone, which is the entire point of this channel.
+ */
+export function classifyWatchdogProgress(
+  series: readonly number[],
+): WatchdogProgressTransition[] {
+  return series.slice(1).map((value, index) => {
+    const previous = series[index] as number;
+    if (value > previous) return 'ADVANCED';
+    if (value < previous) return 'REGRESSED';
+    return 'FLAT';
+  });
+}
+
+/** Length of the run of trailing samples for which `same` holds against its predecessor. */
+function trailingRun<T>(
+  history: readonly T[],
+  same: (previous: T, next: T) => boolean,
+): number {
+  let run = 0;
+  for (let index = history.length - 1; index > 0; index -= 1) {
+    if (!same(history[index - 1] as T, history[index] as T)) break;
+    run += 1;
+  }
+  return run;
+}
+
+function elapsedSeconds(history: readonly WatchdogProgressObservation[], run: number): number {
+  const newest = history[history.length - 1];
+  const oldest = history[history.length - 1 - run];
+  if (!newest || !oldest) return 0;
+  const span = Date.parse(newest.observedAt) - Date.parse(oldest.observedAt);
+  return Number.isFinite(span) ? Math.max(span, 0) / 1_000 : 0;
+}
+
+/**
+ * Decide, from an ordered oldest-to-newest run of this tenant's own watchdog samples, whether the
+ * goal stopped advancing and whether the alert lane has gone constant.
+ *
+ * This is the deliberately separate second channel. The self-correction channel (convergence
+ * ledger, failure-fingerprint repeat counters) answers "should the agent change strategy"; this one
+ * answers "should a human be told". They were previously the same detector, so the single bug that
+ * disabled one disabled both, and a stalled goal reported healthy for three days. Nothing in this
+ * function, or in the SQL probe that produces its input, reads the self-correction channel.
+ */
+export function evaluateWatchdogProgress(
+  history: readonly WatchdogProgressObservation[],
+  contract: WatchdogContract,
+): WatchdogConclusion[] {
+  validateWatchdogContract(contract);
+  const conclusions: WatchdogConclusion[] = [];
+  const newest = history[history.length - 1];
+  if (!newest) return conclusions;
+
+  const progress = contract.metrics.goalProgress as WatchdogMetricContract;
+  const flatLimit = threshold(contract, 'goalProgress', 'maximumConsecutiveFlatSamples');
+  const flatWindow = threshold(contract, 'goalProgress', 'minimumFlatWindowSeconds');
+  if (history.length >= progress.minSampleSize) {
+    // A regression is not progress either, so the run is "did not advance" rather than "was equal".
+    // Otherwise a goal oscillating 36 -> 35 -> 36 would reset the run forever and never be reported.
+    const flatRun = trailingRun(history, (previous, next) => next.settledUnits <= previous.settledUnits);
+    const flatSeconds = elapsedSeconds(history, flatRun);
+    if (newest.engagedUnits > 0 && flatRun >= flatLimit && flatSeconds >= flatWindow) {
+      conclusions.push({
+        code: 'GOAL_PROGRESS_STALLED',
+        observed: {
+          consecutiveFlatSamples: flatRun,
+          flatWindowSeconds: flatSeconds,
+          settledUnits: newest.settledUnits,
+          outstandingUnits: newest.outstandingUnits,
+          engagedUnits: newest.engagedUnits,
+        },
+        threshold: {
+          maximumConsecutiveFlatSamples: flatLimit,
+          minimumFlatWindowSeconds: flatWindow,
+        },
+      });
+    }
+  }
+
+  const constancy = contract.metrics.alertConstancy as WatchdogMetricContract;
+  const minimumAlerts = threshold(contract, 'alertConstancy', 'minimumAlertCount');
+  const constantLimit = threshold(contract, 'alertConstancy', 'maximumConsecutiveIdenticalSamples');
+  const constantWindow = threshold(contract, 'alertConstancy', 'minimumConstantWindowSeconds');
+  if (history.length >= constancy.minSampleSize && newest.alertCount >= minimumAlerts) {
+    const constantRun = trailingRun(history, (previous, next) => previous.alertCount === next.alertCount);
+    const constantSeconds = elapsedSeconds(history, constantRun);
+    if (constantRun >= constantLimit && constantSeconds >= constantWindow) {
+      conclusions.push({
+        code: 'ALERT_FATIGUE',
+        observed: {
+          consecutiveIdenticalSamples: constantRun,
+          constantWindowSeconds: constantSeconds,
+          alertCount: newest.alertCount,
+        },
+        threshold: {
+          minimumAlertCount: minimumAlerts,
+          maximumConsecutiveIdenticalSamples: constantLimit,
+          minimumConstantWindowSeconds: constantWindow,
+        },
+      });
+    }
+  }
+  return conclusions.sort((left, right) => left.code.localeCompare(right.code));
 }
 
 export function watchdogCanaryMember(
