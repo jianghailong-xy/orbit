@@ -35,21 +35,6 @@ export function topologicalOrder(plan) {
   const nodes = new Map(plan.nodes.map((node) => [node.id, node]));
   const indegree = new Map(plan.nodes.map((node) => [node.id, 0]));
   const children = new Map(plan.nodes.map((node) => [node.id, []]));
-  const postgresPolicies = plan.postgresIsolation?.nodes;
-  if (plan.postgresIsolation?.schemaVersion !== 1
-      || plan.postgresIsolation?.allocator
-        !== 'ATTEMPT_BOUND_NODE_AND_CASE_DISPOSABLE_DATABASE_ROLE_V2'
-      || plan.postgresIsolation?.concurrentShardPolicy
-        !== 'UNIQUE_DATABASE_AND_ROLE_PER_GLOBAL_CASE_INDEX'
-      || typeof postgresPolicies !== 'object' || postgresPolicies === null) {
-    throw new Error('Release DAG PostgreSQL isolation policy is incomplete');
-  }
-  const postgresNodeIds = new Set(plan.nodes
-    .filter((node) => node.usesSharedPostgres === true).map((node) => node.id));
-  if (Object.keys(postgresPolicies).length !== postgresNodeIds.size
-      || Object.keys(postgresPolicies).some((id) => !postgresNodeIds.has(id))) {
-    throw new Error('Release DAG PostgreSQL isolation policies do not exactly cover its nodes');
-  }
   for (const node of plan.nodes) {
     for (const dependency of node.dependsOn) {
       indegree.set(node.id, indegree.get(node.id) + 1);
@@ -75,6 +60,20 @@ export function validatePlan(plan) {
     throw new Error('unsupported release DAG contract');
   }
   const postgresPolicies = plan.postgresIsolation?.nodes;
+  if (plan.postgresIsolation?.schemaVersion !== 1
+      || plan.postgresIsolation?.allocator
+        !== 'ATTEMPT_BOUND_NODE_AND_CASE_DISPOSABLE_DATABASE_ROLE_V2'
+      || plan.postgresIsolation?.concurrentShardPolicy
+        !== 'UNIQUE_DATABASE_AND_ROLE_PER_GLOBAL_CASE_INDEX'
+      || typeof postgresPolicies !== 'object' || postgresPolicies === null) {
+    throw new Error('Release DAG PostgreSQL isolation policy is incomplete');
+  }
+  const postgresNodeIds = new Set(plan.nodes
+    .filter((node) => node.usesSharedPostgres === true).map((node) => node.id));
+  if (Object.keys(postgresPolicies).length !== postgresNodeIds.size
+      || Object.keys(postgresPolicies).some((id) => !postgresNodeIds.has(id))) {
+    throw new Error('Release DAG PostgreSQL isolation policies do not exactly cover its nodes');
+  }
   const superseded = plan.supersededAttempt;
   const supersededBinding = superseded?.binding;
   const bindingFields = [
