@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "89c6fb6c1b0b082f2698733a5e75fe59e1cd70d3b281054bce917aef14805d30",
+  "declaredDagPlanDigest": "a660ba0df8638126925f8670a9d5a59d9ca64264199a09be9238e52d23a2e35b",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GWrlngwd6e1AfHXq4hG",
   "supersededAttempt": {
@@ -287,7 +287,7 @@
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs"
     ],
     "digests": {
-      "package.json": "87c8cd0c6301ccc625d0dcf90432f1925f2b7803cc95f081aaf272f1aa0dc2b3",
+      "package.json": "6a2056024c6e6dbcfb2c13f9875c4a4b91faac5d3545d0998c5bb1dbebf60095",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
       "contracts/outcome-reconciler-authoritative-target.json": "0d1df5e81be57dc75b7bf023dad41f22180aebf86368bcaf7100dc4512c2e96e",
       "contracts/outcome-reconciler-release-frontier.json": "73b89c2ee3cd463aa7fbef555f6f8e4219ab6256f87ac4c677c932336ac1215b",
