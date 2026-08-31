@@ -241,6 +241,11 @@ export function evaluateExecutableAttempt(result: ExecutableAttemptResult): {
 /**
  * Finite convergence for an attempt-ending fact. A mismatch is a criterion conclusion, while
  * infrastructure/process terminations retain the goal and vary the next action by budget.
+ *
+ * `sameFingerprintCount` counts this failure over the whole supersession lineage, not over one
+ * Task -- a loop that files a fresh successor per failure gives every Task exactly one attempt, so
+ * a per-Task count is the constant 1 and no budget is ever spent. See the caller in
+ * `runner-api.controller.ts` for the relation that defines the lineage.
  */
 export function continuationAfterExecutableAttempt(
   result: ExecutableAttemptResult,
@@ -267,6 +272,19 @@ export function continuationAfterExecutableAttempt(
       goalActionable: true,
       kind: 'DIAGNOSIS',
       reasonCode: `ATTEMPT_${result.terminationKind}_FINGERPRINT_REPEATED`,
+    };
+  }
+  // A SUCCESSOR is one more whole attempt budget spent on the same failure. Past
+  // `maximumAttempts` occurrences this fingerprint has already outlived a complete budget -- a
+  // count only the lineage can reach, since one Task cannot exceed its own -- so handing it
+  // another identical successor is the loop this bounds. Route it for diagnosis instead: only
+  // DIAGNOSIS opens a continuation obligation, so this is what reaches the Failure Continuation
+  // Controller and lets it change the diagnostic path (ALTERNATE_DIAGNOSIS and beyond).
+  if (sameFingerprintCount > maximumAttempts) {
+    return {
+      goalActionable: true,
+      kind: 'DIAGNOSIS',
+      reasonCode: `ATTEMPT_${result.terminationKind}_LINEAGE_BUDGET_EXHAUSTED`,
     };
   }
   return {
