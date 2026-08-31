@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fullApiCaseIdentity } from '../scripts/outcome-reconciler-release-dag-database.mjs';
 import {
   CASE_FAILED_TESTS,
@@ -2215,3 +2216,275 @@ assert.equal(strictGuards.length, 8);
 for (const [name, assertGuard] of strictGuards) {
   test(`the strict Release DAG guard is unweakened: ${name}`, assertGuard);
 }
+
+// --- Disposable resource ownership ------------------------------------------------------------
+// The 2026-08-31 formal attempt exited 1 at 10:52:51 and its disposable PostgreSQL container was
+// still running at 12:15, holding 734 MiB while the host reached load 101 with no free memory.
+// These exercise the production guard from a child process, one real exit path at a time, over
+// real containers that only ever carry a binding label this file minted for the one test using it.
+
+const disposableFixture = path.join(repo, 'test/fixtures/release-dag-disposable-exit-path.mjs');
+const disposableRunner = read('scripts/outcome-reconciler-release-dag.mjs');
+
+// The structural gate re-runs this file inside a sandbox whose `docker` is a refusing shim, so the
+// container-driven exit paths are not registered there. Not registering rather than skipping is
+// deliberate: that gate asserts `# skipped 0`, and a skip inside it would read as a hole in the
+// gate rather than as a regression that runs in the ordinary invocation above it.
+const containerTest = process.env.ORBIT_RELEASE_DAG_PLAN_GATE_NESTED ? () => {} : test;
+
+function docker(args, { allowFailure = false } = {}) {
+  const result = spawnSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (!allowFailure && result.status !== 0) {
+    throw new Error(`docker ${args.join(' ')} failed: ${result.stderr ?? result.stdout}`);
+  }
+  return (result.stdout ?? '').trim();
+}
+
+// A real Release DAG binding digest, unique per test, so no two tests can ever see each other's
+// containers and no container outside the test owns the label being swept.
+function disposableBinding(seed) {
+  return deriveBinding({
+    plan,
+    targetSha: sha256(seed).slice(0, 40),
+    targetReceiptDigest,
+    environment,
+  }).bindingDigest;
+}
+
+// Deliberately without orbit.release-dag.managed, which a concurrent formal attempt sweeps by
+// binding mismatch: the fixture has to outlive other sessions on this host, and the ownership
+// under test reads the binding label alone.
+function startDisposable(name, bindingDigest) {
+  docker(['run', '--detach', '--name', name,
+    '--label', `orbit.release-dag.binding=${bindingDigest}`,
+    '--entrypoint', 'sleep', plan.environment.postgresImage, '600']);
+  return name;
+}
+
+function boundContainers(bindingDigest) {
+  return docker(['ps', '--all', '--quiet',
+    '--filter', `label=orbit.release-dag.binding=${bindingDigest}`]).split('\n').filter(Boolean);
+}
+
+function containerExists(name) {
+  return docker(['inspect', '--format', '{{.Id}}', name], { allowFailure: true }) !== '';
+}
+
+function exitPath(bindingDigest, mode, { contextPath = '' } = {}) {
+  const directory = mkdtempSync(path.join(tmpdir(), 'release-dag-disposable-'));
+  const documentPath = path.join(directory, 'document.json');
+  const result = spawnSync(process.execPath,
+    [disposableFixture, bindingDigest, documentPath, mode, '', contextPath],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const document = JSON.parse(readFileSync(documentPath, 'utf8'));
+  rmSync(directory, { recursive: true, force: true });
+  return { exitCode: result.status, document };
+}
+
+async function interruptedExitPath(bindingDigest) {
+  const directory = mkdtempSync(path.join(tmpdir(), 'release-dag-disposable-'));
+  const documentPath = path.join(directory, 'document.json');
+  const readyPath = path.join(directory, 'ready');
+  const child = spawn(process.execPath,
+    [disposableFixture, bindingDigest, documentPath, 'sigterm', readyPath, ''],
+    { stdio: ['ignore', 'pipe', 'pipe'] });
+  const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  for (let attempt = 0; attempt < 200 && !existsSync(readyPath); attempt += 1) {
+    await delay(50);
+  }
+  assert.ok(existsSync(readyPath), 'the interrupted exit path never installed its guard');
+  child.kill('SIGTERM');
+  const result = await exited;
+  const document = JSON.parse(readFileSync(documentPath, 'utf8'));
+  rmSync(directory, { recursive: true, force: true });
+  return { exitCode: result.code, document };
+}
+
+containerTest('a successful attempt leaves no container carrying its binding label', () => {
+  const bindingDigest = disposableBinding('disposable-success');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  try {
+    startDisposable(container, bindingDigest);
+    const { exitCode, document } = exitPath(bindingDigest, 'success');
+    assert.equal(exitCode, 0);
+    assert.equal(document.kind, 'orbit.outcome-reconciler.release-dag-disposable-cleanup');
+    assert.equal(document.reason, 'PROCESS_EXIT');
+    assert.deepEqual(document.removed.map(({ container: name }) => name), [container]);
+    assert.equal(document.resourcesRemaining, 0);
+    assert.equal(document.outcome, 'CLEAN');
+    assert.deepEqual(boundContainers(bindingDigest), []);
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+});
+
+containerTest('a formal attempt that exits on a failed node leaves no container either', () => {
+  // The regression fixture is the 2026-08-31 attempt: 39 of the plan's 45 nodes succeeded and
+  // full-api-shard-3 failed, so the evaluator exited 1 from the middle of the file.
+  const bindingDigest = disposableBinding('disposable-node-failure');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  const order = topologicalOrder(plan);
+  const failedNode = 'full-api-shard-3';
+  assert.equal(plan.nodes.length, 45);
+  assert.ok(order.includes(failedNode));
+  const attempt = {
+    executionMode: 'FORMAL_RELEASE_DAG',
+    nodeCount: plan.nodes.length,
+    successfulNodes: order.filter((id) => id !== failedNode).slice(0, 39),
+    failedNodes: [failedNode],
+    outcome: 'FAIL',
+  };
+  assert.equal(attempt.successfulNodes.length, 39);
+  assert.equal(attempt.successfulNodes.length + 6, attempt.nodeCount);
+  try {
+    startDisposable(container, bindingDigest);
+    const { exitCode, document } = exitPath(bindingDigest, 'node-failure');
+    assert.equal(exitCode, 1, 'the regression fixture must reproduce the exit code that leaked');
+    assert.deepEqual(document.removed.map(({ container: name }) => name), [container]);
+    assert.equal(document.resourcesRemaining, 0);
+    assert.equal(document.outcome, 'CLEAN');
+    assert.deepEqual(boundContainers(bindingDigest), []);
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+});
+
+containerTest('an uncaught exception leaves no container carrying its binding label', () => {
+  const bindingDigest = disposableBinding('disposable-uncaught');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  try {
+    startDisposable(container, bindingDigest);
+    const { exitCode, document } = exitPath(bindingDigest, 'uncaught');
+    assert.equal(exitCode, 1);
+    assert.equal(document.resourcesRemaining, 0);
+    assert.equal(document.outcome, 'CLEAN');
+    assert.deepEqual(boundContainers(bindingDigest), []);
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+});
+
+containerTest('SIGTERM leaves no container carrying its binding label', async () => {
+  const bindingDigest = disposableBinding('disposable-sigterm');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  try {
+    startDisposable(container, bindingDigest);
+    const { exitCode, document } = await interruptedExitPath(bindingDigest);
+    assert.equal(exitCode, 143, 'a signalled evaluator must still run cleanup and then exit 128+15');
+    assert.equal(document.reason, 'SIGNAL_SIGTERM');
+    assert.equal(document.resourcesRemaining, 0);
+    assert.equal(document.outcome, 'CLEAN');
+    assert.deepEqual(boundContainers(bindingDigest), []);
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+});
+
+containerTest('a missing postgres context falls back to the binding label instead of abandoning cleanup', () => {
+  const bindingDigest = disposableBinding('disposable-missing-context');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  const absentContext = path.join(tmpdir(), `release-dag-absent-context-${bindingDigest.slice(0, 12)}.json`);
+  assert.ok(!existsSync(absentContext));
+  try {
+    startDisposable(container, bindingDigest);
+    const { document } = exitPath(bindingDigest, 'cleanup', { contextPath: absentContext });
+    assert.equal(document.strategy, 'BINDING_LABEL_SWEEP');
+    assert.deepEqual(document.declaredContext, { path: absentContext, present: false });
+    assert.deepEqual(document.removed.map(({ container: name }) => name), [container]);
+    assert.equal(document.resourcesRemaining, 0);
+    assert.deepEqual(boundContainers(bindingDigest), []);
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+  // Formal mode is not allowed to have a shorter cleanup path than the focused modes.
+  assert.ok(!disposableRunner.includes('if (!focusedMode) return;'),
+    'formal mode still abandons cleanup when the postgres context is missing');
+  assert.ok(!disposableRunner.includes('cleanupPostgres'),
+    'the mode-conditional cleanup the exit paths skipped is still there');
+});
+
+containerTest('a container cleanup cannot remove is reported, not silently counted as clean', () => {
+  const bindingDigest = disposableBinding('disposable-unremovable');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  try {
+    startDisposable(container, bindingDigest);
+    const { document } = exitPath(bindingDigest, 'cleanup-with-unremovable');
+    assert.equal(document.outcome, 'RESOURCES_REMAINING');
+    assert.equal(document.resourcesRemaining, 1);
+    assert.deepEqual(document.removed, []);
+    assert.deepEqual(document.failures.map(({ kind }) => kind).sort(),
+      ['CONTAINER_REMOVE_FAILED', 'CONTAINER_SURVIVED_REMOVAL']);
+    for (const failure of document.failures) assert.equal(failure.container, container);
+    assert.ok(containerExists(container), 'the negative control never had a removable container');
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+});
+
+containerTest('cleanup removes only the binding it owns, never a container that merely looks like it', () => {
+  const bindingDigest = disposableBinding('disposable-safety');
+  const foreignDigest = disposableBinding('disposable-safety-foreign');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  const neighbour = `${container}-concurrent-session`;
+  assert.notEqual(bindingDigest, foreignDigest);
+  try {
+    startDisposable(container, bindingDigest);
+    startDisposable(neighbour, foreignDigest);
+    const { document } = exitPath(bindingDigest, 'success');
+    assert.deepEqual(document.removed.map(({ container: name }) => name), [container]);
+    assert.equal(document.selector, `label=orbit.release-dag.binding=${bindingDigest}`);
+    assert.ok(!containerExists(container));
+    assert.ok(containerExists(neighbour),
+      'a container sharing the name prefix but not the binding label was destroyed');
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+    docker(['rm', '--force', '--volumes', neighbour], { allowFailure: true });
+  }
+});
+
+containerTest('a disposable container outliving the threshold is a typed remediation, not a log line', () => {
+  const bindingDigest = disposableBinding('disposable-leak');
+  const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
+  try {
+    startDisposable(container, bindingDigest);
+    const { document } = exitPath(bindingDigest, 'detect-leak');
+    assert.equal(document.kind, 'orbit.outcome-reconciler.release-dag-disposable-leak-remediation');
+    assert.equal(document.outcome, 'LEAK_DETECTED');
+    assert.equal(document.failureMode, 'DISPOSABLE_POSTGRES_LEAK_STARVES_HOST');
+    assert.equal(document.thresholdSeconds, 900);
+    assert.deepEqual(document.leaks.map(({ container: name }) => name), [container]);
+    assert.ok(document.leaks.every(({ ageSeconds }) => ageSeconds >= document.thresholdSeconds));
+    assert.deepEqual(document.remediation, {
+      action: 'REMOVE_BINDING_LABELLED_DISPOSABLE_CONTAINERS',
+      scope: 'EXACT_BINDING_LABEL_MATCH_ONLY',
+      selector: `label=orbit.release-dag.binding=${bindingDigest}`,
+      containers: [container],
+    });
+    const remediated = exitPath(bindingDigest, 'remediate-leak').document;
+    assert.equal(remediated.outcome, 'LEAK_DETECTED');
+    assert.equal(remediated.applied.outcome, 'CLEAN');
+    assert.equal(remediated.applied.reason, 'LEAK_REMEDIATION');
+    assert.deepEqual(boundContainers(bindingDigest), []);
+  } finally {
+    docker(['rm', '--force', '--volumes', container], { allowFailure: true });
+  }
+});
+
+test('the evaluator installs the cleanup guard before it can admit or fail a node', () => {
+  assert.ok(disposableRunner.includes(
+    "import { guardDisposableResources } from './outcome-reconciler-release-dag-disposable.mjs';"),
+  'the evaluator does not use the shared disposable resource guard');
+  const installedAt = disposableRunner.indexOf('guardDisposableResources({');
+  assert.ok(installedAt > 0);
+  assert.ok(installedAt < disposableRunner.indexOf('while (completed.size < nodes.size)'),
+    'the guard is installed after the execution loop it exists to survive');
+  assert.ok(installedAt < disposableRunner.indexOf('const completed = focusedMode'),
+    'the guard is installed after checkpoint resume can throw');
+  for (const wiring of [
+    "contextPath: path.join(runRoot, 'postgres-context.json')",
+    'onManifest: recordDisposableCleanup',
+    // The manifest is a fact of the attempt, so a failed cleanup reaches the attempt document.
+    'disposableCleanup: manifest',
+    'disposable-cleanup.json',
+  ]) assert.ok(disposableRunner.includes(wiring), `the evaluator is missing wiring: ${wiring}`);
+});
