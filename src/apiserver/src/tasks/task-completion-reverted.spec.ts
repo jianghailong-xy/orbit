@@ -51,6 +51,9 @@ function makeService(verifications = 0) {
         lookups.push({ op: 'count', where });
         return verifications;
       },
+      // The aggregation pass a status write schedules walks this task's closure, which this
+      // fixture's world does not populate.
+      findMany: async () => [],
     },
     taskListEvent: {
       upsert: async ({ create }: { create: ListEventWrite }) => {

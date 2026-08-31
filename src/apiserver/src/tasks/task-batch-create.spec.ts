@@ -55,6 +55,9 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
     task: {
       count: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.filter((id) => owned.has(id)).length,
+      // The aggregation pass that follows a batch walks each created task's closure. This fixture
+      // writes no parent, verification or supersession edge, so the closure is empty.
+      findMany: async () => [],
     },
   } as never;
   const service = new TasksService(prisma, {} as never, {

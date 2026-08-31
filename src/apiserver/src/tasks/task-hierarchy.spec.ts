@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
+import { isFailureCoordinationRead } from '../test-support/prisma-transaction-double';
 import { TasksService } from './tasks.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -48,6 +49,12 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
     if (sql.includes('changed(id) AS') && sql.includes('family_probe(id) AS')) {
       calls.push('publish:affected-rows');
       return [{ id: null, requiresResync: false }];
+    }
+    // A task-detail read also carries the failure-coordination rollup. Give it its own label so
+    // an order assertion says which statement it means rather than quoting the whole statement.
+    if (isFailureCoordinationRead(sql)) {
+      calls.push('failure-coordination');
+      return [];
     }
     // Labelled by the table it locks: the owner lock is `... FROM "user" ... FOR UPDATE`.
     calls.push(
@@ -312,13 +319,15 @@ test('the cycle walk runs inside the locked transaction, not before it', async (
 
   await service.update(OWNER_ID, TASK_ID, { parentTaskId: PARENT_ID } as never);
 
-  // `get()`'s read comes first (outside), then everything that decides and writes is inside one
+  // `get()`'s read comes first (outside) — its row read and the failure-coordination rollup that
+  // rides along with every task detail — then everything that decides and writes is inside one
   // transaction, behind the lock. No rank-30 pre-lock here: a re-point writes the task row once,
   // and PostgreSQL only re-runs `task_creator_session_id_fkey` on a SECOND write of a row this
   // transaction already wrote (common/lock-order.ts, I2) — which a dependency replacement or a
   // supersession does and this does not.
   assert.deepEqual(calls, [
     'reReadTask',
+    'failure-coordination',
     'BEGIN',
     'lock:user',
     'reReadTask',
@@ -454,7 +463,8 @@ test('acceptance criteria are replaced when sent and cleared by null', async () 
 
 // The guarantee this whole phase rests on: an update that says nothing about a project or a parent
 // behaves exactly as it did before the columns existed — same admission reads and no owner lock.
-// The post-commit affected-row read belongs to realtime publication, not hierarchy admission.
+// The post-commit affected-row read belongs to realtime publication, and the failure-coordination
+// rollup to the detail read that opens every update; neither is a hierarchy admission question.
 test('an update that mentions neither column asks no hierarchy admission questions', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
@@ -489,6 +499,7 @@ test('an update that mentions neither column asks no hierarchy admission questio
   // task has been re-filed since, the guess holds the old project while the AFTER trigger reaches
   // for the new one — the same inversion, one step late, and committing rather than deadlocking.
   assert.deepEqual(calls, [
+    'failure-coordination',
     'BEGIN',
     'raw:SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE',
     'raw:SELECT DISTINCT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ANY($1::uuid[]) AND t."owner_id" = $2::uuid',
@@ -523,7 +534,7 @@ test('a status write on a task with no project stays transaction-free', async ()
 
   await service.update(OWNER_ID, TASK_ID, { status: TaskStatus.OPEN } as never);
 
-  assert.deepEqual(calls, ['updateTask', 'publish:affected-rows']);
+  assert.deepEqual(calls, ['failure-coordination', 'updateTask', 'publish:affected-rows']);
 });
 
 // batch-create shares taskCreateData with create, so it would otherwise be a way to write the

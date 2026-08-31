@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 
 const OWNER = '00000000-0000-7000-8000-000000000001';
@@ -8,6 +9,9 @@ const SESSION = '00000000-0000-7000-8000-0000000000b1';
 function fixture(adopted: boolean) {
   const writes: Array<Record<string, unknown>> = [];
   const lifecycle: string[] = [];
+  // Discarding a candidate ends the Session, and every end settles undelivered CURRENT_WORK. This
+  // fixture has none queued, so both reads must still be answerable and neither write may fire.
+  const currentWork = currentWorkTerminalizationDouble();
   const row = {
     id: SESSION,
     ownerId: OWNER,
@@ -35,18 +39,21 @@ function fixture(adopted: boolean) {
         return { ...row };
       },
     },
-    conversationTurn: { updateMany: async () => ({ count: 0 }) },
+    conversationTurn: currentWork.conversationTurn,
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const realtime: any = {
     notifyInbox: () => undefined,
     requestCancel: () => undefined,
     publishSessionUpdated: () => undefined,
+    publishQueuedTurnsChanged: () => undefined,
     publishSessionLifecycleChanged: (id: string) => lifecycle.push(id),
   };
   return {
     service: new SessionsService(prisma, {} as never, realtime),
     writes,
     lifecycle,
+    currentWork,
   };
 }
 
@@ -69,4 +76,22 @@ test('an adopted coordinator candidate is preserved without any Session write', 
 
   assert.deepEqual(f.writes, []);
   assert.deepEqual(f.lifecycle, []);
+});
+
+test('discarding an unbound candidate asks both CURRENT_WORK ledgers and writes to neither', async () => {
+  const f = fixture(false);
+
+  await f.service.discardProjectCoordinatorCandidate(OWNER, SESSION);
+
+  // Both reads happen even though the answer is empty: the delegate has to exist for real, and
+  // the historical drift was a double that only owned `updateMany` and so never proved the read.
+  assert.equal(f.currentWork.calls.steerFinds.length, 1);
+  assert.equal(f.currentWork.calls.startupFinds.length, 1);
+  // Ending the Session still answers its open turns — that write is not a delivery receipt. With
+  // no candidate to settle, no terminal CURRENT_WORK receipt may be written on either ledger.
+  const receipts = f.currentWork.calls.steerWrites.filter(
+    (write) => 'deliveryStatus' in (write.data as Record<string, unknown>),
+  );
+  assert.deepEqual(receipts, []);
+  assert.deepEqual(f.currentWork.calls.startupWrites, []);
 });

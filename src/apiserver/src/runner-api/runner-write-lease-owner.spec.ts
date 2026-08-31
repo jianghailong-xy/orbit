@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -198,16 +199,19 @@ test('legacy omitted owners are accepted only through the SQL NULL-safe fence', 
     const h = harness();
     await invoke(h.controller);
     assert.ok(h.writes.length > 0);
-    const sql = (h.rawCalls[0][0] as readonly string[]).join('?');
-    assert.match(sql, /"inbox_lease_owner" IS NOT DISTINCT FROM \?::uuid/);
-    assert.equal(h.rawCalls[0][1], null);
+    // Rendered through the shared renderer rather than joining `args[0]` directly: a composed
+    // `Prisma.Sql` reaching this assertion has no `join`, and that TypeError reads as a failure
+    // of the controller instead of a stale double.
+    const lock = renderRawQuery(h.rawCalls[0]);
+    assert.match(lock.text, /"inbox_lease_owner" IS NOT DISTINCT FROM \?::uuid/);
+    assert.equal(lock.values[0], null);
   }
 });
 
 test('write leaseOwner UUIDs are normalized and malformed values fail before a transaction', async () => {
   const normalized = harness();
   await normalized.controller.events({ id: RUNNER_ID }, SESSION_ID, eventBatch(OWNER.toUpperCase()));
-  assert.equal(normalized.rawCalls[0][1], OWNER);
+  assert.equal(renderRawQuery(normalized.rawCalls[0]).values[0], OWNER);
 
   for (const invoke of [
     (controller: RunnerApiController) => controller.events({ id: RUNNER_ID }, SESSION_ID, eventBatch('bad')),

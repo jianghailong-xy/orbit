@@ -100,6 +100,10 @@ function fixture(options: FixtureOptions = {}) {
       supersededByTaskId: WINNER_ID,
       terminalReason: 'SUPERSEDED',
     }),
+    // The post-commit aggregation pass walks the created task's closure. Nothing here has a
+    // parent, a verifier or a supersession edge to recompute, so the closure is empty — but the
+    // delegate has to exist, or the pass fails and production only warns about it.
+    findMany: async () => [],
     create: async ({ data }: { data: Row }) => {
       inserts.push(data);
       if (appearsOnInsert) {

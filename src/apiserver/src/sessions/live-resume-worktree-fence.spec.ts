@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +68,18 @@ function makeService(
       count: async ({ where }: { where: Record<string, unknown> }) =>
         'leaseDeadlineAt' in where ? 0 : earlierExecutable,
     },
+    // createTurn checks BOTH durable receipt tables for the client turn id while holding the
+    // Session lock. No resume in this file replays a settled key, so the startup ledger answers
+    // "never used" — but it has to answer, because production reads it unconditionally.
+    conversationTurnStartupFragment: {
+      findUnique: async () => null,
+    },
+    // The steer routing decision reads the assigned runner's declared capabilities. This runner
+    // declares none, which is what keeps every case here on the queued placement they are about:
+    // a runner that announced mid-turn steer would be answering a different question.
+    runner: {
+      findUnique: async () => ({ capabilities: [] }),
+    },
   };
   const prisma = {
     session: {
@@ -106,8 +119,14 @@ test('a live resume preserves createTurn\'s row-locked queued placement', async 
   assert.equal(result.placement, 'queued');
 });
 
-function sql(call: unknown[] | undefined): string {
-  return ((call?.[0] as readonly string[] | undefined) ?? []).join('?');
+/**
+ * Both `$queryRaw` calling conventions reach this double on the same resume: the Session row lock
+ * is a tagged template, and the in-flight probe that follows it is a composed `Prisma.Sql`. A
+ * renderer that only knew the first threw `args[0].join is not a function` on the second, which
+ * read as a failure of the code under test.
+ */
+function raw(call: unknown[] | undefined) {
+  return renderRawQuery(call ?? []);
 }
 
 for (const tc of [
@@ -154,8 +173,12 @@ for (const tc of [
       { turnId: 'turn-2', seq: 2, kind: 'message', placement: 'accepted' },
     );
 
-    assert.equal(h.lockCalls.length, 1);
-    assert.match(sql(h.lockCalls[0]), /FOR UPDATE/);
+    // Two statements, one of each shape: take the row lock, then ask whether a turn is live.
+    assert.equal(h.lockCalls.length, 2);
+    assert.equal(raw(h.lockCalls[0]).shape, 'tagged-template');
+    assert.match(raw(h.lockCalls[0]).text, /FROM "session".*FOR UPDATE/s);
+    assert.equal(raw(h.lockCalls[1]).shape, 'prisma-sql');
+    assert.match(raw(h.lockCalls[1]).text, /FROM "conversation_turn"/);
     assert.deepEqual(h.outerUpdates, []);
     assert.equal(h.lockedUpdates.length, 1);
     const data = (h.lockedUpdates[0] as { data: Record<string, unknown> }).data;
@@ -207,7 +230,11 @@ for (const tc of [
       kind: 'message',
       placement: 'accepted',
     });
-    assert.equal(h.lockCalls.length, 1);
+    assert.equal(h.lockCalls.length, 2);
+    assert.deepEqual(
+      h.lockCalls.map((call) => raw(call).shape),
+      ['tagged-template', 'prisma-sql'],
+    );
     assert.deepEqual(h.outerUpdates, []);
     assert.equal(h.turnCreates(), 1);
     assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
