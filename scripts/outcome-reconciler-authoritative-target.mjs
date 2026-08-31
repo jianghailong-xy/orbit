@@ -100,6 +100,14 @@ assert.equal(inventory.historicalEvidencePolicy,
 assert.equal(releaseDag.builderTaskId, inventory.taskId);
 assert.equal(releaseDag.builder.sourceBranch, inventory.sourceBranch);
 assert.equal(releaseDag.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
+// Every other identity in the receipt lookup below is read from the Release DAG builder, so a
+// rebind that moves the builder cannot leave them behind. The branch was the one field read from
+// this inventory instead, which is how it stayed on a two-generation-old branch whose receipt
+// attests a superseded target: the lookup then matched nothing and the node failed with a bare
+// "receipt is missing". Tying it to the branch the rest of the contract already agrees on makes
+// that drift a contract error at the top of the run rather than a mystery at the query.
+assert.equal(inventory.authoritativeReceiptLookup.sourceBranch, inventory.sourceBranch,
+  'the authoritative receipt lookup names a different branch than the declared source branch');
 
 if (!allowUnpushed) git('fetch', '--quiet', 'origin', 'refs/heads/main:refs/remotes/origin/main');
 

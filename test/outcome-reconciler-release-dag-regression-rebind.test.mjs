@@ -243,7 +243,10 @@ test('the current successor identity and every implementation/package-lock diges
   assert.equal(authoritative.taskId, plan.builder.taskId);
   assert.equal(authoritative.sourceBranch, plan.builder.sourceBranch);
   assert.equal(authoritative.lineage.remoteMainObservedBeforeIntegration,
-    'cf786a39e1b2b8eaf1f8fb62d02ff6411199c33a');
+    '0791fa7d01ac3c5ad96b91265373440cdddd021e');
+  // The lookup branch is the one identity the authoritative-target node reads from the inventory
+  // rather than from the builder, so it is the one a rebind can silently leave a generation behind.
+  assert.equal(authoritative.authoritativeReceiptLookup.sourceBranch, plan.builder.sourceBranch);
   assert.equal(plan.implementationInputs.paths.length,
     Object.keys(plan.implementationInputs.digests).length);
   assert.equal(new Set(plan.implementationInputs.paths).size,
