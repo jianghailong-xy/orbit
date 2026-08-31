@@ -271,9 +271,24 @@ const tokens = {
   EVIDENCE_CUT_DIGEST: binding.evidenceCutDigest,
   BINDING_DIGEST: binding.bindingDigest,
 };
+const focusPreparePostgres = process.argv.includes('--focus-prepare-postgres');
+const focusedNodeIds = new Set();
+if (focusPreparePostgres) {
+  const declaredNodes = new Map(plan.nodes.map((node) => [node.id, node]));
+  const includeWithDependencies = (id) => {
+    if (focusedNodeIds.has(id)) return;
+    const node = declaredNodes.get(id);
+    assert.ok(node, `focused Release DAG node is missing: ${id}`);
+    for (const dependency of node.dependsOn) includeWithDependencies(dependency);
+    focusedNodeIds.add(id);
+  };
+  includeWithDependencies('prepare-postgres');
+}
 const expandedPlan = {
   ...plan,
-  nodes: plan.nodes.map((node) => expandedNode(node, tokens)),
+  nodes: plan.nodes
+    .filter((node) => !focusPreparePostgres || focusedNodeIds.has(node.id))
+    .map((node) => expandedNode(node, tokens)),
 };
 const nodes = new Map(expandedPlan.nodes.map((node) => [node.id, node]));
 const order = topologicalOrder(expandedPlan);
@@ -698,7 +713,17 @@ async function executeNode(node, attemptDeadlineMs) {
 
 function cleanupPostgres() {
   const context = path.join(runRoot, 'postgres-context.json');
-  if (!existsSync(context)) return;
+  if (!existsSync(context)) {
+    if (!focusPreparePostgres) return;
+    const expected = `orbit-release-dag-pg-${binding.bindingDigest.slice(0, 12)}`;
+    const inspected = run('docker', [
+      'inspect', '--format', '{{ index .Config.Labels "orbit.release-dag.binding" }}', expected,
+    ], { allowFailure: true });
+    if (inspected.status === 0 && inspected.stdout === binding.bindingDigest) {
+      run('docker', ['rm', '-fv', expected], { allowFailure: true });
+    }
+    return;
+  }
   const result = run('timeout', [
     '-k', '5', '30', 'bash',
     'scripts/outcome-reconciler-release-dag-prepare.sh', 'cleanup-postgres', context,
@@ -710,7 +735,9 @@ function cleanupPostgres() {
 
 const attemptStartedAtMs = processStartedAtMs;
 const attemptDeadlineMs = attemptStartedAtMs + (plan.evaluator.schedulerDeadlineSeconds * 1000);
-const completed = loadReusable();
+// The focused rebind preflight is an observation, not a resumable formal attempt. It always
+// exercises the disposable PostgreSQL and isolated Prisma fixture from scratch.
+const completed = focusPreparePostgres ? new Map() : loadReusable();
 const attempted = new Set();
 const running = new Map();
 let inUse = {};
@@ -775,9 +802,13 @@ const attempt = {
   timedOutNodes: timedOut,
   incompleteNodes: incomplete,
   automaticRetries: 0,
+  executionMode: focusPreparePostgres
+    ? 'FOCUSED_PREPARE_POSTGRES_PREFLIGHT'
+    : 'FORMAL_RELEASE_DAG',
   outcome: incomplete.length === 0 ? 'PASS' : 'FAIL',
 };
 atomicJson(path.join(runRoot, 'attempt.json'), attempt);
 console.log(JSON.stringify(attempt, null, 2));
+if (focusPreparePostgres) cleanupPostgres();
 if (incomplete.length !== 0) process.exit(1);
-cleanupPostgres();
+if (!focusPreparePostgres) cleanupPostgres();

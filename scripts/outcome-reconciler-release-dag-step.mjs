@@ -166,10 +166,33 @@ if (action === 'preflight') {
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
 } else if (action === 'postgres-context') {
   const [output, container, admin, _password, host, port, systemIdentifier, version,
-    migrations, lastMigration, currentTemplate, beforeOwnerRoutingTemplate, imageId] = args;
-  assert.ok(imageId,
-    'usage: release-dag-step postgres-context OUTPUT CONTAINER ADMIN PASSWORD HOST PORT SYSTEM VERSION MIGRATIONS LAST CURRENT BEFORE IMAGE_ID');
+    migrations, beforeMigrations, lastMigration, currentTemplate, beforeOwnerRoutingTemplate,
+    imageId, prismaFixturePath] = args;
+  assert.ok(prismaFixturePath,
+    'usage: release-dag-step postgres-context OUTPUT CONTAINER ADMIN PASSWORD HOST PORT SYSTEM VERSION MIGRATIONS BEFORE_MIGRATIONS LAST CURRENT BEFORE IMAGE_ID PRISMA_FIXTURE');
   assert.equal(_password, 'ord_disposable_password');
+  const prismaFixture = JSON.parse(readFileSync(prismaFixturePath, 'utf8'));
+  const { artifactDigest: fixtureArtifactDigest, ...fixtureBody } = prismaFixture;
+  assert.equal(fixtureArtifactDigest, sha256(canonical(fixtureBody)));
+  assert.equal(prismaFixture.outcome, 'PASS');
+  assert.equal(prismaFixture.targetSha, binding.targetSha);
+  assert.equal(prismaFixture.packageLock.target.sha256,
+    fileEvidence(path.join(repo, 'package-lock.json')).sha256);
+  assert.equal(prismaFixture.packageLock.target.sha256,
+    prismaFixture.packageLock.installed.sha256);
+  assert.equal(prismaFixture.packageLock.targetEqualsInstalled, true);
+  assert.equal(prismaFixture.regression.reproducedBeforeRepair, true);
+  assert.equal(prismaFixture.regression.absentAfterRepair, true);
+  assert.equal(prismaFixture.regression.oldFailureFingerprint,
+    "Cannot find module 'prisma/config'");
+  assert.equal(prismaFixture.generatedClient.schema.sha256,
+    prismaFixture.sources.formattedFixtureSchema.sha256);
+  assert.equal(existsSync(prismaFixture.isolation.stage), false,
+    'isolated Prisma stage was not removed after migration deployment');
+  const repositoryMigrations = execFileSync('find', [
+    path.join(repo, 'src/apiserver/prisma/migrations'),
+    '-mindepth', '1', '-maxdepth', '1', '-type', 'd', '-printf', '%f\n',
+  ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
   const body = {
     schemaVersion: 1,
     kind: 'orbit.outcome-reconciler.release-dag-postgres-context',
@@ -183,15 +206,39 @@ if (action === 'preflight') {
     systemIdentifier,
     version,
     migrations: Number(migrations),
+    beforeMigrations: Number(beforeMigrations),
     lastMigration,
+    migrationFrontier: {
+      repositoryCount: repositoryMigrations.length,
+      beforeOwnerRoutingCount: Number(beforeMigrations),
+      currentCount: Number(migrations),
+      lastMigration,
+      ownerRoutingDeltaApplied: true,
+    },
     currentTemplate,
     beforeOwnerRoutingTemplate,
     imageId,
+    prismaFixture: {
+      path: path.relative(repo, path.resolve(prismaFixturePath)),
+      artifactDigest: fixtureArtifactDigest,
+      packageLock: prismaFixture.packageLock,
+      packages: prismaFixture.packages,
+      regression: prismaFixture.regression,
+      sources: prismaFixture.sources,
+      generatedClient: prismaFixture.generatedClient,
+      isolation: {
+        ...prismaFixture.isolation,
+        stageRemoved: true,
+      },
+    },
     generatedAt: new Date().toISOString(),
   };
   assert.equal(version, '16.14');
   assert.match(imageId, /^sha256:[0-9a-f]{64}$/u);
   assert.ok(body.migrations >= 210);
+  assert.equal(body.migrations, repositoryMigrations.length);
+  assert.equal(body.beforeMigrations, body.migrations - 1);
+  assert.equal(body.lastMigration, repositoryMigrations.at(-1));
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
 } else if (action === 'full-api-inventory') {
   const [output] = args;

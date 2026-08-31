@@ -59,12 +59,26 @@ export function validatePlan(plan) {
   if (plan?.schemaVersion !== 1 || plan?.kind !== 'orbit.outcome-reconciler.release-evaluation-dag') {
     throw new Error('unsupported release DAG contract');
   }
-  if (!/^[0-9A-Za-z]+$/u.test(plan.supersededAttempt?.taskId ?? '')
-      || !/^[0-9A-Za-z]+$/u.test(plan.supersededAttempt?.sessionId ?? '')
-      || !SHA.test(plan.supersededAttempt?.preservedTip ?? '')
-      || plan.supersededAttempt?.terminalState !== 'TIMED_OUT'
-      || plan.supersededAttempt?.evidenceReuse !== 'NONE') {
-    throw new Error('superseded timed-out attempt policy is incomplete');
+  const superseded = plan.supersededAttempt;
+  const supersededBinding = superseded?.binding;
+  const bindingFields = [
+    'targetReceiptDigest', 'environmentDigest', 'evaluationPlanDigest', 'dagPlanDigest',
+    'evidenceCutDigest', 'bindingDigest',
+  ];
+  const validExitedFailure = superseded?.terminalState === 'EXITED'
+    && Number.isInteger(superseded.actualExitCode) && superseded.actualExitCode !== 0
+    && DIGEST.test(superseded.failureFingerprint ?? '');
+  const validTimedOutFailure = superseded?.terminalState === 'TIMED_OUT';
+  if (!/^[0-9A-Za-z]+$/u.test(superseded?.taskId ?? '')
+      || !/^[0-9A-Za-z]+$/u.test(superseded?.sessionId ?? '')
+      || !SHA.test(superseded?.preservedTip ?? '')
+      || (!validExitedFailure && !validTimedOutFailure)
+      || superseded?.evidenceReuse !== 'NONE'
+      || superseded?.stalePolicy
+        !== 'TARGET_OR_PLAN_CHANGE_INVALIDATES_ALL_CHECKPOINTS_AND_THE_EVIDENCE_CUT'
+      || supersededBinding?.targetSha !== superseded.preservedTip
+      || bindingFields.some((field) => !DIGEST.test(supersededBinding?.[field] ?? ''))) {
+    throw new Error('superseded failed attempt policy is incomplete');
   }
   if (!Array.isArray(plan.nodes) || plan.nodes.length === 0) throw new Error('release DAG has no nodes');
   if (plan.builder?.taskId !== plan.builderTaskId
@@ -104,6 +118,10 @@ export function validatePlan(plan) {
   }
   if (!Array.isArray(plan.integratedDeliveries) || plan.integratedDeliveries.length === 0) {
     throw new Error('the DAG omits required integrated deliveries');
+  }
+  if (!DIGEST.test(plan.declaredDagPlanDigest ?? '')
+      || plan.declaredDagPlanDigest !== dagPlanDigest(plan)) {
+    throw new Error('declared Release DAG plan digest is stale');
   }
   for (const delivery of plan.integratedDeliveries) {
     if (!/^[0-9A-Za-z]+$/u.test(delivery.taskId ?? '')

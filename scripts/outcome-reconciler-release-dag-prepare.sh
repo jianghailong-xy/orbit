@@ -163,6 +163,8 @@ case "$ACTION" in
     BEFORE_OWNER_TEMPLATE='ord_template_before_owner_routing'
     IMAGE="${OUTCOME_RELEASE_DAG_PG_IMAGE:-postgres:16-alpine}"
     STAGE="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-before-owner-routing"
+    PRISMA_FIXTURE_MANIFEST="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-before-owner-routing-fixture.json"
+    STAGE_API="$STAGE/src/apiserver"
 
     while IFS= read -r STALE_CONTAINER; do
       [ -n "$STALE_CONTAINER" ] || continue
@@ -214,31 +216,32 @@ case "$ACTION" in
     [ "$VERSION" = '16.14' ] || { echo "unexpected PostgreSQL version: $VERSION" >&2; exit 1; }
 
     REPOSITORY_MIGRATIONS="$(find "$API/prisma/migrations" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')"
-    echo '==> release-dag prepare-postgres: apply migrations through 0209 exactly once'
+    echo '==> release-dag prepare-postgres: materialize target-lock-isolated Prisma fixture'
+    node "$REPO/scripts/outcome-reconciler-release-dag-prisma-fixture.mjs" \
+      "$STAGE" "$PRISMA_FIXTURE_MANIFEST"
+
+    echo '==> release-dag prepare-postgres: apply every target migration except owner routing'
     docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
       -c "CREATE DATABASE $BEFORE_OWNER_TEMPLATE" >/dev/null
     BEFORE_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$BEFORE_OWNER_TEMPLATE"
-    rm -rf -- "$STAGE"
-    mkdir -p "$STAGE"
-    cp -R "$API/prisma" "$STAGE/prisma"
-    cp "$API/prisma.config.ts" "$STAGE/prisma.config.ts"
-    rm -rf -- "$STAGE/prisma/migrations/0210_owner_ratification_inbox_eligibility"
-    ( cd "$STAGE" && DATABASE_URL="$BEFORE_URL" "$API/node_modules/.bin/prisma" \
-      migrate deploy --config prisma.config.ts >/dev/null )
-    rm -rf -- "$STAGE"
+    rm -rf -- "$STAGE_API/prisma/migrations/0210_owner_ratification_inbox_eligibility"
+    ( cd "$STAGE_API" && DATABASE_URL="$BEFORE_URL" \
+      node node_modules/prisma/build/index.js migrate deploy --config prisma.config.ts >/dev/null )
     BEFORE_MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$BEFORE_OWNER_TEMPLATE" -tAc \
       'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
     [ "$BEFORE_MIGRATIONS" -eq $((REPOSITORY_MIGRATIONS - 1)) ] || {
-      echo "pre-0210 migration mismatch applied=$BEFORE_MIGRATIONS repository=$REPOSITORY_MIGRATIONS" >&2
+      echo "pre-owner-routing migration mismatch applied=$BEFORE_MIGRATIONS repository=$REPOSITORY_MIGRATIONS" >&2
       exit 1
     }
 
-    echo '==> release-dag prepare-postgres: clone 0209 and apply only the current delta'
+    echo '==> release-dag prepare-postgres: clone pre-owner fixture and reach current frontier'
     docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
       -c "CREATE DATABASE $CURRENT_TEMPLATE TEMPLATE $BEFORE_OWNER_TEMPLATE" >/dev/null
     CURRENT_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$CURRENT_TEMPLATE"
-    ( cd "$API" && DATABASE_URL="$CURRENT_URL" node node_modules/prisma/build/index.js \
-      migrate deploy --schema prisma/schema.prisma >/dev/null )
+    cp -R "$API/prisma/migrations/0210_owner_ratification_inbox_eligibility" \
+      "$STAGE_API/prisma/migrations/0210_owner_ratification_inbox_eligibility"
+    ( cd "$STAGE_API" && DATABASE_URL="$CURRENT_URL" \
+      node node_modules/prisma/build/index.js migrate deploy --config prisma.config.ts >/dev/null )
     MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$CURRENT_TEMPLATE" -tAc \
       'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
     LAST_MIGRATION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$CURRENT_TEMPLATE" -tAc \
@@ -248,11 +251,13 @@ case "$ACTION" in
       echo "migration frontier mismatch applied=$MIGRATIONS repository=$REPOSITORY_MIGRATIONS" >&2
       exit 1
     }
+    rm -rf -- "$STAGE"
 
     node "$REPO/scripts/outcome-reconciler-release-dag-step.mjs" postgres-context \
       "$OUTPUT" "$CONTAINER" "$ADMIN" "$PASSWORD" '127.0.0.1' "$PORT" \
-      "$SYSTEM_ID" "$VERSION" "$MIGRATIONS" "$LAST_MIGRATION" \
-      "$CURRENT_TEMPLATE" "$BEFORE_OWNER_TEMPLATE" "$OBSERVED_IMAGE_ID"
+      "$SYSTEM_ID" "$VERSION" "$MIGRATIONS" "$BEFORE_MIGRATIONS" "$LAST_MIGRATION" \
+      "$CURRENT_TEMPLATE" "$BEFORE_OWNER_TEMPLATE" "$OBSERVED_IMAGE_ID" \
+      "$PRISMA_FIXTURE_MANIFEST"
     ;;
 
   cleanup-postgres)

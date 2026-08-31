@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "taskId": "34G78wVKFWCGmxuj2aLhw",
-  "sourceBranch": "orbit/release-evaluation-dag-target-84fe31",
+  "taskId": "34GG81QJ2G1b5USb00rPS",
+  "sourceBranch": "orbit/release-dag-prisma-target-4063c0",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
     "mode": "BUILDER_AGENT_MERGE_RECEIPT",
-    "rule": "declared target is the receipt source/target-after SHA for session 4sHH6oQfYvls1guZ4qOyS7 and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
+    "rule": "declared target is the receipt source/target-after SHA for session 4LeiBLaxefRdW21bdsTEFR and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
   },
   "lineage": {
-    "remoteMainObservedBeforeIntegration": "0c6e2da94f27a4efa7c07a13b382d5d38c54864e",
-    "localMainIntegrationBase": "0c6e2da94f27a4efa7c07a13b382d5d38c54864e",
+    "remoteMainObservedBeforeIntegration": "4ec981e58c3f0b38b7c67637dedf53a67cb0bfcf",
+    "localMainIntegrationBase": "4ec981e58c3f0b38b7c67637dedf53a67cb0bfcf",
     "historyPolicy": "NO_FORCE_NO_RESET_NO_REWRITE"
   },
   "immutableVerifier": {
@@ -251,6 +251,46 @@
       "candidateCommit": "19165b1b59ac0cfc5054ea584645d57a070a0cb7",
       "requiredAncestor": true,
       "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34GBC8A6vhR6pVdPigwFU",
+      "taskStatus": "DONE",
+      "sessionId": "7SgJ8IF41zzAkMGwTgF9Dl",
+      "branch": "orbit/failure-continuation-7ef590",
+      "candidateCommit": "f129029567f280ae5b89996ec1771808ff0b72a6",
+      "successfulSessionCommit": "d523222e2c42d29de1dcde782cd01967c6171515",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34GBC8Q012TDNY0TrFQs8",
+      "taskStatus": "DONE",
+      "sessionId": "40MUG4Egk58aWr59d1pftK",
+      "branch": "orbit/owner-93dca0",
+      "candidateCommit": "e0cb652c0ae4e1f9a6fe1805433bdefda90aeb9a",
+      "successfulSessionCommit": "d81c2a59bdab9e2a46827cee81e5154fa86bf51e",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34GBC8XtdyVjJkkT8kxlx",
+      "taskStatus": "DONE",
+      "sessionId": "o8eFJOal2UppRwpWfIo7L",
+      "branch": "orbit/successor-68c9e3",
+      "candidateCommit": "c76126892c7129cff63d6e739fba7b35e8ba0737",
+      "successfulSessionCommit": "2b943120fe5c58661603ec2af60a8c44b076217c",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
+    },
+    {
+      "taskId": "34GBC8bVICSuRcT7XZht3",
+      "taskStatus": "DONE",
+      "sessionId": "6cQKuZqxcW4OiS8xuFvsBK",
+      "branch": "orbit/ui-project-attention-a9b06c",
+      "candidateCommit": "cb42e0d4498fbe5f420ff6597cde237eb9aa8442",
+      "successfulSessionCommit": "cb42e0d4498fbe5f420ff6597cde237eb9aa8442",
+      "requiredAncestor": true,
+      "mergeReceiptIds": []
     }
   ],
   "recordedMergeReceipts": [
@@ -423,7 +463,7 @@
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/release-evaluation-dag-target-84fe31",
+    "sourceBranch": "orbit/release-dag-prisma-target-4063c0",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

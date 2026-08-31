@@ -29,7 +29,7 @@ assert.equal(remoteMain, head, 'remote refs/heads/main does not equal the frozen
 assert.equal(run('git', ['status', '--porcelain=v1', '--untracked-files=no']), '',
   'frozen target checkout has tracked changes');
 assert.equal(authoritative.taskId, plan.builderTaskId);
-assert.equal(authoritative.sourceBranch, 'orbit/release-evaluation-dag-target-84fe31');
+assert.equal(authoritative.sourceBranch, plan.builder.sourceBranch);
 assert.equal(plan.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
 assert.equal(plan.target.requiredReceipt.sessionDatabaseId, plan.builder.sessionDatabaseId);
 assert.equal(plan.target.requiredReceipt.sourceBranch, plan.builder.sourceBranch);

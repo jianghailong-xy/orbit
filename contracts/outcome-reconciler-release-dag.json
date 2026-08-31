@@ -1,29 +1,42 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
+  "declaredDagPlanDigest": "428f9127a48f56edbc856e49761a35107c8e8fa8892906755866f46d9c6e9b75",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "builderTaskId": "34G78wVKFWCGmxuj2aLhw",
+  "builderTaskId": "34GG81QJ2G1b5USb00rPS",
   "supersededAttempt": {
-    "taskId": "34FPjTbN1Y1KM1XZzVaHx",
-    "sessionId": "3pbmdZbj29xhjM0AXepDD6",
-    "preservedTip": "e8308e7e933e6b8cee4f6d7f9f8edea7c60b5489",
-    "terminalState": "TIMED_OUT",
+    "taskId": "34G78wiI5uXnNieL1YyAo",
+    "sessionId": "71OcGPdjrSgXo0PC1x1Nsg",
+    "preservedTip": "fa29dbef903ddf19905c5a5f60e9ca2931cff6e7",
+    "terminalState": "EXITED",
+    "actualExitCode": 1,
+    "failureFingerprint": "1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153",
     "evidenceReuse": "NONE",
-    "reason": "partial ledgers and manually observed PASS output are not a fresh exact-binding evidence cut"
+    "reason": "prepare-postgres failed because the isolated checkout could not resolve prisma/config; the partial fa29 evidence cut is preserved as stale audit history only",
+    "binding": {
+      "targetSha": "fa29dbef903ddf19905c5a5f60e9ca2931cff6e7",
+      "targetReceiptDigest": "70d0faad88a9ba3e54c8ffec258a3eabff2703a9abe9e8bf6e81553b0557da3a",
+      "environmentDigest": "eae45b76aa0b4ccb2e19ff13c8b0fe1cce0526a0c687e6141fc189875052d173",
+      "evaluationPlanDigest": "21e4e031a6caf1ec6a837c6f4be2628d24ab465b3736216e6486cb4687c10dc1",
+      "dagPlanDigest": "7826b4d221447aca1fb0a46da4d8ba5d2056a7693534050ccaa577af1ee58076",
+      "evidenceCutDigest": "48730fb099ed8cd59f63e6a1b1da628e1cde3ea731f0a99b8622740beedcb13b",
+      "bindingDigest": "0e4d8c87f3373b08ff64d42f55a0fbaef9610e0cce2cec071fb49b2accc85c24"
+    },
+    "stalePolicy": "TARGET_OR_PLAN_CHANGE_INVALIDATES_ALL_CHECKPOINTS_AND_THE_EVIDENCE_CUT"
   },
   "builder": {
-    "taskId": "34G78wVKFWCGmxuj2aLhw",
-    "taskDatabaseId": "01a05290-9f1e-756f-90bd-98d3a9354fd8",
-    "sessionId": "4sHH6oQfYvls1guZ4qOyS7",
-    "sessionDatabaseId": "a0313df2-755d-59e6-b093-67c28e8fba7f",
-    "sourceBranch": "orbit/release-evaluation-dag-target-84fe31",
-    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-plan",
-    "commandDigest": "c1af8365d44bfe56b4dafc58bfc399747887d23ab5fc5fcf37a2d508e279a14d",
-    "evaluationPlanDigest": "006b5ed74bc7ad7e6a614d38f7c6e7bcaec81ce71d82f21cfe40c298e095bb45",
+    "taskId": "34GG81QJ2G1b5USb00rPS",
+    "taskDatabaseId": "01a053df-d26a-739e-b6a9-c766117d185e",
+    "sessionId": "4LeiBLaxefRdW21bdsTEFR",
+    "sessionDatabaseId": "8ee78396-0d3a-5889-a08c-bc4bec21054d",
+    "sourceBranch": "orbit/release-dag-prisma-target-4063c0",
+    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-rebind",
+    "commandDigest": "146e668160613865e3c379accf4e1ca62f4745f25f1290a0e0cac6941788d398",
+    "evaluationPlanDigest": "0fad0bf7ada065ed351c3dc9ac5222c8d87724d0f37c64b3151adf11a27ed709",
     "timeoutSeconds": 1800
   },
   "evaluator": {
-    "taskId": "34G78wiI5uXnNieL1YyAo",
+    "taskId": "34GG81bW8miI0nbxFDqN6",
     "phase": "PREDEPLOY_EVALUATION",
     "deploymentTaskId": "34G78wmlyJ1g4TAbijdSD",
     "acceptanceCommand": "npm run test:outcome-reconciler:release-dag",
@@ -41,8 +54,8 @@
     "remoteTrackingRef": "refs/remotes/origin/main",
     "resolution": "BUILDER_AGENT_MERGE_RECEIPT",
     "requiredReceipt": {
-      "sessionDatabaseId": "a0313df2-755d-59e6-b093-67c28e8fba7f",
-      "sourceBranch": "orbit/release-evaluation-dag-target-84fe31",
+      "sessionDatabaseId": "8ee78396-0d3a-5889-a08c-bc4bec21054d",
+      "sourceBranch": "orbit/release-dag-prisma-target-4063c0",
       "targetBranch": "main",
       "recordedBy": "AGENT",
       "results": ["MERGED", "ALREADY_MERGED"]
@@ -73,8 +86,129 @@
         "test: resolve shared package from current worktree"
       ],
       "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8A6vhR6pVdPigwFU",
+      "successfulSessionId": "7SgJ8IF41zzAkMGwTgF9Dl",
+      "successfulCommit": "d523222e2c42d29de1dcde782cd01967c6171515",
+      "validatedTargetSha": "0c6e2da94f27a4efa7c07a13b382d5d38c54864e",
+      "manifest": "build/outcome-reconciler-failure-continuation-trigger-manifest.json",
+      "resultDigest": "0bd88a27562c4df5c97cc43b80fd25d346bba19cb3c43b78c80469bff341273c",
+      "commits": [
+        "f129029567f280ae5b89996ec1771808ff0b72a6"
+      ],
+      "requiredSubjects": [
+        "test: add failure-continuation-trigger reconciler verification"
+      ],
+      "patchEquivalence": {
+        "sourceCommit": "ce97d43c1b51bc13c2bd93791c03025b3692eebd",
+        "integratedCommit": "f129029567f280ae5b89996ec1771808ff0b72a6",
+        "stablePatchId": "a47a518e60d554ddeebfb5a896e3c4c19f223522"
+      },
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8Q012TDNY0TrFQs8",
+      "successfulSessionId": "40MUG4Egk58aWr59d1pftK",
+      "validatedTargetSha": "d81c2a59bdab9e2a46827cee81e5154fa86bf51e",
+      "manifest": "build/outcome-reconciler-failure-routing-manifest.json",
+      "resultDigest": "897aa1891fc99c8e3d181ec8d39323dbea3a2e63a39a7d41266ecba2f3289499",
+      "commits": [
+        "e0cb652c0ae4e1f9a6fe1805433bdefda90aeb9a"
+      ],
+      "requiredSubjects": [
+        "feat: add deterministic failure continuation routing"
+      ],
+      "patchEquivalence": {
+        "sourceCommit": "d81c2a59bdab9e2a46827cee81e5154fa86bf51e",
+        "integratedCommit": "e0cb652c0ae4e1f9a6fe1805433bdefda90aeb9a",
+        "stablePatchId": "3a264c52cd8c2aee634e7cb23e4a3093d1c0dc45"
+      },
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8XtdyVjJkkT8kxlx",
+      "successfulSessionId": "o8eFJOal2UppRwpWfIo7L",
+      "validatedTargetSha": "2b943120fe5c58661603ec2af60a8c44b076217c",
+      "manifest": "build/outcome-reconciler-failure-successor-handoff-manifest.json",
+      "resultDigest": "619a3e82d14e65d3e58ee4abc7ac939af7fc8c549e9b408a3affcc8cbba1d0f3",
+      "commits": [
+        "c76126892c7129cff63d6e739fba7b35e8ba0737"
+      ],
+      "requiredSubjects": [
+        "feat: atomically hand off failed continuations"
+      ],
+      "patchEquivalence": {
+        "sourceCommit": "2b943120fe5c58661603ec2af60a8c44b076217c",
+        "integratedCommit": "c76126892c7129cff63d6e739fba7b35e8ba0737",
+        "stablePatchId": "130280cfc93bdfe9ee88098a9ac4f28ef5e077c7"
+      },
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8bVICSuRcT7XZht3",
+      "successfulSessionId": "6cQKuZqxcW4OiS8xuFvsBK",
+      "validatedTargetSha": "cb42e0d4498fbe5f420ff6597cde237eb9aa8442",
+      "manifest": "build/outcome-reconciler-failure-coordination-e2e-manifest.json",
+      "resultDigest": "c4d3b711fd1bbcec3cc1aa08bd92bf3cd0aca6534e6e418df32a184939f3fd20",
+      "commits": [
+        "e19f2f147fd15a21c06dd6d6e9bc95658a3b8915",
+        "baeea0018ab5abc7842d6b8e1eef5f4368015e81",
+        "9298d915d46cfe05a9c78ff9f9bded932c0332a8",
+        "cb42e0d4498fbe5f420ff6597cde237eb9aa8442"
+      ],
+      "requiredSubjects": [
+        "feat: unify failure coordination surfaces",
+        "fix: resolve isolated Prisma client generation",
+        "test: align project attention regression coverage",
+        "test: cover runner failure coordination route"
+      ],
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
     }
   ],
+  "integrationCandidate": {
+    "tip": "cb42e0d4498fbe5f420ff6597cde237eb9aa8442",
+    "requiredBase": "4ec981e58c3f0b38b7c67637dedf53a67cb0bfcf",
+    "strategy": "FAST_FORWARD_THEN_APPEND_TARGET_REBIND_REPAIR",
+    "duplicateCherryPicks": false
+  },
+  "implementationInputs": {
+    "revision": "failure-continuation-target-rebind-v2",
+    "paths": [
+      "package.json",
+      "package-lock.json",
+      "contracts/outcome-reconciler-authoritative-target.json",
+      "contracts/outcome-reconciler-release-frontier.json",
+      "scripts/outcome-reconciler-authoritative-target.mjs",
+      "scripts/outcome-reconciler-release-dag-lib.mjs",
+      "scripts/outcome-reconciler-release-dag-prepare.sh",
+      "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs",
+      "scripts/outcome-reconciler-release-dag-rebind-manifest.mjs",
+      "scripts/outcome-reconciler-release-dag-rebind.sh",
+      "scripts/outcome-reconciler-release-dag-step.mjs",
+      "scripts/outcome-reconciler-release-dag-target-check.mjs",
+      "scripts/outcome-reconciler-release-dag.mjs",
+      "test/outcome-reconciler-release-dag-plan.test.mjs",
+      "test/outcome-reconciler-release-dag-rebind.test.mjs"
+    ],
+    "digests": {
+      "package.json": "6a209ee9793fa02a17537a5b5f373ea50fb2b2153462664afbcb9028596899cc",
+      "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
+      "contracts/outcome-reconciler-authoritative-target.json": "1683903a2850d6b2f1f9fbe66d58ba3e2cb786f3ed11dbe90a23cf7e45093159",
+      "contracts/outcome-reconciler-release-frontier.json": "d7558d0c47ea77706c9ed8313bc1842cfcb775b95e9cfcc8192dcfb9e2eacd79",
+      "scripts/outcome-reconciler-authoritative-target.mjs": "7f60c4c8f61199634fb6019a71bd01c038faf6885fff38d5477e904c54542492",
+      "scripts/outcome-reconciler-release-dag-lib.mjs": "cdba35a1f1efa1a7fd00d76870ac4b1fb65aef00d0de26b8e8f6da577a6fceee",
+      "scripts/outcome-reconciler-release-dag-prepare.sh": "83614e493612f8f503aac205ad174d5db68ef41895a15c65a939368bcddffd6c",
+      "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs": "ecd95eda1e601cae804139d5c8ba743cc3955df512de9d7cd61e4cb0d61be7c5",
+      "scripts/outcome-reconciler-release-dag-rebind-manifest.mjs": "e1e3c314b7ce59c6ae10a8a475b0d309cdb377e232086c269203f6bf1938803b",
+      "scripts/outcome-reconciler-release-dag-rebind.sh": "e9a946ad1fcbfd73b48deea951fca81150335e2af0c351918cf32fbbcd7bb115",
+      "scripts/outcome-reconciler-release-dag-step.mjs": "33749571f6e78ecdcfc3968e47e96d31064dca74e8dc1588c14c790e1ef6ee63",
+      "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
+      "scripts/outcome-reconciler-release-dag.mjs": "c64bb760cf1c6a99b15e4447423323ef60d5e5832c77d042091cf4e0e3ed1965",
+      "test/outcome-reconciler-release-dag-plan.test.mjs": "1939c3134c2dbf2d8344a59737aa42b9a7784a6377ae9364f6666c466807616b",
+      "test/outcome-reconciler-release-dag-rebind.test.mjs": "bb35d3d12a8545f3924544df2af3b9846671ec60319473840bce1038fd045a98"
+    }
+  },
   "environment": {
     "identity": "orbit-release-linux-docker-postgres16-node26-go-swift61-v1",
     "platform": "linux",

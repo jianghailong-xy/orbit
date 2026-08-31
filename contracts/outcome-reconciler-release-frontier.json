@@ -6,15 +6,15 @@
     "databaseId": "01a04416-6517-7329-b0b7-9926a89d86aa"
   },
   "task": {
-    "publicId": "34G78wVKFWCGmxuj2aLhw",
-    "databaseId": "01a05290-9f1e-756f-90bd-98d3a9354fd8",
-    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-plan",
+    "publicId": "34GG81QJ2G1b5USb00rPS",
+    "databaseId": "01a053df-d26a-739e-b6a9-c766117d185e",
+    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-rebind",
     "expectedExitCode": 0
   },
   "session": {
-    "publicId": "4sHH6oQfYvls1guZ4qOyS7",
-    "databaseId": "a0313df2-755d-59e6-b093-67c28e8fba7f",
-    "sourceBranch": "orbit/release-evaluation-dag-target-84fe31"
+    "publicId": "4LeiBLaxefRdW21bdsTEFR",
+    "databaseId": "8ee78396-0d3a-5889-a08c-bc4bec21054d",
+    "sourceBranch": "orbit/release-dag-prisma-target-4063c0"
   },
   "repository": {
     "provider": "GITHUB",
@@ -40,7 +40,7 @@
   },
   "postgres": {
     "version": "16.14",
-    "minimumMigrations": 209
+    "minimumMigrations": 220
   },
   "canonicalBinding": {
     "subjectType": "PROJECT",

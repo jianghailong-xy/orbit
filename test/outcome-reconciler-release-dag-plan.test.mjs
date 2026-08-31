@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   checkpointReuseDecision,
   commandDigest,
+  dagPlanDigest,
   deriveBinding,
   addResources,
   metricsForNode,
@@ -52,23 +53,27 @@ function successReceipt(node, selectedBinding = binding) {
 test('the formal evaluator and every DAG node have bounded admission', () => {
   const result = validatePlan(plan);
   assert.equal(plan.evaluator.acceptanceCommand, 'npm run test:outcome-reconciler:release-dag');
-  assert.equal(plan.builder.acceptanceCommand, 'npm run test:outcome-reconciler:release-dag-plan');
+  assert.equal(plan.builder.acceptanceCommand, 'npm run test:outcome-reconciler:release-dag-rebind');
   assert.deepEqual({
     taskId: plan.supersededAttempt.taskId,
     sessionId: plan.supersededAttempt.sessionId,
     terminalState: plan.supersededAttempt.terminalState,
+    actualExitCode: plan.supersededAttempt.actualExitCode,
+    failureFingerprint: plan.supersededAttempt.failureFingerprint,
     evidenceReuse: plan.supersededAttempt.evidenceReuse,
   }, {
-    taskId: '34FPjTbN1Y1KM1XZzVaHx',
-    sessionId: '3pbmdZbj29xhjM0AXepDD6',
-    terminalState: 'TIMED_OUT',
+    taskId: '34G78wiI5uXnNieL1YyAo',
+    sessionId: '71OcGPdjrSgXo0PC1x1Nsg',
+    terminalState: 'EXITED',
+    actualExitCode: 1,
+    failureFingerprint: '1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153',
     evidenceReuse: 'NONE',
   });
   assert.equal(plan.builder.timeoutSeconds, 1800);
   assert.equal(plan.builder.commandDigest,
-    'c1af8365d44bfe56b4dafc58bfc399747887d23ab5fc5fcf37a2d508e279a14d');
+    '146e668160613865e3c379accf4e1ca62f4745f25f1290a0e0cac6941788d398');
   assert.equal(plan.builder.evaluationPlanDigest,
-    '006b5ed74bc7ad7e6a614d38f7c6e7bcaec81ce71d82f21cfe40c298e095bb45');
+    '0fad0bf7ada065ed351c3dc9ac5222c8d87724d0f37c64b3151adf11a27ed709');
   assert.equal(plan.evaluator.attemptTimeoutSeconds, 3600);
   assert.ok(plan.evaluator.schedulerDeadlineSeconds < plan.evaluator.attemptTimeoutSeconds);
   assert.equal(plan.evaluator.automaticRetries, 0);
@@ -85,10 +90,10 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
     assert.ok(node.timeoutSeconds > 0 && node.timeoutSeconds <= 3600, node.id);
     assert.ok(node.timeoutSeconds <= plan.evaluator.attemptTimeoutSeconds, node.id);
   }
-  const builderHarness = read('scripts/outcome-reconciler-release-dag-plan.sh');
+  const builderHarness = read('scripts/outcome-reconciler-release-dag-rebind.sh');
   const builderBudgets = [...builderHarness.matchAll(/timeout -k \d+ (\d+)/gu)]
     .map((match) => Number(match[1]));
-  assert.deepEqual(builderBudgets, [90, 30, 1500, 90]);
+  assert.deepEqual(builderBudgets, [30, 180, 90, 1200, 30]);
   assert.ok(builderBudgets.reduce((total, seconds) => total + seconds, 0)
     < plan.builder.timeoutSeconds);
   let inUse = addResources({}, nodeById.get('prepare-postgres'));
@@ -234,7 +239,11 @@ test('shared preparation and resource ceilings prevent repeated setup and oversu
   assert.doesNotMatch(prepare, /\.bin\/prisma generate|isolated-prisma-schema/u);
   assert.match(prepare, /cp -a --reflink=auto.*@prisma/su);
   assert.match(prepare, /tsc -p tsconfig\.test\.json/u);
-  assert.match(prepare, /clone 0209 and apply only the current delta/u);
+  assert.match(prepare, /materialize target-lock-isolated Prisma fixture/u);
+  assert.match(prepare, /outcome-reconciler-release-dag-prisma-fixture\.mjs/u);
+  assert.match(prepare, /node node_modules\/prisma\/build\/index\.js migrate deploy --config/u);
+  assert.match(prepare, /clone pre-owner fixture and reach current frontier/u);
+  assert.doesNotMatch(prepare, /\$API\/node_modules\/\.bin\/prisma.*migrate deploy/su);
   assert.match(prepare, /--cpus 2 --memory 3072m --memory-swap 3072m/u);
   const step = read('scripts/outcome-reconciler-release-dag-step.mjs');
   assert.match(step, /FIXED_DISPOSABLE_LOOPBACK_ONLY/u);
@@ -265,6 +274,7 @@ test('target, environment, evaluator plan and evidence cut form one exact bindin
   assert.notEqual(environmentChanged.bindingDigest, binding.bindingDigest);
   const changedPlan = structuredClone(plan);
   changedPlan.resourceLimits.maxConcurrent -= 1;
+  changedPlan.declaredDagPlanDigest = dagPlanDigest(changedPlan);
   const planChanged = deriveBinding({
     plan: changedPlan, targetSha: zeroTarget, targetReceiptDigest, environment,
   });
@@ -357,10 +367,6 @@ test('a skip in any declared node artifact cannot be hidden by a larger report',
 });
 
 test('the inbox repair is integrated and frozen-target verification is mandatory', () => {
-  const subjects = git('log', '--format=%s', `${authoritative.lineage.remoteMainObservedBeforeIntegration}..HEAD`)
-    .split('\n');
-  assert.ok(subjects.includes('fix: route only actionable owner ratifications'));
-  assert.ok(subjects.includes('test: resolve shared package from current worktree'));
   const ownerDelivery = plan.integratedDeliveries.find(
     (delivery) => delivery.taskId === '34FvZL9JNez5O9vLVYd8h',
   );
@@ -369,11 +375,12 @@ test('the inbox repair is integrated and frozen-target verification is mandatory
     'b9d27c8d2561ebedc05bc367466302389a4685e6',
     '7eb3eb3628186b89a2c8e869da66deff5bbb6473',
   ]);
-  for (const commit of ownerDelivery.commits) {
+  for (const [index, commit] of ownerDelivery.commits.entries()) {
     assert.doesNotThrow(() => git('merge-base', '--is-ancestor', commit, 'HEAD'));
+    assert.equal(git('show', '-s', '--format=%s', commit), ownerDelivery.requiredSubjects[index]);
   }
   assert.equal(authoritative.taskId, plan.builderTaskId);
-  assert.equal(authoritative.sourceBranch, 'orbit/release-evaluation-dag-target-84fe31');
+  assert.equal(authoritative.sourceBranch, plan.builder.sourceBranch);
   assert.equal(authoritative.historicalEvidencePolicy,
     'ANCESTRY_INVENTORY_ONLY_NOT_CURRENT_RELEASE_EVIDENCE');
   assert.equal(plan.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
@@ -383,7 +390,7 @@ test('the inbox repair is integrated and frozen-target verification is mandatory
   assert.equal(plan.target.remoteMustRemainExactlyTarget, true);
   assert.equal(packageJson.scripts['test:outcome-reconciler:owner-ratification-inbox-routing'],
     'bash scripts/outcome-reconciler-owner-ratification-inbox-routing.sh');
-  assert.match(read('scripts/outcome-reconciler-release-dag-plan.sh'),
+  assert.match(read('scripts/outcome-reconciler-release-dag-rebind.sh'),
     /outcome-reconciler-release-dag-target-check\.mjs/u);
   const runner = read('scripts/outcome-reconciler-release-dag.mjs');
   assert.match(runner, /session_merge_receipt/u);

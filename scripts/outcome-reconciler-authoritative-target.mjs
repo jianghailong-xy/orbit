@@ -158,7 +158,7 @@ const candidates = inventory.candidates.map((candidate) => {
   }
   return { ...candidate, targetAncestor: ancestor };
 });
-assert.equal(candidates.length, 25, 'the terminal project session inventory is incomplete');
+assert.equal(candidates.length, 29, 'the terminal project session inventory is incomplete');
 assert.equal(new Set(candidates.map((candidate) => candidate.taskId)).size, candidates.length);
 assert.equal(new Set(candidates.map((candidate) => candidate.sessionId)).size, candidates.length);
 
