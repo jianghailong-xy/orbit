@@ -100,7 +100,7 @@ const summary = {
   cancelled: counter('cancelled'),
   todo: counter('todo'),
 };
-assert.ok(summary.tests >= 13, 'the watchdog suite is unexpectedly empty or truncated');
+assert.ok(summary.tests >= 22, 'the watchdog suite is unexpectedly empty or truncated');
 assert.equal(summary.passed, summary.tests, 'not every watchdog test passed');
 assert.equal(summary.failed, 0, 'watchdog suite contains failures');
 assert.equal(summary.skipped, 0, 'skipped watchdog tests are forbidden');
@@ -117,6 +117,36 @@ assert.match(evidence.targetSha, /^[0-9a-f]{40}$/);
 for (const label of ['independence', 'faults', 'security', 'sloCanary']) {
   assertAllTrue(evidence[label], label);
 }
+
+// The progress dimension is a separate proof obligation from liveness, and it is the one that was
+// missing while a stalled goal reported healthy for three days. A run that proves only liveness
+// does not publish a manifest.
+const progress = evidence.progress;
+assert.equal(progress.stalledWhileLivenessGreen, true,
+  'no run proved a liveness-green, progress-flat tenant is reported stalled');
+assert.equal(progress.advancingNotReported, true,
+  'no run proved an advancing goal is left alone');
+assert.equal(progress.independentOfSelfCorrection, true,
+  'no run proved the stall survives the self-correction channel being dead');
+assert.equal(progress.alertConstancyDiagnosed, true,
+  'no run proved a permanently constant alert count is itself diagnosed');
+assert.deepEqual(progress.realCurve, [10, 25, 31, 36, 36],
+  "the collector did not reproduce this project's own success-node curve");
+assert.deepEqual(progress.realCurveTransitions, ['ADVANCED', 'ADVANCED', 'ADVANCED', 'FLAT'],
+  'the first three transitions must be progress and the fourth must not');
+assert.ok(progress.disabledSignalSources.length >= 8,
+  'the independence proof disabled too little of the self-correction channel');
+for (const source of contract.progressIndependence.forbiddenSignalSources) {
+  assert.ok(progress.disabledSignalSources.includes(source),
+    `${source} is declared forbidden but was never taken away during the independence proof`);
+}
+assert.equal(progress.livenessHeartbeatStopped, true, 'heartbeat detection regressed');
+assert.equal(progress.livenessProjectionStale, true, 'projection staleness detection regressed');
+assert.ok(progress.livenessStaleAttempts > 0, 'stale-attempt detection regressed');
+assert.equal(progress.livenessDeadManMissing, true, 'dead-man detection regressed');
+assert.ok(contract.progressIndependence.permittedSignalSources.every(
+  (source) => !contract.progressIndependence.forbiddenSignalSources.includes(source),
+), 'the two signal channels overlap in the contract that declares them separate');
 validateMetric(contract.operationalSlo, 'operationalSlo');
 for (const [name, metric] of Object.entries(contract.metrics)) validateMetric(metric, name);
 for (const [name, metric] of Object.entries(contract.canary.metrics)) {
@@ -256,6 +286,7 @@ const sourceFiles = [
   'src/apiserver/Dockerfile',
   'src/apiserver/package.json',
   'src/apiserver/prisma/migrations/0199_outcome_independent_watchdog_slo_security/migration.sql',
+  'src/apiserver/prisma/migrations/0214_watchdog_goal_progress_channel/migration.sql',
   'src/apiserver/src/app.module.ts',
   'src/apiserver/src/common/db-write-inventory.ts',
   'src/apiserver/src/outcome-watchdog/main.ts',
@@ -319,7 +350,9 @@ const body = {
     faults: evidence.faults,
     security: evidence.security,
     sloCanary: evidence.sloCanary,
+    progress,
   },
+  progressIndependence: contract.progressIndependence,
   slo: bindMetric(contract.operationalSlo),
   operationalMetrics: boundOperationalMetrics,
   canary: boundCanary,

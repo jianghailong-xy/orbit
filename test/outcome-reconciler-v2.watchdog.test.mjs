@@ -100,6 +100,19 @@ const evidence = {
     observationWindowDefined: false,
     abortThresholdFalsifiable: false,
   },
+  progress: {
+    stalledWhileLivenessGreen: false,
+    advancingNotReported: false,
+    independentOfSelfCorrection: false,
+    alertConstancyDiagnosed: false,
+    livenessHeartbeatStopped: false,
+    livenessProjectionStale: false,
+    livenessStaleAttempts: 0,
+    livenessDeadManMissing: false,
+    realCurve: [],
+    realCurveTransitions: [],
+    disabledSignalSources: [],
+  },
   capacity: {
     taskScale: 0,
     queryRowLimit: 0,
@@ -849,6 +862,427 @@ test('samples are append-only, bounded and bind every metric to both SHAs', asyn
       <= contract.collector.maximumDetectionDeltaSeconds;
 });
 
+// ---------------------------------------------------------------------------------------------
+// Progress dimension.
+//
+// Everything above this line proves the collector notices when a *component* stops. None of it
+// notices when the *goal* stops: a target that made no forward movement for three days kept every
+// indicator above green. The fixtures below add that second dimension and pin down that it reads a
+// different signal source from the self-correction channel, so one bug cannot silence both.
+// ---------------------------------------------------------------------------------------------
+
+function conclusionCodes(sample) {
+  for (const entry of sample.conclusions) {
+    assert.ok(watchdog.WATCHDOG_CONCLUSION_CODES.includes(entry.code),
+      `${entry.code} is not a declared watchdog conclusion code`);
+  }
+  return new Set(sample.conclusions.map((conclusion) => conclusion.code));
+}
+
+function conclusion(sample, code) {
+  return sample.conclusions.find((entry) => entry.code === code);
+}
+
+async function fixtureUser(label) {
+  const id = uuid(`watchdog-fixture-user:${label}`);
+  await pool.query(`
+    INSERT INTO "user" (id, email, name, password_hash)
+    VALUES ($1::uuid, $2, $3, 'watchdog-fixture')
+    ON CONFLICT (id) DO NOTHING
+  `, [id, `${label}@watchdog.fixture.invalid`, `watchdog ${label}`]);
+  return id;
+}
+
+/** A tenant whose liveness surface is empty, so only the progress dimension can say anything. */
+async function progressScope(label) {
+  return { label, tenantId: await fixtureUser(`progress:${label}`), settled: 0 };
+}
+
+async function settleUnits(scope, count) {
+  if (count <= 0) return;
+  await pool.query(`
+    INSERT INTO task (id, owner_id, creator_type, creator_id, title, status, updated_at)
+    SELECT gen_random_uuid(), $1::uuid, 'USER', $1::uuid,
+           format('%s settled %s', $2::text, series), 'DONE', now()
+      FROM generate_series(1, $3::integer) series
+  `, [scope.tenantId, scope.label, count]);
+  scope.settled += count;
+}
+
+/** A running session is what makes a flat tenant "stalled" rather than merely idle. */
+async function engageUnits(scope, count) {
+  await pool.query(`
+    INSERT INTO session (id, owner_id, creator_id, title, prompt, status, updated_at)
+    SELECT gen_random_uuid(), $1::uuid, $1::uuid,
+           format('%s engaged %s', $2::text, series), 'watchdog progress fixture', 'RUNNING', now()
+      FROM generate_series(1, $3::integer) series
+  `, [scope.tenantId, scope.label, count]);
+}
+
+/** One coordinator obligation whose lease is permanently expired: a single, never-changing alert. */
+async function seedExpiredLeaseObligation(scope) {
+  const projectId = uuid(`watchdog-obligation-project:${scope.label}`);
+  const source = { schemaVersion: 1, kind: 'WATCHDOG_FIXTURE_OBLIGATION', label: scope.label };
+  const shaped = [scope.tenantId, projectId, scope.label, JSON.stringify(source)];
+  await pool.query(`
+    INSERT INTO outcome_fact_stream (tenant_id, project_id, last_logical_time, binding_epoch)
+    VALUES ($1::uuid, $2::uuid, 0, 0)
+  `, [scope.tenantId, projectId]);
+  await pool.query(`
+    WITH shaped AS (
+      SELECT $1::uuid AS tenant_id, $2::uuid AS project_id,
+             encode(digest('watchdog-coordination-revision:' || $3::text, 'sha256'), 'hex') AS coordination_revision,
+             encode(digest('watchdog-obligation:' || $3::text, 'sha256'), 'hex') AS obligation_id,
+             encode(digest('watchdog-obligation-revision:' || $3::text, 'sha256'), 'hex') AS obligation_revision,
+             encode(digest('watchdog-binding:' || $3::text, 'sha256'), 'hex') AS binding_digest,
+             $4::jsonb AS source
+    )
+    INSERT INTO outcome_coordinator_obligation_revision (
+      tenant_id, project_id, coordination_revision, source_type, source_key,
+      obligation_id, obligation_revision, binding_digest, kind, requested_owner, capability,
+      liveness_delta, attempt_budget, wake_budget, same_failure_fingerprint_limit,
+      max_lease_renewals, source_obligation, source_digest, created_logical_time
+    )
+    SELECT tenant_id, project_id, coordination_revision, 'CANONICAL', 'watchdog-fixture',
+           obligation_id, obligation_revision, binding_digest, 'WATCHDOG_FIXTURE_OBLIGATION',
+           'AGENT', 'watchdog.progress', 5, 3, 3, 2, 1, source, outcome_sha256_json(source), 0
+      FROM shaped
+  `, shaped);
+  await pool.query(`
+    WITH shaped AS (
+      SELECT $1::uuid AS tenant_id, $2::uuid AS project_id,
+             encode(digest('watchdog-coordination-revision:' || $3::text, 'sha256'), 'hex') AS coordination_revision,
+             encode(digest('watchdog-obligation:' || $3::text, 'sha256'), 'hex') AS obligation_id,
+             encode(digest('watchdog-obligation-revision:' || $3::text, 'sha256'), 'hex') AS obligation_revision,
+             encode(digest('watchdog-binding:' || $3::text, 'sha256'), 'hex') AS binding_digest,
+             $4::jsonb AS source
+    )
+    INSERT INTO outcome_coordinator_obligation (
+      coordination_id, tenant_id, project_id, coordination_revision, source_type, source_key,
+      obligation_id, obligation_revision, binding_digest, kind, capability, requested_owner,
+      durable_owner, status, attempt_budget_max, attempt_budget_remaining, wake_budget_max,
+      wake_budget_remaining, same_failure_fingerprint_limit, max_lease_renewals,
+      liveness_delta, last_progress_logical_time, progress_deadline_logical_time,
+      lease_id, lease_token, lease_owner, lease_expires_logical_time,
+      source_obligation, source_digest
+    )
+    SELECT gen_random_uuid(), tenant_id, project_id, coordination_revision, 'CANONICAL',
+           'watchdog-fixture', obligation_id, obligation_revision, binding_digest,
+           'WATCHDOG_FIXTURE_OBLIGATION', 'watchdog.progress', 'AGENT', 'AGENT', 'CLAIMED',
+           3, 3, 3, 3, 2, 1, 5, 0, 0,
+           gen_random_uuid(), gen_random_uuid(), 'AGENT', 0,
+           source, outcome_sha256_json(source)
+      FROM shaped
+  `, shaped);
+}
+
+let stalledScope;
+
+test('liveness stays green while the goal stops advancing, and the watchdog still says stalled', async () => {
+  stalledScope = await progressScope('stalled');
+  await settleUnits(stalledScope, 3);
+  await engageUnits(stalledScope, 1);
+  const base = Date.parse('2026-08-28T06:00:00.000Z');
+  const samples = [];
+  for (const minutes of [0, 20, 40]) {
+    samples.push(await collect(stalledScope.tenantId, new Date(base + minutes * 60_000)));
+  }
+  // Every liveness indicator that existed before this change reads healthy in every sample.
+  for (const sample of samples) {
+    assert.equal(sample.projectionStatus, 'CURRENT');
+    assert.deepEqual(sample.alerts, []);
+    assert.equal(sample.snapshot.watermarkLagLogicalTicks, 0);
+    assert.equal(sample.progress.settledUnits, 3);
+    assert.equal(sample.progress.engagedUnits, 1);
+  }
+  const staleAttempts = (await one(pool, `
+    SELECT executable_acceptance_mark_stale_attempts($1::timestamptz, 64) AS count
+  `, [new Date(base + 40 * 60_000).toISOString()])).count;
+  assert.equal(staleAttempts, 0, 'the stalled fixture must not owe its verdict to a stale attempt');
+  // The progress dimension is the only one that can see it, and it does.
+  assert.equal(conclusionCodes(samples[0]).has('GOAL_PROGRESS_STALLED'), false);
+  assert.equal(conclusionCodes(samples[1]).has('GOAL_PROGRESS_STALLED'), false);
+  const stalled = conclusion(samples[2], 'GOAL_PROGRESS_STALLED');
+  assert.ok(stalled, 'liveness-green with flat progress produced no typed stalled conclusion');
+  assert.equal(stalled.observed.consecutiveFlatSamples, 2);
+  assert.equal(stalled.observed.settledUnits, 3);
+  assert.ok(stalled.observed.flatWindowSeconds
+    >= contract.metrics.goalProgress.threshold.minimumFlatWindowSeconds);
+  evidence.progress.stalledWhileLivenessGreen = true;
+  evidence.samples.stalledSampleId = samples[2].sampleId;
+});
+
+test('a goal that is still advancing is never reported as stalled', async () => {
+  const scope = await progressScope('advancing');
+  await engageUnits(scope, 1);
+  const base = Date.parse('2026-08-28T07:00:00.000Z');
+  const samples = [];
+  for (const minutes of [0, 20, 40, 60]) {
+    await settleUnits(scope, 2);
+    samples.push(await collect(scope.tenantId, new Date(base + minutes * 60_000)));
+  }
+  assert.deepEqual(samples.map((sample) => sample.progress.settledUnits), [2, 4, 6, 8]);
+  for (const sample of samples) {
+    assert.equal(conclusionCodes(sample).has('GOAL_PROGRESS_STALLED'), false,
+      'an advancing goal was reported as stalled');
+  }
+  evidence.progress.advancingNotReported = true;
+});
+
+test("this project's own 10 -> 25 -> 31 -> 36 -> 36 curve advances three times and then stalls", async () => {
+  const curve = [10, 25, 31, 36, 36];
+  assert.deepEqual(watchdog.classifyWatchdogProgress(curve),
+    ['ADVANCED', 'ADVANCED', 'ADVANCED', 'FLAT']);
+  const scope = await progressScope('release-dag-curve');
+  await engageUnits(scope, 1);
+  const base = Date.parse('2026-08-28T08:00:00.000Z');
+  const observed = [];
+  for (const [index, target] of curve.entries()) {
+    await settleUnits(scope, target - scope.settled);
+    observed.push(await collect(scope.tenantId, new Date(base + index * 20 * 60_000)));
+  }
+  const measured = observed.map((sample) => sample.progress.settledUnits);
+  assert.deepEqual(measured, curve, 'the collector did not reproduce the real success-node curve');
+  assert.deepEqual(watchdog.classifyWatchdogProgress(measured),
+    ['ADVANCED', 'ADVANCED', 'ADVANCED', 'FLAT']);
+  for (const sample of observed) {
+    assert.equal(conclusionCodes(sample).has('GOAL_PROGRESS_STALLED'), false,
+      'one flat transition is not yet a stall under the declared threshold');
+  }
+  // The stall is declared once the flat run reaches the contract threshold: 36, 36, 36.
+  const continued = await collect(scope.tenantId, new Date(base + 5 * 20 * 60_000));
+  assert.equal(continued.progress.settledUnits, 36);
+  assert.ok(conclusionCodes(continued).has('GOAL_PROGRESS_STALLED'));
+  // The pure evaluator and the SQL collector must agree on this exact history.
+  const history = [...observed, continued].map((sample) => ({
+    observedAt: new Date(sample.observedAt).toISOString(),
+    settledUnits: sample.progress.settledUnits,
+    outstandingUnits: sample.progress.outstandingUnits,
+    engagedUnits: sample.progress.engagedUnits,
+    alertCount: sample.alerts.length,
+  }));
+  assert.deepEqual(
+    watchdog.evaluateWatchdogProgress(history, contract).map(({ code }) => code),
+    continued.conclusions.map(({ code }) => code),
+    'the pure progress evaluator and the SQL collector disagree');
+  evidence.progress.realCurve = measured;
+  evidence.progress.realCurveTransitions = watchdog.classifyWatchdogProgress(measured);
+});
+
+const SELF_CORRECTION_RELATIONS = [
+  'task_convergence_decision',
+  'project_convergence_decision',
+  'outcome_action_failure_fingerprint',
+  'outcome_coordinator_failure_fingerprint',
+];
+const SELF_CORRECTION_COLUMNS = [
+  ['task', 'convergence_counters'],
+  ['task', 'progress_state'],
+  ['task', 'last_progress_at'],
+  ['task_executable_attempt', 'failure_fingerprint'],
+];
+
+test('the stall is still detected when the whole self-correction channel is dead', async () => {
+  // Structural: the collector's own compiled body may not name a self-correction signal source.
+  const definition = (await one(pool, `
+    SELECT pg_get_functiondef($1::regprocedure) AS body
+  `, ['outcome_watchdog.collect(uuid,uuid,jsonb,text,text,timestamptz)'])).body;
+  for (const forbidden of contract.progressIndependence.forbiddenSignalSources) {
+    assert.doesNotMatch(definition, new RegExp(forbidden.replaceAll('.', '\\.'), 'i'),
+      `the progress probe reads ${forbidden}, which the self-correction channel also owns`);
+  }
+  // ...and it may not pass that check by reading nothing at all.
+  for (const permitted of ['outcome_coordinator_obligation', 'task_executable_attempt', 'session']) {
+    assert.match(definition, new RegExp(permitted));
+  }
+
+  // Behavioural: take the entire channel away and re-run the detector. A collector that shared the
+  // signal source would fail with undefined_table here instead of reaching a verdict.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const relation of SELF_CORRECTION_RELATIONS) {
+      await client.query(`ALTER TABLE "${relation}" RENAME TO "${relation}__disabled"`);
+    }
+    for (const [table, column] of SELF_CORRECTION_COLUMNS) {
+      await client.query(`ALTER TABLE "${table}" RENAME COLUMN "${column}" TO "${column}__disabled"`);
+    }
+    for (const relation of SELF_CORRECTION_RELATIONS) {
+      const present = await client.query(`SELECT to_regclass($1) IS NULL AS gone`, [relation]);
+      assert.equal(present.rows[0].gone, true, `${relation} was still reachable`);
+    }
+    const sample = (await client.query(`
+      SELECT outcome_watchdog.collect($1::uuid, $1::uuid, $2::jsonb, $3, $4, $5::timestamptz) AS result
+    `, [stalledScope.tenantId, JSON.stringify(contract), COLLECTOR_SHA, TARGET_SHA,
+      new Date(Date.parse('2026-08-28T06:00:00.000Z') + 60 * 60_000).toISOString()]))
+      .rows[0].result;
+    assert.ok(conclusionCodes(sample).has('GOAL_PROGRESS_STALLED'),
+      'the watchdog lost the stall along with the self-correction channel');
+    assert.ok(conclusion(sample, 'GOAL_PROGRESS_STALLED').observed.consecutiveFlatSamples >= 2);
+    evidence.progress.independentOfSelfCorrection = true;
+    evidence.progress.disabledSignalSources = [
+      ...SELF_CORRECTION_RELATIONS,
+      ...SELF_CORRECTION_COLUMNS.map(([table, column]) => `${table}.${column}`),
+    ];
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+  // The rollback must have put the channel back, or every later test would be running on a lie.
+  const restored = await one(pool, `SELECT to_regclass('task_convergence_decision') IS NOT NULL AS present`);
+  assert.equal(restored.present, true);
+});
+
+test('an alert count that never changes is itself a typed diagnosis', async () => {
+  const scope = await progressScope('alert-fatigue');
+  await seedExpiredLeaseObligation(scope);
+  const base = Date.parse('2026-08-28T09:00:00.000Z');
+  const samples = [];
+  for (const minutes of [0, 20, 40]) {
+    samples.push(await collect(scope.tenantId, new Date(base + minutes * 60_000)));
+  }
+  for (const sample of samples) {
+    assert.deepEqual(sample.alerts.map(({ code }) => code), ['LEASE_EXPIRED']);
+  }
+  assert.equal(conclusionCodes(samples[0]).has('ALERT_FATIGUE'), false);
+  assert.equal(conclusionCodes(samples[1]).has('ALERT_FATIGUE'), false);
+  const fatigue = conclusion(samples[2], 'ALERT_FATIGUE');
+  assert.ok(fatigue, 'an alert count constant across the whole window produced no diagnosis');
+  assert.equal(fatigue.observed.alertCount, 1);
+  assert.equal(fatigue.observed.consecutiveIdenticalSamples, 2);
+  assert.ok(fatigue.observed.constantWindowSeconds
+    >= contract.metrics.alertConstancy.threshold.minimumConstantWindowSeconds);
+  // The diagnosis lives outside `alerts`, so it cannot move the count it is measuring.
+  assert.equal(samples[2].alerts.length, 1);
+  assert.equal(conclusionCodes(samples[2]).has('GOAL_PROGRESS_STALLED'), true,
+    'the two conclusions are independent codes, not one blended verdict');
+  evidence.progress.alertConstancyDiagnosed = true;
+  evidence.samples.alertFatigueSampleId = samples[2].sampleId;
+});
+
+// ---------------------------------------------------------------------------------------------
+// Liveness regression. The progress dimension is additive; each of the four liveness detectors
+// that already existed keeps its own independent assertion.
+// ---------------------------------------------------------------------------------------------
+
+async function expectGeneration(label, graceSeconds) {
+  const generation = uuid(`watchdog-runtime-generation:${label}`);
+  const instanceId = `watchdog-liveness-fixture:${label}`;
+  const moduleGraphDigest = digest(`watchdog-module-graph:${label}`);
+  await one(pool, `
+    SELECT executable_runtime_expect_generation(
+      'outcome-watchdog', $1, $2::uuid, $3, $4, $5::integer, $6
+    ) AS result
+  `, [instanceId, generation, COLLECTOR_SHA, moduleGraphDigest, graceSeconds,
+    `watchdog-liveness-fixture:${label}`]);
+  return { generation, instanceId, moduleGraphDigest };
+}
+
+async function runtimeLiveness(generation) {
+  return one(pool, `
+    SELECT state, condition_code AS "conditionCode"
+      FROM executable_runtime_expected_liveness WHERE generation = $1::uuid
+  `, [generation]);
+}
+
+test('liveness regression: a stopped heartbeat is still detected', async () => {
+  const expectation = await expectGeneration('heartbeat-stopped', 3600);
+  await pool.query(`
+    INSERT INTO executable_runtime_heartbeat (
+      id, component, instance_id, sequence, source_sha, module_graph_digest,
+      observed_at, deadline_at, payload, payload_digest, heartbeat_digest, expectation_generation
+    ) VALUES (
+      gen_random_uuid(), 'outcome-watchdog', $1, 1, $2, $3,
+      now() - interval '2 hours', now() - interval '1 hour', '{}'::jsonb, $4, $5, $6::uuid
+    )
+  `, [expectation.instanceId, COLLECTOR_SHA, expectation.moduleGraphDigest,
+    digest(`payload:${expectation.instanceId}`), digest(`heartbeat:${expectation.instanceId}`),
+    expectation.generation]);
+  const liveness = await runtimeLiveness(expectation.generation);
+  assert.equal(liveness.state, 'WATCHDOG_STALE');
+  assert.equal(liveness.conditionCode, 'WATCHDOG_STALE');
+  evidence.progress.livenessHeartbeatStopped = true;
+});
+
+test('liveness regression: a lagging projection is still detected', async () => {
+  const tenantId = uuid('watchdog-liveness-projection-tenant');
+  await pool.query(`
+    INSERT INTO outcome_fact_stream (tenant_id, project_id, last_logical_time, binding_epoch)
+    VALUES ($1::uuid, $2::uuid, 12, 0)
+  `, [tenantId, uuid('watchdog-liveness-projection-project')]);
+  const sample = await collect(tenantId, new Date('2026-08-28T10:00:00.000Z'));
+  const codes = alertCodes(sample);
+  assert.ok(codes.has('RECONCILER_STOPPED'));
+  assert.ok(codes.has('PROJECTION_STALE'));
+  assert.equal(sample.projectionStatus, 'RECONCILER_STALE');
+  assert.ok(sample.snapshot.watermarkLagLogicalTicks > 0);
+  evidence.progress.livenessProjectionStale = true;
+});
+
+test('liveness regression: an overdue executable attempt is still marked stale', async () => {
+  const ownerId = await fixtureUser('stale-attempt');
+  const taskId = uuid('watchdog-stale-attempt-task');
+  const sessionId = uuid('watchdog-stale-attempt-session');
+  const runnerId = uuid('watchdog-stale-attempt-runner');
+  const admissionId = uuid('watchdog-stale-attempt-admission');
+  const attemptId = uuid('watchdog-stale-attempt');
+  const turnId = uuid('watchdog-stale-attempt-turn');
+  const planDigest = digest('watchdog-stale-plan');
+  await pool.query(`
+    INSERT INTO task (id, owner_id, creator_type, creator_id, title, status, updated_at)
+    VALUES ($1::uuid, $2::uuid, 'USER', $2::uuid, 'watchdog stale attempt', 'OPEN', now())
+  `, [taskId, ownerId]);
+  await pool.query(`
+    INSERT INTO session (id, owner_id, creator_id, task_id, title, prompt, status, updated_at)
+    VALUES ($1::uuid, $2::uuid, $2::uuid, $3::uuid, 'watchdog stale attempt', 'x', 'RUNNING', now())
+  `, [sessionId, ownerId, taskId]);
+  await pool.query(`
+    INSERT INTO runner (id, name, owner_id, token_hash)
+    VALUES ($1::uuid, 'watchdog-fixture-runner', $2::uuid, 'watchdog-fixture')
+  `, [runnerId, ownerId]);
+  await pool.query(`
+    INSERT INTO task_executable_admission (
+      id, task_id, session_id, turn_id, runner_id, evaluation_plan_digest, command_digest,
+      expected_exit_code, requested_timeout_seconds, owner_timeout_ceiling_seconds,
+      policy_timeout_ceiling_seconds, required_schema_revision, required_capability_revision,
+      runner_schema_revision, runner_capability_revision, runner_hard_max_seconds,
+      decision, effective_timeout_seconds, effective_deadline, spawn_count
+    ) VALUES ($1::uuid, $2::uuid, $3::uuid, $7::uuid, $4::uuid, $5, $6,
+      0, 120, 120, 3600, 2, 2, 2, 2, 3600, 'ADMITTED', 120, now() - interval '1 hour', 0)
+  `, [admissionId, taskId, sessionId, runnerId, planDigest,
+    digest('watchdog-stale-command'), turnId]);
+  // The start guard owns attempt_number, expected_exit_code and deadline_at; the admission's
+  // already-past effective_deadline is what makes this attempt overdue.
+  await pool.query(`
+    INSERT INTO task_executable_attempt (
+      id, admission_id, task_id, session_id, turn_id, evaluation_plan_digest, started_at
+    ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, now() - interval '2 hours')
+  `, [attemptId, admissionId, taskId, sessionId, turnId, planDigest]);
+  const marked = (await one(pool, `
+    SELECT executable_acceptance_mark_stale_attempts(now(), 64) AS count
+  `)).count;
+  assert.ok(marked > 0, 'an overdue admitted attempt was no longer marked stale');
+  const attempt = await one(pool, `
+    SELECT termination_kind::text AS "terminationKind", failure_fingerprint AS "failureFingerprint"
+      FROM task_executable_attempt WHERE id = $1::uuid
+  `, [attemptId]);
+  assert.equal(attempt.terminationKind, 'INFRASTRUCTURE_LOST');
+  assert.match(attempt.failureFingerprint, /^[0-9a-f]{64}$/);
+  evidence.progress.livenessStaleAttempts = marked;
+});
+
+test('liveness regression: a generation that never heartbeats is still declared missing', async () => {
+  const expectation = await expectGeneration('dead-man-missing', 1);
+  let liveness = await runtimeLiveness(expectation.generation);
+  for (let attempt = 0; attempt < 40 && liveness.conditionCode !== 'WATCHDOG_MISSING'; attempt += 1) {
+    await new Promise((resolve) => { setTimeout(resolve, 100); });
+    liveness = await runtimeLiveness(expectation.generation);
+  }
+  assert.equal(liveness.conditionCode, 'WATCHDOG_MISSING');
+  assert.equal(liveness.state, 'WATCHDOG_STALE');
+  evidence.progress.livenessDeadManMissing = true;
+});
+
 function planIndexes(node, result = new Set()) {
   if (node['Index Name']) result.add(node['Index Name']);
   for (const child of node.Plans ?? []) planIndexes(child, result);
@@ -973,7 +1407,10 @@ test('111k capacity fixture proves bounded indexed queries, replay time and stor
                + series * interval '1 microsecond') AS observed_at,
              jsonb_build_object('capacityTaskOrdinal', series) AS snapshot,
              '{}'::jsonb AS metrics,
-             '[]'::jsonb AS alerts
+             '[]'::jsonb AS alerts,
+             jsonb_build_object('settledUnits', 0, 'outstandingUnits', 0,
+               'engagedUnits', 0) AS progress,
+             '[]'::jsonb AS conclusions
         FROM generate_series(1, $2::integer) series
     ), shaped AS (
       SELECT seed.*,
@@ -988,18 +1425,20 @@ test('111k capacity fixture proves bounded indexed queries, replay time and stor
                'projectionStatus', 'CURRENT',
                'metrics', metrics,
                'snapshot', snapshot,
-               'alerts', alerts
+               'alerts', alerts,
+               'progress', progress,
+               'conclusions', conclusions
              ) AS body
         FROM seed
     )
     INSERT INTO outcome_watchdog.sample (
       tenant_id, observed_logical_time, observed_at, window_started_at, window_seconds,
       window_logical_ticks, collector_sha, target_sha, policy_digest, projection_status,
-      metrics, snapshot, alerts, sample_digest
+      metrics, snapshot, alerts, progress, conclusions, sample_digest
     )
     SELECT $1::uuid, series, observed_at, observed_at - interval '5 minutes', 300, 5,
            $3::text, $4::text, $5::text, 'CURRENT', metrics, snapshot, alerts,
-           outcome_sha256_json(body)
+           progress, conclusions, outcome_sha256_json(body)
       FROM shaped
   `, [tenantId, taskScale, COLLECTOR_SHA, TARGET_SHA, policyDigest]);
   const seedDuration = performance.now() - started;

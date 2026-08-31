@@ -10,6 +10,8 @@
     "maximumDetectionDeltaLogicalTicks": 1,
     "maximumRowsPerProbe": 257,
     "checksumSubjectsPerProbe": 64,
+    "progressUnitsPerProbe": 262144,
+    "progressHistorySamples": 8,
     "collectorSha": {
       "source": "RUNTIME_REQUIRED",
       "format": "FULL_GIT_SHA"
@@ -119,6 +121,24 @@
       "collectorSha": "RUNTIME_REQUIRED",
       "targetSha": "RUNTIME_REQUIRED"
     },
+    "goalProgress": {
+      "window": { "kind": "ROLLING", "seconds": 3600, "logicalTicks": 60 },
+      "denominator": "consecutive samples of this tenant's own settled-work vector, counted from the coordinator obligation, task and typed-acceptance settlement lanes; samples in which nothing was engaged are still counted and classified, never dropped",
+      "minSampleSize": 2,
+      "threshold": { "maximumConsecutiveFlatSamples": 2, "minimumFlatWindowSeconds": 900 },
+      "abortThreshold": { "consecutiveFlatSamples": 2, "flatWindowSeconds": 900 },
+      "collectorSha": "RUNTIME_REQUIRED",
+      "targetSha": "RUNTIME_REQUIRED"
+    },
+    "alertConstancy": {
+      "window": { "kind": "ROLLING", "seconds": 3600, "logicalTicks": 60 },
+      "denominator": "consecutive samples of this tenant carrying an alert count, including the samples whose alert set never changed; a permanently lit alert is a fault of the alert lane, not background noise",
+      "minSampleSize": 2,
+      "threshold": { "minimumAlertCount": 1, "maximumConsecutiveIdenticalSamples": 2, "minimumConstantWindowSeconds": 900 },
+      "abortThreshold": { "consecutiveIdenticalSamples": 2, "constantWindowSeconds": 900 },
+      "collectorSha": "RUNTIME_REQUIRED",
+      "targetSha": "RUNTIME_REQUIRED"
+    },
     "completionAckStaleness": {
       "window": { "kind": "ROLLING", "seconds": 300, "logicalTicks": 5 },
       "denominator": "legacy v1 terminal shell events durably ingested while their exact conversation turn remains IN_FLIGHT",
@@ -186,6 +206,27 @@
         "targetSha": "RUNTIME_REQUIRED"
       }
     }
+  },
+  "progressIndependence": {
+    "rationale": "The progress channel and the self-correction channel must be able to fail independently. They were previously the same detector, so one bug disabled both: the agent stopped changing strategy and nobody was told, for three days, while every liveness indicator stayed green.",
+    "forbiddenSignalSources": [
+      "task.convergence_counters",
+      "task.progress_state",
+      "task.last_progress_at",
+      "task_convergence_decision",
+      "project_convergence_decision",
+      "outcome_action_failure_fingerprint",
+      "outcome_coordinator_failure_fingerprint",
+      "task_executable_attempt.failure_fingerprint"
+    ],
+    "permittedSignalSources": [
+      "outcome_coordinator_obligation.status",
+      "task.status",
+      "task_executable_attempt.termination_kind",
+      "task_executable_attempt.actual_exit_code",
+      "session.status",
+      "outcome_watchdog.sample"
+    ]
   },
   "security": {
     "maximumPayloadBytes": 65536,

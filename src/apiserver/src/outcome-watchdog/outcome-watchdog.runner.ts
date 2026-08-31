@@ -160,16 +160,32 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
             collectorSha: this.collectorSha,
             targetSha: this.targetSha,
           });
-          const alerts = Array.isArray(sample.alerts) ? sample.alerts.length : 0;
+          const alertList = Array.isArray(sample.alerts) ? sample.alerts : [];
+          const conclusions = Array.isArray(sample.conclusions) ? sample.conclusions : [];
           this.logger.log(JSON.stringify({
             event: 'OUTCOME_WATCHDOG_SAMPLE',
             tenantId,
             sampleId: sample.sampleId,
             projectionStatus: sample.projectionStatus,
-            alerts,
+            alerts: alertList.length,
+            // A bare count cannot be triaged: alerts:1 held steady for 37 hours before anyone could
+            // say which signal it was. The codes make a constant count readable at a glance.
+            alertCodes: alertList.map((alert) => (alert as { code?: string }).code ?? 'UNKNOWN'),
+            progress: sample.progress,
+            conclusions: conclusions.map((entry) => (entry as { code?: string }).code ?? 'UNKNOWN'),
             collectorSha: this.collectorSha,
             targetSha: this.targetSha,
           }));
+          for (const conclusion of conclusions) {
+            this.logger.error(JSON.stringify({
+              event: 'OUTCOME_WATCHDOG_CONCLUSION',
+              tenantId,
+              sampleId: sample.sampleId,
+              ...(conclusion as Record<string, unknown>),
+              collectorSha: this.collectorSha,
+              targetSha: this.targetSha,
+            }));
+          }
         } catch (error) {
           this.logger.error(JSON.stringify({
             event: 'OUTCOME_WATCHDOG_COLLECTION_FAILED',
