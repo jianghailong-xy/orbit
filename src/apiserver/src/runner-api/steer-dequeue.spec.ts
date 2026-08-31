@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -21,13 +22,6 @@ const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 
 type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<unknown>;
 
-function queryText(query: unknown): string {
-  if (Array.isArray(query)) return (query as readonly string[]).join('?');
-  const strings = (query as { strings?: readonly string[] } | null)?.strings;
-  if (strings) return strings.join('?');
-  return String(query);
-}
-
 function leaseSQL() {
   const rawCalls: unknown[][] = [];
   const tx = {
@@ -37,7 +31,7 @@ function leaseSQL() {
     conversationTurn: { findMany: async () => [] },
     $queryRaw: async (...args: unknown[]) => {
       rawCalls.push(args);
-      const sql = queryText(args[0]);
+      const sql = renderRawQuery(args).text;
       if (/SELECT id, "inbox_lease_generation"/.test(sql)) {
         return [
           { id: SESSION_ID, inboxLeaseGeneration: null, inboxLeaseOwner: null, status: RunStatus.RUNNING },
@@ -58,7 +52,7 @@ function leaseSQL() {
   );
   return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn
     .bind(controller)(SESSION_ID, RUNNER_ID, null)
-    .then(() => queryText(rawCalls.at(-1)?.[0]));
+    .then(() => renderRawQuery(rawCalls.at(-1) ?? []).text);
 }
 
 test('a steer is gated ON a live engine turn, and an executable turn is still gated OFF one', async () => {

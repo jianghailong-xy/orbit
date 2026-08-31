@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 
 function makeService(executableAfterDelete: number) {
@@ -12,10 +13,12 @@ function makeService(executableAfterDelete: number) {
   };
   let controlTurns = 0;
   let inboxWakes = 0;
+  const currentWork = currentWorkTerminalizationDouble();
   const tx = {
     $queryRaw: async () => [{ id: session.id }],
     session: { findUniqueOrThrow: async () => ({ ...session }) },
     conversationTurn: {
+      ...currentWork.conversationTurn,
       deleteMany: async () => ({ count: 1 }),
       count: async () => executableAfterDelete,
       findUnique: async () => null,
@@ -25,6 +28,7 @@ function makeService(executableAfterDelete: number) {
         return { id: '44444444-4444-4444-8444-444444444444', seq: 4 };
       },
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }) },

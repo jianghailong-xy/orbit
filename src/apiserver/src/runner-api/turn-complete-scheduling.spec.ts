@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { buildCoordinatorDeliveryContextKey } from '../projects/coordinator-opening';
+import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
@@ -37,6 +38,9 @@ function makeController(
   let retireCalls = 0;
   const taskChanges: string[] = [];
   const sessionUpdates: string[] = [];
+  const currentWork = currentWorkTerminalizationDouble({
+    onConversationTurnUpdateMany: async () => ({ count: 1 }),
+  });
   const tx = {
     $queryRaw: async () => [{ id: sessionId, leaseOwnerMatches: true }],
     $executeRaw: async () => {
@@ -44,7 +48,7 @@ function makeController(
       return 1;
     },
     conversationTurn: {
-      updateMany: async () => ({ count: 1 }),
+      ...currentWork.conversationTurn,
       findUnique: async () => ({ kind: 'message' }),
       count: async () => pendingExecutable,
       findFirst: async (args: { where: { kind?: string } }) =>
@@ -57,8 +61,9 @@ function makeController(
               content: 'hello',
               leaseGeneration: turnLeaseGeneration,
               coordinatorContextKey,
-            },
+          },
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
     session: {
       findUniqueOrThrow: async () => ({
         status: session.status,

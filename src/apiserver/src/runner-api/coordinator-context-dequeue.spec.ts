@@ -7,6 +7,7 @@ import {
   buildCoordinatorDeliveryInstructions,
   buildCoordinatorOpening,
 } from '../projects/coordinator-opening';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import {
   RunnerApiController,
   SESSION_CLAUDE_COORDINATOR_CONTEXT_V1,
@@ -47,7 +48,7 @@ function harness(options: {
   const turnUpdates: unknown[] = [];
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
-      const sql = (args[0] as readonly string[]).join('?');
+      const sql = renderRawQuery(args).text;
       if (/SELECT id, "inbox_lease_generation"[\s\S]*FROM "session"/.test(sql)) {
         return [{
           id: SESSION_ID,
@@ -95,6 +96,10 @@ function harness(options: {
         turnUpdates.push(args);
         return { count: 1 };
       },
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
     runEvent: {
       findFirst: async () => options.started ? { id: 'event-1' } : null,

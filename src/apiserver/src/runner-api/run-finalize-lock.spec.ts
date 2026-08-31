@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
+import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -37,6 +38,9 @@ function makeController(current: LockedSnapshot) {
   const publishedStatuses: RunStatus[] = [];
   const publishedTaskChanges: string[] = [];
   let retireCalls = 0;
+  const currentWork = currentWorkTerminalizationDouble({
+    onConversationTurnUpdateMany: async () => ({ count: 1 }),
+  });
   const tx = {
     $queryRaw: async () => {
       order.push('lock');
@@ -62,9 +66,10 @@ function makeController(current: LockedSnapshot) {
       },
     },
     conversationTurn: {
-      updateMany: async () => ({ count: 1 }),
+      ...currentWork.conversationTurn,
       findFirst: async () => null,
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
     task: {
       updateMany: async ({ where }: { where: { id: string } }) => {
         taskUpdateIds.push(where.id);

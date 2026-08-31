@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -25,7 +26,7 @@ function leaseSQL() {
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       rawCalls.push(args);
-      const sql = (args[0] as readonly string[]).join('?');
+      const sql = renderRawQuery(args).text;
       if (/SELECT id, "inbox_lease_generation"/.test(sql)) {
         return [
           { id: SESSION_ID, inboxLeaseGeneration: null, inboxLeaseOwner: null, status: RunStatus.RUNNING },
@@ -46,7 +47,7 @@ function leaseSQL() {
   );
   return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn
     .bind(controller)(SESSION_ID, RUNNER_ID, null)
-    .then(() => (rawCalls.at(-1)?.[0] as readonly string[]).join('?'));
+    .then(() => renderRawQuery(rawCalls.at(-1) ?? []).text);
 }
 
 test('setconfig lands mid-turn like an interrupt, and reload is still held until the turn ends', async () => {

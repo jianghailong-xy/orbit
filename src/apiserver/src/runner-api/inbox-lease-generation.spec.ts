@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -9,13 +10,6 @@ const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const GENERATION = '33333333-3333-4333-8333-333333333333';
 
 type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<unknown>;
-
-function queryText(query: unknown): string {
-  if (Array.isArray(query)) return (query as readonly string[]).join('?');
-  const strings = (query as { strings?: readonly string[] } | null)?.strings;
-  if (strings) return strings.join('?');
-  return String(query);
-}
 
 function harness(
   owned: boolean,
@@ -28,7 +22,7 @@ function harness(
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       rawCalls.push(args);
-      const sql = queryText(args[0]);
+      const sql = renderRawQuery(args).text;
       if (/SELECT id, "inbox_lease_generation"[\s\S]*FROM "session"/.test(sql)) {
         return owned
           ? [{
@@ -61,20 +55,20 @@ test('dequeue row-locks runner ownership and stamps the engine generation with t
   assert.equal(await h.dequeue(SESSION_ID, RUNNER_ID, GENERATION), null);
   assert.equal(h.rawCalls.length, 4);
 
-  const lockSQL = queryText(h.rawCalls[0][0]);
+  const lockSQL = renderRawQuery(h.rawCalls[0]).text;
   assert.match(lockSQL, /"assigned_runner_id" = \?::uuid[\s\S]*FOR UPDATE/);
   assert.match(lockSQL, /"inbox_lease_owner" AS "inboxLeaseOwner", status/);
   assert.deepEqual(h.rawCalls[0].slice(1), [SESSION_ID, RUNNER_ID]);
 
-  const activeSQL = queryText(h.rawCalls[1][0]);
+  const activeSQL = renderRawQuery(h.rawCalls[1]).text;
   assert.match(activeSQL, /FROM "inbox_lease_generation"/);
   assert.match(activeSQL, /"lease_owner" IS NOT DISTINCT FROM \?::uuid/);
   assert.match(activeSQL, /"retired_at" IS NULL/);
 
-  const capabilitySQL = queryText(h.rawCalls[2][0]);
+  const capabilitySQL = renderRawQuery(h.rawCalls[2]).text;
   assert.match(capabilitySQL, /conversation_turn_startup_fragment/);
 
-  const leaseSQL = queryText(h.rawCalls[3][0]);
+  const leaseSQL = renderRawQuery(h.rawCalls[3]).text;
   assert.match(leaseSQL, /"lease_deadline_at" = now\(\) \+ \(\? \* interval '1 millisecond'\)/);
   assert.match(leaseSQL, /"lease_generation" = \?::uuid/);
   assert.ok(h.rawCalls[3].slice(1).includes(GENERATION));

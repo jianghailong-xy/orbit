@@ -47,11 +47,18 @@ function makeService(opts: {
       update: async () => ({ ...session }),
     },
     conversationTurn: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
       findUnique: async () => null,
       findFirst: async () => (opts.steerRow ? { id: TURN_ID } : null),
       deleteMany: async () => ({ count: opts.deleted ?? 0 }),
       count: async () => opts.executable ?? 1,
       create: async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', seq: 2, ...data }),
+    },
+    conversationTurnStartupFragment: {
+      findUnique: async () => null,
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
     attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     modelProvider: { findFirst: async () => null },

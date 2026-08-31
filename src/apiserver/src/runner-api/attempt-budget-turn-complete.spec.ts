@@ -35,11 +35,16 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
     $executeRaw: async () => 1,
     conversationTurn: {
+      findMany: async () => [],
       findFirst: async ({ where }: { where: { kind?: string } }) =>
         where.kind === 'steer' && kind === 'steer' ? { id: TURN_ID } : null,
       findUnique: async () => ({ kind }),
       updateMany: async () => ({ count: 1 }),
       count: async () => 0,
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
     session: {
       findUniqueOrThrow: async () => ({

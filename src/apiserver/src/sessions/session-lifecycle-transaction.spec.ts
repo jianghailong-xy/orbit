@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
+import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -23,6 +24,7 @@ test('complete atomically persists live end intent and completedAt before side e
     archivedAt: null,
     deletedAt: null,
   };
+  const currentWork = currentWorkTerminalizationDouble();
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID }],
     session: {
@@ -33,11 +35,13 @@ test('complete atomically persists live end intent and completedAt before side e
       },
     },
     conversationTurn: {
+      ...currentWork.conversationTurn,
       deleteMany: async () => ({ count: 1 }),
       findUnique: async () => null,
       findFirst: async () => ({ seq: 2 }),
       create: async ({ data }: { data: Record<string, unknown> }) => data,
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => {
@@ -50,6 +54,10 @@ test('complete atomically persists live end intent and completedAt before side e
     publishSessionUpdated: () => {
       assert.equal(committed, true);
       effects.push('updated');
+    },
+    publishQueuedTurnsChanged: () => {
+      assert.equal(committed, true);
+      effects.push('queue');
     },
     requestCancel: () => {
       assert.equal(committed, true);
@@ -79,7 +87,7 @@ test('complete atomically persists live end intent and completedAt before side e
   assert.ok(updateData?.cancelRequestedAt instanceof Date);
   assert.equal(updateData?.endReason, SessionEndReason.COMPLETED);
   assert.equal(publishedLifecycleState, SessionLifecycleState.COMPLETED);
-  assert.deepEqual(effects, ['updated', 'cancel', 'inbox', 'ended']);
+  assert.deepEqual(effects, ['updated', 'queue', 'cancel', 'inbox', 'ended']);
 });
 
 test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
@@ -89,6 +97,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   let publishedStatus: RunStatus | undefined;
   let publishedLifecycleState: SessionLifecycleState | undefined;
   let summaryUpdates = 0;
+  let queuedTurnUpdates = 0;
   const session = {
     id: SESSION_ID,
     status: RunStatus.PENDING,
@@ -98,6 +107,12 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
     archivedAt: null,
     deletedAt: null,
   };
+  const currentWork = currentWorkTerminalizationDouble({
+    onConversationTurnUpdateMany: async () => {
+      drained++;
+      return { count: 1 };
+    },
+  });
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID }],
     $executeRaw: async () => {
@@ -112,18 +127,17 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
       },
     },
     conversationTurn: {
-      updateMany: async () => {
-        drained++;
-        return { count: 1 };
-      },
+      ...currentWork.conversationTurn,
       findFirst: async () => null,
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const realtime = {
     publishSessionUpdated: () => summaryUpdates++,
+    publishQueuedTurnsChanged: () => queuedTurnUpdates++,
     requestCancel: () => undefined,
     notifyInbox: () => undefined,
     publishSessionLifecycleChanged: (
@@ -147,6 +161,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   assert.equal(publishedStatus, RunStatus.CANCELLED);
   assert.equal(publishedLifecycleState, SessionLifecycleState.TRASH);
   assert.equal(summaryUpdates, 1, 'the PENDING task overlay is cleared post-commit');
+  assert.equal(queuedTurnUpdates, 1, 'the drained queue is published post-commit');
 });
 
 test('completing a dormant terminal session publishes its actual end reason', async () => {
@@ -307,6 +322,7 @@ test('complete emits no side effects when the atomic end transaction fails', asy
     archivedAt: null,
     deletedAt: null,
   };
+  const currentWork = currentWorkTerminalizationDouble();
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID }],
     session: {
@@ -314,6 +330,7 @@ test('complete emits no side effects when the atomic end transaction fails', asy
       update: async () => session,
     },
     conversationTurn: {
+      ...currentWork.conversationTurn,
       deleteMany: async () => ({ count: 0 }),
       findUnique: async () => null,
       findFirst: async () => ({ seq: 1 }),
@@ -321,6 +338,7 @@ test('complete emits no side effects when the atomic end transaction fails', asy
         throw new Error('turn insert failed');
       },
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),

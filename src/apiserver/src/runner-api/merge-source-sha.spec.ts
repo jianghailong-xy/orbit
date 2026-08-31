@@ -327,10 +327,15 @@ function turnHarness(branchSha?: string) {
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
     conversationTurn: {
+      findMany: async () => [],
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ kind: 'message' }),
       count: async () => 0,
       findFirst: async () => null,
+    },
+    conversationTurnStartupFragment: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
     },
     session: {
       findUniqueOrThrow: async () => ({

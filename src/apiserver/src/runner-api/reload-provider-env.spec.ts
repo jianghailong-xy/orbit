@@ -5,6 +5,7 @@ import { RunStatus } from '@prisma/client';
 process.env.PROVIDER_SECRET_KEY = 'test-master-key';
 
 import { encryptSecret } from '../providers/provider-crypto';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -22,7 +23,7 @@ type Dequeue = (
 function harness(reloadContent: string, session: Record<string, unknown>, provider?: unknown) {
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
-      const sql = (args[0] as readonly string[]).join('?');
+      const sql = renderRawQuery(args).text;
       if (/SELECT id, "inbox_lease_generation"[\s\S]*FROM "session"/.test(sql)) {
         return [
           {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SessionEndReason } from '@orbit/shared';
+import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 
 test('end linearizes after a concurrent send and finalizes the now-PENDING session', async () => {
@@ -22,6 +23,13 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   let inboxWakes = 0;
   let retired = 0;
   const sessionUpdates: string[] = [];
+  const queuedTurnUpdates: string[] = [];
+  const currentWork = currentWorkTerminalizationDouble({
+    onConversationTurnUpdateMany: async () => {
+      drained++;
+      return { count: 1 };
+    },
+  });
   const tx = {
     $queryRaw: async () => [{ id }],
     $executeRaw: async () => {
@@ -36,12 +44,10 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
       },
     },
     conversationTurn: {
-      updateMany: async () => {
-        drained++;
-        return { count: 1 };
-      },
+      ...currentWork.conversationTurn,
       findFirst: async () => null,
     },
+    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     session: { findFirst: async () => fastRead },
@@ -49,6 +55,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   } as never;
   const realtime = {
     publishSessionUpdated: (sessionId: string) => sessionUpdates.push(sessionId),
+    publishQueuedTurnsChanged: (sessionId: string) => queuedTurnUpdates.push(sessionId),
     requestCancel: () => cancelRequests++,
     notifyInbox: () => inboxWakes++,
   } as never;
@@ -62,4 +69,5 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   assert.equal(cancelRequests, 1);
   assert.equal(inboxWakes, 1);
   assert.deepEqual(sessionUpdates, [id]);
+  assert.deepEqual(queuedTurnUpdates, [id]);
 });
