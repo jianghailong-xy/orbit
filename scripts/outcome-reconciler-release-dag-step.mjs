@@ -14,6 +14,7 @@ import { canonical, sha256 } from './outcome-reconciler-release-dag-lib.mjs';
 import {
   CASE_MISSING_RECEIPT,
   CASE_PASS,
+  caseDiagnostic,
   classifyCase,
   formatPartitionReport,
   partitionConclusion,
@@ -297,7 +298,11 @@ if (action === 'preflight') {
     exitCode,
     cleanupCode,
     summary,
-    diagnostic: outcome === CASE_PASS ? '' : tapDiagnostic(tap),
+    // A case killed by the per-case timeout prints no `not ok` line at all, so the TAP reader has
+    // nothing to quote. It still has to say something locatable rather than nothing.
+    diagnostic: outcome === CASE_PASS
+      ? ''
+      : caseDiagnostic({ diagnostic: tapDiagnostic(tap), outcome, exitCode }),
     tap: fileEvidence(tapPath),
   };
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
