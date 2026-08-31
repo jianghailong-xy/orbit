@@ -5,9 +5,11 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  checkoutScopeDigests,
   checkpointReuseDecision,
   commandDigest,
   deriveBinding,
+  nodeInputDigests,
   sha256,
 } from '../scripts/outcome-reconciler-release-dag-lib.mjs';
 
@@ -275,18 +277,32 @@ test('the old 36d binding is necessarily stale under the successor plan and targ
     environment,
   });
   const node = plan.nodes.find(({ id }) => id === 'full-api-shard-0');
-  const decision = checkpointReuseDecision({
+  const supersededReceipt = {
+    nodeId: node.id,
+    state: 'SUCCESS',
+    exitCode: 0,
+    commandDigest: commandDigest(node.command),
+    binding: plan.supersededAttempt.binding,
+  };
+  // The superseded attempt predates per-node input digests, so it cannot even be compared.
+  assert.deepEqual(checkpointReuseDecision({ node, binding: current, receipt: supersededReceipt }),
+    { reusable: false, reason: 'INDETERMINATE_INPUTS' });
+  // And once an input set is fully determined, the round the shard artifacts name still
+  // rules them out: this node embeds its binding and never leaves the round it ran in.
+  const inputIndex = nodeInputDigests({
+    plan,
+    scopeDigests: checkoutScopeDigests(plan, repo),
+    environmentDigest: current.environmentDigest,
+  });
+  const { inputDigest, inputs } = inputIndex.get(node.id);
+  assert.equal(node.artifactBinding, 'BINDING_EMBEDDED');
+  assert.deepEqual(checkpointReuseDecision({
     node,
     binding: current,
-    receipt: {
-      nodeId: node.id,
-      state: 'SUCCESS',
-      exitCode: 0,
-      commandDigest: commandDigest(node.command),
-      binding: plan.supersededAttempt.binding,
-    },
-  });
-  assert.deepEqual(decision, { reusable: false, reason: 'STALE_BINDING' });
+    inputDigest,
+    inputs,
+    receipt: { ...supersededReceipt, inputDigest, inputs },
+  }), { reusable: false, reason: 'STALE_BINDING' });
   assert.notEqual(current.dagPlanDigest, plan.supersededAttempt.binding.dagPlanDigest);
   assert.notEqual(current.bindingDigest, plan.supersededAttempt.binding.bindingDigest);
 });

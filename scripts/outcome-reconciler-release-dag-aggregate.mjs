@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  DIGEST,
   canonical,
+  checkoutScopeDigests,
   commandDigest,
   expandedNode,
+  nodeInputDigests,
   sha256,
   topologicalOrder,
   validatePlan,
@@ -64,6 +67,14 @@ function assertBinding(receipt) {
   }
 }
 
+// Recomputed from this checkout, so a receipt only enters the manifest if it is an
+// observation of the input set that exists now.
+const currentInputDigests = nodeInputDigests({
+  plan,
+  scopeDigests: checkoutScopeDigests(plan, repo),
+  environmentDigest: binding.environmentDigest,
+});
+
 function validateReceipt(node) {
   const file = path.join(runRoot, 'nodes', `${node.id}.json`);
   assert.ok(existsSync(file), `${node.id} has no node receipt`);
@@ -74,6 +85,11 @@ function validateReceipt(node) {
   assertBinding(receipt);
   assert.equal(receipt.commandDigest, commandDigest(node.command),
     `${node.id} command changed after admission`);
+  const currentInputDigest = currentInputDigests.get(node.id)?.inputDigest;
+  assert.ok(DIGEST.test(currentInputDigest ?? ''),
+    `${node.id} has no exactly determined input set`);
+  assert.equal(receipt.inputDigest, currentInputDigest,
+    `${node.id} was not observed under the current input set`);
   assert.deepEqual(receipt.target, {
     ref: plan.target.ref,
     sha: binding.targetSha,
@@ -142,6 +158,8 @@ const receiptEntries = predecessorIds.map((id) => {
     failed: receipt.failCount,
     skipped: receipt.skipCount,
     artifactDigest: receipt.artifactDigest,
+    inputDigest: receipt.inputDigest,
+    reused: receipt.reuse !== undefined,
     receiptDigest,
   };
 });

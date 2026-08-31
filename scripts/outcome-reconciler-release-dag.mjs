@@ -18,16 +18,23 @@ import {
   UUID,
   addResources,
   canonical,
+  checkoutScopeDigests,
   checkpointReuseDecision,
   commandDigest,
   deriveBinding,
   expandedNode,
   metricsForNode,
+  nodeInputDigests,
   resourceFits,
   sha256,
   topologicalOrder,
   validatePlan,
 } from './outcome-reconciler-release-dag-lib.mjs';
+import {
+  readCheckpoint,
+  readmitCheckpoint,
+  writeCheckpoint,
+} from './outcome-reconciler-release-dag-checkpoints.mjs';
 import {
   deriveReleaseAttemptIdentity,
   nodeDatabaseIdentity,
@@ -332,6 +339,17 @@ const nodes = new Map(expandedPlan.nodes.map((node) => [node.id, node]));
 const order = topologicalOrder(expandedPlan);
 const orderIndex = new Map(order.map((id, index) => [id, index]));
 
+// Reuse is keyed on this, never on the round: the declared plan entry, the content of the
+// scopes the node reads, the host it reads them on, and the shape of what produced its inputs.
+const observedScopeDigests = checkoutScopeDigests(plan, repo);
+const nodeInputIndex = nodeInputDigests({
+  plan,
+  scopeDigests: observedScopeDigests,
+  environmentDigest: binding.environmentDigest,
+});
+const inputDigestOf = (nodeId) => nodeInputIndex.get(nodeId)?.inputDigest ?? null;
+const checkpointRoot = path.join(stateRoot, 'checkpoints');
+
 function receiptPath(nodeId) {
   return path.join(receiptRoot, `${nodeId}.json`);
 }
@@ -519,22 +537,60 @@ function quarantineNodeOutputs(node) {
   }
 }
 
+// The checkpoint store is addressed by what a node reads, not by the round it ran in.
+// A round is a fresh directory; a checkpoint outlives it exactly as long as its inputs do.
+function storedCheckpoint(nodeId) {
+  return readCheckpoint({ storeRoot: checkpointRoot, nodeId, inputDigest: inputDigestOf(nodeId) });
+}
+
+function storeCheckpoint(receipt) {
+  // A focused observation is not a resumable formal attempt and never seeds the store.
+  if (focusedMode) return;
+  writeCheckpoint({ repo, storeRoot: checkpointRoot, receipt });
+}
+
+function readmit(receipt, node) {
+  return readmitCheckpoint({
+    repo,
+    receipt,
+    node,
+    binding: {
+      targetRef: plan.target.ref,
+      targetSha,
+      targetReceiptDigest: binding.targetReceiptDigest,
+      environmentDigest: binding.environmentDigest,
+      evaluationPlanDigest: binding.evaluationPlanDigest,
+      dagPlanDigest: binding.dagPlanDigest,
+      evidenceCutDigest: binding.evidenceCutDigest,
+      bindingDigest: binding.bindingDigest,
+    },
+    target: {
+      ref: plan.target.ref,
+      sha: targetSha,
+      receiptDigest: targetResolution.receipt.digest,
+    },
+    releaseAttempt,
+    runRoot,
+    logRoot,
+  });
+}
+
 function loadReusable() {
   const decide = (requireLivePostgres) => {
     const decisions = new Map();
     const reusable = new Set();
     for (const id of order) {
       const node = nodes.get(id);
-      const receipt = readReceipt(id);
-      let decision = checkpointReuseDecision({
+      const { inputDigest, inputs } = nodeInputIndex.get(id) ?? {};
+      const receipt = storedCheckpoint(id) ?? readReceipt(id);
+      const decision = checkpointReuseDecision({
         receipt,
         node,
         binding,
         artifactsValid: artifactsValid(receipt, node, { requireLivePostgres }),
+        inputDigest,
+        inputs,
       });
-      if (decision.reusable && node.dependsOn.some((dependency) => !reusable.has(dependency))) {
-        decision = { reusable: false, reason: 'STALE_DEPENDENCY' };
-      }
       decisions.set(id, { decision, receipt });
       if (decision.reusable) reusable.add(id);
     }
@@ -548,12 +604,15 @@ function loadReusable() {
   const completed = new Map();
   for (const id of order) {
     const { decision, receipt } = selected.decisions.get(id);
+    const node = nodes.get(id);
     if (decision.reusable) {
-      materialize(receipt);
-      completed.set(id, { ...receipt, reused: true, reuseReason: decision.reason });
-      console.log(`==> release-dag: reuse ${id} artifact=${receipt.artifactDigest}`);
-    } else if (receipt) {
-      console.log(`==> release-dag: invalidate ${id} reason=${decision.reason}`);
+      const readmitted = readmit(receipt, node);
+      materialize(readmitted);
+      atomicJson(receiptPath(id), readmitted);
+      completed.set(id, { ...readmitted, reused: true, reuseReason: decision.reason });
+      console.log(`==> release-dag: reuse ${id} input=${inputDigestOf(id)?.slice(0, 12)} artifact=${readmitted.artifactDigest}`);
+    } else {
+      console.log(`==> release-dag: invalidate ${id} reason=${decision.reason} input=${inputDigestOf(id)?.slice(0, 12) ?? 'INDETERMINATE'}`);
     }
   }
   return completed;
@@ -626,6 +685,7 @@ function nodeEnvironment(node, effectiveTimeoutSeconds) {
     OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: releaseAttempt.token,
     OUTCOME_RELEASE_DAG_PLAN_PATH: planPath,
     OUTCOME_RELEASE_DAG_COMMAND_DIGEST: commandDigest(node.command),
+    OUTCOME_RELEASE_DAG_NODE_INPUT_DIGEST: inputDigestOf(node.id) ?? '',
     OUTCOME_RELEASE_DAG_POSTGRES_IMAGE_ID: environment.imageIds[plan.environment.postgresImage],
     OUTCOME_RELEASE_DAG_SWIFT_IMAGE_ID: environment.imageIds[plan.environment.swiftImage],
   };
@@ -742,6 +802,9 @@ async function executeNode(node, attemptDeadlineMs) {
     nodeId: node.id,
     nodeKind: node.kind,
     state,
+    artifactBinding: node.artifactBinding,
+    inputDigest: inputDigestOf(node.id),
+    inputs: nodeInputIndex.get(node.id)?.inputs ?? null,
     target: {
       ref: plan.target.ref,
       sha: targetSha,
@@ -789,9 +852,11 @@ async function executeNode(node, attemptDeadlineMs) {
     log: { path: relativeToRepo(logPath), ...log },
     artifactDigest: sha256(canonical({ artifacts, log })),
     validationError,
-    reusable: state === 'SUCCESS' && node.cacheable === true,
+    reusable: state === 'SUCCESS' && node.cacheable === true
+      && DIGEST.test(inputDigestOf(node.id) ?? ''),
   };
   atomicJson(receiptPath(node.id), receipt);
+  storeCheckpoint(receipt);
   console.log(`==> release-dag: ${node.id} ${state} exit=${receipt.exitCode ?? 'null'} tests=${receipt.testCount} skip=${receipt.skipCount} artifact=${receipt.artifactDigest}`);
   return receipt;
 }
@@ -823,6 +888,26 @@ const attemptDeadlineMs = attemptStartedAtMs + (plan.evaluator.schedulerDeadline
 // The focused rebind preflight is an observation, not a resumable formal attempt. It always
 // exercises the disposable PostgreSQL and isolated Prisma fixture from scratch.
 const completed = focusedMode ? new Map() : loadReusable();
+
+// What would this round actually rerun? The answer is a property of the checkout, not of
+// the run, so it is worth being able to ask without starting a 45-node matrix.
+if (process.argv.includes('--plan-reuse')) {
+  console.log(JSON.stringify({
+    outcome: 'PASS',
+    bindingDigest: binding.bindingDigest,
+    targetSha,
+    scopeDigests: observedScopeDigests,
+    reusedNodeIds: [...completed.keys()].sort(),
+    rerunNodeIds: order.filter((id) => !completed.has(id)),
+    nodes: order.map((id) => ({
+      id,
+      artifactBinding: nodes.get(id).artifactBinding,
+      inputDigest: inputDigestOf(id),
+      reused: completed.has(id),
+    })),
+  }, null, 2));
+  process.exit(0);
+}
 const attempted = new Set();
 const running = new Map();
 let inUse = {};

@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  DIGEST,
   canonical,
+  checkoutScopeDigests,
   commandDigest,
   expandedNode,
+  nodeInputDigests,
   sha256,
   topologicalOrder,
   validatePlan,
@@ -68,6 +71,18 @@ assert.equal(manifest.logicalSummary.passed, manifest.logicalSummary.tests);
 
 const publisherId = plan.evidenceCut.publisherNodeId;
 const expectedReceiptIds = topologicalOrder(plan).filter((id) => id !== publisherId);
+assert.equal(expectedReceiptIds.length + 1, plan.nodes.length,
+  'the evidence cut must cover every declared node');
+// Finer checkpoints may not buy a weaker gate. Every receipt admitted here has to be an
+// observation of the input set that exists RIGHT NOW, whether it was made in this round or
+// re-admitted from an earlier one: the digests are recomputed from this checkout, not read
+// back out of the receipt that is being judged.
+const currentInputDigests = nodeInputDigests({
+  plan,
+  scopeDigests: checkoutScopeDigests(plan, repo),
+  environmentDigest: binding.environmentDigest,
+});
+const reusedNodes = [];
 const receipts = expectedReceiptIds.map((nodeId) => {
   const node = nodes.get(nodeId);
   const file = path.join(runRoot, 'nodes', `${nodeId}.json`);
@@ -87,6 +102,29 @@ const receipts = expectedReceiptIds.map((nodeId) => {
     receiptDigest: binding.targetReceiptDigest,
   });
   assert.equal(receipt.commandDigest, commandDigest(node.command));
+  const currentInputDigest = currentInputDigests.get(nodeId)?.inputDigest;
+  assert.ok(DIGEST.test(currentInputDigest ?? ''),
+    `${nodeId} has no exactly determined input set at publication`);
+  assert.equal(receipt.inputDigest, currentInputDigest,
+    `${nodeId} was not observed under the current input set`);
+  if (receipt.reuse) {
+    assert.equal(node.artifactBinding, 'CONTENT_ONLY',
+      `${nodeId} embeds its round binding and may not be re-admitted`);
+    assert.equal(receipt.reuse.inputDigest, currentInputDigest,
+      `${nodeId} was re-admitted under a different input set`);
+    assert.match(receipt.reuse.observedTargetSha ?? '', /^[0-9a-f]{40}$/u);
+    assert.match(receipt.reuse.observedBindingDigest ?? '', DIGEST);
+    assert.match(receipt.reuse.sourceReceiptDigest ?? '', DIGEST);
+    assert.notEqual(receipt.reuse.observedBindingDigest, binding.bindingDigest,
+      `${nodeId} declares re-admission from the round it already belongs to`);
+    reusedNodes.push({
+      nodeId,
+      inputDigest: currentInputDigest,
+      observedTargetSha: receipt.reuse.observedTargetSha,
+      observedBindingDigest: receipt.reuse.observedBindingDigest,
+      sourceReceiptDigest: receipt.reuse.sourceReceiptDigest,
+    });
+  }
   assert.equal(sha256(canonical(receipt.environment)), binding.environmentDigest);
   assert.equal(receipt.evaluationPhase, plan.evaluator.phase);
   assert.deepEqual(receipt.resources, node.resources);
@@ -117,6 +155,8 @@ const receipts = expectedReceiptIds.map((nodeId) => {
     nodeId,
     receiptDigest: sha256(canonical(receipt)),
     commandDigest: receipt.commandDigest,
+    inputDigest: receipt.inputDigest,
+    reused: receipt.reuse !== undefined,
     artifactDigest: receipt.artifactDigest,
   };
 });
@@ -133,12 +173,20 @@ const body = {
   evaluationCommandDigest: plan.evaluator.commandDigest,
   admittedAttemptTimeoutSeconds: plan.evaluator.attemptTimeoutSeconds,
   automaticRetries: plan.evaluator.automaticRetries,
+  declaredNodeCount: plan.nodes.length,
   evidenceCut: {
     ordering: plan.evidenceCut.ordering,
     membership: plan.evidenceCut.membership,
     requiredNodeState: plan.evidenceCut.requiredNodeState,
     receipts,
     receiptCutDigest,
+  },
+  // Named, not smoothed over: a re-admitted observation is as strong as a rerun only
+  // because its input set is identical, and a reader gets to check that claim.
+  reuse: {
+    key: plan.checkpointPolicy.reuseKey,
+    reusedNodes,
+    freshNodeCount: receipts.length - reusedNodes.length,
   },
   aggregateManifest: {
     path: path.relative(repo, manifestPath),
