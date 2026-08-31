@@ -16,6 +16,17 @@ export interface OwnerRatificationReference {
   status: 'PENDING';
   projectId: string;
   projectTitle: string;
+  /**
+   * The conversation this contract was DRAFTED in, or null when nothing drafted it in a session.
+   *
+   * It is `project.coordinator_session_id` — the pointer a project created from inside an agent
+   * session is bound to in the same insert that creates it. It is what lets the pending question
+   * be shown where the contract was written instead of only in a separate inbox: a session view
+   * can ask for its own pending references without first listing every project. Still no CTA and
+   * still no authority — naming the conversation grants nothing, and the decision continues to
+   * require the owner's own credential on the existing owner route.
+   */
+  coordinatorSessionId: string | null;
   decisionRequestId: string;
   requestRevision: string;
   obligationId: string;
@@ -75,6 +86,7 @@ export interface OwnerRatificationEligibility {
 export interface OwnerRatificationReferenceInput {
   projectId: string;
   projectTitle: string;
+  coordinatorSessionId?: string | null;
   ownerId: string;
   requestId: string;
   requestGeneration: bigint | number | string;
@@ -203,6 +215,7 @@ export function ownerRatificationReference(
     status: 'PENDING',
     projectId: input.projectId,
     projectTitle: input.projectTitle,
+    coordinatorSessionId: input.coordinatorSessionId ?? null,
     decisionRequestId: input.requestId,
     requestRevision,
     obligationId: observed?.obligationId ?? input.requestId,

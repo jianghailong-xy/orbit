@@ -130,6 +130,7 @@ echo '==> owner-ratification-ui: running Web integration, keyboard and mobile pr
 set +e
 ( cd "$WEB" && timeout -k 20 "$TIMEOUT_SECONDS" "$VITEST" run \
     src/pages/OwnerRatificationUi.test.tsx src/pages/JudgmentEntryPoints.test.tsx \
+    src/components/SessionOwnerRatification.test.tsx \
     --maxWorkers=1 --reporter=json --outputFile="$WEB_JSON" )
 WEB_RC=$?
 set -e
