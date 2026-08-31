@@ -1408,3 +1408,356 @@ test('a shard that leaves a database behind fails even when every test passed', 
     partition, declaredCases: 2, results: [clean[0]],
   }).outcome, 'FAILED');
 });
+
+// ---------------------------------------------------------------------------
+// Structural gate versus formal gate.
+//
+// "Is this checkout the published target?" is a precondition of RUNNING the Release DAG, not of
+// checking that the plan file is well formed. While the structural gate asked it too, that gate
+// was unpassable for every task that produced a commit (HEAD then necessarily differs from
+// origin/main) and unpassable again whenever main merely advanced. The tests below pin both
+// halves at once: the structural gate must stay decidable inside an ordinary worktree, and the
+// formal path must still refuse anything that is not the exact frozen target.
+//
+// The formal-path assertions drive the real scripts/outcome-reconciler-release-dag.mjs with git
+// and docker replaced by recording shims, so they observe the shipped guards rather than a
+// restatement of them. Every one of them makes a target assertion fail, so resolveTarget() always
+// aborts and no node is ever scheduled.
+// ---------------------------------------------------------------------------
+
+const gateShell = read('scripts/outcome-reconciler-release-dag-plan.sh');
+const gateBody = gateShell
+  .split('\n')
+  .filter((line) => !line.trimStart().startsWith('#'))
+  .join('\n');
+const gateSteps = gateShell
+  .replace(/\\\r?\n\s*/gu, ' ')
+  .split('\n')
+  .map((line) => line.trim())
+  .filter((line) => line.startsWith('timeout '));
+const runnerSource = read('scripts/outcome-reconciler-release-dag.mjs');
+const realGit = process.env.ORBIT_SHIM_REAL_GIT
+  || execFileSync('bash', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+const divergentSha = 'd'.repeat(40);
+
+const GIT_SHIM = `#!/usr/bin/env bash
+set -uo pipefail
+{ printf '%s ' "\$@"; printf '\\n'; } >>"\$ORBIT_SHIM_LOG"
+case "\${1-}" in
+  fetch) exit 0 ;;
+  rev-parse)
+    if [ "\${2-}" = 'HEAD' ] && [ -n "\${ORBIT_SHIM_HEAD-}" ]; then
+      printf '%s\\n' "\$ORBIT_SHIM_HEAD"; exit 0
+    fi
+    if [ "\${2-}" = 'refs/remotes/origin/main' ] && [ -n "\${ORBIT_SHIM_TRACKING-}" ]; then
+      printf '%s\\n' "\$ORBIT_SHIM_TRACKING"; exit 0
+    fi
+    ;;
+  ls-remote)
+    if [ -n "\${ORBIT_SHIM_REMOTE-}" ]; then
+      printf '%s\\trefs/heads/main\\n' "\$ORBIT_SHIM_REMOTE"; exit 0
+    fi
+    ;;
+  status)
+    if [ -n "\${ORBIT_SHIM_STATUS_SET-}" ]; then
+      printf '%s\\n' "\${ORBIT_SHIM_STATUS-}"; exit 0
+    fi
+    ;;
+esac
+exec "\$ORBIT_SHIM_REAL_GIT" "\$@"
+`;
+
+const DOCKER_SHIM = `#!/usr/bin/env bash
+set -uo pipefail
+{ printf '%s ' "\$@"; printf '\\n'; } >>"\$ORBIT_SHIM_LOG"
+if [ "\${1-}" = 'exec' ]; then printf '%s' "\${ORBIT_SHIM_RECEIPT-}"; exit 0; fi
+printf 'release DAG plan test shim refuses docker %s\\n' "\${1-}" >&2
+exit 1
+`;
+
+function runShimmed(command, args, overrides) {
+  const sandbox = mkdtempSync(path.join(tmpdir(), 'orbit-release-dag-shim-'));
+  try {
+    const log = path.join(sandbox, 'invocations.log');
+    writeFileSync(log, '');
+    writeFileSync(path.join(sandbox, 'git'), GIT_SHIM, { mode: 0o755 });
+    writeFileSync(path.join(sandbox, 'docker'), DOCKER_SHIM, { mode: 0o755 });
+    const childEnv = {
+      ...process.env,
+      OUTCOME_RELEASE_DAG_TARGET_SHA: '',
+      ORBIT_SHIM_HEAD: '',
+      ORBIT_SHIM_TRACKING: '',
+      ORBIT_SHIM_REMOTE: '',
+      ORBIT_SHIM_STATUS_SET: '',
+      ORBIT_SHIM_STATUS: '',
+      ORBIT_SHIM_RECEIPT: '',
+      ...overrides,
+      PATH: `${sandbox}${path.delimiter}${process.env.PATH}`,
+      ORBIT_SHIM_LOG: log,
+      ORBIT_SHIM_REAL_GIT: realGit,
+    };
+    // node:test marks its own children, and an inherited mark makes a nested `node --test`
+    // report to a parent runner that is not listening instead of writing TAP to stdout.
+    for (const name of Object.keys(childEnv)) {
+      if (name.startsWith('NODE_TEST_')) delete childEnv[name];
+    }
+    const result = spawnSync(command, args, {
+      cwd: repo,
+      encoding: 'utf8',
+      timeout: 300_000,
+      env: childEnv,
+    });
+    return {
+      status: result.status,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+      log: readFileSync(log, 'utf8'),
+    };
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+function refusedRelease(overrides) {
+  const refusal = runShimmed('node', ['scripts/outcome-reconciler-release-dag.mjs'], overrides);
+  assert.notEqual(refusal.status, 0, `the formal Release DAG admitted a rejected target\n${refusal.stdout}`);
+  assert.doesNotMatch(refusal.stdout, /==> release-dag: /u, 'a node was scheduled after a refusal');
+  return refusal;
+}
+
+function receiptRow(fields) {
+  const required = plan.target.requiredReceipt;
+  return [
+    '00000000-0000-4000-8000-000000000000',
+    'MERGED',
+    required.sourceBranch,
+    fields.sourceSha,
+    required.targetBranch,
+    fields.targetShaBefore,
+    fields.targetShaAfter,
+    required.recordedBy,
+    '2026-08-31 00:00:00+00',
+  ].join('\t');
+}
+
+test('the structural regression gate is exactly --check-plan plus the plan regression', () => {
+  assert.equal(gateSteps.length, 2, `the structural gate runs ${gateSteps.length} steps:\n${gateShell}`);
+  assert.match(gateSteps[0], /outcome-reconciler-release-dag\.mjs" --check-plan\b/u);
+  assert.match(gateSteps[1], /test\/outcome-reconciler-release-dag-plan\.test\.mjs"$/u);
+  assert.doesNotMatch(gateBody, /target-check/u,
+    'the structural gate calls the frozen-target check again');
+  assert.doesNotMatch(gateBody, /\borigin\b|ls-remote|rev-parse|\bfetch\b/u,
+    'the structural gate consults the release target again');
+  assert.equal(packageJson.scripts['test:outcome-reconciler:release-dag-plan'],
+    'bash scripts/outcome-reconciler-release-dag-plan.sh');
+});
+
+if (!process.env.ORBIT_RELEASE_DAG_PLAN_GATE_NESTED) {
+  test('the structural regression gate passes where HEAD is not origin/main', () => {
+    const head = git('rev-parse', 'HEAD');
+    assert.match(head, /^[0-9a-f]{40}$/u);
+    assert.notEqual(head, divergentSha, 'the divergence fixture collided with the real HEAD');
+    const gate = runShimmed('bash', ['scripts/outcome-reconciler-release-dag-plan.sh'], {
+      ORBIT_SHIM_TRACKING: divergentSha,
+      ORBIT_SHIM_REMOTE: divergentSha,
+      ORBIT_RELEASE_DAG_PLAN_GATE_NESTED: '1',
+    });
+    assert.equal(gate.status, 0,
+      `the structural gate failed in an ordinary worktree\n${gate.stdout}\n${gate.stderr}`);
+    assert.match(gate.stdout, /^# fail 0$/mu);
+    assert.match(gate.stdout, /^# cancelled 0$/mu);
+    assert.match(gate.stdout, /^# skipped 0$/mu);
+    assert.doesNotMatch(gate.log, /\borigin\b/u, 'the structural gate still asked about origin');
+    assert.doesNotMatch(gate.log, /^(fetch|ls-remote)\b/mu);
+  });
+}
+
+test('the formal Release DAG resolves the frozen target before it schedules anything', () => {
+  const checkPlanAt = runnerSource.indexOf("process.argv.includes('--check-plan')");
+  const resolveAt = runnerSource.indexOf('const targetResolution = resolveTarget();');
+  const environmentAt = runnerSource.indexOf('const environment = inspectEnvironment();');
+  const scheduleAt = runnerSource.indexOf('mkdirSync(receiptRoot, { recursive: true });');
+  assert.ok(checkPlanAt > 0 && checkPlanAt < resolveAt, 'the plan check no longer precedes the target');
+  assert.ok(resolveAt > 0 && resolveAt < environmentAt && environmentAt < scheduleAt,
+    'the frozen-target resolution is no longer the first thing the formal run does');
+  for (const harness of [
+    'scripts/outcome-reconciler-release-dag-pcc-rebind.sh',
+    'scripts/outcome-reconciler-release-dag-regression-rebind.sh',
+  ]) {
+    assert.match(read(harness), /outcome-reconciler-release-dag-target-check\.mjs/u, harness);
+  }
+  const head = git('rev-parse', 'HEAD');
+  const refusal = refusedRelease({
+    ORBIT_SHIM_TRACKING: head,
+    ORBIT_SHIM_REMOTE: head,
+    ORBIT_SHIM_STATUS_SET: '1',
+  });
+  assert.match(refusal.stderr, /the frozen builder merge receipt is missing/u);
+  assert.match(refusal.log, /^exec orbit-postgres psql\b/mu,
+    'the formal run never reached the builder receipt query');
+});
+
+test('the formal Release DAG refuses a checkout whose HEAD is not origin/main', () => {
+  const refusal = refusedRelease({
+    ORBIT_SHIM_TRACKING: divergentSha,
+    ORBIT_SHIM_REMOTE: divergentSha,
+  });
+  assert.match(refusal.stderr, /checkout HEAD is not the freshly fetched origin\/main target/u);
+  assert.doesNotMatch(refusal.log, /^exec orbit-postgres\b/mu,
+    'a divergent checkout still reached the receipt query');
+});
+
+test('the formal Release DAG refuses a checkout with tracked changes', () => {
+  const head = git('rev-parse', 'HEAD');
+  const refusal = refusedRelease({
+    ORBIT_SHIM_TRACKING: head,
+    ORBIT_SHIM_REMOTE: head,
+    ORBIT_SHIM_STATUS_SET: '1',
+    ORBIT_SHIM_STATUS: ' M scripts/outcome-reconciler-release-dag.mjs',
+  });
+  assert.match(refusal.stderr, /release DAG requires a tracked-clean checkout/u);
+  assert.doesNotMatch(refusal.log, /^exec orbit-postgres\b/mu);
+});
+
+test('the formal Release DAG refuses a remote that moved away from the fetched target', () => {
+  const head = git('rev-parse', 'HEAD');
+  const refusal = refusedRelease({
+    ORBIT_SHIM_TRACKING: head,
+    ORBIT_SHIM_REMOTE: divergentSha,
+  });
+  assert.match(refusal.stderr, /origin\/main changed between fetch and remote observation/u);
+  assert.doesNotMatch(refusal.log, /^exec orbit-postgres\b/mu);
+});
+
+test('the formal Release DAG refuses a builder receipt bound to another target', () => {
+  const head = git('rev-parse', 'HEAD');
+  const refusal = refusedRelease({
+    ORBIT_SHIM_TRACKING: head,
+    ORBIT_SHIM_REMOTE: head,
+    ORBIT_SHIM_STATUS_SET: '1',
+    ORBIT_SHIM_RECEIPT: receiptRow({
+      sourceSha: oneTarget,
+      targetShaBefore: zeroTarget,
+      targetShaAfter: head,
+    }),
+  });
+  assert.match(refusal.stderr, /checkout differs from the builder receipt target/u);
+});
+
+const strictGuards = [
+  ['exact target SHA', () => {
+    assert.equal(plan.target.checkoutMustEqualTarget, true);
+    assert.equal(plan.target.remoteMustRemainExactlyTarget, true);
+    assert.equal(plan.target.trackedCheckoutMustBeClean, true);
+    assert.match(runnerSource, /assert\.match\(value, SHA, `\$\{name\} is not a full commit SHA`\)/u);
+    assert.match(runnerSource, /checkout HEAD is not the freshly fetched origin\/main target/u);
+    assert.match(runnerSource, /origin\/main changed between fetch and remote observation/u);
+    assert.match(runnerSource, /checkout does not equal the frozen target SHA/u);
+    assert.match(runnerSource, /release DAG requires a tracked-clean checkout/u);
+  }],
+  ['current binding', () => {
+    assert.match(runnerSource, /atomicJson\(path\.join\(stateRoot, 'current-binding\.json'\)/u);
+    assert.match(runnerSource, /assert\.equal\(context\.bindingDigest, binding\.bindingDigest,/u);
+    assert.match(read('scripts/lib/outcome-reconciler-release-dag.sh'),
+      /stale Release DAG build binding/u);
+    // Artifacts that name the round that produced them cannot be handed to another round. Since
+    // per-node input digests that guard is scoped to BINDING_EMBEDDED nodes on purpose -- a
+    // content-only artifact is keyed on its inputs, so a new target SHA over an identical tree
+    // reuses it. The subject here is therefore an embedded node, and its input set is supplied
+    // exactly, so the refusal that comes back is the binding's own.
+    const node = nodeById.get('prepare-build');
+    assert.equal(node.artifactBinding, 'BINDING_EMBEDDED');
+    const foreignRound = { ...successReceipt(node), binding: { ...binding, targetSha: oneTarget } };
+    assert.equal(checkpointReuseDecision({
+      receipt: foreignRound,
+      node,
+      binding,
+      artifactsValid: true,
+      inputDigest: baselineInputs.get(node.id).inputDigest,
+      inputs: baselineInputs.get(node.id).inputs,
+    }).reason, 'STALE_BINDING');
+    // An input set that cannot be pinned down is refused before the binding is consulted at all,
+    // so neither failure can be quietly absorbed into the other.
+    assert.equal(checkpointReuseDecision({
+      receipt: foreignRound,
+      node,
+      binding,
+      artifactsValid: true,
+      inputDigest: undefined,
+      inputs: undefined,
+    }).reason, 'INDETERMINATE_INPUTS');
+    assert.equal(plan.supersededAttempt.stalePolicy,
+      'TARGET_OR_PLAN_CHANGE_INVALIDATES_ALL_CHECKPOINTS_AND_THE_EVIDENCE_CUT');
+  }],
+  ['builder target receipt', () => {
+    assert.equal(plan.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
+    assert.equal(plan.target.requiredReceipt.recordedBy, 'AGENT');
+    assert.deepEqual(plan.target.requiredReceipt.results, ['MERGED', 'ALREADY_MERGED']);
+    assert.match(runnerSource, /the frozen builder merge receipt is missing/u);
+    assert.match(runnerSource, /checkout differs from the builder receipt target/u);
+    assert.match(runnerSource, /remote target differs from the builder receipt/u);
+    assert.match(runnerSource, /builder receipt is not a strict target advance/u);
+    assert.match(runnerSource, /ALREADY_MERGED receipt does not describe an already-current target/u);
+  }],
+  ['frozen package lock', () => {
+    assert.match(runnerSource,
+      /installed dependency checkout does not match the frozen target package lock/u);
+    assert.match(runnerSource, /fileDigest\(path\.join\(repo, 'package-lock\.json'\)\)/u);
+    assert.match(runnerSource, /fileDigest\('\/root\/orbit\/package-lock\.json'\)/u);
+    assert.match(runnerSource, /fileDigest\('\/root\/orbit\/node_modules\/\.package-lock\.json'\)/u);
+  }],
+  ['bound environment', () => {
+    assert.match(runnerSource, /host platform differs from the Release DAG environment contract/u);
+    assert.match(runnerSource, /required environment probe failed/u);
+    assert.match(runnerSource, /required bound image is unavailable at admission/u);
+    assert.equal(typeof plan.environment.identity, 'string');
+    assert.notEqual(deriveBinding({
+      plan,
+      targetSha: zeroTarget,
+      targetReceiptDigest,
+      environment: { ...environment, versions: { ...environment.versions, docker: 'changed' } },
+    }).bindingDigest, binding.bindingDigest);
+  }],
+  ['evaluation plan digest', () => {
+    assert.match(plan.evaluator.evaluationPlanDigest, /^[0-9a-f]{64}$/u);
+    const rebound = structuredClone(plan);
+    rebound.evaluator.evaluationPlanDigest = 'a'.repeat(64);
+    rebound.declaredDagPlanDigest = dagPlanDigest(rebound);
+    assert.notEqual(deriveBinding({
+      plan: rebound, targetSha: zeroTarget, targetReceiptDigest, environment,
+    }).bindingDigest, binding.bindingDigest);
+    const untyped = structuredClone(plan);
+    untyped.evaluator.evaluationPlanDigest = 'not-a-digest';
+    untyped.declaredDagPlanDigest = dagPlanDigest(untyped);
+    assert.throws(() => validatePlan(untyped),
+      /formal evaluator command and plan digests must be full SHA-256 values/u);
+  }],
+  ['declared DAG plan digest', () => {
+    assert.equal(plan.declaredDagPlanDigest, dagPlanDigest(plan));
+    assert.match(runnerSource, /const validation = validatePlan\(plan\)/u);
+    const drifted = structuredClone(plan);
+    drifted.resourceLimits.maxConcurrent -= 1;
+    assert.throws(() => validatePlan(drifted), /declared Release DAG plan digest is stale/u);
+  }],
+  ['evidence cut', () => {
+    assert.equal(plan.evidenceCut.membership,
+      'ALL_SUCCESSFUL_NODE_RECEIPTS_EXCEPT_PUBLISHER_SELF');
+    assert.deepEqual(plan.nodes.filter((node) => node.evidenceWriter === true)
+      .map((node) => node.id), ['publish-evidence-cut']);
+    assert.match(read('scripts/outcome-reconciler-release-dag-aggregate.mjs'), /skipCount, 0/u);
+    const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-release-dag-evidence-'));
+    try {
+      const artifact = path.join(fixture, 'skipped.json');
+      writeFileSync(artifact, JSON.stringify({ summary: { tests: 2, passed: 1, failed: 0, skipped: 1 } }));
+      assert.throws(() => metricsForNode({ id: 'synthetic-node', testBearing: true }, [artifact]),
+        /published 1 skips/u);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  }],
+];
+
+assert.equal(strictGuards.length, 8);
+for (const [name, assertGuard] of strictGuards) {
+  test(`the strict Release DAG guard is unweakened: ${name}`, assertGuard);
+}
