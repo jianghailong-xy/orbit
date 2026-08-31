@@ -97,7 +97,7 @@ import {
   type NormalizedSearchQuery,
   stripEmphasis,
 } from './search-query';
-import { notNoiseSql } from '../common/system-noise';
+import { replayableEventSql } from '../common/system-noise';
 import {
   SERVICE_TOKEN_CONCURRENCY,
   SPAWN_TREE_OUTSTANDING,
@@ -2512,11 +2512,19 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('shared session not found');
     const stateful = withSessionState(session);
-    const events = await this.prisma.runEvent.findMany({
-      where: { sessionId: session.id },
-      orderBy: { seq: 'asc' },
-      select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
-    });
+    // A share is another historical transcript reader, so it observes the same replay contract as
+    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
+    // persisted by an older API during a rolling deployment (or spend a public response on their
+    // repeated foreground-shell snapshots).
+    const events = await this.prisma.$queryRaw<
+      { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
+    >`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${session.id}::uuid
+        AND ${replayableEventSql}
+      ORDER BY seq ASC
+    `;
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
@@ -2544,11 +2552,12 @@ export class SessionsService {
    * report `hasMore`, then returns the page in chronological (seq asc) order.
    *
    * Two things shrink what a page costs on a slow link. The `system` progress pings no client
-   * renders are filtered out in the query (notNoiseSql) — they're still stored, they just don't
-   * ride the wire, and filtering in SQL rather than after it means `take` counts events the
-   * reader can actually see. And `maxPayload` (opt-in, see truncate-payload) clips bulky tool
-   * call/result bodies to a preview and marks those events `truncated`, so the client downloads
-   * what the folded transcript shows and refetches the rest per card from getEventFull.
+   * renders and any live-only events a legacy API accidentally persisted are filtered out in the
+   * query (`replayableEventSql`) — they stay stored, but do not ride a historical wire. Filtering
+   * in SQL rather than after it means `take` counts events the reader can actually use. And
+   * `maxPayload` (opt-in, see truncate-payload) clips bulky tool call/result bodies to a preview
+   * and marks those events `truncated`, so the client downloads what the folded transcript shows
+   * and refetches the rest per card from getEventFull.
    */
   async getEventPage(
     userId: string,
@@ -2575,7 +2584,8 @@ export class SessionsService {
       typeof opts.before === 'number' && Number.isFinite(opts.before)
         ? Prisma.sql`AND seq < ${Math.trunc(opts.before)}`
         : Prisma.empty;
-    // Raw because notNoiseSql needs a jsonb key-subtraction Prisma's filter language can't spell.
+    // Raw because replayableEventSql includes a jsonb key-subtraction Prisma's filter language
+    // cannot spell, and because the filter must run before the page LIMIT.
     // Index Scan Backward on (session_id, seq) still drives it — the filter just skips pings on
     // the way, and the scan stops as soon as `take + 1` renderable rows are in hand.
     const rows = await this.prisma.$queryRaw<
@@ -2585,7 +2595,7 @@ export class SessionsService {
       FROM run_event
       WHERE session_id = ${id}::uuid
         ${before}
-        AND ${notNoiseSql}
+        AND ${replayableEventSql}
       ORDER BY seq DESC
       LIMIT ${take + 1}
     `; // one extra row: its presence means older events remain

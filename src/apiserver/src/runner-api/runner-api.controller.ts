@@ -176,7 +176,11 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
-import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
+import {
+  isNoiseSystemEvent,
+  NON_REPLAYABLE_EVENT_TYPES,
+  replayableEventSql,
+} from '../common/system-noise';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -4289,14 +4293,10 @@ export class RunnerApiController {
     // text without piling up rows. background_output is the live tail of a background
     // shell's file, and tool_output is the current output snapshot of an in-flight foreground
     // shell — same deal (ephemeral animation; their durable records are background_task / the
-    // final tool_result respectively).
-    const durable = events.filter(
-      (e) =>
-        e.type !== RunEventType.TEXT_DELTA &&
-        e.type !== RunEventType.THINKING_DELTA &&
-        e.type !== RunEventType.TOOL_OUTPUT &&
-        e.type !== RunEventType.BACKGROUND_OUTPUT,
-    );
+    // final tool_result respectively). The shared deny-list also fences control-plane nudges such
+    // as approvals/resync if a newer or misbehaving runner ever sends one through this generic
+    // event ingress; the read paths use the same list for rolling-deployment history compatibility.
+    const durable = events.filter((e) => !NON_REPLAYABLE_EVENT_TYPES.includes(e.type));
     // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
     // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
     // skipDuplicates, the tool_call outcome by tool_use id, the running sets by set semantics),
@@ -5408,7 +5408,7 @@ export class RunnerApiController {
       FROM run_event
       WHERE session_id = ${sessionId}::uuid
         AND seq > ${afterSeq}
-        AND ${notNoiseSql}
+        AND ${replayableEventSql}
       ORDER BY seq ASC
       LIMIT ${take + 1}
     `; // one extra row: its presence means newer events remain

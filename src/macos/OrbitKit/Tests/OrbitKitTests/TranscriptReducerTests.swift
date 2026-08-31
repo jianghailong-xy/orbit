@@ -1187,6 +1187,44 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.hasMoreOlder)
     }
 
+    /// Rolling deployment compatibility: the runner learned `tool_output` just before the API
+    /// learned not to persist it. A page made entirely of those legacy rows has no transcript item,
+    /// but it still has a real server position. Both cursors must advance so SSE skips the polluted
+    /// tail and the load-older row can page past it instead of spinning with `oldestSeq == nil`.
+    func testLegacyPersistedToolOutputPageStillAdvancesHistoryCursors() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 1814, type: .toolOutput,
+                     payload: .object(["toolUseId": .string("shell"), "content": .string("a")])),
+            RunEvent(seq: 2013, type: .toolOutput,
+                     payload: .object(["toolUseId": .string("shell"), "content": .string("b")])),
+        ], hasMore: true))
+
+        XCTAssertTrue(r.state.items.isEmpty, "live snapshots never become transcript history")
+        XCTAssertEqual(r.state.maxSeq, 2013, "SSE resumes after the persisted polluted tail")
+        XCTAssertEqual(r.state.oldestSeq, 1814, "load-older has a cursor it can consume")
+        XCTAssertTrue(r.state.hasMoreOlder)
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1614, type: .toolOutput,
+                     payload: .object(["toolUseId": .string("shell"), "content": .string("older")])),
+        ], hasMore: true))
+        XCTAssertEqual(r.state.oldestSeq, 1614, "an all-live-only page still moves paging onward")
+        XCTAssertEqual(r.state.maxSeq, 2013, "older paging never moves the replay high-water back")
+    }
+
+    func testTailPageWithoutAPersistedCursorCannotOfferLoadOlder() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 0, type: .approvalRequest),
+            RunEvent(seq: RunEvent.sentinelSeq, type: .status,
+                     payload: .object(["status": .string("FAILED")])),
+        ], hasMore: true))
+
+        XCTAssertNil(r.state.oldestSeq)
+        XCTAssertFalse(r.state.hasMoreOlder, "never render a spinner whose before= cursor is nil")
+    }
+
     func testPrependOlderGraftsHistoryInFront() {
         var r = TranscriptReducer()
         r.applyTailPage(EventPage(events: [

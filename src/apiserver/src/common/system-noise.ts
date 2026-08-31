@@ -65,3 +65,33 @@ export const notNoiseSql = Prisma.sql`NOT (
   AND COALESCE(payload->>'subtype', '') NOT IN ('init', 'resumed')
   AND (payload - 'model' - 'subtype' - 'sessionId') = '{}'::jsonb
 )`;
+
+/**
+ * Event kinds that belong only to a live connection and must never be replayed from `run_event`.
+ *
+ * Current ingress does not persist these. Keep the read fence anyway: a rolling deployment can
+ * briefly pair a runner that has learned a new live event with an older API that still treats every
+ * unknown kind as durable. That happened for `tool_output`: one session accumulated enough stored
+ * snapshots that its newest 200-row page contained no durable event, leaving native clients with no
+ * resume cursor and an endless loading row.
+ *
+ * Parameter values, rather than SQL literals, deliberately make this the single list all historical
+ * read paths share. Filtering before ORDER/LIMIT means a page or replay cap counts actual history,
+ * not legacy live-only pollution.
+ */
+export const NON_REPLAYABLE_EVENT_TYPES: readonly string[] = [
+  RunEventType.TEXT_DELTA,
+  RunEventType.THINKING_DELTA,
+  RunEventType.TOOL_OUTPUT,
+  RunEventType.APPROVAL_REQUEST,
+  RunEventType.APPROVAL_RESOLVED,
+  RunEventType.QUEUED_TURNS_CHANGED,
+  RunEventType.BACKGROUND_OUTPUT,
+  RunEventType.RESYNC,
+];
+
+/** SQL predicate for a row that may cross a persisted transcript replay/page boundary. */
+export const replayableEventSql = Prisma.sql`
+  ${notNoiseSql}
+  AND type NOT IN (${Prisma.join(NON_REPLAYABLE_EVENT_TYPES)})
+`;

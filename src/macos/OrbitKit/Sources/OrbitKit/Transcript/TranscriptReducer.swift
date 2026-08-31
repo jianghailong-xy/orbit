@@ -12,10 +12,14 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// `queued` state (see `addOptimisticUser`).
     public var queued: [UserBubble] = []
     public var status: RunStatus = .pending
-    /// Durable high-water seq — the `?sinceSeq=` value to reconnect with.
+    /// Persisted high-water seq — the `?sinceSeq=` value to reconnect with. Live events advance it
+    /// only when durable; a historical page may also advance across a legacy live-only row that an
+    /// older server accidentally persisted, because the next replay must start after that row.
     public var maxSeq: Int = 0
-    /// Oldest durable seq STILL HELD in this window — the `before=` cursor for pulling the previous
-    /// history page when the user scrolls up (web parity: AgentView's `oldestSeqRef`).
+    /// Oldest persisted seq covered by this window — the `before=` cursor for pulling the previous
+    /// history page when the user scrolls up (web parity: AgentView's `oldestSeqRef`). Normally this
+    /// is durable; retaining a legacy persisted live-only row here lets paging step past it instead
+    /// of producing `hasMoreOlder == true` with no usable cursor.
     ///
     /// "Still held", not "oldest ever seen": `trimOlder` caps the window by dropping the head, and
     /// moves this cursor forward onto the oldest item that survived. The two readings coincide
@@ -63,7 +67,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
 /// behavior-dense piece of the client and is exercised directly by the Phase-0 tests.
 ///
 /// Invariants:
-///  - durable events (real `seq`) are deduped via `seen` and advance `maxSeq`;
+///  - durable events (real `seq`) are deduped via `seen` and advance `maxSeq`; a historical page
+///    additionally positions its cursors across any legacy live-only row that was actually stored;
 ///  - `text_delta`/`thinking_delta` are animation only — appended to the open bubble,
 ///    never deduped, never advancing `maxSeq`;
 ///  - live-only events bypass dedup/cursor bookkeeping even when the runner assigns them a
@@ -220,7 +225,18 @@ public struct TranscriptReducer: Sendable, Codable {
     /// history remains on the server before it — the cold-open half of tail-first pagination.
     public mutating func applyTailPage(_ page: EventPage) {
         for ev in page.events { apply(ev) }
-        state.hasMoreOlder = page.hasMore && !page.events.isEmpty
+        // Page membership itself proves persistence. During a rolling upgrade an older API briefly
+        // stored `tool_output` snapshots even though their event kind is live-only; treating those
+        // rows as animation (correct) but refusing their seq as a PAGE cursor left maxSeq=0,
+        // oldestSeq=nil and hasMoreOlder=true — an unconsumable loading row forever. Keep live
+        // ingest semantics strict while using any real historical row to position both HTTP
+        // pagination and the follow-on SSE replay. Never accept the live terminal sentinel.
+        let bounds = Self.persistedPageBounds(page.events)
+        if let low = bounds?.low, state.oldestSeq.map({ low < $0 }) ?? true {
+            state.oldestSeq = low
+        }
+        if let high = bounds?.high, high > state.maxSeq { state.maxSeq = high }
+        state.hasMoreOlder = page.hasMore && bounds != nil
     }
 
     /// Fold a `before=oldestSeq` history page — chronological and strictly older than everything
@@ -236,13 +252,13 @@ public struct TranscriptReducer: Sendable, Codable {
     public mutating func prependOlder(_ page: EventPage) {
         // An empty page means the cursor can't advance: stop the affordance regardless of
         // `hasMore`, or the load-earlier row would spin forever re-fetching nothing.
-        state.hasMoreOlder = page.hasMore && !page.events.isEmpty
-        // Move the low-water cursor to the page's first durable event — even when every event
-        // turns out to be already folded (a misbehaving overlap), so a retry pages onward instead
-        // of refetching the same window forever (web parity: `oldestSeqRef` moves unconditionally).
-        if let first = page.events.first(where: { $0.type.isDurable && $0.seq > 0 }),
-           state.oldestSeq.map({ first.seq < $0 }) ?? true {
-            state.oldestSeq = first.seq
+        let bounds = Self.persistedPageBounds(page.events)
+        state.hasMoreOlder = page.hasMore && bounds != nil
+        // Move the low-water cursor to the page's first persisted event — even when every event is
+        // live-only legacy pollution or already folded — so a retry pages onward instead of
+        // refetching the same window forever (web parity: `oldestSeqRef` moves unconditionally).
+        if let low = bounds?.low, state.oldestSeq.map({ low < $0 }) ?? true {
+            state.oldestSeq = low
         }
         // Only durable events build history (the live-only types fold to side effects discarded
         // below anyway), and pages are disjoint by construction (`before` is exclusive) — but
@@ -260,6 +276,15 @@ public struct TranscriptReducer: Sendable, Codable {
         // page is older by construction; the low-water cursor already moved above.)
         if let i = openAssistant { openAssistant = i + sub.state.items.count }
         if let i = openThinking { openThinking = i + sub.state.items.count }
+    }
+
+    /// Bounds of real database rows in a historical page. Seq 0 is reserved for live-only nudges;
+    /// the JS-safe terminal sentinel is a live broadcast wearing a durable event type. Neither can
+    /// position a persisted page even if a malformed server response includes it.
+    private static func persistedPageBounds(_ events: [RunEvent]) -> (low: Int, high: Int)? {
+        let seqs = events.lazy.map(\.seq).filter { $0 > 0 && $0 != RunEvent.sentinelSeq }
+        guard let low = seqs.min(), let high = seqs.max() else { return nil }
+        return (low, high)
     }
 
     /// Cap the in-memory window: drop the oldest items until only the newest `maxItems` remain, and

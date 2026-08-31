@@ -19,7 +19,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { Prisma } from '@prisma/client';
 import { concat, concatMap, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
 import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
-import { notNoiseSql } from '../common/system-noise';
+import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -513,10 +513,11 @@ export class SessionsController {
         // With a cursor: replay the gap after it (seq asc), up to SSE_GAP_CAP. Without one: replay
         // only the newest SSE_REPLAY_CAP, fetched seq desc so the LIMIT keeps the newest rows, then
         // reversed back to seq asc below — see SSE_REPLAY_CAP.
-        // `notNoiseSql` skips the `system` progress pings no client renders (they stay in the
-        // table; this is the wire). It matches what the live broadcast already drops, so a
-        // replayed transcript and a live one carry the same events — and it makes SSE_REPLAY_CAP
-        // count renderable events rather than being spent three-quarters on pings.
+        // `replayableEventSql` skips the `system` progress pings no client renders and any
+        // live-only events an older API accidentally persisted (they stay in the table; this is
+        // the wire). It matches what the live broadcast/modern ingress already drops, so replay
+        // carries only durable history — and makes SSE_REPLAY_CAP count renderable events rather
+        // than being spent on pings or foreground-shell snapshots.
         const capped = !seqFilter;
         const gap = seqFilter ? Prisma.sql`AND seq > ${seqFilter.gt}` : Prisma.empty;
         const order = capped ? Prisma.sql`DESC` : Prisma.sql`ASC`;
@@ -533,7 +534,7 @@ export class SessionsController {
             FROM run_event
             WHERE session_id = ${id}::uuid
               ${gap}
-              AND ${notNoiseSql}
+              AND ${replayableEventSql}
             ORDER BY seq ${order}
             ${limit}
           `,
