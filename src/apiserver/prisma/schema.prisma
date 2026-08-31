@@ -2811,6 +2811,35 @@ enum ProjectAcceptanceVerdict {
   @@map("project_acceptance_verdict")
 }
 
+/// The three states an acceptance run can be read in (migration 0215). Declared here because the
+/// database renders them from this type: "still evaluating", "concluded" and "superseded by the next
+/// evidence set" are three different things, and being pushed out is not a verdict. No column stores
+/// the state — `project_acceptance_run_state_value()` derives it from the row.
+enum ProjectAcceptanceRunState {
+  EVALUATING
+  CONCLUDED
+  SUPERSEDED
+
+  @@map("project_acceptance_run_state")
+}
+
+/// What a run that never closed owes (migration 0215). One label: a run left evaluating past its
+/// declared window is a typed obligation rather than a silence.
+enum ProjectAcceptanceRunObligationKind {
+  ACCEPTANCE_RUN_STALLED
+
+  @@map("project_acceptance_run_obligation_kind")
+}
+
+/// The one basis a run conclusion may have (migration 0215). A single label on purpose: a run
+/// concludes by mechanical derivation from its criterion projection and the canonical DONE gate, or
+/// it does not conclude. A second label here would be a second way to decide an acceptance.
+enum ProjectAcceptanceRunConclusionBasis {
+  CRITERION_PROJECTION_AND_DONE_GATE
+
+  @@map("project_acceptance_run_conclusion_basis")
+}
+
 /// One immutable version of the project-level acceptance evidence set.
 ///
 /// The historical API/table name is retained for compatibility. Since migration 0179 this is not a
@@ -2853,8 +2882,22 @@ model ProjectAcceptanceRun {
   /// Legacy pre-0179 terminal projection. New conclusions live only in the event table.
   resultDigest String? @map("result_digest") @db.Char(64)
 
-  /// Legacy pre-0179 terminal projection; new evidence versions leave it null.
+  /// The run's own conclusion (migration 0215). Written by `project_acceptance_run_conclude` and by
+  /// no other path, together with `completedAt`, `conclusionBasis` and `conclusionDigest`. Before
+  /// 0215 the only thing that could ever happen to a run was being superseded by the next evidence
+  /// set, which left this null forever while the real judging happened in the criterion projection.
   verdict ProjectAcceptanceVerdict?
+
+  /// Non-null exactly when this run concluded, and the reason a conclusion cannot be confused with a
+  /// supersession: the two transitions are written by different paths and are mutually exclusive per
+  /// row. There is no column, and no function parameter, through which free text becomes a verdict.
+  conclusionBasis ProjectAcceptanceRunConclusionBasis? @map("conclusion_basis")
+  /// sha256 of the derivation — criterion projection plus the canonical DONE gate's decision — so
+  /// re-deriving over an unchanged world reproduces the same conclusion, digest included.
+  conclusionDigest String? @map("conclusion_digest") @db.Char(64)
+  /// The window this run was given to conclude in. Past it the run is stalled and owes a typed
+  /// ACCEPTANCE_RUN_STALLED obligation rather than hanging silently.
+  conclusionWindowSeconds Int @default(172800) @map("conclusion_window_seconds")
 
   /// Who caused this evidence version to be materialized. Conclusion authorship is recorded on
   /// every ProjectAcceptanceConclusion event instead.
