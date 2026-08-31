@@ -25,7 +25,8 @@ ROLLING_PRISMA="$(mktemp -d /tmp/orbit-executable-rolling.XXXXXX)"
 
 cleanup() {
   if outcome_release_dag_db_enabled; then
-    if [[ "${ROLLING_DATABASE:-}" =~ ^ord_[a-z0-9_]{1,56}$ ]]; then
+    if [ "${ROLLING_DATABASE:-}" = "${OUTCOME_RELEASE_DAG_DATABASE:-}_rolling" ] \
+      && [[ "$ROLLING_DATABASE" =~ ^[a-z][a-z0-9_]{1,62}$ ]]; then
       docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
         -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$ROLLING_DATABASE' AND pid <> pg_backend_pid()" \
         >/dev/null 2>&1 || true

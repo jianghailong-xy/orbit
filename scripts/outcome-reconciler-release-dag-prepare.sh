@@ -157,10 +157,10 @@ case "$ACTION" in
     command -v docker >/dev/null || { echo 'docker is required' >&2; exit 1; }
     docker info >/dev/null 2>&1 || { echo 'docker daemon is unavailable' >&2; exit 1; }
     CONTAINER="orbit-release-dag-pg-${OUTCOME_RELEASE_DAG_BINDING_DIGEST:0:12}"
-    ADMIN='ord_admin'
-    PASSWORD='ord_disposable_password'
-    CURRENT_TEMPLATE='ord_template_current'
-    BEFORE_OWNER_TEMPLATE='ord_template_before_owner_routing'
+    ADMIN='pccrd_provisioner'
+    PASSWORD='pccrd_disposable_password'
+    CURRENT_TEMPLATE='pccrd_template_current'
+    BEFORE_OWNER_TEMPLATE='pccrd_template_before_owner_routing'
     IMAGE="${OUTCOME_RELEASE_DAG_PG_IMAGE:-postgres:16-alpine}"
     STAGE="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-before-owner-routing"
     PRISMA_FIXTURE_MANIFEST="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-before-owner-routing-fixture.json"

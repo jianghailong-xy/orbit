@@ -35,6 +35,21 @@ export function topologicalOrder(plan) {
   const nodes = new Map(plan.nodes.map((node) => [node.id, node]));
   const indegree = new Map(plan.nodes.map((node) => [node.id, 0]));
   const children = new Map(plan.nodes.map((node) => [node.id, []]));
+  const postgresPolicies = plan.postgresIsolation?.nodes;
+  if (plan.postgresIsolation?.schemaVersion !== 1
+      || plan.postgresIsolation?.allocator
+        !== 'ATTEMPT_BOUND_NODE_AND_CASE_DISPOSABLE_DATABASE_ROLE_V2'
+      || plan.postgresIsolation?.concurrentShardPolicy
+        !== 'UNIQUE_DATABASE_AND_ROLE_PER_GLOBAL_CASE_INDEX'
+      || typeof postgresPolicies !== 'object' || postgresPolicies === null) {
+    throw new Error('Release DAG PostgreSQL isolation policy is incomplete');
+  }
+  const postgresNodeIds = new Set(plan.nodes
+    .filter((node) => node.usesSharedPostgres === true).map((node) => node.id));
+  if (Object.keys(postgresPolicies).length !== postgresNodeIds.size
+      || Object.keys(postgresPolicies).some((id) => !postgresNodeIds.has(id))) {
+    throw new Error('Release DAG PostgreSQL isolation policies do not exactly cover its nodes');
+  }
   for (const node of plan.nodes) {
     for (const dependency of node.dependsOn) {
       indegree.set(node.id, indegree.get(node.id) + 1);
@@ -59,6 +74,7 @@ export function validatePlan(plan) {
   if (plan?.schemaVersion !== 1 || plan?.kind !== 'orbit.outcome-reconciler.release-evaluation-dag') {
     throw new Error('unsupported release DAG contract');
   }
+  const postgresPolicies = plan.postgresIsolation?.nodes;
   const superseded = plan.supersededAttempt;
   const supersededBinding = superseded?.binding;
   const bindingFields = [
@@ -170,6 +186,20 @@ export function validatePlan(plan) {
     if (!Array.isArray(node.dependsOn) || !Array.isArray(node.command)
         || node.command.length === 0 || !Array.isArray(node.outputs)) {
       throw new Error(`${node.id} has an incomplete execution declaration`);
+    }
+    if (node.usesSharedPostgres === true) {
+      const policy = postgresPolicies[node.id];
+      const prefix = /^[a-z][a-z0-9_]{1,24}$/u;
+      if (!prefix.test(policy?.postgresDatabasePrefix ?? '')
+          || !prefix.test(policy?.postgresRolePrefix ?? '')
+          || typeof policy?.destructiveCoordinatorSpecs !== 'boolean') {
+        throw new Error(`${node.id} omits its disposable PostgreSQL identity policy`);
+      }
+      if (policy.destructiveCoordinatorSpecs
+          && (!/^pcc[0-9a-z]*$/u.test(policy.postgresDatabasePrefix)
+            || !/^pcc[0-9a-z]*$/u.test(policy.postgresRolePrefix))) {
+        throw new Error(`${node.id} weakens the destructive pcc_* PostgreSQL safety gate`);
+      }
     }
     if (!Number.isInteger(node.timeoutSeconds) || node.timeoutSeconds < 1
         || node.timeoutSeconds > MAX_NODE_TIMEOUT_SECONDS

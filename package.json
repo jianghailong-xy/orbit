@@ -56,6 +56,7 @@
     "test:outcome-reconciler:release-dag": "node scripts/outcome-reconciler-release-dag.mjs",
     "test:outcome-reconciler:release-dag-plan": "bash scripts/outcome-reconciler-release-dag-plan.sh",
     "test:outcome-reconciler:release-dag-rebind": "bash scripts/outcome-reconciler-release-dag-rebind.sh",
+    "test:outcome-reconciler:release-dag-pcc-rebind": "bash scripts/outcome-reconciler-release-dag-pcc-rebind.sh",
     "test:session-current-work-routing": "bash scripts/session-current-work-routing.sh"
   },
   "engines": {

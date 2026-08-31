@@ -170,7 +170,9 @@ if (action === 'preflight') {
     imageId, prismaFixturePath] = args;
   assert.ok(prismaFixturePath,
     'usage: release-dag-step postgres-context OUTPUT CONTAINER ADMIN PASSWORD HOST PORT SYSTEM VERSION MIGRATIONS BEFORE_MIGRATIONS LAST CURRENT BEFORE IMAGE_ID PRISMA_FIXTURE');
-  assert.equal(_password, 'ord_disposable_password');
+  assert.equal(_password, 'pccrd_disposable_password');
+  assert.match(admin, /^pcc[0-9a-z]*_/u,
+    'Release DAG provisioner must remain a dedicated pcc_* disposable role');
   const prismaFixture = JSON.parse(readFileSync(prismaFixturePath, 'utf8'));
   const { artifactDigest: fixtureArtifactDigest, ...fixtureBody } = prismaFixture;
   assert.equal(fixtureArtifactDigest, sha256(canonical(fixtureBody)));
@@ -240,6 +242,72 @@ if (action === 'preflight') {
   assert.equal(body.beforeMigrations, body.migrations - 1);
   assert.equal(body.lastMigration, repositoryMigrations.at(-1));
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
+} else if (action === 'full-api-case-receipt') {
+  const [output, indexText, specPath, partitionClass, partitionIndexText,
+    database, emptyDatabase, role, identityDatabase, identityRole, identitySystemIdentifier,
+    tapPath, exitCodeText, cleanupCodeText] = args;
+  assert.ok(cleanupCodeText != null,
+    'usage: release-dag-step full-api-case-receipt OUTPUT INDEX SPEC CLASS SHARD DB EMPTY ROLE ID_DB ID_ROLE ID_SYSTEM TAP EXIT CLEANUP');
+  const index = Number(indexText);
+  const partitionIndex = Number(partitionIndexText);
+  const exitCode = Number(exitCodeText);
+  const cleanupCode = Number(cleanupCodeText);
+  const attemptDigest = requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_DIGEST');
+  const attemptToken = requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN');
+  assert.match(attemptDigest, /^[0-9a-f]{64}$/u);
+  assert.match(attemptToken, /^[0-9a-f]{12}$/u);
+  assert.ok(Number.isInteger(index) && index >= 1);
+  assert.ok(partitionClass === 'parallel' || partitionClass === 'serial');
+  assert.ok(Number.isInteger(partitionIndex) && partitionIndex >= 0);
+  for (const identity of [database, emptyDatabase, role]) {
+    assert.match(identity, /^pcc[0-9a-z]*_[a-z0-9_]+$/u,
+      'destructive Full API cases must retain pcc_* identities');
+  }
+  assert.equal(identityDatabase, database);
+  assert.equal(identityRole, role);
+  assert.match(identitySystemIdentifier, /^[0-9]+$/u);
+  assert.equal(cleanupCode, 0, 'Full API case database or role survived cleanup');
+  const tap = readFileSync(tapPath, 'utf8');
+  const summary = tapMetrics(tap);
+  assert.ok(summary.tests > 0, 'Full API case reported no tests');
+  assert.equal(summary.skipped, 0);
+  assert.equal(summary.cancelled, 0);
+  assert.equal(summary.todo, 0);
+  if (exitCode === 0) {
+    assert.equal(summary.passed, summary.tests);
+    assert.equal(summary.failed, 0);
+  } else {
+    assert.ok(summary.failed > 0, 'failing Full API case did not propagate a failed test');
+  }
+  const body = {
+    schemaVersion: 1,
+    kind: 'orbit.outcome-reconciler.release-dag-full-api-case',
+    outcome: exitCode === 0 ? 'PASS' : 'EXPECTED_FAILURE_PROPAGATED',
+    ...binding,
+    releaseAttempt: { digest: attemptDigest, token: attemptToken },
+    partition: { class: partitionClass, index: partitionIndex },
+    caseIndex: index,
+    spec: fileEvidence(specPath),
+    database,
+    emptyDatabase,
+    role,
+    identity: {
+      database: identityDatabase,
+      role: identityRole,
+      systemIdentifier: identitySystemIdentifier,
+      verifiedBeforeMutation: true,
+    },
+    cleanup: {
+      databaseRemoved: true,
+      emptyDatabaseRemoved: true,
+      roleRemoved: true,
+      resourcesRemaining: 0,
+    },
+    exitCode,
+    summary,
+    tap: fileEvidence(tapPath),
+  };
+  writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
 } else if (action === 'full-api-inventory') {
   const [output] = args;
   assert.ok(output, 'usage: release-dag-step full-api-inventory OUTPUT');
@@ -291,6 +359,26 @@ if (action === 'preflight') {
     assert.ok(existsSync(log), `full API case ${spec.index} produced no TAP log`);
     return readFileSync(log, 'utf8');
   });
+  const cases = selected.map((spec) => {
+    const receipt = JSON.parse(readFileSync(path.join(
+      caseRoot, `${String(spec.index).padStart(4, '0')}.json`,
+    ), 'utf8'));
+    assert.equal(receipt.outcome, 'PASS');
+    assert.equal(receipt.bindingDigest, binding.bindingDigest);
+    assert.equal(receipt.releaseAttempt.token,
+      requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN'));
+    assert.deepEqual(receipt.partition, { class: partitionClass, index });
+    assert.equal(receipt.caseIndex, spec.index);
+    assert.equal(receipt.spec.sha256, spec.sha256);
+    assert.equal(receipt.cleanup.resourcesRemaining, 0);
+    assert.match(receipt.database, /^pcc[0-9a-z]*_/u);
+    assert.match(receipt.role, /^pcc[0-9a-z]*_/u);
+    return receipt;
+  });
+  assert.equal(new Set(cases.map((entry) => entry.database)).size, cases.length,
+    'Full API cases shared a database inside one partition');
+  assert.equal(new Set(cases.map((entry) => entry.role)).size, cases.length,
+    'Full API cases shared a role inside one partition');
   mkdirSync(path.dirname(path.resolve(tapOutput)), { recursive: true });
   writeFileSync(tapOutput, chunks.join('\n'));
   const metrics = tapMetrics(chunks.join('\n'));
@@ -309,6 +397,20 @@ if (action === 'preflight') {
     inventoryDigest: inventory.inventoryDigest,
     specCount: selected.length,
     specIndices: selected.map((spec) => spec.index),
+    databaseIsolation: {
+      bindingDigest: binding.bindingDigest,
+      attemptToken: requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN'),
+      uniqueDatabases: true,
+      uniqueRoles: true,
+      allResourcesCleaned: true,
+      cases: cases.map((entry) => ({
+        caseIndex: entry.caseIndex,
+        database: entry.database,
+        emptyDatabase: entry.emptyDatabase,
+        role: entry.role,
+        artifactDigest: entry.artifactDigest,
+      })),
+    },
     summary: metrics,
     tapDigest: createHash('sha256').update(chunks.join('\n')).digest('hex'),
   };
@@ -326,11 +428,21 @@ if (action === 'preflight') {
     assert.equal(partition.outcome, 'PASS');
     assert.equal(partition.summary.failed, 0);
     assert.equal(partition.summary.skipped, 0);
+    assert.equal(partition.databaseIsolation.bindingDigest, binding.bindingDigest);
+    assert.equal(partition.databaseIsolation.uniqueDatabases, true);
+    assert.equal(partition.databaseIsolation.uniqueRoles, true);
+    assert.equal(partition.databaseIsolation.allResourcesCleaned, true);
   }
   const indices = partitions.flatMap((partition) => partition.specIndices).sort((a, b) => a - b);
   assert.deepEqual(indices, inventory.specs.map((spec) => spec.index),
     'Full API partitions are not an exhaustive one-time cover');
   assert.equal(new Set(indices).size, indices.length, 'a Full API spec was executed twice');
+  const caseIsolation = partitions.flatMap((partition) => partition.databaseIsolation.cases);
+  assert.equal(caseIsolation.length, inventory.specs.length);
+  assert.equal(new Set(caseIsolation.map((entry) => entry.database)).size, caseIsolation.length,
+    'concurrent Full API shards shared a database');
+  assert.equal(new Set(caseIsolation.map((entry) => entry.role)).size, caseIsolation.length,
+    'concurrent Full API shards shared a role');
   const caseRoot = path.join(requiredEnvironment('OUTCOME_RELEASE_DAG_RUN_ROOT'), 'full-api-cases');
   const raw = inventory.specs.map((spec) => readFileSync(path.join(
     caseRoot, `${String(spec.index).padStart(4, '0')}.tap`,

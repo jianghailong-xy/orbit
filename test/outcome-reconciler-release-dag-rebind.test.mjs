@@ -102,25 +102,25 @@ test('the formal prepare-postgres node uses only the target-lock-isolated Prisma
 
 test('the focused builder cannot schedule the full Release DAG matrix', () => {
   const runner = read('scripts/outcome-reconciler-release-dag.mjs');
-  const harness = read('scripts/outcome-reconciler-release-dag-rebind.sh');
-  assert.match(runner, /--focus-prepare-postgres/u);
+  const harness = read('scripts/outcome-reconciler-release-dag-pcc-rebind.sh');
+  assert.match(runner, /--focus-pcc-rebind/u);
   assert.match(runner, /includeWithDependencies\('prepare-postgres'\)/u);
-  assert.match(runner, /FOCUSED_PREPARE_POSTGRES_PREFLIGHT/u);
-  assert.match(harness, /--focus-prepare-postgres/u);
+  assert.match(runner, /FOCUSED_PCC_DATABASE_REBIND/u);
+  assert.match(harness, /--focus-pcc-rebind/u);
   assert.doesNotMatch(harness, /npm run test:outcome-reconciler:release-dag(?:\s|$)/u);
 });
 
-test('the fa29 binding and evidence cut are explicitly stale under the new plan', () => {
+test('the 360f binding and evidence cut are explicitly stale under the pcc plan', () => {
   const old = plan.supersededAttempt.binding;
-  assert.equal(old.targetSha, 'fa29dbef903ddf19905c5a5f60e9ca2931cff6e7');
+  assert.equal(old.targetSha, '360f08f9600dc41357ced9a4872ab08ca530f681');
   assert.equal(old.dagPlanDigest,
-    '7826b4d221447aca1fb0a46da4d8ba5d2056a7693534050ccaa577af1ee58076');
+    '428f9127a48f56edbc856e49761a35107c8e8fa8892906755866f46d9c6e9b75');
   assert.equal(old.evidenceCutDigest,
-    '48730fb099ed8cd59f63e6a1b1da628e1cde3ea731f0a99b8622740beedcb13b');
+    '878e3c8b7abc4a7fefc92b6f62858ed861785fdf547ce37d94be5a77bb1a372a');
   assert.notEqual(dagPlanDigest(plan), old.dagPlanDigest);
   const current = deriveBinding({
     plan,
-    targetSha: git('rev-parse', 'HEAD'),
+    targetSha: 'f'.repeat(40),
     targetReceiptDigest: 'a'.repeat(64),
     environment: { identity: 'focused-rebind-test' },
   });
@@ -145,18 +145,18 @@ test('the fa29 binding and evidence cut are explicitly stale under the new plan'
 });
 
 test('the new builder, successor evaluator and implementation inputs are frozen exactly', () => {
-  assert.equal(plan.builder.taskId, '34GG81QJ2G1b5USb00rPS');
-  assert.equal(plan.builder.sessionId, '4LeiBLaxefRdW21bdsTEFR');
-  assert.equal(plan.builder.sourceBranch, 'orbit/release-dag-prisma-target-4063c0');
-  assert.equal(plan.evaluator.taskId, '34GG81bW8miI0nbxFDqN6');
+  assert.equal(plan.builder.taskId, '34GPMWXHBT6PcxQ4KV3qO');
+  assert.equal(plan.builder.sessionId, '2dYsqAzyq3NF0dM96npo3N');
+  assert.equal(plan.builder.sourceBranch, 'orbit/release-dag-target-bc59f8');
+  assert.equal(plan.evaluator.taskId, '34GPMWmm6WxUjmxCYvLxh');
   assert.equal(plan.evaluator.automaticRetries, 0);
   assert.equal(authoritative.taskId, plan.builder.taskId);
   assert.equal(authoritative.sourceBranch, plan.builder.sourceBranch);
   assert.equal(frontier.task.publicId, plan.builder.taskId);
   assert.equal(frontier.session.publicId, plan.builder.sessionId);
   assert.equal(frontier.postgres.minimumMigrations, 220);
-  assert.equal(packageJson.scripts['test:outcome-reconciler:release-dag-rebind'],
-    'bash scripts/outcome-reconciler-release-dag-rebind.sh');
+  assert.equal(packageJson.scripts['test:outcome-reconciler:release-dag-pcc-rebind'],
+    'bash scripts/outcome-reconciler-release-dag-pcc-rebind.sh');
   assert.equal(plan.implementationInputs.paths.length,
     Object.keys(plan.implementationInputs.digests).length);
   for (const relative of plan.implementationInputs.paths) {

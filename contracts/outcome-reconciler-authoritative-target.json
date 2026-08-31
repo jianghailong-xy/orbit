@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "taskId": "34GG81QJ2G1b5USb00rPS",
-  "sourceBranch": "orbit/release-dag-prisma-target-4063c0",
+  "taskId": "34GPMWXHBT6PcxQ4KV3qO",
+  "sourceBranch": "orbit/release-dag-target-bc59f8",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
     "mode": "BUILDER_AGENT_MERGE_RECEIPT",
-    "rule": "declared target is the receipt source/target-after SHA for session 4LeiBLaxefRdW21bdsTEFR and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
+    "rule": "declared target is the receipt source/target-after SHA for session 2dYsqAzyq3NF0dM96npo3N and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
   },
   "lineage": {
-    "remoteMainObservedBeforeIntegration": "4ec981e58c3f0b38b7c67637dedf53a67cb0bfcf",
-    "localMainIntegrationBase": "4ec981e58c3f0b38b7c67637dedf53a67cb0bfcf",
+    "remoteMainObservedBeforeIntegration": "360f08f9600dc41357ced9a4872ab08ca530f681",
+    "localMainIntegrationBase": "360f08f9600dc41357ced9a4872ab08ca530f681",
     "historyPolicy": "NO_FORCE_NO_RESET_NO_REWRITE"
   },
   "immutableVerifier": {
@@ -463,7 +463,7 @@
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/release-dag-prisma-target-4063c0",
+    "sourceBranch": "orbit/release-dag-target-bc59f8",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

@@ -57,16 +57,46 @@ outcome_release_dag_bind_database() {
   : "${OUTCOME_RELEASE_DAG_PG_MIGRATIONS:?}"
   : "${OUTCOME_RELEASE_DAG_PG_TEMPLATE:?}"
   : "${OUTCOME_RELEASE_DAG_DATABASE:?}"
-  [[ "$OUTCOME_RELEASE_DAG_DATABASE" =~ ^ord_[a-z0-9_]{1,56}$ ]] || {
+  : "${OUTCOME_RELEASE_DAG_DATABASE_USER:?}"
+  : "${OUTCOME_RELEASE_DAG_DATABASE_PREFIX:?}"
+  : "${OUTCOME_RELEASE_DAG_ROLE_PREFIX:?}"
+  : "${OUTCOME_RELEASE_DAG_DESTRUCTIVE_COORDINATOR_SPECS:?}"
+  [[ "$OUTCOME_RELEASE_DAG_DATABASE" =~ ^[a-z][a-z0-9_]{1,62}$ ]] || {
     echo '!! unsafe Release DAG database name' >&2
     return 2
   }
-  [[ "$OUTCOME_RELEASE_DAG_PG_TEMPLATE" =~ ^ord_template_[a-z0-9_]+$ ]] || {
+  [[ "$OUTCOME_RELEASE_DAG_DATABASE_USER" =~ ^[a-z][a-z0-9_]{1,62}$ ]] || {
+    echo '!! unsafe Release DAG database role' >&2
+    return 2
+  }
+  [[ "$OUTCOME_RELEASE_DAG_DATABASE" == "${OUTCOME_RELEASE_DAG_DATABASE_PREFIX}_"* ]] || {
+    echo '!! Release DAG database does not match its declared node prefix' >&2
+    return 2
+  }
+  [[ "$OUTCOME_RELEASE_DAG_DATABASE_USER" == "${OUTCOME_RELEASE_DAG_ROLE_PREFIX}_"* ]] || {
+    echo '!! Release DAG role does not match its declared node prefix' >&2
+    return 2
+  }
+  if [ "$OUTCOME_RELEASE_DAG_DESTRUCTIVE_COORDINATOR_SPECS" = 1 ]; then
+    [[ "$OUTCOME_RELEASE_DAG_DATABASE" =~ ^pcc[0-9a-z]*_ ]] || {
+      echo '!! destructive coordinator specs require a dedicated pcc_* database' >&2
+      return 2
+    }
+    [[ "$OUTCOME_RELEASE_DAG_DATABASE_USER" =~ ^pcc[0-9a-z]*_ ]] || {
+      echo '!! destructive coordinator specs require a dedicated pcc_* role' >&2
+      return 2
+    }
+  elif [ "$OUTCOME_RELEASE_DAG_DESTRUCTIVE_COORDINATOR_SPECS" != 0 ]; then
+    echo '!! invalid destructive coordinator spec declaration' >&2
+    return 2
+  fi
+  [[ "$OUTCOME_RELEASE_DAG_PG_TEMPLATE" =~ ^pccrd_template_[a-z0-9_]+$ ]] || {
     echo '!! unsafe Release DAG template name' >&2
     return 2
   }
   CONTAINER="$OUTCOME_RELEASE_DAG_PG_CONTAINER"
-  ADMIN="$OUTCOME_RELEASE_DAG_PG_ADMIN"
+  PROVISIONER="$OUTCOME_RELEASE_DAG_PG_ADMIN"
+  ADMIN="$OUTCOME_RELEASE_DAG_DATABASE_USER"
   PASSWORD="$OUTCOME_RELEASE_DAG_PG_PASSWORD"
   DATABASE="$OUTCOME_RELEASE_DAG_DATABASE"
   PORT="$OUTCOME_RELEASE_DAG_PG_PORT"
@@ -82,25 +112,51 @@ outcome_release_dag_bind_database() {
   URL="postgresql://$ADMIN:$PASSWORD@$PG_HOST:$PG_PORT/$DATABASE"
   PG_URL="$URL"
 
-  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
     -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$DATABASE' AND pid <> pg_backend_pid()" \
     >/dev/null 2>&1 || true
-  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
     -c "DROP DATABASE IF EXISTS \"$DATABASE\"" >/dev/null
-  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-    -c "CREATE DATABASE \"$DATABASE\" TEMPLATE \"$OUTCOME_RELEASE_DAG_PG_TEMPLATE\"" >/dev/null
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP ROLE IF EXISTS \"$ADMIN\"" >/dev/null
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE ROLE \"$ADMIN\" LOGIN SUPERUSER PASSWORD '$PASSWORD'" >/dev/null
   OUTCOME_RELEASE_DAG_DB_BOUND=1
-  export CONTAINER ADMIN PASSWORD DATABASE PORT PG_PORT PG_HOST SYSTEM_ID SYSTEM_IDENTIFIER
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE \"$DATABASE\" WITH TEMPLATE \"$OUTCOME_RELEASE_DAG_PG_TEMPLATE\" OWNER \"$ADMIN\"" >/dev/null
+  local observed_database observed_role observed_system
+  IFS=$'\t' read -r observed_database observed_role observed_system < <(
+    docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+      psql -h 127.0.0.1 -U "$ADMIN" -d "$DATABASE" -X -At -F $'\t' -v ON_ERROR_STOP=1 \
+      -c "SELECT current_database(), current_user, system_identifier::text FROM pg_control_system()"
+  )
+  [ "$observed_database" = "$DATABASE" ] || return 2
+  [ "$observed_role" = "$ADMIN" ] || return 2
+  [ "$observed_system" = "$SYSTEM_ID" ] || return 2
+  echo "==> release-dag PostgreSQL identity: database=$DATABASE role=$ADMIN binding=${OUTCOME_RELEASE_DAG_BINDING_DIGEST:0:12} attempt=${OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN:-missing}"
+  export CONTAINER PROVISIONER ADMIN PASSWORD DATABASE PORT PG_PORT PG_HOST SYSTEM_ID SYSTEM_IDENTIFIER
   export PG_SYSTEM_IDENTIFIER PG_VERSION MIGRATIONS MIGRATION_COUNT LAST_MIGRATION URL PG_URL
 }
 
 outcome_release_dag_drop_database() {
   [ "${OUTCOME_RELEASE_DAG_DB_BOUND:-0}" = 1 ] || return 0
-  [[ "${DATABASE:-}" =~ ^ord_[a-z0-9_]{1,56}$ ]] || return 2
-  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
+  [ "${DATABASE:-}" = "${OUTCOME_RELEASE_DAG_DATABASE:-}" ] || return 2
+  [ "${ADMIN:-}" = "${OUTCOME_RELEASE_DAG_DATABASE_USER:-}" ] || return 2
+  [[ "$DATABASE" =~ ^[a-z][a-z0-9_]{1,62}$ ]] || return 2
+  [[ "$ADMIN" =~ ^[a-z][a-z0-9_]{1,62}$ ]] || return 2
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
     -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$DATABASE' AND pid <> pg_backend_pid()" \
     >/dev/null 2>&1 || true
-  docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-    -c "DROP DATABASE IF EXISTS \"$DATABASE\"" >/dev/null 2>&1 || true
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP DATABASE IF EXISTS \"$DATABASE\"" >/dev/null
+  docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP ROLE IF EXISTS \"$ADMIN\"" >/dev/null
+  local leftovers
+  leftovers="$(docker exec "$CONTAINER" psql -U "$PROVISIONER" -d postgres -At -v ON_ERROR_STOP=1 \
+    -c "SELECT (SELECT count(*) FROM pg_database WHERE datname='$DATABASE') + (SELECT count(*) FROM pg_roles WHERE rolname='$ADMIN')")"
+  [ "$leftovers" = 0 ] || {
+    echo '!! Release DAG database or role survived cleanup' >&2
+    return 2
+  }
   OUTCOME_RELEASE_DAG_DB_BOUND=0
 }

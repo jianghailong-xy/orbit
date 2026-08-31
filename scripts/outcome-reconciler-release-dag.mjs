@@ -28,6 +28,10 @@ import {
   topologicalOrder,
   validatePlan,
 } from './outcome-reconciler-release-dag-lib.mjs';
+import {
+  deriveReleaseAttemptIdentity,
+  nodeDatabaseIdentity,
+} from './outcome-reconciler-release-dag-database.mjs';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const processStartedAtMs = Date.now();
@@ -237,6 +241,14 @@ for (const field of ['targetReceiptDigest', 'environmentDigest', 'evaluationPlan
   'evidenceCutDigest', 'bindingDigest']) {
   assert.match(binding[field], DIGEST);
 }
+const releaseAttempt = deriveReleaseAttemptIdentity({
+  bindingDigest: binding.bindingDigest,
+  evaluatorTaskId: plan.evaluator.taskId,
+  runnerTaskId: process.env.ORBIT_TASK_ID ?? plan.evaluator.taskId,
+  runnerSessionId: process.env.ORBIT_SESSION_ID ?? 'standalone',
+  startedAt: new Date(processStartedAtMs).toISOString(),
+  nonce: process.env.OUTCOME_RELEASE_DAG_ATTEMPT_NONCE,
+});
 const defaultStateRoot = path.join(repo, 'build', 'outcome-reconciler-release-dag');
 const stateRoot = path.resolve(process.env.OUTCOME_RELEASE_DAG_STATE_ROOT ?? defaultStateRoot);
 const runRoot = path.join(stateRoot, binding.bindingDigest);
@@ -251,6 +263,7 @@ const bindingDocument = {
   targetRef: plan.target.ref,
   ...binding,
   targetReceipt: targetResolution.receipt,
+  releaseAttempt,
   planPath: relativeToRepo(planPath),
   admittedAt: new Date().toISOString(),
 };
@@ -270,10 +283,14 @@ const tokens = {
   DAG_PLAN_DIGEST: binding.dagPlanDigest,
   EVIDENCE_CUT_DIGEST: binding.evidenceCutDigest,
   BINDING_DIGEST: binding.bindingDigest,
+  ATTEMPT_TOKEN: releaseAttempt.token,
 };
 const focusPreparePostgres = process.argv.includes('--focus-prepare-postgres');
+const focusPccRebind = process.argv.includes('--focus-pcc-rebind');
+assert.equal(focusPreparePostgres && focusPccRebind, false,
+  'only one focused Release DAG mode may be selected');
 const focusedNodeIds = new Set();
-if (focusPreparePostgres) {
+if (focusPreparePostgres || focusPccRebind) {
   const declaredNodes = new Map(plan.nodes.map((node) => [node.id, node]));
   const includeWithDependencies = (id) => {
     if (focusedNodeIds.has(id)) return;
@@ -283,11 +300,23 @@ if (focusPreparePostgres) {
     focusedNodeIds.add(id);
   };
   includeWithDependencies('prepare-postgres');
+  if (focusPccRebind) {
+    includeWithDependencies('prepare-build');
+    for (const id of [
+      'suite-bootstrap',
+      'suite-evaluator',
+      'suite-projection',
+      'suite-fact-ingress',
+      'suite-auto-dispatch',
+      'suite-work-overview-readiness',
+      'suite-watchdog-111k',
+    ]) includeWithDependencies(id);
+  }
 }
 const expandedPlan = {
   ...plan,
   nodes: plan.nodes
-    .filter((node) => !focusPreparePostgres || focusedNodeIds.has(node.id))
+    .filter((node) => (!focusPreparePostgres && !focusPccRebind) || focusedNodeIds.has(node.id))
     .map((node) => expandedNode(node, tokens)),
 };
 const nodes = new Map(expandedPlan.nodes.map((node) => [node.id, node]));
@@ -523,19 +552,23 @@ function loadReusable() {
 
 function postgresEnvironment(node) {
   if (!node.usesSharedPostgres) return {};
+  const policy = plan.postgresIsolation.nodes[node.id];
   const contextPath = path.join(runRoot, 'postgres-context.json');
   const context = JSON.parse(readFileSync(contextPath, 'utf8'));
   assert.equal(context.bindingDigest, binding.bindingDigest,
     `${node.id} received stale PostgreSQL preparation`);
   assert.equal(context.credential, 'FIXED_DISPOSABLE_LOOPBACK_ONLY');
   assert.equal(context.imageId, environment.imageIds[plan.environment.postgresImage]);
-  const database = `ord_${binding.bindingDigest.slice(0, 8)}_${node.id.replaceAll('-', '_')}`
-    .slice(0, 60);
+  const allocation = nodeDatabaseIdentity({
+    node: { ...node, ...policy },
+    bindingDigest: binding.bindingDigest,
+    attemptToken: releaseAttempt.token,
+  });
   return {
     OUTCOME_RELEASE_DAG_PG_CONTEXT: contextPath,
     OUTCOME_RELEASE_DAG_PG_CONTAINER: context.container,
     OUTCOME_RELEASE_DAG_PG_ADMIN: context.admin,
-    OUTCOME_RELEASE_DAG_PG_PASSWORD: 'ord_disposable_password',
+    OUTCOME_RELEASE_DAG_PG_PASSWORD: 'pccrd_disposable_password',
     OUTCOME_RELEASE_DAG_PG_HOST: context.host,
     OUTCOME_RELEASE_DAG_PG_PORT: String(context.port),
     OUTCOME_RELEASE_DAG_PG_SYSTEM_ID: context.systemIdentifier,
@@ -545,7 +578,12 @@ function postgresEnvironment(node) {
     OUTCOME_RELEASE_DAG_PG_TEMPLATE: node.postgresTemplate === 'before-owner-routing'
       ? context.beforeOwnerRoutingTemplate
       : context.currentTemplate,
-    OUTCOME_RELEASE_DAG_DATABASE: database,
+    OUTCOME_RELEASE_DAG_DATABASE: allocation.database,
+    OUTCOME_RELEASE_DAG_DATABASE_USER: allocation.role,
+    OUTCOME_RELEASE_DAG_DATABASE_PREFIX: policy.postgresDatabasePrefix,
+    OUTCOME_RELEASE_DAG_ROLE_PREFIX: policy.postgresRolePrefix,
+    OUTCOME_RELEASE_DAG_DESTRUCTIVE_COORDINATOR_SPECS:
+      policy.destructiveCoordinatorSpecs ? '1' : '0',
   };
 }
 
@@ -572,12 +610,43 @@ function nodeEnvironment(node) {
     OUTCOME_RELEASE_DAG_PLAN_DIGEST: binding.dagPlanDigest,
     OUTCOME_RELEASE_DAG_EVIDENCE_CUT_DIGEST: binding.evidenceCutDigest,
     OUTCOME_RELEASE_DAG_BINDING_DIGEST: binding.bindingDigest,
+    OUTCOME_RELEASE_DAG_ATTEMPT_DIGEST: releaseAttempt.digest,
+    OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: releaseAttempt.token,
     OUTCOME_RELEASE_DAG_PLAN_PATH: planPath,
     OUTCOME_RELEASE_DAG_COMMAND_DIGEST: commandDigest(node.command),
     OUTCOME_RELEASE_DAG_POSTGRES_IMAGE_ID: environment.imageIds[plan.environment.postgresImage],
     OUTCOME_RELEASE_DAG_SWIFT_IMAGE_ID: environment.imageIds[plan.environment.swiftImage],
   };
   return environmentVariables;
+}
+
+function postgresIsolationEvidence(node, environmentVariables) {
+  if (!node.usesSharedPostgres) return null;
+  const database = environmentVariables.OUTCOME_RELEASE_DAG_DATABASE;
+  const role = environmentVariables.OUTCOME_RELEASE_DAG_DATABASE_USER;
+  const container = environmentVariables.OUTCOME_RELEASE_DAG_PG_CONTAINER;
+  const provisioner = environmentVariables.OUTCOME_RELEASE_DAG_PG_ADMIN;
+  const observed = run('docker', [
+    'exec', container, 'psql', '-U', provisioner, '-d', 'postgres',
+    '-X', '-At', '-v', 'ON_ERROR_STOP=1', '-c',
+    `SELECT (SELECT count(*) FROM pg_database WHERE datname='${database}') + (SELECT count(*) FROM pg_roles WHERE rolname='${role}')`,
+  ]).stdout;
+  assert.equal(observed, '0', `${node.id} leaked its disposable PostgreSQL database or role`);
+  return {
+    allocator: plan.postgresIsolation.allocator,
+    bindingDigest: binding.bindingDigest,
+    attemptDigest: releaseAttempt.digest,
+    attemptToken: releaseAttempt.token,
+    nodeId: node.id,
+    database,
+    role,
+    databasePrefix: environmentVariables.OUTCOME_RELEASE_DAG_DATABASE_PREFIX,
+    rolePrefix: environmentVariables.OUTCOME_RELEASE_DAG_ROLE_PREFIX,
+    destructiveCoordinatorSpecs:
+      environmentVariables.OUTCOME_RELEASE_DAG_DESTRUCTIVE_COORDINATOR_SPECS === '1',
+    identityVerifiedBeforeMutation: true,
+    cleanup: { databaseRemoved: true, roleRemoved: true, resourcesRemaining: 0 },
+  };
 }
 
 function redactor(environmentVariables) {
@@ -641,11 +710,13 @@ async function executeNode(node, attemptDeadlineMs) {
   let artifacts = [];
   let metrics = { tests: 0, passed: 0, failed: 0, skipped: 0 };
   let validationError = result.error?.message ?? null;
+  let postgresIsolation = null;
   if (!timedOut && exitCode === 0) {
     try {
       const outputFiles = node.outputs.map(resolveFromRepo);
       metrics = metricsForNode(node, outputFiles);
       artifacts = snapshotOutputs(node);
+      postgresIsolation = postgresIsolationEvidence(node, environmentVariables);
     } catch (error) {
       exitCode = 66;
       validationError = error instanceof Error ? error.message : String(error);
@@ -674,6 +745,7 @@ async function executeNode(node, attemptDeadlineMs) {
       evidenceCutDigest: binding.evidenceCutDigest,
       bindingDigest: binding.bindingDigest,
     },
+    releaseAttempt,
     command: node.command,
     commandDigest: commandDigest(node.command),
     admission: {
@@ -697,6 +769,7 @@ async function executeNode(node, attemptDeadlineMs) {
     environmentIdentity: environment.identity,
     evaluationPhase: plan.evaluator.phase,
     environment,
+    postgresIsolation,
     resources: node.resources,
     resourceLimits: plan.resourceLimits,
     hostResourceEnvelope: plan.hostResourceEnvelope,
@@ -714,7 +787,7 @@ async function executeNode(node, attemptDeadlineMs) {
 function cleanupPostgres() {
   const context = path.join(runRoot, 'postgres-context.json');
   if (!existsSync(context)) {
-    if (!focusPreparePostgres) return;
+    if (!focusPreparePostgres && !focusPccRebind) return;
     const expected = `orbit-release-dag-pg-${binding.bindingDigest.slice(0, 12)}`;
     const inspected = run('docker', [
       'inspect', '--format', '{{ index .Config.Labels "orbit.release-dag.binding" }}', expected,
@@ -737,7 +810,7 @@ const attemptStartedAtMs = processStartedAtMs;
 const attemptDeadlineMs = attemptStartedAtMs + (plan.evaluator.schedulerDeadlineSeconds * 1000);
 // The focused rebind preflight is an observation, not a resumable formal attempt. It always
 // exercises the disposable PostgreSQL and isolated Prisma fixture from scratch.
-const completed = focusPreparePostgres ? new Map() : loadReusable();
+const completed = (focusPreparePostgres || focusPccRebind) ? new Map() : loadReusable();
 const attempted = new Set();
 const running = new Map();
 let inUse = {};
@@ -779,6 +852,48 @@ try {
   // the next invocation, so only unfinished nodes are rescheduled. Successful cuts clean it up.
 }
 
+let focusedRegression = null;
+if (focusPccRebind && completed.size === nodes.size) {
+  const focusedOutput = path.join(runRoot, 'pcc-focused-regression.json');
+  const focusedLog = path.join(logRoot, 'pcc-focused-regression.log');
+  const result = spawnSync(process.execPath, [
+    path.join(repo, 'scripts', 'outcome-reconciler-release-dag-pcc-focus.mjs'),
+    runRoot,
+    focusedOutput,
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    timeout: Math.max(1, attemptDeadlineMs - Date.now()),
+    killSignal: 'SIGKILL',
+    env: {
+      ...process.env,
+      OUTCOME_RELEASE_DAG_TARGET_SHA: binding.targetSha,
+      OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST: binding.targetReceiptDigest,
+      OUTCOME_RELEASE_DAG_ENVIRONMENT_DIGEST: binding.environmentDigest,
+      OUTCOME_RELEASE_DAG_EVALUATION_PLAN_DIGEST: binding.evaluationPlanDigest,
+      OUTCOME_RELEASE_DAG_PLAN_DIGEST: binding.dagPlanDigest,
+      OUTCOME_RELEASE_DAG_EVIDENCE_CUT_DIGEST: binding.evidenceCutDigest,
+      OUTCOME_RELEASE_DAG_BINDING_DIGEST: binding.bindingDigest,
+      OUTCOME_RELEASE_DAG_ATTEMPT_DIGEST: releaseAttempt.digest,
+      OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: releaseAttempt.token,
+      OUTCOME_RELEASE_DAG_RUN_ROOT: runRoot,
+    },
+  });
+  writeFileSync(focusedLog, `${result.stdout ?? ''}${result.stderr ?? ''}`);
+  if (result.status === 0 && existsSync(focusedOutput)) {
+    focusedRegression = JSON.parse(readFileSync(focusedOutput, 'utf8'));
+    assert.equal(focusedRegression.outcome, 'PASS');
+  } else {
+    focusedRegression = {
+      outcome: 'FAIL',
+      exitCode: result.status,
+      signal: result.signal,
+      error: result.error?.message ?? null,
+      log: { path: relativeToRepo(focusedLog), ...fileDigest(focusedLog) },
+    };
+  }
+}
+
 const failed = order.filter((id) => {
   const receipt = readReceipt(id);
   return attempted.has(id) && receipt?.state === 'FAILED';
@@ -792,6 +907,7 @@ const attempt = {
   schemaVersion: 1,
   kind: 'orbit.outcome-reconciler.release-dag-attempt',
   binding: bindingDocument,
+  releaseAttempt,
   startedAt: new Date(attemptStartedAtMs).toISOString(),
   finishedAt: new Date().toISOString(),
   evaluatorTimeoutSeconds: plan.evaluator.attemptTimeoutSeconds,
@@ -804,11 +920,13 @@ const attempt = {
   automaticRetries: 0,
   executionMode: focusPreparePostgres
     ? 'FOCUSED_PREPARE_POSTGRES_PREFLIGHT'
-    : 'FORMAL_RELEASE_DAG',
-  outcome: incomplete.length === 0 ? 'PASS' : 'FAIL',
+    : focusPccRebind ? 'FOCUSED_PCC_DATABASE_REBIND' : 'FORMAL_RELEASE_DAG',
+  focusedRegression,
+  outcome: incomplete.length === 0 && (!focusPccRebind || focusedRegression?.outcome === 'PASS')
+    ? 'PASS' : 'FAIL',
 };
 atomicJson(path.join(runRoot, 'attempt.json'), attempt);
 console.log(JSON.stringify(attempt, null, 2));
-if (focusPreparePostgres) cleanupPostgres();
-if (incomplete.length !== 0) process.exit(1);
-if (!focusPreparePostgres) cleanupPostgres();
+if (focusPreparePostgres || focusPccRebind) cleanupPostgres();
+if (incomplete.length !== 0 || (focusPccRebind && focusedRegression?.outcome !== 'PASS')) process.exit(1);
+if (!focusPreparePostgres && !focusPccRebind) cleanupPostgres();
