@@ -1,98 +1,75 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "59ed92d2cb701581ff8da528070b6df96840d060396b4bc94cd9bf774c004053",
+  "declaredDagPlanDigest": "1c0e7a24156c707ab2a054b9fe97f5439486c5419739395d3feb640ad466c4dd",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "builderTaskId": "34GS9AILYltV03zzexrVh",
+  "builderTaskId": "34GWrlngwd6e1AfHXq4hG",
   "supersededAttempt": {
-    "taskId": "34GPMWmm6WxUjmxCYvLxh",
-    "sessionId": "42NqmQLttJLS4kzUl6XUmX",
-    "attemptId": "3QLN8FBUrKS84LaoE0Vo58",
-    "diagnosisId": "Hmj7440inFPxu3Bh9OVDE",
-    "preservedTip": "2c697755bddd560e569c49470a9b45a0199a82c4",
+    "taskId": "34GVK9T3B4GW7UpXH6kmT",
+    "sessionId": "5saDXo7pdATSJ98Cd7VcdK",
+    "attemptId": "Hl7cHRRDc7ZFW7i4uFF02",
+    "continuationId": "3cuFGpL658QhObvBo7lagT",
+    "diagnosisId": "6OvjkUtyXeX1CjloMwU6xl",
+    "preservedTip": "36d340cb75f048443f2130001d28f277eca5daad",
     "terminalState": "EXITED",
     "actualExitCode": 1,
     "failureFingerprint": "1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153",
+    "receiptDigest": "da858a9db3420711b71d0803c86d16681fd5d20cc453d20e666c36bb591253f8",
     "evidenceReuse": "NONE",
-    "reason": "Six deterministic nodes failed after the old target was frozen: one predeploy Watchdog manifest read the deployed e8308e7e runtime, two API mocks lagged their transaction/Prisma.Sql interfaces, two project-rollup fixtures retained a seven-query budget after canonical failure coordination added two bounded page-wide reads, and one full-web assertion crossed Vitest's five-second default only under DAG concurrency. Product bucket, tenant, SHA, zero-skip and database safety semantics remain strict; the immutable EXITED 1 attempt is stale audit history only.",
-    "failedNodeCount": 6,
+    "reason": "All four API shards exited at the first stale transaction double they reached, each one a fixture that had stopped modelling a delegate production genuinely calls: a raw-query renderer that knew only tagged templates, and transaction doubles that entered terminalizeUndeliveredCurrentWork without owning conversationTurn/conversationTurnStartupFragment. The first error in each shard masked the rest of the same family. Product bucket, tenant, SHA, zero-skip and database safety semantics remain strict; the immutable EXITED 1 attempt is stale audit history only.",
+    "failedNodeCount": 4,
     "failedNodes": [
-      "full-web",
-      "suite-watchdog-111k",
       "full-api-shard-0",
       "full-api-shard-1",
       "full-api-shard-2",
       "full-api-shard-3"
     ],
-    "attemptManifestDigest": "b8fcab941b5f9303e7ca99f3b35fbfbc59b52ea7881bb558c8cf6fc00f53bf1d",
+    "attemptManifestDigest": "f62e2a144dca55e0579393ffa565e0368ea097ac882dc07ba5af3ea445913a2d",
     "rawOutput": {
-      "bytes": 1438971,
-      "sha256": "2fd02b34b51f220009383752f2b38b23b5a489d98fddd385f8e80f958d4da8fa",
+      "bytes": 1695962,
+      "sha256": "cf63fa20fd2b1607e8cc20fc10f0fa1ec79ae6db0c9b44f786c53d028ef43c7f",
       "outputTruncated": false
     },
-    "fullWebReport": {
-      "bytes": 444533,
-      "sha256": "a03beb60574a6399c324eb7feda46495ca0b67b8320d80ed423274ebe7ee262c",
-      "testSuites": 365,
-      "passedTestSuites": 363,
-      "failedTestSuites": 2,
-      "tests": 1315,
-      "passed": 1314,
-      "failed": 1,
-      "skipped": 0,
-      "failingFile": "src/web/src/components/ProjectReadyToRun.test.tsx",
-      "failingAssertion": "shows an actionable ready queue without the old chart/table control",
-      "durationMilliseconds": 5277.932840999998,
-      "timeoutMilliseconds": 5000,
-      "failureMarker": "STACK_TRACE_ERROR"
+    "routeDecision": {
+      "publicId": "64ZHShlb04BuebptQCjTnJ",
+      "diagnosticPath": "ALTERNATE_DIAGNOSIS",
+      "reasonCode": "TRANSIENT_EXTERNAL_EXITED",
+      "canonicalReasonDigest": "bfe2fe00263c90bf08bacf35bdfac0e9d7952ecc6304447e5b4a523036b30a8c",
+      "decisionDigest": "bc659e5939b414306b786eacacd206df6fe5d67d92901fd8e5a9bf62bb42ad3e",
+      "allowsUnchangedRetry": false,
+      "requiresOwnerDecision": false
     },
     "failureClasses": [
       {
-        "id": "WATCHDOG_MANIFEST_SHA_BINDING",
-        "classification": "MANIFEST_BINDING_ERROR",
-        "nodes": ["suite-watchdog-111k"],
+        "id": "CURRENT_WORK_TRANSACTION_DOUBLE_DRIFT",
+        "classification": "ROUTE_BOUND_TEST_DOUBLE_REPAIR",
+        "nodes": [
+          "full-api-shard-0",
+          "full-api-shard-1",
+          "full-api-shard-2",
+          "full-api-shard-3"
+        ],
         "markers": [
-          "e8308e7e933e6b8cee4f6d7f9f8edea7c60b5489",
-          "2c697755bddd560e569c49470a9b45a0199a82c4"
-        ]
-      },
-      {
-        "id": "API_MOCK_INTERFACE_DRIFT",
-        "classification": "STALE_TEST_FIXTURE",
-        "nodes": ["full-api-shard-0", "full-api-shard-1"],
-        "markers": [
-          "tx.conversationTurn.findMany is not a function",
-          "args[0].join is not a function"
-        ]
-      },
-      {
-        "id": "PROJECT_ROLLUP_QUERY_BUDGET_DRIFT",
-        "classification": "STALE_TEST_FIXTURE",
-        "nodes": ["full-api-shard-2", "full-api-shard-3"],
-        "markers": ["9 !== 7"],
-        "sevenBucketProductRegression": false
-      },
-      {
-        "id": "FULL_WEB_CONCURRENT_TIMEOUT",
-        "classification": "CONCURRENCY_ISOLATION",
-        "nodes": ["full-web"],
-        "markers": ["STACK_TRACE_ERROR", "5277.932840999998"]
+          "args[0].join is not a function",
+          "tx.conversationTurn.findMany is not a function"
+        ],
+        "canonicalReasonReclassified": false
       }
     ],
     "classificationSummary": {
       "productRegression": [],
-      "staleTestFixtures": ["API_MOCK_INTERFACE_DRIFT", "PROJECT_ROLLUP_QUERY_BUDGET_DRIFT"],
-      "concurrencyIsolation": ["FULL_WEB_CONCURRENT_TIMEOUT"],
-      "manifestBinding": ["WATCHDOG_MANIFEST_SHA_BINDING"]
+      "staleTestFixtures": ["CURRENT_WORK_TRANSACTION_DOUBLE_DRIFT"],
+      "concurrencyIsolation": [],
+      "manifestBinding": []
     },
     "binding": {
-      "targetSha": "2c697755bddd560e569c49470a9b45a0199a82c4",
-      "targetReceiptDigest": "2356fc4c2b3ecda8526c0047d943d3e5a17354779f79c6c0aff70000bf2bc2de",
-      "environmentDigest": "90fac36e43467b32173b4a827a30f0544a20790a2c2a4a52aa47801d86431032",
+      "targetSha": "36d340cb75f048443f2130001d28f277eca5daad",
+      "targetReceiptDigest": "2d47066f563820fb1acf87462e2ed63c3796b16cedd2742f6c69b28e1eed91d3",
+      "environmentDigest": "e1c200d36a23bbdebd44dcf2da271abbdca80762bbc1b24d4fe1ffe7de4de5cb",
       "evaluationPlanDigest": "21e4e031a6caf1ec6a837c6f4be2628d24ab465b3736216e6486cb4687c10dc1",
-      "dagPlanDigest": "7f722f0564a31f8e773b0a2b33e5be4e92786200dd22ec23f32aa10bc5ccb44d",
-      "evidenceCutDigest": "7100472b0a543f7eac35b4867305ba6f6ad17f82e9bf5d19d6dda68b0d66344d",
-      "bindingDigest": "c8db2dfc00cafe5d0cfdb8fa5ef678f2044f3c799979e873008a681adadca5cc"
+      "dagPlanDigest": "59ed92d2cb701581ff8da528070b6df96840d060396b4bc94cd9bf774c004053",
+      "evidenceCutDigest": "f55c7e086c219a15c134e33a3816f1be9466f7877799076602247c6d4e721d74",
+      "bindingDigest": "9b84be559cd9594f0c82953ef51da796c857f9955b84de91cb2c13c72576d951"
     },
     "stalePolicy": "TARGET_OR_PLAN_CHANGE_INVALIDATES_ALL_CHECKPOINTS_AND_THE_EVIDENCE_CUT"
   },
@@ -112,21 +89,37 @@
       },
       "bindingDigest": "7b44df90632060c220d74c916569cfbecfd5015353fbb8c2922398e15d478f32",
       "status": "STALE"
+    },
+    {
+      "taskId": "34GPMWmm6WxUjmxCYvLxh",
+      "sessionId": "42NqmQLttJLS4kzUl6XUmX",
+      "attemptId": "3QLN8FBUrKS84LaoE0Vo58",
+      "preservedTip": "2c697755bddd560e569c49470a9b45a0199a82c4",
+      "terminalState": "EXITED",
+      "actualExitCode": 1,
+      "failureFingerprint": "1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153",
+      "rawOutput": {
+        "bytes": 1438971,
+        "sha256": "2fd02b34b51f220009383752f2b38b23b5a489d98fddd385f8e80f958d4da8fa",
+        "outputTruncated": false
+      },
+      "bindingDigest": "c8db2dfc00cafe5d0cfdb8fa5ef678f2044f3c799979e873008a681adadca5cc",
+      "status": "STALE"
     }
   ],
   "builder": {
-    "taskId": "34GS9AILYltV03zzexrVh",
-    "taskDatabaseId": "01a055a0-2ea5-72bb-a3e9-4e8fc96e0549",
-    "sessionId": "6HoxFms8qUlVFDHp32Oim6",
-    "sessionDatabaseId": "ce95f840-9e22-5b4e-b4f7-2fce65fd0a96",
-    "sourceBranch": "orbit/release-dag-sha-api-web-target-8e6041",
+    "taskId": "34GWrlngwd6e1AfHXq4hG",
+    "taskDatabaseId": "01a05650-3ee0-72dc-addb-439a55e0931a",
+    "sessionId": "1P7b99zBOd7eHTmYVikcnP",
+    "sessionDatabaseId": "2e2ba8a5-7d77-5c09-a031-8b4eecdb7d7f",
+    "sourceBranch": "orbit/release-dag-current-work-b0429a",
     "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-regression-rebind",
     "commandDigest": "dd60f2d723df98ed4605f894751a11c0a6d63f8c128984dcdf50bb899bf80241",
     "evaluationPlanDigest": "6c852b45dedf94260b61ce17a269ed484c8c2b523b9b0ed84d999dea00853da2",
     "timeoutSeconds": 1800
   },
   "evaluator": {
-    "taskId": "34GS9DAvreJyhBXtt1qNS",
+    "taskId": "34GWrlngwd6e1AfHXq4hG",
     "phase": "PREDEPLOY_EVALUATION",
     "deploymentTaskId": "34G78wmlyJ1g4TAbijdSD",
     "acceptanceCommand": "npm run test:outcome-reconciler:release-dag",
@@ -144,8 +137,8 @@
     "remoteTrackingRef": "refs/remotes/origin/main",
     "resolution": "BUILDER_AGENT_MERGE_RECEIPT",
     "requiredReceipt": {
-      "sessionDatabaseId": "ce95f840-9e22-5b4e-b4f7-2fce65fd0a96",
-      "sourceBranch": "orbit/release-dag-sha-api-web-target-8e6041",
+      "sessionDatabaseId": "2e2ba8a5-7d77-5c09-a031-8b4eecdb7d7f",
+      "sourceBranch": "orbit/release-dag-current-work-b0429a",
       "targetBranch": "main",
       "recordedBy": "AGENT",
       "results": ["MERGED", "ALREADY_MERGED"]
@@ -257,9 +250,9 @@
     }
   ],
   "integrationCandidate": {
-    "tip": "cb42e0d4498fbe5f420ff6597cde237eb9aa8442",
-    "requiredBase": "4ec981e58c3f0b38b7c67637dedf53a67cb0bfcf",
-    "strategy": "FAST_FORWARD_CURRENT_MAIN_THEN_APPEND_SHA_API_WEB_REGRESSION_REBIND",
+    "tip": "b2b4a513",
+    "requiredBase": "cf786a39e1b2b8eaf1f8fb62d02ff6411199c33a",
+    "strategy": "FAST_FORWARD_CURRENT_MAIN_THEN_APPEND_CURRENT_WORK_TRANSACTION_DOUBLE_REPAIR",
     "duplicateCherryPicks": false
   },
   "implementationInputs": {
@@ -296,13 +289,13 @@
     "digests": {
       "package.json": "87c8cd0c6301ccc625d0dcf90432f1925f2b7803cc95f081aaf272f1aa0dc2b3",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
-      "contracts/outcome-reconciler-authoritative-target.json": "f11b7098ceee113987785abcadf40c54cda97d0f9111a752e4a7712f2324844f",
-      "contracts/outcome-reconciler-release-frontier.json": "bb8470e810784fa5f0deee33c012b90c5a8724be9449b808b0c9071aed773540",
+      "contracts/outcome-reconciler-authoritative-target.json": "5754208cd965f772f6abaed605a99226781c7f94f51432eba48d1faaf44d395c",
+      "contracts/outcome-reconciler-release-frontier.json": "37ab4eae40d57d3c41d4311e1623ff0d893128c2947669c741f3122f4a81d3ab",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "9e8e01e61b58085006be331b086f939f4ea854cd2d56b48c1f775ae7f93539bd",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "c55f1a1609df3c6447626fff070b29bc5ab9627107fbd9cf3da12716337607f8",
-      "src/apiserver/src/runner-api/inbox-lease-generation.spec.ts": "c2c32882691dcbe3e5c3c247fca389ca4ce5fdf972a174918fd20e798888ce2d",
-      "src/apiserver/src/runner-api/runner-write-lease-owner.spec.ts": "976bb3b9be1595a86a1fdb45c6d0ad011e619415e9952098acc844240df3122e",
+      "src/apiserver/src/runner-api/inbox-lease-generation.spec.ts": "06579d2727dc2f315bded7652955fe22b53175f3662b7f3c2b07ec9550d0dffd",
+      "src/apiserver/src/runner-api/runner-write-lease-owner.spec.ts": "4026bd62dea8cdd2be16d73d57315d7372f91f03cb874ddafa7975683274f10e",
       "src/web/src/components/ProjectReadyToRun.test.tsx": "84973ea8d2c1710e4c02e0dee7eebe414372baaa5723e4e327d33990f63ad42c",
       "scripts/lib/outcome-reconciler-release-dag.sh": "b8bcbbf057afb9301553566b48123f6806fef2ea8fb6ce2a840bb317dfb83f3a",
       "scripts/outcome-reconciler-full-api-case.sh": "1b51e134b73ff877151193e28ffa9e66cd0c8c7b6e3d8dad12ce92cbd627f662",
@@ -311,16 +304,16 @@
       "scripts/outcome-reconciler-release-dag-lib.mjs": "b86518ec572f62ec8fb01c60f78e29d7ce8e93d51ee071ada0c0ff8253fa693b",
       "scripts/outcome-reconciler-release-dag-prepare.sh": "e0a6bb5a0804b65148472eb2e34e6712eb6e2574f8dcf65ddc9824d3e8a9d38d",
       "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs": "ecd95eda1e601cae804139d5c8ba743cc3955df512de9d7cd61e4cb0d61be7c5",
-      "scripts/outcome-reconciler-release-dag-regression-focus.mjs": "bc2ccda8d88c3fdfc273f35d3c2c4b1e660077b4b44e69f4bfa429be0800a5c8",
-      "scripts/outcome-reconciler-release-dag-regression-rebind-manifest.mjs": "a2ae2821b354b556374fcb6f1e638c77fda26d8c97e1176a18c05c932bfbb4bf",
-      "scripts/outcome-reconciler-release-dag-regression-rebind.sh": "d613a07ecdf9cf88d49c65cb4556b908bd899b1e649e2d9024f60ac9b2496115",
+      "scripts/outcome-reconciler-release-dag-regression-focus.mjs": "05de71c10bba951720af4ab948e1cd593daf4b6b20c6652ad17ea2d58b3f2fbb",
+      "scripts/outcome-reconciler-release-dag-regression-rebind-manifest.mjs": "bb6c9b542a4538b5fe3bb75a8fdb12a5a18c3a84e0fdddacb8fa14acfcc1107f",
+      "scripts/outcome-reconciler-release-dag-regression-rebind.sh": "4e0267d9606113c25ec6994a6f4e2a70b76aa3579f3185bbf6ac4b565a1bb2f2",
       "scripts/outcome-reconciler-release-dag-step.mjs": "2586b6b7186ddd0d8200964551ae59da9eb3c2e5c04c29806b611ac753115e88",
       "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
-      "scripts/outcome-reconciler-release-dag.mjs": "f44f00345e8d5d8f8521e1041c6212f0272c371efc7a36b914a603f89876d750",
+      "scripts/outcome-reconciler-release-dag.mjs": "0806e086c678924e0b2c9c940aa0231a59bd6f58759090d5d626a7ffd33c2f51",
       "scripts/outcome-reconciler-watchdog-manifest.mjs": "755ed62f5b0f43041385aec40e37ddcb0ff4d56e31b73751c2cdde0ae7b190de",
       "scripts/outcome-reconciler-watchdog.sh": "d04e0c8a16ce4b57c29406aa214900562b1ad7ac1337785db15536662493edde",
-      "test/outcome-reconciler-release-dag-plan.test.mjs": "172cd7dfb3eb6be541c350061a675a3166c69c98c2d2c97717731ce6ee6c59a1",
-      "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "6c150e000320be96c231e7f39e3c109496206f5c560080ecc7781dc7bdcaaa32"
+      "test/outcome-reconciler-release-dag-plan.test.mjs": "b90a5a09d2d6df3fa04d6043d26ce7b0152ed8ca1ee8813c080efc6cb3b56e13",
+      "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "b8aed8cbaf980988ea9df3975d8a058af4dae1506252404e7aeb46ec4e3b4ef3"
     }
   },
   "environment": {

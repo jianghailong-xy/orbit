@@ -20,79 +20,69 @@ const output = path.resolve(outputArgument);
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const binding = readJson(path.join(runRoot, 'binding.json'));
 const postgres = readJson(path.join(runRoot, 'postgres-context.json'));
-const webReportPath = path.join(repo, 'build', 'outcome-reconciler-full-web.json');
-const watchdogManifestPath = path.join(repo, 'build',
-  'outcome-reconciler-v2-watchdog-manifest.json');
-const webReport = readJson(webReportPath);
-const watchdog = readJson(watchdogManifestPath);
+const inventoryPath = path.join(runRoot, 'full-api-inventory.json');
+const inventory = readJson(inventoryPath);
 const caseRoot = path.join(runRoot, 'regression-focused-cases');
 const logRoot = path.join(runRoot, 'regression-focused-logs');
 mkdirSync(caseRoot, { recursive: true });
 mkdirSync(logRoot, { recursive: true });
 
-for (const nodeId of ['full-web', 'suite-watchdog-111k']) {
-  const receipt = readJson(path.join(runRoot, 'nodes', `${nodeId}.json`));
-  assert.equal(receipt.state, 'SUCCESS', `${nodeId} did not pass its focused run`);
-  assert.equal(receipt.exitCode, 0);
-  assert.equal(receipt.skipCount, 0);
-  assert.equal(receipt.binding.targetSha, binding.targetSha);
-  assert.equal(receipt.binding.bindingDigest, binding.bindingDigest);
-}
+const inventoryReceipt = readJson(path.join(runRoot, 'nodes', 'full-api-inventory.json'));
+assert.equal(inventoryReceipt.state, 'SUCCESS');
+assert.equal(inventoryReceipt.exitCode, 0);
+assert.equal(inventoryReceipt.binding.targetSha, binding.targetSha);
+assert.equal(inventoryReceipt.binding.bindingDigest, binding.bindingDigest);
+assert.equal(inventory.outcome, 'PASS');
+assert.equal(inventory.targetSha, binding.targetSha);
+assert.equal(inventory.bindingDigest, binding.bindingDigest);
+assert.equal(inventory.totalSpecs, 338,
+  'the focused audit must resolve cases from the complete 338-spec API inventory');
+assert.equal(inventory.specs.length, inventory.totalSpecs);
+assert.ok(inventory.parallelSpecs > 0);
+assert.ok(inventory.serialSpecs > 0);
 
-assert.equal(webReport.success, true, 'full-web JSON report did not pass');
-assert.ok(webReport.numTotalTests > 0, 'full-web JSON report contains no tests');
-assert.equal(webReport.numFailedTests, 0);
-assert.equal(webReport.numPendingTests, 0);
-assert.equal(webReport.numFailedTestSuites, 0);
-assert.equal(webReport.numPendingTestSuites, 0);
-assert.equal(webReport.numPassedTests, webReport.numTotalTests);
-assert.equal(webReport.numPassedTestSuites, webReport.numTotalTestSuites);
-assert.ok(webReport.testResults.every((result) => result.status === 'passed'));
-const readySuite = webReport.testResults.find((result) =>
-  result.name.endsWith('/src/web/src/components/ProjectReadyToRun.test.tsx'));
-assert.ok(readySuite, 'full-web report omitted the old failing ProjectReadyToRun suite');
-const oldFailingAssertion = readySuite.assertionResults.find((result) =>
-  result.title === 'shows an actionable ready queue without the old chart/table control');
-assert.equal(oldFailingAssertion?.status, 'passed',
-  'the old full-web timeout fingerprint was not cleared');
-
-assert.equal(watchdog.outcome, 'PASS');
-assert.equal(watchdog.tests, 13);
-assert.equal(watchdog.passed, 13);
-assert.equal(watchdog.failed, 0);
-assert.equal(watchdog.skipped, 0);
-assert.equal(watchdog.cancelled, 0);
-assert.equal(watchdog.targetSha, binding.targetSha);
-assert.equal(watchdog.collectorSha, binding.targetSha);
-assert.equal(watchdog.liveReleaseFence.mode, 'OFFLINE_DEV_ONLY',
-  'predeploy Watchdog read or required the live production deployment');
-
-const cases = [
-  {
-    index: 181,
-    shard: 0,
-    spec: 'src/apiserver/build/runner-api/runner-write-lease-owner.spec.js',
-    oldFingerprint: 'tx.conversationTurn.findMany is not a function',
-  },
-  {
-    index: 154,
-    shard: 1,
-    spec: 'src/apiserver/build/runner-api/inbox-lease-generation.spec.js',
-    oldFingerprint: 'args[0].join is not a function',
-  },
-  {
-    index: 79,
-    shard: 2,
-    spec: 'src/apiserver/build/projects/project-list-rollup.audit.pg.spec.js',
-    oldFingerprint: '9 !== 7',
-  },
-  {
-    index: 80,
-    shard: 3,
-    spec: 'src/apiserver/build/projects/project-list-rollup.pg.spec.js',
-    oldFingerprint: '9 !== 7',
-  },
+// This is the complete transaction-double surface that directly exercises dequeueTurn,
+// turnComplete, finalize, interrupt/end, or terminalizeUndeliveredCurrentWork. PostgreSQL specs
+// use real Prisma delegates and remain in the formal 338-case matrix instead of this fixture audit.
+const requiredSpecs = [
+  { surface: 'turnComplete', path: 'src/apiserver/build/runner-api/attempt-budget-turn-complete.spec.js' },
+  { surface: 'dequeue', path: 'src/apiserver/build/runner-api/coordinator-context-dequeue.spec.js' },
+  { surface: 'finalize', path: 'src/apiserver/build/runner-api/finalize-failed-run.spec.js' },
+  { surface: 'dequeue', path: 'src/apiserver/build/runner-api/inbox-lease-generation.spec.js' },
+  { surface: 'turnComplete', path: 'src/apiserver/build/runner-api/merge-source-sha.spec.js' },
+  { surface: 'dequeue', path: 'src/apiserver/build/runner-api/reload-provider-env.spec.js' },
+  { surface: 'finalize', path: 'src/apiserver/build/runner-api/run-finalize-lock.spec.js' },
+  { surface: 'turnComplete/finalize', path: 'src/apiserver/build/runner-api/runner-write-lease-owner.spec.js' },
+  { surface: 'dequeue', path: 'src/apiserver/build/runner-api/setconfig-dequeue.spec.js' },
+  { surface: 'dequeue', path: 'src/apiserver/build/runner-api/steer-dequeue.spec.js' },
+  { surface: 'turnComplete', path: 'src/apiserver/build/runner-api/steer-requeue.spec.js' },
+  { surface: 'turnComplete', path: 'src/apiserver/build/runner-api/steer-turn-complete.spec.js' },
+  { surface: 'turnComplete', path: 'src/apiserver/build/runner-api/turn-complete-scheduling.spec.js' },
+  { surface: 'interrupt/terminalization', path: 'src/apiserver/build/sessions/current-work-delivery.spec.js' },
+  { surface: 'interrupt/end', path: 'src/apiserver/build/sessions/end-scheduling.spec.js' },
+  { surface: 'interrupt', path: 'src/apiserver/build/sessions/interrupt-and-send.spec.js' },
+  { surface: 'interrupt', path: 'src/apiserver/build/sessions/interrupt-scheduling.spec.js' },
+  { surface: 'interrupt/lifecycle', path: 'src/apiserver/build/sessions/session-lifecycle-transaction.spec.js' },
+  { surface: 'interrupt', path: 'src/apiserver/build/sessions/turn-error-contract.spec.js' },
 ];
+assert.equal(new Set(requiredSpecs.map(({ path: spec }) => spec)).size, requiredSpecs.length);
+
+const inventoryByPath = new Map(inventory.specs.map((entry) => [entry.path, entry]));
+const cases = requiredSpecs.map((required) => {
+  const entry = inventoryByPath.get(required.path);
+  assert.ok(entry, `focused transaction-double spec omitted from inventory: ${required.path}`);
+  assert.equal(entry.class, 'parallel', `${required.path} unexpectedly left the parallel partition`);
+  return {
+    ...required,
+    index: entry.index,
+    shard: (entry.index - 1) % inventory.shardCount,
+    bytes: entry.bytes,
+    sha256: entry.sha256,
+  };
+});
+assert.equal(cases.length, 19);
+assert.equal(new Set(cases.map(({ index }) => index)).size, cases.length);
+
 const commonEnvironment = {
   ...process.env,
   OUTCOME_API_CASE_CONTAINER: postgres.container,
@@ -108,14 +98,14 @@ const commonEnvironment = {
   OUTCOME_API_CASE_REPO: repo,
   OUTCOME_API_CASE_API: path.join(repo, 'src', 'apiserver'),
   OUTCOME_API_CASE_DIR: caseRoot,
-  OUTCOME_API_CASE_TOTAL: String(cases.length),
+  OUTCOME_API_CASE_TOTAL: String(inventory.totalSpecs),
 };
 
 function runCase(entry) {
   return new Promise((resolve, reject) => {
     const child = spawn('bash', [
       path.join(repo, 'scripts', 'outcome-reconciler-full-api-case.sh'),
-      String(entry.index), path.join(repo, entry.spec),
+      String(entry.index), path.join(repo, entry.path),
     ], {
       cwd: repo,
       env: {
@@ -133,7 +123,7 @@ function runCase(entry) {
       const log = path.join(logRoot, `${String(entry.index).padStart(4, '0')}.log`);
       writeFileSync(log, raw);
       if (signal || code !== 0) {
-        reject(new Error(`focused API case ${entry.spec} exited code=${code} signal=${signal ?? 'none'}\n${raw.toString('utf8')}`));
+        reject(new Error(`focused API case ${entry.path} exited code=${code} signal=${signal ?? 'none'}\n${raw.toString('utf8')}`));
         return;
       }
       resolve({ ...entry, log });
@@ -141,15 +131,28 @@ function runCase(entry) {
   });
 }
 
-// Launch all four before awaiting any one of them. The two PostgreSQL rollup suites therefore
-// prove the case allocator's isolation under actual overlap, not merely by comparing names.
-const completedCases = await Promise.all(cases.map((entry) => runCase(entry)));
+// Match the formal scheduler's four-case ceiling while still exercising allocator overlap.
+const completedCases = [];
+for (let offset = 0; offset < cases.length; offset += inventory.shardCount) {
+  completedCases.push(...await Promise.all(
+    cases.slice(offset, offset + inventory.shardCount).map((entry) => runCase(entry)),
+  ));
+}
+
+const oldFingerprints = [
+  'args[0].join is not a function',
+  'tx.conversationTurn.findMany is not a function',
+];
 const receipts = completedCases.map((entry) => {
-  const receipt = readJson(path.join(caseRoot, `${String(entry.index).padStart(4, '0')}.json`));
+  const stem = String(entry.index).padStart(4, '0');
+  const receipt = readJson(path.join(caseRoot, `${stem}.json`));
   const launcherRaw = readFileSync(entry.log, 'utf8');
-  const tapPath = path.join(caseRoot, `${String(entry.index).padStart(4, '0')}.tap`);
+  const tapPath = path.join(caseRoot, `${stem}.tap`);
   const tapRaw = readFileSync(tapPath, 'utf8');
   assert.equal(receipt.outcome, 'PASS');
+  assert.equal(receipt.spec.path, entry.path);
+  assert.equal(receipt.spec.bytes, entry.bytes);
+  assert.equal(receipt.spec.sha256, entry.sha256);
   assert.ok(receipt.summary.tests > 0);
   assert.equal(receipt.summary.passed, receipt.summary.tests);
   assert.equal(receipt.summary.failed, 0);
@@ -164,28 +167,28 @@ const receipts = completedCases.map((entry) => {
   assert.match(receipt.role, /^pcc[0-9a-z]*_/u);
   assert.equal(receipt.tap.bytes, Buffer.byteLength(tapRaw));
   assert.equal(receipt.tap.sha256, sha256(tapRaw));
-  assert.doesNotMatch(tapRaw,
-    new RegExp(entry.oldFingerprint.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+  for (const fingerprint of oldFingerprints) {
+    assert.ok(!tapRaw.includes(fingerprint), `${entry.path} retained ${fingerprint}`);
+    assert.ok(!launcherRaw.includes(fingerprint), `${entry.path} launcher retained ${fingerprint}`);
+  }
   return {
     entry,
     receipt,
+    tapRaw,
     tap: { bytes: Buffer.byteLength(tapRaw), sha256: sha256(tapRaw) },
     launcherLog: { bytes: Buffer.byteLength(launcherRaw), sha256: sha256(launcherRaw) },
   };
 });
 
-const rollups = receipts.filter(({ entry }) => entry.spec.includes('project-list-rollup'));
-assert.equal(rollups.length, 2);
-for (const { entry, tap } of rollups) {
-  const raw = readFileSync(path.join(
-    caseRoot, `${String(entry.index).padStart(4, '0')}.tap`,
-  ), 'utf8');
-  assert.match(raw,
-    /the four named boundaries, hand-counted, self-consistent AND equal to the page|index and the project page report the same seven numbers|every bucket equals what the project page computes/u);
-  assert.match(raw, /# fail 0/u);
-  assert.match(raw, /# skipped 0/u);
-  assert.ok(tap.bytes > 0);
-}
+const delivery = receipts.find(({ entry }) =>
+  entry.path.endsWith('/sessions/current-work-delivery.spec.js'));
+assert.ok(delivery);
+for (const title of [
+  'the raw-query double renders a tagged-template call with its separate bindings',
+  'the raw-query double renders a composed Prisma.Sql object with embedded bindings',
+  'zero CURRENT_WORK candidates perform both reads and no receipt writes',
+  'steer and startup candidates receive their exact terminal receipts together',
+]) assert.ok(delivery.tapRaw.includes(title), `terminalization TAP omitted: ${title}`);
 
 for (const field of ['database', 'emptyDatabase', 'role']) {
   assert.equal(new Set(receipts.map(({ receipt }) => receipt[field])).size, receipts.length,
@@ -205,54 +208,42 @@ const apiSummary = receipts.reduce((summary, { receipt }) => ({
   tests: summary.tests + receipt.summary.tests,
   passed: summary.passed + receipt.summary.passed,
   failed: summary.failed + receipt.summary.failed,
+  cancelled: summary.cancelled + receipt.summary.cancelled,
   skipped: summary.skipped + receipt.summary.skipped,
-}), { tests: 0, passed: 0, failed: 0, skipped: 0 });
+}), { tests: 0, passed: 0, failed: 0, cancelled: 0, skipped: 0 });
 assert.ok(apiSummary.tests > 0);
 assert.equal(apiSummary.passed, apiSummary.tests);
 assert.equal(apiSummary.failed, 0);
+assert.equal(apiSummary.cancelled, 0);
 assert.equal(apiSummary.skipped, 0);
 
+const surfaceCounts = Object.fromEntries(['dequeue', 'turnComplete', 'finalize', 'interrupt']
+  .map((surface) => [surface, cases.filter((entry) => entry.surface.includes(surface)).length]));
+for (const count of Object.values(surfaceCounts)) assert.ok(count > 0);
+
+const inventoryRaw = readFileSync(inventoryPath);
 const body = {
   schemaVersion: 1,
-  kind: 'orbit.outcome-reconciler.release-dag-regression-focused-run',
-  suite: 'release-dag-regression-focused-run-v1',
+  kind: 'orbit.outcome-reconciler.release-dag-transaction-double-focused-run',
+  suite: 'release-dag-current-work-transaction-double-rebind-v2',
   outcome: 'PASS',
   targetSha: binding.targetSha,
   bindingDigest: binding.bindingDigest,
   releaseAttempt: binding.releaseAttempt,
-  watchdog: {
-    tests: watchdog.tests,
-    passed: watchdog.passed,
-    failed: watchdog.failed,
-    skipped: watchdog.skipped,
-    targetSha: watchdog.targetSha,
-    collectorSha: watchdog.collectorSha,
-    liveReleaseFence: watchdog.liveReleaseFence,
-    manifest: {
-      path: path.relative(repo, watchdogManifestPath),
-      bytes: readFileSync(watchdogManifestPath).byteLength,
-      sha256: sha256(readFileSync(watchdogManifestPath)),
-    },
-  },
-  fullWeb: {
-    success: webReport.success,
-    testSuites: webReport.numTotalTestSuites,
-    passedTestSuites: webReport.numPassedTestSuites,
-    failedTestSuites: webReport.numFailedTestSuites,
-    tests: webReport.numTotalTests,
-    passed: webReport.numPassedTests,
-    failed: webReport.numFailedTests,
-    skipped: webReport.numPendingTests,
-    oldFailingAssertionCleared: true,
-    report: {
-      path: path.relative(repo, webReportPath),
-      bytes: readFileSync(webReportPath).byteLength,
-      sha256: sha256(readFileSync(webReportPath)),
-    },
+  inventory: {
+    totalSpecs: inventory.totalSpecs,
+    parallelSpecs: inventory.parallelSpecs,
+    serialSpecs: inventory.serialSpecs,
+    shardCount: inventory.shardCount,
+    path: path.relative(repo, inventoryPath),
+    bytes: inventoryRaw.byteLength,
+    sha256: sha256(inventoryRaw),
   },
   api: {
     summary: apiSummary,
+    surfaceCounts,
     cases: receipts.map(({ entry, receipt, tap, launcherLog }) => ({
+      surface: entry.surface,
       path: receipt.spec.path,
       caseIndex: receipt.caseIndex,
       partition: receipt.partition,
@@ -264,19 +255,21 @@ const body = {
       receiptDigest: receipt.artifactDigest,
       tap,
       launcherLog,
-      oldFingerprintCleared: entry.oldFingerprint,
+      oldFingerprintsCleared: oldFingerprints,
     })),
   },
-  rollup: {
-    suites: rollups.map(({ receipt }) => receipt.spec.path),
-    bucketFields: [
-      'running', 'ready', 'blocked', 'awaitingVerification', 'done', 'failed', 'cancelled',
-    ],
-    indexPageParity: true,
-    concurrentlyIsolated: true,
+  terminalization: {
+    taggedTemplateQueryRaw: true,
+    prismaSqlQueryRaw: true,
+    zeroCandidateNoWrites: true,
+    steerExactTerminalReceipt: true,
+    startupFragmentExactTerminalReceipt: true,
+    evidenceSpec: delivery.entry.path,
+    tests: delivery.receipt.summary.tests,
   },
   isolation: {
-    allCasesStartedBeforeAwait: true,
+    maxConcurrentCases: inventory.shardCount,
+    overlappingAllocatorBatches: Math.ceil(cases.length / inventory.shardCount),
     uniqueDatabases: true,
     uniqueEmptyDatabases: true,
     uniqueRoles: true,
@@ -292,4 +285,4 @@ writeFileSync(output, `${JSON.stringify({
 rmSync(caseRoot, { recursive: true, force: true });
 rmSync(logRoot, { recursive: true, force: true });
 assert.equal(Number(remaining), 0);
-console.log(`release-dag regression focus PASS: api=${apiSummary.tests} web=${webReport.numTotalTests} watchdog=${watchdog.tests} target=${binding.targetSha}`);
+console.log(`release-dag transaction-double focus PASS: cases=${cases.length} tests=${apiSummary.tests} target=${binding.targetSha}`);

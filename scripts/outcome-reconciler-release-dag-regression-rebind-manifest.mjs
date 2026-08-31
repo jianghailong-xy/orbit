@@ -66,20 +66,19 @@ function terminalTapSummary(raw) {
     tests: field('tests'),
     passed: field('pass'),
     failed: field('fail'),
+    cancelled: field('cancelled'),
     skipped: field('skipped'),
   };
 }
 
-// Re-read the immutable failed executable attempt from the machine database. The full raw text
-// remains in its original row; byte count + SQL-side SHA-256 prove it was neither truncated nor
-// rewritten while marker booleans prove this is the expected six-node machine output.
+// The failed task, typed attempt, append-only receipt, raw output and route are audit history.
 const attemptRow = psql(`
 SELECT termination_kind::text, actual_exit_code::text, output_truncated::text,
        btrim(failure_fingerprint::text), btrim(evaluation_plan_digest::text),
        octet_length(raw_output)::text,
        encode(digest(convert_to(raw_output,'UTF8'),'sha256'),'hex')
   FROM task_executable_attempt
- WHERE id='70882cfd-ba1a-4194-9a56-4f51e1ae09ce'::uuid`).split('\t');
+ WHERE id='096973d5-dff8-41f4-afce-f3a2b835ee46'::uuid`).split('\t');
 assert.deepEqual(attemptRow, [
   'EXITED',
   '1',
@@ -89,87 +88,171 @@ assert.deepEqual(attemptRow, [
   String(old.rawOutput.bytes),
   old.rawOutput.sha256,
 ]);
-assert.equal(psql(`SELECT status::text FROM task
-  WHERE id='01a05538-4dfa-7049-b6cd-fdb4fdf01761'::uuid`), 'FAILED');
+assert.deepEqual(psql(`SELECT status::text, terminal_reason::text,
+  superseded_by_task_id::text FROM task
+  WHERE id='01a05616-b60b-73e9-b696-535f278d9df5'::uuid`).split('\t'), [
+  'FAILED', 'SUPERSEDED', '01a05650-3ee0-72dc-addb-439a55e0931a',
+]);
 
 const rawMarkers = [
-  'full-web',
-  'suite-watchdog-111k',
   'full-api-shard-0',
   'full-api-shard-1',
   'full-api-shard-2',
   'full-api-shard-3',
+  'interrupt-scheduling.spec.js',
+  'reload-provider-env.spec.js',
+  'run-finalize-lock.spec.js',
+  'coordinator-context-dequeue.spec.js',
   'tx.conversationTurn.findMany is not a function',
   'args[0].join is not a function',
-  'e8308e7e933e6b8cee4f6d7f9f8edea7c60b5489',
   old.preservedTip,
-  'JSON report written to /root/.orbit/worktrees/84b0f1f3-435a-550f-9a9b-ce3621f9bdb1/build/outcome-reconciler-full-web.json',
 ];
 const markerSql = rawMarkers.map((marker) => (
   `(position('${marker.replaceAll("'", "''")}' in raw_output)>0)::text`
 )).join(',');
 assert.deepEqual(psql(`SELECT ${markerSql} FROM task_executable_attempt
-  WHERE id='70882cfd-ba1a-4194-9a56-4f51e1ae09ce'::uuid`).split('\t'),
+  WHERE id='096973d5-dff8-41f4-afce-f3a2b835ee46'::uuid`).split('\t'),
 Array(rawMarkers.length).fill('true'));
 
-const continuationRow = psql(`
+assert.deepEqual(psql(`
 SELECT id::text, kind::text, reason_code, goal_actionable::text, status
   FROM task_executable_continuation
- WHERE id='096cf6ca-c75a-467b-8571-ae91ba8aea60'::uuid`).split('\t');
-assert.deepEqual(continuationRow, [
-  '096cf6ca-c75a-467b-8571-ae91ba8aea60',
+ WHERE id='77307d1c-03c5-415d-b17f-8709d954b3d1'::uuid`).split('\t'), [
+  '77307d1c-03c5-415d-b17f-8709d954b3d1',
   'DIAGNOSIS',
   'UNEXPECTED_EXIT_OBSERVED',
   'true',
-  'ACTIVE',
+  'RESOLVED',
+]);
+assert.deepEqual(psql(`
+SELECT id::text, kind, source, btrim(evidence_digest::text)
+  FROM task_executable_diagnosis
+ WHERE id='d25a7abe-dead-44f3-9bac-ff8211f08081'::uuid`).split('\t'), [
+  'd25a7abe-dead-44f3-9bac-ff8211f08081',
+  'UNEXPECTED_EXIT',
+  'TYPED_ATTEMPT',
+  'fe6015abb1a5dcd0b11c03d434e832acda26dee61651ea427152e7843296571f',
+]);
+assert.deepEqual(psql(`
+SELECT decision_id::text, diagnostic_path, reason_code,
+       btrim(canonical_reason_digest::text), btrim(decision_digest::text),
+       next_action->>'allowsUnchangedRetry', next_action->>'requiresOwnerDecision'
+  FROM failure_continuation_route_decision
+ WHERE decision_id='c790003a-5d67-4f6d-8798-5bd9a5555bbd'::uuid`).split('\t'), [
+  'c790003a-5d67-4f6d-8798-5bd9a5555bbd',
+  'ALTERNATE_DIAGNOSIS',
+  'TRANSIENT_EXTERNAL_EXITED',
+  'bfe2fe00263c90bf08bacf35bdfac0e9d7952ecc6304447e5b4a523036b30a8c',
+  old.routeDecision.decisionDigest,
+  'false',
+  'false',
+]);
+assert.deepEqual(psql(`
+SELECT receipt_id::text, btrim(receipt_digest::text), btrim(output_digest::text),
+       attempt_id::text
+  FROM failure_continuation_attempt_receipt
+ WHERE attempt_id='096973d5-dff8-41f4-afce-f3a2b835ee46'::uuid`).split('\t'), [
+  '740a4129-fbfc-4bb6-b2ae-fadf09e5ce3e',
+  old.receiptDigest,
+  old.rawOutput.sha256,
+  '096973d5-dff8-41f4-afce-f3a2b835ee46',
+]);
+assert.deepEqual(psql(`
+SELECT source_task_id::text, successor_task_id::text, source_binding_revision::text,
+       source_attempt_generation::text, binding_generation::text,
+       btrim(route_decision_digest::text), btrim(binding_digest::text),
+       dependency_rebind_count::text, continuation_disposition
+  FROM failure_successor_handoff
+ WHERE handoff_id='3a2308a9-26fc-40d4-b55f-62dd2b631568'::uuid`).split('\t'), [
+  '01a05616-b60b-73e9-b696-535f278d9df5',
+  '01a05650-3ee0-72dc-addb-439a55e0931a',
+  '1', '1', '3', old.routeDecision.decisionDigest,
+  'd00a17d6fb94721f4b2dfb0e45ae372f80bef81e2774fea21f5e7caeeba810fe',
+  '0', 'RESOLVED_TO_SUCCESSOR',
+]);
+assert.deepEqual(psql(`
+SELECT current_successor_task_id::text, binding_generation::text, btrim(binding_digest::text)
+  FROM failure_successor_current_binding
+ WHERE lineage_root_task_id='01a055a0-35cd-77fb-85b8-33d2042157c6'::uuid`).split('\t'), [
+  '01a05650-3ee0-72dc-addb-439a55e0931a',
+  '3',
+  'd00a17d6fb94721f4b2dfb0e45ae372f80bef81e2774fea21f5e7caeeba810fe',
 ]);
 
-const oldWorktree = '/root/.orbit/worktrees/84b0f1f3-435a-550f-9a9b-ce3621f9bdb1';
+const oldWorktree = '/root/.orbit/worktrees/c1360bed-d18f-58b3-b39e-187bfdabb9b6';
 const oldRunRoot = path.join(oldWorktree, 'build', 'outcome-reconciler-release-dag',
   old.binding.bindingDigest);
 const oldAttemptPath = path.join(oldRunRoot, 'attempt.json');
 const oldAttemptEvidence = fileEvidence(oldAttemptPath);
-assertEvidence(oldAttemptEvidence, { bytes: 8270, sha256: old.attemptManifestDigest },
+assertEvidence(oldAttemptEvidence, { bytes: 8257, sha256: old.attemptManifestDigest },
   'old attempt manifest');
 const oldAttempt = readJson(oldAttemptPath);
 assert.equal(oldAttempt.outcome, 'FAIL');
 assert.equal(oldAttempt.executionMode, 'FORMAL_RELEASE_DAG');
+assert.equal(oldAttempt.nodeCount, 45);
 assert.deepEqual(oldAttempt.failedNodes, old.failedNodes);
+assert.deepEqual(oldAttempt.timedOutNodes, []);
 assert.equal(oldAttempt.binding.targetSha, old.preservedTip);
 assert.equal(oldAttempt.binding.bindingDigest, old.binding.bindingDigest);
 
+const oldInventoryPath = path.join(oldRunRoot, 'full-api-inventory.json');
+const oldInventoryEvidence = fileEvidence(oldInventoryPath);
+assertEvidence(oldInventoryEvidence, {
+  bytes: 81888,
+  sha256: '00931a5902d0b9a382fa96c0ae9fed32e83feeaafb78df2da6af0eb0ea95fd5f',
+}, 'old full-API inventory');
+const oldInventory = readJson(oldInventoryPath);
+assert.equal(oldInventory.totalSpecs, 338);
+assert.equal(oldInventory.specs.length, 338);
+
 const oldArtifactDeclarations = [
   {
-    id: 'runner-write-lease-owner',
+    id: 'shard-0-interrupt-scheduling',
     file: path.join(oldRunRoot, 'logs', 'full-api-shard-0.log'),
-    expected: { bytes: 24217, sha256: '40d09bc7f4ff2ba640cf3bc3f25cc80e77d0006ef8ab5d3c572269722e6bcc09' },
-    markers: ['runner-write-lease-owner.spec.js', 'tx.conversationTurn.findMany is not a function'],
+    expected: { bytes: 29513, sha256: '758b844f7e1804a57ede22f5415796335b2fa62b20fddbd47b8a8026721d278b' },
+    markers: ['interrupt-scheduling.spec.js', 'tx.conversationTurn.findMany is not a function'],
   },
   {
-    id: 'inbox-lease-generation',
+    id: 'shard-1-reload-provider-env',
     file: path.join(oldRunRoot, 'logs', 'full-api-shard-1.log'),
-    expected: { bytes: 21475, sha256: '8f7e691f55d618bb7fc8fb735b6eb35a773efbc518b7e1b788df8142de680516' },
-    markers: ['inbox-lease-generation.spec.js', 'args[0].join is not a function'],
+    expected: { bytes: 25043, sha256: '2c8ec52a78d9ffaef1dbd28223d7b7b3f32838461a19688c0c719f7cf0941d4e' },
+    markers: ['reload-provider-env.spec.js', 'args[0].join is not a function'],
   },
   {
-    id: 'project-list-rollup-audit',
-    file: path.join(oldRunRoot, 'full-api-cases', '0079.tap'),
-    expected: { bytes: 2813, sha256: '2a296ac3076a4aab5ab781825fc2539470fefea4ebdd4871dc1db24a83174475' },
-    markers: ['project-list-rollup.audit.pg.spec.js', '9 !== 7', 'expected: 7', 'actual: 9'],
+    id: 'shard-2-run-finalize-lock',
+    file: path.join(oldRunRoot, 'logs', 'full-api-shard-2.log'),
+    expected: { bytes: 26712, sha256: '3f4cefd26c7b5174fe6b5dc5395b32dbaf26a6679f2a6cc4eb47987933892a6f' },
+    markers: ['run-finalize-lock.spec.js', 'tx.conversationTurn.findMany is not a function'],
   },
   {
-    id: 'project-list-rollup',
-    file: path.join(oldRunRoot, 'full-api-cases', '0080.tap'),
-    expected: { bytes: 4633, sha256: '9f00986b59a022304328731c997f165b723de00ea6fbf5f1dd3cf25256676bb7' },
-    markers: ['project-list-rollup.pg.spec.js', '9 !== 7', 'expected: 7', 'actual: 9',
-      'every bucket equals what the project page computes for the same project'],
+    id: 'shard-3-coordinator-context-dequeue',
+    file: path.join(oldRunRoot, 'logs', 'full-api-shard-3.log'),
+    expected: { bytes: 43544, sha256: '38019a76657e5e1d1e9e586a55f105a728c8716ed961b50fbf495c842a47d962' },
+    markers: ['coordinator-context-dequeue.spec.js', 'args[0].join is not a function'],
   },
   {
-    id: 'watchdog-manifest-sha',
-    file: path.join(oldRunRoot, 'logs', 'suite-watchdog-111k.log'),
-    expected: { bytes: 5009, sha256: '6689e6ee647ca58c6bd931633bffb15ef1f45940c623f929c5d321b92fb4560c' },
-    markers: ['# tests 13', '# pass 13', '# fail 0', '# skipped 0',
-      'e8308e7e933e6b8cee4f6d7f9f8edea7c60b5489', old.preservedTip],
+    id: 'case-148',
+    file: path.join(oldRunRoot, 'full-api-cases', '0148.tap'),
+    expected: { bytes: 25704, sha256: '4136c7f20463105d1ab831fc67bb333b97d2ef7c8ae1c7842e4ec3f1e88af4b4' },
+    markers: ['coordinator-context-dequeue.spec.js', '# fail 18', 'args[0].join is not a function'],
+  },
+  {
+    id: 'case-162',
+    file: path.join(oldRunRoot, 'full-api-cases', '0162.tap'),
+    expected: { bytes: 5625, sha256: 'fa3c9bd0d4f2ffa7fddb03e27f81e5c2389b677baee66243e33fa50829ed0dbe' },
+    markers: ['reload-provider-env.spec.js', '# fail 4', 'args[0].join is not a function'],
+  },
+  {
+    id: 'case-167',
+    file: path.join(oldRunRoot, 'full-api-cases', '0167.tap'),
+    expected: { bytes: 6345, sha256: 'a2c79ab718e11bbce497d80b0ba716539aa88841cd4631c2c2c301c70655f97c' },
+    markers: ['run-finalize-lock.spec.js', '# fail 4', 'tx.conversationTurn.findMany is not a function'],
+  },
+  {
+    id: 'case-209',
+    file: path.join(oldRunRoot, 'full-api-cases', '0209.tap'),
+    expected: { bytes: 3885, sha256: 'aa14fbe6a08b092c9036f9a0a2a97f83061f8713a24d27b70142c5574988da7a' },
+    markers: ['interrupt-scheduling.spec.js', '# fail 2', 'tx.conversationTurn.findMany is not a function'],
   },
 ];
 const oldArtifacts = oldArtifactDeclarations.map((declaration) => {
@@ -182,39 +265,7 @@ const oldArtifacts = oldArtifactDeclarations.map((declaration) => {
   return { id: declaration.id, ...evidence, markers: declaration.markers };
 });
 
-const oldWebPath = path.join(oldWorktree, 'build', 'outcome-reconciler-full-web.json');
-const oldWebEvidence = fileEvidence(oldWebPath);
-assertEvidence(oldWebEvidence, old.fullWebReport, 'old full-web report');
-const oldWeb = readJson(oldWebPath);
-assert.deepEqual({
-  success: oldWeb.success,
-  testSuites: oldWeb.numTotalTestSuites,
-  passedTestSuites: oldWeb.numPassedTestSuites,
-  failedTestSuites: oldWeb.numFailedTestSuites,
-  tests: oldWeb.numTotalTests,
-  passed: oldWeb.numPassedTests,
-  failed: oldWeb.numFailedTests,
-  skipped: oldWeb.numPendingTests,
-}, {
-  success: false,
-  testSuites: old.fullWebReport.testSuites,
-  passedTestSuites: old.fullWebReport.passedTestSuites,
-  failedTestSuites: old.fullWebReport.failedTestSuites,
-  tests: old.fullWebReport.tests,
-  passed: old.fullWebReport.passed,
-  failed: old.fullWebReport.failed,
-  skipped: old.fullWebReport.skipped,
-});
-const oldReadySuite = oldWeb.testResults.find((result) =>
-  result.name.endsWith('/src/web/src/components/ProjectReadyToRun.test.tsx'));
-const oldReadyAssertion = oldReadySuite?.assertionResults.find((result) =>
-  result.title === old.fullWebReport.failingAssertion);
-assert.equal(oldReadyAssertion?.status, 'failed');
-assert.equal(oldReadyAssertion?.duration, old.fullWebReport.durationMilliseconds);
-assert.ok(oldReadyAssertion.failureMessages.some((message) =>
-  message.includes(old.fullWebReport.failureMarker)));
-
-// Verify the newly pushed target, merge receipt and all six focused repairs under one binding.
+// Verify the newly pushed target, merge receipt and focused repair under one fresh binding.
 const targetCheck = readJson(path.join(stateRoot, 'target-check.json'));
 assert.equal(targetCheck.outcome, 'PASS');
 const binding = readJson(path.join(stateRoot, 'current-binding.json'));
@@ -245,7 +296,7 @@ assert.deepEqual(binding.environment.dependencies.targetPackageLock,
 
 for (const relative of plan.implementationInputs.paths) {
   assert.equal(sha256(readFileSync(path.join(repo, relative))),
-    plan.implementationInputs.digests[relative], `${relative} escaped the declared package lock`);
+    plan.implementationInputs.digests[relative], `${relative} escaped the declared content lock`);
 }
 assert.equal(frontier.task.publicId, plan.builder.taskId);
 assert.equal(frontier.session.publicId, plan.builder.sessionId);
@@ -266,46 +317,45 @@ assert.deepEqual(focusedAttempt.successfulNodes, [
   'prepare-prisma',
   'prepare-build',
   'prepare-postgres',
-  'full-web',
-  'suite-acceptance-runtime',
-  'suite-watchdog-111k',
+  'full-api-inventory',
 ]);
 assert.equal(focusedAttempt.nodeCount, focusedAttempt.successfulNodes.length);
 const focused = readJson(path.join(runRoot, 'regression-rebind-focused.json'));
 assert.equal(focused.outcome, 'PASS');
 assert.equal(focused.targetSha, targetSha);
 assert.equal(focused.bindingDigest, binding.bindingDigest);
-assert.deepEqual(focused.watchdog, {
-  ...focused.watchdog,
-  tests: 13,
-  passed: 13,
-  failed: 0,
-  skipped: 0,
-  targetSha,
-  collectorSha: targetSha,
-});
-assert.equal(focused.watchdog.liveReleaseFence.mode, 'OFFLINE_DEV_ONLY');
-assert.ok(focused.fullWeb.tests > 0);
-assert.equal(focused.fullWeb.passed, focused.fullWeb.tests);
-assert.equal(focused.fullWeb.failed, 0);
-assert.equal(focused.fullWeb.skipped, 0);
-assert.equal(focused.fullWeb.failedTestSuites, 0);
-assert.equal(focused.fullWeb.oldFailingAssertionCleared, true);
+assert.equal(focused.inventory.totalSpecs, 338);
+assert.equal(focused.inventory.shardCount, 4);
 assert.ok(focused.api.summary.tests > 0);
 assert.equal(focused.api.summary.passed, focused.api.summary.tests);
 assert.equal(focused.api.summary.failed, 0);
+assert.equal(focused.api.summary.cancelled, 0);
 assert.equal(focused.api.summary.skipped, 0);
-assert.equal(focused.api.cases.length, 4);
+assert.equal(focused.api.cases.length, 19);
+assert.deepEqual(focused.api.surfaceCounts, {
+  dequeue: 5,
+  turnComplete: 6,
+  finalize: 3,
+  interrupt: 6,
+});
+assert.ok(focused.api.cases.every((entry) => entry.summary.tests > 0));
+assert.ok(focused.api.cases.every((entry) => entry.summary.failed === 0
+  && entry.summary.cancelled === 0 && entry.summary.skipped === 0));
 assert.ok(focused.api.cases.every((entry) => entry.cleanup.resourcesRemaining === 0));
-assert.equal(new Set(focused.api.cases.map((entry) => entry.database)).size, 4);
-assert.equal(new Set(focused.api.cases.map((entry) => entry.emptyDatabase)).size, 4);
-assert.equal(new Set(focused.api.cases.map((entry) => entry.role)).size, 4);
-assert.deepEqual(focused.rollup.bucketFields,
-  ['running', 'ready', 'blocked', 'awaitingVerification', 'done', 'failed', 'cancelled']);
-assert.equal(focused.rollup.indexPageParity, true);
-assert.equal(focused.rollup.concurrentlyIsolated, true);
+assert.equal(new Set(focused.api.cases.map((entry) => entry.database)).size, 19);
+assert.equal(new Set(focused.api.cases.map((entry) => entry.emptyDatabase)).size, 19);
+assert.equal(new Set(focused.api.cases.map((entry) => entry.role)).size, 19);
+assert.deepEqual(focused.terminalization, {
+  ...focused.terminalization,
+  taggedTemplateQueryRaw: true,
+  prismaSqlQueryRaw: true,
+  zeroCandidateNoWrites: true,
+  steerExactTerminalReceipt: true,
+  startupFragmentExactTerminalReceipt: true,
+});
 assert.deepEqual(focused.isolation, {
-  allCasesStartedBeforeAwait: true,
+  maxConcurrentCases: 4,
+  overlappingAllocatorBatches: 5,
   uniqueDatabases: true,
   uniqueEmptyDatabases: true,
   uniqueRoles: true,
@@ -323,15 +373,16 @@ const containerInspection = spawnSync('docker', ['inspect', focusedContainer], {
 assert.notEqual(containerInspection.status, 0,
   'focused disposable PostgreSQL container survived cleanup');
 
-const fullWebNode = plan.nodes.find(({ id }) => id === 'full-web');
 const oldBindingDecision = checkpointReuseDecision({
-  node: fullWebNode,
+  node: plan.nodes.find(({ id }) => id === 'full-api-shard-0'),
   binding,
   receipt: {
-    nodeId: fullWebNode.id,
+    nodeId: 'full-api-shard-0',
     state: 'SUCCESS',
     exitCode: 0,
-    commandDigest: commandDigest(fullWebNode.command),
+    commandDigest: commandDigest(
+      plan.nodes.find(({ id }) => id === 'full-api-shard-0').command,
+    ),
     binding: old.binding,
   },
 });
@@ -342,26 +393,25 @@ const structural = terminalTapSummary(tapRaw);
 assert.ok(structural.tests > 0);
 assert.equal(structural.passed, structural.tests);
 assert.equal(structural.failed, 0);
+assert.equal(structural.cancelled, 0);
 assert.equal(structural.skipped, 0);
 const totals = {
-  tests: structural.tests + focused.watchdog.tests + focused.fullWeb.tests
-    + focused.api.summary.tests,
-  passed: structural.passed + focused.watchdog.passed + focused.fullWeb.passed
-    + focused.api.summary.passed,
-  failed: structural.failed + focused.watchdog.failed + focused.fullWeb.failed
-    + focused.api.summary.failed,
-  skipped: structural.skipped + focused.watchdog.skipped + focused.fullWeb.skipped
-    + focused.api.summary.skipped,
+  tests: structural.tests + focused.api.summary.tests,
+  passed: structural.passed + focused.api.summary.passed,
+  failed: structural.failed + focused.api.summary.failed,
+  cancelled: structural.cancelled + focused.api.summary.cancelled,
+  skipped: structural.skipped + focused.api.summary.skipped,
 };
 assert.ok(totals.tests > 0);
 assert.equal(totals.passed, totals.tests);
 assert.equal(totals.failed, 0);
+assert.equal(totals.cancelled, 0);
 assert.equal(totals.skipped, 0);
 
 const body = {
   schemaVersion: 1,
-  kind: 'orbit.outcome-reconciler.release-dag-regression-rebind-manifest',
-  suite: 'release-dag-sha-api-web-regression-rebind-v1',
+  kind: 'orbit.outcome-reconciler.release-dag-transaction-double-rebind-manifest',
+  suite: 'release-dag-current-work-transaction-double-rebind-v2',
   outcome: 'PASS',
   summary: totals,
   oldAttempt: {
@@ -369,30 +419,38 @@ const body = {
     sessionId: old.sessionId,
     attemptId: old.attemptId,
     taskStatus: 'FAILED',
+    terminalReason: 'SUPERSEDED',
     terminalState: 'EXITED',
     actualExitCode: 1,
     outputTruncated: false,
     failureFingerprint: old.failureFingerprint,
+    receiptDigest: old.receiptDigest,
     rawOutput: old.rawOutput,
     diagnosis: {
       id: old.diagnosisId,
-      kind: 'DIAGNOSIS',
+      kind: 'UNEXPECTED_EXIT',
+      source: 'TYPED_ATTEMPT',
+    },
+    routeDecision: old.routeDecision,
+    continuation: {
+      id: old.continuationId,
       reasonCode: 'UNEXPECTED_EXIT_OBSERVED',
-      goalActionable: true,
-      status: 'ACTIVE',
+      status: 'RESOLVED',
+    },
+    successor: {
+      taskId: plan.builder.taskId,
+      bindingGeneration: 3,
+      dependencyRebindCount: 0,
+      current: true,
     },
     targetSha: old.preservedTip,
     binding: old.binding,
     bindingStatus: 'STALE',
     failedNodes: old.failedNodes,
     failureClasses: old.failureClasses,
-    classificationSummary: old.classificationSummary,
     attemptManifest: oldAttemptEvidence,
+    inventory: oldInventoryEvidence,
     machineArtifacts: oldArtifacts,
-    fullWeb: {
-      ...old.fullWebReport,
-      report: oldWebEvidence,
-    },
   },
   frozenTarget: {
     sha: targetSha,
@@ -423,17 +481,25 @@ const body = {
   },
   safetyAssertions: {
     shaCurrentBindingStrict: true,
+    targetReceiptStrict: true,
+    packageLockStrict: true,
+    environmentStrict: true,
+    evaluationPlanStrict: true,
+    dagStrict: true,
+    evidenceCutStrict: true,
     tenantStrict: true,
     zeroSkipStrict: true,
     disposablePccOnly: true,
-    ownerRatificationUnchanged: true,
-    projectAcceptanceCriteriaUnchanged: true,
+    productionDelegatesUnchanged: true,
+    canonicalRouteReasonUnchanged: true,
+    ownerDecisionCreated: false,
+    humanSignoffCreated: false,
   },
   executionBoundary: {
     mode: focusedAttempt.executionMode,
     scheduledNodes: focusedAttempt.successfulNodes,
     completeReleaseDagExecuted: false,
-    finalMatrixExecuted: false,
+    formalExecutableAttemptCreated: false,
     productionDeployed: false,
   },
   structural: {

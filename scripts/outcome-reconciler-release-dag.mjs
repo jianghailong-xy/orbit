@@ -319,8 +319,7 @@ if (focusedMode) {
     ]) includeWithDependencies(id);
   }
   if (focusRegressionRebind) {
-    includeWithDependencies('full-web');
-    includeWithDependencies('suite-watchdog-111k');
+    includeWithDependencies('full-api-inventory');
   }
 }
 const expandedPlan = {

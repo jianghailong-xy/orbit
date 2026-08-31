@@ -63,8 +63,8 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
     failureFingerprint: plan.supersededAttempt.failureFingerprint,
     evidenceReuse: plan.supersededAttempt.evidenceReuse,
   }, {
-    taskId: '34GPMWmm6WxUjmxCYvLxh',
-    sessionId: '42NqmQLttJLS4kzUl6XUmX',
+    taskId: '34GVK9T3B4GW7UpXH6kmT',
+    sessionId: '5saDXo7pdATSJ98Cd7VcdK',
     terminalState: 'EXITED',
     actualExitCode: 1,
     failureFingerprint: '1a09b7ba0ad9ecf8c6b42e00eb7037e94120764ff0a658a42493838d28fbb153',
