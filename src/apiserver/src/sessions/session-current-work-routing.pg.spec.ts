@@ -10,7 +10,26 @@ import {
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
 
-const PG_URL = process.env.ORBIT_TEST_PG_URL;
+/**
+ * The CURRENT_WORK create/dequeue/ACK race, run against the real application schema.
+ *
+ * steer-dequeue.pg.spec.ts beside this one builds the three tables its predicate touches into
+ * a scratch schema, so it asks for an empty database through ORBIT_TEST_PG_URL. This file is
+ * the opposite: it drives the real SessionsService and RunnerApiController through Prisma, so
+ * "user", "runner", "session", "conversation_turn" and the startup-fragment table all have to
+ * exist before its first statement. It therefore reads COORDINATOR_PG_URL, the migrated
+ * per-case database, which is what every other .pg.spec in this tree reads.
+ *
+ * Reading the empty database instead is how this file failed its before hook with 42P01
+ * relation "session" does not exist.
+ */
+const PG_URL = process.env.COORDINATOR_PG_URL;
+
+// The protocol is rollout-gated: sessions.service rejects an explicit intent with 503 unless this
+// is set. scripts/session-current-work-routing.sh exports it, but the full-API matrix runs every
+// compiled spec under one fixed environment and cannot know which flag a given case needs, so the
+// spec that exercises the protocol turns it on itself — the same way steer-kind.spec.ts does.
+process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED = '1';
 const OWNER_ID = '71111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '72222222-2222-4222-8222-222222222222';
 const SESSION_ID = '73333333-3333-4333-8333-333333333333';
@@ -60,13 +79,19 @@ before(async () => {
 });
 
 after(async () => {
-  if (admin) {
-    await admin.query(`DELETE FROM "session" WHERE owner_id = $1::uuid`, [OWNER_ID]);
-    await admin.query(`DELETE FROM "runner" WHERE owner_id = $1::uuid`, [OWNER_ID]);
-    await admin.query(`DELETE FROM "user" WHERE id = $1::uuid`, [OWNER_ID]);
+  try {
+    if (admin) {
+      await admin.query(`DELETE FROM "session" WHERE owner_id = $1::uuid`, [OWNER_ID]);
+      await admin.query(`DELETE FROM "runner" WHERE owner_id = $1::uuid`, [OWNER_ID]);
+      await admin.query(`DELETE FROM "user" WHERE id = $1::uuid`, [OWNER_ID]);
+    }
+  } finally {
+    // Close both connections even when the cleanup statements throw. A before hook that fails
+    // on the schema used to leave this client open, so the case ran to its timeout and reported
+    // no tests at all, hiding a one-line cause behind an unreadable receipt.
+    await prisma?.$disconnect();
+    await admin?.end();
   }
-  await prisma?.$disconnect();
-  await admin?.end();
 });
 
 async function seedStartingWindow(): Promise<void> {
@@ -128,7 +153,7 @@ async function waitForBlockedSessionLocker(minimum: number): Promise<void> {
 }
 
 const pgTest = (name: string, body: () => Promise<void>) =>
-  test(name, { skip: PG_URL ? false : 'set ORBIT_TEST_PG_URL to run the routing race' }, body);
+  test(name, { skip: PG_URL ? false : 'set COORDINATOR_PG_URL to run the routing race' }, body);
 
 pgTest('Codex create/dequeue/ACK startup race atomically binds CURRENT_WORK to one executable', async () => {
   await seedStartingWindow();

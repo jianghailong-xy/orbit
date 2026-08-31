@@ -158,7 +158,7 @@ node --test --test-concurrency=1 \
   "$API/build/sessions/steer-queue-visibility.spec.js"
 
 echo "==> PostgreSQL lock race, migration constraints, and real dequeue predicate"
-ORBIT_TEST_PG_URL="$DATABASE_URL" node --test --test-concurrency=1 \
+COORDINATOR_PG_URL="$DATABASE_URL" ORBIT_TEST_PG_URL="$DATABASE_URL" node --test --test-concurrency=1 \
   "$API/build/sessions/session-current-work-routing.pg.spec.js" \
   "$API/build/runner-api/steer-dequeue.pg.spec.js"
 
