@@ -179,7 +179,7 @@ REQUIRED_MIGRATION_APPLIED="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DAT
   echo '!! zero applied migrations is forbidden' >&2
   exit 1
 }
-[ "$LAST_MIGRATION" = '0213_failure_site_fingerprint' ] || {
+[ "$LAST_MIGRATION" = '0216_project_authority_envelope' ] || {
   echo "!! migration frontier is $LAST_MIGRATION" >&2
   exit 1
 }

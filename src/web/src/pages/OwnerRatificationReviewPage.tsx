@@ -391,7 +391,6 @@ export function OwnerRatificationReviewPage() {
                 <h3>Risk</h3>
                 <dl>
                   <div><dt>Automation policy</dt><dd>{display(risk.automationPolicy)}</dd></div>
-                  <div><dt>Authorization revision</dt><dd>{display(risk.authorizationRevision)}</dd></div>
                   <div><dt>Convergence thresholds</dt><dd>{display(risk.convergenceThresholds)}</dd></div>
                   <div><dt>Unbounded authorization</dt><dd>{display(risk.unboundedAuthorizedBy, '未授权')}</dd></div>
                 </dl>

@@ -2027,6 +2027,13 @@ model ProjectCompletionContract {
   recipientDigest         String   @map("recipient_digest") @db.Char(64)
   semanticMaterial        Json     @map("semantic_material")
   evaluationPlanMaterial  Json     @map("evaluation_plan_material")
+  /// The permissiveness ceiling the owner's most recent ratification approved: concurrency, the two
+  /// budgets, the coordinator switch, the automation policy and the threshold maps. `contractDigest`
+  /// binds THIS rather than the live values, so moving under an approved ceiling — or tightening in
+  /// any of these dimensions — costs the owner nothing, while raising one still advances the digest
+  /// and asks. NULL until the project has ever been ratified, which reads as "its current
+  /// configuration is its own ceiling". Written only by the ratification trigger.
+  authorityEnvelope       Json?    @map("authority_envelope")
   templateId              String?  @map("template_id") @db.Uuid
   delegationId            String?  @map("delegation_id") @db.Uuid
   lastChangeReason        String   @map("last_change_reason")

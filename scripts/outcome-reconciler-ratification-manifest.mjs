@@ -63,6 +63,7 @@ const sourceFiles = [
   'scripts/outcome-reconciler-ratification-manifest.mjs',
   'scripts/outcome-reconciler-ratification.sh',
   'src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql',
+  'src/apiserver/prisma/migrations/0216_project_authority_envelope/migration.sql',
   'src/apiserver/prisma/schema.prisma',
   'src/apiserver/src/common/db-write-inventory.ts',
   'src/apiserver/src/projects/dto.ts',
