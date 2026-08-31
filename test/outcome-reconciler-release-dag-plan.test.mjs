@@ -1,10 +1,30 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fullApiCaseIdentity } from '../scripts/outcome-reconciler-release-dag-database.mjs';
+import {
+  CASE_FAILED_TESTS,
+  CASE_MISSING_RECEIPT,
+  CASE_NO_TESTS,
+  CASE_PASS,
+  CASE_UNCLEAN,
+  classifyCase,
+  partitionConclusion,
+  tapMetrics,
+} from '../scripts/outcome-reconciler-release-dag-full-api-shard.mjs';
 import {
   canonical,
   checkpointReuseDecision,
@@ -510,6 +530,323 @@ test('the inbox repair is integrated and frozen-target verification is mandatory
   assert.match(runner, /origin\/main changed between fetch and remote observation/u);
 });
 
+// The Full API shard regression, modelled on the real full-api-shard-3 run that died at
+// [228/338] build/sessions/session-current-work-routing.pg.spec.js with 42P01: cases 229..338 were
+// never executed, so a 15-minute shard produced exactly one fact.
+const shardBinding = 'a'.repeat(64);
+const shardAttempt = '0123456789ab';
+const passingCaseTap = (name) => `TAP version 13
+# Subtest: ${name}
+ok 1 - ${name}
+  ---
+  duration_ms: 12.1
+  ...
+1..1
+# tests 1
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+`;
+const undefinedTableTap = `TAP version 13
+# Subtest: routes the session's current work
+not ok 1 - routes the session's current work
+  ---
+  duration_ms: 41.2
+  location: 'build/sessions/session-current-work-routing.pg.spec.js:88:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    relation "session_current_work" does not exist
+  code: '42P01'
+  ...
+1..1
+# tests 1
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+`;
+// exit=124 with tests=0: the per-case timeout fired before the spec reported a single subtest.
+const timedOutTap = `TAP version 13
+# Subtest: reaches the migration frontier
+`;
+// exit=1 with tests=0: the spec never loaded, so nothing ran and nothing could fail.
+const neverLoadedTap = `TAP version 13
+Error: Cannot find module '/orbit/src/apiserver/build/sessions/session-current-work-routing.pg.spec.js'
+`;
+
+function stageShardFixture(root, cases) {
+  const caseRoot = path.join(root, 'full-api-cases');
+  mkdirSync(caseRoot, { recursive: true });
+  const specs = cases.map(({ caseIndex, spec }) => ({
+    index: caseIndex, path: spec, class: 'serial',
+  }));
+  const inventoryPath = path.join(root, 'inventory.json');
+  writeFileSync(inventoryPath, JSON.stringify({
+    bindingDigest: shardBinding, shardCount: 4, totalSpecs: specs.length, specs,
+  }));
+  for (const { caseIndex, tap, exitCode } of cases) {
+    const padded = String(caseIndex).padStart(4, '0');
+    const summary = tapMetrics(tap);
+    const identity = fullApiCaseIdentity({
+      bindingDigest: shardBinding,
+      attemptToken: shardAttempt,
+      partitionClass: 'serial',
+      partitionIndex: 0,
+      caseIndex,
+    });
+    writeFileSync(path.join(caseRoot, `${padded}.tap`), tap);
+    writeFileSync(path.join(caseRoot, `${padded}.json`), JSON.stringify({
+      outcome: classifyCase({ exitCode, cleanupCode: 0, summary }),
+      caseIndex,
+      summary,
+      ...identity,
+      cleanup: { resourcesRemaining: 0 },
+    }));
+    writeFileSync(path.join(caseRoot, `${padded}.exit`), String(exitCode));
+  }
+  const executedLog = path.join(root, 'executed.log');
+  const caseScript = path.join(root, 'stub-full-api-case.sh');
+  writeFileSync(caseScript, `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$1" >> ${JSON.stringify(executedLog)}
+exit "$(cat ${JSON.stringify(caseRoot)}/$(printf '%04d' "$1").exit)"
+`);
+  chmodSync(caseScript, 0o755);
+  return { caseRoot, caseScript, executedLog, inventoryPath };
+}
+
+function driveShard(root, cases) {
+  const { caseRoot, caseScript, executedLog, inventoryPath } = stageShardFixture(root, cases);
+  const resultsPath = path.join(root, 'results.json');
+  const driven = spawnSync(process.execPath, [
+    path.join(repo, 'scripts/outcome-reconciler-release-dag-full-api-shard.mjs'),
+    'run', inventoryPath, 'serial', '0', '1', caseRoot, resultsPath, caseScript,
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OUTCOME_RELEASE_DAG_BINDING_DIGEST: shardBinding,
+      OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: shardAttempt,
+    },
+  });
+  return {
+    exitCode: driven.status,
+    report: `${driven.stdout}${driven.stderr}`,
+    executed: readFileSync(executedLog, 'utf8').trim().split('\n').map(Number),
+    results: JSON.parse(readFileSync(resultsPath, 'utf8')),
+  };
+}
+
+test('a Full API shard runs every case it owns and reports all of the failures', (t) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-full-api-shard-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const broken = new Map([
+    [228, { tap: undefinedTableTap, exitCode: 1 }],
+    [301, { tap: undefinedTableTap, exitCode: 1 }],
+    [337, { tap: timedOutTap, exitCode: 124 }],
+  ]);
+  const cases = Array.from({ length: 338 }, (_, offset) => {
+    const caseIndex = offset + 1;
+    const spec = caseIndex === 228
+      ? 'src/apiserver/build/sessions/session-current-work-routing.pg.spec.js'
+      : `src/apiserver/build/sessions/case-${caseIndex}.spec.js`;
+    return { caseIndex, spec, tap: passingCaseTap(`case ${caseIndex}`), exitCode: 0,
+      ...(broken.get(caseIndex) ?? {}) };
+  });
+  const shard = driveShard(fixture, cases);
+
+  // The first failing case no longer ends the shard: every declared case is executed, in order.
+  assert.equal(shard.results.executedCases, 338);
+  assert.equal(shard.results.declaredCases, 338);
+  assert.equal(shard.executed.length, 338);
+  assert.deepEqual(shard.executed.slice(227, 231), [228, 229, 230, 231]);
+  assert.equal(shard.executed.at(-1), 338);
+
+  // More than one failure survives to the report, and every one of them is locatable.
+  assert.ok(shard.results.failures.length > 1,
+    `the shard reported ${shard.results.failures.length} failing cases`);
+  assert.deepEqual(shard.results.failures.map((failure) => failure.caseIndex), [228, 301, 337]);
+  for (const failure of shard.results.failures) {
+    assert.ok(Number.isInteger(failure.caseIndex) && failure.caseIndex >= 1);
+    assert.ok(failure.spec.length > 0, 'a failing case reported no spec path');
+    assert.ok(failure.diagnostic.length > 0, 'a failing case reported no diagnostic');
+    assert.match(shard.report, new RegExp(`\\[${failure.caseIndex}\\] ${failure.spec}`, 'u'));
+  }
+  assert.match(shard.results.failures[0].diagnostic, /42P01/u);
+  assert.match(shard.results.failures[0].diagnostic,
+    /relation "session_current_work" does not exist/u);
+  assert.equal(shard.results.failures[0].spec,
+    'src/apiserver/build/sessions/session-current-work-routing.pg.spec.js');
+
+  // Collecting every failure is not forgiving one: the shard is still FAILED and still exits 1, so
+  // the node it backs can never be recorded SUCCESS.
+  assert.equal(shard.results.outcome, 'FAILED');
+  assert.equal(shard.exitCode, 1);
+  assert.equal(shard.results.passedCases, 335);
+
+  // A crashed case costs the cases behind it nothing: its neighbour still runs and still passes,
+  // on its own uniquely named disposable database and role.
+  const byIndex = new Map(shard.results.results.map((result) => [result.caseIndex, result]));
+  assert.equal(byIndex.get(229).outcome, CASE_PASS);
+  assert.equal(byIndex.get(338).outcome, CASE_PASS);
+  assert.notEqual(byIndex.get(229).database, byIndex.get(228).database);
+  const databases = shard.results.results.map((result) => result.database);
+  const roles = shard.results.results.map((result) => result.role);
+  assert.equal(new Set(databases).size, 338, 'cases behind a failure shared a database');
+  assert.equal(new Set(roles).size, 338, 'cases behind a failure shared a role');
+  for (const identity of [...databases, ...roles]) assert.match(identity, /^pcc[0-9a-z]*_/u);
+  assert.equal(shard.results.isolation.resourcesRemaining, 0);
+  assert.equal(shard.results.isolation.uniqueDatabases, true);
+  assert.equal(shard.results.isolation.uniqueRoles, true);
+});
+
+test('a Full API case that never reported a test is not the same fact as one that failed', (t) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-full-api-tests-zero-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const shard = driveShard(fixture, [
+    { caseIndex: 1, spec: 'src/apiserver/build/a.spec.js', tap: passingCaseTap('a'), exitCode: 0 },
+    { caseIndex: 2, spec: 'src/apiserver/build/b.spec.js', tap: timedOutTap, exitCode: 124 },
+    { caseIndex: 3, spec: 'src/apiserver/build/c.spec.js', tap: neverLoadedTap, exitCode: 1 },
+    { caseIndex: 4, spec: 'src/apiserver/build/d.spec.js', tap: undefinedTableTap, exitCode: 1 },
+  ]);
+  const outcomeOf = (caseIndex) => shard.results.failures
+    .find((failure) => failure.caseIndex === caseIndex)?.outcome;
+  assert.equal(shard.results.executedCases, 4);
+  assert.equal(outcomeOf(2), CASE_NO_TESTS);
+  assert.equal(outcomeOf(3), CASE_NO_TESTS);
+  assert.equal(outcomeOf(4), CASE_FAILED_TESTS);
+  assert.notEqual(outcomeOf(2), outcomeOf(4),
+    'a case that reported no test and a case that ran and failed became one conclusion');
+  for (const caseIndex of [2, 3, 4]) {
+    const failure = shard.results.failures.find((entry) => entry.caseIndex === caseIndex);
+    assert.ok(failure.diagnostic.length > 0);
+  }
+  assert.equal(shard.results.failures.find((entry) => entry.caseIndex === 2).summary.tests, 0);
+  assert.ok(shard.results.failures.find((entry) => entry.caseIndex === 4).summary.tests > 0);
+  assert.equal(shard.results.outcome, 'FAILED');
+  assert.equal(shard.exitCode, 1);
+  assert.match(shard.report, new RegExp(CASE_NO_TESTS, 'u'));
+  assert.match(shard.report, new RegExp(CASE_FAILED_TESTS, 'u'));
+});
+
+test('the Full API shard adapter drives the case script through the collecting driver', () => {
+  const adapter = read('scripts/outcome-reconciler-release-dag-full-api.sh');
+  assert.match(adapter, /outcome-reconciler-release-dag-full-api-shard\.mjs" run/u);
+  assert.match(adapter, /"\$REPO\/scripts\/outcome-reconciler-full-api-case\.sh" \|\| driver_rc/u);
+  assert.doesNotMatch(adapter, /for \(\(offset = 0; offset < \$\{#selected\[@\]\}/u);
+  const step = read('scripts/outcome-reconciler-release-dag-step.mjs');
+  assert.match(step, /full-api-partition INVENTORY parallel\|serial INDEX COUNT TAP MANIFEST RESULTS/u);
+  assert.match(step, /outcome: conclusion\.outcome/u);
+  const shardNodes = plan.nodes.filter((node) => node.kind === 'full-api-shard');
+  assert.equal(shardNodes.length, 5);
+  for (const node of shardNodes) assert.equal(node.testBearing, true);
+});
+
+test('a shard with a failing case publishes a FAILED partition manifest, never a passing one', (t) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-full-api-partition-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const runRoot = path.join(fixture, 'run');
+  const caseRoot = path.join(runRoot, 'full-api-cases');
+  mkdirSync(caseRoot, { recursive: true });
+  const specs = [1, 2, 3].map((index) => ({
+    index,
+    path: `src/apiserver/build/sessions/case-${index}.spec.js`,
+    class: 'serial',
+    sha256: String(index).repeat(64),
+  }));
+  const inventoryPath = path.join(runRoot, 'inventory.json');
+  writeFileSync(inventoryPath, JSON.stringify({
+    bindingDigest: shardBinding, shardCount: 4, totalSpecs: 3, inventoryDigest: 'd'.repeat(64), specs,
+  }));
+  const scripted = new Map([
+    [1, { tap: passingCaseTap('one'), exitCode: 0 }],
+    [2, { tap: undefinedTableTap, exitCode: 1 }],
+    [3, { tap: timedOutTap, exitCode: 124 }],
+  ]);
+  const results = specs.map((spec) => {
+    const { tap, exitCode } = scripted.get(spec.index);
+    const summary = tapMetrics(tap);
+    const identity = fullApiCaseIdentity({
+      bindingDigest: shardBinding,
+      attemptToken: shardAttempt,
+      partitionClass: 'serial',
+      partitionIndex: 0,
+      caseIndex: spec.index,
+    });
+    const outcome = classifyCase({ exitCode, cleanupCode: 0, summary });
+    const padded = String(spec.index).padStart(4, '0');
+    writeFileSync(path.join(caseRoot, `${padded}.tap`), tap);
+    writeFileSync(path.join(caseRoot, `${padded}.json`), JSON.stringify({
+      outcome,
+      bindingDigest: shardBinding,
+      releaseAttempt: { token: shardAttempt },
+      partition: { class: 'serial', index: 0 },
+      caseIndex: spec.index,
+      spec: { sha256: spec.sha256 },
+      ...identity,
+      cleanup: { resourcesRemaining: 0 },
+      exitCode,
+      summary,
+      diagnostic: outcome === CASE_PASS ? '' : `case ${spec.index} diagnostic`,
+      artifactDigest: 'e'.repeat(64),
+    }));
+    return {
+      caseIndex: spec.index, spec: spec.path, outcome, exitCode, summary,
+      diagnostic: `case ${spec.index} diagnostic`, ...identity, resourcesRemaining: 0,
+    };
+  });
+  const resultsPath = path.join(runRoot, 'results.json');
+  writeFileSync(resultsPath, JSON.stringify({
+    kind: 'orbit.outcome-reconciler.release-dag-full-api-shard-results',
+    bindingDigest: shardBinding,
+    attemptToken: shardAttempt,
+    partition: { class: 'serial', index: 0, count: 1 },
+    declaredCases: 3,
+    executedCases: 3,
+    durationMilliseconds: 4321,
+    results,
+  }));
+  const manifestPath = path.join(runRoot, 'full-api-serial.json');
+  const step = spawnSync(process.execPath, [
+    path.join(repo, 'scripts/outcome-reconciler-release-dag-step.mjs'), 'full-api-partition',
+    inventoryPath, 'serial', '0', '1', path.join(runRoot, 'full-api-serial.tap'), manifestPath,
+    resultsPath,
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OUTCOME_RELEASE_DAG_RUN_ROOT: runRoot,
+      OUTCOME_RELEASE_DAG_TARGET_SHA: zeroTarget,
+      OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST: targetReceiptDigest,
+      OUTCOME_RELEASE_DAG_ENVIRONMENT_DIGEST: '3'.repeat(64),
+      OUTCOME_RELEASE_DAG_EVALUATION_PLAN_DIGEST: '4'.repeat(64),
+      OUTCOME_RELEASE_DAG_PLAN_DIGEST: '5'.repeat(64),
+      OUTCOME_RELEASE_DAG_EVIDENCE_CUT_DIGEST: '6'.repeat(64),
+      OUTCOME_RELEASE_DAG_BINDING_DIGEST: shardBinding,
+      OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: shardAttempt,
+    },
+  });
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  assert.equal(step.status, 1, 'a partition with two failing cases exited zero');
+  assert.equal(manifest.outcome, 'FAILED');
+  assert.equal(manifest.executedCases, 3);
+  assert.equal(manifest.passedCases, 1);
+  assert.deepEqual(manifest.failures.map((failure) => failure.caseIndex), [2, 3]);
+  assert.deepEqual(manifest.failures.map((failure) => failure.outcome),
+    [CASE_FAILED_TESTS, CASE_NO_TESTS]);
+  for (const failure of manifest.failures) {
+    assert.ok(failure.spec.length > 0 && failure.diagnostic.length > 0);
+  }
+  assert.equal(manifest.databaseIsolation.allResourcesCleaned, true);
+  assert.equal(manifest.databaseIsolation.uniqueDatabases, true);
+  assert.match(`${step.stdout}${step.stderr}`, /reported 2 failing cases/u);
+});
+
 test('every checkout file lands in exactly one declared scope and every node declares the catch-all', () => {
   const declared = plan.inputScopes;
   assert.equal(declared.assignment, 'FIRST_DECLARED_SELECTOR_WINS_WITH_TERMINAL_CATCH_ALL');
@@ -908,4 +1245,166 @@ test('a checkpoint survives its round by moving the same bytes, and says which r
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+});
+
+// The case receipt step is where a case's conclusion is actually decided during a release run. The
+// shard fixtures above stage receipts directly, so they would stay green if this step regressed to
+// throwing before it wrote one -- and a case with no receipt is exactly the case that cannot appear
+// in any shard report. That regression is what made `tests=0` indistinguishable from a real
+// failure, so it is asserted here against the real step rather than against a staged artifact.
+test('the case receipt step records a typed conclusion instead of throwing one away', (t) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-full-api-receipt-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const specPath = path.join(fixture, 'case.spec.js');
+  writeFileSync(specPath, '// a Full API spec\n');
+
+  const runReceipt = ({ caseIndex, tap, exitCode, cleanupCode }) => {
+    const tapPath = path.join(fixture, `${caseIndex}.tap`);
+    const output = path.join(fixture, `${caseIndex}.json`);
+    writeFileSync(tapPath, tap);
+    const identity = fullApiCaseIdentity({
+      bindingDigest: shardBinding,
+      attemptToken: shardAttempt,
+      partitionClass: 'serial',
+      partitionIndex: 0,
+      caseIndex,
+    });
+    const step = spawnSync(process.execPath, [
+      path.join(repo, 'scripts/outcome-reconciler-release-dag-step.mjs'), 'full-api-case-receipt',
+      output, String(caseIndex), specPath, 'serial', '0',
+      identity.database, identity.emptyDatabase, identity.role,
+      identity.database, identity.role, '13',
+      tapPath, String(exitCode), String(cleanupCode),
+    ], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        OUTCOME_RELEASE_DAG_TARGET_SHA: zeroTarget,
+        OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST: targetReceiptDigest,
+        OUTCOME_RELEASE_DAG_ENVIRONMENT_DIGEST: '3'.repeat(64),
+        OUTCOME_RELEASE_DAG_EVALUATION_PLAN_DIGEST: '4'.repeat(64),
+        OUTCOME_RELEASE_DAG_PLAN_DIGEST: '5'.repeat(64),
+        OUTCOME_RELEASE_DAG_EVIDENCE_CUT_DIGEST: '6'.repeat(64),
+        OUTCOME_RELEASE_DAG_BINDING_DIGEST: shardBinding,
+        OUTCOME_RELEASE_DAG_ATTEMPT_DIGEST: 'f'.repeat(64),
+        OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: shardAttempt,
+      },
+    });
+    // The receipt has to exist whatever the conclusion was: that is what lets the shard report it.
+    assert.ok(existsSync(output), `case ${caseIndex} produced no receipt`);
+    return { status: step.status, receipt: JSON.parse(readFileSync(output, 'utf8')) };
+  };
+
+  const passed = runReceipt({
+    caseIndex: 1, tap: passingCaseTap('clean'), exitCode: 0, cleanupCode: 0,
+  });
+  const timedOut = runReceipt({ caseIndex: 2, tap: timedOutTap, exitCode: 124, cleanupCode: 0 });
+  const failed = runReceipt({ caseIndex: 3, tap: undefinedTableTap, exitCode: 1, cleanupCode: 0 });
+  const unclean = runReceipt({
+    caseIndex: 4, tap: passingCaseTap('leaky'), exitCode: 0, cleanupCode: 1,
+  });
+
+  // Four different facts, four different conclusions -- not one collapsed "the case failed".
+  assert.equal(passed.receipt.outcome, CASE_PASS);
+  assert.equal(timedOut.receipt.outcome, CASE_NO_TESTS);
+  assert.equal(failed.receipt.outcome, CASE_FAILED_TESTS);
+  assert.equal(unclean.receipt.outcome, CASE_UNCLEAN);
+  assert.notEqual(timedOut.receipt.outcome, failed.receipt.outcome);
+
+  // Nothing is forgiven: every non-PASS conclusion still fails the case, and through it the shard.
+  assert.equal(passed.status, 0);
+  for (const observed of [timedOut, failed, unclean]) assert.equal(observed.status, 1);
+
+  // A failing case stays locatable, and a dirty database is still reported as a surviving resource.
+  assert.equal(passed.receipt.diagnostic, '');
+  assert.match(failed.receipt.diagnostic, /42P01/u);
+  for (const observed of [timedOut, failed, unclean]) {
+    assert.ok(observed.receipt.diagnostic.length > 0);
+  }
+  assert.equal(passed.receipt.cleanup.resourcesRemaining, 0);
+  assert.equal(unclean.receipt.cleanup.resourcesRemaining, 1);
+  assert.equal(timedOut.receipt.summary.tests, 0);
+  assert.ok(failed.receipt.summary.tests > 0);
+});
+
+test('a case that leaves no receipt is a distinct fact and does not stop the shard', (t) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-full-api-no-receipt-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const cases = [1, 2, 3].map((caseIndex) => ({
+    caseIndex,
+    spec: `src/apiserver/build/sessions/case-${caseIndex}.spec.js`,
+    tap: passingCaseTap(`case ${caseIndex}`),
+    exitCode: 0,
+  }));
+  const { caseRoot, caseScript, executedLog, inventoryPath } = stageShardFixture(fixture, cases);
+  // Case 2 dies hard: no receipt, and on a real host no TAP either.
+  rmSync(path.join(caseRoot, '0002.json'));
+  rmSync(path.join(caseRoot, '0002.tap'));
+  writeFileSync(path.join(caseRoot, '0002.exit'), '134');
+  const resultsPath = path.join(fixture, 'results.json');
+  const driven = spawnSync(process.execPath, [
+    path.join(repo, 'scripts/outcome-reconciler-release-dag-full-api-shard.mjs'),
+    'run', inventoryPath, 'serial', '0', '1', caseRoot, resultsPath, caseScript,
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OUTCOME_RELEASE_DAG_BINDING_DIGEST: shardBinding,
+      OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN: shardAttempt,
+    },
+  });
+  const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
+  const executed = readFileSync(executedLog, 'utf8').trim().split('\n').map(Number);
+  const outcomeOf = (caseIndex) => results.results
+    .find((entry) => entry.caseIndex === caseIndex).outcome;
+
+  // "It never reported a receipt" is its own conclusion, distinct from both of the others.
+  assert.equal(outcomeOf(2), CASE_MISSING_RECEIPT);
+  assert.notEqual(outcomeOf(2), CASE_NO_TESTS);
+  assert.notEqual(outcomeOf(2), CASE_FAILED_TESTS);
+  // The shard kept going and still failed.
+  assert.deepEqual(executed, [1, 2, 3]);
+  assert.equal(results.executedCases, 3);
+  assert.equal(outcomeOf(1), CASE_PASS);
+  assert.equal(outcomeOf(3), CASE_PASS);
+  assert.equal(results.outcome, 'FAILED');
+  assert.equal(driven.status, 1);
+  // A case with no receipt proves no cleanup, so it is counted as a resource left behind rather
+  // than silently treated as clean.
+  assert.notEqual(results.isolation.resourcesRemaining, 0);
+  assert.equal(results.isolation.uniqueDatabases, false);
+});
+
+test('a shard that leaves a database behind fails even when every test passed', () => {
+  const partition = { class: 'serial', index: 0, count: 1 };
+  const clean = [1, 2].map((caseIndex) => ({
+    caseIndex,
+    spec: `case-${caseIndex}.spec.js`,
+    outcome: CASE_PASS,
+    exitCode: 0,
+    summary: tapMetrics(passingCaseTap(`case ${caseIndex}`)),
+    database: `pccrd_x_c${caseIndex}_d`,
+    role: `pccrd_x_c${caseIndex}_u`,
+    resourcesRemaining: 0,
+  }));
+  assert.equal(partitionConclusion({
+    partition, declaredCases: 2, results: clean,
+  }).outcome, 'PASS');
+
+  // One surviving database is enough to fail the shard: it is what poisons whatever runs next.
+  const leaky = [clean[0], { ...clean[1], resourcesRemaining: 1 }];
+  const leakyConclusion = partitionConclusion({ partition, declaredCases: 2, results: leaky });
+  assert.equal(leakyConclusion.outcome, 'FAILED');
+  assert.equal(leakyConclusion.isolation.resourcesRemaining, 1);
+
+  // So is two cases sharing one database, and so is a case that never ran at all.
+  const shared = [clean[0], { ...clean[1], database: clean[0].database }];
+  assert.equal(partitionConclusion({
+    partition, declaredCases: 2, results: shared,
+  }).outcome, 'FAILED');
+  assert.equal(partitionConclusion({
+    partition, declaredCases: 2, results: [clean[0]],
+  }).outcome, 'FAILED');
 });
