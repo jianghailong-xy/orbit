@@ -29,7 +29,7 @@ run_partition() {
   local class="$2"
   local index="$3"
   local count="$4"
-  local label tap manifest
+  local label tap manifest results
   if [ "$class" = serial ]; then
     label='serial'
   else
@@ -38,22 +38,8 @@ run_partition() {
   tap="$OUTCOME_RELEASE_DAG_RUN_ROOT/full-api-$label.tap"
   manifest="$OUTCOME_RELEASE_DAG_RUN_ROOT/full-api-$label.json"
 
-  mapfile -d '' -t selected < <(node -e '
-    const fs=require("fs");
-    const path=require("path");
-    const [inventoryPath,kind,indexText,countText,repo]=process.argv.slice(1);
-    const value=JSON.parse(fs.readFileSync(inventoryPath,"utf8"));
-    const index=Number(indexText), count=Number(countText);
-    for (const spec of value.specs) {
-      const selected=kind==="serial" ? spec.class==="serial"
-        : spec.class==="parallel" && ((spec.index-1)%count)===index;
-      if (selected) process.stdout.write(String(spec.index)+"\0"+path.join(repo,spec.path)+"\0");
-    }
-  ' "$inventory" "$class" "$index" "$count" "$REPO")
-  [ "${#selected[@]}" -gt 0 ] && [ $(( ${#selected[@]} % 2 )) -eq 0 ] || {
-    echo "Full API $label selected no complete cases" >&2
-    exit 2
-  }
+  results="$OUTCOME_RELEASE_DAG_RUN_ROOT/full-api-$label.results.json"
+  rm -f "$results"
 
   export OUTCOME_API_CASE_CONTAINER="$OUTCOME_RELEASE_DAG_PG_CONTAINER"
   export OUTCOME_API_CASE_PROVISIONER="$OUTCOME_RELEASE_DAG_PG_ADMIN"
@@ -72,14 +58,21 @@ run_partition() {
   export OUTCOME_API_CASE_TOTAL
   OUTCOME_API_CASE_TOTAL="$(node -e 'const v=require(process.argv[1]);process.stdout.write(String(v.totalSpecs))' "$inventory")"
 
-  local offset case_index spec
-  for ((offset = 0; offset < ${#selected[@]}; offset += 2)); do
-    case_index="${selected[$offset]}"
-    spec="${selected[$((offset + 1))]}"
-    "$REPO/scripts/outcome-reconciler-full-api-case.sh" "$case_index" "$spec"
-  done
+  # The driver runs every case this partition owns and stops for nothing: a shard that quit at its
+  # first failing case reported one fact per 15-minute run and left every case behind the failure
+  # unexecuted. The step below turns the collected receipts into this shard's single verdict, which
+  # is still FAILED the moment any one case is.
+  local started=$SECONDS driver_rc=0
+  node "$REPO/scripts/outcome-reconciler-release-dag-full-api-shard.mjs" run \
+    "$inventory" "$class" "$index" "$count" "$CASE_ROOT" "$results" \
+    "$REPO/scripts/outcome-reconciler-full-api-case.sh" || driver_rc=$?
+  echo "==> full-api $label: drove every declared case in $(( SECONDS - started ))s (driver rc=$driver_rc)"
   node "$REPO/scripts/outcome-reconciler-release-dag-step.mjs" full-api-partition \
-    "$inventory" "$class" "$index" "$count" "$tap" "$manifest"
+    "$inventory" "$class" "$index" "$count" "$tap" "$manifest" "$results"
+  [ "$driver_rc" = 0 ] || {
+    echo "!! full-api $label driver failed with rc=$driver_rc but the partition verdict passed" >&2
+    return "$driver_rc"
+  }
 }
 
 case "$ACTION" in

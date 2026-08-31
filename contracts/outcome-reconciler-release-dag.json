@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "7b2450f74384a9070a3505052634db1f140ade4a90c23c24e47e5f7cbd6a812e",
+  "declaredDagPlanDigest": "bf4bc2c71d2178200001217bca16430e1f785f12e43951ba158bcac554de41d0",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GlvYGNFrhA41IVx67o0",
   "supersededAttempt": {
@@ -272,6 +272,7 @@
       "scripts/outcome-reconciler-full-api-case.sh",
       "scripts/outcome-reconciler-release-dag-client.sh",
       "scripts/outcome-reconciler-release-dag-database.mjs",
+      "scripts/outcome-reconciler-release-dag-full-api-shard.mjs",
       "scripts/outcome-reconciler-release-dag-lib.mjs",
       "scripts/outcome-reconciler-release-dag-prepare.sh",
       "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs",
@@ -301,18 +302,19 @@
       "scripts/outcome-reconciler-full-api-case.sh": "1b51e134b73ff877151193e28ffa9e66cd0c8c7b6e3d8dad12ce92cbd627f662",
       "scripts/outcome-reconciler-release-dag-client.sh": "1e3953f8d3340454dd9fd16716a4eca577a1dd4460817907776de3a48c13ebbb",
       "scripts/outcome-reconciler-release-dag-database.mjs": "fae8936aed8b6e089af6b6a44d9d9a68046ded94c5daf278acc65b50bdb8e69d",
+      "scripts/outcome-reconciler-release-dag-full-api-shard.mjs": "6cc486919919a3915fde4fa039d43c47372f083b17511abcd22d091317ff7f51",
       "scripts/outcome-reconciler-release-dag-lib.mjs": "b86518ec572f62ec8fb01c60f78e29d7ce8e93d51ee071ada0c0ff8253fa693b",
       "scripts/outcome-reconciler-release-dag-prepare.sh": "920de903577e6f0082ad212580aff9839aef6f08a9a761c944637cffe232391d",
       "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs": "ecd95eda1e601cae804139d5c8ba743cc3955df512de9d7cd61e4cb0d61be7c5",
       "scripts/outcome-reconciler-release-dag-regression-focus.mjs": "05de71c10bba951720af4ab948e1cd593daf4b6b20c6652ad17ea2d58b3f2fbb",
       "scripts/outcome-reconciler-release-dag-regression-rebind-manifest.mjs": "bb6c9b542a4538b5fe3bb75a8fdb12a5a18c3a84e0fdddacb8fa14acfcc1107f",
       "scripts/outcome-reconciler-release-dag-regression-rebind.sh": "4e0267d9606113c25ec6994a6f4e2a70b76aa3579f3185bbf6ac4b565a1bb2f2",
-      "scripts/outcome-reconciler-release-dag-step.mjs": "2586b6b7186ddd0d8200964551ae59da9eb3c2e5c04c29806b611ac753115e88",
+      "scripts/outcome-reconciler-release-dag-step.mjs": "d13b1c5f6dfa0146a282ddc6f43bc0ec35710f47b63ec5a1b71a42e48eabeaf6",
       "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
       "scripts/outcome-reconciler-release-dag.mjs": "de8614d6a55bbd6f964b3d9ae556f15fd82ddb83cd5839de694e2a7e730acf98",
       "scripts/outcome-reconciler-watchdog-manifest.mjs": "e78023213596ef9db06e08b3890702fbe4a82d590e679d3562d6a726bcf9be7c",
       "scripts/outcome-reconciler-watchdog.sh": "d04e0c8a16ce4b57c29406aa214900562b1ad7ac1337785db15536662493edde",
-      "test/outcome-reconciler-release-dag-plan.test.mjs": "b90a5a09d2d6df3fa04d6043d26ce7b0152ed8ca1ee8813c080efc6cb3b56e13",
+      "test/outcome-reconciler-release-dag-plan.test.mjs": "26b40f23612b0482ba31fe6e9062511de9b4d8f399faa26d2413f151972f45c2",
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "6c116122f5d9ff1f430df98708936adf4af29aa5540c80f69d07e515cbe9bf2a"
     }
   },

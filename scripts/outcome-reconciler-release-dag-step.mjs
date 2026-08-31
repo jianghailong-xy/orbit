@@ -11,6 +11,15 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { canonical, sha256 } from './outcome-reconciler-release-dag-lib.mjs';
+import {
+  CASE_MISSING_RECEIPT,
+  CASE_PASS,
+  classifyCase,
+  formatPartitionReport,
+  partitionConclusion,
+  tapDiagnostic,
+  tapMetrics,
+} from './outcome-reconciler-release-dag-full-api-shard.mjs';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const [action, ...args] = process.argv.slice(2);
@@ -57,19 +66,6 @@ function treeEvidence(directory) {
     path: path.relative(repo, absolute),
     fileCount: files.length,
     treeDigest: sha256(canonical(files)),
-  };
-}
-
-function tapMetrics(raw) {
-  const count = (name) => [...raw.matchAll(new RegExp(`^# ${name} (\\d+)$`, 'gmu'))]
-    .reduce((total, match) => total + Number(match[1]), 0);
-  return {
-    tests: count('tests'),
-    passed: count('pass'),
-    failed: count('fail'),
-    cancelled: count('cancelled'),
-    skipped: count('skipped'),
-    todo: count('todo'),
   };
 }
 
@@ -266,23 +262,18 @@ if (action === 'preflight') {
   assert.equal(identityDatabase, database);
   assert.equal(identityRole, role);
   assert.match(identitySystemIdentifier, /^[0-9]+$/u);
-  assert.equal(cleanupCode, 0, 'Full API case database or role survived cleanup');
   const tap = readFileSync(tapPath, 'utf8');
   const summary = tapMetrics(tap);
-  assert.ok(summary.tests > 0, 'Full API case reported no tests');
-  assert.equal(summary.skipped, 0);
-  assert.equal(summary.cancelled, 0);
-  assert.equal(summary.todo, 0);
-  if (exitCode === 0) {
-    assert.equal(summary.passed, summary.tests);
-    assert.equal(summary.failed, 0);
-  } else {
-    assert.ok(summary.failed > 0, 'failing Full API case did not propagate a failed test');
-  }
+  // A case that reported nothing, a case that ran and failed, and a case whose database survived
+  // cleanup are three different facts, so each gets its own conclusion instead of one thrown
+  // assertion. Nothing is forgiven: every outcome other than PASS still fails this case below, and
+  // through it the shard. Writing the receipt first is what lets the shard report the case at all
+  // -- a thrown assertion left no receipt, and a case with no receipt cannot appear in any report.
+  const outcome = classifyCase({ exitCode, cleanupCode, summary });
   const body = {
     schemaVersion: 1,
     kind: 'orbit.outcome-reconciler.release-dag-full-api-case',
-    outcome: exitCode === 0 ? 'PASS' : 'EXPECTED_FAILURE_PROPAGATED',
+    outcome,
     ...binding,
     releaseAttempt: { digest: attemptDigest, token: attemptToken },
     partition: { class: partitionClass, index: partitionIndex },
@@ -298,16 +289,19 @@ if (action === 'preflight') {
       verifiedBeforeMutation: true,
     },
     cleanup: {
-      databaseRemoved: true,
-      emptyDatabaseRemoved: true,
-      roleRemoved: true,
-      resourcesRemaining: 0,
+      databaseRemoved: cleanupCode === 0,
+      emptyDatabaseRemoved: cleanupCode === 0,
+      roleRemoved: cleanupCode === 0,
+      resourcesRemaining: cleanupCode === 0 ? 0 : 1,
     },
     exitCode,
+    cleanupCode,
     summary,
+    diagnostic: outcome === CASE_PASS ? '' : tapDiagnostic(tap),
     tap: fileEvidence(tapPath),
   };
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
+  if (outcome !== CASE_PASS) process.exitCode = 1;
 } else if (action === 'full-api-inventory') {
   const [output] = args;
   assert.ok(output, 'usage: release-dag-step full-api-inventory OUTPUT');
@@ -340,9 +334,10 @@ if (action === 'preflight') {
   };
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
 } else if (action === 'full-api-partition') {
-  const [inventoryPath, partitionClass, indexText, countText, tapOutput, manifestOutput] = args;
-  assert.ok(manifestOutput,
-    'usage: release-dag-step full-api-partition INVENTORY parallel|serial INDEX COUNT TAP MANIFEST');
+  const [inventoryPath, partitionClass, indexText, countText, tapOutput, manifestOutput,
+    resultsPath] = args;
+  assert.ok(resultsPath,
+    'usage: release-dag-step full-api-partition INVENTORY parallel|serial INDEX COUNT TAP MANIFEST RESULTS');
   const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
   assert.equal(inventory.bindingDigest, binding.bindingDigest);
   const index = Number(indexText);
@@ -353,57 +348,91 @@ if (action === 'preflight') {
     ? spec.class === 'serial'
     : spec.class === 'parallel' && ((spec.index - 1) % count) === index);
   assert.ok(selected.length > 0, 'full API partition selected no specs');
+  const attemptToken = requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN');
+  const driven = JSON.parse(readFileSync(resultsPath, 'utf8'));
+  assert.equal(driven.kind, 'orbit.outcome-reconciler.release-dag-full-api-shard-results');
+  assert.equal(driven.bindingDigest, binding.bindingDigest);
+  assert.equal(driven.attemptToken, attemptToken);
+  assert.deepEqual(driven.partition, { class: partitionClass, index, count });
+  const drivenByIndex = new Map(driven.results.map((result) => [result.caseIndex, result]));
   const caseRoot = path.join(requiredEnvironment('OUTCOME_RELEASE_DAG_RUN_ROOT'), 'full-api-cases');
+  const caseFile = (spec, extension) => path.join(
+    caseRoot, `${String(spec.index).padStart(4, '0')}.${extension}`,
+  );
   const chunks = selected.map((spec) => {
-    const log = path.join(caseRoot, `${String(spec.index).padStart(4, '0')}.tap`);
-    assert.ok(existsSync(log), `full API case ${spec.index} produced no TAP log`);
-    return readFileSync(log, 'utf8');
+    const log = caseFile(spec, 'tap');
+    return existsSync(log) ? readFileSync(log, 'utf8') : '';
   });
-  const cases = selected.map((spec) => {
-    const receipt = JSON.parse(readFileSync(path.join(
-      caseRoot, `${String(spec.index).padStart(4, '0')}.json`,
-    ), 'utf8'));
-    assert.equal(receipt.outcome, 'PASS');
+  // Every declared case gets a row, whether or not it ran. A case the driver never reached is a
+  // different fact from a case that failed, and the shard has to be able to say which it was.
+  const results = selected.map((spec) => {
+    const observed = drivenByIndex.get(spec.index);
+    const receiptPath = caseFile(spec, 'json');
+    if (!observed || !existsSync(receiptPath)) {
+      return {
+        caseIndex: spec.index,
+        spec: spec.path,
+        outcome: CASE_MISSING_RECEIPT,
+        exitCode: observed?.exitCode ?? null,
+        summary: null,
+        diagnostic: observed?.diagnostic || 'the case produced no receipt',
+        database: null,
+        emptyDatabase: null,
+        role: null,
+        resourcesRemaining: null,
+        artifactDigest: null,
+      };
+    }
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
     assert.equal(receipt.bindingDigest, binding.bindingDigest);
-    assert.equal(receipt.releaseAttempt.token,
-      requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN'));
+    assert.equal(receipt.releaseAttempt.token, attemptToken);
     assert.deepEqual(receipt.partition, { class: partitionClass, index });
     assert.equal(receipt.caseIndex, spec.index);
     assert.equal(receipt.spec.sha256, spec.sha256);
-    assert.equal(receipt.cleanup.resourcesRemaining, 0);
     assert.match(receipt.database, /^pcc[0-9a-z]*_/u);
     assert.match(receipt.role, /^pcc[0-9a-z]*_/u);
-    return receipt;
+    return {
+      caseIndex: spec.index,
+      spec: spec.path,
+      outcome: receipt.outcome,
+      exitCode: receipt.exitCode,
+      summary: receipt.summary,
+      diagnostic: receipt.diagnostic ?? '',
+      database: receipt.database,
+      emptyDatabase: receipt.emptyDatabase,
+      role: receipt.role,
+      resourcesRemaining: receipt.cleanup.resourcesRemaining,
+      artifactDigest: receipt.artifactDigest,
+    };
   });
-  assert.equal(new Set(cases.map((entry) => entry.database)).size, cases.length,
-    'Full API cases shared a database inside one partition');
-  assert.equal(new Set(cases.map((entry) => entry.role)).size, cases.length,
-    'Full API cases shared a role inside one partition');
+  const conclusion = partitionConclusion({
+    partition: { class: partitionClass, index, count },
+    declaredCases: selected.length,
+    results,
+  });
   mkdirSync(path.dirname(path.resolve(tapOutput)), { recursive: true });
   writeFileSync(tapOutput, chunks.join('\n'));
   const metrics = tapMetrics(chunks.join('\n'));
-  assert.ok(metrics.tests > 0);
-  assert.equal(metrics.passed, metrics.tests);
-  assert.equal(metrics.failed, 0);
-  assert.equal(metrics.cancelled, 0);
-  assert.equal(metrics.skipped, 0);
-  assert.equal(metrics.todo, 0);
   const body = {
     schemaVersion: 1,
     kind: 'orbit.outcome-reconciler.release-dag-full-api-partition',
-    outcome: 'PASS',
+    outcome: conclusion.outcome,
     ...binding,
     partition: { class: partitionClass, index, count },
     inventoryDigest: inventory.inventoryDigest,
     specCount: selected.length,
     specIndices: selected.map((spec) => spec.index),
+    executedCases: conclusion.executedCases,
+    passedCases: conclusion.passedCases,
+    failedCases: conclusion.failedCases,
+    failures: conclusion.failures,
     databaseIsolation: {
       bindingDigest: binding.bindingDigest,
-      attemptToken: requiredEnvironment('OUTCOME_RELEASE_DAG_ATTEMPT_TOKEN'),
-      uniqueDatabases: true,
-      uniqueRoles: true,
-      allResourcesCleaned: true,
-      cases: cases.map((entry) => ({
+      attemptToken,
+      uniqueDatabases: conclusion.isolation.uniqueDatabases,
+      uniqueRoles: conclusion.isolation.uniqueRoles,
+      allResourcesCleaned: conclusion.isolation.resourcesRemaining === 0,
+      cases: results.map((entry) => ({
         caseIndex: entry.caseIndex,
         database: entry.database,
         emptyDatabase: entry.emptyDatabase,
@@ -412,9 +441,22 @@ if (action === 'preflight') {
       })),
     },
     summary: metrics,
+    durationMilliseconds: driven.durationMilliseconds,
     tapDigest: createHash('sha256').update(chunks.join('\n')).digest('hex'),
   };
   writeJson(manifestOutput, { ...body, artifactDigest: sha256(canonical(body)) });
+  if (conclusion.outcome === 'PASS') {
+    assert.ok(metrics.tests > 0);
+    assert.equal(metrics.passed, metrics.tests);
+    assert.equal(metrics.failed, 0);
+    assert.equal(metrics.cancelled, 0);
+    assert.equal(metrics.skipped, 0);
+    assert.equal(metrics.todo, 0);
+    console.log(formatPartitionReport(conclusion));
+  } else {
+    console.error(formatPartitionReport(conclusion));
+    process.exitCode = 1;
+  }
 } else if (action === 'full-api-combine') {
   const [inventoryPath, tapOutput, ...partitionPaths] = args;
   assert.ok(tapOutput && partitionPaths.length === 5,
