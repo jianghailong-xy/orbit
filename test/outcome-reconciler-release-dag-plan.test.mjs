@@ -1,25 +1,41 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  canonical,
   checkpointReuseDecision,
   commandDigest,
   dagPlanDigest,
   deriveBinding,
   addResources,
   metricsForNode,
+  nodeInputDigest,
+  nodeInputDigests,
   resourceFits,
   resumeProjection,
+  scopeDigests,
+  scopeNameForPath,
+  sha256,
   topologicalOrder,
   validatePlan,
 } from '../scripts/outcome-reconciler-release-dag-lib.mjs';
+import {
+  readCheckpoint,
+  readmitCheckpoint,
+  writeCheckpoint,
+} from '../scripts/outcome-reconciler-release-dag-checkpoints.mjs';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const readJson = (relative) => JSON.parse(readFileSync(path.join(repo, relative), 'utf8'));
 const read = (relative) => readFileSync(path.join(repo, relative), 'utf8');
+const digest = (file) => {
+  const raw = readFileSync(file);
+  return { bytes: raw.byteLength, sha256: sha256(raw) };
+};
 const plan = readJson('contracts/outcome-reconciler-release-dag.json');
 const frontier = readJson('contracts/outcome-reconciler-release-frontier.json');
 const authoritative = readJson('contracts/outcome-reconciler-authoritative-target.json');
@@ -35,20 +51,91 @@ const environment = {
   boundInputs: { PUBLIC_ORIGIN: 'http://localhost:2086' },
 };
 const binding = deriveBinding({ plan, targetSha: zeroTarget, targetReceiptDigest, environment });
+// The next round: a new commit, so a new target SHA and a new round binding, on the very
+// same checkout content. This is the situation the old key could not tell apart from a
+// genuinely different tree.
+const nextBinding = deriveBinding({ plan, targetSha: oneTarget, targetReceiptDigest, environment });
+
+// One representative file per declared scope, so an edit can be aimed at exactly one of them.
+const CHECKOUT_FIXTURE = [
+  ['package.json', 'package'],
+  ['package-lock.json', 'lock'],
+  ['tsconfig.base.json', 'tsconfig-base'],
+  ['contracts/outcome-reconciler-release-dag.json', 'release-dag-plan'],
+  ['contracts/outcome-reconciler-authoritative-target.json', 'authoritative'],
+  ['contracts/outcome-reconciler-release-frontier.json', 'frontier'],
+  ['contracts/outcome-reconciler-v2-watchdog-slo.json', 'watchdog-slo'],
+  ['scripts/outcome-reconciler-release-dag.mjs', 'runner'],
+  ['test/outcome-reconciler-v2.watchdog.test.mjs', 'watchdog-suite'],
+  ['docs/postgres-lock-order.md', 'lock-order'],
+  ['src/apiserver/src/sessions/current-work-delivery.spec.ts', 'current-work-spec'],
+  ['src/apiserver/src/runner-api/inbox-lease-generation.spec.ts', 'inbox-lease-spec'],
+  ['src/apiserver/src/test-support/prisma-transaction-double.ts', 'transaction-double'],
+  ['src/apiserver/src/outcome-watchdog/outcome-watchdog.ts', 'watchdog-source'],
+  ['src/apiserver/prisma/schema.prisma', 'schema'],
+  ['src/shared/src/index.ts', 'shared-source'],
+  ['src/web/src/App.tsx', 'web-source'],
+  ['src/macos/OrbitKit/Sources/OrbitKit/OrbitKit.swift', 'swift-source'],
+  ['src/ios/Orbit/OrbitApp.swift', 'ios-source'],
+  ['src/runner-go/main.go', 'go-source'],
+];
+
+function checkout(edits = {}) {
+  return CHECKOUT_FIXTURE.map(([file, seed]) => ({
+    path: file,
+    sha256: sha256(edits[file] ?? seed),
+  }));
+}
+
+function inputsAfter(edits = {}, selectedPlan = plan, selectedBinding = binding) {
+  return nodeInputDigests({
+    plan: selectedPlan,
+    scopeDigests: scopeDigests(selectedPlan, checkout(edits)),
+    environmentDigest: selectedBinding.environmentDigest,
+  });
+}
+
+const baselineInputs = inputsAfter();
 
 function git(...args) {
   return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
 }
 
-function successReceipt(node, selectedBinding = binding) {
+function successReceipt(node, selectedBinding = binding, index = baselineInputs) {
   return {
     nodeId: node.id,
     state: 'SUCCESS',
     exitCode: 0,
     binding: selectedBinding,
     commandDigest: commandDigest(node.command),
+    inputDigest: index.get(node.id).inputDigest,
+    inputs: index.get(node.id).inputs,
   };
 }
+
+// Round one ran on the baseline checkout; every receipt below was written then.
+function receiptsFromPreviousRound(index = baselineInputs) {
+  return new Map(plan.nodes.map((node) => [node.id, successReceipt(node, binding, index)]));
+}
+
+function projectNextRound(edits, { selectedPlan = plan, receipts } = {}) {
+  const target = selectedPlan ?? plan;
+  return resumeProjection({
+    plan: target,
+    binding: nextBinding,
+    receipts: receipts ?? receiptsFromPreviousRound(),
+    scopeDigests: scopeDigests(target, checkout(edits)),
+  });
+}
+
+const HEAVY_NODES = ['full-swift', 'full-go', 'full-web', 'suite-watchdog-111k'];
+// The real repair between the 36/45 round and the 39/45 round: transaction-double specs
+// and the double itself, and nothing else.
+const TRANSACTION_DOUBLE_REPAIR = {
+  'src/apiserver/src/sessions/current-work-delivery.spec.ts': 'current-work-spec-repaired',
+  'src/apiserver/src/runner-api/inbox-lease-generation.spec.ts': 'inbox-lease-spec-repaired',
+  'src/apiserver/src/test-support/prisma-transaction-double.ts': 'transaction-double-repaired',
+};
 
 test('the formal evaluator and every DAG node have bounded admission', () => {
   const result = validatePlan(plan);
@@ -286,21 +373,31 @@ test('target, environment, evaluator plan and evidence cut form one exact bindin
 
 test('checkpoints reuse only exact successful command/artifact bindings', () => {
   const node = nodeById.get('suite-contract');
-  const receipt = successReceipt(node);
-  assert.deepEqual(checkpointReuseDecision({ receipt, node, binding, artifactsValid: true }),
-    { reusable: true, reason: 'EXACT_SUCCESS_CHECKPOINT' });
-  assert.equal(checkpointReuseDecision({
-    receipt: { ...receipt, state: 'TIMED_OUT', exitCode: null }, node, binding, artifactsValid: true,
+  const inputDigest = baselineInputs.get(node.id).inputDigest;
+  const inputs = baselineInputs.get(node.id).inputs;
+  const decide = (overrides = {}) => checkpointReuseDecision({
+    receipt: successReceipt(node), node, binding, artifactsValid: true, inputDigest, inputs,
+    ...overrides,
+  });
+  assert.deepEqual(decide(), { reusable: true, reason: 'EXACT_SUCCESS_CHECKPOINT' });
+  assert.equal(decide({
+    receipt: { ...successReceipt(node), state: 'TIMED_OUT', exitCode: null },
   }).reusable, false);
+  assert.equal(decide({ receipt: { ...successReceipt(node), commandDigest: 'f'.repeat(64) } }).reason,
+    'STALE_COMMAND');
+  assert.equal(decide({ artifactsValid: false }).reason, 'ARTIFACT_MISMATCH');
+  // A node whose artifacts name the round they were produced in cannot be handed to
+  // another round, however identical its inputs are.
+  const embedded = nodeById.get('prepare-build');
+  assert.equal(embedded.artifactBinding, 'BINDING_EMBEDDED');
   assert.equal(checkpointReuseDecision({
-    receipt: { ...receipt, binding: { ...binding, targetSha: oneTarget } },
-    node, binding, artifactsValid: true,
+    receipt: successReceipt(embedded),
+    node: embedded,
+    binding: nextBinding,
+    artifactsValid: true,
+    inputDigest: baselineInputs.get(embedded.id).inputDigest,
+    inputs: baselineInputs.get(embedded.id).inputs,
   }).reason, 'STALE_BINDING');
-  assert.equal(checkpointReuseDecision({
-    receipt: { ...receipt, commandDigest: 'f'.repeat(64) }, node, binding, artifactsValid: true,
-  }).reason, 'STALE_COMMAND');
-  assert.equal(checkpointReuseDecision({ receipt, node, binding, artifactsValid: false }).reason,
-    'ARTIFACT_MISMATCH');
 });
 
 test('a simulated timeout reschedules only unfinished nodes', () => {
@@ -316,7 +413,8 @@ test('a simulated timeout reschedules only unfinished nodes', () => {
     state: 'TIMED_OUT',
     exitCode: null,
   });
-  const projection = resumeProjection({ plan, binding, receipts });
+  const resumeScopes = scopeDigests(plan, checkout());
+  const projection = resumeProjection({ plan, binding, receipts, scopeDigests: resumeScopes });
   assert.deepEqual(projection.incomplete, topologicalOrder(plan).filter((id) => unfinished.has(id)));
   assert.deepEqual(projection.ready, ['full-api-shard-2']);
   for (const id of projection.reusable) assert.equal(unfinished.has(id), false, id);
@@ -327,11 +425,23 @@ test('a simulated timeout reschedules only unfinished nodes', () => {
     state: 'TIMED_OUT',
     exitCode: null,
   });
-  const mixed = resumeProjection({ plan, binding, receipts: mixedReceipts });
+  const mixed = resumeProjection({
+    plan, binding, receipts: mixedReceipts, scopeDigests: resumeScopes,
+  });
   assert.equal(mixed.invalid.get('suite-auto-dispatch'), 'CHECKPOINT_NOT_SUCCESSFUL');
-  assert.equal(mixed.invalid.get('suite-auto-dispatch-integration'), 'STALE_DEPENDENCY');
-  assert.equal(mixed.invalid.get('manifest-aggregate'), 'STALE_DEPENDENCY');
-  assert.equal(mixed.invalid.get('publish-evidence-cut'), 'STALE_DEPENDENCY');
+  // A node that has to run again does not discard a successor whose own inputs never
+  // moved -- the round still fails, because the cut below demands a SUCCESS receipt for
+  // every declared node, but it fails without rebuilding what nothing touched.
+  assert.equal(mixed.reusable.has('suite-auto-dispatch-integration'), true);
+  assert.equal(mixed.incomplete.includes('suite-auto-dispatch'), true);
+
+  // Without scope digests nothing can be pinned down, so nothing is reused.
+  const blind = resumeProjection({ plan, binding, receipts: mixedReceipts });
+  assert.equal(blind.reusable.size, 0);
+  for (const node of plan.nodes) {
+    assert.equal(blind.invalid.get(node.id) === 'INDETERMINATE_INPUTS'
+      || blind.invalid.get(node.id) === 'CHECKPOINT_NOT_SUCCESSFUL', true, node.id);
+  }
 });
 
 test('every node receipt schema carries the required auditable fields', () => {
@@ -398,4 +508,404 @@ test('the inbox repair is integrated and frozen-target verification is mandatory
   assert.match(runner, /session_merge_receipt/u);
   assert.match(runner, /checkout differs from the builder receipt target/u);
   assert.match(runner, /origin\/main changed between fetch and remote observation/u);
+});
+
+test('every checkout file lands in exactly one declared scope and every node declares the catch-all', () => {
+  const declared = plan.inputScopes;
+  assert.equal(declared.assignment, 'FIRST_DECLARED_SELECTOR_WINS_WITH_TERMINAL_CATCH_ALL');
+  assert.equal(declared.catchAllScope, declared.scopes.at(-1).name);
+  const tracked = git('ls-files').split('\n').filter(Boolean);
+  assert.ok(tracked.length > 0);
+  const covered = new Map();
+  for (const file of tracked) {
+    const scope = scopeNameForPath(plan, file);
+    assert.ok(scope !== null, `${file} matches no input scope`);
+    covered.set(scope, (covered.get(scope) ?? 0) + 1);
+  }
+  // The classification is a total function, so nothing is silently outside the key.
+  assert.equal([...covered.values()].reduce((total, count) => total + count, 0), tracked.length);
+  assert.equal(scopeNameForPath(plan, 'src/apiserver/src/tasks/task-delete.spec.ts'), 'apiserver-spec');
+  assert.equal(scopeNameForPath(plan, 'src/apiserver/src/test-support/prisma-transaction-double.ts'),
+    'apiserver-test-support');
+  assert.equal(scopeNameForPath(plan, 'src/apiserver/src/tasks/tasks.service.ts'), 'apiserver-src');
+  assert.equal(scopeNameForPath(plan, 'package-lock.json'), 'dependency-manifest');
+  assert.equal(scopeNameForPath(plan, 'docs/postgres-lock-order.md'), declared.catchAllScope);
+  for (const node of plan.nodes) {
+    assert.ok(node.inputs.scopes.includes(declared.catchAllScope), node.id);
+    assert.ok(node.inputs.scopes.includes(declared.packageLockScope), node.id);
+  }
+});
+
+test('an API-only edit keeps the heavy client and watchdog checkpoints reusable', () => {
+  const projection = projectNextRound({
+    'src/apiserver/src/sessions/current-work-delivery.spec.ts': 'edited-for-the-api-matrix',
+  });
+  for (const id of HEAVY_NODES) {
+    assert.equal(projection.reusable.has(id), true,
+      `${id} was invalidated by an API-only edit: ${projection.invalid.get(id)}`);
+  }
+  // The nodes that actually read the edited file do rerun.
+  for (const id of ['prepare-build', 'full-api-inventory', 'full-api-shard-0', 'full-api-serial']) {
+    assert.equal(projection.invalid.get(id), 'STALE_INPUTS', id);
+  }
+});
+
+test('the transaction-double repair keeps Swift, Go, Web and the 111k watchdog reusable', () => {
+  const projection = projectNextRound(TRANSACTION_DOUBLE_REPAIR);
+  for (const id of HEAVY_NODES) {
+    assert.equal(projection.reusable.has(id), true,
+      `${id} was invalidated by the transaction-double repair: ${projection.invalid.get(id)}`);
+  }
+  // Every node whose artifacts do not name the round survives a round it did not change.
+  const contentOnly = plan.nodes.filter((node) => node.artifactBinding === 'CONTENT_ONLY');
+  assert.equal(contentOnly.length, 29);
+  for (const node of contentOnly) {
+    assert.equal(projection.reusable.has(node.id), true,
+      `${node.id}: ${projection.invalid.get(node.id)}`);
+  }
+  assert.equal(projection.reusable.size, 29);
+  assert.equal(projection.incomplete.length, 16);
+  // Before this change the same edit discarded all 45.
+  assert.equal(plan.nodes.length, 45);
+});
+
+test('an edit inside a node input set invalidates exactly that node', () => {
+  const projection = projectNextRound({ 'src/web/src/App.tsx': 'edited-web-source' });
+  for (const id of ['full-web', 'full-clients', 'suite-surfaces', 'suite-owner-ratification-ui',
+    'suite-work-overview-readiness', 'owner-ratification-inbox-routing']) {
+    assert.equal(projection.invalid.get(id), 'STALE_INPUTS', id);
+    assert.equal(nodeById.get(id).inputs.scopes.includes('web-src'), true, id);
+  }
+  for (const id of ['full-go', 'full-swift', 'suite-watchdog-111k', 'suite-coordinator']) {
+    assert.equal(nodeById.get(id).inputs.scopes.includes('web-src'), false, id);
+    assert.equal(projection.reusable.has(id), true, id);
+  }
+  const swift = projectNextRound({
+    'src/macos/OrbitKit/Sources/OrbitKit/OrbitKit.swift': 'edited-swift-source',
+  });
+  assert.equal(swift.invalid.get('full-swift'), 'STALE_INPUTS');
+  assert.equal(swift.reusable.has('full-web'), true);
+});
+
+test('a package lock change invalidates every build-bearing node', () => {
+  const projection = projectNextRound({ 'package-lock.json': 'relocked' });
+  const buildBearing = plan.nodes.filter((node) => node.usesSharedBuild === true
+    || ['prepare-dependencies', 'prepare-build', 'prepare-prisma'].includes(node.id));
+  assert.ok(buildBearing.length > 0);
+  for (const node of buildBearing) {
+    assert.equal(projection.reusable.has(node.id), false, node.id);
+  }
+  // The lock is in every node's scope set, so nothing at all survives it.
+  assert.equal(projection.reusable.size, 0);
+  for (const node of plan.nodes) {
+    assert.equal(['STALE_INPUTS', 'STALE_BINDING'].includes(projection.invalid.get(node.id)),
+      true, `${node.id}: ${projection.invalid.get(node.id)}`);
+  }
+});
+
+test('a dependency whose declaration moved invalidates its consumers', () => {
+  const moved = {
+    ...plan,
+    nodes: plan.nodes.map((node) => (node.id === 'suite-acceptance-runtime'
+      ? { ...node, command: [...node.command, '--rebound'] }
+      : node)),
+  };
+  moved.declaredDagPlanDigest = dagPlanDigest(moved);
+  const projection = projectNextRound({}, { selectedPlan: moved });
+  // The moved node itself: its own declaration changed.
+  assert.equal(projection.invalid.get('suite-acceptance-runtime'), 'STALE_INPUTS');
+  // Its consumers: nothing they read changed, but what produced their inputs did.
+  assert.equal(projection.invalid.get('suite-watchdog-111k'), 'STALE_DEPENDENCY');
+  assert.equal(projection.invalid.get('suite-canary'), 'STALE_DEPENDENCY');
+  assert.equal(projection.invalid.get('full-swift'), 'STALE_DEPENDENCY');
+  // And a node that does not descend from it is untouched.
+  assert.equal(projection.reusable.has('full-go'), true);
+});
+
+test('a node whose input set cannot be determined exactly is never reused', () => {
+  const digests = scopeDigests(plan, checkout());
+  const node = nodeById.get('full-go');
+  const undeclared = { ...node, inputs: { scopes: [] } };
+  const unknownScope = { ...node, inputs: { scopes: ['invented-scope', 'unclassified'] } };
+  const withoutCatchAll = { ...node, inputs: { scopes: ['go-src', 'dependency-manifest'] } };
+  for (const candidate of [undeclared, unknownScope, withoutCatchAll, { ...node, inputs: undefined }]) {
+    assert.equal(nodeInputDigest({ plan, node: candidate, scopeDigests: digests,
+      environmentDigest: binding.environmentDigest }), null, candidate.inputs?.scopes?.join());
+    assert.equal(checkpointReuseDecision({
+      receipt: successReceipt(node),
+      node: candidate,
+      binding,
+      artifactsValid: true,
+      inputDigest: nodeInputDigest({ plan, node: candidate, scopeDigests: digests,
+        environmentDigest: binding.environmentDigest }),
+      inputs: null,
+    }).reason, 'INDETERMINATE_INPUTS');
+  }
+  // An unknown host is just as indeterminate as an unknown file set.
+  assert.equal(nodeInputDigest({ plan, node, scopeDigests: digests, environmentDigest: undefined }),
+    null);
+  // A receipt written before input digests existed is reran, not trusted.
+  assert.equal(checkpointReuseDecision({
+    receipt: { ...successReceipt(node), inputDigest: undefined, inputs: undefined },
+    node,
+    binding,
+    artifactsValid: true,
+    inputDigest: baselineInputs.get(node.id).inputDigest,
+    inputs: baselineInputs.get(node.id).inputs,
+  }).reason, 'INDETERMINATE_INPUTS');
+  // And a plan that omits the declaration is refused outright.
+  const incomplete = { ...plan, nodes: plan.nodes.map((entry) => (entry.id === 'full-go'
+    ? { ...entry, inputs: { scopes: ['go-src'] } } : entry)) };
+  incomplete.declaredDagPlanDigest = dagPlanDigest(incomplete);
+  assert.throws(() => validatePlan(incomplete), /does not declare an exact input scope set/u);
+  const unbound = { ...plan, nodes: plan.nodes.map((entry) => (entry.id === 'full-go'
+    ? { ...entry, artifactBinding: undefined } : entry)) };
+  unbound.declaredDagPlanDigest = dagPlanDigest(unbound);
+  assert.throws(() => validatePlan(unbound), /whether its artifacts embed the round binding/u);
+});
+
+test('the publication gate still demands every declared node under the current input set', () => {
+  const publish = read('scripts/outcome-reconciler-release-dag-publish.mjs');
+  const aggregate = read('scripts/outcome-reconciler-release-dag-aggregate.mjs');
+  assert.equal(plan.nodes.length, 45);
+  assert.equal(plan.evidenceCut.requiredNodeState, 'SUCCESS');
+  assert.equal(plan.evidenceCut.membership, 'ALL_SUCCESSFUL_NODE_RECEIPTS_EXCEPT_PUBLISHER_SELF');
+  assert.match(publish, /expectedReceiptIds\.length \+ 1, plan\.nodes\.length/u);
+  assert.match(publish, /the evidence cut must cover every declared node/u);
+  assert.match(publish, /assert\.equal\(receipt\.state, 'SUCCESS'\)/u);
+  assert.match(publish, /assert\.equal\(receipt\.exitCode, 0\)/u);
+  assert.match(publish, /assert\.equal\(receipt\.failCount, 0\)/u);
+  assert.match(publish, /assert\.equal\(receipt\.skipCount, 0\)/u);
+  assert.match(publish, /receipt is absent at publication/u);
+  // Recomputed here, from this checkout, rather than read back out of the receipt.
+  for (const source of [publish, aggregate]) {
+    assert.match(source, /checkoutScopeDigests\(plan, repo\)/u);
+    assert.match(source, /was not observed under the current input set/u);
+    assert.match(source, /no exactly determined input set/u);
+  }
+  assert.match(publish, /was re-admitted under a different input set/u);
+  assert.match(publish, /embeds its round binding and may not be re-admitted/u);
+});
+
+test('no strict SHA, binding, receipt, lock, environment, evaluator, DAG or evidence guard was relaxed', () => {
+  const runner = read('scripts/outcome-reconciler-release-dag.mjs');
+  const publish = read('scripts/outcome-reconciler-release-dag-publish.mjs');
+  const aggregate = read('scripts/outcome-reconciler-release-dag-aggregate.mjs');
+  const step = read('scripts/outcome-reconciler-release-dag-step.mjs');
+  const targetCheck = read('scripts/outcome-reconciler-release-dag-target-check.mjs');
+
+  // 1. strict SHA
+  assert.match(step, /assert\.equal\(head, binding\.targetSha\)/u);
+  assert.match(targetCheck, /fresh origin\/main does not equal the frozen checkout/u);
+  assert.match(targetCheck, /remote refs\/heads\/main does not equal the frozen checkout/u);
+
+  // 2. current binding
+  assert.match(publish, /has stale \$\{field\}/u);
+  assert.match(aggregate, /has stale \$\{field\}/u);
+  assert.match(runner, /current-binding\.json/u);
+  assert.equal(plan.checkpointPolicy.evidenceBindingScope,
+    'EVERY_RECEIPT_ADMITTED_INTO_THE_CUT_IS_BOUND_TO_THE_CURRENT_ROUND');
+
+  // 3. target receipt
+  assert.equal(plan.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
+  assert.match(runner, /session_merge_receipt/u);
+  assert.match(publish, /assert\.deepEqual\(receipt\.target, \{/u);
+  assert.match(targetCheck, /merge\/push receipt is missing/u);
+
+  // 4. package lock
+  assert.ok(plan.implementationInputs.paths.includes('package-lock.json'));
+  assert.equal(plan.inputScopes.packageLockScope, 'dependency-manifest');
+  assert.equal(plan.implementationInputs.digests['package-lock.json'],
+    createHash('sha256').update(readFileSync(path.join(repo, 'package-lock.json'))).digest('hex'));
+  for (const node of plan.nodes) assert.ok(node.inputs.scopes.includes('dependency-manifest'));
+
+  // 5. environment
+  assert.match(publish, /sha256\(canonical\(receipt\.environment\)\), binding\.environmentDigest/u);
+  assert.match(aggregate, /environment payload differs from its binding/u);
+  assert.notEqual(
+    nodeInputDigest({
+      plan,
+      node: nodeById.get('full-swift'),
+      scopeDigests: scopeDigests(plan, checkout()),
+      environmentDigest: binding.environmentDigest,
+    }),
+    nodeInputDigest({
+      plan,
+      node: nodeById.get('full-swift'),
+      scopeDigests: scopeDigests(plan, checkout()),
+      environmentDigest: 'e'.repeat(64),
+    }),
+  );
+
+  // 6. evaluation plan
+  assert.equal(binding.evaluationPlanDigest, plan.evaluator.evaluationPlanDigest);
+  assert.match(publish, /evaluationPlanDigest: required\('OUTCOME_RELEASE_DAG_EVALUATION_PLAN_DIGEST'\)/u);
+  assert.throws(() => validatePlan({
+    ...plan, evaluator: { ...plan.evaluator, evaluationPlanDigest: 'short' },
+  }), /full SHA-256 values/u);
+
+  // 7. DAG plan
+  assert.equal(plan.declaredDagPlanDigest, dagPlanDigest(plan));
+  assert.equal(plan.checkpointPolicy.invalidateOnPlanChange, true);
+  assert.equal(plan.checkpointPolicy.invalidateOnTargetChange, true);
+  assert.throws(() => validatePlan({ ...plan, declaredDagPlanDigest: '0'.repeat(64) }),
+    /declared Release DAG plan digest is stale/u);
+
+  // 8. evidence cut
+  assert.equal(plan.checkpointPolicy.verifyArtifactDigestsOnReuse, true);
+  assert.equal(plan.checkpointPolicy.reusedReceiptProvenance, 'REQUIRED');
+  assert.match(publish, /artifact snapshot|digestFile\(snapshot\)/u);
+  assert.match(publish, /receiptCutDigest/u);
+});
+
+test('the cache key ignores the target SHA and the evidence binding never does', () => {
+  const digests = scopeDigests(plan, checkout());
+  // Two rounds, two SHAs, one checkout: different binding, identical node keys.
+  assert.notEqual(binding.bindingDigest, nextBinding.bindingDigest);
+  assert.equal(binding.targetSha, zeroTarget);
+  assert.equal(nextBinding.targetSha, oneTarget);
+  for (const node of plan.nodes) {
+    assert.equal(
+      nodeInputDigest({ plan, node, scopeDigests: digests, environmentDigest: binding.environmentDigest }),
+      nodeInputDigest({ plan, node, scopeDigests: digests, environmentDigest: nextBinding.environmentDigest }),
+      node.id,
+    );
+  }
+  // The manifest and the publication still carry the exact target SHA of this round.
+  const publish = read('scripts/outcome-reconciler-release-dag-publish.mjs');
+  const aggregate = read('scripts/outcome-reconciler-release-dag-aggregate.mjs');
+  for (const source of [publish, aggregate]) {
+    assert.match(source, /targetSha: required\('OUTCOME_RELEASE_DAG_TARGET_SHA'\)/u);
+    assert.match(source, /\.\.\.binding,/u);
+  }
+  assert.match(publish, /aggregate manifest has stale \$\{field\}/u);
+  assert.equal(plan.target.ref, 'refs/heads/main');
+  assert.equal(plan.target.remoteMustRemainExactlyTarget, true);
+  // A re-admitted observation is named as one, with the round that made it.
+  assert.match(publish, /observedTargetSha/u);
+  assert.match(publish, /declares re-admission from the round it already belongs to/u);
+});
+
+test('a checkpoint survives its round by moving the same bytes, and says which round observed them', () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'release-dag-checkpoints-'));
+  try {
+    const node = nodeById.get('full-swift');
+    const storeRoot = path.join(fixture, 'checkpoints');
+    const firstRunRoot = path.join(fixture, binding.bindingDigest);
+    const secondRunRoot = path.join(fixture, nextBinding.bindingDigest);
+    const declaredPath = 'build/outcome-reconciler-full-swift-manifest.json';
+    const snapshot = path.join(firstRunRoot, 'artifacts', node.id, '00-manifest.json');
+    const logPath = path.join(firstRunRoot, 'logs', `${node.id}.log`);
+    mkdirSync(path.dirname(snapshot), { recursive: true });
+    mkdirSync(path.dirname(logPath), { recursive: true });
+    writeFileSync(snapshot, '{"tests":128}');
+    writeFileSync(logPath, 'Executed 128 tests, with 0 failures\n');
+    const artifacts = [{
+      declaredPath,
+      snapshotPath: snapshot,
+      ...digest(snapshot),
+    }];
+    const log = { path: logPath, ...digest(logPath) };
+    const observed = {
+      schemaVersion: 1,
+      nodeId: node.id,
+      state: 'SUCCESS',
+      exitCode: 0,
+      reusable: true,
+      inputDigest: baselineInputs.get(node.id).inputDigest,
+      inputs: baselineInputs.get(node.id).inputs,
+      commandDigest: commandDigest(node.command),
+      startedAt: '2026-08-31T00:00:00.000Z',
+      finishedAt: '2026-08-31T00:22:00.000Z',
+      target: { ref: plan.target.ref, sha: zeroTarget, receiptDigest: targetReceiptDigest },
+      binding,
+      releaseAttempt: { token: 'first-round' },
+      testCount: 128,
+      artifacts,
+      log,
+      artifactDigest: sha256(canonical({ artifacts, log })),
+    };
+
+    const stored = writeCheckpoint({ repo: fixture, storeRoot, receipt: observed });
+    assert.equal(stored.artifacts[0].sha256, observed.artifacts[0].sha256);
+    const roundTripped = readCheckpoint({
+      storeRoot, nodeId: node.id, inputDigest: observed.inputDigest,
+    });
+    assert.deepEqual(roundTripped, JSON.parse(JSON.stringify(stored)));
+
+    // Round two: new commit, new binding, same Swift sources.
+    const nextTarget = { ref: plan.target.ref, sha: oneTarget, receiptDigest: targetReceiptDigest };
+    const readmitted = readmitCheckpoint({
+      repo: fixture,
+      receipt: roundTripped,
+      node,
+      binding: nextBinding,
+      target: nextTarget,
+      releaseAttempt: { token: 'second-round' },
+      runRoot: secondRunRoot,
+      logRoot: path.join(secondRunRoot, 'logs'),
+    });
+    // The observation itself is untouched, and it is bound to the round asking for it.
+    assert.equal(readmitted.testCount, 128);
+    assert.equal(readmitted.artifacts[0].sha256, observed.artifacts[0].sha256);
+    assert.equal(readmitted.log.sha256, observed.log.sha256);
+    assert.deepEqual(readmitted.target, nextTarget);
+    assert.equal(readmitted.binding.bindingDigest, nextBinding.bindingDigest);
+    assert.equal(readmitted.artifactDigest,
+      sha256(canonical({ artifacts: readmitted.artifacts, log: readmitted.log })));
+    // The bytes moved into this round and are byte-identical there.
+    assert.equal(digest(path.resolve(fixture, readmitted.artifacts[0].snapshotPath)).sha256,
+      observed.artifacts[0].sha256);
+    assert.equal(readmitted.artifacts[0].declaredPath, declaredPath);
+    // And the claim is named, not smoothed over.
+    assert.equal(readmitted.reuse.observedTargetSha, zeroTarget);
+    assert.equal(readmitted.reuse.observedBindingDigest, binding.bindingDigest);
+    assert.equal(readmitted.reuse.inputDigest, observed.inputDigest);
+    assert.equal(readmitted.reuse.sourceReceiptDigest, sha256(canonical(roundTripped)));
+
+    // A node whose artifacts name their round is refused outright.
+    assert.throws(() => readmitCheckpoint({
+      repo: fixture,
+      receipt: roundTripped,
+      node: nodeById.get('prepare-build'),
+      binding: nextBinding,
+      target: nextTarget,
+      releaseAttempt: { token: 'second-round' },
+      runRoot: secondRunRoot,
+      logRoot: path.join(secondRunRoot, 'logs'),
+    }), /cannot be re-admitted into another/u);
+
+    // Same round: nothing is moved and nothing is claimed.
+    assert.equal(readmitCheckpoint({
+      repo: fixture,
+      receipt: roundTripped,
+      node,
+      binding,
+      target: observed.target,
+      releaseAttempt: observed.releaseAttempt,
+      runRoot: firstRunRoot,
+      logRoot: path.join(firstRunRoot, 'logs'),
+    }), roundTripped);
+
+    // A failed or unreusable observation never enters the store.
+    assert.equal(writeCheckpoint({
+      repo: fixture, storeRoot, receipt: { ...observed, state: 'FAILED', exitCode: 1 },
+    }), null);
+    assert.equal(writeCheckpoint({
+      repo: fixture, storeRoot, receipt: { ...observed, inputDigest: null },
+    }), null);
+
+    // The store stays bounded: only the most recent input sets per node survive.
+    for (const [index, seed] of ['a', 'b', 'c', 'd'].entries()) {
+      writeCheckpoint({
+        repo: fixture,
+        storeRoot,
+        receipt: { ...observed, inputDigest: sha256(seed), finishedAt: `2026-09-0${index + 1}T00:00:00.000Z` },
+        keep: 3,
+      });
+    }
+    assert.equal(readdirSync(path.join(storeRoot, node.id)).length, 3);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
