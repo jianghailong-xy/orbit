@@ -173,6 +173,7 @@ import {
   type AttemptTerminationKind,
   type RunnerExecutableAcceptanceCapability,
 } from '../tasks/executable-acceptance-runtime';
+import { TASK_SUPERSESSION_MAX_HOPS } from '../tasks/task-supersession';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -567,6 +568,49 @@ async function ensureLegacyExecutableJudgmentRequest(
     },
     include: { executableResult: true },
   });
+}
+
+/**
+ * How many times this exact failure has already been observed on the way to this attempt.
+ *
+ * The scope is the supersession lineage, not one Task. The failure loop this budget exists to
+ * bound retires the failed Task and files a fresh successor for every failure, so each Task ends
+ * up carrying exactly one attempt: a count scoped to `taskId` is the constant 1, no repeat is ever
+ * seen, and `continuationAfterExecutableAttempt` can never spend the budget. Walking
+ * `superseded_by_task_id` backwards reads the predecessors that named this Task (transitively) as
+ * the attempt that took their place -- the one relation both the coordinator's ordinary
+ * supersession and migration 0212's managed handoff write, so it covers both ways a successor is
+ * filed while excluding independent Tasks that merely fail alike.
+ *
+ * `terminal_reason = 'SUPERSEDED'` is required with it: the pair is what says the predecessor was
+ * replaced rather than merely pointing at some later work. Nothing is written here, and no
+ * predecessor row is re-read as anything other than what it already recorded.
+ */
+async function supersessionLineageFingerprintCount(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+  failureFingerprint: string,
+  attemptId: string,
+): Promise<number> {
+  // UNION, not UNION ALL: 0128's link check already refuses a cycle, and a reader that hangs on
+  // data it was told is impossible is worse than one that stops.
+  const [row] = await tx.$queryRaw<Array<{ repeats: number }>>`
+    WITH RECURSIVE lineage(id, hops) AS (
+      SELECT ${taskId}::uuid, 0
+      UNION
+      SELECT predecessor."id", lineage.hops + 1
+        FROM "task" predecessor
+        JOIN lineage ON predecessor."superseded_by_task_id" = lineage.id
+       WHERE predecessor."terminal_reason" = 'SUPERSEDED'
+         AND lineage.hops < ${TASK_SUPERSESSION_MAX_HOPS}
+    )
+    SELECT count(*)::int AS repeats
+      FROM "task_executable_attempt" attempt
+      JOIN lineage ON lineage.id = attempt."task_id"
+     WHERE attempt."failure_fingerprint" = ${failureFingerprint}
+       AND attempt."id" <> ${attemptId}::uuid
+  `;
+  return 1 + (row?.repeats ?? 0);
 }
 
 function executableAcceptanceCapability(
@@ -3566,13 +3610,10 @@ export class RunnerApiController {
             signal: dto.acceptanceSignal ?? null,
             failureSiteDigest: site.digest,
           });
-          const sameFingerprintCount = fingerprint == null ? 0 : 1 + await tx.taskExecutableAttempt.count({
-            where: {
-              taskId: lockedAcceptanceTask.id,
-              failureFingerprint: fingerprint,
-              id: { not: attempt.id },
-            },
-          });
+          const sameFingerprintCount = fingerprint == null ? 0 : await
+            supersessionLineageFingerprintCount(
+              tx, lockedAcceptanceTask.id, fingerprint, attempt.id,
+            );
           const continuation = continuationAfterExecutableAttempt(
             result,
             attempt.attemptNumber,
@@ -3613,6 +3654,11 @@ export class RunnerApiController {
               signal: dto.acceptanceSignal ?? null,
               attemptNumber: attempt.attemptNumber,
               outputTruncated: dto.acceptanceOutputTruncated === true,
+              // What the budget was spent against, recorded where a reader of the diagnosis can
+              // see it. Without it the lineage count is a number that decided something and then
+              // disappeared, and "this failed the same way three times" stays unauditable.
+              sameFingerprintCount,
+              continuationReasonCode: continuation.reasonCode,
             };
             await tx.taskExecutableDiagnosis.create({
               data: {

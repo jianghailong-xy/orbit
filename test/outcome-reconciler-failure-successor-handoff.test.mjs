@@ -112,6 +112,8 @@ const evidence = {
     queuedSuccessors: 0,
     ownerHeldSuccessors: 0,
     lineageGenerations: 0,
+    lineageFingerprintRepeats: 0,
+    lineageBudgetEscalations: 0,
   },
   coverage: {
     isolatedDatabase: false,
@@ -129,6 +131,11 @@ const evidence = {
     monotoneGeneration: false,
     noOrphanDoubleActiveOrStaleEdge: false,
     appendOnlyEvidence: false,
+    fingerprintRepeatsAcrossLineage: false,
+    exhaustedBudgetChangesDiagnosticPath: false,
+    distinctFingerprintsDoNotAccumulate: false,
+    brokenLineageDoesNotLeak: false,
+    predecessorEvidenceUnrewritten: false,
     productionWrites: false,
   },
   results: {},
@@ -483,6 +490,129 @@ async function createSuccessor(service, failure, title) {
 
 async function sessionCount(taskId) {
   return db.session.count({ where: { taskId, startsTaskWork: true, deletedAt: null } });
+}
+
+async function workSession(project, taskId, label) {
+  const sessionId = randomUUID();
+  await db.session.create({
+    data: {
+      id: sessionId,
+      ownerId: project.ownerId,
+      creatorId: project.ownerId,
+      taskId,
+      workspaceId: project.workspaceId,
+      assignedRunnerId: project.runnerId,
+      title: label,
+      prompt: label,
+      provider: 'claude',
+      status: RunStatus.RUNNING,
+      engineTurnActive: true,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      runSource: SessionRunSource.MANUAL,
+      startsTaskWork: true,
+    },
+  });
+  return sessionId;
+}
+
+/**
+ * One whole typed acceptance attempt against a live work session: model turn, the shell turn the
+ * completion queues, the admitted start boundary and the runner's typed termination. Repeating it
+ * on the same session is how a Task carrying more than one attempt is built.
+ */
+async function acceptanceAttempt(project, sessionId, termination) {
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.RUNNING, engineTurnActive: true },
+  });
+  const messageTurnId = randomUUID();
+  const last = await db.conversationTurn.aggregate({ where: { sessionId }, _max: { seq: true } });
+  await db.conversationTurn.create({
+    data: {
+      id: messageTurnId,
+      sessionId,
+      seq: (last._max.seq ?? 0) + 1,
+      clientTurnId: `message:${messageTurnId}`,
+      kind: 'message',
+      content: 'finish the isolated fixture work',
+      status: 'IN_FLIGHT',
+    },
+  });
+  const api = runnerApi();
+  await api.turnComplete({ id: project.runnerId }, sessionId, {
+    turnId: messageTurnId,
+    status: RunStatus.SUCCEEDED,
+  });
+  const delivery = await api.dequeueTurn(
+    sessionId,
+    project.runnerId,
+    null,
+    false,
+    [],
+    { schemaRevision: 2, capabilityRevision: 2, hardMaxSeconds: 3600, runnerSha: targetSha },
+  );
+  assert.ok(delivery?.acceptancePlan, 'typed acceptance was not admitted for the repeat attempt');
+  const started = await api.startExecutableAcceptanceAttempt(
+    { id: project.runnerId },
+    sessionId,
+    delivery.acceptancePlan.admissionId,
+  );
+  const exited = termination.terminationKind === 'EXITED';
+  await api.turnComplete({ id: project.runnerId }, sessionId, {
+    turnId: delivery.turnId,
+    status: RunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellOutput: termination.output ?? DEFAULT_OUTPUT,
+    acceptanceAdmissionId: delivery.acceptancePlan.admissionId,
+    acceptanceAttemptId: started.attemptId,
+    acceptanceTerminationKind: termination.terminationKind,
+    acceptanceActualExitCode: exited ? termination.actualExitCode : null,
+    acceptanceSignal: null,
+  });
+  return started.attemptId;
+}
+
+/** The ordinary coordinator supersession: no handoff receipt, only the replacement relation. */
+async function supersedingTask(project, predecessorTaskId, title) {
+  return sourceTasks.create(project.ownerId, {
+    title,
+    description: `${title} in the disposable successor fixture`,
+    projectId: project.projectId,
+    assigneeId: project.workspaceId,
+    criterionKey: project.criterionKey,
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCriteria: 'The isolated command exits with code zero.',
+    acceptanceCommand: DEFAULT_COMMAND,
+    acceptanceExpectedExitCode: 0,
+    acceptanceTimeoutSeconds: 120,
+    acceptanceOwnerTimeoutCeilingSeconds: 120,
+    supersedesTaskId: predecessorTaskId,
+  });
+}
+
+/** What the failed attempt was actually charged, read back from the durable diagnosis. */
+async function repeatBudgetSpent(attemptId) {
+  const diagnosis = await db.taskExecutableDiagnosis.findFirst({ where: { attemptId } });
+  assert.ok(diagnosis, `attempt ${attemptId} produced no diagnosis to read the budget from`);
+  return {
+    sameFingerprintCount: diagnosis.evidence.sameFingerprintCount,
+    continuationReasonCode: diagnosis.evidence.continuationReasonCode,
+  };
+}
+
+/** Every column of the predecessors, so a rewrite anywhere in them is a difference here. */
+async function lineageEvidenceSnapshot(taskIds) {
+  return (await pool.query(`
+    SELECT jsonb_build_object(
+      'tasks', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id)
+                  FROM task t WHERE t.id = ANY($1::uuid[])),
+      'attempts', (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id)
+                     FROM task_executable_attempt a WHERE a.task_id = ANY($1::uuid[])),
+      'receipts', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.receipt_id)
+                     FROM failure_continuation_attempt_receipt r
+                    WHERE r.task_id = ANY($1::uuid[]))
+    ) AS snapshot
+  `, [taskIds])).rows[0].snapshot;
 }
 
 test('the suite is bound to the declared disposable PostgreSQL identity', async () => {
@@ -957,6 +1087,206 @@ test('handoff evidence is append-only and replay comparison values cannot be mix
   evidence.samples.replayReads += 1;
   evidence.coverage.appendOnlyEvidence = true;
 });
+
+test('one failure fingerprint accumulates along the supersession lineage and nowhere else',
+  { timeout: 240_000 }, async () => {
+    const project = await projectFixture('lineage-budget');
+    // The production shape this exists for: every failure retires its Task and files a fresh
+    // successor, so each Task carries exactly one attempt and a per-Task count is the constant 1.
+    const first = await executableTask(project, 'lineage-generation-one');
+    const firstAttempt = await acceptanceAttempt(
+      project,
+      await workSession(project, first.id, 'lineage-generation-one'),
+      { terminationKind: 'EXITED', actualExitCode: 9 },
+    );
+    const second = await supersedingTask(project, first.id, 'lineage-generation-two');
+    const secondAttempt = await acceptanceAttempt(
+      project,
+      await workSession(project, second.id, 'lineage-generation-two'),
+      { terminationKind: 'EXITED', actualExitCode: 9 },
+    );
+    // An independent Task that fails exactly alike, failed BEFORE the tail: were the count scoped
+    // to the goal instead of the lineage, the tail below would read four rather than three.
+    const unrelated = await executableTask(project, 'lineage-unrelated');
+    const unrelatedAttempt = await acceptanceAttempt(
+      project,
+      await workSession(project, unrelated.id, 'lineage-unrelated'),
+      { terminationKind: 'EXITED', actualExitCode: 9 },
+    );
+    const third = await supersedingTask(project, second.id, 'lineage-generation-three');
+
+    const before = await lineageEvidenceSnapshot([first.id, second.id, unrelated.id]);
+    const thirdAttempt = await acceptanceAttempt(
+      project,
+      await workSession(project, third.id, 'lineage-generation-three'),
+      { terminationKind: 'EXITED', actualExitCode: 9 },
+    );
+    const after = await lineageEvidenceSnapshot([first.id, second.id, unrelated.id]);
+
+    const attempts = await db.taskExecutableAttempt.findMany({
+      where: { id: { in: [firstAttempt, secondAttempt, thirdAttempt, unrelatedAttempt] } },
+    });
+    const fingerprints = new Set(attempts.map((row) => row.failureFingerprint));
+    assert.equal(fingerprints.size, 1, 'the fixture chain must share one failure fingerprint');
+    assert.equal(attempts.every((row) => row.attemptNumber === 1), true);
+
+    // (a) N=3 lineage: the third attempt is charged three, not one.
+    assert.deepEqual(await repeatBudgetSpent(firstAttempt), {
+      sameFingerprintCount: 1, continuationReasonCode: 'UNEXPECTED_EXIT_OBSERVED',
+    });
+    assert.deepEqual(await repeatBudgetSpent(secondAttempt), {
+      sameFingerprintCount: 2, continuationReasonCode: 'UNEXPECTED_EXIT_OBSERVED',
+    });
+    assert.deepEqual(await repeatBudgetSpent(thirdAttempt), {
+      sameFingerprintCount: 3, continuationReasonCode: 'UNEXPECTED_EXIT_OBSERVED',
+    });
+    // (d) the identical failure on a Task that supersedes nothing stays at one, in both
+    // directions: it neither reads the lineage's history nor leaks into it.
+    assert.equal((await repeatBudgetSpent(unrelatedAttempt)).sameFingerprintCount, 1);
+
+    // (c) negative control: a different fingerprint on the very next link of the same lineage
+    // starts its own budget instead of inheriting this one.
+    const fourth = await supersedingTask(project, third.id, 'lineage-generation-four');
+    const fourthAttempt = await acceptanceAttempt(
+      project,
+      await workSession(project, fourth.id, 'lineage-generation-four'),
+      { terminationKind: 'EXITED', actualExitCode: 7 },
+    );
+    const fourthRow = await db.taskExecutableAttempt.findUniqueOrThrow({
+      where: { id: fourthAttempt },
+    });
+    assert.notEqual(fourthRow.failureFingerprint, [...fingerprints][0]);
+    assert.equal((await repeatBudgetSpent(fourthAttempt)).sameFingerprintCount, 1);
+
+    // (e) nothing about the predecessors was reclassified, re-fingerprinted or re-receipted by
+    // the tail attempt that read them.
+    assert.deepEqual(after, before);
+    assert.equal(after.tasks.every((task) => task.status === 'FAILED'), true);
+    assert.deepEqual(
+      after.tasks.filter((task) => task.id !== unrelated.id).map((task) => task.terminal_reason),
+      ['SUPERSEDED', 'SUPERSEDED'],
+    );
+
+    evidence.samples.lineageFingerprintRepeats += 3;
+    evidence.coverage.fingerprintRepeatsAcrossLineage = true;
+    evidence.coverage.distinctFingerprintsDoNotAccumulate = true;
+    evidence.coverage.brokenLineageDoesNotLeak = true;
+    evidence.coverage.predecessorEvidenceUnrewritten = true;
+    evidence.results.lineageBudget = {
+      chainTaskIds: [first.id, second.id, third.id],
+      unrelatedTaskId: unrelated.id,
+      sharedFingerprint: [...fingerprints][0],
+      spent: [
+        (await repeatBudgetSpent(firstAttempt)).sameFingerprintCount,
+        (await repeatBudgetSpent(secondAttempt)).sameFingerprintCount,
+        (await repeatBudgetSpent(thirdAttempt)).sameFingerprintCount,
+      ],
+      unrelatedSpent: (await repeatBudgetSpent(unrelatedAttempt)).sameFingerprintCount,
+      distinctFingerprintSpent: (await repeatBudgetSpent(fourthAttempt)).sameFingerprintCount,
+      predecessorEvidenceUnchanged: true,
+    };
+  });
+
+test('an exhausted lineage budget changes the diagnostic path instead of filing another successor',
+  { timeout: 240_000 }, async () => {
+    const project = await projectFixture('lineage-escalation');
+    // A termination that keeps the goal actionable is where the repeat budget actually decides the
+    // next action, so this is the branch a per-Task count silently disabled: every generation read
+    // one and every generation answered RETRY, forever, without ever opening an obligation.
+    const timedOut = { terminationKind: 'TIMED_OUT' };
+    const links = [];
+    // (b) the routed decision itself, not merely the existence of a new Task. The claim has to be
+    // taken before the replacement is filed: 0210's sweep will not wake a superseded task, which
+    // is also the order the coordinator works in -- route the failure, then file what it decided.
+    const routes = [];
+    let predecessor = null;
+    for (const generation of ['one', 'two', 'three']) {
+      const task = predecessor == null
+        ? await executableTask(project, `escalation-generation-${generation}`)
+        : await supersedingTask(project, predecessor, `escalation-generation-${generation}`);
+      const sessionId = await workSession(project, task.id, `escalation-${generation}`);
+      const attemptId = await acceptanceAttempt(project, sessionId, timedOut);
+      const continuation = await db.taskExecutableContinuation.findUniqueOrThrow({
+        where: { attemptId },
+      });
+      if (continuation.kind === 'DIAGNOSIS') {
+        const observedAt = new Date();
+        const claims = await courier.claimDue(
+          `lineage-escalation:${randomUUID()}`, observedAt, 120, 64,
+        );
+        const claim = claims.find((candidate) => candidate.taskId === task.id);
+        assert.ok(claim, `no continuation obligation was opened for ${task.id}`);
+        routes.push(
+          await controller.routeClaim(claim, observedAt, { failureNode: 'PRODUCT_SOURCE' }),
+        );
+      }
+      // TIMED_OUT keeps the Task OPEN by construction, so the coordinator's reclaim is what
+      // retires it before the replacement is filed. Only that recorded outcome is fixture state.
+      await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.FAILED } });
+      await db.task.update({ where: { id: task.id }, data: { status: 'FAILED' } });
+      links.push({ task, sessionId, attemptId, continuation });
+      predecessor = task.id;
+    }
+    const byAttempt = new Map(links.map((link) => [link.attemptId, link.continuation]));
+    assert.equal(byAttempt.get(links[0].attemptId).kind, 'RETRY');
+    assert.equal(byAttempt.get(links[0].attemptId).reasonCode,
+      'ATTEMPT_TIMED_OUT_RETRY_BUDGET_AVAILABLE');
+    // The repeat is seen across the supersession, so the budget is spent and the next action stops
+    // being an unchanged retry.
+    for (const link of links.slice(1)) {
+      assert.equal(byAttempt.get(link.attemptId).kind, 'DIAGNOSIS');
+      assert.equal(byAttempt.get(link.attemptId).reasonCode,
+        'ATTEMPT_TIMED_OUT_FINGERPRINT_REPEATED');
+    }
+    assert.equal(await db.taskExecutableContinuation.count({
+      where: { taskId: { in: links.map((link) => link.task.id) }, kind: 'SUCCESSOR' },
+    }), 0, 'an exhausted budget produced another same-shaped successor');
+
+    // The second routed occurrence of this fingerprint leaves PRIMARY_RECOVERY for the alternate
+    // diagnosis: the repeat is only visible because the count spans the supersession.
+    assert.deepEqual(routes.map((route) => route.fingerprintOccurrence), [1, 2]);
+    assert.deepEqual(routes.map((route) => route.diagnosticPath),
+      ['PRIMARY_RECOVERY', 'ALTERNATE_DIAGNOSIS']);
+    assert.equal(new Set(routes.map((route) => route.failureFingerprint)).size, 1);
+
+    // Past a whole attempt budget of occurrences the runtime stops offering a successor at all —
+    // the escalation only a lineage-wide count can reach, since one Task cannot exceed its own.
+    const tail = links.at(-1);
+    await db.task.update({ where: { id: tail.task.id }, data: { status: 'OPEN' } });
+    const tailAttempts = [];
+    for (let round = 0; round < 3; round += 1) {
+      tailAttempts.push(await acceptanceAttempt(project, tail.sessionId, timedOut));
+    }
+    const tailRows = await db.taskExecutableAttempt.findMany({
+      where: { id: { in: tailAttempts } },
+      orderBy: { attemptNumber: 'asc' },
+    });
+    assert.deepEqual(tailRows.map((row) => row.attemptNumber), [2, 3, 4]);
+    const tailContinuations = await db.taskExecutableContinuation.findMany({
+      where: { attemptId: { in: tailAttempts } },
+    });
+    assert.equal(tailContinuations.length, 3);
+    assert.equal(tailContinuations.every((row) => row.kind === 'DIAGNOSIS'), true);
+    const exhausted = tailContinuations.filter((row) => (
+      row.reasonCode === 'ATTEMPT_TIMED_OUT_LINEAGE_BUDGET_EXHAUSTED'
+    ));
+    assert.ok(exhausted.length > 0, 'the exhausted lineage budget never escalated');
+    assert.equal(await db.taskExecutableContinuation.count({
+      where: { taskId: tail.task.id, kind: 'SUCCESSOR' },
+    }), 0);
+
+    evidence.samples.lineageBudgetEscalations += exhausted.length;
+    evidence.coverage.exhaustedBudgetChangesDiagnosticPath = true;
+    evidence.results.lineageEscalation = {
+      chainTaskIds: links.map((link) => link.task.id),
+      continuationKinds: links.map((link) => byAttempt.get(link.attemptId).kind),
+      continuationReasonCodes: links.map((link) => byAttempt.get(link.attemptId).reasonCode),
+      diagnosticPaths: routes.map((route) => route.diagnosticPath),
+      fingerprintOccurrences: routes.map((route) => route.fingerprintOccurrence),
+      exhaustedReasonCodes: exhausted.map((row) => row.reasonCode),
+      successorContinuations: 0,
+    };
+  });
 
 test('the durable DAG contains no orphan, double-current, double-run or stale source edge', async () => {
   const audit = (await pool.query(`
