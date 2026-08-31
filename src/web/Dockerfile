@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-# Build context is the repo root: docker build -f src/web/Dockerfile .
+# Build context is the repo root. Direct builds must identify the source commit:
+# docker build --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" -f src/web/Dockerfile .
 
 # ───────────────────────────────── build ─────────────────────────────────
 FROM node:26-alpine AS build

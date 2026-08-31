@@ -38,6 +38,8 @@ jobs:
         run: npm test -w @orbit/apiserver
       - name: Test web
         run: npm test -w @orbit/web
+      - name: Test upgrade source SHA propagation
+        run: npm run test:upgrade-source-sha
 
   go-runner:
     name: Go runner

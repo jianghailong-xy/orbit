@@ -53,9 +53,12 @@ rebuild the web image whenever it changes.
 ## 2. Start the stack
 
 ```bash
-docker compose up -d --build
+ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build
 docker compose ps
 ```
+
+The source SHA is embedded in the downloadable runner. Resolve it from the checkout for every web
+image build rather than saving it in `.env`, where it would become stale after changing revisions.
 
 By default, the gateway listens on <http://localhost:2086>. A fresh deployment redirects the first visitor to
 `/setup`; that account becomes the initial administrator. There is no public self-service signup. Additional
@@ -123,7 +126,7 @@ release tag or reviewed commit and rebuild the changed services:
 ```bash
 git fetch --tags
 git checkout <release-tag-or-reviewed-commit>
-docker compose up -d --build
+ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build
 ```
 
 The control plane applies pending Prisma migrations on startup. Keep Postgres running unless the release notes

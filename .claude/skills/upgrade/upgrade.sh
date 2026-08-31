@@ -126,6 +126,12 @@ if [ "$GIT_PULL" -eq 1 ]; then
   git pull --ff-only
 fi
 
+# The web image builds the downloadable runner from a deliberately narrow Docker context that
+# contains no Git metadata. Bind that binary to the exact source commit before Compose renders
+# its build arguments. Keep an explicit caller value for reproducible retries of a pinned build.
+DEPLOY_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
+
 echo "==> Building images from source (apiserver, web)"
 if [ "$NO_CACHE" -eq 1 ]; then
   $DC build --no-cache apiserver web

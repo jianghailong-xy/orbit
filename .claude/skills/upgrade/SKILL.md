@@ -36,7 +36,8 @@ It will, in order:
    reverting. Modified tracked files abort the upgrade; untracked files only warn
    (they are additive, not a silent divergence from HEAD). `--allow-dirty`
    proceeds anyway, loudly.
-1. `docker compose build apiserver web` — rebuild from the current source.
+1. Resolve the checked-out commit as `ORBIT_SOURCE_SHA`, then run
+   `docker compose build apiserver web` to rebuild from that exact source revision.
 2. `docker compose up -d --wait apiserver web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
    and `gateway` only if its image or mounted `nginx.conf` changed), and block

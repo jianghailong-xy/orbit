@@ -24,6 +24,8 @@ SOURCE_SHA="${ORBIT_SOURCE_SHA:-}"
 if [ -z "$SOURCE_SHA" ]; then
   if ! SOURCE_SHA="$(git rev-parse HEAD 2>/dev/null)"; then
     echo "error: ORBIT_SOURCE_SHA is required when the build context has no Git metadata" >&2
+    echo '       for Compose from a Git checkout, run:' >&2
+    echo '       ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build' >&2
     exit 1
   fi
 fi

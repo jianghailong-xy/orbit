@@ -74,8 +74,11 @@ cp .env.example .env
 # Set JWT_SECRET and PROVIDER_SECRET_KEY in .env. Generate each independently with:
 openssl rand -base64 32
 
-docker compose up -d --build
+ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build
 ```
+
+`ORBIT_SOURCE_SHA` is embedded in the downloadable runner for release attestation. Resolve it at
+build time as shown instead of storing it in `.env`, where it would become stale after an upgrade.
 
 Open <http://localhost:2086>. The first visitor creates the initial administrator account. Create a
 workspace, then use **Add a runner** in the UI to connect a machine with at least one supported agent runtime
