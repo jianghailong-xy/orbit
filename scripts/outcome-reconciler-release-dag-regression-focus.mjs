@@ -180,7 +180,8 @@ for (const { entry, tap } of rollups) {
   const raw = readFileSync(path.join(
     caseRoot, `${String(entry.index).padStart(4, '0')}.tap`,
   ), 'utf8');
-  assert.match(raw, /index and the project page report the same seven numbers|every bucket equals what the project page computes/u);
+  assert.match(raw,
+    /the four named boundaries, hand-counted, self-consistent AND equal to the page|index and the project page report the same seven numbers|every bucket equals what the project page computes/u);
   assert.match(raw, /# fail 0/u);
   assert.match(raw, /# skipped 0/u);
   assert.ok(tap.bytes > 0);
