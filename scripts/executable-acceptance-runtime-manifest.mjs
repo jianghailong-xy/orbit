@@ -66,7 +66,6 @@ for (const key of [
   'taskGet', 'taskList', 'project', 'readySelector', 'runNow', 'instantTrigger',
   'periodicSweep', 'executeCommitGate', 'brokenFailClosed', 'cycleFailClosed',
 ]) assert.ok(evidence.supersessionSurfaces[key], `supersession evidence missing ${key}`);
-assert.equal(evidence.watchdog.workerTerminated, true);
 assert.equal(evidence.watchdog.staleEvent, true);
 assert.equal(evidence.watchdog.staleSurfaceObligations, 2);
 assert.equal(evidence.watchdog.allSixSurfacesStale, true);
@@ -103,6 +102,7 @@ const subjects = [
   'src/apiserver/prisma/migrations/0201_completion_ack_canonical_obligation/migration.sql',
   'src/apiserver/prisma/migrations/0202_completion_ack_persistent_coordinator/migration.sql',
   'src/apiserver/prisma/migrations/0220_completion_ack_removal/migration.sql',
+  'src/apiserver/prisma/migrations/0221_watchdog_persistent_coordinator_removal/migration.sql',
   'src/apiserver/src/tasks/executable-acceptance-runtime.ts',
   'src/apiserver/src/tasks/task-completion-criterion.ts',
   'src/apiserver/src/tasks/task-dependencies.ts',
@@ -112,10 +112,6 @@ const subjects = [
   'src/apiserver/src/runner-api/runner-api.module.ts',
   'src/apiserver/src/common/blocker-signal-exit-inventory.ts',
   'src/apiserver/src/common/db-write-inventory.ts',
-  'src/apiserver/src/outcome-watchdog/outcome-watchdog.runner.ts',
-  'src/apiserver/src/outcome-watchdog/outcome-watchdog.service.ts',
-  'src/apiserver/src/outcome-watchdog/outcome-watchdog.ts',
-  'src/apiserver/src/outcome-reconciler/outcome-coordinator.service.ts',
   'src/apiserver/src/projects/coordinator-judgment-opening.ts',
   'src/apiserver/src/projects/coordinator-judgment.module.ts',
   'src/apiserver/src/projects/coordinator-wake.ts',
@@ -137,7 +133,6 @@ const subjects = [
   'src/web/src/components/WorkspaceView.tsx',
   'src/web/src/lib/projectAttention.ts',
   'src/web/src/lib/queries.ts',
-  'contracts/outcome-reconciler-v2-watchdog-slo.json',
   'scripts/executable-acceptance-dead-man.mjs',
   'scripts/executable-acceptance-runtime.sh',
   'scripts/executable-acceptance-rolling-upgrade.mjs',

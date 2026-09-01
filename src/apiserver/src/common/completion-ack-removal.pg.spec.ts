@@ -125,7 +125,9 @@ suite('(j) every protected family is still installed and still guarded', async (
     ['failure_continuation_', 5],
     ['failure_successor_', 4],
     ['project_acceptance_', 5],
-    ['executable_runtime_', 8],
+    // 0221 removed the three-relation current-binding ledger 0206 added here, leaving the
+    // expectation/heartbeat/dead-man tables and the two liveness views 0200 and 0202 created.
+    ['executable_runtime_', 6],
   ] as const) {
     const relations = await client.query(
       `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -171,37 +173,26 @@ suite('(j) every protected family is still installed and still guarded', async (
   assert.equal(retired.retired, true);
 });
 
-suite('(j) the restored coordinator entry points are the 0198 implementations', async (t) => {
+suite('(j) the coordinator entry points 0220 restored are gone with the coordinator', async (t) => {
   const client = await connect();
   t.after(async () => { await client.end(); });
 
-  const shadows = await client.query(`
+  // 0220 dropped the 0202 wrappers and renamed the 0198 implementations back. 0221 then removed
+  // the persistent coordinator itself, so neither the wrappers, the shadows nor the restored
+  // implementations may exist: a shadow left behind would be a wrapper no table can serve.
+  const survivors = await client.query(`
     SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public'
-       AND p.proname IN (
-         'outcome_register_coordinator_obligation_0198',
-         'outcome_reconcile_active_obligations_0198',
-         'outcome_record_coordinator_result_0198'
-       ) ORDER BY 1`);
-  assert.deepEqual(shadows.rows, [], 'the 0202 shadows must have been renamed back, not left beside');
+       AND (p.proname LIKE 'outcome\\_%coordinat%' OR p.proname LIKE 'outcome\\_coordinator\\_%'
+            OR p.proname IN ('outcome_reconcile_active_obligations',
+                             'outcome_reconcile_active_obligations_0198'))
+     ORDER BY 1`);
+  assert.deepEqual(survivors.rows, [],
+    'no coordinator entry point may outlive the tables it drives');
 
-  for (const [name, signature] of [
-    ['outcome_register_coordinator_obligation',
-      'outcome_register_coordinator_obligation(uuid,uuid,text,text,jsonb,bigint,integer,integer,integer,integer)'],
-    ['outcome_reconcile_active_obligations',
-      'outcome_reconcile_active_obligations(uuid,bigint,integer,integer,integer,integer)'],
-    ['outcome_record_coordinator_result',
-      'outcome_record_coordinator_result(uuid,uuid,uuid,text,text,text,text,bigint,jsonb)'],
-  ] as const) {
-    const def = (await client.query(
-      `SELECT pg_get_functiondef($1::regprocedure) AS def`, [signature])).rows[0].def as string;
-    assert.equal(def.includes('completion_ack'), false, `${name} must not read the removed protocol`);
-    assert.equal(def.includes('_0198'), false, `${name} must be the implementation, not a wrapper`);
-  }
-
-  // The sweep and the claim never handled COMPLETION_ACK, and still only see the two source types
-  // that remain.
-  const sweep = (await client.query(
-    `SELECT pg_get_functiondef('outcome_sweep_coordinator(uuid)'::regprocedure) AS def`)).rows[0].def as string;
-  assert.match(sweep, /source_type IN \('CANONICAL', 'EXECUTOR'\)/);
+  const relations = await client.query(`
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname LIKE 'outcome\\_coordinator\\_%'
+     ORDER BY 1`);
+  assert.deepEqual(relations.rows, []);
 });

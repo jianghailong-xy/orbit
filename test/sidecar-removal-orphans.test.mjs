@@ -123,19 +123,18 @@ test('(g) every relative import in the apiserver resolves to a file that exists'
   assert.deepEqual(dangling, []);
 });
 
-test('(h) the shared watchdog code AppModule and the runner API still import is still present', () => {
-  // Deliberately kept: removing these would break the apiserver process itself, which is a
-  // stricter constraint than removing dead code.
-  const holders = {
-    'src/apiserver/src/app.module.ts': './outcome-watchdog/outcome-watchdog.module',
-    'src/apiserver/src/runner-api/runner-api.module.ts': '../outcome-watchdog/outcome-watchdog.module',
-  };
-  for (const [holder, specifier] of Object.entries(holders)) {
+test('(h) nothing still imports the watchdog module the sidecar removal left behind', () => {
+  // When the four Compose services went, the watchdog Nest module stayed because the apiserver
+  // still imported it. 0221 removed its data layer, so the module went too -- and the two holders
+  // must have dropped the import in the same change rather than pointing at a missing file.
+  for (const holder of ['src/apiserver/src/app.module.ts',
+    'src/apiserver/src/runner-api/runner-api.module.ts']) {
     const source = read(holder);
-    assert.ok(source.includes(`'${specifier}'`), `${holder} no longer imports ${specifier}`);
-    const target = `${path.resolve(path.dirname(path.join(repo, holder)), specifier)}.ts`;
-    assert.ok(existsSync(target), `${holder} imports ${specifier}, which no longer exists`);
+    assert.doesNotMatch(source, /outcome-watchdog/,
+      `${holder} still imports a module the watchdog removal deleted`);
   }
+  assert.equal(existsSync(path.join(repo, 'src/apiserver/src/outcome-watchdog')), false);
+  assert.equal(existsSync(path.join(repo, 'src/apiserver/src/outcome-coordinator')), false);
 });
 
 test('(g) every repository .mjs entry point still parses', () => {
@@ -147,7 +146,7 @@ test('(g) every repository .mjs entry point still parses', () => {
     execFileSync(process.execPath, ['--check', path.join(repo, entry)], { cwd: repo });
   }
   for (const entry of ['test/compose-topology.test.mjs', 'test/sidecar-removal-orphans.test.mjs',
-    'test/outcome-reconciler-v2.watchdog.test.mjs', 'test/executable-acceptance-runtime.test.mjs']) {
+    'test/executable-acceptance-runtime.test.mjs']) {
     execFileSync(process.execPath, ['--check', path.join(repo, entry)], { cwd: repo });
   }
 });

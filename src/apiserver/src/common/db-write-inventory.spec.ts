@@ -431,6 +431,15 @@ function liveTriggers(): Map<string, { table: string; event: string; kind: strin
         if (meta.table === dropped[1]) live.delete(trigger);
       }
     }
+    // DROP SCHEMA ... CASCADE is the third way a trigger disappears. The CREATE scan files a
+    // schema-qualified trigger under its schema name, so the schema is exactly the key to match.
+    for (const dropped of sql.matchAll(
+      /DROP\s+SCHEMA\s+(?:IF\s+EXISTS\s+)?"?([a-z_0-9]+)"?\s+CASCADE/gi,
+    )) {
+      for (const [trigger, meta] of live) {
+        if (meta.table === dropped[1]) live.delete(trigger);
+      }
+    }
     const created =
       /CREATE\s+(CONSTRAINT\s+)?TRIGGER\s+"?([a-z_0-9]+)"?\s+((?:BEFORE|AFTER|INSTEAD\s+OF)[\s\S]*?)\s+ON\s+"?([a-z_]+)"?[\s\S]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+"?([a-z_0-9]+)"?/gi;
     for (const match of sql.matchAll(created)) {

@@ -65,7 +65,7 @@ else
   "$TSC" \
     "$API/src/outcome-reconciler/outcome-canary.ts" \
     "$API/src/tasks/executable-acceptance-runtime.ts" \
-    "$API/src/outcome-watchdog/outcome-watchdog.ts" \
+    "$API/src/outcome-reconciler/outcome-payload-redaction.ts" \
     --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
     --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
   CANARY_MODULE="$COMPILED/outcome-reconciler/outcome-canary.js"

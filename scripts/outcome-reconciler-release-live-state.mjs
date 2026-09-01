@@ -107,7 +107,7 @@ function inspectContainer(name) {
 }
 
 assert.equal(contract.schemaVersion, 1);
-assert.equal(contract.namedSuites.length, 16, 'the independent verifier named exactly 16 suites');
+assert.equal(contract.namedSuites.length, 12, 'the independent verifier named exactly 12 suites');
 assert.equal(contract.restoredSuites.length, 6, 'the independent verifier named exactly six missing suites');
 const packageJson = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
 for (const suite of [...contract.namedSuites, ...contract.restoredSuites, ...contract.fullMatrices]) {
@@ -540,29 +540,17 @@ assert.equal(canonicalState.doneGate?.canonicalIdentity?.cutId, canonicalState.c
 assert.equal(canonicalState.doneGate?.ratification, undefined,
   'the DONE gate must no longer carry a ratification clause');
 
+// 0221 removed the outcome-watchdog current-binding ledger together with the process it bound.
+// The deployment no longer runs a watchdog container, so there is no current binding to attest;
+// what replaces it is the assertion that the ledger is gone rather than merely empty.
 const runtimeBinding = queryJson(`
   SELECT jsonb_build_object(
-    'count', count(*), 'bindingDigest', min(binding_digest::text),
-    'generation', min(expectation_generation::text), 'instanceId', min(instance_id),
-    'sourceSha', min(source_sha), 'targetSha', min(target_sha), 'targetRef', min(target_ref),
-    'state', min(state), 'heartbeatSequence', min(heartbeat_sequence)::text,
-    'registeredLogicalTime', min(registered_logical_time)::text,
-    'evaluatedThroughLogicalTime', min(evaluated_through_logical_time)::text,
-    'heartbeatFacts', (SELECT count(*) FROM executable_runtime_binding_fact fact
-      WHERE fact.kind='HEARTBEAT_INGESTED'
-        AND fact.binding_digest=(SELECT binding_digest FROM executable_runtime_current_binding LIMIT 1))
-  ) FROM executable_runtime_current_binding
+    'bindingTable', to_regclass('public.executable_runtime_binding')::text,
+    'factTable', to_regclass('public.executable_runtime_binding_fact')::text,
+    'currentView', to_regclass('public.executable_runtime_current_binding')::text
+  )
 `);
-assert.equal(Number(runtimeBinding.count), 1);
-assert.match(runtimeBinding.bindingDigest, DIGEST);
-assert.equal(runtimeBinding.instanceId, 'compose:outcome-watchdog');
-assert.equal(runtimeBinding.sourceSha, targetSha);
-assert.equal(runtimeBinding.targetSha, targetSha);
-assert.equal(runtimeBinding.targetRef, contract.repository.targetRef);
-assert.equal(runtimeBinding.state, 'HEALTHY');
-assert.ok(Number(runtimeBinding.heartbeatFacts) >= 2);
-assert.ok(BigInt(runtimeBinding.evaluatedThroughLogicalTime)
-  > BigInt(runtimeBinding.registeredLogicalTime));
+assert.deepEqual(runtimeBinding, { bindingTable: null, factTable: null, currentView: null });
 
 const sourceFiles = [
   contractPath,

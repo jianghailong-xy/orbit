@@ -257,7 +257,7 @@ const sourceFiles = [
   'scripts/outcome-reconciler-canary-manifest.mjs',
   'scripts/outcome-reconciler-canary-verify.mjs',
   'src/apiserver/src/outcome-reconciler/outcome-canary.ts',
-  'src/apiserver/src/outcome-watchdog/outcome-watchdog.ts',
+  'src/apiserver/src/outcome-reconciler/outcome-payload-redaction.ts',
   'src/apiserver/src/tasks/executable-acceptance-runtime.ts',
   'test/outcome-reconciler-v2.canary.test.mjs',
 ];

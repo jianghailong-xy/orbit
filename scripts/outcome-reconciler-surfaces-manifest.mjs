@@ -45,7 +45,9 @@ for (const [name, proven] of Object.entries(evidence.invariants)) {
   assert.equal(proven, true, `invariant not proven: ${name}`);
 }
 assert.ok(Object.keys(evidence.invariants).length >= 14, 'surface failure matrix is incomplete');
-assert.match(evidence.samples.requestRevision, /^[0-9a-f]{64}$/);
+// The coordinator request revision this used to sample belonged to the owner-decision request
+// table that 0221 removed; the surface fixture's binding digest is what still identifies a run.
+assert.match(evidence.samples.bindingDigest, /^[0-9a-f]{64}$/);
 
 const sourceFiles = [
   'package.json',

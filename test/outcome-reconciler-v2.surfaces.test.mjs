@@ -175,31 +175,15 @@ test('stale projection is explicit and can never assert an empty todo list', () 
   evidence.invariants.staleNeverLooksEmpty = true;
 });
 
-test('database enforces tenant scope, request revision binding, expiry and payload bounds', async () => {
+test('database enforces tenant scope, and the coordinator decision lane is gone', async () => {
   const tenantId = randomUUID();
   const otherTenantId = randomUUID();
   const projectId = randomUUID();
-  const coordinationId = randomUUID();
-  const requestId = randomUUID();
   const bindingDigest = fixture.projection.canonicalIdentity.bindingDigest;
-  const obligation = fixture.projection.obligations[1];
-  const coordinationRevision = digest(`coordination:${coordinationId}`);
-  const source = { ...obligation, binding: { tenantId, projectId } };
   const binding = {
     evaluatorDigest: digest('surface-evaluator'),
     contractDigest: digest('surface-contract'),
     evaluationPlanDigest: digest('surface-plan'),
-  };
-  const request = {
-    whyNotAgent: 'Only the owner can accept this exact risk.',
-    options: ['APPROVE', 'DENY'],
-    impacts: ['resume or remain blocked'],
-    recommendation: 'DENY',
-    noActionConsequence: 'doneGate remains blocked',
-    cost: { amount: 0 },
-    deadline: { logicalTime: '11' },
-    resumeBehavior: 'wake the same coordinator',
-    idempotencyKey: `surface:${requestId}`,
   };
   await pool.query('INSERT INTO outcome_fact_stream (tenant_id,project_id,last_logical_time,binding_epoch) VALUES ($1,$2,1,1)', [tenantId, projectId]);
   await pool.query({
@@ -220,81 +204,28 @@ test('database enforces tenant scope, request revision binding, expiry and paylo
     /OUTCOME_PROJECTION_STREAM_NOT_FOUND/,
   );
 
-  await pool.query('INSERT INTO outcome_coordinator_clock (tenant_id,clock_id,logical_time) VALUES ($1,$2,20)', [tenantId, randomUUID()]);
-  await pool.query({
-    text: `INSERT INTO outcome_coordinator_obligation_revision (
-      tenant_id,project_id,coordination_revision,source_type,source_key,obligation_id,
-      obligation_revision,binding_digest,kind,requested_owner,capability,liveness_delta,
-      attempt_budget,wake_budget,same_failure_fingerprint_limit,max_lease_renewals,
-      source_obligation,source_digest,created_logical_time
-    ) VALUES ($1,$2,$3,'CANONICAL',$4,$5,$6,$7,$8,'OWNER',$9,10,3,3,2,1,$10::jsonb,
-      outcome_sha256_json($10::jsonb),1)`,
-    values: [tenantId, projectId, coordinationRevision, `surface:${coordinationId}`, obligation.obligationId,
-      obligation.obligationRevision, bindingDigest, obligation.kind, obligation.capability, JSON.stringify(source)],
-  });
-  await pool.query({
-    text: `INSERT INTO outcome_coordinator_obligation (
-      coordination_id,tenant_id,project_id,coordination_revision,source_type,source_key,
-      obligation_id,obligation_revision,binding_digest,kind,capability,requested_owner,
-      durable_owner,status,attempt_budget_max,attempt_budget_remaining,wake_budget_max,
-      wake_budget_remaining,same_failure_fingerprint_limit,max_lease_renewals,liveness_delta,
-      last_progress_logical_time,progress_deadline_logical_time,source_obligation,source_digest
-    ) VALUES ($1,$2,$3,$4,'CANONICAL',$5,$6,$7,$8,$9,$10,'OWNER','OWNER','READY',
-      3,3,3,3,2,1,10,1,11,$11::jsonb,outcome_sha256_json($11::jsonb))`,
-    values: [coordinationId, tenantId, projectId, coordinationRevision, `surface:${coordinationId}`,
-      obligation.obligationId, obligation.obligationRevision, bindingDigest, obligation.kind,
-      obligation.capability, JSON.stringify(source)],
-  });
-  await pool.query({
-    text: `INSERT INTO outcome_coordinator_owner_decision_request (
-      request_id,tenant_id,project_id,coordination_id,obligation_revision,reason,why_not_agent,
-      idempotency_key,request,request_digest,status,requested_logical_time
-    ) VALUES ($1,$2,$3,$4,$5,'RISK_ACCEPTANCE',$6,$7,$8::jsonb,
-      outcome_sha256_json($8::jsonb),'OPEN',1)`,
-    values: [requestId, tenantId, projectId, coordinationId, obligation.obligationRevision,
-      request.whyNotAgent, request.idempotencyKey, JSON.stringify(request)],
-  });
-  await pool.query(
-    `UPDATE outcome_coordinator_obligation SET status='OWNER_DECISION',decision_request_id=$2 WHERE coordination_id=$1`,
-    [coordinationId, requestId],
-  );
-  const bound = (await pool.query(
-    `SELECT request_revision,obligation_id,obligation_revision,binding_digest,
-            expires_logical_time::text AS expires
-       FROM outcome_coordinator_owner_decision_request WHERE request_id=$1`,
-    [requestId],
-  )).rows[0];
-  assert.equal(bound.expires, '11');
-  await assert.rejects(pool.query({
-    text: `SELECT outcome_decide_coordinator_owner_request(
-      $1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8::jsonb)`,
-    values: [tenantId, requestId, bound.request_revision, bound.obligation_id,
-      bound.obligation_revision, bound.binding_digest, 'expired-attempt', JSON.stringify({ choice: 'APPROVE' })],
-  }), /OUTCOME_OWNER_DECISION_CTA_STALE_OR_EXPIRED/);
-  await assert.rejects(pool.query({
-    text: 'SELECT outcome_decide_coordinator_owner_request($1::uuid,$2::uuid,$3,$4,$5::jsonb)',
-    values: [tenantId, requestId, bound.obligation_revision, 'unbound-attempt', JSON.stringify({ choice: 'APPROVE' })],
-  }), /function outcome_decide_coordinator_owner_request.*does not exist/i);
-  const oversized = {
-    ...request,
-    idempotencyKey: `huge:${requestId}`,
-    impacts: Array.from({ length: 1_000 }, (_, index) => digest(`uncompressible:${requestId}:${index}`)),
-  };
-  await assert.rejects(pool.query({
-    text: `INSERT INTO outcome_coordinator_owner_decision_request (
-      request_id,tenant_id,project_id,coordination_id,obligation_revision,reason,why_not_agent,
-      idempotency_key,request,request_digest,status,requested_logical_time
-    ) VALUES ($1,$2,$3,$4,$5,'RISK_ACCEPTANCE',$6,$7,$8::jsonb,
-      outcome_sha256_json($8::jsonb),'OPEN',1)`,
-    values: [randomUUID(), tenantId, projectId, coordinationId, obligation.obligationRevision,
-      oversized.whyNotAgent, oversized.idempotencyKey, JSON.stringify(oversized)],
-  }), /outcome_coordinator_owner_payload_bound_check/);
+  // The request-revision binding, database expiry and payload bound this case used to prove were
+  // all enforced by the persistent coordinator's owner-decision request table. 0221 removed that
+  // table and both callbacks with it, so what is left to assert is that the lane is unreachable:
+  // a surface can no longer offer a DECIDE CTA because there is nothing to decide against.
+  const relations = (await pool.query(`
+    SELECT to_regclass('public.outcome_coordinator_owner_decision_request') AS request_table,
+           to_regclass('public.outcome_coordinator_obligation') AS obligation_table,
+           to_regclass('public.outcome_coordinator_clock') AS clock_table
+  `)).rows[0];
+  assert.deepEqual(relations, { request_table: null, obligation_table: null, clock_table: null });
+  const callbacks = (await pool.query(`
+    SELECT coalesce(string_agg(proname, ',' ORDER BY proname), '') AS names
+      FROM pg_proc WHERE proname LIKE 'outcome\\_%coordinator\\_owner\\_%'
+         OR proname LIKE 'outcome\\_%owner\\_decision%'
+  `)).rows[0].names;
+  assert.equal(callbacks, '', 'no owner-decision callback may outlive its table');
+  evidence.samples.bindingDigest = bindingDigest;
   evidence.invariants.crossTenantReadDenied = true;
-  evidence.invariants.requestRevisionBound = true;
-  evidence.invariants.databaseExpiryEnforced = true;
-  evidence.invariants.unboundCallbackRemoved = true;
-  evidence.invariants.payloadBounded = true;
-  evidence.samples.requestRevision = bound.request_revision;
+  evidence.invariants.coordinatorDecisionTablesRemoved = true;
+  evidence.invariants.coordinatorDecisionCallbacksRemoved = true;
+  evidence.invariants.staleProjectionStillFailsClosed = true;
+  evidence.invariants.ownerDecisionLaneUnreachable = true;
 });
 
 test('an evaluation-plan-only edit moves the plan digest and leaves the contract where it is',

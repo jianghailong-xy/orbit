@@ -385,10 +385,15 @@ function deriveItem(input: {
   if (surface === 'OWNER_DECISION_INBOX') {
     if (obligation.owner !== 'OWNER') return null;
     if (!decisionType) throw new Error('OUTCOME_HUMAN_INBOX_NON_DECISION_OBLIGATION');
-    if (!request) throw new Error('OUTCOME_OWNER_DECISION_REQUEST_MISSING');
-    assertOutcomeDecisionProtocol(request.protocol);
-    if (request.protocol.decisionType !== decisionType) {
-      throw new Error('OUTCOME_OWNER_DECISION_PROTOCOL_KIND_MISMATCH');
+    // A missing request is no longer an unavailable control plane: the persistent coordinator
+    // that opened owner-decision requests was removed with its tables. The obligation still has
+    // to appear here -- assertOutcomeSurfaceSetConsistency requires every OWNER-owned DONE_GATE
+    // obligation to -- it simply carries no CTA and reports OWNER_DECISION_REQUEST_MISSING.
+    if (request) {
+      assertOutcomeDecisionProtocol(request.protocol);
+      if (request.protocol.decisionType !== decisionType) {
+        throw new Error('OUTCOME_OWNER_DECISION_PROTOCOL_KIND_MISMATCH');
+      }
     }
   }
 

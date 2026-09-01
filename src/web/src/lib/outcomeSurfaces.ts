@@ -1,4 +1,3 @@
-import { encodeId } from './idCodec';
 import type { CanonicalFailureCoordination } from './failureCoordination';
 
 export type OutcomeDecisionType = 'HUMAN_SIGNOFF'
@@ -67,16 +66,6 @@ export interface OutcomeHumanInbox {
   }>;
 }
 
-export interface OutcomeDecisionView {
-  projectId: string;
-  canonicalIdentity: Record<string, unknown>;
-  semantic: OutcomeSemanticObligation;
-  decision: HumanDecisionProtocol;
-  cta: OutcomeCta | null;
-  decisionRequest: Record<string, unknown> | null;
-  ctaUnavailableReason: string | null;
-}
-
 /** Web may choose labels and CTA layout, but it must never reinterpret this tuple. */
 export function outcomeSemanticTuple(item: { semantic: OutcomeSemanticObligation }) {
   return {
@@ -92,10 +81,6 @@ export function outcomeSemanticTuple(item: { semantic: OutcomeSemanticObligation
 }
 
 export const outcomeInboxPath = (limit = 100) => `/outcomes/inbox?limit=${limit}`;
-export const outcomeDecisionPath = (requestId: string) =>
-  `/outcomes/decisions/${encodeURIComponent(encodeId(requestId))}`;
-export const outcomeDecisionReviewPath = (requestId: string) =>
-  `/judgments/outcome/${encodeURIComponent(encodeId(requestId))}`;
 export function isFailureOwnerInboxItem(
   item: CanonicalOwnerInboxItem | FailureOwnerInboxItem,
 ): item is FailureOwnerInboxItem {

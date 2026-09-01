@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -28,9 +28,6 @@ const { ProjectsService } = require(path.join(apiDist, 'projects/projects.servic
 const { SessionsService } = require(path.join(apiDist, 'sessions/sessions.service.js'));
 const { RunnerApiController } = require(path.join(apiDist, 'runner-api/runner-api.controller.js'));
 const { HTTP_CODE_METADATA } = require('@nestjs/common/constants');
-const { OutcomeWatchdogService } = require(path.join(
-  apiDist, 'outcome-watchdog/outcome-watchdog.service.js',
-));
 const runtime = require(path.join(apiDist, 'tasks/executable-acceptance-runtime.js'));
 const { RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } = require(path.join(
   repo, 'src/apiserver/node_modules/@prisma/client',
@@ -66,13 +63,57 @@ function sha(value) {
   return createHash('sha256').update(String(value)).digest('hex');
 }
 
-const watchdogModuleGraphDigest = sha([
-  'outcome-watchdog/main',
-  'outcome-watchdog/worker-module',
-  'outcome-watchdog/runner',
-  'outcome-watchdog/service',
+const runtimeModuleGraphDigest = sha([
+  'tasks/executable-acceptance-runtime',
   'prisma',
 ].sort().join('\n'));
+
+/**
+ * The heartbeat writer used to live on the watchdog worker's Nest service. 0221 removed that
+ * process and its data layer; the heartbeat/dead-man ledger it wrote into belongs to the 0200
+ * EXECUTABLE runtime contract and stays, so this suite appends to it directly. The statement is
+ * the same generic (non-binding) append the deleted service used for every component.
+ */
+async function appendRuntimeHeartbeat({
+  component, instanceId, sourceSha: heartbeatSourceSha, moduleGraphDigest,
+  expectationGeneration, observedAt, deadlineAt, payload,
+}) {
+  const { rows } = await pool.query(`
+    WITH previous AS (
+      SELECT h."sequence", h."heartbeat_digest"
+        FROM "executable_runtime_heartbeat" h
+       WHERE h."component" = $1::text AND h."instance_id" = $2::text
+       ORDER BY h."sequence" DESC LIMIT 1
+    ), material AS (
+      SELECT coalesce((SELECT "sequence" FROM previous), 0) + 1 AS sequence,
+             (SELECT "heartbeat_digest" FROM previous) AS previous_digest,
+             $8::jsonb AS payload
+    ), bound AS (
+      SELECT material.*, encode(digest(material.payload::text, 'sha256'), 'hex') AS payload_digest
+        FROM material
+    ), final AS (
+      SELECT bound.*, encode(digest(jsonb_build_object(
+               'component', $1::text, 'instanceId', $2::text, 'sequence', bound.sequence,
+               'sourceSha', $3::text, 'moduleGraphDigest', $4::text,
+               'expectationGeneration', $5::uuid, 'observedAt', $6::timestamptz,
+               'deadlineAt', $7::timestamptz, 'payloadDigest', bound.payload_digest,
+               'previousDigest', bound.previous_digest
+             )::text, 'sha256'), 'hex') AS heartbeat_digest
+        FROM bound
+    )
+    INSERT INTO "executable_runtime_heartbeat"
+      ("id", "component", "instance_id", "sequence", "source_sha", "module_graph_digest",
+       "observed_at", "deadline_at", "payload", "payload_digest", "previous_digest",
+       "heartbeat_digest", "expectation_generation")
+    SELECT gen_random_uuid(), $1::text, $2::text, final.sequence, $3::text, $4::text,
+           $6::timestamptz, $7::timestamptz, final.payload, final.payload_digest,
+           final.previous_digest, final.heartbeat_digest, $5::uuid
+      FROM final
+    RETURNING "id", "heartbeat_digest" AS "heartbeatDigest", "sequence"
+  `, [component, instanceId, heartbeatSourceSha, moduleGraphDigest, expectationGeneration,
+      observedAt, deadlineAt, JSON.stringify(payload)]);
+  return rows[0];
+}
 
 test('turn-complete success is an explicit HTTP 200 contract', () => {
   assert.equal(
@@ -97,7 +138,7 @@ function registerRuntimeExpectation({
   component,
   instanceId,
   generation,
-  moduleGraphDigest = watchdogModuleGraphDigest,
+  moduleGraphDigest = runtimeModuleGraphDigest,
   startupGraceSeconds = 5,
 }) {
   return runDeadman([
@@ -118,9 +159,7 @@ async function waitPast(timestamp, marginMs = 100) {
 
 async function empty() {
   await pool.query(`
-    TRUNCATE executable_runtime_binding_fact, executable_runtime_binding,
-             executable_runtime_binding_stream,
-             executable_runtime_expectation_event, executable_runtime_expectation,
+    TRUNCATE executable_runtime_expectation_event, executable_runtime_expectation,
              executable_dead_man_event, executable_runtime_heartbeat, task, session, workspace,
              runner, project, "user" RESTART IDENTITY CASCADE
   `);
@@ -363,7 +402,7 @@ async function assertSqlRejected(sql, params, expected) {
 
 test('virtual negotiation rejects hardMax=120 before spawn and admits hardMax=1200 exactly', () => {
   const plan = runtime.executableEvaluationPlan({
-    command: 'npm run test:outcome-reconciler:watchdog', expectedExitCode: 0,
+    command: 'npm run test:outcome-reconciler:replay', expectedExitCode: 0,
     requestedTimeoutSeconds: 1200, ownerTimeoutCeilingSeconds: 1200,
     policyTimeoutCeilingSeconds: 3600,
   });
@@ -772,8 +811,8 @@ test('legacy bootstrap import preserves UNTYPED/-1 and appends only an evidence 
   const turnId = '01a047fe-d899-711f-a3b7-53a3269f0c12';
   await db.task.create({ data: {
     id: taskId, ownerId: base.ownerId, creatorType: 'USER', creatorId: base.ownerId,
-    title: 'legacy watchdog', assigneeId: base.workspaceId, status: TaskStatus.FAILED,
-    completionCriterion: 'EXECUTABLE', acceptanceCommand: 'npm run test:outcome-reconciler:watchdog',
+    title: 'legacy acceptance suite', assigneeId: base.workspaceId, status: TaskStatus.FAILED,
+    completionCriterion: 'EXECUTABLE', acceptanceCommand: 'npm run test:outcome-reconciler:replay',
     acceptanceExpectedExitCode: 0,
   } });
   await db.session.create({ data: {
@@ -785,7 +824,7 @@ test('legacy bootstrap import preserves UNTYPED/-1 and appends only an evidence 
   const createdAt = new Date('2026-08-28T10:51:19.065Z');
   await db.conversationTurn.create({ data: {
     id: turnId, sessionId, seq: 2, clientTurnId: `system:task-acceptance:v1:${randomUUID()}:0`,
-    kind: 'shell', content: 'npm run test:outcome-reconciler:watchdog', status: 'ANSWERED',
+    kind: 'shell', content: 'npm run test:outcome-reconciler:replay', status: 'ANSWERED',
     createdAt, answeredAt: new Date(createdAt.getTime() + 120_731),
   } });
   await db.taskComment.create({ data: {
@@ -925,26 +964,6 @@ test('broken and cyclic supersession chains fail closed', async () => {
   Object.assign(evidence.supersessionSurfaces, { brokenFailClosed: true, cycleFailClosed: true });
 });
 
-function waitForOutput(child, pattern, timeoutMs = 15_000) {
-  return new Promise((resolve, reject) => {
-    let output = '';
-    const timer = setTimeout(() => reject(new Error(`worker output timeout: ${output}`)), timeoutMs);
-    const read = (chunk) => {
-      output += chunk.toString();
-      if (pattern.test(output)) {
-        clearTimeout(timer);
-        resolve(output);
-      }
-    };
-    child.stdout.on('data', read);
-    child.stderr.on('data', read);
-    child.once('exit', (code) => {
-      clearTimeout(timer);
-      reject(new Error(`worker exited ${code}: ${output}`));
-    });
-  });
-}
-
 async function waitForCondition(read, predicate, label, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let current;
@@ -977,7 +996,7 @@ test('external dead-man marks a registered generation missing when it never hear
   assert.deepEqual(
     [expected.state, expected.condition_code, expected.expected_source_sha,
       expected.module_graph_digest, expected.heartbeat_digest],
-    ['STARTING', 'STARTING', sourceSha, watchdogModuleGraphDigest, null],
+    ['STARTING', 'STARTING', sourceSha, runtimeModuleGraphDigest, null],
   );
   const duringGraceAt = new Date(
     new Date(expected.startup_deadline_at).getTime() - 1,
@@ -1033,13 +1052,12 @@ test('external dead-man marks a registered generation missing when it never hear
   });
 });
 
-test('external dead-man detects a terminated generation-bound worker and exact recovery', async () => {
+test('external dead-man detects an expired generation-bound heartbeat and exact recovery', async () => {
   await empty();
   const instanceId = 'acceptance-worker';
   const watchdogGeneration = randomUUID();
-  // The second worker capability is registered after the spawned process is gone: only
-  // `outcome-watchdog` heartbeats itself, and the overlay aggregation below still has to see two
-  // independently registered components.
+  // Two independently registered components, because the overlay aggregation below has to show
+  // one obligation per expected component rather than one per instance.
   const coordinatorGeneration = randomUUID();
   {
     const registered = registerRuntimeExpectation({
@@ -1050,18 +1068,16 @@ test('external dead-man detects a terminated generation-bound worker and exact r
       ['outcome-watchdog', instanceId, watchdogGeneration, false],
     );
   }
-  const worker = spawn(process.execPath, [path.join(apiDist, 'outcome-watchdog/main.js')], {
-    cwd: repo,
-    env: {
-      ...process.env, DATABASE_URL: url,
-      OUTCOME_WATCHDOG_POLICY_PATH: path.join(repo, 'contracts/outcome-reconciler-v2-watchdog-slo.json'),
-      OUTCOME_WATCHDOG_COLLECTOR_SHA: sourceSha, OUTCOME_WATCHDOG_TARGET_SHA: sourceSha,
-      OUTCOME_WATCHDOG_INSTANCE_ID: instanceId,
-      OUTCOME_WATCHDOG_EXPECTATION_GENERATION: watchdogGeneration,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
+  // 0221 removed the watchdog process, so nothing runs to emit this heartbeat any more. The
+  // ledger, its expectation guard and the dead-man that reads them are the 0200 runtime contract
+  // and stay: one live append is what proves the generation binding is still enforced.
+  await appendRuntimeHeartbeat({
+    component: 'outcome-watchdog', instanceId, sourceSha,
+    moduleGraphDigest: runtimeModuleGraphDigest,
+    expectationGeneration: watchdogGeneration,
+    observedAt: new Date(), deadlineAt: new Date(Date.now() + 30_000),
+    payload: { schemaVersion: 1, liveGenerationFixture: true },
   });
-  await waitForOutput(worker, /OUTCOME_WATCHDOG_HEARTBEAT/);
   const boundHeartbeats = await db.executableRuntimeHeartbeat.findMany({
     where: { instanceId },
     orderBy: [{ component: 'asc' }, { sequence: 'desc' }],
@@ -1071,11 +1087,10 @@ test('external dead-man detects a terminated generation-bound worker and exact r
     boundHeartbeats.map((row) => [
       row.component, row.expectationGeneration, row.sourceSha, row.moduleGraphDigest,
     ]),
-    [['outcome-watchdog', watchdogGeneration, sourceSha, watchdogModuleGraphDigest]],
+    [['outcome-watchdog', watchdogGeneration, sourceSha, runtimeModuleGraphDigest]],
   );
-  const heartbeatService = new OutcomeWatchdogService(db);
   await assert.rejects(
-    heartbeatService.appendRuntimeHeartbeat({
+    appendRuntimeHeartbeat({
       component: 'outcome-watchdog', instanceId, sourceSha,
       moduleGraphDigest: sha('wrong-module-graph'),
       expectationGeneration: watchdogGeneration,
@@ -1084,9 +1099,6 @@ test('external dead-man detects a terminated generation-bound worker and exact r
     }),
     /EXECUTABLE_RUNTIME_HEARTBEAT_EXPECTATION_MISMATCH/,
   );
-  const workerExited = new Promise((resolve) => worker.once('exit', resolve));
-  worker.kill('SIGTERM');
-  await workerExited;
   // Append a production-valid, exact-generation observation whose deadline has elapsed. This
   // keeps the acceptance suite bounded while exercising the same DB-clock dead-man predicate as
   // a worker that stopped for the full 30 second SLO; no mutable clock or projection is patched.
@@ -1099,9 +1111,9 @@ test('external dead-man detects a terminated generation-bound worker and exact r
     ['outcome-coordinator', coordinatorGeneration],
     ['outcome-watchdog', watchdogGeneration],
   ]) {
-    await heartbeatService.appendRuntimeHeartbeat({
+    await appendRuntimeHeartbeat({
       component, instanceId, sourceSha,
-      moduleGraphDigest: watchdogModuleGraphDigest,
+      moduleGraphDigest: runtimeModuleGraphDigest,
       expectationGeneration: generation,
       observedAt: staleObservedAt,
       deadlineAt: staleDeadlineAt,
@@ -1153,9 +1165,9 @@ test('external dead-man detects a terminated generation-bound worker and exact r
     ['outcome-coordinator', coordinatorGeneration],
     ['outcome-watchdog', watchdogGeneration],
   ]) {
-    await heartbeatService.appendRuntimeHeartbeat({
+    await appendRuntimeHeartbeat({
       component, instanceId, sourceSha,
-      moduleGraphDigest: watchdogModuleGraphDigest,
+      moduleGraphDigest: runtimeModuleGraphDigest,
       expectationGeneration: generation,
       observedAt: recoveredAt,
       deadlineAt: new Date(recoveredAt.getTime() + 30_000),
@@ -1200,7 +1212,7 @@ test('external dead-man detects a terminated generation-bound worker and exact r
   const deadmanSource = readFileSync(deadmanPath, 'utf8');
   assert.doesNotMatch(deadmanSource, /from ['"].*(outcome-watchdog|outcome-reconciler|projection|acceptance.executor)/);
   Object.assign(evidence.watchdog, {
-    workerTerminated: true, detectedAt: new Date().toISOString(), maximumDeltaSeconds: 30,
+    detectedAt: new Date().toISOString(), maximumDeltaSeconds: 30,
     generationsRegisteredBeforeStart: 2,
     heartbeatGenerationAndModuleBound: true,
     staleEvent: true, staleSurfaceObligations: 2, recoveryEvent: true, recoveryCleared: true,
@@ -1213,9 +1225,10 @@ test('independent watchdog marks only a started ADMITTED attempt as INFRASTRUCTU
   await empty();
   const { fixture, delivery, started } = await admitAndStart('stale-attempt');
   const attempt = await db.taskExecutableAttempt.findUniqueOrThrow({ where: { id: started.attemptId } });
-  const marked = await new OutcomeWatchdogService(db).markStaleExecutableAttempts(
-    new Date(attempt.deadlineAt.getTime() + 1_000),
-  );
+  const marked = (await pool.query(
+    'SELECT executable_acceptance_mark_stale_attempts($1::timestamptz, 64) AS count',
+    [new Date(attempt.deadlineAt.getTime() + 1_000)],
+  )).rows[0].count;
   assert.equal(marked, 1);
   const [terminated, continuation, task] = await Promise.all([
     db.taskExecutableAttempt.findUniqueOrThrow({ where: { id: started.attemptId } }),
@@ -1257,18 +1270,21 @@ test('successor watchdog task is atomically bound to 1200/current revision by mi
   assert.match(migration, /"acceptance_timeout_seconds" = 1200/);
   assert.match(migration, /"acceptance_capability_revision" = 2/);
   assert.match(migration, /task_executable_plan_bind/);
-  const contract = JSON.parse(readFileSync(path.join(
-    repo, 'contracts/outcome-reconciler-v2-watchdog-slo.json',
-  ), 'utf8'));
+  // The index census used to be read from the watchdog SLO contract, which 0221 deleted along
+  // with the collector that consumed it. The indexes it required are the EXECUTABLE runtime
+  // ledger's own, so the requirement is stated here rather than dropped.
+  const runtimeSchemaIndexes = [
+    'executable_dead_man_event_latest_idx',
+    'executable_runtime_expectation_slot_idx',
+    'executable_runtime_heartbeat_latest_idx',
+    'executable_runtime_heartbeat_sequence_key',
+  ];
   const rows = await pool.query(`
     SELECT indexname FROM pg_indexes
-     WHERE schemaname IN ('public', 'outcome_projection', 'outcome_watchdog')
+     WHERE schemaname IN ('public', 'outcome_projection')
        AND indexname = ANY($1::text[])
      ORDER BY indexname
-  `, [contract.capacity.runtimeSchemaIndexes]);
-  assert.deepEqual(
-    rows.rows.map((row) => row.indexname),
-    [...contract.capacity.runtimeSchemaIndexes].sort(),
-  );
+  `, [runtimeSchemaIndexes]);
+  assert.deepEqual(rows.rows.map((row) => row.indexname), [...runtimeSchemaIndexes].sort());
   evidence.compatibility.runtimeSchemaIndexesPresent = true;
 });

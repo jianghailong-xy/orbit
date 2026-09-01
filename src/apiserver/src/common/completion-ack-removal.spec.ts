@@ -465,33 +465,20 @@ test('(a) the Prisma schema declares none of the removed models or the receipt p
     'the coordinator attempt result must not keep a field over a dropped column');
 });
 
-test('(c) the watchdog SLO contract no longer measures or indexes the removed protocol', () => {
-  const contract = JSON.parse(read('contracts/outcome-reconciler-v2-watchdog-slo.json')) as {
-    metrics: Record<string, unknown>;
-    capacity: Record<string, unknown> & { runtimeSchemaIndexes: string[] };
-  };
-  assert.equal('completionAckStaleness' in contract.metrics, false,
-    'the collector may not still promise an SLO for a protocol that cannot fire');
-  assert.equal('maximumCompletionAckEvidenceBytes' in contract.capacity, false);
-  assert.equal('maximumCompletionAckActiveActions' in contract.capacity, false);
-  assert.deepEqual(
-    contract.capacity.runtimeSchemaIndexes.filter((name) => name.startsWith('completion_ack_')),
-    [],
-    'the runtime index census may not require an index on a dropped table',
-  );
-  // What it does still require has to be real, or the census is decorative.
-  assert.ok(contract.capacity.runtimeSchemaIndexes.length >= 4);
-  assert.equal(
-    contract.capacity.runtimeSchemaIndexes.every((name) => name.startsWith('executable_')),
-    true,
-    'what is left is the EXECUTABLE liveness wall, which stays',
-  );
+test('(c) the watchdog SLO contract that measured the removed protocol is itself gone', () => {
+  // 0220 stripped the completion-ACK metrics out of this contract; 0221 removed the independently
+  // deployed watchdog the whole contract described, so the file no longer exists. Absence is the
+  // stronger form of the same assertion: nothing can promise an SLO for a protocol that cannot fire.
+  assert.equal(existsSync(path.join(ROOT, 'contracts/outcome-reconciler-v2-watchdog-slo.json')),
+    false, 'the watchdog SLO contract must not outlive the watchdog');
+  assert.equal(existsSync(path.join(ROOT, 'scripts/outcome-reconciler-watchdog.sh')), false);
+  assert.equal(existsSync(path.join(ROOT, 'test/outcome-reconciler-v2.watchdog.test.mjs')), false);
 });
 
 test('(l) 0220 is the frontier, and the four migrations it retires stay as history', () => {
   const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
-  assert.equal(names[names.length - 1], '0220_completion_ack_removal',
-    'the removal must be the newest migration, so nothing replays after it');
+  assert.equal(names.includes('0220_completion_ack_removal'), true,
+    'the removal must stay in the ledger, so a database that applied it can replay it');
   // The append-only ledger is not edited: 0201-0204 are still on disk, because a database that has
   // already applied them has to be able to replay the same history and then remove it.
   for (const prefix of ['0201', '0202', '0203', '0204']) {

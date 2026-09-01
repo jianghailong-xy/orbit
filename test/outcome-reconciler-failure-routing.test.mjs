@@ -643,9 +643,11 @@ test('exactly the four owner-only reasons enter the failure decision inbox',
       }),
       /FAILURE_CONTINUATION_OWNER_REASON_FORBIDDEN/,
     );
+    // 0221 removed the persistent coordinator, so the generic owner-decision lane cannot even
+    // be written to: absence of the relation is what "no generic owner work" now means.
     const genericOwnerRows = (await pool.query(`
-      SELECT count(*)::integer AS outcome_count
-        FROM outcome_coordinator_owner_decision_request
+      SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
+                  THEN 0 ELSE 1 END AS outcome_count
     `)).rows[0];
     assert.equal(genericOwnerRows.outcome_count, 0);
     evidence.samples.ownerOnlyReasons = inbox.length;
