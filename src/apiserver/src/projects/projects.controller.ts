@@ -20,6 +20,7 @@ import {
   CreateProjectDto,
   CreateRatificationDelegationDto,
   CreateRatificationTemplateDto,
+  CriteriaProposalDecisionDto,
   DecideCompletionAckOwnerDecisionDto,
   DecideProjectHandoffDto,
   ReopenProjectDto,
@@ -363,6 +364,45 @@ export class ProjectsController {
     @Body() dto: OwnerRatificationDecisionDto,
   ) {
     return this.acceptance.ratifyByOwner(user.userId, id, dto);
+  }
+
+  /**
+   * The pending proposal to change this project's acceptance criteria, rendered whole.
+   *
+   * It carries the criteria in force alongside the proposed ones and the semantic diff between
+   * them, because a card that shows only "confirm?" is a card whose reader cannot tell what they
+   * are agreeing to. No CTA capability is issued: the answer below travels on this same
+   * authenticated connection.
+   */
+  @Get(':id/criteria-proposal')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
+  @Header('Vary', 'Authorization')
+  @Header('Referrer-Policy', 'no-referrer')
+  criteriaProposal(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.criteriaProposal(user.userId, id);
+  }
+
+  /**
+   * Answer it. `expectedCardDigest` is the identity of the rendering the reader decided on, so a
+   * proposal that changed underneath them is refused rather than approved on their behalf.
+   */
+  @Post(':id/criteria-proposal/decision')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
+  @Header('Vary', 'Authorization')
+  @Header('Referrer-Policy', 'no-referrer')
+  decideCriteriaProposal(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: CriteriaProposalDecisionDto,
+  ) {
+    return this.acceptance.decideCriteriaProposal(
+      user.userId, id, { actorType: 'USER', actorId: user.userId }, dto,
+    );
   }
 
   /** @deprecated Compatibility alias for an owner approval of the current contract digest. */

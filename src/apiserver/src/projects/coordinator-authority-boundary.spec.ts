@@ -254,6 +254,9 @@ test('a judgment session may still write the prose that says what the work is', 
 
 function acceptanceFixture() {
   const prisma = {
+    // The criteria-proposal path scopes the project before it opens its transaction; every other
+    // method here reaches `$transaction` without it.
+    project: { findFirst: async () => ({ id: PROJECT }) },
     session: {
       findFirst: async ({ where }: { where: { id: string } }) =>
         where.id === SESSION
@@ -319,21 +322,38 @@ test('a no-session owner/internal caller and a USER-origin session conclude PASS
 
 // ═══ N21: credential possession is not human presence ═════════════════════════════════════════
 
-test('an agent-held runner credential with no acting session can edit explicit structured criteria', async () => {
-  const runner = await runnerFromAgentCredential();
-  await reachesTheWrite(() => runnerController().updateProject(
-    runner,
-    PROJECT,
-    undefined,
-    {
-      acceptanceCriteriaItems: [{
-        text: 'replacement exam',
-        verificationMethod: 'A person reviews the replacement exam.',
-        completionCriterion: 'HUMAN_SIGNOFF',
-      }],
-    } as never,
-  ));
-});
+// The claim this test carries has not changed — a credential a model can reach is not a person —
+// but what that credential now BUYS has. The same headless call still goes through the door and is
+// not stopped by any human-presence check; what it reaches is the proposal write, and the criteria
+// in force keep grading the project until the owner answers the card it produces. That is the
+// difference between "an agent can rewrite its own exam without a person" and "an agent can ask".
+test('an agent-held runner credential with no acting session reaches the PROPOSAL, not the exam',
+  async () => {
+    const runner = await runnerFromAgentCredential();
+    const projects = projectFixture();
+    let projectWrite = false;
+    (projects as unknown as { $transaction: () => never }).$transaction = (() => {
+      projectWrite = true;
+      return pastTheGate();
+    }) as never;
+    const controller = new RunnerProjectsController(
+      projects as never, acceptanceFixture() as never, {} as never,
+    );
+    await reachesTheWrite(() => controller.updateProject(
+      runner,
+      PROJECT,
+      undefined,
+      {
+        acceptanceCriteriaItems: [{
+          text: 'replacement exam',
+          verificationMethod: 'A person reviews the replacement exam.',
+          completionCriterion: 'HUMAN_SIGNOFF',
+        }],
+      } as never,
+    ));
+    assert.equal(projectWrite, false,
+      'the criteria in force must not be reached by a machine credential at all');
+  });
 
 test('an agent-held runner credential with no acting session cannot record acceptance PASS', async () => {
   const runner = await runnerFromAgentCredential();

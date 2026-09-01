@@ -381,8 +381,19 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(mcpToolDescription(tools, "project_update"), "[] to clear") {
-		t.Fatalf("project_update does not document the structured clear: %q", mcpToolDescription(tools, "project_update"))
+	// The structured set is no longer a write this tool performs, so what the description has to
+	// carry is the opposite fact: a model that reads "you have authority to write these fields"
+	// and then reports the criteria as changed has been told something untrue by its own tool.
+	for _, want := range []string{"PROPOSAL, not a write", "changes nothing until they approve it"} {
+		if !strings.Contains(mcpToolDescription(tools, "project_update"), want) {
+			t.Fatalf("project_update does not say the criteria set is a proposal (%q): %q",
+				want, mcpToolDescription(tools, "project_update"))
+		}
+	}
+	if !strings.Contains(mcpToolPropertyDescription(t, tools, "project_update", "acceptanceCriteriaItems"),
+		"[] is refused") {
+		t.Fatalf("project_update still offers the structured clear: %q",
+			mcpToolPropertyDescription(t, tools, "project_update", "acceptanceCriteriaItems"))
 	}
 }
 
@@ -398,6 +409,24 @@ func mcpToolRequired(t *testing.T, tools []map[string]interface{}, name string) 
 	}
 	t.Fatalf("%s missing from the tools", name)
 	return nil
+}
+
+// One input property's own description. The tool-level prose says what the write does; a schema
+// property says what the caller may send, and the two can drift apart independently.
+func mcpToolPropertyDescription(t *testing.T, tools []map[string]interface{}, name, property string) string {
+	t.Helper()
+	for _, tool := range tools {
+		if tool["name"] != name {
+			continue
+		}
+		schema, _ := tool["inputSchema"].(map[string]interface{})
+		properties, _ := schema["properties"].(map[string]interface{})
+		field, _ := properties[property].(map[string]interface{})
+		description, _ := field["description"].(string)
+		return description
+	}
+	t.Fatalf("%s missing from the tools", name)
+	return ""
 }
 
 func mcpToolDescription(tools []map[string]interface{}, name string) string {
