@@ -572,9 +572,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     'proposeCriteriaChange',
     'recordMergeEvidence',
     'removeProject',
-    // A machine may file the exact owner-only question its current authenticated delivery calls
-    // for; PostgreSQL binds runner + Session + delivery revision. It cannot answer that question.
-    'requestCompletionAckOwnerDecision',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -601,7 +598,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     proposeCriteriaChange: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
-    requestCompletionAckOwnerDecision: RequestMethod.POST,
     updateProject: RequestMethod.PATCH,
   });
 });

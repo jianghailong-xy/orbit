@@ -129,7 +129,6 @@ test('(h) the shared watchdog code AppModule and the runner API still import is 
   const holders = {
     'src/apiserver/src/app.module.ts': './outcome-watchdog/outcome-watchdog.module',
     'src/apiserver/src/runner-api/runner-api.module.ts': '../outcome-watchdog/outcome-watchdog.module',
-    'src/apiserver/src/runner-api/runner-api.controller.ts': '../outcome-watchdog/outcome-watchdog.service',
   };
   for (const [holder, specifier] of Object.entries(holders)) {
     const source = read(holder);

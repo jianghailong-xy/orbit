@@ -246,7 +246,10 @@ test('the project index buckets every project in one pass and agrees with the pr
         rawQueries = 0;
         const rows = await projects.list(ownerId);
         assert.equal(rows.length, 3);
-        assert.equal(rawQueries, 8,
+        // Six since 0220: the completion-ACK overlay was two of the eight, and removing the
+        // protocol removed its reads with it. The property under test is that the count is
+        // page-wide rather than per project, so the number moves when a whole reader does.
+        assert.equal(rawQueries, 6,
           'canonical task lanes, blockers, control-plane obligations and failure coordination stay page-wide');
       });
 

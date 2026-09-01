@@ -110,15 +110,6 @@ export function autoDispatchFailureDisposition(
 ): AutoDispatchDisposition {
   const message = errorText(error);
   const wakeAt = new Date(now.getTime() + AUTO_DISPATCH_WAKE_DELAY_MS);
-  if (message.includes('COMPLETION_ACK_RECONCILIATION_REQUIRED')) {
-    return {
-      reasonCode: 'COMPLETION_ACK_RECONCILIATION_REQUIRED',
-      reason: 'The prior workload completed; its original completion receipt must be reconciled before task work is dispatched again.',
-      owner: 'PROJECT_COORDINATOR',
-      nextAction: 'RECONCILE_ORIGINAL_COMPLETION_RECEIPT',
-      wakeAt,
-    };
-  }
   if (message.includes('TASK_RUN_REQUEST_IN_PROGRESS')) {
     return {
       reasonCode: 'DISPATCH_REQUEST_IN_PROGRESS',
@@ -182,17 +173,6 @@ export function autoDispatchSkippedDisposition(
 ): { outcome: AutoDispatchOutcome; disposition: AutoDispatchDisposition } {
   const wakeAt = new Date(now.getTime() + AUTO_DISPATCH_WAKE_DELAY_MS);
   switch (skipped) {
-    case 'completion-ack-reconciliation':
-      return {
-        outcome: 'REFUSED',
-        disposition: {
-          reasonCode: 'COMPLETION_ACK_RECONCILIATION_REQUIRED',
-          reason: 'The prior workload completed; its original completion receipt must be reconciled before task work is dispatched again.',
-          owner: 'PROJECT_COORDINATOR',
-          nextAction: 'RECONCILE_ORIGINAL_COMPLETION_RECEIPT',
-          wakeAt,
-        },
-      };
     case 'stale-epoch':
       return {
         outcome: 'SUPERSEDED',

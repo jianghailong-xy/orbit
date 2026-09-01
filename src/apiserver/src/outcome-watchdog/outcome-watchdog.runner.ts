@@ -22,7 +22,6 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
   private targetRef!: string;
   private instanceId!: string;
   private watchdogExpectationGeneration!: string;
-  private completionAckExpectationGeneration!: string;
   private readonly moduleGraphDigest = createHash('sha256').update([
     'outcome-watchdog/main',
     'outcome-watchdog/worker-module',
@@ -52,9 +51,6 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
       ?? `${hostname()}:${process.pid}`;
     this.watchdogExpectationGeneration = this.requiredGeneration(
       'OUTCOME_WATCHDOG_EXPECTATION_GENERATION',
-    );
-    this.completionAckExpectationGeneration = this.requiredGeneration(
-      'COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION',
     );
     const binding = await this.watchdog.registerCurrentBinding({
       component: 'outcome-watchdog',
@@ -94,14 +90,6 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
     try {
       const observedAt = new Date();
       const staleAttempts = await this.watchdog.markStaleExecutableAttempts(observedAt);
-      const completionAcks = await this.watchdog.reconcileStaleCompletionAcks(
-        observedAt,
-        this.contract.collector.maximumDetectionDeltaSeconds,
-      );
-      const completionAckDeliveries = await this.watchdog.reconcileStaleCompletionAckDeliveries(
-        observedAt,
-        this.contract.collector.maximumDetectionDeltaSeconds,
-      );
       // A detector may only claim health after its bounded scan and reducer committed. Writing the
       // heartbeat first is the self-monitoring failure this component exists to avoid: an
       // undefined SQL function or a wedged reducer would leave a fresh "healthy" row behind.
@@ -115,18 +103,6 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
           completedAt.getTime() + this.contract.collector.maximumDetectionDeltaSeconds * 1_000,
         ),
       };
-      const completionHeartbeat = await this.watchdog.appendRuntimeHeartbeat({
-        ...heartbeatInput,
-        component: 'completion-ack-watchdog',
-        expectationGeneration: this.completionAckExpectationGeneration,
-        payload: {
-          schemaVersion: 1,
-          targetSha: this.targetSha,
-          pollIntervalSeconds: this.contract.collector.pollIntervalSeconds,
-          completionAcks,
-          completionAckDeliveries,
-        },
-      });
       const heartbeat = await this.watchdog.appendRuntimeHeartbeat({
         ...heartbeatInput,
         component: 'outcome-watchdog',
@@ -144,11 +120,8 @@ export class OutcomeWatchdogRunner implements OnApplicationBootstrap, OnModuleDe
         heartbeatDigest: heartbeat.heartbeatDigest,
         bindingDigest: heartbeat.bindingDigest,
         evaluatedThroughLogicalTime: heartbeat.evaluatedThroughLogicalTime?.toString(),
-        completionHeartbeatDigest: completionHeartbeat.heartbeatDigest,
         sourceSha: this.collectorSha,
         staleAttempts,
-        completionAcks,
-        completionAckDeliveries,
       }));
       const tenantIds = await this.watchdog.tenantIds();
       for (const tenantId of tenantIds) {

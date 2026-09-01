@@ -19,7 +19,6 @@ import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
   CriteriaProposalDecisionDto,
-  DecideCompletionAckOwnerDecisionDto,
   DecideProjectHandoffDto,
   ReopenProjectDto,
   FinalizeAcceptanceRunDto,
@@ -81,23 +80,6 @@ export class ProjectsController {
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(user.userId, id);
-  }
-
-  /** Decide an irreducibly owner-shaped child request and resume the same autonomous remediation.
-   * This does not sign off a Task and does not close or take ownership of the parent incident. */
-  @Post(':id/completion-ack/owner-decisions/:decisionRequestId/decision')
-  decideCompletionAckOwnerDecision(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Param('decisionRequestId', PublicIdPipe) decisionRequestId: string,
-    @Body() dto: DecideCompletionAckOwnerDecisionDto,
-  ) {
-    return this.projects.decideCompletionAckOwnerDecision(
-      user.userId,
-      id,
-      decisionRequestId,
-      dto,
-    );
   }
 
   /**

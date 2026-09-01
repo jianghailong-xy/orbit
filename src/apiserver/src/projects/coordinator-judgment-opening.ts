@@ -144,27 +144,6 @@ export function failureContinuationProtocol(): string {
   );
 }
 
-/** A code/control-plane defect is ordinary autonomous engineering work, not a human judgment. */
-export function completionAckRemediationProtocol(): string {
-  return (
-    '\n\n这条 COMPLETION_ACK_STALE 是 mandatory remediation obligation。你要自动闭合它，不要等待人发消息：\n'
-    + '1. 先读取 project_get、task_get 和 session_get；以其中同一个 obligationId/revision 为事实身份，'
-    + '不得把聊天文本当作故障事实。\n'
-    + '2. 保护原始结果：不得取消或重跑已完成命令，不得直接写 Task.status，不得放宽 writer fence，'
-    + '不得把 legacy v1 伪造成 typed attempt。\n'
-    + '3. 自动安排诊断、代码兼容修复、直接 PostgreSQL 回归、部署、原 callback 恢复和现场核验；'
-    + '重复 delivery 必须复用当前义务与已有修复任务。创建确有必要的修复任务时不要伪造 criterionKey：'
-    + '当前 active obligation revision 是服务端验证的正交范围理由，并受独立的 active-action 容量上限约束。\n'
-    + '4. ACK 成功后确认义务从 active 读面自动消失、append-only incident/repair history 仍存在，'
-    + '再恢复依赖 successor。\n'
-    + '5. 只有确实需要 NEW_AUTHORIZATION、RISK_ACCEPTANCE、GOAL_DECISION 或 EXTERNAL_IDENTITY 时才升级给人；'
-    + '此时必须调用 project_owner_decision_request，传当前 projectId、obligationId、obligationRevision、reason，'
-    + '并完整填写 whyNotAgent、options、impacts、recommendation、noActionConsequence、cost、deadline、'
-    + 'resumeBehavior、idempotencyKey。不得用 task_comment、聊天文本或 HUMAN_SIGNOFF 代替这个结构化协议。'
-    + '代码兼容缺陷、测试、部署和验证不属于这四类。'
-  );
-}
-
 /**
  * T7's settlement-only action protocol.
  *
@@ -229,7 +208,6 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + '把发现和还差什么写进 task_comment，账号所有者会读到。\n\n'
     + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'
     + (fact.event === 'PROJECT_TASKS_SETTLED' ? settledAcceptanceProtocol(projectId) : '')
-    + (fact.event === 'COMPLETION_ACK_STALE' ? completionAckRemediationProtocol() : '')
     + (fact.event === 'FAILURE_CONTINUATION_ACTIONABLE' ? failureContinuationProtocol() : '')
     + '\n\n'
     + '同一个项目还有一条人点开的协调会话，长期开着、由人驱动。它和这次判断读库里同一份事实，不共享上下文；'

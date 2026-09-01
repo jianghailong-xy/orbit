@@ -138,15 +138,6 @@
       "abortThreshold": { "consecutiveIdenticalSamples": 2, "constantWindowSeconds": 900 },
       "collectorSha": "RUNTIME_REQUIRED",
       "targetSha": "RUNTIME_REQUIRED"
-    },
-    "completionAckStaleness": {
-      "window": { "kind": "ROLLING", "seconds": 300, "logicalTicks": 5 },
-      "denominator": "legacy v1 terminal shell events durably ingested while their exact conversation turn remains IN_FLIGHT",
-      "minSampleSize": 1,
-      "threshold": { "maximumDetectionSeconds": 30, "maximumActiveObligationsPerIdentity": 1 },
-      "abortThreshold": { "missedDetections": 1, "duplicateActiveObligations": 1 },
-      "collectorSha": "RUNTIME_REQUIRED",
-      "targetSha": "RUNTIME_REQUIRED"
     }
   },
   "canary": {
@@ -242,8 +233,6 @@
     "checksumSampleLimit": 64,
     "maximumQueryP99Milliseconds": 250,
     "maximumStorageBytesPerTask": 8192,
-    "maximumCompletionAckEvidenceBytes": 16384,
-    "maximumCompletionAckActiveActions": 16,
     "requiredIndexes": [
       "outcome_fact_stream_watchdog_recent_idx",
       "outcome_coordinator_watchdog_lease_idx",
@@ -256,14 +245,6 @@
       "outcome_watchdog_sample_replay_idx"
     ],
     "runtimeSchemaIndexes": [
-      "completion_ack_fact_turn_idx",
-      "completion_ack_event_latest_idx",
-      "completion_ack_delivery_plan_latest_idx",
-      "completion_ack_delivery_receipt_coordination_idx",
-      "completion_ack_delivery_one_revocation_idx",
-      "completion_ack_delivery_progress_trace_idx",
-      "completion_ack_delivery_progress_deadline_idx",
-      "completion_ack_remediation_action_coordination_idx",
       "executable_runtime_expectation_slot_idx",
       "executable_runtime_expectation_event_latest_idx",
       "executable_runtime_heartbeat_expectation_idx",

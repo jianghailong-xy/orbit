@@ -56,14 +56,6 @@ export function liveTaskWorkSql(alias = 't'): string {
   )`;
 }
 
-/** An unresolved completion acknowledgement overrides a stale live session as BLOCKED. */
-function completionAckOpenSql(alias = 't'): string {
-  return `EXISTS (
-    SELECT 1 FROM "completion_ack_active_obligation" work_ack
-     WHERE work_ack."task_id" = ${alias}."id"
-  )`;
-}
-
 /**
  * The one classification expression behind panorama, project-list rollups, task cards and graph.
  *
@@ -75,14 +67,12 @@ function completionAckOpenSql(alias = 't'): string {
 export function projectTaskWorkStateSql(alias = 't'): string {
   const verificationSubject = verificationSubjectSql(alias);
   const verificationPassed = verificationSubjectPassedSql(alias);
-  const completionAckOpen = completionAckOpenSql(alias);
   return `CASE
     WHEN ${alias}."status" = 'CANCELLED'::"task_status" THEN 'CANCELLED'
     WHEN ${alias}."status" = 'FAILED'::"task_status" THEN 'FAILED'
     WHEN (${verificationSubject}) AND NOT (${verificationPassed}) THEN 'AWAITING_VERIFICATION'
     WHEN ${alias}."status" = 'DONE'::"task_status" THEN 'DONE'
     WHEN ${alias}."status" IN ('OPEN'::"task_status", 'IN_PROGRESS'::"task_status")
-         AND NOT (${completionAckOpen})
          AND (${alias}."status" = 'IN_PROGRESS'::"task_status" OR ${liveTaskWorkSql(alias)})
       THEN 'RUNNING'
     WHEN ${alias}."status" = 'OPEN'::"task_status"
