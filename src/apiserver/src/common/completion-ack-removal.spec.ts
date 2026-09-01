@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -23,13 +32,32 @@ function read(relative: string): string {
   return readFileSync(path.join(ROOT, relative), 'utf8');
 }
 
-/** Every tracked file, minus the migration ledger and the build output. */
-function trackedSources(): string[] {
-  return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+/**
+ * Every file the worktree actually has — what git tracks AND what it merely knows about — minus
+ * the migration ledger and the build output.
+ *
+ * `--others --exclude-standard` is load-bearing. Plain `git ls-files` reports the INDEX, so a file
+ * that has been written but not staged is invisible to the scans below. That is not hypothetical:
+ * while this suite was being written its six files were untracked, the scan could not see its own
+ * siblings, and the run was green; the identical bytes went red on the next run, after the commit.
+ * An assertion whose answer depends on whether someone has run `git add` yet binds its conclusion to
+ * nothing, which is the one thing a removal proof has to do.
+ * `scripts/outcome-reconciler-release-dag-lib.mjs` reaches for the same three flags for the same
+ * reason. Parameterised by root so the enumeration itself can be tested against a throwaway
+ * repository rather than asserted about this one.
+ */
+export function sourceFiles(root: string = ROOT): string[] {
+  const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .split('\n')
-    .filter(Boolean)
+    .filter(Boolean);
+  // `--cached` prints one row per index stage, so an unmerged path would arrive three times.
+  return [...new Set(listed)]
     .filter((file) => !file.startsWith('src/apiserver/prisma/migrations/'))
-    .filter((file) => existsSync(path.join(ROOT, file)) && statSync(path.join(ROOT, file)).isFile());
+    .filter((file) => existsSync(path.join(root, file)) && statSync(path.join(root, file)).isFile());
 }
 
 const REMOVAL_SQL = readFileSync(REMOVAL, 'utf8');
@@ -82,6 +110,60 @@ const PROTECTED_PREFIXES = [
   'project_acceptance_',
   'executable_runtime_',
 ];
+
+/** Every completion-ACK function 0220 drops, read back out of the removal's own DROP statements. */
+const DROPPED_FUNCTIONS = [...REMOVAL_SQL.matchAll(/DROP FUNCTION ([a-z0-9_]+)\(/g)]
+  .map((hit) => hit[1])
+  .filter((name) => name.includes('completion_ack'));
+
+/**
+ * Everything no live line of source may still name. Deduplicated because a trigger and the function
+ * it fires share a name in PostgreSQL — `run_event_completion_ack_ingestion_guard` is both — and one
+ * line naming it once is one residual, not two.
+ */
+const DROPPED_NAMES = [...new Set([
+  ...DROPPED_FUNCTIONS,
+  ...DROPPED_TABLES,
+  ...DROPPED_VIEWS,
+  ...CORE_TABLE_TRIGGERS.map(([, trigger]) => trigger),
+])];
+
+/**
+ * A line that carries no code at all: a `//` comment, a block-comment opener, or the ` * `
+ * continuation inside one. A removal suite has to say what it removed, and a sentence about what a
+ * dropped trigger used to do is not a call to it — the four hits that failed the 0220 acceptance run
+ * were all sentences of that kind, in the sibling suites that drive the writes those triggers used
+ * to fire on.
+ *
+ * Anchored at the start of the line on purpose: `await q(); // completion_ack_fact` is still a call
+ * site, so only a line that is prose end to end is let through. The costs fall in the safe
+ * direction — a wrapped expression whose continuation begins with `*` reads as prose, and a `#`
+ * comment (shell, YAML) does not, so it would be reported rather than laundered.
+ */
+export function isProseLine(line: string): boolean {
+  return /^\s*(\/\/|\/\*|\*)/.test(line);
+}
+
+/** The same source with its prose blanked out and its line numbering intact. */
+function withoutProse(source: string): string {
+  return source
+    .split('\n')
+    .map((line) => (isProseLine(line) ? '' : line))
+    .join('\n');
+}
+
+/**
+ * Which of `needles` this one line still puts in front of PostgreSQL. Empty for prose; empty for a
+ * line naming a migration DIRECTORY, because an inventory row saying a trigger has existed since
+ * 0202_completion_ack_persistent_coordinator is history rather than a call site; otherwise every
+ * name the line spells out, string literals included — a dropped table reached through `$queryRaw`
+ * survives `tsc` and fails in production, which is why this suite reads text at all.
+ */
+export function namesDroppedObject(line: string, needles: readonly string[]): string[] {
+  if (isProseLine(line)) return [];
+  if (/\d{4}_completion_ack_/.test(line)) return [];
+  return needles.filter((needle) => line.includes(needle));
+}
 
 // (a) --------------------------------------------------------------------------------------------
 test('(a) 0220 drops every completion-ACK table, view and function by name', () => {
@@ -146,30 +228,88 @@ test('(b) the trigger inventory agrees, and the renamed guard is attributed to 0
 
 // (c) --------------------------------------------------------------------------------------------
 test('(c) no live source names a dropped table, view, function or trigger', () => {
-  const droppedFunctions = [...REMOVAL_SQL.matchAll(/DROP FUNCTION ([a-z0-9_]+)\(/g)]
-    .map((hit) => hit[1])
-    .filter((name) => name.includes('completion_ack'));
-  assert.ok(droppedFunctions.length >= 50);
-  const relations = [...DROPPED_TABLES, ...DROPPED_VIEWS];
-  const triggers = CORE_TABLE_TRIGGERS.map(([, trigger]) => trigger);
+  assert.ok(DROPPED_FUNCTIONS.length >= 50);
   const residual: string[] = [];
-  for (const file of trackedSources()) {
-    // This suite is where the removal is asserted, so it names what it asserts the absence of.
+  for (const file of sourceFiles()) {
+    // Only the two files that name the dropped objects in CODE are exempt: this suite holds the
+    // lists above, and its pg half holds the catalog queries. Every other file — the four sibling
+    // removal suites included — stays in the scan, and it is `namesDroppedObject` rather than a
+    // path that decides whether one of their lines is a call site or a sentence about one.
     if (file === 'src/apiserver/src/common/completion-ack-removal.spec.ts') continue;
     if (file === 'src/apiserver/src/common/completion-ack-removal.pg.spec.ts') continue;
     const source = read(file);
     if (!source.includes('completion_ack')) continue;
-    for (const line of source.split('\n')) {
-      // `0201_completion_ack_...`/`0220_completion_ack_removal` are migration DIRECTORY names. An
-      // inventory row saying "this trigger has existed since 0202" is history, not a call site.
-      if (/\d{4}_completion_ack_/.test(line)) continue;
-      for (const needle of [...droppedFunctions, ...relations, ...triggers]) {
-        if (line.includes(needle)) residual.push(`${file}: ${needle}`);
+    source.split('\n').forEach((line, index) => {
+      // Reported with the line number: what failed the 0220 acceptance run was four entries that
+      // had to be located by re-running this scan by hand before they could be read.
+      for (const needle of namesDroppedObject(line, DROPPED_NAMES)) {
+        residual.push(`${file}:${index + 1}: ${needle}`);
       }
-    }
+    });
   }
   assert.deepEqual([...new Set(residual)].sort(), [],
     'no live source may still read a dropped relation or call a dropped function');
+});
+
+// (c) negative controls --------------------------------------------------------------------------
+// The scan above is an assertion that something is absent, so it is worth nothing unless it would
+// still report the thing if it were present. These three state that directly, against the exported
+// pieces the scan is built from: what it must catch, what it must let through, and what it must be
+// able to see at all.
+
+test('(c) negative control: a forged $queryRaw call site is still residual', () => {
+  const table = '  const [row] = await prisma.$queryRaw`SELECT id FROM completion_ack_fact`;';
+  assert.deepEqual(namesDroppedObject(table, DROPPED_NAMES), ['completion_ack_fact'],
+    'a live read of a dropped table must be reported, template literal or not');
+  const trigger =
+    "  await db.$executeRawUnsafe('ALTER TABLE run_event ENABLE TRIGGER run_event_completion_ack_ingestion_guard');";
+  assert.deepEqual(namesDroppedObject(trigger, DROPPED_NAMES),
+    ['run_event_completion_ack_ingestion_guard'],
+    'a dropped trigger named from live code must be reported too');
+  // Prose is a property of the whole line, so a trailing comment cannot launder the statement it is
+  // attached to. This is what keeps the D1 fix from being a way to hide a call site.
+  assert.deepEqual(namesDroppedObject('  await q(); // completion_ack_fact', DROPPED_NAMES),
+    ['completion_ack_fact'], 'a comment tacked onto a live statement does not excuse it');
+});
+
+test('(c) negative control: the same name inside a comment is not residual', () => {
+  // The two comment shapes the sibling removal suites actually use, carrying the two names that
+  // failed the 0220 acceptance run. Both are explaining what a dropped guard used to do.
+  assert.deepEqual(
+    namesDroppedObject('  // `session_completion_ack_dispatch_insert_guard` fired on that INSERT.',
+      DROPPED_NAMES),
+    [], 'a sentence about a dropped trigger is not a call to it');
+  assert.deepEqual(
+    namesDroppedObject(' * `run_event_completion_ack_ingestion_guard` was not a completion-ACK guard',
+      DROPPED_NAMES),
+    [], 'and neither is a JSDoc line about one');
+});
+
+test('(c) negative control: a file that exists but is not in the index is still scanned', () => {
+  // D2, stated as the difference it makes. `git ls-files` answers about the index, so the scan used
+  // to be blind to a source file that had been written and not yet committed — which is exactly the
+  // state a spec is in while you are writing it, and exactly how this suite passed a run that its
+  // own committed content then failed. A throwaway repository holds both states at once.
+  const root = mkdtempSync(path.join(tmpdir(), 'completion-ack-removal-scan-'));
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: root, stdio: 'ignore' });
+    writeFileSync(path.join(root, 'staged.ts'), 'export const staged = 1;\n');
+    execFileSync('git', ['add', 'staged.ts'], { cwd: root, stdio: 'ignore' });
+    const callSite = 'const [row] = await prisma.$queryRaw`SELECT id FROM completion_ack_fact`;';
+    writeFileSync(path.join(root, 'never-added.ts'), `${callSite}\n`);
+
+    assert.deepEqual(
+      execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean),
+      ['staged.ts'],
+      'the index-only enumeration this scan used to run cannot see the uncommitted file',
+    );
+    assert.deepEqual(sourceFiles(root).sort(), ['never-added.ts', 'staged.ts'],
+      'the scan must enumerate a file that exists in the worktree but is not in the index');
+    assert.deepEqual(namesDroppedObject(callSite, DROPPED_NAMES), ['completion_ack_fact'],
+      'and the call site inside that file is read as residual');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('(c) the deleted modules are gone and nothing imports them', () => {
@@ -193,9 +333,10 @@ test('(c) the deleted modules are gone and nothing imports them', () => {
     'CompletionAckObligationBanner',
   ];
   const importing: string[] = [];
-  for (const file of trackedSources()) {
+  for (const file of sourceFiles()) {
     if (file === 'src/apiserver/src/common/completion-ack-removal.spec.ts') continue;
-    const source = read(file);
+    // Same rule as the scan above: a commented-out import is a note, not an edge.
+    const source = withoutProse(read(file));
     for (const [, specifier] of source.matchAll(/(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g)) {
       if (specifiers.some((needle) => specifier.includes(needle))) importing.push(`${file}: ${specifier}`);
     }
