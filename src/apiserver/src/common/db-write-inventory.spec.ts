@@ -418,6 +418,19 @@ function liveTriggers(): Map<string, { table: string; event: string; kind: strin
     for (const dropped of sql.matchAll(/DROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?"?([a-z_0-9]+)"?\s+ON/gi)) {
       live.delete(dropped[1]);
     }
+    // Dropping a table drops every trigger on it, so a replay that only reads DROP TRIGGER
+    // reports triggers no database has. It stayed invisible because the inventory was hand-edited
+    // to match reality while this function still derived the pre-drop set: two errors that agreed.
+    // Modelling the cascade is what makes "the installed triggers" mean the installed ones.
+    for (const dropped of sql.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?([a-z_0-9]+)"?(\s*\.)?/gi)) {
+      // A schema-qualified drop names ONE table, but the capture above is its schema — and the
+      // CREATE scan records a qualified trigger under that same schema name. Cascading on it
+      // would retire every trigger in the schema. No migration drops one; refuse to guess.
+      if (dropped[2]) continue;
+      for (const [trigger, meta] of live) {
+        if (meta.table === dropped[1]) live.delete(trigger);
+      }
+    }
     const created =
       /CREATE\s+(CONSTRAINT\s+)?TRIGGER\s+"?([a-z_0-9]+)"?\s+((?:BEFORE|AFTER|INSTEAD\s+OF)[\s\S]*?)\s+ON\s+"?([a-z_]+)"?[\s\S]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+"?([a-z_0-9]+)"?/gi;
     for (const match of sql.matchAll(created)) {

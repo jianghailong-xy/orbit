@@ -25,6 +25,18 @@ function liveTriggers(files) {
     for (const dropped of sql.matchAll(
       /DROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?"?([a-z_0-9]+)"?\s+ON/gi,
     )) live.delete(dropped[1]);
+    // Dropping a table drops its triggers. This must stay identical to the same loop in
+    // db-write-inventory.spec.ts: this script WRITES the list that spec checks, so a generator
+    // blind to the cascade would reinstate triggers no database has the next time it runs.
+    // A schema-qualified drop names one table but captures its schema, so it is refused.
+    for (const dropped of sql.matchAll(
+      /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?([a-z_0-9]+)"?(\s*\.)?/gi,
+    )) {
+      if (dropped[2]) continue;
+      for (const [trigger, meta] of live) {
+        if (meta.table === dropped[1]) live.delete(trigger);
+      }
+    }
     const created =
       /CREATE\s+(CONSTRAINT\s+)?TRIGGER\s+"?([a-z_0-9]+)"?\s+((?:BEFORE|AFTER|INSTEAD\s+OF)[\s\S]*?)\s+ON\s+"?([a-z_]+)"?[\s\S]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+"?([a-z_0-9]+)"?/gi;
     for (const match of sql.matchAll(created)) {

@@ -47,8 +47,9 @@ import { OutcomeWatchdogModule } from './outcome-watchdog/outcome-watchdog.modul
     PushModule,
     ProvidersModule,
     OutcomeReconcilerHttpModule,
-    // API adapters may inject the storage boundary, but the poller is intentionally absent. The
-    // standalone outcome-watchdog/main process owns collection and survives a reconciler stop.
+    // API adapters may inject the storage boundary, but the poller is intentionally absent: this
+    // module is the read side. Collection belongs to outcome-watchdog/main, which the deployment
+    // stopped starting when its Compose service was removed — nothing samples on a schedule now.
     OutcomeWatchdogModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs

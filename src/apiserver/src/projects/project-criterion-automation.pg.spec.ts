@@ -500,6 +500,11 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
     await establishCanonicalClosedEvaluationForPgTest(
       db, target.ownerId, target.projectId, 'verification criterion passes', 'verification',
     );
+    // The same trigger the two verdict steps below use, and the one the runner API and
+    // tasks.service call whenever an evidence Task moves. It is what makes the first assertion
+    // "an undecided verifier projects INCONCLUSIVE" rather than the far weaker "nothing has
+    // evaluated this criterion yet", which is all a bare overview can say.
+    await acceptance.reconcileForEvidenceTask(verifier.id);
     let overview = await acceptance.overview(target.ownerId, target.projectId);
     assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.INCONCLUSIVE);
     assert.equal(overview.status, ProjectStatus.OPEN);

@@ -1174,16 +1174,19 @@ test('(p) project acceptance is untouched: 0178-0190 keeps its schema and its ro
 test('(q) this change adds no compose service and no resident process', () => {
   const compose = read('docker-compose.yml');
   const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // watchdog, outcome-coordinator, outcome-coordinator-secondary and executable-dead-man were
+  // removed from Compose after this migration landed. The list shrank; this assertion still says
+  // the same thing it always did — that nothing here ADDS a service. ('pg-socket' is the volume,
+  // which the two-space regex above cannot tell apart from a service.)
   assert.deepEqual(services.sort(), [
-    'apiserver', 'executable-dead-man', 'gateway', 'outcome-coordinator',
-    'outcome-coordinator-secondary', 'pg-socket', 'pgbackup', 'postgres', 'watchdog', 'web',
+    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web',
   ], 'the deployment is exactly the services it already had');
 
   // A resident process would arrive as a new long-running start script or a new scheduled job.
   const packageJson = JSON.parse(read('package.json'));
   const apiserver = JSON.parse(read('src/apiserver/package.json'));
   assert.deepEqual(Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev', 'start:outcome-coordinator', 'start:watchdog'],
+    ['start:dev'],
     'no new long-running entry point');
   assert.equal(Object.keys(packageJson.scripts).some((name) => /daemon|worker|cron/i.test(name)),
     false, 'no new scheduled or resident runner');

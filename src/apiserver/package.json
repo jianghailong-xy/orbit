@@ -7,8 +7,6 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "start:watchdog": "node dist/outcome-watchdog/main.js",
-    "start:outcome-coordinator": "node dist/outcome-coordinator/main.js",
     "start:dev": "npm run build && { tsc -p tsconfig.json --watch --preserveWatchOutput & TSC=$!; trap \"kill $TSC 2>/dev/null\" EXIT INT TERM; node --watch dist/main.js; }",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
