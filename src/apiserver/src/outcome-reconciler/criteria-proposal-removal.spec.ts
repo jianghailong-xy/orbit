@@ -227,7 +227,7 @@ test('no live source names the proposal relation, a proposal function or the cha
       + 'is not type-checked, so this scan is the only thing that would catch it');
 });
 
-test('all four invariants are gone: no half-removed channel is left behind', () => {
+test('all four invariants are gone together: no half-removed channel is left behind', () => {
   const offenders: string[] = [];
   for (const { rel, text } of liveSources()) {
     if (REMOVAL_WITNESSES.includes(rel)) continue;
@@ -238,13 +238,20 @@ test('all four invariants are gone: no half-removed channel is left behind', () 
   assert.deepEqual(offenders, [],
     'one of the four invariants still has an implementation: they are removed together or the '
       + 'channel is half-standing, with logic nothing can reach');
+});
 
-  // Each of the four, at the exact place it used to live.
+test('the web entry point is gone: the card, its test and its mount point', () => {
   assert.equal(exists('src/web/src/components/ProjectCriteriaProposalCard.tsx'), false);
   assert.equal(exists('src/web/src/components/ProjectCriteriaProposalCard.test.tsx'), false);
-  const workspace = read('src/web/src/components/WorkspaceView.tsx');
-  assert.doesNotMatch(workspace, /CriteriaProposal/, 'the web mount point is still there');
+  assert.doesNotMatch(read('src/web/src/components/WorkspaceView.tsx'), /CriteriaProposal/,
+    'the web mount point is still there');
+  // The manifest that takes a digest of every surface file must have stopped naming the card, or
+  // the surfaces suite fails on a missing file rather than on anything a reader would recognise.
+  assert.doesNotMatch(read('scripts/outcome-reconciler-surfaces-manifest.mjs'),
+    /ProjectCriteriaProposalCard/, 'a manifest still digests a file that no longer exists');
+});
 
+test('the apiserver propose and decide paths are gone from both doors', () => {
   const service = read('src/apiserver/src/projects/project-acceptance.service.ts');
   assert.doesNotMatch(service, /proposeCriteriaChange|decideCriteriaProposal/,
     'the propose and decide service methods are still there');
@@ -255,6 +262,10 @@ test('all four invariants are gone: no half-removed channel is left behind', () 
   assert.doesNotMatch(runner, /criteria-proposal/, 'the runner door still carries a proposal route');
   assert.doesNotMatch(read('src/apiserver/src/projects/dto.ts'),
     /ProposeCriteriaChangeDto|CriteriaProposalDecisionDto/, 'the proposal DTOs are still declared');
+  // The two write units the inventory carried for them go with the methods: an entry describing a
+  // method that no longer exists is exactly what `db-write-inventory.spec.ts` refuses.
+  assert.doesNotMatch(read('src/apiserver/src/common/db-write-inventory.ts'),
+    /CriteriaProposal|criteria_proposal/, 'a write-inventory unit still describes the channel');
 });
 
 test('the acceptance-criteria capability set carries no propose and no confirm', () => {
@@ -321,17 +332,23 @@ test('CLI, MCP and web copy about acceptance criteria matches what a write now d
   assert.deepEqual(offenders, [],
     'a surface still tells its caller that acceptance criteria are a proposal the owner must '
       + 'approve, while the write lands immediately');
+});
 
-  // And the positive half, so the copy is not merely silent: both doors say the set is replaced.
+test('CLI and MCP say what the write does rather than merely not lying about it', () => {
+  // Silence would pass the scan above and still leave a caller guessing. Both doors state the
+  // semantics they actually have: the set you send replaces the one in force.
   const mcp = read('src/runner-go/mcp.go');
   const property = mcp.slice(mcp.indexOf('projectCriteriaUpdateProp'));
   assert.match(property.slice(0, property.indexOf('items')), /whole structured replacement/i,
     'the MCP acceptanceCriteriaItems property must say the set is replaced');
-  assert.match(read('src/runner-go/project_cli.go'), /whole-collection replacement/i,
-    'the CLI help must say the set is replaced');
+  assert.match(mcp, /Sending acceptanceCriteriaItems replaces the criteria in force immediately/,
+    'the MCP project_update description must say the write lands immediately');
+  const cli = read('src/runner-go/project_cli.go');
+  assert.match(cli, /whole-collection replacement/i, 'the CLI help must say the set is replaced');
+  assert.match(cli, /\[\] clears the collection/, 'the CLI help must document the clear again');
 });
 
-test('0220 is subtraction: it only takes machinery away, and reaches no acceptance relation', () => {
+test('0220 is subtraction: it only takes machinery away', () => {
   const sql = removalMigration();
   for (const forbidden of [/CREATE\s+TABLE/i, /CREATE\s+(?:CONSTRAINT\s+)?TRIGGER/i,
     /CREATE\s+(?:UNIQUE\s+)?INDEX/i, /CREATE\s+(?:OR\s+REPLACE\s+)?VIEW/i, /CREATE\s+TYPE/i,
@@ -344,7 +361,10 @@ test('0220 is subtraction: it only takes machinery away, and reaches no acceptan
   assert.deepEqual([...new Set(ddl)].sort(), ['DROP FUNCTION', 'DROP TABLE']);
   assert.doesNotMatch(sql, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /,
     'the migration starts nothing that keeps running after it commits');
+});
 
+test('0220 cannot reach the ruler it stops protecting', () => {
+  const sql = removalMigration();
   // Unit (h)/(i): the ruler's CONTENT is not what is being removed. The migration names no
   // acceptance RELATION in any statement, so no criterion's text or verification_method can move
   // by one byte — a stronger claim than "we did not mean to touch them". The one
@@ -357,8 +377,9 @@ test('0220 is subtraction: it only takes machinery away, and reaches no acceptan
         `the removal migration names ${table} in a statement: ${line.trim()}`);
     }
   }
+});
 
-  // No new compose service and no new resident process: this task is a deletion.
+test('the removal adds no compose service and no resident process', () => {
   const compose = read('docker-compose.yml');
   const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
   assert.deepEqual(services.sort(),

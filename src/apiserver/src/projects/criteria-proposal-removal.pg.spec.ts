@@ -213,11 +213,88 @@ test('project_update writes acceptance criteria directly: one call, in force, no
         ['The corpus is indexed AND deduplicated.'],
       );
 
-      // `[]` is a clear again. It was refused for as long as it had to be a proposal an owner
-      // could answer, and a project measured by nothing was not one.
-      await controller.updateProject(runner, target.projectId, undefined,
-        { acceptanceCriteriaItems: [] } as never);
-      assert.deepEqual(await inForce(db, target.projectId), []);
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+test('a second write replaces the set rather than appending to it', { skip }, async () => {
+  const { db, acceptance, projects } = await connect();
+  try {
+    const target = await base(db, 'whole-collection');
+    const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
+    const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+
+    await controller.updateProject(runner, target.projectId, undefined, {
+      acceptanceCriteriaItems: [criterion('First'), criterion('Second')],
+    } as never);
+    assert.deepEqual(await inForce(db, target.projectId), ['First', 'Second']);
+
+    // Whole-collection replacement is what both the MCP and CLI copy now promise. A set that
+    // grew to three here would mean the copy was wrong in the other direction.
+    await controller.updateProject(runner, target.projectId, undefined, {
+      acceptanceCriteriaItems: [criterion('Only this one')],
+    } as never);
+    assert.deepEqual(await inForce(db, target.projectId), ['Only this one']);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+// `[]` was refused for as long as `acceptanceCriteriaItems` had to be a proposal an owner could
+// answer, and a project measured by nothing was not one. It is a clear again.
+test('an empty structured set clears the criteria instead of being refused', { skip }, async () => {
+  const { db, acceptance, projects } = await connect();
+  try {
+    const target = await base(db, 'empty-clears');
+    const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
+    const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+
+    await controller.updateProject(runner, target.projectId, undefined, {
+      acceptanceCriteriaItems: [criterion('Something to clear')],
+    } as never);
+    assert.deepEqual(await inForce(db, target.projectId), ['Something to clear']);
+
+    await controller.updateProject(runner, target.projectId, undefined,
+      { acceptanceCriteriaItems: [] } as never);
+    assert.deepEqual(await inForce(db, target.projectId), []);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+// The acceptance overview read `project_acceptance_criteria_set_digest` for its `criteriaDigest`
+// until 0220 dropped that function with the rest of the channel. It reads `acceptance_criteria_
+// digest` again -- the 0189 column the set-level confirmation is keyed on, which is where the
+// field came from before 0218 introduced the proposal-facing one. Exercised end to end because a
+// dropped function behind a `$queryRaw` is not a compile error, it is a 500 in production.
+test('the acceptance overview still reports the criteria set, and it is the one just written',
+  { skip }, async () => {
+    const { db, acceptance, projects } = await connect();
+    try {
+      const target = await base(db, 'overview-digest');
+      const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
+      const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+
+      await controller.updateProject(runner, target.projectId, undefined, {
+        acceptanceCriteriaItems: [criterion('The first standard')],
+      } as never);
+      const before = await acceptance.overview(target.ownerId, target.projectId);
+      assert.match(String(before.criteriaDigest), /^[0-9a-f]{64}$/);
+      assert.deepEqual(
+        (before.criteria as Array<{ criterionText: string }>).map((c) => c.criterionText),
+        ['The first standard']);
+
+      await controller.updateProject(runner, target.projectId, undefined, {
+        acceptanceCriteriaItems: [criterion('The standard an agent chose instead')],
+      } as never);
+      const after = await acceptance.overview(target.ownerId, target.projectId);
+      assert.deepEqual(
+        (after.criteria as Array<{ criterionText: string }>).map((c) => c.criterionText),
+        ['The standard an agent chose instead'],
+        'the overview must show the set the write left, not the one it replaced');
+      assert.notEqual(after.criteriaDigest, before.criteriaDigest,
+        'moving the ruler must move the digest that names it');
     } finally {
       await db.$disconnect();
     }
