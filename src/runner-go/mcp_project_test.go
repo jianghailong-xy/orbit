@@ -300,19 +300,23 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 			}
 		}
 	}
-	// The structured set is no longer a write this tool performs, so what the description has to
-	// carry is the opposite fact: a model that reads "you have authority to write these fields"
-	// and then reports the criteria as changed has been told something untrue by its own tool.
-	for _, want := range []string{"PROPOSAL, not a write", "changes nothing until they approve it"} {
-		if !strings.Contains(mcpToolDescription(tools, "project_update"), want) {
-			t.Fatalf("project_update does not say the criteria set is a proposal (%q): %q",
-				want, mcpToolDescription(tools, "project_update"))
-		}
+	if !strings.Contains(mcpToolDescription(tools, "project_update"), "[] to clear") {
+		t.Fatalf("project_update does not document the structured clear: %q", mcpToolDescription(tools, "project_update"))
 	}
-	if !strings.Contains(mcpToolPropertyDescription(t, tools, "project_update", "acceptanceCriteriaItems"),
-		"[] is refused") {
-		t.Fatalf("project_update still offers the structured clear: %q",
-			mcpToolPropertyDescription(t, tools, "project_update", "acceptanceCriteriaItems"))
+	// The proposal channel is gone and acceptanceCriteriaItems is a write again, so the copy has
+	// to say so. A description that still called it a proposal would tell a model the criteria had
+	// not changed while the write it just made had already landed — worse than saying nothing.
+	property := mcpToolPropertyDescription(t, tools, "project_update", "acceptanceCriteriaItems")
+	if !strings.Contains(property, "Whole structured replacement") {
+		t.Fatalf("project_update does not say the set is replaced: %q", property)
+	}
+	for _, lie := range []string{"PROPOSAL", "PROPOSING", "approve", "[] is refused"} {
+		for _, text := range []string{mcpToolDescription(tools, "project_update"), property} {
+			if strings.Contains(text, lie) {
+				t.Fatalf("project_update still describes acceptance criteria as a proposal (%q): %q",
+					lie, text)
+			}
+		}
 	}
 }
 

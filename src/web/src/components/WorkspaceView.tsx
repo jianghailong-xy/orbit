@@ -113,7 +113,6 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
-import { ProjectCriteriaProposalCard } from './ProjectCriteriaProposalCard';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import {
   currentProviderChoice,
@@ -5338,13 +5337,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId={selected.id}
             initialToken={detailForSelected?.shareToken ?? null}
           />
-        )}
-
-        {/* An agent's proposal to change what this project counts as done. The proposal has
-            already been recorded and has moved nothing; this is where the owner reads the diff
-            and decides: same conversation, same credential the agent could not use. */}
-        {selectedSession?.projectId && !selectedTrashed && !composing && (
-          <ProjectCriteriaProposalCard projectId={selectedSession.projectId} />
         )}
 
         {stuck && (
