@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "c9d20c1f8117a19d0aec9d4a91a25c00603e40bbac79d2197529ea38f1bb96e9",
+  "declaredDagPlanDigest": "08bb9792dcada17e4d88172737c090f9a27ed921d0dd1cda7add6dc8fd97b1a3",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GlvYGNFrhA41IVx67o0",
   "supersededAttempt": {
@@ -173,7 +173,6 @@
       "prepare-postgres": 75,
       "prepare-prisma": 163,
       "suite-acceptance-runtime": 308,
-      "suite-actions": 15,
       "suite-auto-dispatch": 25,
       "suite-auto-dispatch-integration": 9,
       "suite-bootstrap": 64,
@@ -357,10 +356,10 @@
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs"
     ],
     "digests": {
-      "package.json": "113421fc73004ac80cc53c0340d983265cbc078541c6114ec350fe1d7b7a45ea",
+      "package.json": "b6185dcba04c55cca978e8a77376834db0427c2fac9cc6fb23ff939666e6cc1e",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
       "contracts/outcome-reconciler-authoritative-target.json": "1f60c41f05d63102f5ab516894dc449511a4cab0bc07565c605a77d875b04f41",
-      "contracts/outcome-reconciler-release-frontier.json": "6f311a4c4915e476c8cf1d1a13f89d46a9434162e436d6b7e1bae47a81cc5ff9",
+      "contracts/outcome-reconciler-release-frontier.json": "5f1f652e06b9674527592b923d2c1e49f65f5910e99c1fbf87a05e215fd848c9",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "9e8e01e61b58085006be331b086f939f4ea854cd2d56b48c1f775ae7f93539bd",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "c55f1a1609df3c6447626fff070b29bc5ab9627107fbd9cf3da12716337607f8",
@@ -499,7 +498,6 @@
       "suite-evaluator": { "postgresDatabasePrefix": "pceval", "postgresRolePrefix": "pceval", "destructiveCoordinatorSpecs": false },
       "suite-projection": { "postgresDatabasePrefix": "pcprojection", "postgresRolePrefix": "pcprojection", "destructiveCoordinatorSpecs": false },
       "suite-done-gate": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "suite-actions": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "suite-coordinator": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "suite-acceptance-runtime": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "suite-watchdog-111k": { "postgresDatabasePrefix": "pcwatchdog", "postgresRolePrefix": "pcwatchdog", "destructiveCoordinatorSpecs": false },
@@ -548,7 +546,6 @@
     { "name": "evaluator", "packageScript": "test:outcome-reconciler:evaluator", "nodeId": "suite-evaluator" },
     { "name": "projection", "packageScript": "test:outcome-reconciler:projection", "nodeId": "suite-projection" },
     { "name": "done-gate", "packageScript": "test:outcome-reconciler:done-gate", "nodeId": "suite-done-gate" },
-    { "name": "actions", "packageScript": "test:outcome-reconciler:actions", "nodeId": "suite-actions" },
     { "name": "coordinator", "packageScript": "test:outcome-reconciler:coordinator", "nodeId": "suite-coordinator" },
     { "name": "watchdog", "packageScript": "test:outcome-reconciler:watchdog", "nodeId": "suite-watchdog-111k" },
     { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "nodeId": "suite-acceptance-runtime" },
@@ -648,7 +645,6 @@
     { "id": "suite-evaluator", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:evaluator"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1024, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-evaluator-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-projection", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:projection"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1024, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-projection-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-done-gate", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:done-gate"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1024, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-done-gate-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "suite-actions", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:actions"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1280, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-actions-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-coordinator", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:coordinator"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1280, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-coordinator-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-acceptance-runtime", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:acceptance-runtime"], "timeoutSeconds": 620, "resources": { "cpu": 2, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["build/executable-acceptance-runtime-evidence.json", "build/executable-acceptance-runtime-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-watchdog-111k", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres", "suite-acceptance-runtime"], "command": ["npm", "run", "test:outcome-reconciler:watchdog"], "environment": { "OUTCOME_WATCHDOG_RUNTIME_CLOSURE": "reuse", "OUTCOME_WATCHDOG_LIVE_RELEASE_FENCE": "offline" }, "timeoutSeconds": 380, "resources": { "cpu": 3, "memoryMiB": 4096, "postgres": 4, "dockerHeavy": 1 }, "outputs": ["build/outcome-reconciler-v2-watchdog-manifest.json", "build/outcome-reconciler-v2-watchdog-capacity-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "scale": { "tasks": 111000, "replaySamples": 111000 } },
@@ -688,7 +684,7 @@
       "kind": "manifest-aggregate",
       "dependsOn": [
         "suite-bootstrap", "suite-contract", "suite-protocol", "suite-evaluator",
-        "suite-projection", "suite-done-gate", "suite-actions", "suite-coordinator",
+        "suite-projection", "suite-done-gate", "suite-coordinator",
         "suite-watchdog-111k", "suite-acceptance-runtime", "suite-fact-ingress",
         "suite-ratification", "suite-auto-dispatch", "suite-work-overview-readiness",
         "suite-auto-dispatch-integration", "suite-watchdog-current-binding-regression",

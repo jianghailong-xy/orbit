@@ -2,13 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  ActionExecutorService,
-} from './action-executor.service';
-import type {
-  BoundSourceObligation,
-  ConstrainedActionIntent,
-} from './action-executor';
-import {
   coordinatorFailureFingerprint,
   validateCoordinatorOwnerDecision,
   validateCoordinatorSourceObligation,
@@ -39,12 +32,6 @@ export interface OutcomeCoordinatorContext {
 }
 
 export type OutcomeCoordinatorResolution =
-  | {
-      kind: 'ACTION';
-      intent: ConstrainedActionIntent;
-      sourceObligation: BoundSourceObligation;
-      fairWaitLogicalTicks?: number;
-    }
   | {
       kind: 'EXTERNAL_WAIT' | 'QUOTA_WAIT';
       provider: string;
@@ -100,14 +87,13 @@ export class OutcomeCoordinatorResolverRegistry {
 /**
  * Persistent control-plane adapter. PostgreSQL owns clocks, leases, wakes, budgets, fairness and
  * the append-only trace; this service only translates resolver outcomes into fenced transitions.
- * A resolver cannot perform an effect through this API: its only effectful response is ACTION,
- * which is admitted by ActionExecutorService before the coordinator records delivery.
+ * A resolver cannot perform an effect through this API at all: every response it may return is a
+ * durable coordination transition.
  */
 @Injectable()
 export class OutcomeCoordinatorService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly actions: ActionExecutorService,
     private readonly resolvers: OutcomeCoordinatorResolverRegistry,
   ) {}
 
@@ -202,7 +188,7 @@ export class OutcomeCoordinatorService {
     leaseToken: string;
     workerId: string;
     callbackKey: string;
-    result: 'DELIVERED' | 'ACTION_ENQUEUED' | 'RETRYABLE_FAILURE' | 'QUOTA_WAIT'
+    result: 'DELIVERED' | 'RETRYABLE_FAILURE' | 'QUOTA_WAIT'
       | 'EXTERNAL_WAIT' | 'RESOLVED' | 'SUPERSEDED' | 'ESCALATED' | 'TERMINAL';
     failureFingerprint?: string | null;
     retryAfterLogicalTicks?: number | null;
@@ -376,30 +362,6 @@ export class OutcomeCoordinatorService {
         leaseToken: claim.leaseToken,
         callbackKey: `resolver:${claim.leaseId}`,
       };
-      if (resolution.kind === 'ACTION') {
-        const queued = await this.actions.enqueue({
-          intent: resolution.intent,
-          sourceObligation: resolution.sourceObligation,
-          logicalNow: input.logicalNow,
-          fairWaitLogicalTicks: resolution.fairWaitLogicalTicks,
-        });
-        if (typeof queued.actionIntentId !== 'string') {
-          return this.recordResult({
-            ...base,
-            result: 'RETRYABLE_FAILURE',
-            failureFingerprint: coordinatorFailureFingerprint('ACTION_EXECUTOR_REFUSED', {
-              obligationRevision: claim.obligationRevision,
-              response: queued,
-            }),
-            detail: { code: 'ACTION_EXECUTOR_REFUSED', response: queued },
-          });
-        }
-        return this.recordResult({
-          ...base,
-          result: 'ACTION_ENQUEUED',
-          detail: { actionIntentId: queued.actionIntentId, executorReceipt: queued },
-        });
-      }
       if (resolution.kind === 'OWNER_DECISION') {
         return this.requestOwnerDecision({
           ...base,

@@ -10,7 +10,6 @@ const require = createRequire(import.meta.url);
 const { Pool } = require('pg');
 const MODULE_PATH = process.env.OUTCOME_COORDINATOR_MODULE;
 const SERVICE_MODULE_PATH = process.env.OUTCOME_COORDINATOR_SERVICE_MODULE;
-const ACTION_MODULE_PATH = process.env.OUTCOME_COORDINATOR_ACTION_MODULE;
 const URL = process.env.OUTCOME_COORDINATOR_PG_URL;
 const EXPECTED_DATABASE = process.env.OUTCOME_COORDINATOR_PG_EXPECTED_DATABASE;
 const EXPECTED_USER = process.env.OUTCOME_COORDINATOR_PG_EXPECTED_USER;
@@ -20,7 +19,6 @@ const EVIDENCE_PATH = process.env.OUTCOME_COORDINATOR_EVIDENCE_PATH;
 for (const [name, value] of Object.entries({
   OUTCOME_COORDINATOR_MODULE: MODULE_PATH,
   OUTCOME_COORDINATOR_SERVICE_MODULE: SERVICE_MODULE_PATH,
-  OUTCOME_COORDINATOR_ACTION_MODULE: ACTION_MODULE_PATH,
   OUTCOME_COORDINATOR_PG_URL: URL,
   OUTCOME_COORDINATOR_PG_EXPECTED_DATABASE: EXPECTED_DATABASE,
   OUTCOME_COORDINATOR_PG_EXPECTED_USER: EXPECTED_USER,
@@ -31,9 +29,6 @@ for (const [name, value] of Object.entries({
 const coordinator = await import(pathToFileURL(path.resolve(MODULE_PATH)).href);
 const { OutcomeCoordinatorResolverRegistry } = await import(
   pathToFileURL(path.resolve(SERVICE_MODULE_PATH)).href
-);
-const { actionBackoffDigest, actionProtocolDigest } = await import(
-  pathToFileURL(path.resolve(ACTION_MODULE_PATH)).href
 );
 
 const pool = new Pool({ connectionString: URL, max: 32 });
@@ -83,8 +78,6 @@ const evidence = {
   },
   executor: {
     resolverRegistryBound: false,
-    constrainedActionRequired: false,
-    constrainedActionLinked: false,
   },
   samples: {},
 };
@@ -173,33 +166,11 @@ async function seedActive(label, options = {}) {
     evaluatorDigest: digest('coordinator-evaluator-v2'),
     grantDigest: digest(`grant:${label}`),
   };
-  if (options.actionReady) {
-    const grantId = uuid(`grant-id:${label}`);
-    const grant = await one(pool, `
-      SELECT outcome_register_authority_grant(
-        $1::uuid, $2::uuid, $3::uuid, 'SYSTEM', $4,
-        'ACTION_INTENT_RECORDED', 'INTENT', 'ORBIT_CONTROL_PLANE',
-        'coordinator-test', '2.0.0', NULL, 0, NULL, $5
-      ) AS result
-    `, [tenantId, projectId, grantId, `system:${label}`, scope.riskPolicyDigest]);
-    scope.grantId = grantId;
-    scope.grantDigest = grant.result.grantDigest;
-    scope.preconditionDigest = digest(`precondition:${label}`);
-    await one(pool, `
-      SELECT outcome_register_action_precondition(
-        $1::uuid, $2::uuid, 'EXTERNAL_EFFECT', $3, $4, $5
-      ) AS result
-    `, [tenantId, projectId, `effect:${label}`, scope.preconditionDigest, scope.targetDigest]);
-    await one(pool, `
-      SELECT outcome_register_action_budget($1::uuid, $2::uuid, $3, $4, 'PROTOCOL_ACTION', 20) AS result
-    `, [tenantId, projectId, `budget:${label}`, scope.budgetDigest]);
-  } else {
-    await pool.query(`
-      INSERT INTO outcome_fact_stream (tenant_id, project_id, last_logical_time, binding_epoch)
-      VALUES ($1::uuid, $2::uuid, 1, 0)
-      ON CONFLICT (tenant_id, project_id) DO NOTHING
-    `, [tenantId, projectId]);
-  }
+  await pool.query(`
+    INSERT INTO outcome_fact_stream (tenant_id, project_id, last_logical_time, binding_epoch)
+    VALUES ($1::uuid, $2::uuid, 1, 0)
+    ON CONFLICT (tenant_id, project_id) DO NOTHING
+  `, [tenantId, projectId]);
   const binding = bindingFor(scope);
   const bindingReceipt = await one(pool, `
     SELECT outcome_register_fact_binding($1::uuid, $2::uuid, $3::jsonb) AS result
@@ -750,98 +721,6 @@ test('only a complete closed-set owner request enters the durable queue and deci
   evidence.decisions.validRequestDurable = true;
   evidence.decisions.decisionAutoResume = true;
   evidence.samples.ownerRequestId = accepted.requestId;
-});
-
-test('constrained Action Executor intent is required and linked before action delivery is recorded', async () => {
-  const scope = await seedActive('action-link', {
-    actionReady: true,
-    kind: 'REMEDIATE_SIDE_EFFECT', owner: 'SYSTEM', capability: 'effect.remediate',
-  });
-  await advance(scope.tenantId, 1);
-  await reconcile(scope.tenantId);
-  const claimed = await claim(scope, 1, 'worker:action');
-  await assert.rejects(
-    record(scope, claimed, 1, 'ACTION_ENQUEUED', {
-      worker: 'worker:action', callbackKey: 'unbound-action',
-      detail: { actionIntentId: uuid('absent-action') },
-    }),
-    /ACTION_NOT_CONSTRAINED_OR_BOUND/,
-  );
-  const protocol = {
-    obligationKind: 'REMEDIATE_SIDE_EFFECT',
-    actionKind: 'TEST_COORDINATOR_ACTION',
-    effectClass: 'EXTERNAL_REVERSIBLE',
-    resourceType: 'EXTERNAL_EFFECT',
-    actor: { role: 'SYSTEM', adapter: 'ACTION_EXECUTOR', capability: 'test.effect.execute' },
-    resolver: { adapter: 'OUTCOME_RECONCILER', capability: 'effect.remediate' },
-    authorityScopes: ['effect:test'], policyRules: ['test-effect'],
-    budgetUnit: 'PROTOCOL_ACTION', budgetCharge: 1,
-    retry: { maxAttempts: 3, sameFailureFingerprintLimit: 2, backoffLogicalTicks: [1, 4, 16] },
-    timeoutLogicalTicks: 20,
-    compensation: {
-      capability: 'effect.rollback.external', manualRecovery: null,
-      remediationObligationKind: 'REMEDIATE_SIDE_EFFECT',
-    },
-  };
-  const intent = {
-    schemaVersion: 1,
-    actionIntentId: uuid('action-link-intent'),
-    actionKind: protocol.actionKind,
-    tenantId: scope.tenantId,
-    projectId: scope.projectId,
-    obligationId: scope.obligationId,
-    obligationRevision: scope.obligationRevision,
-    bindingDigest: scope.bindingDigest,
-    protocolDigest: actionProtocolDigest(protocol),
-    effectClass: protocol.effectClass,
-    resourceType: protocol.resourceType,
-    resourceId: `effect:${scope.label}`,
-    targetDigest: scope.targetDigest,
-    principal: { type: 'SYSTEM', id: `system:${scope.label}` },
-    authorityGrantDigest: scope.grantDigest,
-    policyDigest: scope.binding.policyDigest,
-    preconditionDigest: scope.preconditionDigest,
-    evaluatedThroughLogicalTime: '1',
-    idempotencyKey: 'coordinator-action-link',
-    budget: {
-      accountId: `budget:${scope.label}`, unit: 'PROTOCOL_ACTION', charge: 1, limit: 20,
-      reservationId: 'coordinator-action-reservation',
-    },
-    retryPolicy: {
-      maxAttempts: 3,
-      backoffDigest: actionBackoffDigest([1, 4, 16]),
-      sameFailureFingerprintLimit: 2,
-    },
-    timeout: { logicalTicks: 20, wallClockMs: 1_000 },
-    compensation: {
-      compensatorCapability: 'effect.rollback.external', manualRecovery: null,
-      remediationObligationKind: 'REMEDIATE_SIDE_EFFECT',
-    },
-    receiptRequirements: {
-      providerIdentity: true, effectDigest: true, observedAt: true, result: true, idempotencyKey: true,
-    },
-  };
-  const queued = (await one(pool, `
-    SELECT outcome_enqueue_action(
-      $1::uuid, $2::uuid, $3::jsonb, $4::jsonb, ARRAY[1,4,16]::bigint[], 1, 10
-    ) AS result
-  `, [
-    scope.tenantId, scope.projectId, JSON.stringify(intent), JSON.stringify(scope.sourceObligation),
-  ])).result;
-  assert.equal(queued.actionIntentId, intent.actionIntentId);
-  const linked = await record(scope, claimed, 1, 'ACTION_ENQUEUED', {
-    worker: 'worker:action', callbackKey: 'bound-action',
-    detail: { actionIntentId: intent.actionIntentId },
-  });
-  assert.equal(linked.result, 'ACTION_ENQUEUED');
-  const event = await one(pool, `
-    SELECT count(*)::integer AS count FROM outcome_coordinator_event
-     WHERE coordination_id = $1::uuid AND event_type = 'CONSTRAINED_ACTION_ENQUEUED'
-  `, [claimed.coordinationId]);
-  assert.equal(event.count, 1);
-  evidence.executor.constrainedActionRequired = true;
-  evidence.executor.constrainedActionLinked = true;
-  evidence.samples.actionIntentId = intent.actionIntentId;
 });
 
 test('wake budget and liveness delta end churn with an auditable non-human disposition', async () => {

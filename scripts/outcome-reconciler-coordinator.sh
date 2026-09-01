@@ -74,20 +74,16 @@ if [ "${OUTCOME_RELEASE_DAG_PREPARED_BUILD:-0}" = 1 ]; then
   outcome_release_dag_assert_build
   COORDINATOR_MODULE="$API/dist/outcome-reconciler/outcome-coordinator.js"
   COORDINATOR_SERVICE_MODULE="$API/dist/outcome-reconciler/outcome-coordinator.service.js"
-  COORDINATOR_ACTION_MODULE="$API/dist/outcome-reconciler/action-executor.js"
   echo '==> outcome-coordinator: use exact bound production build'
 else
-  echo "==> outcome-coordinator: compiling production coordinator and constrained executor bridge"
+  echo '==> outcome-coordinator: compiling the production coordinator'
   "$TSC" \
     "$API/src/outcome-reconciler/outcome-coordinator.ts" \
     "$API/src/outcome-reconciler/outcome-coordinator.service.ts" \
-    "$API/src/outcome-reconciler/action-executor.ts" \
-    "$API/src/outcome-reconciler/action-executor.service.ts" \
     --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
     --experimentalDecorators --emitDecoratorMetadata --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
   COORDINATOR_MODULE="$COMPILED/outcome-reconciler/outcome-coordinator.js"
   COORDINATOR_SERVICE_MODULE="$COMPILED/outcome-reconciler/outcome-coordinator.service.js"
-  COORDINATOR_ACTION_MODULE="$COMPILED/outcome-reconciler/action-executor.js"
 fi
 
 if outcome_release_dag_db_enabled; then
@@ -125,7 +121,6 @@ set +e
 NODE_PATH="$NODE_MODULES" \
 OUTCOME_COORDINATOR_MODULE="$COORDINATOR_MODULE" \
 OUTCOME_COORDINATOR_SERVICE_MODULE="$COORDINATOR_SERVICE_MODULE" \
-OUTCOME_COORDINATOR_ACTION_MODULE="$COORDINATOR_ACTION_MODULE" \
 OUTCOME_COORDINATOR_PG_URL="$URL" \
 OUTCOME_COORDINATOR_PG_EXPECTED_DATABASE="$DATABASE" \
 OUTCOME_COORDINATOR_PG_EXPECTED_USER="$ADMIN" \

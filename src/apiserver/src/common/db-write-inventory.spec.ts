@@ -418,6 +418,16 @@ function liveTriggers(): Map<string, { table: string; event: string; kind: strin
     for (const dropped of sql.matchAll(/DROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?"?([a-z_0-9]+)"?\s+ON/gi)) {
       live.delete(dropped[1]);
     }
+    // Dropping a table drops its triggers with it, so a migration that removes one need not — and
+    // does not — spell out a DROP TRIGGER the database performs for it.
+    for (const dropped of sql.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([^;]+);/gi)) {
+      const tables = new Set(
+        dropped[1]
+          .split(',')
+          .map((name) => name.trim().replace(/\s+(?:CASCADE|RESTRICT)$/i, '').replace(/"/g, '')),
+      );
+      for (const [trigger, meta] of live) if (tables.has(meta.table)) live.delete(trigger);
+    }
     const created =
       /CREATE\s+(CONSTRAINT\s+)?TRIGGER\s+"?([a-z_0-9]+)"?\s+((?:BEFORE|AFTER|INSTEAD\s+OF)[\s\S]*?)\s+ON\s+"?([a-z_]+)"?[\s\S]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+"?([a-z_0-9]+)"?/gi;
     for (const match of sql.matchAll(created)) {
