@@ -26,9 +26,14 @@ import {
   tapMetrics,
 } from '../scripts/outcome-reconciler-release-dag-full-api-shard.mjs';
 import {
+  MAX_AUTOMATIC_RETRIES_PER_TERMINATION,
+  ReleaseDagAdmissionError,
+  TERMINATION_TYPES,
+  calibratedFloorSeconds,
   canonical,
   checkpointReuseDecision,
   commandDigest,
+  criticalPath,
   dagPlanDigest,
   deriveBinding,
   addResources,
@@ -37,6 +42,7 @@ import {
   nodeInputDigests,
   resourceFits,
   resumeProjection,
+  retryDecision,
   scopeDigests,
   scopeNameForPath,
   sha256,
@@ -1407,4 +1413,454 @@ test('a shard that leaves a database behind fails even when every test passed', 
   assert.equal(partitionConclusion({
     partition, declaredCases: 2, results: [clean[0]],
   }).outcome, 'FAILED');
+});
+
+// ---------------------------------------------------------------------------
+// Critical-path feasibility admission.
+//
+// Before this gate the contract declared 7440s of node timeouts along its longest chain
+// against a 3540s scheduler deadline -- 110% over budget -- and validatePlan admitted it,
+// because it only ever asked whether each node was individually bounded. A run that cannot
+// fit is not a run that fails slowly; it is one that should never have been started.
+
+// Re-derive the digest so a mutated fixture is rejected for the reason under test rather
+// than for being stale.
+function sealed(mutate) {
+  const draft = JSON.parse(JSON.stringify(plan));
+  mutate(draft);
+  delete draft.declaredDagPlanDigest;
+  draft.declaredDagPlanDigest = dagPlanDigest(draft);
+  return draft;
+}
+
+function admissionError(candidate) {
+  try {
+    validatePlan(candidate);
+  } catch (error) {
+    return error;
+  }
+  return null;
+}
+
+// The node the critical path runs through, so raising it raises the path by exactly as much.
+const CRITICAL_LEAF = 'publish-evidence-cut';
+
+test('(a)(b) an infeasible critical path is refused, typed, before anything is spawned', () => {
+  const feasible = criticalPath(plan);
+  const overBy = 600;
+  const infeasible = sealed((draft) => {
+    const leaf = draft.nodes.find((node) => node.id === CRITICAL_LEAF);
+    leaf.timeoutSeconds += (plan.evaluator.schedulerDeadlineSeconds - feasible.seconds) + overBy;
+  });
+
+  const error = admissionError(infeasible);
+  assert.ok(error instanceof ReleaseDagAdmissionError, 'the refusal is not a typed admission error');
+  assert.equal(error.code, 'RELEASE_DAG_CRITICAL_PATH_EXCEEDS_SCHEDULER_DEADLINE');
+
+  // (b) The refusal names the offending path and the exact overshoot -- both as structured
+  // fields and in the message, because a human reads one and a caller branches on the other.
+  assert.equal(error.excessSeconds, overBy);
+  assert.equal(error.schedulerDeadlineSeconds, plan.evaluator.schedulerDeadlineSeconds);
+  assert.equal(error.criticalPathSeconds,
+    plan.evaluator.schedulerDeadlineSeconds + overBy);
+  assert.deepEqual(error.criticalPath, feasible.path);
+  assert.equal(error.criticalPath.at(0), 'preflight-binding');
+  assert.equal(error.criticalPath.at(-1), CRITICAL_LEAF);
+  assert.ok(error.message.includes(feasible.path.join(' -> ')),
+    'the message omits the node sequence that overran');
+  assert.match(error.message, new RegExp(`exceeds the scheduler deadline by ${overBy}s`, 'u'));
+
+  // (a) And it costs nothing: the runner refuses in validatePlan, which is reached before
+  // the target is resolved, before any node is spawned and before a receipt root exists.
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-release-dag-admission-'));
+  try {
+    const planFile = path.join(fixture, 'infeasible-plan.json');
+    const stateRoot = path.join(fixture, 'state');
+    const shims = path.join(fixture, 'shims');
+    const spawnLog = path.join(fixture, 'spawned.log');
+    mkdirSync(shims, { recursive: true });
+    // Anything the runner shells out to lands in this log. The shims record and refuse
+    // rather than exec, so the control below observes the spawn without a real fetch.
+    for (const tool of ['git', 'docker', 'npm']) {
+      writeFileSync(path.join(shims, tool),
+        `#!/bin/sh\necho "${tool} $*" >> ${JSON.stringify(spawnLog)}\nexit 1\n`);
+      chmodSync(path.join(shims, tool), 0o755);
+    }
+    writeFileSync(planFile, `${JSON.stringify(infeasible, null, 2)}\n`);
+    const env = {
+      ...process.env,
+      PATH: `${shims}${path.delimiter}${process.env.PATH}`,
+      OUTCOME_RELEASE_DAG_PLAN: planFile,
+      OUTCOME_RELEASE_DAG_STATE_ROOT: stateRoot,
+    };
+    const refused = spawnSync(process.execPath,
+      [path.join(repo, 'scripts/outcome-reconciler-release-dag.mjs')],
+      { cwd: repo, encoding: 'utf8', env, timeout: 120_000 });
+    assert.notEqual(refused.status, 0, 'an infeasible plan was admitted');
+    assert.match(refused.stderr, /RELEASE_DAG_CRITICAL_PATH_EXCEEDS_SCHEDULER_DEADLINE/u);
+    assert.equal(existsSync(spawnLog), false, 'the refused plan still spawned a subprocess');
+    assert.equal(existsSync(stateRoot), false, 'the refused plan still created a receipt root');
+
+    // The negative control: the log stays empty above because nothing ran, not because the
+    // shims are inert. The same runner on the same PATH, given the feasible plan, gets past
+    // admission and reaches for git on its very next step.
+    writeFileSync(planFile, `${JSON.stringify(plan, null, 2)}\n`);
+    const admitted = spawnSync(process.execPath,
+      [path.join(repo, 'scripts/outcome-reconciler-release-dag.mjs'), '--print-binding'],
+      { cwd: repo, encoding: 'utf8', env, timeout: 120_000 });
+    assert.equal(existsSync(spawnLog), true, 'the shims never recorded anything, so they prove nothing');
+    assert.match(readFileSync(spawnLog, 'utf8'), /^git fetch /mu);
+    assert.doesNotMatch(admitted.stderr, /RELEASE_DAG_CRITICAL_PATH_EXCEEDS_SCHEDULER_DEADLINE/u,
+      'the feasible plan was refused by the critical-path gate');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('(c) a critical path exactly equal to the scheduler deadline is admitted', () => {
+  const slack = plan.evaluator.schedulerDeadlineSeconds - criticalPath(plan).seconds;
+  assert.ok(slack >= 0, 'the shipped plan is already over budget');
+  const exact = sealed((draft) => {
+    draft.nodes.find((node) => node.id === CRITICAL_LEAF).timeoutSeconds += slack;
+  });
+  assert.equal(criticalPath(exact).seconds, plan.evaluator.schedulerDeadlineSeconds);
+  assert.doesNotThrow(() => validatePlan(exact), 'the boundary case was refused');
+
+  // One second past the boundary is the first refusal: the gate is `>`, not `>=`.
+  const overByOne = sealed((draft) => {
+    draft.nodes.find((node) => node.id === CRITICAL_LEAF).timeoutSeconds += slack + 1;
+  });
+  const error = admissionError(overByOne);
+  assert.equal(error.code, 'RELEASE_DAG_CRITICAL_PATH_EXCEEDS_SCHEDULER_DEADLINE');
+  assert.equal(error.excessSeconds, 1);
+});
+
+test('(d)(f) the shipped contract itself passes the new admission with a measured path', () => {
+  // Not a fixture: the file the release actually runs. A gate the production plan cannot
+  // pass is a welded door, and this assertion is what stops one from being shipped.
+  const shipped = JSON.parse(
+    readFileSync(path.join(repo, 'contracts/outcome-reconciler-release-dag.json'), 'utf8'),
+  );
+  assert.deepEqual(shipped, plan, 'this test must read the real contract, never a copy');
+  const result = validatePlan(shipped);
+
+  const longest = criticalPath(shipped);
+  assert.equal(longest.seconds, 3440);
+  assert.equal(shipped.evaluator.schedulerDeadlineSeconds, 3540);
+  assert.ok(longest.seconds <= shipped.evaluator.schedulerDeadlineSeconds,
+    `critical path ${longest.seconds}s exceeds the ${shipped.evaluator.schedulerDeadlineSeconds}s deadline`);
+  assert.deepEqual(result.criticalPath, longest);
+  assert.deepEqual(longest.path, [
+    'preflight-binding', 'prepare-dependencies', 'prepare-prisma', 'prepare-build',
+    'full-api-inventory', 'full-api-shard-0', 'full-api-serial', 'full-api',
+    'manifest-aggregate', 'release-live-state-boundary', 'publish-evidence-cut',
+  ]);
+
+  // The path is a real longest chain: every node's timeout is on it exactly once, in
+  // dependency order, and it sums to the reported total.
+  assert.equal(new Set(longest.path).size, longest.path.length);
+  assert.equal(
+    longest.path.reduce((total, id) => total + nodeById.get(id).timeoutSeconds, 0),
+    longest.seconds,
+  );
+  for (let index = 1; index < longest.path.length; index += 1) {
+    assert.ok(nodeById.get(longest.path[index]).dependsOn.includes(longest.path[index - 1]),
+      `${longest.path[index]} does not depend on ${longest.path[index - 1]}`);
+  }
+
+  // The calibration is what bought the headroom, and it is 110% -- not a relaxed deadline.
+  assert.equal(shipped.nodes.reduce((total, node) => total + node.timeoutSeconds, 0), 14110);
+});
+
+test('(e) every node timeout clears its observed maximum times the declared margin', () => {
+  const calibration = plan.timeoutCalibration;
+  assert.equal(calibration.schemaVersion, 1);
+  assert.equal(calibration.source, 'RELEASE_DAG_NODE_RECEIPT_DURATIONS');
+  assert.equal(calibration.marginFactor, 2);
+  assert.equal(calibration.minimumTimeoutSeconds, 60);
+  // A run killed by its own timeout never said how long it needed. Calibrating on one would
+  // ratchet the budget up every time the host was starved -- which is what retry is for.
+  assert.equal(calibration.completedTerminationsOnly, true);
+
+  const observed = calibration.observedMaximumSeconds;
+  assert.equal(Object.keys(observed).length, 42);
+  for (const [id, seconds] of Object.entries(observed)) {
+    assert.ok(nodeById.has(id), `${id} is calibrated but is not a node`);
+    assert.ok(Number.isInteger(seconds) && seconds >= 1, id);
+    const required = Math.ceil(seconds * calibration.marginFactor);
+    assert.equal(calibratedFloorSeconds(plan, id), required);
+    assert.ok(nodeById.get(id).timeoutSeconds >= required,
+      `${id} declares ${nodeById.get(id).timeoutSeconds}s, below its ${required}s calibrated floor`);
+    assert.ok(nodeById.get(id).timeoutSeconds >= calibration.minimumTimeoutSeconds, id);
+  }
+
+  // Only nodes the DAG has never completed are exempt, and they are named rather than
+  // silently uncalibrated.
+  const uncalibrated = plan.nodes.map((node) => node.id).filter((id) => observed[id] === undefined);
+  assert.deepEqual(uncalibrated.sort(), [...calibration.unobservedNodes].sort());
+  assert.deepEqual(calibration.unobservedNodes,
+    ['manifest-aggregate', 'publish-evidence-cut', 'release-live-state-boundary']);
+  for (const id of calibration.unobservedNodes) assert.equal(calibratedFloorSeconds(plan, id), null);
+
+  // The floor is enforced by admission, not just asserted here: a node trimmed below its
+  // observed maximum is refused with the node named.
+  const trimmed = sealed((draft) => {
+    draft.nodes.find((node) => node.id === 'full-api-shard-0').timeoutSeconds = 1000;
+  });
+  const error = admissionError(trimmed);
+  assert.equal(error.code, 'RELEASE_DAG_NODE_TIMEOUT_BELOW_CALIBRATED_FLOOR');
+  assert.equal(error.nodeId, 'full-api-shard-0');
+  assert.equal(error.observedMaximumSeconds, 926);
+  assert.equal(error.requiredSeconds, 1852);
+  assert.equal(error.declaredSeconds, 1000);
+
+  // And a calibration that names a node the DAG does not have is itself refused.
+  assert.equal(admissionError(sealed((draft) => {
+    draft.timeoutCalibration.observedMaximumSeconds['no-such-node'] = 10;
+  })).code, 'RELEASE_DAG_TIMEOUT_CALIBRATION_INCOMPLETE');
+  assert.equal(admissionError(sealed((draft) => {
+    draft.timeoutCalibration.completedTerminationsOnly = false;
+  })).code, 'RELEASE_DAG_TIMEOUT_CALIBRATION_INCOMPLETE');
+});
+
+// ---------------------------------------------------------------------------
+// Retry budgets, declared per termination type.
+
+const INFRASTRUCTURE_TERMINATIONS = ['INFRASTRUCTURE_LOST', 'TIMED_OUT', 'SIGNALED', 'START_FAILED'];
+
+// The two attempts that motivated this, to scale: 2026-08-31, one hour each, zero bytes out.
+const STARVED_ATTEMPT = { terminalState: 'INFRASTRUCTURE_LOST', outputBytes: 0, elapsedSeconds: 3600 };
+
+test('(g) an EXITED attempt with the wrong exit code is never retried automatically', () => {
+  assert.equal(plan.evaluator.retryBudgets.byTerminationType.EXITED, 0);
+
+  const decision = retryDecision({
+    plan,
+    terminations: [{ terminalState: 'EXITED', actualExitCode: 1 }],
+  });
+  assert.equal(decision.decision, 'STOP');
+  assert.equal(decision.reasonCode, 'TERMINATION_TYPE_NOT_RETRYABLE');
+  assert.equal(decision.terminalState, 'EXITED');
+  assert.equal(decision.budget, 0);
+  assert.equal(decision.retriesUsed, 0);
+
+  // Not even once, and not after an infrastructure retry has already happened: the moment
+  // the command actually ran, its exit code is the answer. Retrying it would turn one
+  // criterion into best-of-N, which is the dilution this budget exists to prevent.
+  assert.equal(retryDecision({
+    plan,
+    terminations: [STARVED_ATTEMPT, { terminalState: 'EXITED', actualExitCode: 7 }],
+  }).decision, 'STOP');
+
+  // A zero budget cannot be written into the contract either.
+  const permissive = sealed((draft) => {
+    draft.evaluator.retryBudgets.byTerminationType.EXITED = 1;
+  });
+  const error = admissionError(permissive);
+  assert.equal(error.code, 'RELEASE_DAG_EXITED_RETRY_BUDGET_MUST_BE_ZERO');
+  assert.equal(error.declared, 1);
+});
+
+test('(h)(i) every non-EXITED termination retries inside its declared budget', () => {
+  const budgets = plan.evaluator.retryBudgets.byTerminationType;
+  for (const terminalState of INFRASTRUCTURE_TERMINATIONS) {
+    assert.ok(budgets[terminalState] >= 1, `${terminalState} has no retry budget`);
+    const decision = retryDecision({ plan, terminations: [{ terminalState }] });
+    assert.equal(decision.decision, 'RETRY', terminalState);
+    assert.equal(decision.reasonCode, 'TYPED_INFRASTRUCTURE_TERMINATION_RETRYABLE');
+    assert.equal(decision.terminalState, terminalState);
+    assert.equal(decision.retryIndex, 1);
+    assert.equal(decision.budget, budgets[terminalState]);
+
+    // (h) The retry is not a bypass: admission is re-run and its verdict is reported, so a
+    // caller can check that it happened instead of trusting that it did.
+    assert.equal(decision.admission.outcome, 'ADMITTED');
+    assert.equal(decision.admission.revalidated, true);
+    assert.equal(decision.admission.criticalPathSeconds, criticalPath(plan).seconds);
+    assert.equal(decision.admission.schedulerDeadlineSeconds,
+      plan.evaluator.schedulerDeadlineSeconds);
+  }
+
+  // And the admission is load-bearing: against a plan that no longer fits, the very same
+  // retryable termination stops instead of retrying. A bypass would still say RETRY.
+  const infeasible = sealed((draft) => {
+    draft.nodes.find((node) => node.id === CRITICAL_LEAF).timeoutSeconds
+      += (plan.evaluator.schedulerDeadlineSeconds - criticalPath(plan).seconds) + 1;
+  });
+  const refused = retryDecision({ plan: infeasible, terminations: [STARVED_ATTEMPT] });
+  assert.equal(refused.decision, 'STOP');
+  assert.equal(refused.reasonCode, 'ADMISSION_REJECTED');
+  assert.equal(refused.admission.outcome, 'REJECTED');
+  assert.equal(refused.admission.revalidated, true);
+  assert.equal(refused.admission.code, 'RELEASE_DAG_CRITICAL_PATH_EXCEEDS_SCHEDULER_DEADLINE');
+});
+
+test('(j) the retry budget is a real bound and its exhaustion is typed', () => {
+  const budgets = plan.evaluator.retryBudgets;
+  for (const terminalState of INFRASTRUCTURE_TERMINATIONS) {
+    const budget = budgets.byTerminationType[terminalState];
+    const history = [];
+    for (let attempt = 1; attempt <= budget; attempt += 1) {
+      history.push({ terminalState });
+      assert.equal(retryDecision({ plan, terminations: [...history] }).decision, 'RETRY',
+        `${terminalState} stopped retrying at attempt ${attempt} of ${budget}`);
+    }
+    history.push({ terminalState });
+    const exhausted = retryDecision({ plan, terminations: history });
+    assert.equal(exhausted.decision, 'STOP', terminalState);
+    assert.equal(exhausted.reasonCode, 'RETRY_BUDGET_EXHAUSTED');
+    assert.equal(exhausted.consumedForTerminationType, budget + 1);
+    assert.equal(exhausted.retriesUsed, budget);
+  }
+
+  // Mixed types cannot add up past the total ceiling either -- otherwise a run could rotate
+  // through the types forever, one budget at a time.
+  assert.equal(budgets.maxTotalAutomaticRetries, 3);
+  const rotated = ['INFRASTRUCTURE_LOST', 'START_FAILED', 'TIMED_OUT', 'SIGNALED']
+    .map((terminalState) => ({ terminalState }));
+  const ceiling = retryDecision({ plan, terminations: rotated });
+  assert.equal(ceiling.decision, 'STOP');
+  assert.equal(ceiling.reasonCode, 'TOTAL_RETRY_CEILING_REACHED');
+  assert.equal(ceiling.retriesUsed, 3);
+
+  // Whatever the history, the sequence terminates: no input makes it retry forever.
+  let history = [];
+  let steps = 0;
+  for (;;) {
+    history = [...history, STARVED_ATTEMPT];
+    const decision = retryDecision({ plan, terminations: history });
+    if (decision.decision === 'STOP') break;
+    steps += 1;
+    assert.ok(steps <= budgets.maxTotalAutomaticRetries, 'the retry loop is unbounded');
+  }
+  assert.equal(steps, budgets.byTerminationType.INFRASTRUCTURE_LOST);
+
+  // The contract cannot declare an unbounded ceiling, or a per-type budget above the cap.
+  assert.equal(MAX_AUTOMATIC_RETRIES_PER_TERMINATION, 3);
+  assert.equal(admissionError(sealed((draft) => {
+    draft.evaluator.retryBudgets.byTerminationType.INFRASTRUCTURE_LOST = 4;
+  })).code, 'RELEASE_DAG_RETRY_BUDGETS_INCOMPLETE');
+  assert.equal(admissionError(sealed((draft) => {
+    draft.evaluator.retryBudgets.maxTotalAutomaticRetries = 99;
+  })).code, 'RELEASE_DAG_RETRY_CEILING_UNBOUNDED');
+  assert.equal(admissionError(sealed((draft) => {
+    delete draft.evaluator.retryBudgets.byTerminationType.SIGNALED;
+  })).code, 'RELEASE_DAG_RETRY_BUDGETS_INCOMPLETE');
+  // Untyped retry stays banned: the budget must be asked for by termination type.
+  assert.throws(() => validatePlan(sealed((draft) => { draft.evaluator.automaticRetries = 1; })),
+    /may not retry in place/u);
+});
+
+test('(k) retries and the type that caused each one are visible on the attempt record', () => {
+  const budgets = plan.evaluator.retryBudgets;
+  assert.equal(budgets.observability,
+    'PER_ATTEMPT_TERMINATION_TYPE_RECORDED_ON_THE_ATTEMPT_MANIFEST');
+  assert.equal(budgets.admissionOnRetry, 'FULL_PLAN_REVALIDATION');
+  assert.deepEqual(Object.keys(budgets.byTerminationType).sort(), [...TERMINATION_TYPES].sort());
+
+  // Every decision carries the whole history, typed and indexed -- not just a count.
+  const history = [
+    STARVED_ATTEMPT,
+    { terminalState: 'TIMED_OUT' },
+    { terminalState: 'EXITED', actualExitCode: 3 },
+  ];
+  const decision = retryDecision({ plan, terminations: history });
+  assert.deepEqual(decision.observedTerminations, [
+    { attemptIndex: 0, terminalState: 'INFRASTRUCTURE_LOST', actualExitCode: null },
+    { attemptIndex: 1, terminalState: 'TIMED_OUT', actualExitCode: null },
+    { attemptIndex: 2, terminalState: 'EXITED', actualExitCode: 3 },
+  ]);
+  assert.equal(decision.retriesUsed, 2);
+  assert.throws(() => retryDecision({ plan, terminations: [{ terminalState: 'WEDGED' }] }),
+    /unknown attempt termination type: WEDGED/u);
+
+  // The runner writes the same facts onto attempt.json, and the publication carries the
+  // declared budgets alongside the evidence cut.
+  const runner = read('scripts/outcome-reconciler-release-dag.mjs');
+  assert.match(runner, /retryIndex: priorTerminations\.length/u);
+  assert.match(runner, /priorTerminations,/u);
+  assert.match(runner, /OUTCOME_RELEASE_DAG_PRIOR_TERMINATIONS/u);
+  assert.match(runner,
+    /priorTerminations\.length <= plan\.evaluator\.retryBudgets\.maxTotalAutomaticRetries/u);
+  assert.match(read('scripts/outcome-reconciler-release-dag-publish.mjs'),
+    /retryBudgets: plan\.evaluator\.retryBudgets,/u);
+});
+
+test('the two starved hour-long attempts of 2026-08-31 now retry instead of spending a quota', () => {
+  // a04bd84d 08:33:44 -> 09:33:55 and e7c287ae 09:12:45 -> 10:12:58: INFRASTRUCTURE_LOST,
+  // zero bytes of output, the full 3600s deadline each, on a host with 0-3 GiB free and a
+  // load average of 101. Under automaticRetries: 0 they were two formal attempts spent on
+  // nothing. Neither produced evidence, so neither retry can dilute any.
+  const attempts = [
+    { attemptId: 'a04bd84d', ...STARVED_ATTEMPT },
+    { attemptId: 'e7c287ae', ...STARVED_ATTEMPT },
+  ];
+  for (const attempt of attempts) {
+    assert.equal(attempt.outputBytes, 0);
+    assert.equal(attempt.elapsedSeconds, plan.evaluator.attemptTimeoutSeconds);
+  }
+
+  const first = retryDecision({ plan, terminations: attempts.slice(0, 1) });
+  assert.equal(first.decision, 'RETRY');
+  assert.equal(first.retryIndex, 1);
+  assert.equal(first.admission.outcome, 'ADMITTED');
+
+  const second = retryDecision({ plan, terminations: attempts });
+  assert.equal(second.decision, 'RETRY');
+  assert.equal(second.retryIndex, 2);
+  assert.equal(second.consumedForTerminationType, 2);
+  assert.deepEqual(second.observedTerminations.map((entry) => entry.terminalState),
+    ['INFRASTRUCTURE_LOST', 'INFRASTRUCTURE_LOST']);
+
+  // A third starved hour is where the bound bites: still typed, still not an EXITED verdict.
+  const third = retryDecision({ plan, terminations: [...attempts, STARVED_ATTEMPT] });
+  assert.equal(third.decision, 'STOP');
+  assert.equal(third.reasonCode, 'RETRY_BUDGET_EXHAUSTED');
+  assert.equal(third.terminalState, 'INFRASTRUCTURE_LOST');
+});
+
+test('(j)(k) an attempt past the retry ceiling is refused at admission, before it costs an hour', () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-release-dag-retry-'));
+  try {
+    const stateRoot = path.join(fixture, 'state');
+    const shims = path.join(fixture, 'shims');
+    const spawnLog = path.join(fixture, 'spawned.log');
+    mkdirSync(shims, { recursive: true });
+    for (const tool of ['git', 'docker', 'npm']) {
+      writeFileSync(path.join(shims, tool),
+        `#!/bin/sh\necho "${tool} $*" >> ${JSON.stringify(spawnLog)}\nexec /usr/bin/env ${tool} "$@"\n`);
+      chmodSync(path.join(shims, tool), 0o755);
+    }
+    const run = (priorTerminations) => spawnSync(process.execPath,
+      [path.join(repo, 'scripts/outcome-reconciler-release-dag.mjs')],
+      {
+        cwd: repo,
+        encoding: 'utf8',
+        timeout: 120_000,
+        env: {
+          ...process.env,
+          PATH: `${shims}${path.delimiter}${process.env.PATH}`,
+          OUTCOME_RELEASE_DAG_STATE_ROOT: stateRoot,
+          OUTCOME_RELEASE_DAG_PRIOR_TERMINATIONS: priorTerminations,
+        },
+      });
+
+    // One retry past the declared ceiling: refused where the plan's own feasibility is
+    // checked, so an over-budget retry burns nothing.
+    const over = new Array(plan.evaluator.retryBudgets.maxTotalAutomaticRetries + 1)
+      .fill('INFRASTRUCTURE_LOST').join(',');
+    const refused = run(over);
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /past the declared automatic retry ceiling/u);
+    assert.equal(existsSync(spawnLog), false, 'an over-ceiling retry still spawned something');
+    assert.equal(existsSync(stateRoot), false, 'an over-ceiling retry still created a receipt root');
+
+    // An untyped termination is refused the same way rather than silently counted.
+    const untyped = run('WEDGED');
+    assert.notEqual(untyped.status, 0);
+    assert.match(untyped.stderr, /must be one of the declared termination types/u);
+    assert.equal(existsSync(spawnLog), false);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });

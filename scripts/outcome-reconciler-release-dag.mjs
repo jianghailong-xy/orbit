@@ -15,6 +15,7 @@ import path from 'node:path';
 import {
   DIGEST,
   SHA,
+  TERMINATION_TYPES,
   UUID,
   addResources,
   canonical,
@@ -46,6 +47,15 @@ const planPath = path.resolve(process.env.OUTCOME_RELEASE_DAG_PLAN
   ?? path.join(repo, 'contracts/outcome-reconciler-release-dag.json'));
 const plan = JSON.parse(readFileSync(planPath, 'utf8'));
 const validation = validatePlan(plan);
+
+// Whoever drives a retry names what stopped the attempts before it. Checked here, beside
+// the plan's own admission, so an attempt past the declared ceiling costs nothing either.
+const priorTerminations = (process.env.OUTCOME_RELEASE_DAG_PRIOR_TERMINATIONS ?? '')
+  .split(',').map((entry) => entry.trim()).filter(Boolean);
+assert.ok(priorTerminations.every((type) => TERMINATION_TYPES.includes(type)),
+  'a prior attempt termination must be one of the declared termination types');
+assert.ok(priorTerminations.length <= plan.evaluator.retryBudgets.maxTotalAutomaticRetries,
+  'this attempt is past the declared automatic retry ceiling');
 
 function run(file, args, { allowFailure = false } = {}) {
   const result = spawnSync(file, args, {
@@ -1019,6 +1029,14 @@ const attempt = {
   timedOutNodes: timedOut,
   incompleteNodes: incomplete,
   automaticRetries: 0,
+  // (k) A retry that nobody can count is indistinguishable from a silent re-run. The
+  // declared budgets and this attempt's place in the retry sequence both land on the
+  // record, so a reader can check the bound was honoured rather than assume it.
+  retryPolicy: {
+    ...plan.evaluator.retryBudgets,
+    retryIndex: priorTerminations.length,
+    priorTerminations,
+  },
   executionMode: focusPreparePostgres
     ? 'FOCUSED_PREPARE_POSTGRES_PREFLIGHT'
     : focusPccRebind

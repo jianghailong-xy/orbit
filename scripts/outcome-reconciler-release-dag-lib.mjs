@@ -8,6 +8,28 @@ export const DIGEST = /^[0-9a-f]{64}$/u;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 export const MAX_NODE_TIMEOUT_SECONDS = 3600;
 
+// The five ways an attempt can stop. Only EXITED carries a product verdict: it ran the
+// command to completion and the exit code is the answer. The other four say the run never
+// got to answer, which is a different fact and gets a different retry budget below.
+export const TERMINATION_TYPES = [
+  'EXITED', 'INFRASTRUCTURE_LOST', 'TIMED_OUT', 'SIGNALED', 'START_FAILED',
+];
+// A budget is a budget: no termination type may declare more than this many automatic
+// retries, so "retry the infrastructure" can never become an unbounded loop.
+export const MAX_AUTOMATIC_RETRIES_PER_TERMINATION = 3;
+
+// Admission refusals are typed because a caller has to be able to tell "this plan cannot
+// fit" from "this plan is malformed" without reading English. Every field a reader needs
+// to act on -- which path, how much over -- is on the error, not only in the message.
+export class ReleaseDagAdmissionError extends Error {
+  constructor(code, message, details = {}) {
+    super(message);
+    this.name = 'ReleaseDagAdmissionError';
+    this.code = code;
+    Object.assign(this, details);
+  }
+}
+
 export function canonical(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -55,6 +77,38 @@ export function topologicalOrder(plan) {
   }
   if (ordered.length !== nodes.size) throw new Error('release DAG contains a cycle');
   return ordered;
+}
+
+// The longest chain of declared timeouts through the dependency graph: the wall clock a
+// scheduler must be able to spend before the DAG can possibly finish, no matter how much
+// concurrency it has. Nothing here models resource contention -- that can only make a run
+// slower, so this is a lower bound on the worst case and an admission test can be built on
+// it. Ties break on the first-declared node so the reported path is deterministic.
+export function criticalPath(plan) {
+  const byId = new Map(plan.nodes.map((node) => [node.id, node]));
+  const longest = new Map();
+  let worst = { seconds: 0, path: [] };
+  for (const id of topologicalOrder(plan)) {
+    const node = byId.get(id);
+    let prefix = { seconds: 0, path: [] };
+    for (const dependency of node.dependsOn) {
+      const candidate = longest.get(dependency);
+      if (candidate.seconds > prefix.seconds) prefix = candidate;
+    }
+    const here = { seconds: prefix.seconds + node.timeoutSeconds, path: [...prefix.path, id] };
+    longest.set(id, here);
+    if (here.seconds > worst.seconds) worst = here;
+  }
+  return worst;
+}
+
+// What the calibration says a node's timeout may not go below. A node with no completed
+// observation is not calibrated at all: `null` means "no floor is derivable", never zero.
+export function calibratedFloorSeconds(plan, nodeId) {
+  const calibration = plan.timeoutCalibration;
+  const observed = calibration?.observedMaximumSeconds?.[nodeId];
+  if (!Number.isInteger(observed) || !Number.isFinite(calibration?.marginFactor)) return null;
+  return Math.ceil(observed * calibration.marginFactor);
 }
 
 export function validatePlan(plan) {
@@ -124,7 +178,45 @@ export function validatePlan(plan) {
       || !DIGEST.test(plan.evaluator.evaluationPlanDigest)) {
     throw new Error('formal evaluator command and plan digests must be full SHA-256 values');
   }
+  // Untyped retry stays banned: nothing may re-run an attempt without first asking what
+  // stopped it. `retryBudgets` is where that question gets answered, one budget per type.
   if (plan.evaluator.automaticRetries !== 0) throw new Error('the formal evaluator may not retry in place');
+  const budgets = plan.evaluator.retryBudgets;
+  const byTermination = budgets?.byTerminationType;
+  if (budgets?.schemaVersion !== 1
+      || budgets.admissionOnRetry !== 'FULL_PLAN_REVALIDATION'
+      || budgets.observability !== 'PER_ATTEMPT_TERMINATION_TYPE_RECORDED_ON_THE_ATTEMPT_MANIFEST'
+      || typeof byTermination !== 'object' || byTermination === null
+      || Object.keys(byTermination).length !== TERMINATION_TYPES.length
+      || TERMINATION_TYPES.some((type) => !Number.isInteger(byTermination[type])
+        || byTermination[type] < 0
+        || byTermination[type] > MAX_AUTOMATIC_RETRIES_PER_TERMINATION)) {
+    throw new ReleaseDagAdmissionError(
+      'RELEASE_DAG_RETRY_BUDGETS_INCOMPLETE',
+      'every termination type must declare a bounded automatic retry budget',
+      { terminationTypes: TERMINATION_TYPES, maxPerType: MAX_AUTOMATIC_RETRIES_PER_TERMINATION },
+    );
+  }
+  // The one budget that is not a judgement call. An EXITED attempt ran the command and the
+  // exit code is the product's answer; retrying it until it agrees with us would dilute the
+  // criterion into "best of N". Every other type produced no answer to dilute.
+  if (byTermination.EXITED !== 0) {
+    throw new ReleaseDagAdmissionError(
+      'RELEASE_DAG_EXITED_RETRY_BUDGET_MUST_BE_ZERO',
+      'a typed EXITED attempt is a product verdict and may never be retried automatically',
+      { declared: byTermination.EXITED },
+    );
+  }
+  const totalBudget = TERMINATION_TYPES.reduce((sum, type) => sum + byTermination[type], 0);
+  if (!Number.isInteger(budgets.maxTotalAutomaticRetries)
+      || budgets.maxTotalAutomaticRetries < 1
+      || budgets.maxTotalAutomaticRetries > totalBudget) {
+    throw new ReleaseDagAdmissionError(
+      'RELEASE_DAG_RETRY_CEILING_UNBOUNDED',
+      'the total automatic retry ceiling must be a positive bound no looser than the per-type budgets',
+      { maxTotalAutomaticRetries: budgets.maxTotalAutomaticRetries, totalBudget },
+    );
+  }
   if (plan.evaluator.phase !== 'PREDEPLOY_EVALUATION'
       || !/^[0-9A-Za-z]+$/u.test(plan.evaluator.deploymentTaskId ?? '')
       || plan.postDeploymentBoundary?.taskId !== plan.evaluator.deploymentTaskId
@@ -253,6 +345,26 @@ export function validatePlan(plan) {
         || node.timeoutSeconds > plan.evaluator.attemptTimeoutSeconds) {
       throw new Error(`${node.id} has an invalid timeout admission`);
     }
+    // A timeout is the answer to "how long before this is wedged", and the only honest
+    // source for that is how long the node has actually taken. The margin is a declared
+    // multiple of the observed maximum, and it is a FLOOR: a node may be given more head
+    // room than that, but never less, and never a number nobody measured.
+    const floor = calibratedFloorSeconds(plan, node.id);
+    if (floor !== null && node.timeoutSeconds < floor) {
+      throw new ReleaseDagAdmissionError(
+        'RELEASE_DAG_NODE_TIMEOUT_BELOW_CALIBRATED_FLOOR',
+        `${node.id} declares ${node.timeoutSeconds}s but its observed maximum of `
+          + `${plan.timeoutCalibration.observedMaximumSeconds[node.id]}s at margin `
+          + `${plan.timeoutCalibration.marginFactor} requires at least ${floor}s`,
+        {
+          nodeId: node.id,
+          declaredSeconds: node.timeoutSeconds,
+          observedMaximumSeconds: plan.timeoutCalibration.observedMaximumSeconds[node.id],
+          marginFactor: plan.timeoutCalibration.marginFactor,
+          requiredSeconds: floor,
+        },
+      );
+    }
     if (new Set(node.dependsOn).size !== node.dependsOn.length) {
       throw new Error(`${node.id} repeats a dependency`);
     }
@@ -268,6 +380,49 @@ export function validatePlan(plan) {
     }
   }
   topologicalOrder(plan);
+
+  const calibration = plan.timeoutCalibration;
+  const observedMaxima = calibration?.observedMaximumSeconds;
+  if (calibration?.schemaVersion !== 1
+      || calibration.source !== 'RELEASE_DAG_NODE_RECEIPT_DURATIONS'
+      // A run killed by its own timeout never reported how long it needed: TIMED_OUT is a
+      // truncation, not an observation, and calibrating on it would ratchet the budget up
+      // every time the host was starved. Starvation is what the retry budgets are for.
+      || calibration.completedTerminationsOnly !== true
+      || !Number.isFinite(calibration.marginFactor) || calibration.marginFactor < 1
+      || typeof observedMaxima !== 'object' || observedMaxima === null
+      || Object.keys(observedMaxima).length === 0
+      || Object.entries(observedMaxima).some(([id, seconds]) => !ids.has(id)
+        || !Number.isInteger(seconds) || seconds < 1)) {
+    throw new ReleaseDagAdmissionError(
+      'RELEASE_DAG_TIMEOUT_CALIBRATION_INCOMPLETE',
+      'node timeouts must be calibrated against observed completed durations at a declared margin',
+      { source: calibration?.source ?? null, marginFactor: calibration?.marginFactor ?? null },
+    );
+  }
+
+  // The admission this DAG never performed on itself. Every node timeout can be individually
+  // legal and the plan still be impossible: the longest chain of them is the earliest the run
+  // can be allowed to finish, and if that exceeds the scheduler deadline the attempt is
+  // already over budget before a single node is spawned. Refusing here -- before the target is
+  // resolved, before any receipt directory exists -- is the whole point: an infeasible plan
+  // must cost nothing.
+  const longest = criticalPath(plan);
+  if (longest.seconds > plan.evaluator.schedulerDeadlineSeconds) {
+    const excessSeconds = longest.seconds - plan.evaluator.schedulerDeadlineSeconds;
+    throw new ReleaseDagAdmissionError(
+      'RELEASE_DAG_CRITICAL_PATH_EXCEEDS_SCHEDULER_DEADLINE',
+      `release DAG critical path exceeds the scheduler deadline by ${excessSeconds}s: `
+        + `${longest.path.join(' -> ')} declares ${longest.seconds}s of node timeouts but the `
+        + `scheduler deadline admits only ${plan.evaluator.schedulerDeadlineSeconds}s`,
+      {
+        criticalPath: longest.path,
+        criticalPathSeconds: longest.seconds,
+        schedulerDeadlineSeconds: plan.evaluator.schedulerDeadlineSeconds,
+        excessSeconds,
+      },
+    );
+  }
 
   const mappings = new Set();
   const mappedNodes = new Set();
@@ -316,7 +471,107 @@ export function validatePlan(plan) {
       || writers[0].dependsOn[0] !== releaseBoundaries[0].id) {
     throw new Error('the legacy live-state boundary must precede the sole publisher');
   }
-  return { nodeIds: ids, order: topologicalOrder(plan), evidenceWriter: writers[0].id };
+  return {
+    nodeIds: ids,
+    order: topologicalOrder(plan),
+    evidenceWriter: writers[0].id,
+    criticalPath: longest,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Retry, decided by what stopped the attempt.
+//
+// Two attempts on 2026-08-31 -- a04bd84d (08:33:44 -> 09:33:55) and e7c287ae
+// (09:12:45 -> 10:12:58) -- each burned the full hour and wrote zero bytes. The host had
+// 0-3 GiB free and a load average of 101; nothing was learned about the release, and yet
+// each one spent a formal attempt as if it had returned a verdict. That is the bug this
+// answers: a budget of 0 applied to every termination type equally treats "the product
+// failed" and "the machine was starved" as the same fact.
+//
+// They are not. Retrying an EXITED attempt whose exit code disagrees with us turns one
+// criterion into best-of-N and dilutes the evidence. Retrying an INFRASTRUCTURE_LOST
+// attempt that produced no output dilutes nothing -- there was no evidence to weaken.
+//
+// Every decision below re-runs the full admission first. A retry that skipped it could
+// re-enter a plan that is no longer feasible, which is exactly what admission exists to
+// stop, so "we already admitted this once" is not a reason to skip it.
+
+// terminations: every attempt that has already ended, oldest first, each
+// { terminalState } and, for EXITED, { actualExitCode }.
+export function retryDecision({ plan, terminations }) {
+  if (!Array.isArray(terminations) || terminations.length === 0) {
+    throw new Error('a retry decision needs at least one terminated attempt');
+  }
+  const observedTerminations = terminations.map((termination, index) => {
+    if (!TERMINATION_TYPES.includes(termination?.terminalState)) {
+      throw new Error(`unknown attempt termination type: ${termination?.terminalState}`);
+    }
+    return {
+      attemptIndex: index,
+      terminalState: termination.terminalState,
+      actualExitCode: termination.terminalState === 'EXITED'
+        ? (termination.actualExitCode ?? null) : null,
+    };
+  });
+
+  // Admission is re-evaluated on every decision, and its outcome is reported either way, so
+  // a caller can prove it ran rather than take the retry on faith.
+  let admission;
+  try {
+    const validation = validatePlan(plan);
+    admission = {
+      outcome: 'ADMITTED',
+      revalidated: true,
+      criticalPathSeconds: validation.criticalPath.seconds,
+      schedulerDeadlineSeconds: plan.evaluator.schedulerDeadlineSeconds,
+    };
+  } catch (error) {
+    return {
+      decision: 'STOP',
+      reasonCode: 'ADMISSION_REJECTED',
+      admission: {
+        outcome: 'REJECTED',
+        revalidated: true,
+        code: error.code ?? 'RELEASE_DAG_PLAN_INVALID',
+        message: error.message,
+      },
+      observedTerminations,
+      retriesUsed: terminations.length - 1,
+    };
+  }
+
+  const budgets = plan.evaluator.retryBudgets;
+  const last = observedTerminations.at(-1);
+  const budget = budgets.byTerminationType[last.terminalState];
+  const consumed = observedTerminations
+    .filter((termination) => termination.terminalState === last.terminalState).length;
+  const retriesUsed = terminations.length - 1;
+  const shared = {
+    admission,
+    observedTerminations,
+    terminalState: last.terminalState,
+    retriesUsed,
+    budget,
+    consumedForTerminationType: consumed,
+    maxTotalAutomaticRetries: budgets.maxTotalAutomaticRetries,
+  };
+  if (consumed > budget) {
+    return {
+      ...shared,
+      decision: 'STOP',
+      reasonCode: budget === 0 ? 'TERMINATION_TYPE_NOT_RETRYABLE' : 'RETRY_BUDGET_EXHAUSTED',
+    };
+  }
+  if (retriesUsed >= budgets.maxTotalAutomaticRetries) {
+    return { ...shared, decision: 'STOP', reasonCode: 'TOTAL_RETRY_CEILING_REACHED' };
+  }
+  return {
+    ...shared,
+    decision: 'RETRY',
+    reasonCode: 'TYPED_INFRASTRUCTURE_TERMINATION_RETRYABLE',
+    retryIndex: retriesUsed + 1,
+  };
 }
 
 // ---------------------------------------------------------------------------
