@@ -183,10 +183,15 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
       { columnName: 'evidence_version', nullable: 'NO' },
     ]);
 
+    // The gate DOES have a stale-evidence branch — 0222 restored 0150's body, whose whole point is
+    // that a superseded or reopened run stops being a claim about now. What this asserts is that
+    // merge evidence does not TAKE that branch: the assertion above is on the answer, this one is
+    // on the branch being present to answer with, so a gate that silently lost it would not read
+    // as a passing test.
     const [gateDefinition] = await db.$queryRaw<Array<{ definition: string }>>(Prisma.sql`
       SELECT pg_get_functiondef('project_acceptance_done_gate()'::regprocedure) AS definition
     `);
-    assert.doesNotMatch(gateDefinition?.definition ?? '', /ACCEPTANCE_EVIDENCE_STALE/);
+    assert.match(gateDefinition?.definition ?? '', /ACCEPTANCE_EVIDENCE_STALE: acceptance run % was superseded/);
   } finally {
     await db.$disconnect();
   }

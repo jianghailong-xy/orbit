@@ -70,7 +70,7 @@ const DROPPED_FUNCTIONS = [
  * of the walls this removal must not have knocked down.
  */
 async function seedAcceptedProject(client: Client, label: string, run: {
-  verdict?: 'PASS' | 'FAIL'; superseded?: boolean;
+  verdict?: 'PASS' | 'FAIL'; superseded?: boolean; conclusion?: 'PASS' | 'FAIL';
 } = {}): Promise<{ ownerId: string; projectId: string; runId: string }> {
   const ownerId = randomUUID();
   const projectId = randomUUID();
@@ -121,8 +121,8 @@ async function seedAcceptedProject(client: Client, label: string, run: {
        ("id","run_id","project_id","ordinal","criterion_key","criterion_text","definition_id",
         "definition_revision","verdict","created_at")
      VALUES ($1,$2,$3,1,$4,'The gate still decides',$5,1,
-             'PASS'::"project_acceptance_verdict",now())`,
-    [randomUUID(), runId, projectId, criterionKey, definitionId],
+             $6::"project_acceptance_verdict",now())`,
+    [randomUUID(), runId, projectId, criterionKey, definitionId, run.conclusion ?? 'PASS'],
   );
   await client.query(
     `INSERT INTO "project_acceptance_conclusion"
@@ -130,8 +130,9 @@ async function seedAcceptedProject(client: Client, label: string, run: {
         "criterion_text","definition_id","definition_revision","verdict","decided_by",
         "decided_by_id","decided_at")
      VALUES ($1,$2,$3,1,1,$4,'The gate still decides',$5,1,
-             'PASS'::"project_acceptance_verdict",'USER',$6,now())`,
-    [randomUUID(), projectId, runId, criterionKey, definitionId, ownerId],
+             $6::"project_acceptance_verdict",'USER',$7,now())`,
+    [randomUUID(), projectId, runId, criterionKey, definitionId,
+      run.conclusion ?? 'PASS', ownerId],
   );
   return { ownerId, projectId, runId };
 }
@@ -262,14 +263,28 @@ suite('(g)-(k) the 0150 acceptance DONE gate still decides, positively and negat
         [seeded.projectId]),
       /ACCEPTANCE_MISSING/);
 
-    // (h) an acceptance run whose summary is not PASS. Its own project, because a concluded run
-    // is immutable and rewriting this one would be testing the wrong wall.
-    const failed = await seedAcceptedProject(client, 'gate-fail', { verdict: 'FAIL' });
+    // (h) an acceptance run that did not conclude PASS. What "did not PASS" means after 0179 is the
+    // append-only conclusion projection, not the run's immutable `verdict` summary column: a run
+    // that says FAIL can have a current projection in which every criterion is PASS because a later
+    // event refuted the failure, and reading the summary would make that project unclosable behind
+    // a row nothing may rewrite. So the fixture states the non-PASS as the model states it.
+    const failed = await seedAcceptedProject(client, 'gate-fail',
+      { verdict: 'FAIL', conclusion: 'FAIL' });
     assert.match(
       await refusal(client,
         `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
         [failed.projectId, failed.runId]),
       /ACCEPTANCE_MISSING/);
+
+    // And the converse, which is the reason the summary is not the input: a run whose summary is
+    // FAIL but whose current projection is all PASS still closes the project.
+    const refuted = await seedAcceptedProject(client, 'gate-refuted', { verdict: 'FAIL' });
+    await client.query(
+      `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
+      [refuted.projectId, refuted.runId]);
+    assert.equal((await client.query(
+      `SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid`, [refuted.projectId],
+    )).rows[0].status, 'DONE');
 
     // (i) an acceptance run that was superseded.
     const stale = await seedAcceptedProject(client, 'gate-stale', { superseded: true });

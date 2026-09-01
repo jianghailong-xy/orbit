@@ -92,7 +92,7 @@ const CHECKOUT_FIXTURE = [
   ['contracts/outcome-reconciler-authoritative-target.json', 'authoritative'],
   ['contracts/outcome-reconciler-release-frontier.json', 'frontier'],
   ['scripts/outcome-reconciler-release-dag.mjs', 'runner'],
-  ['test/outcome-reconciler-v2.surfaces.test.mjs', 'surfaces-suite'],
+  ['test/outcome-reconciler-v2.ratification.test.mjs', 'ratification-suite'],
   ['docs/postgres-lock-order.md', 'lock-order'],
   ['src/apiserver/src/sessions/current-work-delivery.spec.ts', 'current-work-spec'],
   ['src/apiserver/src/runner-api/inbox-lease-generation.spec.ts', 'inbox-lease-spec'],

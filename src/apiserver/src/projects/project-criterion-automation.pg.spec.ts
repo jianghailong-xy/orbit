@@ -393,7 +393,13 @@ test('late typed attempts advance the evidence version and back all four wired E
         [...initialConclusionIds].every((id) => latest.conclusions.some((event) => event.id === id)),
         'the version-0 INCONCLUSIVE events remain in the append-only ledger',
       );
-      assert.equal(overview.status, ProjectStatus.OPEN, 'canonical DONE proof remains fail-closed');
+      // 0197 additionally required a canonical evaluation cut here, so this project stayed OPEN
+      // with all four criteria PASS. 0222 removed that layer: the acceptance evidence is once more
+      // the whole of the DONE decision, and four evidence-backed PASSes are what it takes.
+      assert.equal(overview.status, ProjectStatus.DONE,
+        'four typed EXECUTABLE attempts, all matching, are the acceptance evidence for DONE');
+      assert.equal(overview.doneGate.allowed, true);
+      assert.equal(overview.doneGate.refusalCode, null);
     } finally {
       await db.$disconnect();
     }

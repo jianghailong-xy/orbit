@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "49b80d44ead9d7fedc7281d3ceadcd91b0ec4e9eddcb654b489b164211321b19",
+  "declaredDagPlanDigest": "7b3ca3722da543ad1eb09f96bba68d22b32553f11327a8452ec296430ad352e1",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GlvYGNFrhA41IVx67o0",
   "supersededAttempt": {
@@ -344,7 +344,7 @@
     "digests": {
       "package.json": "09cd227e422174918682bb93a4be56860db25f5735e48000dad56d5048bd382c",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
-      "contracts/outcome-reconciler-authoritative-target.json": "0a3a269d1a014d3de5890343b869a211096aaba338817b0b0ada74f5e7363b7f",
+      "contracts/outcome-reconciler-authoritative-target.json": "343982d61040435310276677ad7622fe97790e8ca773111afa22031d19f1efc7",
       "contracts/outcome-reconciler-release-frontier.json": "24342d1028c0a99dad4b42d6c7a8221d20238e0132b0a9980bd43d4c104e1aa6",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "efd97c051ec63dcce5984fbfd79ea6842b7e5e35da77d85fe73d3dab4d8f1776",
@@ -369,7 +369,7 @@
       "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
       "scripts/outcome-reconciler-release-dag.mjs": "a139e0a2da523b4d0cc44cfdba9e8ee269496f99030db1a8ef86e5d98c28124e",
       "test/fixtures/release-dag-disposable-exit-path.mjs": "14328f8254aff4b852fd13e54da46c18d2ad2b6f6383662078261797a039465f",
-      "test/outcome-reconciler-release-dag-plan.test.mjs": "43317b3a335ad40612c4ba01231444ea7a755a2e6b3dda4d01682fafb1047f57",
+      "test/outcome-reconciler-release-dag-plan.test.mjs": "c2270e220fa909d4758683208234e8b9c50f034ffb93ac9eff3788e5ee9f009e",
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "c7ee0ed206243f318bb02f92d8a210f74e99f20ddffcedc9aa7f91e991d342c5"
     }
   },

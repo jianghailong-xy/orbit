@@ -75,6 +75,13 @@ BEGIN;
 --         folded into ACCEPTANCE_MISSING, which is 0182's distinction and the one
 --         `project-provenance-epoch.spec.ts` has asserted 0150's text for all along: "your
 --         evidence is about a world that is no longer this one" already has a code.
+--
+--     What "the run did not PASS" means is the criterion projection, not the run's `verdict`
+--     summary column, and that is 0185's decision rather than a new one. A concluded run is
+--     immutable and conclusions are append-only events, so a run whose summary says FAIL can have a
+--     current projection in which every criterion is PASS — a later event refuted the failure. 0182
+--     read the summary because it predated those events; reading it again here would make a project
+--     that fixed what it failed permanently unclosable behind a row nothing is allowed to rewrite.
 -- ---------------------------------------------------------------------------------------------
 
 DROP TRIGGER "project_acceptance_done_insert_gate" ON "project";
@@ -119,11 +126,6 @@ BEGIN
       'ACCEPTANCE_EVIDENCE_STALE: acceptance run % passed in epoch %, and this project is now in epoch % — it was reopened after that run',
       run."id", run."acceptance_epoch", NEW."acceptance_epoch" USING ERRCODE = 'raise_exception';
   END IF;
-  IF run."verdict" IS DISTINCT FROM 'PASS'::"project_acceptance_verdict" THEN
-    RAISE EXCEPTION 'ACCEPTANCE_MISSING: acceptance run % concluded %, not PASS',
-      run."id", COALESCE(run."verdict"::text, 'UNDECIDED') USING ERRCODE = 'raise_exception';
-  END IF;
-
   SELECT count(*) INTO criterion_count FROM "project_acceptance_criterion_definition"
    WHERE "project_id" = NEW."id";
   IF criterion_count = 0 THEN

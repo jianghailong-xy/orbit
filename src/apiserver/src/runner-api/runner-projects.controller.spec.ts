@@ -565,9 +565,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // Failure Continuation's canonical agent-queue view is also read-only. It gives a runner
     // the same obligation revision/binding/reason tuple that owner-facing clients receive.
     'projectFailureCoordination',
-    // Read-only canonical projection. The actor is fixed to AGENT by the controller, so this
-    // reveals the standing obligation/CTA without turning the runner into its owner.
-    'projectOutcome',
     // See `criteriaProposal` above: proposing is not deciding.
     'proposeCriteriaChange',
     'recordMergeEvidence',
@@ -594,7 +591,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     openAcceptanceRun: RequestMethod.POST,
     projectAcceptance: RequestMethod.GET,
     projectFailureCoordination: RequestMethod.GET,
-    projectOutcome: RequestMethod.GET,
     proposeCriteriaChange: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
