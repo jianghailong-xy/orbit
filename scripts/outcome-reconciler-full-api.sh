@@ -8,6 +8,7 @@ API="$REPO/src/apiserver"
 BUILD="$REPO/build"
 CONTAINER="orbit-release-api-pg-$$"
 ADMIN="pccrf_admin"
+PREFIX="pccrf"
 PASSWORD="pccrf_password"
 DATABASE="pccrf_frontier_template"
 IMAGE="${OUTCOME_RELEASE_API_PG_IMAGE:-postgres:16-alpine}"
@@ -135,6 +136,11 @@ export OUTCOME_API_CASE_REPO="$REPO"
 export OUTCOME_API_CASE_API="$API"
 export OUTCOME_API_CASE_DIR="$CASE_DIR"
 export OUTCOME_API_CASE_TOTAL="${#SPECS[@]}"
+# The template every case clones, and the prefix its own database, empty database and role are
+# named from. Both are asserted by the case script rather than assumed, so a run that lost its
+# isolation cannot quietly borrow the shared one.
+export OUTCOME_API_CASE_TEMPLATE="$DATABASE"
+export OUTCOME_API_CASE_PREFIX="$PREFIX"
 
 PARALLEL_INPUT=()
 SERIAL_INPUT=()
@@ -152,14 +158,14 @@ TEST_RC=0
 if [ "${#PARALLEL_INPUT[@]}" -gt 0 ]; then
   set +e
   printf '%s\0' "${PARALLEL_INPUT[@]}" | \
-    xargs -0 -r -n 2 -P "$JOBS" "$REPO/scripts/outcome-reconciler-full-api-case.sh"
+    xargs -0 -r -n 2 -P "$JOBS" "$REPO/scripts/outcome-reconciler-full-api-standalone-case.sh"
   PARALLEL_RC=${PIPESTATUS[1]}
   set -e
   [ "$PARALLEL_RC" = 0 ] || TEST_RC=1
 fi
 
 for ((OFFSET = 0; OFFSET < ${#SERIAL_INPUT[@]}; OFFSET += 2)); do
-  if ! "$REPO/scripts/outcome-reconciler-full-api-case.sh" \
+  if ! "$REPO/scripts/outcome-reconciler-full-api-standalone-case.sh" \
     "${SERIAL_INPUT[$OFFSET]}" "${SERIAL_INPUT[$((OFFSET + 1))]}"; then
     TEST_RC=1
   fi
@@ -167,8 +173,25 @@ done
 
 for ((INDEX = 1; INDEX <= ${#SPECS[@]}; INDEX += 1)); do
   CASE_LOG="$CASE_DIR/$(printf '%04d' "$INDEX").tap"
+  CASE_RECEIPT="$CASE_DIR/$(printf '%04d' "$INDEX").json"
   [ -f "$CASE_LOG" ] || { echo "full API case $INDEX produced no TAP log" >&2; TEST_RC=1; continue; }
   cat "$CASE_LOG" >> "$TAP"
+  if [ -z "${OUTCOME_RELEASE_API_SPEC_REGEX:-}" ]; then
+    # The receipt carries the three properties the concatenated TAP cannot: that this case ran
+    # under its own verified pcc* identity, that it left nothing of it behind, and that it
+    # reported at least one test rather than silently running none.
+    if ! CASE_FACTS="$(node -e 'const r=require(process.argv[1]);process.stdout.write(`${r.outcome} ${r.cleanup.resourcesRemaining} ${r.summary.tests} ${r.identity.verifiedBeforeMutation}`)' "$CASE_RECEIPT" 2>/dev/null)"; then
+      echo "full API case $INDEX left no readable receipt" >&2
+      TEST_RC=1
+    else
+      read -r CASE_OUTCOME CASE_REMAINING CASE_TESTS CASE_VERIFIED <<<"$CASE_FACTS"
+      if [ "$CASE_OUTCOME" != PASS ] || [ "$CASE_REMAINING" != 0 ] \
+        || [ "$CASE_TESTS" -lt 1 ] || [ "$CASE_VERIFIED" != true ]; then
+        echo "full API case $INDEX did not leave a clean PASS receipt: $CASE_FACTS" >&2
+        TEST_RC=1
+      fi
+    fi
+  fi
 done
 [ "$TEST_RC" = 0 ] || { echo 'full API acceptance failed' >&2; exit "$TEST_RC"; }
 if [ -n "${OUTCOME_RELEASE_API_SPEC_REGEX:-}" ]; then

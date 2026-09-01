@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
@@ -41,7 +42,7 @@ function harness({
   const turnWrites: unknown[] = [];
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
-      const text = ((args[0] as readonly string[]) ?? []).join('?');
+      const text = renderRawQuery(args).text;
       if (/FROM "session"/.test(text)) {
         return [{
           id: SESSION_ID,

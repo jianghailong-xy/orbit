@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -134,13 +135,13 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
         throw new Error('the coordinator binding must be written in the create, not after it');
       },
     },
-    $queryRaw: async (query: { text?: string; values?: unknown[] }) => {
-      const text = query.text ?? '';
+    $queryRaw: async (...args: unknown[]) => {
+      const { text, values: bound } = renderRawQuery(args);
       if (text.includes('FROM "user"')) return [{ id: OWNER_ID }];
       if (text.includes('FROM "workspace"')) return [{ id: WORKSPACE_ID }];
       if (!text.includes('UPDATE "session"')) throw new Error(`unexpected raw query: ${text}`);
       sessionUpdateSql.push(text);
-      const [title, id, ownerId, workspaceId] = query.values as string[];
+      const [title, id, ownerId, workspaceId] = bound as string[];
       const row = rows.find(
         (candidate) =>
           candidate.id === id &&

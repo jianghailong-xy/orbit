@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { Query } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
@@ -62,9 +63,9 @@ function serviceWith(opts: {
     // proved against a real one in `project-task-dependency-fields.pg.spec.ts`; what is checked
     // here is the part that is this file's subject — that it happens once per page and that its
     // answer reaches the rows.
-    $queryRaw: async (sql: unknown) => {
-      const query = sql as { strings?: readonly string[]; sql?: string };
-      const rendered = query.strings?.join(' ') ?? query.sql ?? String(sql);
+    $queryRaw: async (...args: unknown[]) => {
+      const sql = args[0];
+      const rendered = renderRawQuery(args).text;
       if (rendered.includes('"unmetCount"')) {
         calls.graph.push(sql);
         return opts.graph ?? [];

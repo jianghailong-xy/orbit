@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { before, after, beforeEach, test } from 'node:test';
 import { Client } from 'pg';
 import { RunStatus } from '@prisma/client';
@@ -123,19 +124,12 @@ async function session(provider: string) {
 /** Prisma's tagged-template $queryRaw, forwarded to a real connection as $1,$2,… */
 function pgTx() {
   return {
-    $queryRaw: async (
-      query: readonly string[] | { strings: readonly string[]; values?: readonly unknown[] },
-      ...taggedValues: unknown[]
-    ) => {
+    $queryRaw: async (...args: unknown[]) => {
       // Prisma sometimes calls a transaction client as a tag and sometimes hands it a
-      // pre-built `Prisma.sql` object. Exercise both production call shapes against the real
-      // database; treating the latter as a template array made capability-gated cases fail in
-      // the harness before their predicate could run.
-      const prismaSql = Array.isArray(query)
-        ? null
-        : (query as { strings: readonly string[]; values?: readonly unknown[] });
-      const strings = prismaSql?.strings ?? (query as readonly string[]);
-      const values = prismaSql?.values ?? taggedValues;
+      // pre-built `Prisma.sql` object. Both production call shapes reach the real database
+      // here, through the one splitter that is tested against both; treating the latter as a
+      // template array made capability-gated cases fail before their predicate could run.
+      const { strings, values } = renderRawQuery(args);
       const text = strings.reduce(
         (sql, part, i) => sql + part + (i < values.length ? `$${i + 1}` : ''),
         '',

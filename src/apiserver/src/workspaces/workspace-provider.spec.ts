@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import {
   agentProviderSeed,
   DEFAULT_AGENT_PROVIDER,
@@ -13,9 +14,10 @@ function prismaStub(rows: unknown[] = []) {
   return {
     seen,
     prisma: {
-      $queryRaw: async (query: { strings: string[]; values: unknown[] }) => {
-        seen.sql = query.strings.join('?');
-        seen.values = query.values;
+      $queryRaw: async (...args: unknown[]) => {
+        const rendered = renderRawQuery(args);
+        seen.sql = rendered.text;
+        seen.values = [...rendered.values];
         return rows;
       },
     } as never,

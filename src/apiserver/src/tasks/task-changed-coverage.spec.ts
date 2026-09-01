@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { TasksService, TASK_CHANGED_MAX_ROWS } from './tasks.service';
 
@@ -13,8 +14,8 @@ function fixture(answer: AffectedRow[] | Error) {
   const published: unknown[][] = [];
   let sql = '';
   const prisma = {
-    $queryRaw: async (strings: TemplateStringsArray) => {
-      sql = strings.join('?');
+    $queryRaw: async (...args: unknown[]) => {
+      sql = renderRawQuery(args).text;
       if (answer instanceof Error) throw answer;
       return answer;
     },

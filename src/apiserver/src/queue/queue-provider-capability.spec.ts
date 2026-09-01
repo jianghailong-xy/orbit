@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
 import { QueueService } from './queue.service';
@@ -11,8 +12,8 @@ async function capturedClaimCapability(
   let claimSetting: unknown;
   let settingSql = '';
   const tx = {
-    $executeRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-      const statement = strings.join('?');
+    $executeRaw: async (...args: unknown[]) => {
+      const { text: statement, values: bound } = renderRawQuery(args);
       if (statement.includes('orbit.runner_supports_opencode')) {
         settingSql = statement;
         claimSetting = bound[0];
@@ -21,9 +22,10 @@ async function capturedClaimCapability(
     },
     // The claim composes shared cap fragments, so it hands $queryRaw one Prisma.Sql rather
     // than a tagged template: literal segments in `strings`, bound parameters in `values`.
-    $queryRaw: async (statement: { strings: readonly string[]; values: unknown[] }) => {
-      sql = statement.strings.join('?');
-      values = statement.values;
+    $queryRaw: async (...args: unknown[]) => {
+      const rendered = renderRawQuery(args);
+      sql = rendered.text;
+      values = [...rendered.values];
       return [];
     },
   };

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { TasksService } from './tasks.service';
 import { TASK_BATCH_CREATE_MAX, type CreateTaskBatchItemDto } from './dto';
@@ -17,10 +18,10 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
   const owned = new Set(options.ownedTasks ?? [EXISTING_TASK]);
   const locks: string[] = [];
   const tx = {
-    $queryRaw: async (strings: TemplateStringsArray) => {
+    $queryRaw: async (...args: unknown[]) => {
       // The owner lock is the only raw statement this path issues; recorded so a test can assert
       // whether a batch took it at all.
-      if (/FOR UPDATE/i.test(strings.join(''))) locks.push('lock');
+      if (/FOR UPDATE/i.test(renderRawQuery(args).text)) locks.push('lock');
       return [];
     },
     task: {

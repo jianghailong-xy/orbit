@@ -21,12 +21,16 @@
  */
 
 import { Prisma } from '@prisma/client';
+import { TransactionSurface } from '../common/prisma-transaction-surface';
 import {
   AggregationTaskFact,
   AggregationTaskStatus,
   PlannedTaskAggregation,
 } from './task-aggregation';
 import { taskRetirement } from '../tasks/task-supersession';
+
+/** The closure reads tasks and nothing else; `task.findMany` is the whole of its surface. */
+export type AggregationScopeTransaction = TransactionSurface<{ task: ['findMany'] }>;
 
 /**
  * How many tasks one recomputation may pull in before it gives up.
@@ -88,7 +92,7 @@ const SCOPE_SELECT = {
  * compares them by identity and never parses them, so the spelling only has to be consistent.
  */
 export async function collectAggregationScope(
-  db: Prisma.TransactionClient,
+  db: AggregationScopeTransaction,
   ownerId: string,
   seedTaskIds: readonly string[],
 ): Promise<AggregationScope> {

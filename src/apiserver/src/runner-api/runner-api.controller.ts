@@ -106,6 +106,7 @@ import {
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
@@ -783,6 +784,12 @@ function completionAckFailureEvidence(error: unknown): {
     },
   };
 }
+
+/** `runner.findUnique` is the whole of the quota snapshot read, and was itself a drift point. */
+export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] }>;
+
+/** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
+export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
 
 @MachineProtocol()
 @Controller('runner')
@@ -5513,7 +5520,7 @@ export class RunnerApiController {
    *    fails identically every time would be re-sent to forever.
    */
   private async retryPlanFor(
-    tx: Prisma.TransactionClient,
+    tx: RetryPlanTransaction,
     sessionId: string,
     runnerId: string,
     text: string,
@@ -5552,7 +5559,7 @@ export class RunnerApiController {
    * terminal `error` of a run that never got to speak.
    */
   private async quotaRetryAt(
-    tx: Prisma.TransactionClient,
+    tx: QuotaRetryTransaction,
     runnerId: string,
     provider: string,
     text: string,

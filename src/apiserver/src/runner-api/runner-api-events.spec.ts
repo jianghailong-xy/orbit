@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
@@ -30,8 +31,8 @@ function makeController(
   const publishedEvents: any[] = [];
   const tx = {
     $queryRaw: async () => [{ id: 'session-1', leaseOwnerMatches: true }],
-    $executeRaw: async (strings: TemplateStringsArray, ..._values: unknown[]) => {
-      calls.executeRaw.push(strings.join('?'));
+    $executeRaw: async (...args: unknown[]) => {
+      calls.executeRaw.push(renderRawQuery(args).text);
       return 1;
     },
     runEvent: {

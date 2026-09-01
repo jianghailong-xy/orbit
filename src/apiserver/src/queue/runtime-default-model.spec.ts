@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { AgentProvider, PermissionMode, type ClaimedSession } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -86,8 +87,9 @@ function harness(
       },
       update: async () => session,
     },
-    $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      materializeQueries.push(strings.join('?'));
+    $executeRaw: async (...args: unknown[]) => {
+      const { text, values } = renderRawQuery(args);
+      materializeQueries.push(text);
       assert.equal(values[1], session.id);
       modelWrites.push(values[0] as string);
       return options.casWinnerModel === undefined ? 1 : 0;

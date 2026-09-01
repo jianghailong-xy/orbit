@@ -4,6 +4,9 @@ import { Prisma, RunStatus } from '@prisma/client';
 import {
   acknowledgedRuntimeTurnIds,
   CURRENT_WORK_INTERRUPTED,
+  CurrentWorkStartupTransaction,
+  CurrentWorkSteerTransaction,
+  CurrentWorkTransaction,
   terminalizeUndeliveredCurrentWork,
   terminalizePendingCurrentWorkSteers,
   terminalizePendingStartupContexts,
@@ -11,6 +14,7 @@ import {
 import {
   currentWorkTerminalizationDouble,
   renderRawQuery,
+  transactionDouble,
 } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 
@@ -28,6 +32,7 @@ test('the raw-query double renders a tagged-template call with its separate bind
 
   assert.deepEqual(rendered, {
     shape: 'tagged-template',
+    strings: ['SELECT ', '::uuid, ', '::uuid'],
     text: 'SELECT ?::uuid, ?::uuid',
     values: [SESSION_ID, TARGET_ID],
   });
@@ -40,17 +45,47 @@ test('the raw-query double renders a composed Prisma.Sql object with embedded bi
 
   assert.deepEqual(rendered, {
     shape: 'prisma-sql',
+    strings: ['SELECT ', '::uuid, ', '::uuid'],
     text: 'SELECT ?::uuid, ?::uuid',
     values: [SESSION_ID, TARGET_ID],
   });
+
+  // Both forms are pinned by shape, not merely by "it did not throw": the tagged template keeps
+  // its bindings beside the fragments, the composed object carries them inside itself, and the two
+  // are told apart rather than coerced into one.
+  assert.notEqual(rendered.shape, 'tagged-template');
+});
+
+test('a composed statement nested inside a tagged template is spliced, not bound', () => {
+  const renderTag = (strings: TemplateStringsArray, ...values: unknown[]) =>
+    renderRawQuery([strings, ...values]);
+  const ids = Prisma.join([SESSION_ID, TARGET_ID].map((id) => Prisma.sql`${id}::uuid`));
+
+  const rendered = renderTag`SELECT id FROM t WHERE id IN (${ids}) AND owner = ${OWNER_ID}`;
+
+  // Prisma folds a nested statement's fragments into the surrounding text; a double that bound it
+  // as one opaque parameter would report a statement with no `::uuid` in it at all.
+  assert.deepEqual(rendered, {
+    shape: 'tagged-template',
+    strings: ['SELECT id FROM t WHERE id IN (', '::uuid,', '::uuid) AND owner = ', ''],
+    text: 'SELECT id FROM t WHERE id IN (?::uuid,?::uuid) AND owner = ?',
+    values: [SESSION_ID, TARGET_ID, OWNER_ID],
+  });
+
+  // …and the answer is the real client's, not merely a self-consistent one: Prisma renders the
+  // same statement with positional placeholders, so replacing them yields exactly this text and
+  // exactly these bindings. A double that disagreed here would be a silent false green.
+  const real = Prisma.sql`SELECT id FROM t WHERE id IN (${ids}) AND owner = ${OWNER_ID}`;
+  assert.equal(real.text.replace(/\$\d+/g, '?'), rendered.text);
+  assert.deepEqual(real.values, [...rendered.values]);
 });
 
 test('zero CURRENT_WORK candidates perform both reads and no receipt writes', async () => {
   const double = currentWorkTerminalizationDouble();
-  const tx = {
+  const tx: CurrentWorkTransaction = {
     conversationTurn: double.conversationTurn,
     conversationTurnStartupFragment: double.conversationTurnStartupFragment,
-  } as unknown as Prisma.TransactionClient;
+  };
 
   const result = await terminalizeUndeliveredCurrentWork(tx, SESSION_ID, {
     code: CURRENT_WORK_INTERRUPTED,
@@ -83,10 +118,10 @@ test('steer and startup candidates receive their exact terminal receipts togethe
       targetTurn: { status: 'PENDING' },
     }],
   });
-  const tx = {
+  const tx: CurrentWorkTransaction = {
     conversationTurn: double.conversationTurn,
     conversationTurnStartupFragment: double.conversationTurnStartupFragment,
-  } as unknown as Prisma.TransactionClient;
+  };
 
   const result = await terminalizeUndeliveredCurrentWork(tx, SESSION_ID, {
     code: CURRENT_WORK_INTERRUPTED,
@@ -158,19 +193,20 @@ test('only engine-read acknowledged USER receipts enter the durable ACK ledger',
 
 test('pending and leased CURRENT_WORK steer terminalize in the authored receipt without run_event writes', async () => {
   const writes: Array<Record<string, unknown>> = [];
-  const tx = {
+  const tx = transactionDouble<CurrentWorkSteerTransaction>({
     conversationTurn: {
-      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+      findMany: async (args) => {
+        const where = args?.where as Record<string, unknown>;
         assert.deepEqual((where.status as { in: string[] }).in, ['PENDING', 'IN_FLIGHT']);
         assert.equal(where.deliveryStatus, null);
         return [{ id: STEER_ID, targetTurnId: TARGET_ID, status: 'PENDING' }];
       },
-      updateMany: async (write: Record<string, unknown>) => {
-        writes.push(write);
+      updateMany: async (write) => {
+        writes.push(write as unknown as Record<string, unknown>);
         return { count: 1 };
       },
     },
-  } as unknown as Prisma.TransactionClient;
+  });
 
   const result = await terminalizePendingCurrentWorkSteers(tx, SESSION_ID, {
     targetTurnIds: [TARGET_ID],
@@ -193,10 +229,10 @@ test('pending and leased CURRENT_WORK steer terminalize in the authored receipt 
 
 test('undelivered startup context terminalizes in place with mutually-exclusive failure proof', async () => {
   const writes: Array<Record<string, unknown>> = [];
-  const tx = {
+  const tx = transactionDouble<CurrentWorkStartupTransaction>({
     conversationTurnStartupFragment: {
-      findMany: async ({ where }: { where: Record<string, unknown> }) => {
-        assert.equal(where.deliveryStatus, null);
+      findMany: async (args) => {
+        assert.equal((args?.where as Record<string, unknown>).deliveryStatus, null);
         return [{
           id: FRAGMENT_ID,
           targetTurnId: TARGET_ID,
@@ -204,12 +240,12 @@ test('undelivered startup context terminalizes in place with mutually-exclusive 
           targetTurn: { status: 'PENDING' },
         }];
       },
-      updateMany: async (write: Record<string, unknown>) => {
-        writes.push(write);
+      updateMany: async (write) => {
+        writes.push(write as unknown as Record<string, unknown>);
         return { count: 1 };
       },
     },
-  } as unknown as Prisma.TransactionClient;
+  });
 
   const result = await terminalizePendingStartupContexts(tx, SESSION_ID, {
     code: CURRENT_WORK_INTERRUPTED,
@@ -228,11 +264,11 @@ test('undelivered startup context terminalizes in place with mutually-exclusive 
 test('runner loss records leased CURRENT_WORK as UNCONFIRMED rather than a false non-delivery', async () => {
   const steerWrites: Array<Record<string, unknown>> = [];
   const startupWrites: Array<Record<string, unknown>> = [];
-  const tx = {
+  const tx = transactionDouble<CurrentWorkTransaction>({
     conversationTurn: {
       findMany: async () => [{ id: STEER_ID, targetTurnId: TARGET_ID, status: 'IN_FLIGHT' }],
-      updateMany: async (write: Record<string, unknown>) => {
-        steerWrites.push(write);
+      updateMany: async (write) => {
+        steerWrites.push(write as unknown as Record<string, unknown>);
         return { count: 1 };
       },
     },
@@ -243,12 +279,12 @@ test('runner loss records leased CURRENT_WORK as UNCONFIRMED rather than a false
         deliveredAt: new Date(),
         targetTurn: { status: 'IN_FLIGHT' },
       }],
-      updateMany: async (write: Record<string, unknown>) => {
-        startupWrites.push(write);
+      updateMany: async (write) => {
+        startupWrites.push(write as unknown as Record<string, unknown>);
         return { count: 1 };
       },
     },
-  } as unknown as Prisma.TransactionClient;
+  });
 
   const options = {
     includeInFlight: true,
