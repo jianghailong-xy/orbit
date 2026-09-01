@@ -18,56 +18,19 @@ import {
 import {
   OUTCOME_SURFACES,
   OUTCOME_SURFACE_LIMITS,
-  assertOutcomeDecisionProtocol,
   assertOutcomeSurfaceSetConsistency,
   deriveOutcomeSurface,
   redactOutcomePayload,
   type DerivedOutcomeSurface,
-  type HumanDecisionProtocol,
-  type OutcomeDecisionRequest,
   type OutcomeProjectionInput,
   type OutcomeSurface,
   type OutcomeSurfaceActor,
 } from './outcome-surfaces';
 
-interface DecisionRequestRow {
-  requestId: string;
-  requestRevision: string;
-  obligationId: string;
-  obligationRevision: string;
-  bindingDigest: string;
-  reason: string;
-  status: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
-  expiresLogicalTime: bigint;
-  request: Prisma.JsonValue;
-  attemptedActions: Prisma.JsonValue;
-  logicalNow: bigint;
-}
-
-export interface BoundOutcomeDecisionInput {
-  requestRevision: string;
-  obligationId: string;
-  obligationRevision: string;
-  bindingDigest: string;
-  idempotencyKey: string;
-  decision: Record<string, unknown>;
-}
-
-const REASON_DECISION_TYPE: Readonly<Record<string, HumanDecisionProtocol['decisionType']>> = {
-  GOAL_DECISION: 'GOAL_DECISION',
-  RISK_ACCEPTANCE: 'RISK_ACCEPTANCE',
-  NEW_AUTHORIZATION: 'NEW_AUTHORIZATION',
-  EXTERNAL_IDENTITY: 'EXTERNAL_IDENTITY',
-};
-
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-}
-
-function array(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 function boundedRedacted<T>(value: T, maxBytes = OUTCOME_SURFACE_LIMITS.maxProjectionBytes): T {
@@ -80,26 +43,6 @@ function boundedRedacted<T>(value: T, maxBytes = OUTCOME_SURFACE_LIMITS.maxProje
     });
   }
   return safe;
-}
-
-function requestProtocol(row: DecisionRequestRow): HumanDecisionProtocol {
-  const request = record(row.request);
-  return {
-    decisionType: REASON_DECISION_TYPE[row.reason] ?? 'GOAL_DECISION',
-    // Older coordinator requests predate this presentation field. Their immutable semantic reason
-    // already carries the attempts, so the read adapter can supply it without changing identity.
-    agentWorkCompleted: array(request.agentWorkCompleted).length > 0
-      ? array(request.agentWorkCompleted)
-      : array(row.attemptedActions),
-    whyNotAgent: String(request.whyNotAgent ?? ''),
-    options: array(request.options),
-    impacts: array(request.impacts),
-    recommendation: request.recommendation ?? null,
-    cost: request.cost ?? null,
-    deadline: request.deadline ?? { logicalTime: row.expiresLogicalTime.toString() },
-    noActionConsequence: request.noActionConsequence ?? null,
-    resumeBehavior: request.resumeBehavior ?? null,
-  };
 }
 
 /**
@@ -159,16 +102,17 @@ export class OutcomeSurfaceService {
         message: error instanceof Error ? error.message : 'Outcome projection unavailable',
       });
     }
-    const requests = await this.currentDecisionRequests(input.tenantId, input.projectId);
-    const logicalNow = requests[0]?.logicalNow.toString()
-      ?? String(record(record(projection).canonicalIdentity).evaluatedThroughLogicalTime ?? '0');
+    // The persistent coordinator that opened owner-decision requests is gone with its tables;
+    // the surface is derived from the projection alone.
+    const logicalNow =
+      String(record(record(projection).canonicalIdentity).evaluatedThroughLogicalTime ?? '0');
     let derived: DerivedOutcomeSurface;
     try {
       derived = deriveOutcomeSurface({
         projection: projection as unknown as OutcomeProjectionInput,
         surface: input.surface,
         actor: input.actor,
-        decisionRequests: requests.map((row) => this.decisionRequest(row)),
+        decisionRequests: [],
         logicalNow,
       });
     } catch (error) {
@@ -292,62 +236,6 @@ export class OutcomeSurfaceService {
     });
   }
 
-  async decideOwnerRequest(
-    tenantId: string,
-    requestId: string,
-    input: BoundOutcomeDecisionInput,
-  ): Promise<Record<string, unknown>> {
-    if (!input || !input.idempotencyKey?.trim()
-        || input.decision === null || typeof input.decision !== 'object'
-        || Array.isArray(input.decision)) {
-      throw new BadRequestException('idempotencyKey and decision object are required');
-    }
-    const serialized = JSON.stringify(input.decision);
-    if (Buffer.byteLength(serialized, 'utf8') > OUTCOME_SURFACE_LIMITS.maxDecisionPayloadBytes) {
-      throw new BadRequestException('OUTCOME_HUMAN_DECISION_PAYLOAD_TOO_LARGE');
-    }
-    if (JSON.stringify(redactOutcomePayload(input.decision)) !== serialized) {
-      throw new BadRequestException('OUTCOME_HUMAN_DECISION_SECRET_FORBIDDEN');
-    }
-    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-      SELECT outcome_decide_coordinator_owner_request(
-        ${tenantId}::uuid,
-        ${requestId}::uuid,
-        ${input.requestRevision},
-        ${input.obligationId},
-        ${input.obligationRevision},
-        ${input.bindingDigest},
-        ${input.idempotencyKey},
-        ${serialized}::jsonb
-      ) AS result
-    `);
-    if (!row) throw new ConflictException('Outcome owner decision returned no receipt');
-    return redactOutcomePayload(row.result) as Record<string, unknown>;
-  }
-
-  async ownerDecisionView(tenantId: string, requestId: string): Promise<Record<string, unknown>> {
-    const [row] = await this.prisma.$queryRaw<Array<{ projectId: string }>>(Prisma.sql`
-      SELECT request.project_id AS "projectId"
-        FROM outcome_coordinator_owner_decision_request request
-        JOIN project ON project.id = request.project_id
-       WHERE request.tenant_id = ${tenantId}::uuid
-         AND project.owner_id = ${tenantId}::uuid
-         AND request.request_id = ${requestId}::uuid
-    `);
-    if (!row) throw new NotFoundException('decision request not found');
-    const surface = await this.readProjectSurface({
-      tenantId,
-      projectId: row.projectId,
-      surface: 'OWNER_DECISION_INBOX',
-      actor: 'OWNER',
-    });
-    const item = surface.items?.find(
-      (candidate) => candidate.decisionRequest?.requestId === requestId,
-    );
-    if (!item) throw new ConflictException('decision request is not current');
-    return { projectId: row.projectId, canonicalIdentity: surface.canonicalIdentity, ...item };
-  }
-
   private async assertProjectTenant(tenantId: string, projectId: string): Promise<void> {
     const owned = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId: tenantId },
@@ -355,55 +243,6 @@ export class OutcomeSurfaceService {
     });
     // Deliberately the same response for an absent project and another tenant's project.
     if (!owned) throw new NotFoundException('project not found');
-  }
-
-  private async currentDecisionRequests(
-    tenantId: string,
-    projectId: string,
-  ): Promise<DecisionRequestRow[]> {
-    return this.prisma.$queryRaw<DecisionRequestRow[]>(Prisma.sql`
-      SELECT request.request_id AS "requestId",
-             request.request_revision AS "requestRevision",
-             request.obligation_id AS "obligationId",
-             request.obligation_revision AS "obligationRevision",
-             request.binding_digest AS "bindingDigest",
-             request.reason,
-             request.status,
-             request.expires_logical_time AS "expiresLogicalTime",
-             request.request,
-             COALESCE((
-               SELECT revision.source_obligation#>'{reason,attemptedActions}'
-                 FROM outcome_coordinator_obligation_revision revision
-                WHERE revision.tenant_id = request.tenant_id
-                  AND revision.project_id = request.project_id
-                  AND revision.obligation_id = request.obligation_id
-                  AND revision.obligation_revision = request.obligation_revision
-                  AND revision.binding_digest = request.binding_digest
-                ORDER BY revision.created_logical_time DESC, revision.coordination_revision DESC
-                LIMIT 1
-             ), '[]'::jsonb) AS "attemptedActions",
-             clock.logical_time AS "logicalNow"
-        FROM outcome_coordinator_owner_decision_request request
-        JOIN outcome_coordinator_clock clock ON clock.tenant_id = request.tenant_id
-       WHERE request.tenant_id = ${tenantId}::uuid
-         AND request.project_id = ${projectId}::uuid
-         AND request.status IN ('OPEN', 'DECIDED', 'SUPERSEDED')
-       ORDER BY request.requested_logical_time DESC, request.request_id DESC
-    `);
-  }
-
-  private decisionRequest(row: DecisionRequestRow): OutcomeDecisionRequest {
-    const expired = row.status === 'OPEN' && row.expiresLogicalTime <= row.logicalNow;
-    return {
-      requestId: row.requestId,
-      requestRevision: row.requestRevision,
-      obligationId: row.obligationId,
-      obligationRevision: row.obligationRevision,
-      bindingDigest: row.bindingDigest,
-      status: expired ? 'EXPIRED' : row.status,
-      expiresLogicalTime: row.expiresLogicalTime.toString(),
-      protocol: requestProtocol(row),
-    };
   }
 
 }

@@ -420,7 +420,8 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      assert.equal(rawQueries, 8,
+      // Six since 0220 removed the completion-ACK overlay's two page-wide reads.
+      assert.equal(rawQueries, 6,
         'one bounded set of page-wide canonical aggregates, including failure coordination');
     });
   } finally {

@@ -668,8 +668,8 @@ test('online obligation selection is bounded and uses the owner/target index', a
     pg_get_functiondef(
       'outcome_projection.read_surface_projection_only(uuid,uuid,text,text,text)'::regprocedure
     ) AS projection_source`);
-  assert.match(definitions.rows[0].public_source, /completion_ack_operational_read_surface/,
-    'the public surface must retain the completion-ack operational overlay');
+  assert.match(definitions.rows[0].public_source, /outcome_operational_read_surface/,
+    'the public surface must retain the operational overlay');
   assert.match(definitions.rows[0].public_source, /read_surface_projection_only/,
     'the integrity-only lane must retain the bounded canonical projection reader');
   assert.match(definitions.rows[0].projection_source, /ORDER BY binding_epoch DESC LIMIT 1/,

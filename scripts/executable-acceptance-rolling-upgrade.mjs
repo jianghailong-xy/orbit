@@ -107,17 +107,13 @@ function realtime() {
 async function verify() {
   const { prismaClientFor } = require(path.join(apiDist, 'prisma/prisma-client.js'));
   const { RunnerApiController } = require(path.join(apiDist, 'runner-api/runner-api.controller.js'));
-  const { OutcomeWatchdogService } = require(path.join(
-    apiDist, 'outcome-watchdog/outcome-watchdog.service.js',
-  ));
   const { RunStatus } = require(path.join(repo, 'src/apiserver/node_modules/@prisma/client'));
   const db = prismaClientFor(url);
   try {
     const history = await pool.query(`
       SELECT f.seeded_at,
              max(m.finished_at) FILTER (WHERE m.migration_name = '0193_task_done_writer_fence') AS fence_at,
-             max(m.finished_at) FILTER (WHERE m.migration_name = '0200_executable_acceptance_runtime_contract') AS runtime_at,
-             max(m.finished_at) FILTER (WHERE m.migration_name = '0201_completion_ack_canonical_obligation') AS ack_at
+             max(m.finished_at) FILTER (WHERE m.migration_name = '0200_executable_acceptance_runtime_contract') AS runtime_at
         FROM rolling_v1_fixture_stage f
         CROSS JOIN _prisma_migrations m
        WHERE f.fixture = 'legacy-shell-in-flight'
@@ -126,7 +122,6 @@ async function verify() {
     assert.equal(history.rowCount, 1);
     assert.ok(history.rows[0].fence_at > history.rows[0].seeded_at);
     assert.ok(history.rows[0].runtime_at > history.rows[0].seeded_at);
-    assert.ok(history.rows[0].ack_at > history.rows[0].seeded_at);
     const before = await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } });
     assert.equal(before.status, 'OPEN');
     assert.equal(before.acceptanceEvaluationPlanDigest, null);
@@ -141,52 +136,13 @@ async function verify() {
     assert.equal(historicalEvent.ingested_at, null);
     assert.equal(historicalEvent.ingested_by_runner_id, null);
     assert.equal(historicalEvent.ingested_under_lease_generation, null);
-    const monitor = new OutcomeWatchdogService(db);
-    const insideDelta = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64);
-    assert.equal(insideDelta.newFactCount, 0,
-      'a historical terminal event alarmed before receiving a full post-rollout detection window');
-    assert.equal((await pool.query(`
-      SELECT count(*)::int AS n FROM completion_ack_active_obligation
-       WHERE turn_id = $1::uuid
-    `, [fixture.turnId])).rows[0].n, 0);
-
-    // Test-only virtual passage of the full rollout window. The production epoch is append-only;
-    // disabling user triggers is confined to this disposable database so the test can prove the
-    // boundary without adding a 30-second wall-clock sleep to every acceptance run.
-    const clockClient = await pool.connect();
-    try {
-      await clockClient.query('BEGIN');
-      await clockClient.query("SET LOCAL session_replication_role = 'replica'");
-      await clockClient.query(`
-        UPDATE completion_ack_rollout_epoch
-           SET rollout_recorded_at = clock_timestamp() - interval '31 seconds'
-      `);
-      await clockClient.query('COMMIT');
-    } catch (error) {
-      await clockClient.query('ROLLBACK');
-      throw error;
-    } finally {
-      clockClient.release();
-    }
-    const afterDelta = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64);
-    assert.equal(afterDelta.newFactCount, 1);
-    const activeBeforeCallback = (await pool.query(`
-      SELECT obligation_id, obligation_revision, obligation
-        FROM completion_ack_active_obligation
-       WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-    `, [fixture.taskId, fixture.sessionId, fixture.turnId])).rows;
-    assert.equal(activeBeforeCallback.length, 1);
-    assert.equal(activeBeforeCallback[0].obligation.owner, 'PROJECT_COORDINATOR');
-    assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
-    assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-
     const api = new RunnerApiController(
       db,
       { notifySessionQueued() {} },
       realtime(),
       {}, {}, {},
       { appendFor: async (_tx, _sessionId, content) => content },
-      undefined, undefined, undefined, monitor,
+      undefined, undefined, undefined,
     );
     const callback = {
       turnId: fixture.turnId,
@@ -223,14 +179,6 @@ async function verify() {
     assert.equal(await db.taskExecutableJudgmentResult.count({ where: { requestId: request.id } }), 1);
     assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
     assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-    assert.equal((await pool.query(`
-      SELECT count(*)::int AS n FROM completion_ack_active_obligation
-       WHERE obligation_revision = $1
-    `, [activeBeforeCallback[0].obligation_revision])).rows[0].n, 0);
-    assert.equal((await pool.query(`
-      SELECT count(*)::int AS n FROM completion_ack_obligation_event
-       WHERE obligation_revision = $1 AND state = 'CLOSED'
-    `, [activeBeforeCallback[0].obligation_revision])).rows[0].n, 1);
 
     const evidencePath = process.env.EXECUTABLE_ACCEPTANCE_EVIDENCE_PATH;
     if (evidencePath) {
@@ -240,9 +188,7 @@ async function verify() {
       evidence.compatibility ??= {};
       evidence.compatibility.stagedPre0193V1Turn = true;
       evidence.compatibility.crossed0193And0200 = true;
-      evidence.compatibility.stagedPre0201TerminalEvent = true;
-      evidence.compatibility.historicalEventReceivedFullDetectionDelta = true;
-      evidence.compatibility.stagedObligationAutoClosed = true;
+      evidence.compatibility.historicalTerminalEventUningested = true;
       writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
     }
   } finally {

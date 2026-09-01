@@ -173,7 +173,6 @@ function runnerApi() {
     undefined,
     undefined,
     undefined,
-    undefined,
     { kick: async () => undefined },
   );
 }

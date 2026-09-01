@@ -55,16 +55,12 @@
     { "name": "evaluator", "packageScript": "test:outcome-reconciler:evaluator", "manifest": "build/outcome-reconciler-v2-evaluator-manifest.json" },
     { "name": "projection", "packageScript": "test:outcome-reconciler:projection", "manifest": "build/outcome-reconciler-v2-projection-manifest.json" },
     { "name": "done-gate", "packageScript": "test:outcome-reconciler:done-gate", "manifest": "build/outcome-reconciler-v2-done-gate-manifest.json" },
-    { "name": "coordinator", "packageScript": "test:outcome-reconciler:coordinator", "manifest": "build/outcome-reconciler-v2-coordinator-manifest.json" },
-    { "name": "watchdog", "packageScript": "test:outcome-reconciler:watchdog", "manifest": "build/outcome-reconciler-v2-watchdog-manifest.json" },
     { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "manifest": "build/executable-acceptance-runtime-manifest.json" },
     { "name": "fact-ingress", "packageScript": "test:outcome-reconciler:fact-ingress", "manifest": "build/outcome-reconciler-v2-fact-ingress-manifest.json" },
     { "name": "ratification", "packageScript": "test:outcome-reconciler:ratification", "manifest": "build/outcome-reconciler-v2-ratification-manifest.json" },
     { "name": "auto-dispatch", "packageScript": "test:outcome-reconciler:auto-dispatch", "manifest": "build/outcome-reconciler-auto-dispatch-manifest.json" },
     { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "manifest": "build/work-overview-readiness-manifest.json" },
-    { "name": "auto-dispatch-integration", "packageScript": "test:outcome-reconciler:auto-dispatch:integration", "manifest": "build/outcome-reconciler-auto-dispatch-integration-attestation.json" },
-    { "name": "watchdog-current-binding-regression", "packageScript": "test:outcome-reconciler:watchdog-current-binding:regression", "manifest": "build/outcome-reconciler-watchdog-current-binding-manifest.json" },
-    { "name": "watchdog-current-binding", "packageScript": "test:outcome-reconciler:watchdog-current-binding", "manifest": "build/outcome-reconciler-watchdog-current-binding-attestation.json" }
+    { "name": "auto-dispatch-integration", "packageScript": "test:outcome-reconciler:auto-dispatch:integration", "manifest": "build/outcome-reconciler-auto-dispatch-integration-attestation.json" }
   ],
   "restoredSuites": [
     { "name": "delivery", "packageScript": "test:outcome-reconciler:delivery", "manifest": "build/outcome-reconciler-v2-delivery-manifest.json" },
@@ -78,7 +74,6 @@
     { "name": "full-clients", "packageScript": "test:outcome-reconciler:full-clients", "manifest": "build/outcome-reconciler-full-clients-manifest.json" }
   ],
   "additionalManifests": [
-    "build/outcome-reconciler-v2-watchdog-capacity-manifest.json",
     "build/outcome-reconciler-authoritative-target-manifest.json",
     "build/outcome-reconciler-release-live-state-manifest.json"
   ]

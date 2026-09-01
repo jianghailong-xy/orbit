@@ -29,7 +29,6 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
-import { OutcomeWatchdogModule } from '../outcome-watchdog/outcome-watchdog.module';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 
 @Module({
@@ -51,7 +50,6 @@ import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconcile
     TaskListsModule,
     ProvidersModule,
     ProjectsModule,
-    OutcomeWatchdogModule,
     OutcomeReconcilerModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow

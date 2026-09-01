@@ -536,12 +536,10 @@ test('nothing left over from the control loop fires on a judgment session',
          ORDER BY 1, 2`);
       assert.deepEqual(
         triggers.rows.map((r) => r.on_table),
-        [
-          'completion_ack_coordinator_delivery_receipt',
-          'outcome_coordinator_obligation',
-          'project_action',
-        ],
-        'only append-only obligation, receipt and action guards may name the dispatch origin',
+        ['project_action'],
+        // 0220 removed the completion-ACK terminal guard, which was the only other trigger that
+        // named the dispatch origin; the append-only action guard is what is left.
+        'only the append-only action guard may name the dispatch origin',
       );
     } finally {
       await client.end();

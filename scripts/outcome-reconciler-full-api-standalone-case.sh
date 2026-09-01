@@ -6,8 +6,9 @@
 # run's binding and attempt; a standalone run has neither, and inventing them would put a release
 # binding's name on a receipt no release produced. So this one keeps every property the acceptance
 # actually asserts -- a unique pcc* identity per case, that identity verified before the spec may
-# mutate anything, a TAP log that reported at least one test and skipped none, and a cleanup that
-# is checked rather than assumed -- and records them under its own kind.
+# mutate anything, a TAP log that reported at least one test and skipped none, a cleanup that is
+# checked rather than assumed, and how the case ended when it did not pass -- and records them
+# under its own kind.
 set -euo pipefail
 
 [ "$#" = 2 ] || { echo 'usage: full-api-standalone-case INDEX SPEC' >&2; exit 2; }
@@ -24,6 +25,7 @@ set -euo pipefail
 : "${OUTCOME_API_CASE_TEMPLATE:?}"
 : "${OUTCOME_API_CASE_PREFIX:=pccrf}"
 : "${OUTCOME_API_CASE_TIMEOUT:=360}"
+: "${OUTCOME_API_CASE_TAIL_LINES:=40}"
 
 [[ "$OUTCOME_API_CASE_PREFIX" =~ ^pcc[0-9a-z]*$ ]] || {
   echo 'OUTCOME_API_CASE_PREFIX must be a pcc* identifier prefix' >&2
@@ -36,6 +38,7 @@ set -euo pipefail
 
 INDEX="$1"
 SPEC="$2"
+TAIL_LINES="$OUTCOME_API_CASE_TAIL_LINES"
 CONTAINER="$OUTCOME_API_CASE_CONTAINER"
 ADMIN="$OUTCOME_API_CASE_ADMIN"
 PASSWORD="$OUTCOME_API_CASE_PASSWORD"
@@ -64,9 +67,26 @@ EMPTY_CREATED=0
 IDENTITY_DATABASE=''
 IDENTITY_ROLE=''
 IDENTITY_SYSTEM=''
+SPEC_RC=0
+SPEC_ELAPSED=0
 
 psql_admin() {
   docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 "$@"
+}
+
+# How the case ended, named rather than left as a bare number. "Non-zero" arrives for four
+# different facts and they are not the same news: the wall clock ran out (`timeout` reports its
+# own 124), the process was killed by a signal (`timeout` reports 128+N, which is what an
+# out-of-memory kill looks like from here), the case died before it could report a single TAP
+# line, or the spec ran and reported a failing test. The first three all leave a log with no
+# `not ok` in it, so only the exit code can tell them apart.
+case_kind() {
+  local rc="$1"
+  if [ "$rc" = 0 ]; then echo COMPLETED; return; fi
+  if [ "$rc" = 124 ]; then echo TIMED_OUT; return; fi
+  if [ "$rc" -gt 128 ]; then echo SIGNALED; return; fi
+  if grep -q '^not ok' "$LOG" 2>/dev/null; then echo SPEC_FAILED; return; fi
+  echo CRASHED_BEFORE_TAP
 }
 
 cleanup_case() {
@@ -89,11 +109,15 @@ cleanup_case() {
     2>/dev/null)" || cleanup_rc=1
   [ "$leftovers" = 0 ] || cleanup_rc=1
 
-  if [ -s "$LOG" ]; then
+  # An empty log is itself a fact worth recording, so the receipt is written whenever the spec was
+  # actually launched -- which is exactly when the identity read-back below has run. A case killed
+  # before it printed one byte used to leave no receipt at all.
+  if [ -s "$LOG" ] || [ -n "$IDENTITY_DATABASE" ]; then
     node "$REPO/scripts/outcome-reconciler-full-api-standalone-receipt.mjs" \
       "$RECEIPT" "$INDEX" "$SPEC" "$CASE_DB" "$EMPTY_DB" "$CASE_ROLE" \
       "$IDENTITY_DATABASE" "$IDENTITY_ROLE" "$IDENTITY_SYSTEM" \
-      "$LOG" "$original_rc" "$cleanup_rc" || receipt_rc=1
+      "$LOG" "$original_rc" "$cleanup_rc" \
+      "$(case_kind "$original_rc")" "$SPEC_ELAPSED" "$OUTCOME_API_CASE_TIMEOUT" || receipt_rc=1
   elif [ "$original_rc" = 0 ]; then
     receipt_rc=1
   fi
@@ -131,6 +155,7 @@ EMPTY_URL="postgresql://$CASE_ROLE:$PASSWORD@$PG_HOST:$PG_PORT/$EMPTY_DB"
 CONFLICT_ORIGIN=service
 [[ "$RELATIVE_SPEC" == *.pg.spec.js ]] && CONFLICT_ORIGIN=fault_injection
 
+CASE_STARTED_AT="$(date +%s)"
 set +e
 (
   cd "$API"
@@ -149,10 +174,22 @@ set +e
 ) >"$LOG" 2>&1
 SPEC_RC=$?
 set -e
+SPEC_ELAPSED=$(( $(date +%s) - CASE_STARTED_AT ))
+SPEC_KIND="$(case_kind "$SPEC_RC")"
 
 if [ "$SPEC_RC" != 0 ]; then
-  echo "==> full-api FAILED [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC" >&2
-  sed -n '/^not ok/,$p' "$LOG" >&2
+  echo "==> full-api FAILED [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC $SPEC_KIND exit=$SPEC_RC elapsed=${SPEC_ELAPSED}s timeout=$OUTCOME_API_CASE_TIMEOUT" >&2
+  if grep -q '^not ok' "$LOG"; then
+    sed -n '/^not ok/,$p' "$LOG" >&2
+  else
+    # The case died before it produced a single `not ok`, so the sed above printed nothing at all.
+    # That is how one acceptance run reported nineteen reds without one word of why. Whatever the
+    # case did manage to write is the only evidence left, so print the end of it, and state the
+    # three numbers that separate "it ran out of time" from "it broke".
+    echo "==> full-api NO TAP [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC: last ${TAIL_LINES} lines of $LOG" >&2
+    tail -n "$TAIL_LINES" "$LOG" >&2
+    echo "exit=$SPEC_RC elapsed=${SPEC_ELAPSED}s timeout=$OUTCOME_API_CASE_TIMEOUT kind=$SPEC_KIND" >&2
+  fi
   exit "$SPEC_RC"
 fi
 echo "==> full-api PASS [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC"

@@ -1038,28 +1038,6 @@ func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
 	return out, err
 }
 
-// requestProjectOwnerDecision is the typed human-exit door for an autonomous completion-ACK
-// remediation. The Session header is authority context, not caller-authored JSON; the server binds
-// it together with this runner principal to the exact current non-revoked delivery receipt.
-func (t *Transport) requestProjectOwnerDecision(
-	id, sessionID string,
-	body map[string]interface{},
-) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(sessionID) == "" {
-		return nil, fmt.Errorf("ORBIT_SESSION_ID is required")
-	}
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST",
-		"/runner/projects/"+url.PathEscape(id)+"/completion-ack/owner-decisions",
-		body, &out, taskOpTimeout, sessionHeader(sessionID))
-	return out, err
-}
-
-// getProjectOutcome is intentionally a raw pass-through. Reformatting the semantic item in the
-// CLI would create a second obligation contract; only the server derives the AGENT CTA.
 func (t *Transport) getProjectOutcome(id, surface string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

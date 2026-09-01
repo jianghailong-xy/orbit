@@ -128,7 +128,6 @@ test('the three boundaries do not share a code', () => {
 // ── OPEN_TASK: bounded rather than refused ─────────────────────────────────────────────────────
 
 const OPENING = {
-  canonicalRemediation: false,
   completionCriterion: 'EXECUTABLE' as const,
   declaredCriterionKey: KEY_A,
   statedCriterionKeys: [KEY_A, KEY_B],
@@ -136,34 +135,6 @@ const OPENING = {
   opening: 1,
   budgetPerDay: 5,
 };
-
-test('an exact canonical remediation obligation is an orthogonal task scope reason', () => {
-  assert.equal(refuseTaskOpening('JUDGMENT', {
-    ...OPENING,
-    canonicalRemediation: true,
-    declaredCriterionKey: undefined,
-    statedCriterionKeys: [],
-    openedInWindow: 99_999,
-    budgetPerDay: 0,
-  }), null);
-});
-
-test('canonical remediation cannot silently turn into HUMAN_SIGNOFF work', () => {
-  const refusal = refuseTaskOpening('JUDGMENT', {
-    ...OPENING,
-    canonicalRemediation: true,
-    completionCriterion: 'HUMAN_SIGNOFF',
-    declaredCriterionKey: undefined,
-    statedCriterionKeys: [],
-    openedInWindow: 99_999,
-    budgetPerDay: 0,
-  });
-  assert.equal(refusal?.code, 'CANONICAL_REMEDIATION_HUMAN_SIGNOFF_FORBIDDEN');
-  assert.equal(refusal?.requiredAction, 'USE_STRUCTURED_OWNER_DECISION_PROTOCOL');
-  for (const reason of [
-    'NEW_AUTHORIZATION', 'RISK_ACCEPTANCE', 'GOAL_DECISION', 'EXTERNAL_IDENTITY',
-  ]) assert.match(refusal?.message ?? '', new RegExp(reason));
-});
 
 test('a judgment session opening a task must name the criterion it serves', () => {
   const refusal = refuseTaskOpening('JUDGMENT', { ...OPENING, declaredCriterionKey: undefined });

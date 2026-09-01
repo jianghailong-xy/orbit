@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -28,9 +28,6 @@ const { ProjectsService } = require(path.join(apiDist, 'projects/projects.servic
 const { SessionsService } = require(path.join(apiDist, 'sessions/sessions.service.js'));
 const { RunnerApiController } = require(path.join(apiDist, 'runner-api/runner-api.controller.js'));
 const { HTTP_CODE_METADATA } = require('@nestjs/common/constants');
-const { OutcomeWatchdogService } = require(path.join(
-  apiDist, 'outcome-watchdog/outcome-watchdog.service.js',
-));
 const runtime = require(path.join(apiDist, 'tasks/executable-acceptance-runtime.js'));
 const { RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } = require(path.join(
   repo, 'src/apiserver/node_modules/@prisma/client',
@@ -47,7 +44,6 @@ const evidence = {
   persistedTypedAttempts: [],
   supersessionSurfaces: {},
   watchdog: {},
-  completionAck: {},
   legacy: {},
   compatibility: {},
 };
@@ -67,30 +63,64 @@ function sha(value) {
   return createHash('sha256').update(String(value)).digest('hex');
 }
 
-const watchdogModuleGraphDigest = sha([
-  'outcome-watchdog/main',
-  'outcome-watchdog/worker-module',
-  'outcome-watchdog/runner',
-  'outcome-watchdog/service',
+const runtimeModuleGraphDigest = sha([
+  'tasks/executable-acceptance-runtime',
   'prisma',
 ].sort().join('\n'));
 
-const coordinatorModuleGraphDigest = sha([
-  'outcome-coordinator/main',
-  'outcome-coordinator/worker-module',
-  'outcome-coordinator/runner',
-  'outcome-coordinator/completion-ack-resolver',
-  'outcome-reconciler/persistent-coordinator',
-  'projects/coordinator-judgment',
-  'prisma',
-].sort().join('\n'));
+/**
+ * The heartbeat writer used to live on the watchdog worker's Nest service. 0221 removed that
+ * process and its data layer; the heartbeat/dead-man ledger it wrote into belongs to the 0200
+ * EXECUTABLE runtime contract and stays, so this suite appends to it directly. The statement is
+ * the same generic (non-binding) append the deleted service used for every component.
+ */
+async function appendRuntimeHeartbeat({
+  component, instanceId, sourceSha: heartbeatSourceSha, moduleGraphDigest,
+  expectationGeneration, observedAt, deadlineAt, payload,
+}) {
+  const { rows } = await pool.query(`
+    WITH previous AS (
+      SELECT h."sequence", h."heartbeat_digest"
+        FROM "executable_runtime_heartbeat" h
+       WHERE h."component" = $1::text AND h."instance_id" = $2::text
+       ORDER BY h."sequence" DESC LIMIT 1
+    ), material AS (
+      SELECT coalesce((SELECT "sequence" FROM previous), 0) + 1 AS sequence,
+             (SELECT "heartbeat_digest" FROM previous) AS previous_digest,
+             $8::jsonb AS payload
+    ), bound AS (
+      SELECT material.*, encode(digest(material.payload::text, 'sha256'), 'hex') AS payload_digest
+        FROM material
+    ), final AS (
+      SELECT bound.*, encode(digest(jsonb_build_object(
+               'component', $1::text, 'instanceId', $2::text, 'sequence', bound.sequence,
+               'sourceSha', $3::text, 'moduleGraphDigest', $4::text,
+               'expectationGeneration', $5::uuid, 'observedAt', $6::timestamptz,
+               'deadlineAt', $7::timestamptz, 'payloadDigest', bound.payload_digest,
+               'previousDigest', bound.previous_digest
+             )::text, 'sha256'), 'hex') AS heartbeat_digest
+        FROM bound
+    )
+    INSERT INTO "executable_runtime_heartbeat"
+      ("id", "component", "instance_id", "sequence", "source_sha", "module_graph_digest",
+       "observed_at", "deadline_at", "payload", "payload_digest", "previous_digest",
+       "heartbeat_digest", "expectation_generation")
+    SELECT gen_random_uuid(), $1::text, $2::text, final.sequence, $3::text, $4::text,
+           $6::timestamptz, $7::timestamptz, final.payload, final.payload_digest,
+           final.previous_digest, final.heartbeat_digest, $5::uuid
+      FROM final
+    RETURNING "id", "heartbeat_digest" AS "heartbeatDigest", "sequence"
+  `, [component, instanceId, heartbeatSourceSha, moduleGraphDigest, expectationGeneration,
+      observedAt, deadlineAt, JSON.stringify(payload)]);
+  return rows[0];
+}
 
 test('turn-complete success is an explicit HTTP 200 contract', () => {
   assert.equal(
     Reflect.getMetadata(HTTP_CODE_METADATA, RunnerApiController.prototype.turnComplete),
     200,
   );
-  evidence.completionAck.httpSuccessStatus = 200;
+  evidence.negotiation.httpSuccessStatus = 200;
 });
 
 function runDeadman(args) {
@@ -108,7 +138,7 @@ function registerRuntimeExpectation({
   component,
   instanceId,
   generation,
-  moduleGraphDigest = watchdogModuleGraphDigest,
+  moduleGraphDigest = runtimeModuleGraphDigest,
   startupGraceSeconds = 5,
 }) {
   return runDeadman([
@@ -129,11 +159,7 @@ async function waitPast(timestamp, marginMs = 100) {
 
 async function empty() {
   await pool.query(`
-    TRUNCATE executable_runtime_binding_fact, executable_runtime_binding,
-             executable_runtime_binding_stream,
-             executable_runtime_expectation_event, executable_runtime_expectation,
-             completion_ack_obligation_event, completion_ack_fact,
-             completion_ack_obligation_revision,
+    TRUNCATE executable_runtime_expectation_event, executable_runtime_expectation,
              executable_dead_man_event, executable_runtime_heartbeat, task, session, workspace,
              runner, project, "user" RESTART IDENTITY CASCADE
   `);
@@ -151,14 +177,14 @@ function tasks(sessions = {}) {
   return new TasksService(db, sessions, realtime());
 }
 
-function controller(completionAckMonitor, projectAcceptance) {
+function controller(projectAcceptance) {
   return new RunnerApiController(
     db,
     { notifySessionQueued() {} },
     realtime(),
     {}, {}, {},
     { appendFor: async (_tx, _sessionId, content) => content },
-    undefined, undefined, projectAcceptance, completionAckMonitor,
+    undefined, undefined, projectAcceptance,
   );
 }
 
@@ -242,7 +268,7 @@ async function dequeue(
 
 async function admitAndStart(label, options = {}) {
   const fixture = await executableFixture(label, options);
-  const api = controller(undefined, options.projectAcceptance);
+  const api = controller(options.projectAcceptance);
   await queueAcceptance(api, fixture);
   const delivery = await dequeue(api, fixture, options.hardMaxSeconds ?? 3600);
   assert.ok(delivery?.acceptancePlan, `${label} was not admitted`);
@@ -265,95 +291,6 @@ async function forceStatus(taskId, status) {
   } finally {
     client.release();
   }
-}
-
-async function backdateRunEventIngestion(eventId, seconds) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    // Test-only clock fixture: production ingestion time is DB-owned and immutable. The disposable
-    // acceptance database disables user triggers only long enough to place an event beyond Δ.
-    await client.query("SET LOCAL session_replication_role = 'replica'");
-    await client.query(
-      `UPDATE run_event
-          SET ingested_at = clock_timestamp() - ($2::integer * interval '1 second')
-        WHERE id = $1::uuid`,
-      [eventId, seconds],
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function completionAckFixture(label, options = {}) {
-  const fixture = await executableFixture(label, {
-    legacy: true,
-    withProject: true,
-    command: options.command ?? 'true',
-    expectedExitCode: options.expectedExitCode ?? 0,
-  });
-  await db.project.update({
-    where: { id: fixture.projectId },
-    data: {
-      coordinatorEnabled: true,
-      coordinatorWorkspaceId: fixture.workspaceId,
-      automationPolicy: 'GUARDED_AUTO',
-    },
-  });
-  const api = controller();
-  const leaseGeneration = options.exactLease ? randomUUID() : null;
-  const leaseOwner = options.exactLease ? randomUUID() : null;
-  await queueAcceptance(api, fixture);
-  if (leaseGeneration && leaseOwner) {
-    await api.takeoverLeases(
-      { id: fixture.runnerId },
-      fixture.sessionId,
-      { leaseOwner, expectedLeaseOwner: null },
-    );
-    await api.activateLeases(
-      { id: fixture.runnerId },
-      fixture.sessionId,
-      { leaseGeneration, leaseOwner },
-    );
-  }
-  const delivery = await dequeue(api, fixture, null, 2, leaseGeneration);
-  const turn = await db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } });
-  const rawOutput = options.rawOutput ?? '16 tests\n16 pass\n0 fail\n';
-  const actualExitCode = options.actualExitCode ?? 0;
-  const event = await db.runEvent.create({
-    data: {
-      sessionId: fixture.sessionId,
-      turnId: delivery.turnId,
-      seq: 1,
-      type: 'tool_result',
-      payload: {
-        toolUseId: options.toolUseId ?? `shell-${delivery.turnId}`,
-        content: rawOutput,
-        isError: options.isError ?? actualExitCode !== 0,
-      },
-      ingestedByRunnerId: fixture.runnerId,
-      // A legacy runner may have no lease-generation handshake. Exact runner provenance and
-      // inferred lease provenance are intentionally independent.
-      ingestedUnderLeaseGeneration: turn.leaseGeneration,
-    },
-  });
-  if (options.ingestionAgeSeconds != null) {
-    await backdateRunEventIngestion(event.id, options.ingestionAgeSeconds);
-  }
-  return {
-    fixture,
-    delivery,
-    turn,
-    event,
-    rawOutput,
-    actualExitCode,
-    leaseGeneration,
-    leaseOwner,
-  };
 }
 
 async function seedExistingExecutableRequest(
@@ -465,7 +402,7 @@ async function assertSqlRejected(sql, params, expected) {
 
 test('virtual negotiation rejects hardMax=120 before spawn and admits hardMax=1200 exactly', () => {
   const plan = runtime.executableEvaluationPlan({
-    command: 'npm run test:outcome-reconciler:watchdog', expectedExitCode: 0,
+    command: 'npm run test:outcome-reconciler:replay', expectedExitCode: 0,
     requestedTimeoutSeconds: 1200, ownerTimeoutCeilingSeconds: 1200,
     policyTimeoutCeilingSeconds: 3600,
   });
@@ -659,71 +596,6 @@ test('typed EXITED alone derives DONE or FAILED from the expected code', async (
   }
 });
 
-test('v2 ACK success closes liveness for criterion FAIL and non-EXITED outcomes', async () => {
-  for (const [kind, actualExitCode, expectedTaskStatus] of [
-    ['EXITED', 9, TaskStatus.FAILED],
-    ['TIMED_OUT', null, TaskStatus.OPEN],
-  ]) {
-    await empty();
-    const monitor = new OutcomeWatchdogService(db);
-    const { fixture, api, delivery, started } = await admitAndStart(
-      `v2-ack-close-${kind.toLowerCase()}`,
-      { withProject: true },
-    );
-    const turn = await db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } });
-    const event = await db.runEvent.create({ data: {
-      sessionId: fixture.sessionId,
-      turnId: delivery.turnId,
-      seq: 1,
-      type: 'tool_result',
-      payload: {
-        toolUseId: `shell-${delivery.turnId}`,
-        content: `${kind} durable output`,
-        isError: true,
-      },
-      ingestedByRunnerId: fixture.runnerId,
-      ingestedUnderLeaseGeneration: turn.leaseGeneration,
-    } });
-    await backdateRunEventIngestion(event.id, 60);
-    assert.equal(
-      (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
-      1,
-    );
-    const [standing] = (await pool.query(`
-      SELECT obligation_revision FROM completion_ack_active_obligation
-       WHERE task_id = $1::uuid
-    `, [fixture.taskId])).rows;
-    assert.ok(standing);
-
-    await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, {
-      turnId: delivery.turnId,
-      status: RunStatus.SUCCEEDED,
-      subtype: 'shell',
-      shellOutput: `${kind} durable output`,
-      acceptanceAdmissionId: delivery.acceptancePlan.admissionId,
-      acceptanceAttemptId: started.attemptId,
-      acceptanceTerminationKind: kind,
-      ...(actualExitCode == null ? {} : { acceptanceActualExitCode: actualExitCode }),
-    });
-    assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status,
-      expectedTaskStatus);
-    assert.equal((await pool.query(`
-      SELECT count(*)::integer AS count FROM completion_ack_active_obligation
-       WHERE obligation_revision = $1
-    `, [standing.obligation_revision])).rows[0].count, 0);
-    assert.equal((await pool.query(`
-      SELECT count(*)::integer AS count FROM completion_ack_fact
-       WHERE obligation_revision = $1 AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-    `, [standing.obligation_revision])).rows[0].count, 1);
-    assert.equal((await pool.query(`
-      SELECT count(*)::integer AS count FROM completion_ack_obligation_event
-       WHERE obligation_revision = $1 AND state = 'CLOSED'
-    `, [standing.obligation_revision])).rows[0].count, 1);
-  }
-  evidence.completionAck.v2FailAckClosesLiveness = true;
-  evidence.completionAck.v2NonExitedAckClosesLiveness = true;
-});
-
 test('rolling v1/no-request callback atomically creates one canonical judgment and replays no side effects', async () => {
   await empty();
   const fixture = await executableFixture('rolling-v1-pass', { legacy: true });
@@ -858,199 +730,6 @@ test('rolling v1/no-request nonzero exit records FAIL without a typed attempt', 
   assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
 });
 
-test('v1 ACK recovery fact commits atomically with projection, turn, session and judgment', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const state = await completionAckFixture('rolling-v1-atomic-recovery', {
-    ingestionAgeSeconds: 60,
-    rawOutput: 'atomic recovery output\n',
-    exactLease: true,
-  });
-  const { fixture, delivery, rawOutput, leaseOwner } = state;
-  assert.equal(
-    (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
-    1,
-  );
-  const [standing] = (await pool.query(`
-    SELECT obligation_revision FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [fixture.taskId])).rows;
-  assert.ok(standing);
-  const sessionBeforeRejectedCallback = await db.session.findUniqueOrThrow({
-    where: { id: fixture.sessionId },
-  });
-
-  await pool.query(`
-    CREATE FUNCTION completion_ack_test_reject_closed_event() RETURNS trigger AS $$
-    BEGIN
-      IF NEW.obligation_revision = '${standing.obligation_revision}'::char(64)
-         AND NEW.state = 'CLOSED' THEN
-        RAISE EXCEPTION 'ACK_RECOVERY_COMMIT_INJECTION' USING ERRCODE = 'P0001';
-      END IF;
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql
-  `);
-  await pool.query(`
-    CREATE TRIGGER zz_completion_ack_test_reject_closed_event
-    AFTER INSERT ON completion_ack_obligation_event
-    FOR EACH ROW EXECUTE FUNCTION completion_ack_test_reject_closed_event()
-  `);
-  const callback = {
-    turnId: delivery.turnId,
-    status: RunStatus.SUCCEEDED,
-    subtype: 'shell',
-    shellExitCode: 0,
-    shellOutput: rawOutput,
-    leaseOwner,
-  };
-  try {
-    await assert.rejects(
-      controller(monitor).turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback),
-      /ACK_RECOVERY_COMMIT_INJECTION/,
-    );
-  } finally {
-    await pool.query(
-      'DROP TRIGGER zz_completion_ack_test_reject_closed_event ON completion_ack_obligation_event',
-    );
-    await pool.query('DROP FUNCTION completion_ack_test_reject_closed_event()');
-  }
-  const [rolledBackTask, rolledBackTurn, rolledBackSession] = await Promise.all([
-    db.task.findUniqueOrThrow({ where: { id: fixture.taskId } }),
-    db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } }),
-    db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } }),
-  ]);
-  assert.equal(rolledBackTask.status, TaskStatus.OPEN);
-  assert.equal(rolledBackTurn.status, 'IN_FLIGHT');
-  assert.equal(rolledBackSession.status, sessionBeforeRejectedCallback.status);
-  assert.equal(
-    rolledBackSession.engineTurnActive,
-    sessionBeforeRejectedCallback.engineTurnActive,
-  );
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableJudgmentResult.count(), 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_fact
-     WHERE obligation_revision = $1 AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-  `, [standing.obligation_revision])).rows[0].count, 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_active_obligation
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision])).rows[0].count, 1);
-  const rejectedCommitFact = (await pool.query(`
-    SELECT lease_generation::text, runner_provenance, lease_provenance,
-           evidence_source
-      FROM completion_ack_fact
-     WHERE obligation_revision = $1
-       AND fact_kind = 'CONTROL_PLANE_COMMIT_REJECTED'
-  `, [standing.obligation_revision])).rows[0];
-  assert.deepEqual({
-    leaseGeneration: rejectedCommitFact.lease_generation,
-    runnerProvenance: rejectedCommitFact.runner_provenance,
-    leaseProvenance: rejectedCommitFact.lease_provenance,
-    runnerId: rejectedCommitFact.evidence_source.runnerId,
-  }, {
-    leaseGeneration: state.leaseGeneration,
-    runnerProvenance: 'INGESTED_EXACT',
-    leaseProvenance: 'INGESTED_EXACT',
-    runnerId: fixture.runnerId,
-  });
-
-  const recovered = await controller(monitor).turnComplete(
-    { id: fixture.runnerId }, fixture.sessionId, callback,
-  );
-  assert.deepEqual(recovered, { ok: true, status: RunStatus.AWAITING_INPUT });
-  const replay = await controller(monitor).turnComplete(
-    { id: fixture.runnerId }, fixture.sessionId, callback,
-  );
-  assert.deepEqual(replay, { ok: true, status: RunStatus.AWAITING_INPUT });
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_fact
-     WHERE obligation_revision = $1 AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-  `, [standing.obligation_revision])).rows[0].count, 1);
-  const recoveryProvenance = (await pool.query(`
-    SELECT runner_provenance, lease_provenance
-      FROM completion_ack_fact
-     WHERE obligation_revision = $1 AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-  `, [standing.obligation_revision])).rows[0];
-  assert.deepEqual(recoveryProvenance, {
-    runner_provenance: 'INGESTED_EXACT',
-    lease_provenance: 'INGESTED_EXACT',
-  });
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_obligation_event
-     WHERE obligation_revision = $1 AND state = 'CLOSED'
-  `, [standing.obligation_revision])).rows[0].count, 1);
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal(await db.taskExecutableJudgmentResult.count(), 1);
-  assert.equal(await db.taskComment.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status,
-    TaskStatus.DONE);
-  assert.equal((await db.conversationTurn.findUniqueOrThrow({
-    where: { id: delivery.turnId },
-  })).status, 'ANSWERED');
-  evidence.completionAck.atomicAckRecoveryCommit = true;
-  evidence.completionAck.atomicAckRecoveryRetryExactlyOnce = true;
-  evidence.completionAck.receiptProvenanceExact = true;
-});
-
-test('rolling v1 closes an active ACK obligation through an exact pre-existing OPEN request/result', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const state = await completionAckFixture(
-    'rolling-v1-existing-open',
-    { ingestionAgeSeconds: 60, rawOutput: 'pre-recorded durable result\n' },
-  );
-  const { fixture, delivery, rawOutput } = state;
-  const detected = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64);
-  assert.equal(detected.newFactCount, 1);
-  const [activeBefore] = (await pool.query(`
-    SELECT obligation_id, obligation_revision
-      FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [fixture.taskId])).rows;
-  assert.ok(activeBefore);
-
-  const request = await seedExistingExecutableRequest(fixture, delivery, {
-    rawOutput,
-    evidenceOverride: exactLegacyV1Evidence(state, rawOutput),
-    label: 'exact-existing-open',
-  });
-
-  const result = await controller(monitor).turnComplete(
-    { id: fixture.runnerId }, fixture.sessionId, {
-    turnId: delivery.turnId, status: RunStatus.SUCCEEDED, subtype: 'shell',
-    shellExitCode: 0, shellOutput: rawOutput,
-    },
-  );
-  assert.deepEqual(result, { ok: true, status: RunStatus.AWAITING_INPUT });
-  const decided = await db.taskJudgmentRequest.findUniqueOrThrow({
-    where: { id: request.id }, include: { executableResult: true },
-  });
-  assert.equal(decided.status, 'DECIDED');
-  assert.equal(decided.decision, 'PASS');
-  assert.equal(decided.executableResult.rawOutput, rawOutput);
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status, TaskStatus.DONE);
-  assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal(await db.taskExecutableJudgmentResult.count({ where: { requestId: request.id } }), 1);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-     WHERE obligation_revision = $1
-  `, [activeBefore.obligation_revision])).rows[0].n, 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_obligation_event
-     WHERE obligation_revision = $1 AND state = 'CLOSED'
-  `, [activeBefore.obligation_revision])).rows[0].n, 1);
-  Object.assign(evidence.compatibility, {
-    rollingV1ExistingOpenRequest: true,
-    rollingV1ExistingResult: true,
-    existingOpenClosesCanonicalObligation: true,
-  });
-});
-
 test('rolling v1 callback never consumes a stale OPEN executable request', async () => {
   await empty();
   const fixture = await executableFixture('rolling-v1-stale-open', { legacy: true });
@@ -1106,1301 +785,6 @@ test('rolling v1 callback never consumes a stale OPEN executable request', async
   evidence.compatibility.rollingV1StaleOpenIsolation = true;
 });
 
-test('ANSWERED without an exact callback receipt stays ACTIVE as ACK_COMMIT_FACT_MISSING', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const { fixture, delivery } = await completionAckFixture(
-    'ack-answered-without-canonical-fact',
-    { ingestionAgeSeconds: 60 },
-  );
-  assert.equal(
-    (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
-    1,
-  );
-  const [standing] = (await pool.query(`
-    SELECT obligation_id, obligation_revision
-      FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [fixture.taskId])).rows;
-  assert.ok(standing);
-
-  // Reapers, drains and cancellation paths can acknowledge a turn without having committed the
-  // executable judgment. ANSWERED alone must never be mistaken for completion authority.
-  await markTurnAnswered(fixture.sessionId, delivery.turnId);
-  const recovery = await monitor.recordCompletionAckRecovery({
-    sessionId: fixture.sessionId,
-    turnId: delivery.turnId,
-    observedAt: new Date(),
-    evidenceSource: { source: 'ACCEPTANCE_ANSWERED_WITHOUT_CANONICAL_FACT' },
-  });
-  assert.equal(recovery.state, 'ACTIVE');
-  assert.equal(recovery.reason, 'ACK_COMMIT_RECEIPT_MISSING');
-  assert.equal(recovery.closedObligationCount, 0);
-  assert.equal(recovery.recoveryFactCount, 0);
-
-  const [active] = (await pool.query(`
-    SELECT obligation FROM completion_ack_active_obligation
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision])).rows;
-  assert.ok(active);
-  assert.equal(active.obligation.reasonCode, 'ACK_COMMIT_FACT_MISSING');
-  assert.equal(active.obligation.requiredAction, 'RECORD_ACK_COMMIT_RECEIPT');
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_fact
-     WHERE obligation_revision = $1 AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-  `, [standing.obligation_revision])).rows[0].n, 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_obligation_event
-     WHERE obligation_revision = $1 AND state = 'CLOSED'
-  `, [standing.obligation_revision])).rows[0].n, 0);
-
-  const blocker = await db.projectBlocker.findFirstOrThrow({
-    where: { projectId: fixture.projectId, kind: 'COMPLETION_ACK_STALE', resolvedAt: null },
-  });
-  assert.equal(blocker.requiredAction, 'RECORD_ACK_COMMIT_RECEIPT');
-  assert.equal(blocker.detail.reasonCode, 'ACK_COMMIT_FACT_MISSING');
-  assert.deepEqual(
-    [blocker.detail.obligationId, blocker.detail.obligationRevision],
-    [standing.obligation_id, standing.obligation_revision],
-  );
-
-  for (const surface of [
-    'DONE_GATE', 'AGENT_QUEUE', 'OWNER_DECISION_INBOX',
-    'PROJECT_ATTENTION', 'MUTATION_RESPONSE', 'WEB',
-  ]) {
-    const payload = (await pool.query(`
-      SELECT outcome_projection.read_surface(
-        $1::uuid, $2::uuid, 'TASK', $3::text, $4::text
-      ) AS payload
-    `, [fixture.ownerId, fixture.projectId, fixture.taskId, surface])).rows[0].payload;
-    const obligation = payload.completionAckObligations[0];
-    assert.deepEqual(
-      [obligation.obligationId, obligation.obligationRevision],
-      [standing.obligation_id, standing.obligation_revision],
-    );
-    assert.equal(obligation.reasonCode, 'ACK_COMMIT_FACT_MISSING');
-    assert.equal(obligation.requiredAction, 'RECORD_ACK_COMMIT_RECEIPT');
-  }
-  Object.assign(evidence.completionAck, {
-    answeredAloneCannotClose: true,
-    ackCommitReceiptReasonUnifiedAcrossSurfaces: true,
-  });
-});
-
-test('missing projection stream fallback is exact-active and tenant scoped', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const state = await completionAckFixture('ack-projection-fallback-scope', {
-    ingestionAgeSeconds: 60,
-  });
-  assert.equal(
-    (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
-    1,
-  );
-  const [standing] = (await pool.query(`
-    SELECT obligation_id, obligation_revision
-      FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [state.fixture.taskId])).rows;
-  assert.ok(standing);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM outcome_fact_stream
-     WHERE tenant_id = $1::uuid AND project_id = $2::uuid
-  `, [state.fixture.ownerId, state.fixture.projectId])).rows[0].count, 0);
-  const ownerPayload = (await pool.query(`
-    SELECT outcome_projection.read_surface(
-      $1::uuid, $2::uuid, 'TASK', $3::text, 'WEB'
-    ) AS payload
-  `, [state.fixture.ownerId, state.fixture.projectId, state.fixture.taskId])).rows[0].payload;
-  assert.equal(ownerPayload.canonicalProjectionAvailable, false);
-  assert.equal(ownerPayload.canonicalProjectionErrorCode, 'OUTCOME_PROJECTION_STREAM_NOT_FOUND');
-  assert.equal(ownerPayload.doneGate.allowed, false);
-  assert.deepEqual([
-    ownerPayload.completionAckObligations[0].obligationId,
-    ownerPayload.completionAckObligations[0].obligationRevision,
-  ], [standing.obligation_id, standing.obligation_revision]);
-
-  await assertSqlRejected(`
-    SELECT outcome_projection.read_surface(
-      $1::uuid, $2::uuid, 'TASK', $3::text, 'WEB'
-    )
-  `, [randomUUID(), state.fixture.projectId, state.fixture.taskId],
-  /OUTCOME_PROJECTION_STREAM_NOT_FOUND/);
-
-  const noActive = await foundation('ack-projection-fallback-negative', true);
-  await assertSqlRejected(`
-    SELECT outcome_projection.read_surface(
-      $1::uuid, $2::uuid, 'PROJECT', $2::text, 'WEB'
-    )
-  `, [noActive.ownerId, noActive.projectId], /OUTCOME_PROJECTION_STREAM_NOT_FOUND/);
-  evidence.completionAck.projectionFallbackOwnerExact = true;
-  evidence.completionAck.projectionFallbackForeignTenantDenied = true;
-  evidence.completionAck.projectionFallbackRequiresActiveAck = true;
-});
-
-test('authorized ACK receipt is harmless without an obligation and fail-closed without its event', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const noObligation = await executableFixture('ack-receipt-no-obligation', {
-    legacy: true, withProject: true,
-  });
-  const noObligationApi = controller();
-  await queueAcceptance(noObligationApi, noObligation);
-  const noObligationDelivery = await dequeue(noObligationApi, noObligation, null);
-  await markTurnAnswered(noObligation.sessionId, noObligationDelivery.turnId);
-  const harmless = await monitor.recordCompletionAckRecovery({
-    sessionId: noObligation.sessionId,
-    turnId: noObligationDelivery.turnId,
-    observedAt: new Date(),
-    evidenceSource: {
-      source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
-      runnerId: noObligation.runnerId,
-    },
-  });
-  assert.equal(harmless.state, 'NO_OBLIGATION');
-  assert.equal(harmless.closedObligationCount, 0);
-
-  await empty();
-  const missingEvent = await executableFixture('ack-receipt-missing-event', {
-    legacy: true, withProject: true,
-  });
-  const missingEventApi = controller();
-  await queueAcceptance(missingEventApi, missingEvent);
-  const missingEventDelivery = await dequeue(missingEventApi, missingEvent, null);
-  const turn = await db.conversationTurn.findUniqueOrThrow({
-    where: { id: missingEventDelivery.turnId },
-  });
-  const recorded = await monitor.recordCompletionAckFailure({
-    sessionId: missingEvent.sessionId,
-    turnId: missingEventDelivery.turnId,
-    leaseGeneration: turn.leaseGeneration,
-    errorFingerprint: sha('P0001:missing-terminal-event'),
-    observedAt: new Date(),
-    evidenceSource: {
-      source: 'RUNNER_API_TURN_COMPLETE_REJECTED',
-      sqlstate: 'P0001',
-      invariant: 'TASK_DONE_CANONICAL_FACT_REQUIRED',
-    },
-  });
-  assert.equal(recorded.state, 'ACTIVE');
-  await markTurnAnswered(missingEvent.sessionId, missingEventDelivery.turnId);
-  await assert.rejects(
-    monitor.recordCompletionAckRecovery({
-      sessionId: missingEvent.sessionId,
-      turnId: missingEventDelivery.turnId,
-      observedAt: new Date(),
-      evidenceSource: {
-        source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
-        runnerId: missingEvent.runnerId,
-      },
-    }),
-    /COMMIT_TERMINAL_EVENT_MISMATCH/,
-  );
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [missingEvent.taskId])).rows[0].count, 1);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_fact
-     WHERE task_id = $1::uuid AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-  `, [missingEvent.taskId])).rows[0].count, 0);
-  evidence.completionAck.noObligationReceiptHarmless = true;
-  evidence.completionAck.missingTerminalEventReceiptDenied = true;
-});
-
-test('authorized ACK receipt rejects exact-event runner and lease mismatches', async () => {
-  const variants = [
-    { name: 'runner', wrongRunner: true },
-    { name: 'lease', wrongLease: true },
-  ];
-
-  for (const variant of variants) {
-    await empty();
-    const monitor = new OutcomeWatchdogService(db);
-    const fixture = await executableFixture(`ack-receipt-${variant.name}-mismatch`, {
-      legacy: true,
-      withProject: true,
-    });
-    const api = controller();
-    await queueAcceptance(api, fixture);
-    const delivery = await dequeue(api, fixture, null);
-    const turn = await db.conversationTurn.findUniqueOrThrow({
-      where: { id: delivery.turnId },
-    });
-    const recorded = await monitor.recordCompletionAckFailure({
-      sessionId: fixture.sessionId,
-      turnId: delivery.turnId,
-      leaseGeneration: turn.leaseGeneration,
-      errorFingerprint: sha(`P0001:receipt-${variant.name}-mismatch`),
-      observedAt: new Date(),
-      evidenceSource: {
-        source: 'RUNNER_API_TURN_COMPLETE_REJECTED',
-        sqlstate: 'P0001',
-        invariant: 'TASK_DONE_CANONICAL_FACT_REQUIRED',
-      },
-    });
-    assert.equal(recorded.state, 'ACTIVE', variant.name);
-    let ingestedByRunnerId = fixture.runnerId;
-    if (variant.wrongRunner) {
-      const otherRunner = await db.runner.create({ data: {
-        id: randomUUID(),
-        ownerId: fixture.ownerId,
-        name: `ack-receipt-${variant.name}-other-runner`,
-        tokenHash: 'x',
-        status: RunnerStatus.ONLINE,
-      } });
-      ingestedByRunnerId = otherRunner.id;
-    }
-    await db.runEvent.create({ data: {
-      sessionId: fixture.sessionId,
-      turnId: delivery.turnId,
-      seq: 1,
-      type: 'tool_result',
-      payload: {
-        toolUseId: `shell-${delivery.turnId}`,
-        content: `durable ${variant.name} output\n`,
-        isError: false,
-      },
-      ingestedByRunnerId,
-      ingestedUnderLeaseGeneration: variant.wrongLease ? randomUUID() : turn.leaseGeneration,
-    } });
-    await markTurnAnswered(fixture.sessionId, delivery.turnId);
-    await assert.rejects(monitor.recordCompletionAckRecovery({
-      sessionId: fixture.sessionId,
-      turnId: delivery.turnId,
-      observedAt: new Date(),
-      evidenceSource: {
-        source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
-        runnerId: fixture.runnerId,
-      },
-    }), /COMMIT_TERMINAL_EVENT_MISMATCH/, variant.name);
-    assert.equal((await pool.query(`
-      SELECT count(*)::int AS n FROM completion_ack_active_obligation
-       WHERE task_id = $1::uuid AND turn_id = $2::uuid
-    `, [fixture.taskId, delivery.turnId])).rows[0].n, 1, variant.name);
-    assert.equal((await pool.query(`
-      SELECT count(*)::int AS n FROM completion_ack_fact
-       WHERE task_id = $1::uuid AND turn_id = $2::uuid
-         AND fact_kind = 'COMPLETION_ACK_RECOVERED'
-    `, [fixture.taskId, delivery.turnId])).rows[0].n, 0, variant.name);
-  }
-  evidence.completionAck.receiptProvenanceMismatchFailClosed = variants.map(({ name }) => name);
-});
-
-test('completion ACK detector is protocol-neutral and finds v2 without reading typed attempts', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-
-  const noEvent = await executableFixture('ack-no-terminal-event', {
-    legacy: true, withProject: true,
-  });
-  const noEventApi = controller();
-  await queueAcceptance(noEventApi, noEvent);
-  await dequeue(noEventApi, noEvent, null);
-
-  await completionAckFixture('ack-fresh-terminal', { ingestionAgeSeconds: 0 });
-  await completionAckFixture('ack-unrelated-tool-result', {
-    ingestionAgeSeconds: 60,
-    toolUseId: `shell-${randomUUID()}`,
-  });
-
-  const v2 = await executableFixture('ack-v2-no-attempt', { withProject: true });
-  const v2Api = controller();
-  await queueAcceptance(v2Api, v2);
-  const v2Delivery = await dequeue(v2Api, v2, 3600);
-  const v2Event = await db.runEvent.create({ data: {
-    sessionId: v2.sessionId, turnId: v2Delivery.turnId, seq: 1, type: 'tool_result',
-    payload: {
-      toolUseId: `shell-${v2Delivery.turnId}`,
-      content: 'typed result',
-      isError: false,
-    },
-    ingestedByRunnerId: v2.runnerId,
-  } });
-  await backdateRunEventIngestion(v2Event.id, 60);
-
-  const nonzero = await completionAckFixture('ack-nonzero-terminal', {
-    command: 'exit 9',
-    actualExitCode: 9,
-    rawOutput: `${'failure detail\n'.repeat(256)}exit 9\n`,
-    isError: true,
-    ingestionAgeSeconds: 60,
-  });
-  const scan = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64);
-  assert.equal(scan.candidateCount, 2);
-  assert.equal(scan.newFactCount, 2);
-  const active = (await pool.query(`
-    SELECT * FROM completion_ack_active_obligation ORDER BY obligation_revision
-  `)).rows;
-  assert.equal(active.length, 2);
-  const activeByTask = new Map(active.map((row) => [row.task_id, row]));
-  const legacyActive = activeByTask.get(nonzero.fixture.taskId);
-  const v2Active = activeByTask.get(v2.taskId);
-  assert.ok(legacyActive);
-  assert.ok(v2Active);
-  assert.deepEqual(
-    [legacyActive.session_id, legacyActive.turn_id],
-    [nonzero.fixture.sessionId, nonzero.delivery.turnId],
-  );
-  assert.deepEqual([v2Active.session_id, v2Active.turn_id], [v2.sessionId, v2Delivery.turnId]);
-  const facts = (await pool.query(`
-    SELECT revision.task_id, fact.fact_kind, fact.runner_provenance,
-           fact.lease_provenance, fact.evidence_source
-      FROM completion_ack_fact fact
-      JOIN completion_ack_obligation_revision revision
-        ON revision.obligation_revision = fact.obligation_revision
-     WHERE revision.task_id = ANY($1::uuid[])
-  `, [[nonzero.fixture.taskId, v2.taskId]])).rows;
-  assert.equal(facts.length, 2);
-  const factsByTask = new Map(facts.map((row) => [row.task_id, row]));
-  const legacyFact = factsByTask.get(nonzero.fixture.taskId);
-  const v2Fact = factsByTask.get(v2.taskId);
-  assert.equal(legacyFact.fact_kind, 'COMPLETION_ACK_STALE');
-  assert.equal(legacyFact.runner_provenance, 'INGESTED_EXACT');
-  assert.equal(legacyFact.lease_provenance, 'LEGACY_INFERRED');
-  assert.equal(legacyFact.evidence_source.executionProtocol, 'LEGACY_V1');
-  assert.equal(legacyFact.evidence_source.terminalEvent.id, nonzero.event.id);
-  assert.equal(v2Fact.fact_kind, 'COMPLETION_ACK_STALE');
-  assert.equal(v2Fact.runner_provenance, 'INGESTED_EXACT');
-  assert.equal(v2Fact.lease_provenance, 'LEGACY_INFERRED');
-  assert.equal(v2Fact.evidence_source.executionProtocol, 'TYPED_V2');
-  assert.equal(v2Fact.evidence_source.terminalEvent.id, v2Event.id);
-  const terminalDigest = (await pool.query(`
-    SELECT completion_ack_json_digest(payload) AS digest
-      FROM run_event WHERE id = $1::uuid
-  `, [nonzero.event.id])).rows[0].digest;
-  assert.equal(legacyFact.evidence_source.terminalEvent.payloadDigest, terminalDigest);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: nonzero.fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: nonzero.fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: v2.taskId } }), 1);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: v2.taskId } }), 0);
-  Object.assign(evidence.completionAck, {
-    outcomeNeutral: true,
-    freshEventExcluded: true,
-    unrelatedToolResultExcluded: true,
-    noTerminalEventExcluded: true,
-    typedV2DetectedWithoutAttempt: true,
-    detectorIndependentOfTypedAttempt: true,
-  });
-});
-
-test('HTTP catch and independent detector converge concurrently on one scope identity', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const state = await completionAckFixture('ack-concurrent-catch-detector', {
-    ingestionAgeSeconds: 60,
-  });
-  const catchInput = {
-    sessionId: state.fixture.sessionId,
-    turnId: state.delivery.turnId,
-    leaseGeneration: state.turn.leaseGeneration,
-    errorFingerprint: sha('P0001:TASK_DONE_CANONICAL_FACT_REQUIRED'),
-    observedAt: new Date(),
-    evidenceSource: {
-      source: 'RUNNER_API_TURN_COMPLETE_REJECTED',
-      sqlstate: 'P0001',
-      invariant: 'TASK_DONE_CANONICAL_FACT_REQUIRED',
-    },
-  };
-  await Promise.all([
-    monitor.recordCompletionAckFailure(catchInput),
-    monitor.reconcileStaleCompletionAcks(new Date(), 30, 64),
-  ]);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_obligation_revision
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-  `, [state.fixture.taskId, state.fixture.sessionId, state.delivery.turnId])).rows[0].count, 1);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-  `, [state.fixture.taskId, state.fixture.sessionId, state.delivery.turnId])).rows[0].count, 1);
-  const factsBeforeReplay = (await pool.query(`
-    SELECT fact_kind, error_fingerprint, evidence_source, count(*)::integer AS count
-      FROM completion_ack_fact
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-     GROUP BY fact_kind, error_fingerprint, evidence_source ORDER BY fact_kind
-  `, [state.fixture.taskId, state.fixture.sessionId, state.delivery.turnId])).rows;
-  assert.ok(factsBeforeReplay.length >= 1 && factsBeforeReplay.length <= 2);
-  assert.equal(new Set(factsBeforeReplay.map((row) => row.fact_kind)).size,
-    factsBeforeReplay.length);
-  assert.ok(factsBeforeReplay.every((row) => row.count === 1));
-  assert.ok(factsBeforeReplay.every((row) =>
-    ['COMPLETION_ACK_STALE', 'CONTROL_PLANE_COMMIT_REJECTED'].includes(row.fact_kind)));
-  assert.ok(factsBeforeReplay.every((row) => /^[0-9a-f]{64}$/.test(row.error_fingerprint)));
-  assert.ok(factsBeforeReplay.every((row) =>
-    typeof row.evidence_source?.source === 'string'
-      || typeof row.evidence_source?.executionProtocol === 'string'));
-  const registerBefore = (await pool.query(`
-    SELECT observation_count, meaningful_observation_count
-      FROM completion_ack_observation_register
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-  `, [state.fixture.taskId, state.fixture.sessionId, state.delivery.turnId])).rows[0];
-  await Promise.all([
-    monitor.recordCompletionAckFailure({ ...catchInput, observedAt: new Date() }),
-    monitor.reconcileStaleCompletionAcks(new Date(), 30, 64),
-  ]);
-  const factsAfterReplay = (await pool.query(`
-    SELECT fact_kind, error_fingerprint, evidence_source, count(*)::integer AS count
-      FROM completion_ack_fact
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-     GROUP BY fact_kind, error_fingerprint, evidence_source ORDER BY fact_kind
-  `, [state.fixture.taskId, state.fixture.sessionId, state.delivery.turnId])).rows;
-  assert.deepEqual(factsAfterReplay, factsBeforeReplay);
-  const registerAfter = (await pool.query(`
-    SELECT observation_count, meaningful_observation_count
-      FROM completion_ack_observation_register
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-  `, [state.fixture.taskId, state.fixture.sessionId, state.delivery.turnId])).rows[0];
-  assert.ok(BigInt(registerAfter.observation_count) > BigInt(registerBefore.observation_count));
-  assert.ok(
-    BigInt(registerAfter.meaningful_observation_count)
-      >= BigInt(registerBefore.meaningful_observation_count),
-  );
-  evidence.completionAck.concurrentCatchDetectorConverges = true;
-  evidence.completionAck.concurrentReplayFactsExactlyOnce = true;
-});
-
-test('a nonzero legacy result closes its ACK obligation through a canonical FAIL without a typed attempt', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const { fixture, delivery, rawOutput } = await completionAckFixture(
-    'ack-nonzero-canonical-fail',
-    {
-      command: 'exit 9',
-      expectedExitCode: 0,
-      actualExitCode: 9,
-      rawOutput: 'assertion failed with exit 9\n',
-      isError: true,
-      ingestionAgeSeconds: 60,
-    },
-  );
-  assert.equal(
-    (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
-    1,
-  );
-  const [standing] = (await pool.query(`
-    SELECT obligation_revision FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [fixture.taskId])).rows;
-  assert.ok(standing);
-
-  const reply = await controller(monitor).turnComplete(
-    { id: fixture.runnerId },
-    fixture.sessionId,
-    {
-      turnId: delivery.turnId,
-      status: RunStatus.SUCCEEDED,
-      subtype: 'shell',
-      shellExitCode: 9,
-      shellOutput: rawOutput,
-    },
-  );
-  assert.deepEqual(reply, { ok: true, status: RunStatus.FAILED });
-  const [task, session, turn, request] = await Promise.all([
-    db.task.findUniqueOrThrow({ where: { id: fixture.taskId } }),
-    db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } }),
-    db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } }),
-    db.taskJudgmentRequest.findFirstOrThrow({
-      where: { taskId: fixture.taskId }, include: { executableResult: true },
-    }),
-  ]);
-  assert.equal(task.status, TaskStatus.FAILED);
-  assert.equal(session.status, RunStatus.FAILED);
-  assert.equal(session.engineTurnActive, false);
-  assert.equal(turn.status, 'ANSWERED');
-  assert.equal(request.status, 'DECIDED');
-  assert.equal(request.decision, 'FAIL');
-  assert.equal(request.executableResult.actualExitCode, 9);
-  assert.equal(request.executableResult.rawOutput, rawOutput);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision])).rows[0].n, 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_obligation_event
-     WHERE obligation_revision = $1 AND state = 'CLOSED'
-  `, [standing.obligation_revision])).rows[0].n, 1);
-  evidence.completionAck.nonzeroCanonicalFailCloses = true;
-});
-
-test('permanent turn-complete rejection auto-routes one canonical obligation and original retry closes it', async (t) => {
-  await empty();
-  let coordinatorWorker = null;
-  t.after(async () => {
-    if (!coordinatorWorker
-        || coordinatorWorker.exitCode != null
-        || coordinatorWorker.signalCode != null) return;
-    const exited = new Promise((resolve) => coordinatorWorker.once('exit', resolve));
-    coordinatorWorker.kill('SIGTERM');
-    await exited;
-  });
-  const monitor = new OutcomeWatchdogService(db);
-  const { fixture, delivery, rawOutput } = await completionAckFixture(
-    'ack-permanent-commit-rejection',
-    { ingestionAgeSeconds: 60 },
-  );
-  const successor = await tasks().create(fixture.ownerId, {
-    title: 'must wait for original receipt',
-    projectId: fixture.projectId,
-    assigneeId: fixture.workspaceId,
-    completionCriterion: 'EXECUTABLE',
-    acceptanceCriteria: 'true exits zero',
-    acceptanceCommand: 'true',
-    acceptanceExpectedExitCode: 0,
-  });
-  await db.taskDependency.create({ data: {
-    taskId: successor.id,
-    dependsOnTaskId: fixture.taskId,
-  } });
-
-  await pool.query(`
-    CREATE FUNCTION completion_ack_test_reject_projection() RETURNS trigger AS $$
-    BEGIN
-      RAISE EXCEPTION 'TASK_DONE_CANONICAL_FACT_REQUIRED'
-        USING ERRCODE = 'P0001';
-    END;
-    $$ LANGUAGE plpgsql
-  `);
-  await pool.query(`
-    CREATE TRIGGER zz_completion_ack_test_reject_projection
-    BEFORE UPDATE OF status ON task
-    FOR EACH ROW WHEN (
-      OLD.id = '${fixture.taskId}'::uuid
-      AND NEW.status IN ('DONE'::task_status, 'FAILED'::task_status)
-    ) EXECUTE FUNCTION completion_ack_test_reject_projection()
-  `);
-  const callback = {
-    turnId: delivery.turnId,
-    status: RunStatus.SUCCEEDED,
-    subtype: 'shell',
-    shellExitCode: 0,
-    shellOutput: rawOutput,
-    costUsd: 0.75,
-    usage: { input_tokens: 5, output_tokens: 3 },
-  };
-  const rejectingApi = controller(monitor);
-  try {
-    await assert.rejects(
-      rejectingApi.turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback),
-      /TASK_DONE_CANONICAL_FACT_REQUIRED/,
-    );
-    await assert.rejects(
-      rejectingApi.turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback),
-      /TASK_DONE_CANONICAL_FACT_REQUIRED/,
-    );
-  } finally {
-    await pool.query('DROP TRIGGER zz_completion_ack_test_reject_projection ON task');
-    await pool.query('DROP FUNCTION completion_ack_test_reject_projection()');
-  }
-
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status, TaskStatus.OPEN);
-  assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } })).status, 'IN_FLIGHT');
-  assert.equal((await db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } })).status, RunStatus.RUNNING);
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableJudgmentResult.count(), 0);
-
-  // The independent event detector observes the same turn and reuses the edge-created identity.
-  await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64);
-  await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64);
-  const [canonical] = (await pool.query(`
-    SELECT * FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [fixture.taskId])).rows;
-  assert.ok(canonical);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid AND session_id = $2::uuid AND turn_id = $3::uuid
-       AND error_fingerprint = $4
-  `, [fixture.taskId, fixture.sessionId, delivery.turnId, canonical.error_fingerprint])).rows[0].n, 1);
-  const obligation = canonical.obligation;
-  const identity = [canonical.obligation_id, canonical.obligation_revision];
-  assert.deepEqual([obligation.obligationId, obligation.obligationRevision], identity);
-  assert.equal(obligation.owner, 'PROJECT_COORDINATOR');
-  assert.equal(obligation.requiredAction, 'RETRY_CANONICAL_COMPLETION_COMMIT');
-  assert.ok(Array.isArray(obligation.attemptedActions));
-  assert.ok(obligation.actionProtocol);
-
-  const taskService = tasks();
-  const sessionService = new SessionsService(
-    db,
-    { notifySessionQueued() {} },
-    realtime(),
-  );
-  const projectService = new ProjectsService(db);
-  const [taskList, taskRow, taskDetail, projectList, projectDetail, projectTaskPage,
-    sessionList, sessionDetail, orchestrationSessionList, orchestrationSessionDetail] =
-    await Promise.all([
-      taskService.list(fixture.ownerId),
-      taskService.listRow(fixture.ownerId, fixture.taskId),
-      taskService.get(fixture.ownerId, fixture.taskId),
-      projectService.list(fixture.ownerId),
-      projectService.get(fixture.ownerId, fixture.projectId),
-      projectService.taskPage(fixture.ownerId, fixture.projectId),
-      sessionService.list(fixture.ownerId, { view: 'open' }),
-      sessionService.get(fixture.ownerId, fixture.sessionId),
-      sessionService.listForOrchestration(fixture.ownerId, {}),
-      sessionService.getForOrchestration(fixture.ownerId, fixture.sessionId),
-    ]);
-  const taskListRow = taskList.find((row) => row.id === fixture.taskId);
-  const projectListRow = projectList.find((row) => row.id === fixture.projectId);
-  const projectTaskRow = projectTaskPage.items.find((row) => row.id === fixture.taskId);
-  const sessionListRow = sessionList.find((row) => row.id === fixture.sessionId);
-  const orchestrationSessionRow = orchestrationSessionList.find(
-    (row) => row.id === fixture.sessionId,
-  );
-  const readModels = [
-    taskListRow, taskRow, taskDetail, projectListRow, projectDetail, projectTaskRow,
-    sessionListRow, sessionDetail, orchestrationSessionRow, orchestrationSessionDetail,
-  ];
-  for (const model of readModels) {
-    assert.ok(model, 'read surface omitted the affected row');
-    assert.equal(model.controlPlaneObligations.length, 1);
-    assert.deepEqual([
-      model.controlPlaneObligations[0].obligationId,
-      model.controlPlaneObligations[0].obligationRevision,
-    ], identity);
-    assert.equal(model.controlPlaneObligations[0].reason, obligation.reason);
-    assert.equal(model.controlPlaneObligations[0].owner, 'PROJECT_COORDINATOR');
-    assert.equal(
-      model.controlPlaneObligations[0].requiredAction,
-      obligation.requiredAction,
-    );
-  }
-  assert.equal(taskListRow.blocked, true);
-  assert.equal(taskRow.blocked, true);
-  assert.equal(taskRow.runnable, false);
-  assert.equal(taskDetail.blocked, true);
-  assert.equal(projectTaskRow.blocked, true);
-  assert.equal(projectListRow.attention.coordinatorBlockers, 1);
-  assert.equal(projectListRow.buckets.ready, 0);
-  const projectBlockedBucketBeforeRouting = projectListRow.buckets.blocked;
-
-  await assert.rejects(
-    taskService.execute(fixture.ownerId, fixture.taskId, undefined, randomUUID()),
-    (error) => error?.response?.code === 'COMPLETION_ACK_RECONCILIATION_REQUIRED'
-      && error.response.obligationId === identity[0]
-      && error.response.obligationRevision === identity[1],
-  );
-  const batch = await taskService.batchExecute(
-    fixture.ownerId,
-    [fixture.taskId],
-    undefined,
-    randomUUID(),
-  );
-  assert.equal(batch.dispatched, 0);
-  assert.match(batch.skipped[0].reason, new RegExp(identity[0]));
-  await assert.rejects(
-    db.conversationTurn.create({ data: {
-      sessionId: fixture.sessionId,
-      seq: 99,
-      clientTurnId: `completion-ack-reexecution:${randomUUID()}`,
-      kind: 'message',
-      content: 'run it again',
-      status: 'PENDING',
-    } }),
-    /COMPLETION_ACK_RECONCILIATION_REQUIRED/,
-  );
-
-  const surfaces = [
-    'DONE_GATE', 'AGENT_QUEUE', 'OWNER_DECISION_INBOX',
-    'PROJECT_ATTENTION', 'MUTATION_RESPONSE', 'WEB',
-  ];
-  for (const surface of surfaces) {
-    const payload = (await pool.query(`
-      SELECT outcome_projection.read_surface(
-        $1::uuid, $2::uuid, 'TASK', $3::text, $4::text
-      ) AS payload
-    `, [fixture.ownerId, fixture.projectId, fixture.taskId, surface])).rows[0].payload;
-    assert.equal(payload.surface, surface);
-    assert.equal(payload.doneGate.allowed, false);
-    assert.equal(payload.doneGate.operationalState, 'COMPLETION_ACK_STALE');
-    assert.equal(payload.completionAckObligations.length, 1);
-    assert.deepEqual([
-      payload.completionAckObligations[0].obligationId,
-      payload.completionAckObligations[0].obligationRevision,
-    ], identity);
-  }
-
-  const blocker = await db.projectBlocker.findFirstOrThrow({
-    where: { projectId: fixture.projectId, kind: 'COMPLETION_ACK_STALE', resolvedAt: null },
-  });
-  assert.deepEqual([
-    blocker.detail.obligationId,
-    blocker.detail.obligationRevision,
-  ], identity);
-  assert.equal(blocker.owner, 'COORDINATOR');
-  assert.equal(blocker.requiredAction, obligation.requiredAction);
-
-  const coordinatorInstanceId = 'acceptance-completion-coordinator';
-  const coordinatorGeneration = randomUUID();
-  registerRuntimeExpectation({
-    component: 'outcome-coordinator',
-    instanceId: coordinatorInstanceId,
-    generation: coordinatorGeneration,
-    moduleGraphDigest: coordinatorModuleGraphDigest,
-  });
-  const coordinatorEnv = {
-    ...process.env,
-    DATABASE_URL: url,
-    OUTCOME_COORDINATOR_SOURCE_SHA: sourceSha,
-    OUTCOME_COORDINATOR_TARGET_SHA: sourceSha,
-    OUTCOME_COORDINATOR_INSTANCE_ID: coordinatorInstanceId,
-    OUTCOME_COORDINATOR_EXPECTATION_GENERATION: coordinatorGeneration,
-  };
-  coordinatorWorker = spawn(
-    process.execPath,
-    [path.join(apiDist, 'outcome-coordinator/main.js')],
-    { cwd: repo, env: coordinatorEnv, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  await waitForOutput(coordinatorWorker, /OUTCOME_COORDINATOR_HEARTBEAT/, 20_000);
-  const firstDelivery = await waitForCondition(async () => {
-    const result = await pool.query(`
-      SELECT receipt.delivery_receipt_id, receipt.session_id_snapshot,
-             receipt.obligation_id, receipt.obligation_revision,
-             wake.id AS wake_id, wake.subject_version, session.status AS session_status
-        FROM completion_ack_coordinator_delivery_receipt receipt
-        JOIN project_coordinator_wake wake ON wake.id = receipt.wake_id_snapshot
-        JOIN session ON session.id = receipt.session_id_snapshot
-       WHERE receipt.obligation_id = $1 AND receipt.obligation_revision = $2
-       ORDER BY receipt.recorded_at, receipt.delivery_receipt_id
-    `, identity);
-    return result.rows;
-  }, (rows) => rows.length === 1, 'first durable coordinator delivery');
-  const firstWake = await db.projectCoordinatorWake.findUniqueOrThrow({
-    where: { id: firstDelivery[0].wake_id }, include: { session: true },
-  });
-  assert.equal(firstWake.status, 'SESSION_OPENED');
-  assert.deepEqual([firstWake.detail.obligationId, firstWake.detail.obligationRevision], identity);
-  assert.match(firstWake.session.prompt, new RegExp(identity[0]));
-  assert.match(firstWake.session.prompt, new RegExp(identity[1]));
-  assert.match(firstWake.session.prompt, /NEW_AUTHORIZATION/);
-
-  // Delivery is not resolution. A hard-failed one-shot coordinator Session leaves the canonical
-  // obligation ACTIVE and must yield one deterministic retry delivery, not weld the key forever.
-  await db.session.update({
-    where: { id: firstWake.sessionId },
-    data: {
-      status: RunStatus.FAILED,
-      engineTurnActive: false,
-      finishedAt: new Date(),
-      error: 'delivery fixture failure',
-    },
-  });
-  const secondDelivery = await waitForCondition(async () => {
-    const result = await pool.query(`
-      SELECT receipt.delivery_receipt_id, receipt.session_id_snapshot,
-             receipt.obligation_id, receipt.obligation_revision,
-             wake.id AS wake_id, wake.subject_version, session.status AS session_status
-        FROM completion_ack_coordinator_delivery_receipt receipt
-        JOIN project_coordinator_wake wake ON wake.id = receipt.wake_id_snapshot
-        JOIN session ON session.id = receipt.session_id_snapshot
-       WHERE receipt.obligation_id = $1 AND receipt.obligation_revision = $2
-       ORDER BY receipt.recorded_at, receipt.delivery_receipt_id
-    `, identity);
-    return result.rows;
-  }, (rows) => rows.length === 2, 'replacement durable coordinator delivery', 25_000);
-  const coordinatorExited = new Promise((resolve) => coordinatorWorker.once('exit', resolve));
-  coordinatorWorker.kill('SIGTERM');
-  await coordinatorExited;
-  const coordinatorHeartbeat = await db.executableRuntimeHeartbeat.findFirstOrThrow({
-    where: { expectationGeneration: coordinatorGeneration },
-    orderBy: { sequence: 'desc' },
-  });
-  assert.deepEqual(
-    [coordinatorHeartbeat.component, coordinatorHeartbeat.instanceId,
-      coordinatorHeartbeat.sourceSha, coordinatorHeartbeat.moduleGraphDigest],
-    ['outcome-coordinator', coordinatorInstanceId, sourceSha, coordinatorModuleGraphDigest],
-  );
-  const routedWakes = await db.projectCoordinatorWake.findMany({
-    where: { projectId: fixture.projectId, event: 'COMPLETION_ACK_STALE' },
-    include: { session: true },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-  });
-  assert.equal(routedWakes.length, 2);
-  const retryWake = routedWakes.find((row) => row.id !== firstWake.id);
-  assert.ok(retryWake);
-  assert.notEqual(retryWake.subjectVersion, firstWake.subjectVersion);
-  assert.deepEqual([retryWake.detail.obligationId, retryWake.detail.obligationRevision], identity);
-  assert.equal(retryWake.status, 'SESSION_OPENED');
-  assert.notEqual(secondDelivery[0].session_id_snapshot, secondDelivery[1].session_id_snapshot);
-  assert.equal(await db.projectCoordinatorWake.count({
-    where: { projectId: fixture.projectId, event: 'COMPLETION_ACK_STALE' },
-  }), 2);
-  const standingBeforeAck = (await pool.query(`
-    SELECT status, terminal_reason
-      FROM outcome_coordinator_obligation
-     WHERE source_type = 'COMPLETION_ACK'
-       AND obligation_id = $1 AND obligation_revision = $2
-  `, identity)).rows[0];
-  assert.notEqual(standingBeforeAck.status, 'RESOLVED',
-    'delivery receipts must not decide the canonical obligation');
-  assert.equal(standingBeforeAck.terminal_reason, null);
-  for (const table of [
-    'completion_ack_coordinator_delivery_plan',
-    'completion_ack_coordinator_delivery_receipt',
-  ]) {
-    await assertSqlRejected(`
-      UPDATE ${table} SET recorded_at = recorded_at
-       WHERE obligation_id = $1 AND obligation_revision = $2
-    `, identity, /OUTCOME_APPEND_ONLY/);
-    await assertSqlRejected(`
-      DELETE FROM ${table}
-       WHERE obligation_id = $1 AND obligation_revision = $2
-    `, identity, /OUTCOME_APPEND_ONLY/);
-  }
-  evidence.completionAck.coordinatorDeliveryLedgerAppendOnly = true;
-  for (const terminalStatus of ['RESOLVED', 'ESCALATED', 'TERMINAL']) {
-    await assertSqlRejected(`
-      UPDATE outcome_coordinator_obligation
-         SET status = $3
-       WHERE source_type = 'COMPLETION_ACK'
-         AND obligation_id = $1 AND obligation_revision = $2
-    `, [...identity, terminalStatus],
-    /COMPLETION_ACK_(CANONICAL_CLOSED_REQUIRED|NONCANONICAL_TERMINAL_FORBIDDEN)/);
-  }
-  evidence.completionAck.nonCanonicalCoordinatorTerminalRejected = true;
-
-  const sanitized = (await pool.query(`
-    SELECT completion_ack_sanitize_evidence(
-      'CONTROL_PLANE_COMMIT_REJECTED',
-      '{"message":"password=do-not-persist","sqlstate":"P0001",
-        "invariant":"TASK_DONE_CANONICAL_FACT_REQUIRED"}'::jsonb
-    ) AS evidence
-  `)).rows[0].evidence;
-  assert.doesNotMatch(JSON.stringify(sanitized), /do-not-persist|password=/);
-  assert.match(String(sanitized.errorDigest ?? sanitized.messageDigest), /^[0-9a-f]{64}$/);
-
-  const recovered = await controller(monitor).turnComplete(
-    { id: fixture.runnerId }, fixture.sessionId, callback,
-  );
-  assert.deepEqual(recovered, { ok: true, status: RunStatus.AWAITING_INPUT });
-  const repeated = await controller(monitor).turnComplete(
-    { id: fixture.runnerId }, fixture.sessionId, callback,
-  );
-  assert.deepEqual(repeated, { ok: true, status: RunStatus.AWAITING_INPUT });
-  coordinatorWorker = spawn(
-    process.execPath,
-    [path.join(apiDist, 'outcome-coordinator/main.js')],
-    { cwd: repo, env: coordinatorEnv, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  await waitForOutput(coordinatorWorker, /OUTCOME_COORDINATOR_HEARTBEAT/, 20_000);
-  const resolvedCoordination = await waitForCondition(async () => {
-    const result = await pool.query(`
-      SELECT status, terminal_reason
-        FROM outcome_coordinator_obligation
-       WHERE source_type = 'COMPLETION_ACK'
-         AND obligation_id = $1 AND obligation_revision = $2
-    `, identity);
-    return result.rows[0];
-  }, (row) => row?.status === 'RESOLVED', 'source-CLOSED coordinator resolution');
-  const restartedCoordinatorExited = new Promise(
-    (resolve) => coordinatorWorker.once('exit', resolve),
-  );
-  coordinatorWorker.kill('SIGTERM');
-  await restartedCoordinatorExited;
-  assert.equal(resolvedCoordination.terminal_reason, 'COMPLETION_ACK_CANONICAL_SOURCE_CLOSED');
-  const [taskAfter, turnAfter, sessionAfter, request] = await Promise.all([
-    db.task.findUniqueOrThrow({ where: { id: fixture.taskId } }),
-    db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } }),
-    db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } }),
-    db.taskJudgmentRequest.findFirstOrThrow({
-      where: { taskId: fixture.taskId }, include: { executableResult: true },
-    }),
-  ]);
-  assert.equal(taskAfter.status, TaskStatus.DONE);
-  assert.equal(turnAfter.status, 'ANSWERED');
-  assert.equal(sessionAfter.status, RunStatus.AWAITING_INPUT);
-  assert.equal(sessionAfter.engineTurnActive, false);
-  assert.equal(sessionAfter.costUsd, 0.75);
-  assert.deepEqual(
-    [sessionAfter.sumInputTokens, sessionAfter.sumOutputTokens],
-    [5, 3],
-  );
-  assert.equal(request.status, 'DECIDED');
-  assert.equal(request.decision, 'PASS');
-  assert.equal(request.executableResult.rawOutput, rawOutput);
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal(await db.taskExecutableJudgmentResult.count({ where: { requestId: request.id } }), 1);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskComment.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal(await db.llmUsage.count({ where: { sessionId: fixture.sessionId } }), 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-     WHERE obligation_revision = $1
-  `, [identity[1]])).rows[0].n, 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_obligation_revision
-     WHERE obligation_revision = $1
-  `, [identity[1]])).rows[0].n, 1);
-  assert.ok((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_fact
-     WHERE obligation_revision = $1
-  `, [identity[1]])).rows[0].n >= 2);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_obligation_event
-     WHERE obligation_revision = $1 AND state = 'CLOSED'
-  `, [identity[1]])).rows[0].n, 1);
-  assert.equal((await db.projectBlocker.findUniqueOrThrow({ where: { id: blocker.id } })).resolvedBy, 'AUTO');
-  const successorAfter = await taskService.listRow(fixture.ownerId, successor.id);
-  assert.equal(successorAfter.runnable, true);
-  assert.equal(successorAfter.blocked, false);
-  assert.equal(projectBlockedBucketBeforeRouting, 2,
-    'the command task is operationally blocked and its successor still waits on that task');
-
-  Object.assign(evidence.completionAck, {
-    permanent500Detected: true,
-    p0001Fingerprint: canonical.error_fingerprint,
-    obligationId: identity[0],
-    obligationRevision: identity[1],
-    deduplicatedActiveObligation: true,
-    allSixSurfacesShareIdentity: true,
-    taskProjectSessionReadsShareIdentity: true,
-    coordinatorOwnedAndRouted: true,
-    persistentCoordinatorWorker: true,
-    coordinatorGenerationBound: true,
-    failedCoordinatorDeliveryRetried: true,
-    sourceClosedOnlyResolution: true,
-    manualAndAutomaticRedispatchBlocked: true,
-    originalCallbackRecovered: true,
-    appendOnlyHistoryRetained: true,
-    duplicateCallbackNoop: true,
-    billingAppliedExactlyOnce: true,
-  });
-});
-
-test('completion ACK database boundary blocks redispatch, provenance rewrites and forged ledger bindings', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const state = await completionAckFixture('ack-database-boundary', {
-    ingestionAgeSeconds: 60,
-  });
-  assert.equal(
-    (await monitor.reconcileStaleCompletionAcks(new Date(), 30, 64)).newFactCount,
-    1,
-  );
-  const [standing] = (await pool.query(`
-    SELECT active.*, fact.id AS fact_id, lifecycle.id AS event_id
-      FROM completion_ack_active_obligation active
-      JOIN completion_ack_fact fact
-        ON fact.obligation_revision = active.obligation_revision
-       AND fact.fact_kind <> 'COMPLETION_ACK_RECOVERED'
-      JOIN completion_ack_obligation_event lifecycle
-        ON lifecycle.obligation_revision = active.obligation_revision
-       AND lifecycle.state = 'ACTIVE'
-     WHERE active.task_id = $1::uuid
-     ORDER BY fact.recorded_at, lifecycle.recorded_at
-     LIMIT 1
-  `, [state.fixture.taskId])).rows;
-  assert.ok(standing);
-
-  await assert.rejects(
-    db.session.create({ data: {
-      id: randomUUID(),
-      ownerId: state.fixture.ownerId,
-      creatorId: state.fixture.ownerId,
-      taskId: state.fixture.taskId,
-      workspaceId: state.fixture.workspaceId,
-      assignedRunnerId: state.fixture.runnerId,
-      title: 'forbidden duplicate task session',
-      prompt: 'do not rerun completed work',
-      provider: 'claude',
-      status: RunStatus.PENDING,
-      dispatchOrigin: SessionDispatchOrigin.USER,
-      startsTaskWork: true,
-    } }),
-    /COMPLETION_ACK_RECONCILIATION_REQUIRED/,
-  );
-  await db.session.update({
-    where: { id: state.fixture.sessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
-  });
-  await assert.rejects(
-    db.session.update({
-      where: { id: state.fixture.sessionId },
-      data: { status: RunStatus.PENDING },
-    }),
-    /COMPLETION_ACK_RECONCILIATION_REQUIRED/,
-  );
-  await assert.rejects(
-    db.conversationTurn.update({
-      where: { id: state.delivery.turnId },
-      data: { leaseGeneration: randomUUID() },
-    }),
-    /COMPLETION_ACK_RECONCILIATION_REQUIRED/,
-  );
-
-  await assert.rejects(
-    db.runEvent.update({
-      where: { id: state.event.id },
-      data: { ingestedByRunnerId: randomUUID() },
-    }),
-    /RUN_EVENT_INGESTION_PROVENANCE_(?:DB_OWNED|IMMUTABLE)|RUN_EVENT_INGESTED_AT_DB_OWNED/,
-  );
-  await assert.rejects(
-    db.runEvent.update({
-      where: { id: state.event.id },
-      data: { ingestedUnderLeaseGeneration: randomUUID() },
-    }),
-    /RUN_EVENT_INGESTION_PROVENANCE_(?:DB_OWNED|IMMUTABLE)|RUN_EVENT_INGESTED_AT_DB_OWNED/,
-  );
-
-  for (const [table, idColumn, id] of [
-    ['completion_ack_obligation_revision', 'obligation_revision', standing.obligation_revision],
-    ['completion_ack_fact', 'id', standing.fact_id],
-    ['completion_ack_obligation_event', 'id', standing.event_id],
-  ]) {
-    await assertSqlRejected(
-      `UPDATE ${table} SET recorded_at = recorded_at WHERE ${idColumn} = $1`,
-      [id],
-      /COMPLETION_ACK_APPEND_ONLY/,
-    );
-    await assertSqlRejected(
-      `DELETE FROM ${table} WHERE ${idColumn} = $1`,
-      [id],
-      /COMPLETION_ACK_APPEND_ONLY/,
-    );
-  }
-
-  const observationBefore = (await pool.query(`
-    SELECT observation_count, latest_failure_at
-      FROM completion_ack_observation_register
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision])).rows[0];
-  assert.ok(observationBefore);
-  await assertSqlRejected(`
-    DELETE FROM completion_ack_observation_register WHERE obligation_revision = $1
-  `, [standing.obligation_revision], /COMPLETION_ACK_OBSERVATION_REGISTER_DELETE_FORBIDDEN/);
-  await assertSqlRejected(`
-    UPDATE completion_ack_observation_register
-       SET task_id = $2::uuid
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision, randomUUID()],
-  /COMPLETION_ACK_OBSERVATION_REGISTER_SCOPE_IMMUTABLE/);
-  await assertSqlRejected(`
-    UPDATE completion_ack_observation_register
-       SET observation_count = observation_count
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision], /COMPLETION_ACK_OBSERVATION_REGISTER_MONOTONE/);
-  await assertSqlRejected(`
-    UPDATE completion_ack_observation_register
-       SET latest_failure_at = latest_failure_at - interval '1 second',
-           observation_count = observation_count + 1
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision], /COMPLETION_ACK_OBSERVATION_REGISTER_MONOTONE/);
-  const observationAfter = (await pool.query(`
-    SELECT observation_count, latest_failure_at
-      FROM completion_ack_observation_register
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision])).rows[0];
-  assert.deepEqual(observationAfter, observationBefore);
-  assert.equal((await pool.query(`
-    SELECT count(*)::integer AS count
-      FROM completion_ack_active_obligation
-     WHERE obligation_revision = $1
-  `, [standing.obligation_revision])).rows[0].count, 1);
-
-  const foreign = await foundation('ack-cross-tenant-forgery', true);
-  const forgedFingerprint = 'ACCEPTANCE_CROSS_TENANT_FORGERY';
-  await assertSqlRejected(`
-    INSERT INTO completion_ack_obligation_revision (
-      obligation_id, obligation_revision, tenant_id, project_id, task_id,
-      session_id, turn_id, error_fingerprint
-    ) VALUES (
-      completion_ack_obligation_id($1::uuid, $2::uuid, $3::uuid, $4::text),
-      completion_ack_obligation_revision($1::uuid, $2::uuid, $3::uuid, $4::text),
-      $5::uuid, $6::uuid, $1::uuid, $2::uuid, $3::uuid, $4::text
-    )
-  `, [
-    state.fixture.taskId,
-    state.fixture.sessionId,
-    state.delivery.turnId,
-    forgedFingerprint,
-    foreign.ownerId,
-    foreign.projectId,
-  ], /COMPLETION_ACK_(?:REVISION_)?SCOPE_MISMATCH|foreign key|tenant/i);
-
-  await assertSqlRejected(`
-    INSERT INTO completion_ack_fact (
-      id, obligation_id, obligation_revision, tenant_id, project_id, task_id,
-      session_id, turn_id, lease_generation, lease_provenance, runner_provenance,
-      fact_kind, error_fingerprint, first_failure_at, latest_failure_at,
-      source_observed_at, observed_at, recorded_at, ingested_at, observation_bucket,
-      evidence_source, evidence_source_digest, idempotency_key, fact_digest
-    )
-    SELECT gen_random_uuid(), revision.obligation_id, revision.obligation_revision,
-           $2::uuid, revision.project_id, revision.task_id, revision.session_id,
-           revision.turn_id, NULL, 'LEGACY_INFERRED', 'LEGACY_INFERRED',
-           'CONTROL_PLANE_COMMIT_REJECTED', revision.error_fingerprint,
-           statement_timestamp(), statement_timestamp(), NULL,
-           statement_timestamp(), statement_timestamp(), statement_timestamp(),
-           completion_ack_observation_bucket(statement_timestamp()),
-           '{"source":"RAW_CROSS_TENANT"}'::jsonb,
-           repeat('0',64)::char(64), repeat('0',64)::char(64), repeat('0',64)::char(64)
-      FROM completion_ack_obligation_revision revision
-     WHERE revision.obligation_revision = $1
-  `, [standing.obligation_revision, foreign.ownerId], /foreign key|scope mismatch/i);
-
-  const evidenceClient = await pool.connect();
-  try {
-    await evidenceClient.query('BEGIN');
-    const suppliedDigest = 'b'.repeat(64);
-    const inserted = await evidenceClient.query(`
-      INSERT INTO completion_ack_fact (
-        id, obligation_id, obligation_revision, tenant_id, project_id, task_id,
-        session_id, turn_id, lease_generation, lease_provenance, runner_provenance,
-        fact_kind, error_fingerprint, first_failure_at, latest_failure_at,
-        source_observed_at, observed_at, recorded_at, ingested_at, observation_bucket,
-        evidence_source, evidence_source_digest, idempotency_key, fact_digest
-      )
-      SELECT gen_random_uuid(), revision.obligation_id, revision.obligation_revision,
-             revision.tenant_id, revision.project_id, revision.task_id, revision.session_id,
-             revision.turn_id, NULL, 'LEGACY_INFERRED', 'LEGACY_INFERRED',
-             'CONTROL_PLANE_COMMIT_REJECTED', revision.error_fingerprint,
-             statement_timestamp(), statement_timestamp(), NULL,
-             statement_timestamp(), statement_timestamp(), statement_timestamp(),
-             completion_ack_observation_bucket(statement_timestamp()),
-             jsonb_build_object(
-               'source', 'RAW_SECURITY_FIXTURE',
-               'message', 'password=SECRET_MUST_NOT_PERSIST',
-               'messageDigest', $2::text,
-               'sqlstate', 'P0001'
-             ),
-             repeat('0',64)::char(64), repeat('0',64)::char(64), repeat('0',64)::char(64)
-        FROM completion_ack_obligation_revision revision
-       WHERE revision.obligation_revision = $1
-      RETURNING id, obligation_id, obligation_revision, fact_kind, evidence_source
-    `, [standing.obligation_revision, suppliedDigest]);
-    const rawFact = inserted.rows[0];
-    assert.ok(rawFact);
-    assert.doesNotMatch(JSON.stringify(rawFact.evidence_source), /SECRET_MUST_NOT_PERSIST|password=/);
-    assert.equal(rawFact.evidence_source.messageDigest, suppliedDigest);
-
-    await assert.rejects(evidenceClient.query(`
-      INSERT INTO completion_ack_obligation_event (
-        id, obligation_id, obligation_revision, state, source_fact_id,
-        source_fact_kind, reason_code, evidence_source, evidence_source_digest,
-        recorded_at, ingested_at, event_digest
-      ) VALUES (
-        gen_random_uuid(), $1, $2, 'ACTIVE', $3::uuid,
-        $4, $4, '{"source":"DIFFERENT_FROM_SOURCE_FACT"}'::jsonb,
-        repeat('0',64)::char(64), statement_timestamp(), statement_timestamp(),
-        repeat('0',64)::char(64)
-      )
-    `, [
-      rawFact.obligation_id,
-      rawFact.obligation_revision,
-      rawFact.id,
-      rawFact.fact_kind,
-    ]), /evidence|completion_ack_event_fact/i);
-  } finally {
-    await evidenceClient.query('ROLLBACK').catch(() => undefined);
-    evidenceClient.release();
-  }
-
-  Object.assign(evidence.completionAck, {
-    databaseRedispatchGuard: true,
-    runEventProvenanceImmutable: true,
-    appendOnlyUpdateDeleteRejected: true,
-    observationRegisterMonotone: true,
-    crossTenantLedgerForgeryRejected: true,
-    eventEvidenceBoundToSourceFact: true,
-    rawLedgerEvidenceSanitized: true,
-  });
-});
-
-test('bounded reconciliation advances beyond its limit, does not resample ACTIVE identities and cannot starve a recoverable ACK', async () => {
-  await empty();
-  const monitor = new OutcomeWatchdogService(db);
-  const states = [];
-  for (let index = 0; index < 3; index += 1) {
-    states.push(await completionAckFixture(`ack-bounded-fairness-${index}`, {
-      ingestionAgeSeconds: 60,
-      rawOutput: `bounded result ${index}\n`,
-    }));
-  }
-
-  const first = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 2);
-  const second = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 2);
-  const third = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 2);
-  assert.deepEqual(
-    [first.newFactCount, second.newFactCount, third.newFactCount],
-    [2, 1, 0],
-    'standing ACTIVE identities consumed the bounded detector forever',
-  );
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-  `)).rows[0].n, 3);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_fact
-     WHERE fact_kind = 'COMPLETION_ACK_STALE'
-  `)).rows[0].n, 3);
-
-  for (let replay = 0; replay < 8; replay += 1) {
-    const scan = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 2);
-    assert.equal(scan.newFactCount, 0, `replay ${replay} appended another standing fact`);
-  }
-  const bounded = (await pool.query(`
-    SELECT task_id, count(*)::int AS facts,
-           sum(pg_column_size(fact))::int AS bytes
-      FROM completion_ack_fact fact
-     GROUP BY task_id
-     ORDER BY task_id
-  `)).rows;
-  assert.equal(bounded.length, 3);
-  for (const row of bounded) {
-    assert.equal(row.facts, 1);
-    assert.ok(row.bytes <= 8192, `completion ACK facts used ${row.bytes} bytes for ${row.task_id}`);
-  }
-
-  // Make the lexicographically first two active turns look ACKed without a judgment, while the
-  // last one commits the exact callback receipt atomically. The two incomplete rows remain
-  // visible, while a later limit=1 scan must not recreate or re-close the already closed identity.
-  const ordered = [...states].sort((left, right) =>
-    left.fixture.sessionId.localeCompare(right.fixture.sessionId));
-  const recoverable = ordered[ordered.length - 1];
-  for (const missing of ordered.slice(0, -1)) {
-    await markTurnAnswered(missing.fixture.sessionId, missing.delivery.turnId);
-  }
-  const committed = await controller().turnComplete(
-    { id: recoverable.fixture.runnerId },
-    recoverable.fixture.sessionId,
-    {
-      turnId: recoverable.delivery.turnId,
-      status: RunStatus.SUCCEEDED,
-      subtype: 'shell',
-      shellExitCode: 0,
-      shellOutput: recoverable.rawOutput,
-    },
-  );
-  assert.deepEqual(committed, { ok: true, status: RunStatus.AWAITING_INPUT });
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [recoverable.fixture.taskId])).rows[0].n, 0);
-  const recovered = await monitor.reconcileStaleCompletionAcks(new Date(), 30, 1);
-  assert.equal(recovered.recoveredObligationCount, 0);
-  assert.equal((await pool.query(`
-    SELECT count(*)::int AS n FROM completion_ack_active_obligation
-     WHERE task_id = $1::uuid
-  `, [recoverable.fixture.taskId])).rows[0].n, 0);
-  for (const missing of ordered.slice(0, -1)) {
-    const [active] = (await pool.query(`
-      SELECT obligation FROM completion_ack_active_obligation
-       WHERE task_id = $1::uuid
-    `, [missing.fixture.taskId])).rows;
-    assert.equal(active.obligation.reasonCode, 'ACK_COMMIT_FACT_MISSING');
-  }
-  Object.assign(evidence.completionAck, {
-    boundedDetectorFairness: true,
-    standingIdentityNotResampled: true,
-    perTaskStorageBound: 8192,
-    missingFactCannotStarveRecovery: true,
-  });
-});
-
 test('N-1 omission stays on v1 and legacy -1 cannot conclude the task', async () => {
   await empty();
   const fixture = await executableFixture('n-minus-one', { legacy: true });
@@ -2427,8 +811,8 @@ test('legacy bootstrap import preserves UNTYPED/-1 and appends only an evidence 
   const turnId = '01a047fe-d899-711f-a3b7-53a3269f0c12';
   await db.task.create({ data: {
     id: taskId, ownerId: base.ownerId, creatorType: 'USER', creatorId: base.ownerId,
-    title: 'legacy watchdog', assigneeId: base.workspaceId, status: TaskStatus.FAILED,
-    completionCriterion: 'EXECUTABLE', acceptanceCommand: 'npm run test:outcome-reconciler:watchdog',
+    title: 'legacy acceptance suite', assigneeId: base.workspaceId, status: TaskStatus.FAILED,
+    completionCriterion: 'EXECUTABLE', acceptanceCommand: 'npm run test:outcome-reconciler:replay',
     acceptanceExpectedExitCode: 0,
   } });
   await db.session.create({ data: {
@@ -2440,7 +824,7 @@ test('legacy bootstrap import preserves UNTYPED/-1 and appends only an evidence 
   const createdAt = new Date('2026-08-28T10:51:19.065Z');
   await db.conversationTurn.create({ data: {
     id: turnId, sessionId, seq: 2, clientTurnId: `system:task-acceptance:v1:${randomUUID()}:0`,
-    kind: 'shell', content: 'npm run test:outcome-reconciler:watchdog', status: 'ANSWERED',
+    kind: 'shell', content: 'npm run test:outcome-reconciler:replay', status: 'ANSWERED',
     createdAt, answeredAt: new Date(createdAt.getTime() + 120_731),
   } });
   await db.taskComment.create({ data: {
@@ -2580,26 +964,6 @@ test('broken and cyclic supersession chains fail closed', async () => {
   Object.assign(evidence.supersessionSurfaces, { brokenFailClosed: true, cycleFailClosed: true });
 });
 
-function waitForOutput(child, pattern, timeoutMs = 15_000) {
-  return new Promise((resolve, reject) => {
-    let output = '';
-    const timer = setTimeout(() => reject(new Error(`worker output timeout: ${output}`)), timeoutMs);
-    const read = (chunk) => {
-      output += chunk.toString();
-      if (pattern.test(output)) {
-        clearTimeout(timer);
-        resolve(output);
-      }
-    };
-    child.stdout.on('data', read);
-    child.stderr.on('data', read);
-    child.once('exit', (code) => {
-      clearTimeout(timer);
-      reject(new Error(`worker exited ${code}: ${output}`));
-    });
-  });
-}
-
 async function waitForCondition(read, predicate, label, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let current;
@@ -2632,7 +996,7 @@ test('external dead-man marks a registered generation missing when it never hear
   assert.deepEqual(
     [expected.state, expected.condition_code, expected.expected_source_sha,
       expected.module_graph_digest, expected.heartbeat_digest],
-    ['STARTING', 'STARTING', sourceSha, watchdogModuleGraphDigest, null],
+    ['STARTING', 'STARTING', sourceSha, runtimeModuleGraphDigest, null],
   );
   const duringGraceAt = new Date(
     new Date(expected.startup_deadline_at).getTime() - 1,
@@ -2688,51 +1052,45 @@ test('external dead-man marks a registered generation missing when it never hear
   });
 });
 
-test('external dead-man detects a terminated generation-bound worker and exact recovery', async () => {
+test('external dead-man detects an expired generation-bound heartbeat and exact recovery', async () => {
   await empty();
   const instanceId = 'acceptance-worker';
   const watchdogGeneration = randomUUID();
-  const completionAckGeneration = randomUUID();
-  for (const [component, generation] of [
-    ['outcome-watchdog', watchdogGeneration],
-    ['completion-ack-watchdog', completionAckGeneration],
-  ]) {
-    const registered = registerRuntimeExpectation({ component, instanceId, generation });
+  // Two independently registered components, because the overlay aggregation below has to show
+  // one obligation per expected component rather than one per instance.
+  const coordinatorGeneration = randomUUID();
+  {
+    const registered = registerRuntimeExpectation({
+      component: 'outcome-watchdog', instanceId, generation: watchdogGeneration,
+    });
     assert.deepEqual(
       [registered.component, registered.instanceId, registered.generation, registered.replayed],
-      [component, instanceId, generation, false],
+      ['outcome-watchdog', instanceId, watchdogGeneration, false],
     );
   }
-  const worker = spawn(process.execPath, [path.join(apiDist, 'outcome-watchdog/main.js')], {
-    cwd: repo,
-    env: {
-      ...process.env, DATABASE_URL: url,
-      OUTCOME_WATCHDOG_POLICY_PATH: path.join(repo, 'contracts/outcome-reconciler-v2-watchdog-slo.json'),
-      OUTCOME_WATCHDOG_COLLECTOR_SHA: sourceSha, OUTCOME_WATCHDOG_TARGET_SHA: sourceSha,
-      OUTCOME_WATCHDOG_INSTANCE_ID: instanceId,
-      OUTCOME_WATCHDOG_EXPECTATION_GENERATION: watchdogGeneration,
-      COMPLETION_ACK_WATCHDOG_EXPECTATION_GENERATION: completionAckGeneration,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
+  // 0221 removed the watchdog process, so nothing runs to emit this heartbeat any more. The
+  // ledger, its expectation guard and the dead-man that reads them are the 0200 runtime contract
+  // and stay: one live append is what proves the generation binding is still enforced.
+  await appendRuntimeHeartbeat({
+    component: 'outcome-watchdog', instanceId, sourceSha,
+    moduleGraphDigest: runtimeModuleGraphDigest,
+    expectationGeneration: watchdogGeneration,
+    observedAt: new Date(), deadlineAt: new Date(Date.now() + 30_000),
+    payload: { schemaVersion: 1, liveGenerationFixture: true },
   });
-  await waitForOutput(worker, /OUTCOME_WATCHDOG_HEARTBEAT/);
   const boundHeartbeats = await db.executableRuntimeHeartbeat.findMany({
     where: { instanceId },
     orderBy: [{ component: 'asc' }, { sequence: 'desc' }],
   });
-  assert.equal(boundHeartbeats.length, 2);
+  assert.equal(boundHeartbeats.length, 1);
   assert.deepEqual(
     boundHeartbeats.map((row) => [
       row.component, row.expectationGeneration, row.sourceSha, row.moduleGraphDigest,
     ]),
-    [
-      ['completion-ack-watchdog', completionAckGeneration, sourceSha, watchdogModuleGraphDigest],
-      ['outcome-watchdog', watchdogGeneration, sourceSha, watchdogModuleGraphDigest],
-    ],
+    [['outcome-watchdog', watchdogGeneration, sourceSha, runtimeModuleGraphDigest]],
   );
-  const heartbeatService = new OutcomeWatchdogService(db);
   await assert.rejects(
-    heartbeatService.appendRuntimeHeartbeat({
+    appendRuntimeHeartbeat({
       component: 'outcome-watchdog', instanceId, sourceSha,
       moduleGraphDigest: sha('wrong-module-graph'),
       expectationGeneration: watchdogGeneration,
@@ -2741,21 +1099,21 @@ test('external dead-man detects a terminated generation-bound worker and exact r
     }),
     /EXECUTABLE_RUNTIME_HEARTBEAT_EXPECTATION_MISMATCH/,
   );
-  const workerExited = new Promise((resolve) => worker.once('exit', resolve));
-  worker.kill('SIGTERM');
-  await workerExited;
   // Append a production-valid, exact-generation observation whose deadline has elapsed. This
   // keeps the acceptance suite bounded while exercising the same DB-clock dead-man predicate as
   // a worker that stopped for the full 30 second SLO; no mutable clock or projection is patched.
   const staleObservedAt = new Date(Date.now() - 31_000);
   const staleDeadlineAt = new Date(Date.now() - 1_000);
+  registerRuntimeExpectation({
+    component: 'outcome-coordinator', instanceId, generation: coordinatorGeneration,
+  });
   for (const [component, generation] of [
+    ['outcome-coordinator', coordinatorGeneration],
     ['outcome-watchdog', watchdogGeneration],
-    ['completion-ack-watchdog', completionAckGeneration],
   ]) {
-    await heartbeatService.appendRuntimeHeartbeat({
+    await appendRuntimeHeartbeat({
       component, instanceId, sourceSha,
-      moduleGraphDigest: watchdogModuleGraphDigest,
+      moduleGraphDigest: runtimeModuleGraphDigest,
       expectationGeneration: generation,
       observedAt: staleObservedAt,
       deadlineAt: staleDeadlineAt,
@@ -2777,7 +1135,7 @@ test('external dead-man detects a terminated generation-bound worker and exact r
      ORDER BY component
   `, [instanceId])).rows;
   assert.deepEqual(views, [
-    { component: 'completion-ack-watchdog', state: 'WATCHDOG_STALE', active_obligation_count: 1 },
+    { component: 'outcome-coordinator', state: 'WATCHDOG_STALE', active_obligation_count: 1 },
     { component: 'outcome-watchdog', state: 'WATCHDOG_STALE', active_obligation_count: 1 },
   ]);
   const surfaces = [
@@ -2804,12 +1162,12 @@ test('external dead-man detects a terminated generation-bound worker and exact r
 
   const recoveredAt = new Date();
   for (const [component, generation] of [
+    ['outcome-coordinator', coordinatorGeneration],
     ['outcome-watchdog', watchdogGeneration],
-    ['completion-ack-watchdog', completionAckGeneration],
   ]) {
-    await heartbeatService.appendRuntimeHeartbeat({
+    await appendRuntimeHeartbeat({
       component, instanceId, sourceSha,
-      moduleGraphDigest: watchdogModuleGraphDigest,
+      moduleGraphDigest: runtimeModuleGraphDigest,
       expectationGeneration: generation,
       observedAt: recoveredAt,
       deadlineAt: new Date(recoveredAt.getTime() + 30_000),
@@ -2831,7 +1189,7 @@ test('external dead-man detects a terminated generation-bound worker and exact r
      ORDER BY component
   `, [instanceId])).rows;
   assert.deepEqual(views, [
-    { component: 'completion-ack-watchdog', state: 'HEALTHY', active_obligation_count: 0 },
+    { component: 'outcome-coordinator', state: 'HEALTHY', active_obligation_count: 0 },
     { component: 'outcome-watchdog', state: 'HEALTHY', active_obligation_count: 0 },
   ]);
   for (const surface of surfaces) {
@@ -2854,7 +1212,7 @@ test('external dead-man detects a terminated generation-bound worker and exact r
   const deadmanSource = readFileSync(deadmanPath, 'utf8');
   assert.doesNotMatch(deadmanSource, /from ['"].*(outcome-watchdog|outcome-reconciler|projection|acceptance.executor)/);
   Object.assign(evidence.watchdog, {
-    workerTerminated: true, detectedAt: new Date().toISOString(), maximumDeltaSeconds: 30,
+    detectedAt: new Date().toISOString(), maximumDeltaSeconds: 30,
     generationsRegisteredBeforeStart: 2,
     heartbeatGenerationAndModuleBound: true,
     staleEvent: true, staleSurfaceObligations: 2, recoveryEvent: true, recoveryCleared: true,
@@ -2867,9 +1225,10 @@ test('independent watchdog marks only a started ADMITTED attempt as INFRASTRUCTU
   await empty();
   const { fixture, delivery, started } = await admitAndStart('stale-attempt');
   const attempt = await db.taskExecutableAttempt.findUniqueOrThrow({ where: { id: started.attemptId } });
-  const marked = await new OutcomeWatchdogService(db).markStaleExecutableAttempts(
-    new Date(attempt.deadlineAt.getTime() + 1_000),
-  );
+  const marked = (await pool.query(
+    'SELECT executable_acceptance_mark_stale_attempts($1::timestamptz, 64) AS count',
+    [new Date(attempt.deadlineAt.getTime() + 1_000)],
+  )).rows[0].count;
   assert.equal(marked, 1);
   const [terminated, continuation, task] = await Promise.all([
     db.taskExecutableAttempt.findUniqueOrThrow({ where: { id: started.attemptId } }),
@@ -2911,18 +1270,21 @@ test('successor watchdog task is atomically bound to 1200/current revision by mi
   assert.match(migration, /"acceptance_timeout_seconds" = 1200/);
   assert.match(migration, /"acceptance_capability_revision" = 2/);
   assert.match(migration, /task_executable_plan_bind/);
-  const contract = JSON.parse(readFileSync(path.join(
-    repo, 'contracts/outcome-reconciler-v2-watchdog-slo.json',
-  ), 'utf8'));
+  // The index census used to be read from the watchdog SLO contract, which 0221 deleted along
+  // with the collector that consumed it. The indexes it required are the EXECUTABLE runtime
+  // ledger's own, so the requirement is stated here rather than dropped.
+  const runtimeSchemaIndexes = [
+    'executable_dead_man_event_latest_idx',
+    'executable_runtime_expectation_slot_idx',
+    'executable_runtime_heartbeat_latest_idx',
+    'executable_runtime_heartbeat_sequence_key',
+  ];
   const rows = await pool.query(`
     SELECT indexname FROM pg_indexes
-     WHERE schemaname IN ('public', 'outcome_projection', 'outcome_watchdog')
+     WHERE schemaname IN ('public', 'outcome_projection')
        AND indexname = ANY($1::text[])
      ORDER BY indexname
-  `, [contract.capacity.runtimeSchemaIndexes]);
-  assert.deepEqual(
-    rows.rows.map((row) => row.indexname),
-    [...contract.capacity.runtimeSchemaIndexes].sort(),
-  );
+  `, [runtimeSchemaIndexes]);
+  assert.deepEqual(rows.rows.map((row) => row.indexname), [...runtimeSchemaIndexes].sort());
   evidence.compatibility.runtimeSchemaIndexesPresent = true;
 });
