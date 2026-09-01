@@ -41,10 +41,10 @@
  * validated batch — and everything it MUST re-derive is read inside it, under the locks it takes.
  * `identity` is the first half of that claim and `replay` is the second. `effects` is the third
  * thing that decides it: an external action inside a retried closure would happen once per
- * attempt, so retried units keep every such action after commit. The constrained Action Executor
- * is the deliberate exception to "nothing external in a transaction": it is a `TX_BARE` unit
- * whose transaction is the authorization/binding commit fence, whose provider call is
- * provider-idempotent, and which is never automatically replayed by a database retry loop.
+ * attempt, so retried units keep every such action after commit. Nothing is exempt from that
+ * today: the constrained Action Executor was the one deliberate exception, and 0219 removed it
+ * along with the only `TX_BARE` unit. The shape stays in the vocabulary for whatever next has to
+ * state a one-attempt decision, and the checks below still hold such a unit to one attempt.
  *
  * ISOLATION
  * ---------
@@ -96,10 +96,8 @@ export interface TransactionUnit {
  * Every transaction boundary in the API server.
  *
  * Ordinary database-only units are retried. A unit that cannot be re-run appears here as
- * `TX_BARE`, with its one-attempt decision and recovery path stated explicitly. In particular,
- * ActionExecutorService.executeNext holds the fact-stream serialization lock across the provider
- * commit so revocation or rebinding is ordered before or after that effect; provider idempotency
- * and the durable lease recover an ambiguous database outcome without an in-process retry.
+ * `TX_BARE`, with its one-attempt decision and recovery path stated explicitly. Every unit below
+ * is `TX_RETRIED`; the one `TX_BARE` entry belonged to the Action Executor 0219 deleted.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
