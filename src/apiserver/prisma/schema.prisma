@@ -2027,15 +2027,13 @@ model ProjectCompletionContract {
   recipientDigest         String   @map("recipient_digest") @db.Char(64)
   semanticMaterial        Json     @map("semantic_material")
   evaluationPlanMaterial  Json     @map("evaluation_plan_material")
-  /// The permissiveness ceiling the owner's most recent ratification approved: concurrency, the two
-  /// budgets, the coordinator switch, the automation policy and the threshold maps. `contractDigest`
-  /// binds THIS rather than the live values, so moving under an approved ceiling — or tightening in
-  /// any of these dimensions — costs the owner nothing, while raising one still advances the digest
-  /// and asks. NULL until the project has ever been ratified, which reads as "its current
-  /// configuration is its own ceiling". Written only by the ratification trigger.
+  /// The permissiveness ceiling this project's configuration was last cut against: concurrency, the
+  /// two budgets, the coordinator switch, the automation policy and the threshold maps.
+  /// `contractDigest` binds THIS rather than the live values, so moving under the ceiling — or
+  /// tightening in any of these dimensions — leaves the digest where it is, while raising one
+  /// advances it. NULL until the envelope has ever been cut, which reads as "its current
+  /// configuration is its own ceiling".
   authorityEnvelope       Json?    @map("authority_envelope")
-  templateId              String?  @map("template_id") @db.Uuid
-  delegationId            String?  @map("delegation_id") @db.Uuid
   lastChangeReason        String   @map("last_change_reason")
   updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
@@ -2043,98 +2041,17 @@ model ProjectCompletionContract {
   @@map("project_completion_contract")
 }
 
-/// Owner-authored reusable authority with exact semantic/digest/budget/time/use bounds.
-model ProjectRatificationTemplate {
-  id                       String    @id @db.Uuid
-  ownerId                  String    @map("owner_id") @db.Uuid
-  name                     String
-  contractConstraint       Json      @map("contract_constraint")
-  riskPolicyDigests        String[]  @map("risk_policy_digests") @db.Char(64)
-  permissionDigests        String[]  @map("permission_digests") @db.Char(64)
-  budgetDigests            String[]  @map("budget_digests") @db.Char(64)
-  recipientDigests         String[]  @map("recipient_digests") @db.Char(64)
-  maxSessionBudgetPerDay   Int       @map("max_session_budget_per_day")
-  maxUses                  Int       @map("max_uses")
-  useCount                 Int       @default(0) @map("use_count")
-  validFrom                DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
-  validThrough             DateTime  @map("valid_through") @db.Timestamptz(6)
-  templateDigest           String    @map("template_digest") @db.Char(64)
-  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(6)
-  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@unique([ownerId, templateDigest])
-  @@map("project_ratification_template")
-}
-
-/// Owner-authored authority for one exact non-owner principal, optionally scoped to one Project.
-model ProjectRatificationDelegation {
-  id                       String    @id @db.Uuid
-  ownerId                  String    @map("owner_id") @db.Uuid
-  delegateType             String    @map("delegate_type")
-  delegateId               String    @map("delegate_id")
-  projectId                String?   @map("project_id") @db.Uuid
-  contractConstraint       Json      @map("contract_constraint")
-  riskPolicyDigests        String[]  @map("risk_policy_digests") @db.Char(64)
-  permissionDigests        String[]  @map("permission_digests") @db.Char(64)
-  budgetDigests            String[]  @map("budget_digests") @db.Char(64)
-  recipientDigests         String[]  @map("recipient_digests") @db.Char(64)
-  maxSessionBudgetPerDay   Int       @map("max_session_budget_per_day")
-  maxUses                  Int       @map("max_uses")
-  useCount                 Int       @default(0) @map("use_count")
-  validFrom                DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
-  validThrough             DateTime  @map("valid_through") @db.Timestamptz(6)
-  delegationDigest         String    @map("delegation_digest") @db.Char(64)
-  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(6)
-  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@unique([ownerId, delegationDigest])
-  @@map("project_ratification_delegation")
-}
-
-/// One digest-bound owner question. CTA identity/generation make stale, expired and duplicate
-/// answers safe instead of relying on whichever row happens to render first.
-model ProjectOwnerDecisionRequest {
-  id                     String    @id @db.Uuid
-  projectId              String    @map("project_id") @db.Uuid
-  ownerId                String    @map("owner_id") @db.Uuid
-  contractDigest         String    @map("contract_digest") @db.Char(64)
-  contractRevision       BigInt    @map("contract_revision")
-  requestGeneration      BigInt    @map("request_generation")
-  kind                   String    @default("OWNER_RATIFICATION")
-  status                 String    @default("PENDING")
-  reasonCode             String    @map("reason_code")
-  previousContractDigest String?   @map("previous_contract_digest") @db.Char(64)
-  semanticDiff           Json      @default("{}") @map("semantic_diff")
-  decisionPayload        Json      @map("decision_payload")
-  ctaToken               String    @unique @map("cta_token") @db.Uuid
-  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
-  /// Audit disposition for routing. DEFERRED legacy initial backfills remain PENDING history;
-  /// current eligibility additionally observes Project status, binding and blocking obligations.
-  routingState           String    @default("ACTIONABLE") @map("routing_state")
-  routingReasonCode      String    @default("OWNER_RATIFICATION_EXPLICIT_CONTRACT_CHANGE") @map("routing_reason_code")
-  deferredAt             DateTime? @map("deferred_at") @db.Timestamptz(6)
-  /// Terminal owner answer plus its replay identity. Kept on the exact request so DENY has the
-  /// same recoverable network-retry semantics as an append-only APPROVE ratification.
-  decision               String?
-  decisionIdempotencyKey String?   @map("decision_idempotency_key")
-  decidedAt              DateTime? @map("decided_at") @db.Timestamptz(6)
-  decidedByType          String?   @map("decided_by_type")
-  decidedById            String?   @map("decided_by_id")
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@unique([projectId, requestGeneration])
-  @@unique([ownerId, decisionIdempotencyKey], map: "project_owner_decision_idempotency_key")
-  @@index([ownerId, status, createdAt(sort: Desc)], map: "project_owner_decision_inbox_idx")
-  @@map("project_owner_decision_request")
-}
-
-/// One agent-authored proposal to change what a project counts as done (migration 0217).
+/// One agent-authored proposal to change what a project counts as done (migrations 0217, 0218).
 ///
-/// Holding a row here changes nothing: the effective `ProjectAcceptanceCriterionDefinition` rows,
-/// the contract digest and the standing ratification are untouched while a proposal stands. Only
-/// `project_owner_decide_criteria_proposal`, under OWNER credentials and against `cardDigest` —
-/// the identity of the exact rendering the owner answered — applies one, and it applies the
-/// criteria, refreshes the contract and appends the ratification in a single transaction.
+/// Holding a row here changes nothing: the effective `ProjectAcceptanceCriterionDefinition` rows
+/// are untouched while a proposal stands. Only `project_owner_decide_criteria_proposal`, under
+/// OWNER credentials and against `cardDigest` — the identity of the exact rendering the owner
+/// answered — applies one.
+///
+/// It is bound to the CRITERIA SET it was drafted against and to nothing else, so a budget, member
+/// or risk-boundary edit cannot invalidate it, while an edit-then-revert, a delete-and-recreate or
+/// an identity swap inside the criteria still does: `definitionId` and `semanticRevision` are part
+/// of what `baseCriteriaDigest` hashes.
 ///
 /// At most one proposal per project may be PENDING (partial unique index). A newer proposal
 /// retires the older one as SUPERSEDED with `supersededById` and `supersededReason`, which a CHECK
@@ -2149,14 +2066,13 @@ model ProjectCriteriaProposal {
   reasonCode             String    @default("GOAL_DECISION") @map("reason_code")
   kind                   String    @default("PROJECT_CRITERIA_PROPOSAL")
   status                 String    @default("PENDING")
-  /// The exact contract this proposal was drafted against. A decision is refused once it moves.
-  baseContractDigest     String    @map("base_contract_digest") @db.Char(64)
-  baseContractRevision   BigInt    @map("base_contract_revision")
+  /// The exact criteria set this proposal was drafted against. A decision is refused once it moves.
+  baseCriteriaDigest     String    @map("base_criteria_digest") @db.Char(64)
   baseCriteria           Json      @map("base_criteria")
   proposedCriteria       Json      @map("proposed_criteria")
   semanticDiff           Json      @map("semantic_diff")
   card                   Json
-  /// Approve-what-you-see identity over the proposed set, diff, card and base digest.
+  /// Approve-what-you-see identity over the proposed set, diff, card and base criteria digest.
   cardDigest             String    @map("card_digest") @db.Char(64)
   /// Digest of the submitted body, so an idempotency replay can tell a repeat from a new proposal.
   inputDigest            String    @map("input_digest") @db.Char(64)
@@ -2172,8 +2088,7 @@ model ProjectCriteriaProposal {
   decidedAt              DateTime? @map("decided_at") @db.Timestamptz(6)
   decidedByType          String?   @map("decided_by_type")
   decidedById            String?   @map("decided_by_id")
-  appliedContractDigest  String?   @map("applied_contract_digest") @db.Char(64)
-  ratificationId         String?   @map("ratification_id") @db.Uuid
+  appliedCriteriaDigest  String?   @map("applied_criteria_digest") @db.Char(64)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
@@ -2182,31 +2097,6 @@ model ProjectCriteriaProposal {
   @@unique([ownerId, decisionIdempotencyKey], map: "project_criteria_proposal_decision_idempotency_idx")
   @@index([ownerId, status, createdAt(sort: Desc)], map: "project_criteria_proposal_inbox_idx")
   @@map("project_criteria_proposal")
-}
-
-/// Append-only approval of one exact contractDigest. evaluationPlanDigest is recorded for audit,
-/// but is intentionally not the validity key.
-model ProjectOwnerRatification {
-  id                               String    @id @db.Uuid
-  projectId                        String    @map("project_id") @db.Uuid
-  ownerId                          String    @map("owner_id") @db.Uuid
-  contractDigest                   String    @map("contract_digest") @db.Char(64)
-  contractRevision                 BigInt    @map("contract_revision")
-  evaluationPlanDigestAtDecision   String    @map("evaluation_plan_digest_at_decision") @db.Char(64)
-  source                           String
-  ratifiedByType                  String    @map("ratified_by_type")
-  ratifiedById                    String    @map("ratified_by_id")
-  authorityId                     String?   @map("authority_id") @db.Uuid
-  authorityDigest                 String?   @map("authority_digest") @db.Char(64)
-  decisionRequestId               String?   @unique @map("decision_request_id") @db.Uuid
-  idempotencyKey                  String    @map("idempotency_key")
-  validThrough                    DateTime? @map("valid_through") @db.Timestamptz(6)
-  ratifiedAt                      DateTime  @default(now()) @map("ratified_at") @db.Timestamptz(6)
-  createdAt                       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@unique([ownerId, idempotencyKey])
-  @@index([projectId, contractDigest, ratifiedAt(sort: Desc)], map: "project_owner_ratification_digest_idx")
-  @@map("project_owner_ratification")
 }
 
 model ProjectRatifiedActionIntent {
@@ -4274,10 +4164,7 @@ model FailureContinuationRouteDecision {
   attemptEvaluationPlanDigest    String   @map("attempt_evaluation_plan_digest") @db.Char(64)
   taskEvaluationPlanDigest       String?  @map("task_evaluation_plan_digest") @db.Char(64)
   projectEvaluationPlanDigest    String?  @map("project_evaluation_plan_digest") @db.Char(64)
-  ratifiedEvaluationPlanDigest   String?  @map("ratified_evaluation_plan_digest") @db.Char(64)
-  contractRatificationState      String   @map("contract_ratification_state")
   taskEvaluationPlanChanged      Boolean  @map("task_evaluation_plan_changed")
-  projectEvaluationPlanChanged   Boolean  @map("project_evaluation_plan_changed")
   failureDomain                  String   @map("failure_domain")
   failureNode                    String   @map("failure_node")
   ownerReason                    String?  @map("owner_reason")
@@ -6341,18 +6228,4 @@ model OutcomeObligationSuccessor {
 
   @@id([tenantId, projectId, predecessorObligationRevision, successorObligationRevision])
   @@map("outcome_obligation_successor")
-}
-
-model OutcomeBindingRatification {
-  tenantId          String   @map("tenant_id") @db.Uuid
-  projectId         String   @map("project_id") @db.Uuid
-  bindingDigest     String   @map("binding_digest") @db.Char(64)
-  contractDigest    String   @map("contract_digest") @db.Char(64)
-  contractRevision  BigInt?  @map("contract_revision")
-  ratificationId    String?  @map("ratification_id") @db.Uuid
-  carriedForward    Boolean  @default(false) @map("carried_forward")
-  boundAt           DateTime @default(now()) @map("bound_at") @db.Timestamptz(6)
-
-  @@id([tenantId, projectId, bindingDigest])
-  @@map("outcome_binding_ratification")
 }

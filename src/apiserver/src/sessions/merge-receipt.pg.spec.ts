@@ -31,7 +31,7 @@ import { TaskCheckpointService } from '../projects/task-checkpoint.service';
 import { ConvergenceLedgerService } from '../projects/convergence-ledger.service';
 import { mergeReceiptIdempotencyKey } from './merge-receipt';
 import { prismaClientFor } from '../prisma/prisma-client';
-import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -65,7 +65,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   });
   await db.project.create({ data: { id: projectId, ownerId, title: label } });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
-  await ratifyProjectForPgTest(db, ownerId, projectId, label);
+  await establishProjectContractForPgTest(db, ownerId, projectId, label);
   await db.task.create({
     data: { id: taskId, ownerId, title: label, creatorType: 'USER', creatorId: ownerId, projectId },
   });

@@ -13,7 +13,7 @@ import {
  * Atomic adapter for migration 0211's deterministic route reducer.
  *
  * The stored function validates the live outbox lease, reads the immutable attempt receipt and a
- * single database snapshot of binding/capability/ratification state, serializes the fingerprint
+ * single database snapshot of binding and capability state, serializes the fingerprint
  * lineage, and appends one decision. This service deliberately has no in-memory counters.
  */
 @Injectable()

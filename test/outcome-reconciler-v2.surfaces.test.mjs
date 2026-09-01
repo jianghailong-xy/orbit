@@ -297,7 +297,8 @@ test('database enforces tenant scope, request revision binding, expiry and paylo
   evidence.samples.requestRevision = bound.request_revision;
 });
 
-test('evaluation-plan-only evolution preserves ratification and creates no owner todo', async () => {
+test('an evaluation-plan-only edit moves the plan digest and leaves the contract where it is',
+  async () => {
   const ownerId = randomUUID();
   const projectId = randomUUID();
   const definitionId = randomUUID();
@@ -309,7 +310,7 @@ test('evaluation-plan-only evolution preserves ratification and creates no owner
     `INSERT INTO "project" (
       "id","owner_id","title","goal","coordinator_enabled","automation_policy",
       "max_concurrent_tasks","session_budget_per_day","updated_at"
-    ) VALUES ($1,$2,'surface ratification','exact goal',true,
+    ) VALUES ($1,$2,'surface contract','exact goal',true,
       'GUARDED_AUTO'::"project_automation_policy",3,10,now())`,
     [projectId, ownerId],
   );
@@ -320,19 +321,16 @@ test('evaluation-plan-only evolution preserves ratification and creates no owner
       'HUMAN_SIGNOFF'::"task_completion_criterion",$3)`,
     [definitionId, projectId, digest(`placeholder:${definitionId}`)],
   );
-  const readState = async () => (await pool.query(
-    'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS value',
-    [ownerId, projectId],
-  )).rows[0].value;
-  const initial = await readState();
-  const request = initial.decisionRequest;
-  const approved = (await pool.query({
-    text: `SELECT project_owner_ratify_contract(
-      $1::uuid,$2::uuid,'OWNER',$1::text,$3,$4::uuid,$5::uuid,'APPROVE',$6,false
-    ) AS value`,
-    values: [ownerId, projectId, initial.contractDigest, request.id, request.ctaToken, `surface-ratify:${projectId}`],
-  })).rows[0].value;
-  assert.equal(approved.ok, true);
+  const readState = async () => {
+    await pool.query('SELECT project_refresh_completion_contract($1::uuid, $2)',
+      [projectId, 'SURFACE_READ']);
+    return (await pool.query(
+      `SELECT "contract_digest"::text AS "contractDigest",
+              "evaluation_plan_digest"::text AS "evaluationPlanDigest"
+         FROM "project_completion_contract" WHERE "project_id" = $1::uuid`,
+      [projectId],
+    )).rows[0];
+  };
   const before = await readState();
   await pool.query(
     `UPDATE "project_acceptance_criterion_definition"
@@ -340,15 +338,9 @@ test('evaluation-plan-only evolution preserves ratification and creates no owner
     [definitionId],
   );
   const evolved = await readState();
+  // The two lanes are still independent: how a criterion is CHECKED may move without moving what
+  // the project counts as done.
   assert.equal(evolved.contractDigest, before.contractDigest);
   assert.notEqual(evolved.evaluationPlanDigest, before.evaluationPlanDigest);
-  assert.equal(evolved.ratified, true);
-  assert.equal(evolved.decisionRequest, null);
-  const pending = await pool.query(
-    `SELECT count(*)::int AS count FROM project_owner_decision_request
-      WHERE project_id=$1 AND status='PENDING'`,
-    [projectId],
-  );
-  assert.equal(pending.rows[0].count, 0);
-  evidence.invariants.ratificationDoesNotReopenForEvaluationPlan = true;
+  evidence.invariants.evaluationPlanLaneIsIndependent = true;
 });

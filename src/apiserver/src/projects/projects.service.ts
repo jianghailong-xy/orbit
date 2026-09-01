@@ -86,7 +86,6 @@ import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
-import type { OwnerRatificationReference } from './owner-ratification-surface';
 import {
   TASK_COMPLETION_CRITERIA,
   type TaskCompletionCriterionValue,
@@ -628,22 +627,6 @@ export class ProjectsService {
     private readonly sessions: SessionsService = undefined as unknown as SessionsService,
   ) {}
 
-  /** Rolling-test compatibility for focused Prisma/service doubles that predate this projection. */
-  private pendingOwnerRatificationReferences(
-    ownerId: string,
-    projectIds: readonly string[],
-  ): Promise<OwnerRatificationReference[]> {
-    const method = (this.acceptance as unknown as {
-      pendingOwnerRatificationReferences?: (
-        owner: string,
-        projects: readonly string[],
-      ) => Promise<OwnerRatificationReference[]>;
-    }).pendingOwnerRatificationReferences;
-    return typeof method === 'function'
-      ? method.call(this.acceptance, ownerId, projectIds)
-      : Promise.resolve([]);
-  }
-
   /**
    * Ownership check for the write paths, and the 404 every unknown or cross-tenant id gets.
    *
@@ -1063,16 +1046,6 @@ export class ProjectsService {
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
-    if (dto.ownerRatification && (principal.type !== 'OWNER' || principal.id !== ownerId)) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        error: 'Forbidden',
-        code: 'OWNER_RATIFICATION_ACTOR_FORBIDDEN',
-        message:
-          'ownerRatification can only be submitted by the owner in the same authenticated ' +
-          'project-create request; an agent or runner cannot self-approve it',
-      });
-    }
     const structuredCriteria = dto.acceptanceCriteriaItems === undefined
       ? undefined
       : ProjectsService.normalizeAcceptanceItems(dto.acceptanceCriteriaItems);
@@ -1169,25 +1142,7 @@ export class ProjectsService {
           });
         }
 
-        // Explicit only for an atomic decision. Database triggers maintain ordinary creates; an
-        // atomic structured create cannot wait for its deferred definition trigger because the
-        // owner decision must bind the FINAL digest before this transaction commits.
-        let ratification: Record<string, unknown> | null = null;
-        if (dto.ownerRatification) {
-          await this.acceptance.refreshCompletionContract(client, created.id, 'PROJECT_CREATED');
-          ratification = await this.acceptance.ratifyByOwnerInTransaction(
-            client,
-            ownerId,
-            created.id,
-            {
-              decision: dto.ownerRatification.decision,
-              expectedContractDigest: dto.ownerRatification.expectedContractDigest ?? null,
-              idempotencyKey: dto.ownerRatification.idempotencyKey,
-              atomicCreate: true,
-            },
-          );
-        }
-        return { project: finalProject, ratification };
+        return { project: finalProject };
       };
       // Promoting an existing conversation changes two facts that must never split: the Project
       // points at this Session, and this Session's title becomes managed by that Project. Lock/write
@@ -1235,7 +1190,7 @@ export class ProjectsService {
             }
             return writeProject(tx);
           }, loggedRetry(this.logger, 'projects.create'))
-        : structuredCriteria !== undefined || dto.ownerRatification !== undefined
+        : structuredCriteria !== undefined
           ? await withTransactionRetry(
               this.prisma,
               (tx) => writeProject(tx),
@@ -1243,10 +1198,7 @@ export class ProjectsService {
             )
           : await writeProject(this.prisma);
       if (coordinator) this.sessions?.announceProjectSessionChanged?.(coordinator.sessionId);
-      const shaped = withAcceptanceDefinitions(withCoordination(createdResult.project));
-      return createdResult.ratification
-        ? { ...shaped, ownerRatification: createdResult.ratification }
-        : shaped;
+      return withAcceptanceDefinitions(withCoordination(createdResult.project));
     } catch (e) {
       // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
       // only when a coordinator was seeded (`id` is a server-generated uuid v7). The rows nested
@@ -1408,17 +1360,13 @@ export class ProjectsService {
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    const [rollups, attention, activeObligations, ownerRatifications, failureCoordination] = await Promise.all([
+    const [rollups, attention, activeObligations, failureCoordination] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
       readControlPlaneObligations(this.prisma, {
         tenantId: ownerId,
         projectIds: projects.map((project) => project.id),
       }),
-      this.pendingOwnerRatificationReferences(
-        ownerId,
-        projects.map((project) => project.id),
-      ),
       readFailureCoordination(this.prisma, {
         tenantId: ownerId,
         projectIds: projects.map((project) => project.id),
@@ -1427,9 +1375,6 @@ export class ProjectsService {
     ]);
     const obligationsByProject = controlPlaneObligationsBy(activeObligations, 'projectId');
     const failuresByProject = failureCoordinationByProject(failureCoordination);
-    const ratificationsByProject = new Map(
-      ownerRatifications.map((reference) => [reference.projectId, reference]),
-    );
     return projects.map((project) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
       // buckets and no activity rather than making every client handle two shapes.
@@ -1447,9 +1392,6 @@ export class ProjectsService {
         failureCoordination:
           failuresByProject.get(project.id)?.summary ?? summarizeFailureCoordination([]),
         controlPlaneObligations: obligationsByProject.get(project.id) ?? [],
-        // Secret-free and built by the same adapter as `/judgments` and project detail. A CTA is
-        // never selected for this read, so a list cache cannot accidentally become authority.
-        ownerRatification: ratificationsByProject.get(project.id) ?? null,
       };
     });
   }
@@ -1480,7 +1422,6 @@ export class ProjectsService {
       byStatus,
       acceptance,
       controlPlaneObligations,
-      ownerRatifications,
       failureCoordination,
     ] = await Promise.all([
       this.prisma.task.groupBy({
@@ -1490,7 +1431,6 @@ export class ProjectsService {
       }),
       this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
       readControlPlaneObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
-      this.pendingOwnerRatificationReferences(ownerId, [id]),
       readFailureCoordination(this.prisma, {
         tenantId: ownerId,
         projectIds: [id],
@@ -1503,7 +1443,6 @@ export class ProjectsService {
       acceptance,
       failureCoordination,
       controlPlaneObligations,
-      ownerRatification: ownerRatifications[0] ?? null,
     });
   }
 

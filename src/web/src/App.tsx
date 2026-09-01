@@ -25,8 +25,6 @@ import { JudgmentInboxPage } from './pages/JudgmentInboxPage';
 import { JudgmentReviewPage } from './pages/JudgmentReviewPage';
 import { ProjectAcceptanceReviewPage } from './pages/ProjectAcceptanceReviewPage';
 import { OutcomeDecisionReviewPage } from './pages/OutcomeDecisionReviewPage';
-import { OwnerRatificationReviewPage } from './pages/OwnerRatificationReviewPage';
-import { OwnerRatificationLegacyReviewPage } from './pages/OwnerRatificationLegacyReviewPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -118,26 +116,10 @@ export function App() {
               }
             />
             <Route
-              path="judgments/owner-ratification/:projectId/:requestId"
-              element={
-                <DocView>
-                  <OwnerRatificationReviewPage />
-                </DocView>
-              }
-            />
-            <Route
               path="judgments/project-acceptance/:projectId/:runId"
               element={
                 <DocView>
                   <ProjectAcceptanceReviewPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="judgments/owner-ratification/:projectId"
-              element={
-                <DocView>
-                  <OwnerRatificationLegacyReviewPage />
                 </DocView>
               }
             />

@@ -100,8 +100,6 @@ export interface FailureDomainInput {
   requiredCapability?: string | null;
   availableCapabilities?: readonly string[];
   evaluationPlanChanged?: boolean;
-  /** A previously ratified semantic contract no longer matches the current contract digest. */
-  contractRatificationStale?: boolean;
 }
 
 export interface FailureConvergenceInput {
@@ -143,10 +141,7 @@ export interface FailureContinuationRouteDecision {
   attemptEvaluationPlanDigest: string;
   taskEvaluationPlanDigest: string | null;
   projectEvaluationPlanDigest: string | null;
-  ratifiedEvaluationPlanDigest: string | null;
-  contractRatificationState: 'LEGACY_UNBOUND' | 'CURRENT' | 'MISSING' | 'STALE';
   taskEvaluationPlanChanged: boolean;
-  projectEvaluationPlanChanged: boolean;
   failureDomain: FailureContinuationDomain;
   failureNode: FailureContinuationNode;
   ownerReason: FailureContinuationOwnerReason | null;
@@ -234,7 +229,6 @@ export function classifyFailureContinuationDomain(
     return 'OWNER_REQUIRED';
   }
   if (DOMAIN_BY_NODE[input.failureNode] === 'OWNER_REQUIRED') return 'OWNER_REQUIRED';
-  if (input.contractRatificationStale === true) return 'OWNER_REQUIRED';
   const required = input.requiredCapability?.trim();
   if (required && !(input.availableCapabilities ?? []).includes(required)) {
     return 'CAPABILITY/ENVIRONMENT';

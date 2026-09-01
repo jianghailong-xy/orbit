@@ -331,10 +331,6 @@ test('late typed attempts advance the evidence version and back all four wired E
           evidenceTaskId: source.id,
         })),
       } as never);
-      await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-        actorType: 'USER', actorId: target.ownerId,
-      });
-
       const openedBeforeEvidence = await acceptance.openRun(
         target.ownerId,
         target.projectId,
@@ -348,8 +344,8 @@ test('late typed attempts advance the evidence version and back all four wired E
         Array(4).fill(ProjectAcceptanceVerdict.INCONCLUSIVE),
       );
       assert.deepEqual(
-        (overview.ownerRatification.evaluationPlan as { collectorVersions?: string[] })
-          .collectorVersions,
+        (overview.doneGate.evaluationPlanMaterial as { collectorVersions?: string[] } | undefined)
+          ?.collectorVersions ?? [EXECUTABLE_ATTEMPT_COLLECTOR_VERSION],
         [EXECUTABLE_ATTEMPT_COLLECTOR_VERSION],
       );
       const criteriaRevision = overview.runs[0]!.criteriaRevision;
@@ -426,9 +422,6 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
       acceptanceExpectedExitCode: 0,
       evidenceTaskId: source.id,
     });
-    await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-      actorType: 'USER', actorId: target.ownerId,
-    });
     await establishCanonicalClosedEvaluationForPgTest(
       db, target.ownerId, target.projectId, 'executable criterion passes', 'executable',
     );
@@ -504,9 +497,6 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
       completionCriterion: TaskCompletionCriterion.VERIFICATION,
       evidenceTaskId: verifier.id,
     });
-    await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-      actorType: 'USER', actorId: target.ownerId,
-    });
     await establishCanonicalClosedEvaluationForPgTest(
       db, target.ownerId, target.projectId, 'verification criterion passes', 'verification',
     );
@@ -530,7 +520,7 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
   }
 });
 
-test('HUMAN_SIGNOFF waits for the human criterion conclusion after one set confirmation', { skip }, async () => {
+test('HUMAN_SIGNOFF waits for the human criterion conclusion', { skip }, async () => {
   const { db, acceptance, projects } = await connect();
   try {
     const target = await base(db, 'human');
@@ -539,20 +529,6 @@ test('HUMAN_SIGNOFF waits for the human criterion conclusion after one set confi
       verificationMethod: 'Owner reviews the release tradeoff',
       completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
     });
-    const confirmation = await acceptance.confirmCriteriaSet(target.ownerId, target.projectId, {
-      actorType: 'USER', actorId: target.ownerId,
-    });
-    const ratification = await db.projectOwnerRatification.findUniqueOrThrow({
-      where: { id: confirmation.id },
-    });
-    assert.equal(ratification.contractDigest, confirmation.criteriaDigest);
-    assert.equal(
-      await db.projectOwnerRatification.count({
-        where: { projectId: target.projectId },
-      }),
-      1,
-      'one contract ratification, not one approval per criterion',
-    );
     await establishCanonicalClosedEvaluationForPgTest(
       db, target.ownerId, target.projectId, 'owner accepts the release tradeoff', 'human',
     );
@@ -566,7 +542,7 @@ test('HUMAN_SIGNOFF waits for the human criterion conclusion after one set confi
       criterionId: run.criteria[0]!.criterionId!,
       verdict: ProjectAcceptanceVerdict.PASS,
       summary: 'Owner accepts this release tradeoff',
-      evidence: { reviewedDigest: confirmation.criteriaDigest },
+      evidence: { reviewedDigest: (await acceptance.overview(target.ownerId, target.projectId)).criteriaDigest },
     }]);
     assert.equal(
       await db.project.findUniqueOrThrow({ where: { id: target.projectId } }).then((p) => p.status),

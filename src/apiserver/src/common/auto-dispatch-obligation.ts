@@ -110,15 +110,6 @@ export function autoDispatchFailureDisposition(
 ): AutoDispatchDisposition {
   const message = errorText(error);
   const wakeAt = new Date(now.getTime() + AUTO_DISPATCH_WAKE_DELAY_MS);
-  if (message.includes('OWNER_RATIFICATION_REQUIRED')) {
-    return {
-      reasonCode: 'OWNER_RATIFICATION_REQUIRED',
-      reason: 'Automatic execution is waiting for Owner Ratification of the exact current project completion contract.',
-      owner: 'OWNER',
-      nextAction: 'RATIFY_CURRENT_PROJECT_COMPLETION_CONTRACT',
-      wakeAt,
-    };
-  }
   if (message.includes('COMPLETION_ACK_RECONCILIATION_REQUIRED')) {
     return {
       reasonCode: 'COMPLETION_ACK_RECONCILIATION_REQUIRED',

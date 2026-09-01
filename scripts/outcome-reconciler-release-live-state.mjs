@@ -312,43 +312,29 @@ assert.equal(Number(database.migrations), repositoryMigrations);
 assert.ok(Number(database.migrations) >= contract.postgres.minimumMigrations);
 assert.match(String(database.systemIdentifier), /^\d+$/u);
 
-const ratification = queryJson(`
+// The approval queue is gone (migration 0218). What the release still gates on is the fact that
+// carried the meaning: the deployed project's completion contract is byte-for-byte the one this
+// frontier was declared against.
+const projectContract = queryJson(`
   SELECT jsonb_build_object(
-    'id', ratification.id::text,
-    'ownerId', ratification.owner_id::text,
-    'projectId', ratification.project_id::text,
-    'contractDigest', btrim(ratification.contract_digest::text),
-    'contractRevision', ratification.contract_revision::text,
-    'evaluationPlanDigest', btrim(ratification.evaluation_plan_digest_at_decision::text),
-    'source', ratification.source,
-    'ratifiedByType', ratification.ratified_by_type,
-    'ratifiedById', ratification.ratified_by_id,
-    'ratifiedAt', ratification.ratified_at,
+    'ownerId', project.owner_id::text,
+    'projectId', contract.project_id::text,
     'currentContractDigest', btrim(contract.contract_digest::text),
     'currentContractRevision', contract.contract_revision::text,
-    'currentEvaluationPlanDigest', btrim(contract.evaluation_plan_digest::text),
-    'effective', project_owner_ratification_effective(
-      ratification.project_id, ratification.contract_digest::text)
+    'currentEvaluationPlanDigest', btrim(contract.evaluation_plan_digest::text)
   )
-    FROM project_owner_ratification ratification
-    JOIN project_completion_contract contract ON contract.project_id=ratification.project_id
-   WHERE ratification.id='${contract.ownerRatification.databaseId}'::uuid
+    FROM project_completion_contract contract
+    JOIN project ON project.id=contract.project_id
+   WHERE contract.project_id='${contract.project.databaseId}'::uuid
 `);
-assert.equal(ratification.ownerId, contract.ownerRatification.ownerDatabaseId);
-assert.equal(ratification.projectId, contract.project.databaseId);
-assert.equal(ratification.contractDigest, contract.ownerRatification.contractDigest);
-assert.equal(ratification.contractRevision, contract.ownerRatification.contractRevision);
-assert.equal(ratification.evaluationPlanDigest, contract.ownerRatification.evaluationPlanDigest);
-assert.equal(ratification.currentContractDigest, contract.ownerRatification.contractDigest,
+assert.equal(projectContract.ownerId, contract.ownerRatification.ownerDatabaseId);
+assert.equal(projectContract.projectId, contract.project.databaseId);
+assert.equal(projectContract.currentContractDigest, contract.ownerRatification.contractDigest,
   'the owner semantic contract changed');
-assert.equal(ratification.currentContractRevision, contract.ownerRatification.contractRevision,
+assert.equal(projectContract.currentContractRevision, contract.ownerRatification.contractRevision,
   'the owner semantic contract revision changed');
-assert.equal(ratification.currentEvaluationPlanDigest,
+assert.equal(projectContract.currentEvaluationPlanDigest,
   contract.ownerRatification.evaluationPlanDigest, 'the evaluation plan changed');
-assert.equal(ratification.source, 'OWNER');
-assert.equal(ratification.ratifiedByType, 'OWNER');
-assert.equal(ratification.ratifiedById, contract.ownerRatification.ownerDatabaseId);
-assert.equal(ratification.effective, true, 'the declared Owner Ratification is not effective');
 
 const immutableVerifier = queryJson(`
   SELECT jsonb_build_object(
@@ -551,11 +537,8 @@ assert.notEqual(canonicalState.doneGate?.reason?.code, 'CURRENT_BINDING_MISSING'
 assert.equal(canonicalState.doneGate?.canonicalIdentity?.bindingDigest,
   canonicalState.binding.digest);
 assert.equal(canonicalState.doneGate?.canonicalIdentity?.cutId, canonicalState.cut.id);
-assert.equal(canonicalState.doneGate?.ratification?.effectiveNow, true);
-assert.equal(canonicalState.doneGate?.ratification?.currentContractDigest,
-  contract.ownerRatification.contractDigest);
-assert.equal(canonicalState.doneGate?.ratification?.boundContractDigest,
-  contract.ownerRatification.contractDigest);
+assert.equal(canonicalState.doneGate?.ratification, undefined,
+  'the DONE gate must no longer carry a ratification clause');
 
 const runtimeBinding = queryJson(`
   SELECT jsonb_build_object(
@@ -611,10 +594,7 @@ const body = {
   },
   postgres: database,
   immutableVerifier,
-  ownerRatification: {
-    publicId: contract.ownerRatification.publicId,
-    ...ratification,
-  },
+  projectContract,
   releaseEvidence,
   mergeReceipt,
   canonicalState,

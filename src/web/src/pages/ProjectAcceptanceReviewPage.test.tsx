@@ -13,7 +13,6 @@ import {
   type ProjectAcceptanceOverview,
   type ProjectAcceptanceRun,
 } from '../lib/projectAcceptance';
-import { ownerRatificationReviewPath } from '../lib/outcomeSurfaces';
 import { ProjectAcceptanceReviewPage } from './ProjectAcceptanceReviewPage';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -104,18 +103,6 @@ const overview: ProjectAcceptanceOverview = {
   })),
   acceptanceDigest: 'b'.repeat(64),
   criteriaDigest: 'c'.repeat(64),
-  criteriaConfirmation: {
-    confirmed: true,
-    criteriaDigest: 'c'.repeat(64),
-    confirmation: {
-      id: encodeId('019fcda0-d021-72a2-a914-2f4de38f4909'),
-      criteriaDigest: 'c'.repeat(64),
-      confirmedByType: 'USER',
-      confirmedById: encodeId('019fcda0-d021-72a2-a914-2f4de38f4910'),
-      actingSessionId: null,
-      confirmedAt: '2026-08-27T07:59:00.000Z',
-    },
-  },
   runs: [run],
   runsEmptyReason: null,
   audit: [],
@@ -326,35 +313,4 @@ describe('project acceptance review', { timeout: 12_000 }, () => {
     expect(submitButton().disabled).toBe(false, 'append-only human conclusions may be revised');
   });
 
-  it('routes an unratified contract to Owner Ratification without enabling human criteria', async () => {
-    const current: ProjectAcceptanceOverview = {
-      ...overview,
-      criteriaConfirmation: {
-        confirmed: false,
-        criteriaDigest: overview.criteriaDigest,
-        confirmation: null,
-      },
-    };
-    apiMock.mockImplementation((path: string, options?: { method?: string }) => {
-      if (path === projectAcceptanceOverviewPath(PROJECT)) {
-        return Promise.resolve(current) as Promise<never>;
-      }
-      return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
-    });
-    await mount();
-    const page = mountedContainer();
-
-    expect(page.textContent).toContain('当前项目合约尚未 Owner Ratification');
-    expect(page.textContent).toContain('Owner Ratification 是项目合约的价值与授权决定');
-    expect(submitButton().disabled).toBe(true);
-    expect((page.querySelector('.project-acceptance-verdict-field') as HTMLFieldSetElement).disabled)
-      .toBe(true);
-    const ratification = [...page.querySelectorAll('a')].find((link) =>
-      link.textContent?.includes('前往 Owner Ratification')) as HTMLAnchorElement;
-    expect(ratification).toBeTruthy();
-    expect(ratification.getAttribute('href')).toBe(ownerRatificationReviewPath(PROJECT));
-    expect([...page.querySelectorAll('button')].some((button) =>
-      button.textContent?.includes('确认当前标准集'))).toBe(false);
-    expect(apiMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
-  });
 });

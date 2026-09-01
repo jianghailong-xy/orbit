@@ -55,16 +55,15 @@ assert.match(evidence.postgres.version, /^1[6-9]\./, 'PostgreSQL 16+ is required
 assert.match(evidence.postgres.systemIdentifier, /^[0-9]+$/);
 assertAllTrue(evidence.invariants, 'invariants');
 assertAllTrue(evidence.races, 'races');
-assertAllTrue(evidence.cta, 'cta');
+assertAllTrue(evidence.removals, 'removals');
 for (const value of Object.values(evidence.samples)) assert.match(value, /^[0-9a-f]{64}$/);
 
 const sourceFiles = [
   'package.json',
   'scripts/outcome-reconciler-ratification-manifest.mjs',
   'scripts/outcome-reconciler-ratification.sh',
-  'src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql',
-  'src/apiserver/prisma/migrations/0216_project_authority_envelope/migration.sql',
   'src/apiserver/prisma/migrations/0217_project_criteria_proposal_card/migration.sql',
+  'src/apiserver/prisma/migrations/0218_owner_ratification_queue_removal/migration.sql',
   'src/apiserver/prisma/schema.prisma',
   'src/apiserver/src/common/db-write-inventory.ts',
   'src/apiserver/src/projects/dto.ts',
@@ -91,9 +90,9 @@ const body = {
   targetBranch,
   ...summary,
   postgres: evidence.postgres,
-  proofs: { invariants: evidence.invariants, races: evidence.races, cta: evidence.cta },
+  proofs: { invariants: evidence.invariants, races: evidence.races, removals: evidence.removals },
   samples: evidence.samples,
-  migrationDigest: sources['src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql'],
+  migrationDigest: sources['src/apiserver/prisma/migrations/0218_owner_ratification_queue_removal/migration.sql'],
   sourceDigest: sha256Canonical(sources),
   sources,
   window: { startedAt, finishedAt },

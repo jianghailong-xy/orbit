@@ -96,7 +96,7 @@ else
     "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
 fi
 
-echo '==> outcome-surfaces: running semantic, tenant, stale, expiry, secret and ratification matrix'
+echo '==> outcome-surfaces: running semantic, tenant, stale, expiry and secret matrix'
 set +e
 NODE_PATH="$NODE_MODULES" \
 OUTCOME_SURFACES_MODULE="$SURFACES_MODULE" \

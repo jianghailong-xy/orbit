@@ -164,10 +164,7 @@ const receiptEntries = predecessorIds.map((id) => {
   };
 });
 
-const logicalTestNodes = [
-  ...plan.legacyEntrypoints.map((entrypoint) => entrypoint.nodeId),
-  'owner-ratification-inbox-routing',
-];
+const logicalTestNodes = plan.legacyEntrypoints.map((entrypoint) => entrypoint.nodeId);
 const logicalReceipts = new Map(receiptEntries.map((entry) => [entry.nodeId, entry]));
 const logicalSummary = logicalTestNodes.reduce((summary, id) => {
   const entry = logicalReceipts.get(id);

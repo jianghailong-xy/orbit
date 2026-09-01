@@ -234,32 +234,6 @@ function taskData(world, id, title, extra = {}) {
   };
 }
 
-async function ratify(world, suffix = randomUUID()) {
-  const contract = await db.projectCompletionContract.findUniqueOrThrow({
-    where: { projectId: world.projectId },
-  });
-  await db.projectOwnerRatification.create({
-    data: {
-      id: randomUUID(),
-      projectId: world.projectId,
-      ownerId: world.ownerId,
-      contractDigest: contract.contractDigest,
-      contractRevision: contract.contractRevision,
-      evaluationPlanDigestAtDecision: contract.evaluationPlanDigest,
-      source: 'OWNER',
-      ratifiedByType: 'OWNER',
-      ratifiedById: world.ownerId,
-      idempotencyKey: `isolated-owner-ratification:${suffix}`,
-    },
-  });
-  const effective = (await pool.query(
-    `SELECT project_owner_ratification_effective($1::uuid, $2::text) AS effective`,
-    [world.projectId, contract.contractDigest],
-  )).rows[0].effective;
-  assert.equal(effective, true, 'fixture ratification was not effective for the current digest');
-  return contract;
-}
-
 async function releasedFixture(label, options = {}) {
   const world = await makeWorld(label, options);
   const predecessorId = randomUUID();
@@ -269,7 +243,15 @@ async function releasedFixture(label, options = {}) {
     data: taskData(world, taskId, `${label}-successor`, { autoRunWhenReady: true }),
   });
   await db.taskDependency.create({ data: { taskId, dependsOnTaskId: predecessorId } });
-  if (options.ratified !== false) await ratify(world);
+  if (options.aggregateParent) {
+    await db.task.create({
+      data: taskData(world, randomUUID(), `${label}-child`, { parentTaskId: taskId }),
+    });
+    await db.task.update({
+      where: { id: taskId },
+      data: { completionPolicy: 'ALL_CHILDREN_DONE' },
+    });
+  }
   const authority = await db.task.findUniqueOrThrow({
     where: { id: taskId },
     select: { dispatchAuthority: true },
@@ -403,7 +385,6 @@ async function rollingV1Fixture(label) {
     data: taskData(world, taskId, `${label}-successor`, { autoRunWhenReady: true }),
   });
   await db.taskDependency.create({ data: { taskId, dependsOnTaskId: predecessor.id } });
-  await ratify(world);
   const sessionId = randomUUID();
   const messageTurnId = randomUUID();
   await db.session.create({
@@ -523,7 +504,12 @@ test('concurrent immediate trigger and periodic sweep cannot create two active S
 });
 
 test('policy refusal exposes a revision/watermark-bound obligation and persistent wakeup', async () => {
-  const fixture = await releasedFixture('policy-refusal', { ratified: false });
+  // The refusal used to be "this project has no Owner Ratification". That gate is gone: automatic
+  // dispatch no longer waits for an approval. What this test is actually about survives it — a
+  // typed refusal is a durable, watermark-bound obligation with a persistent wake, never a silent
+  // READY — so it is now taken against a refusal that still exists: a task whose completion is
+  // owned by aggregating its subtasks has no work of its own to start.
+  const fixture = await releasedFixture('policy-refusal', { aggregateParent: true });
   const watermark = await completeDependency(fixture);
   await tasks.dispatchDependentsAfterCompletion(fixture.ownerId, fixture.predecessorId);
   const blocked = await tasks.get(fixture.ownerId, fixture.taskId);
@@ -534,9 +520,9 @@ test('policy refusal exposes a revision/watermark-bound obligation and persisten
   assert.equal(blocked.controlPlaneObligations.length, 1);
   const [obligation] = blocked.controlPlaneObligations;
   assert.equal(obligation.factKind, 'AUTO_DISPATCH_BLOCKED');
-  assert.equal(obligation.reasonCode, 'OWNER_RATIFICATION_REQUIRED');
-  assert.equal(obligation.owner, 'OWNER');
-  assert.equal(obligation.nextAction, 'RATIFY_CURRENT_PROJECT_COMPLETION_CONTRACT');
+  assert.equal(obligation.reasonCode, 'AGGREGATE_PARENT_HAS_NO_DIRECT_WORK');
+  assert.equal(obligation.owner, 'AGENT');
+  assert.equal(obligation.nextAction, 'RUN_OR_REPAIR_CHILD_TASKS');
   assert.equal(obligation.evaluatedThroughWatermark, watermark.toString());
   assert.match(obligation.taskRevision, /^[1-9][0-9]*$/);
   assert.match(obligation.obligationId, /^[0-9a-f]{64}$/);
@@ -545,9 +531,13 @@ test('policy refusal exposes a revision/watermark-bound obligation and persisten
   assert.equal(obligation.wakeup?.state, 'PENDING');
   assert.match(obligation.wakeup?.wakeupId ?? '', /^[0-9a-f-]{36}$/);
 
-  // The only mutation here is the declared owner decision and a disposable-clock advance. No
-  // manual task start is used: the persistent wake is delivered to the ordinary periodic sweep.
-  await ratify(fixture, 'policy-recovery');
+  // The only mutation here is the condition that caused the refusal, plus a disposable-clock
+  // advance. No manual task start is used: the persistent wake is delivered to the ordinary
+  // periodic sweep.
+  await db.task.update({
+    where: { id: fixture.taskId },
+    data: { completionPolicy: 'MANUAL' },
+  });
   await pool.query(
     `UPDATE task_auto_dispatch_wakeup
         SET due_at = clock_timestamp() - interval '1 second'
@@ -637,7 +627,7 @@ test('READY automatic work with available assignee, runner, budget and capacity 
        AND p.status = 'OPEN'::project_status
        AND p.coordinator_enabled = true
        AND p.session_budget_per_day IS NULL
-       AND project_owner_ratification_effective(p.id, c.contract_digest)
+       AND c.contract_digest IS NOT NULL
        AND EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
        AND NOT EXISTS (
          SELECT 1 FROM task_dependency d JOIN task prerequisite ON prerequisite.id = d.depends_on_task_id
@@ -670,7 +660,7 @@ test('READY automatic work with available assignee, runner, budget and capacity 
      WHERE t.status = 'OPEN'::task_status AND t.auto_run_when_ready = true
        AND t.dispatch_hold = false AND p.status = 'OPEN'::project_status
        AND p.session_budget_per_day IS NULL
-       AND project_owner_ratification_effective(p.id, c.contract_digest)
+       AND c.contract_digest IS NOT NULL
        AND EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
        AND NOT EXISTS (
          SELECT 1 FROM task_dependency d JOIN task prerequisite ON prerequisite.id = d.depends_on_task_id

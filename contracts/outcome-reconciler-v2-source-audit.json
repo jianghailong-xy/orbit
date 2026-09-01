@@ -85,8 +85,8 @@
           "role": "IMMUTABLE_EXACT_CUT_PROOF_AND_CANONICAL_OBLIGATIONS"
         },
         {
-          "storage": "project_completion_contract + project_owner_ratification",
-          "role": "CURRENT_EXACT_OWNER_AUTHORITY"
+          "storage": "project_completion_contract",
+          "role": "CURRENT_EXACT_COMPLETION_CONTRACT"
         }
       ],
       "projections": [

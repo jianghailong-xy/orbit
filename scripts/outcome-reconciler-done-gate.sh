@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance harness for the structured canonical-obligation DONE gate. PostgreSQL is mandatory:
-# stale cuts, trigger enforcement, ratification invalidation and projection failures are DB proofs.
+# stale cuts, trigger enforcement, contract drift and projection failures are DB proofs.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -95,7 +95,7 @@ else
 fi
 echo "==> done-gate: migrations=$MIGRATIONS system_identifier=$SYSTEM_ID port=$PORT"
 
-echo "==> done-gate: running cut, obligation, ratification, delivery and recovery proofs"
+echo "==> done-gate: running cut, obligation, drift, delivery and recovery proofs"
 set +e
 NODE_PATH="$NODE_MODULES" \
 OUTCOME_DONE_GATE_EVALUATOR_MODULE="$EVALUATOR_MODULE" \

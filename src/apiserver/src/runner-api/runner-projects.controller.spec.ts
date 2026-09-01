@@ -14,9 +14,6 @@ import { RunnerProjectsController } from './runner-projects.controller';
 function acceptanceDouble(): never {
   return {
     overview: async () => assert.fail('this scenario does not read acceptance'),
-    machineRatification: async () => assert.fail('this scenario does not read ratification'),
-    ratifyByPreapproval: async () => assert.fail('this scenario does not spend preapproval'),
-    confirmCriteriaSet: async () => assert.fail('this scenario does not confirm criteria'),
     openRun: async () => assert.fail('this scenario does not open an acceptance run'),
     finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
     recordMergeEvidence: async () => assert.fail('this scenario does not record merge evidence'),
@@ -79,22 +76,6 @@ test('getProject is exposed as GET projects/:id', () => {
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
 });
 
-test('projectRatification uses the machine-redacted owner-decision view', async () => {
-  let received: unknown[] = [];
-  const expected = { ratified: false, decisionRequest: { id: 'decision-1' } };
-  const acceptance = {
-    machineRatification: async (...args: unknown[]) => {
-      received = args;
-      return expected;
-    },
-  } as never;
-  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
-
-  const result = await controller.projectRatification(RUNNER, 'project-1');
-  assert.deepEqual(received, ['owner-1', 'project-1']);
-  assert.equal(result, expected);
-});
-
 // The id an agent holds is the base62 short form (that is what every payload encodes ids as), so
 // the param has to decode before it reaches a `@db.Uuid` column — the same gate the user-facing
 // ProjectsController puts on the same id. Both id-bearing routes, not just the read: a write that
@@ -102,9 +83,6 @@ test('projectRatification uses the machine-redacted owner-decision view', async 
 for (const method of [
   'getProject',
   'updateProject',
-  'projectRatification',
-  'ratifyProjectFromPreapproval',
-  'confirmAcceptanceCriteria',
   'removeProject',
 ] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
@@ -334,13 +312,13 @@ for (const method of ['getProject', 'removeProject'] as const) {
 // `updateProject` used to be in that list, and unit T6 took it out. The rule it was under is about
 // SEEDING — a route that quietly derives a default from whichever session happened to call it —
 // and that rule still holds here: nothing about the update is defaulted from the session. What the
-// header buys is the opposite, an authorization boundary that has to know WHO is writing, since
-// acceptance criteria and their set confirmation are a person's rather than a judgment session's.
+// header buys is the opposite, an authorization boundary that has to know WHO is writing, since a
+// proposal about acceptance criteria is a person's rather than a judgment session's to author.
 // Asserted rather than left implicit because a typo in the header name is
 // silent: the parameter would be `undefined` on every request and the boundary would never bite.
 for (const method of [
   'updateProject',
-  'confirmAcceptanceCriteria',
+  'proposeCriteriaChange',
   'openAcceptanceRun',
   'finalizeAcceptanceRun',
 ] as const) {
@@ -354,25 +332,6 @@ for (const method of [
     assert.deepEqual(headers, ['x-orbit-session-id']);
   });
 }
-
-test('confirmAcceptanceCriteria records runner provenance and the acting session', async () => {
-  let received: unknown[] = [];
-  const acceptance = {
-    confirmCriteriaSet: async (...args: unknown[]) => {
-      received = args;
-      return { current: true };
-    },
-  } as never;
-  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
-
-  await controller.confirmAcceptanceCriteria(RUNNER, 'project-1', SESSION_ID);
-
-  assert.deepEqual(received, [
-    'owner-1',
-    'project-1',
-    { actorType: 'RUNNER', actorId: 'runner-1', actingSessionId: SESSION_ID },
-  ]);
-});
 
 test('openAcceptanceRun attributes the run to the calling judgment session, not the body', async () => {
   const seen: {
@@ -485,8 +444,8 @@ test('updateProject forwards an explicit structured clear rather than dropping i
 });
 
 // The one clear this door no longer performs. Emptying the set is not a proposal an owner could
-// ever approve — a project with no acceptance criteria cannot be ratified — so it is refused with
-// a sentence that says what to send instead, rather than parked on the project's one pending slot.
+// ever sensibly approve — a project measured by nothing has no standard — so it is refused with a
+// sentence that says what to send instead, rather than parked on the project's one pending slot.
 test('updateProject refuses an empty structured criteria set instead of proposing nothing', async () => {
   const projects = {
     update: async () => assert.fail('an empty criteria set must not reach the project write'),
@@ -583,10 +542,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
-    // §11's blocker read, through the machine door (unit 25C). A read, and the one a headless
-    // auditor needs most: an open blocker is a dispatch precondition rather than a status anybody
-    // rewrote, so a project stopped by one looks entirely ordinary from every other endpoint.
-    'confirmAcceptanceCriteria',
     'createProject',
     // The proposal channel: an agent may say what it thinks the acceptance criteria should be
     // (`proposeCriteriaChange`) and read what the owner was asked (`criteriaProposal`). Both are
@@ -613,10 +568,8 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // Read-only canonical projection. The actor is fixed to AGENT by the controller, so this
     // reveals the standing obligation/CTA without turning the runner into its owner.
     'projectOutcome',
-    'projectRatification',
     // See `criteriaProposal` above: proposing is not deciding.
     'proposeCriteriaChange',
-    'ratifyProjectFromPreapproval',
     'recordMergeEvidence',
     'removeProject',
     // A machine may file the exact owner-only question its current authenticated delivery calls
@@ -631,7 +584,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     ]),
   );
   assert.deepEqual(verbs, {
-    confirmAcceptanceCriteria: RequestMethod.POST,
     createProject: RequestMethod.POST,
     // The proposal channel's two verbs are the assertion: a machine POSTs what it PROPOSES and
     // GETs what the owner was asked. There is no verb here that decides one.
@@ -646,9 +598,7 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     projectAcceptance: RequestMethod.GET,
     projectFailureCoordination: RequestMethod.GET,
     projectOutcome: RequestMethod.GET,
-    projectRatification: RequestMethod.GET,
     proposeCriteriaChange: RequestMethod.POST,
-    ratifyProjectFromPreapproval: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     requestCompletionAckOwnerDecision: RequestMethod.POST,

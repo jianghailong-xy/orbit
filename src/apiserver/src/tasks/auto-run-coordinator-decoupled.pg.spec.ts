@@ -13,7 +13,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
-import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -114,7 +114,7 @@ async function releasedTask(
       automationPolicy: ProjectAutomationPolicy.AUTO,
     },
   });
-  await ratifyProjectForPgTest(db, ids.ownerId, projectId, label);
+  await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
   const task = (id: string, title: string, extra: Record<string, unknown>) => ({
     id, ownerId: ids.ownerId, projectId, assigneeId: ids.agentId, title,
     creatorType: CreatorType.USER, creatorId: ids.ownerId, provider: 'claude', ...extra,
@@ -197,7 +197,7 @@ test('the scheduled sweep dispatches a coordinated Project\'s due task',
           automationPolicy: ProjectAutomationPolicy.AUTO,
         },
       });
-      await ratifyProjectForPgTest(s.db, ids.ownerId, projectId, 't1-due');
+      await establishProjectContractForPgTest(s.db, ids.ownerId, projectId, 't1-due');
       await s.db.task.create({
         data: {
           id: taskId, ownerId: ids.ownerId, projectId, assigneeId: ids.agentId, title: 't1-due task',

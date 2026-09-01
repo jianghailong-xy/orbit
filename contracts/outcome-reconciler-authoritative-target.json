@@ -453,13 +453,6 @@
       "shell": "scripts/outcome-reconciler-canary.sh",
       "manifestGenerator": "scripts/outcome-reconciler-canary-manifest.mjs",
       "additionalVerifier": "scripts/outcome-reconciler-canary-verify.mjs"
-    },
-    {
-      "suite": "owner-ratification-ui",
-      "packageScript": "test:outcome-reconciler:owner-ratification-ui",
-      "command": "bash scripts/outcome-reconciler-owner-ratification-ui.sh",
-      "shell": "scripts/outcome-reconciler-owner-ratification-ui.sh",
-      "manifestGenerator": "scripts/outcome-reconciler-owner-ratification-ui-manifest.mjs"
     }
   ],
   "authoritativeReceiptLookup": {

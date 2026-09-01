@@ -19,15 +19,14 @@ const { ProjectCriteriaProposalCard, criteriaProposalPath, criteriaProposalDecis
 const PROJECT_UUID = '0195c0de-0000-7000-8000-0000000000b1';
 const PROJECT = encodeId(PROJECT_UUID);
 const PROPOSAL = encodeId('0195c0de-0000-7000-8000-0000000000b2');
-const CONTRACT = 'a'.repeat(64);
+const CRITERIA_DIGEST = 'a'.repeat(64);
 const CARD_DIGEST = 'b'.repeat(64);
 const NEXT_CARD_DIGEST = 'c'.repeat(64);
 
 function read(cardDigest = CARD_DIGEST) {
   return {
     projectId: PROJECT,
-    currentContractDigest: CONTRACT,
-    ratified: true,
+    currentCriteriaDigest: CRITERIA_DIGEST,
     effectiveCriteria: [{
       definitionId: 'd1', text: 'release DAG 全绿', completionCriterion: 'HUMAN_SIGNOFF',
     }],
@@ -36,22 +35,22 @@ function read(cardDigest = CARD_DIGEST) {
       cardDigest,
       reasonCode: 'GOAL_DECISION',
       status: 'PENDING',
-      baseMatchesCurrentContract: true,
+      baseMatchesCurrentCriteria: true,
       card: {
         title: 'Change this project’s acceptance criteria?',
         headline: '1 of this project’s acceptance criteria change: 0 added, 0 removed, 1 retyped.',
         reason: 'GOAL_DECISION',
         whyNotAgent: '改这条等于我给自己挪考卷',
         options: [
-          { value: 'APPROVE' as const, label: '应用这份标准并批准由此产生的契约' },
+          { value: 'APPROVE' as const, label: '应用这份标准' },
           { value: 'DENY' as const, label: '保留生效中的标准并记录这次拒绝' },
         ],
         impacts: { APPROVE: '按你看到的这一份原子应用', DENY: '什么都不变，拒绝会被记录' },
         recommendation: '逐条读完再决定',
         noActionConsequence: '不会有任何超时、重试或重复提交能替你应用它',
-        cost: '批准会推进 contract digest',
+        cost: '批准会替换生效中的验收标准',
         deadline: '这张卡片展示到 2026-09-08T00:00:00Z',
-        resumeBehavior: '批准后被 OWNER_RATIFICATION_REQUIRED 挡住的工作会自动恢复',
+        resumeBehavior: '工作不在等这张卡片；批准只改变用哪套标准衡量它',
       },
       semanticDiff: {
         changedCriteria: [{
@@ -112,9 +111,9 @@ it('renders the eight-item protocol and a per-criterion semantic diff', async ()
     '什么都不变，拒绝会被记录',
     '逐条读完再决定',
     '不会有任何超时、重试或重复提交能替你应用它',
-    '批准会推进 contract digest',
+    '批准会替换生效中的验收标准',
     '这张卡片展示到 2026-09-08T00:00:00Z',
-    '批准后被 OWNER_RATIFICATION_REQUIRED 挡住的工作会自动恢复',
+    '工作不在等这张卡片；批准只改变用哪套标准衡量它',
   ]) expect(text).toContain(line);
   expect(text).toContain('HUMAN_SIGNOFF → VERIFICATION');
   expect(text).toContain('发版负责人确认 → 独立复核任务给出 PASS');

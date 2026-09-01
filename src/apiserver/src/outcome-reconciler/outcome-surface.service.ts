@@ -206,8 +206,8 @@ export class OutcomeSurfaceService {
     });
   }
 
-  /** A fail-closed, bounded human surface. Ratification is tagged separately and never masquerades
-   * as a HUMAN_SIGNOFF or as a canonical owner obligation. */
+  /** A fail-closed, bounded human surface. A canonical owner obligation never masquerades as a
+   * per-item HUMAN_SIGNOFF. */
   async humanInbox(tenantId: string, limit = 100): Promise<Record<string, unknown>> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be an integer between 1 and 100');
@@ -268,8 +268,7 @@ export class OutcomeSurfaceService {
       }
     }
 
-    const ratifications = await this.ratificationInbox(tenantId, limit);
-    const candidates = [...ratifications, ...canonical];
+    const candidates = [...canonical];
     const total = candidates.length;
     const items: Array<Record<string, unknown>> = [];
     for (const candidate of candidates.slice(0, Math.min(limit, OUTCOME_SURFACE_LIMITS.maxArrayItems))) {
@@ -287,7 +286,6 @@ export class OutcomeSurfaceService {
       truncated: items.length < total,
       failureContinuationIndex: failureInbox.semanticIndex,
       decisionTypeSeparation: {
-        ownerRatification: 'OWNER_RATIFICATION',
         perItemSignoff: 'HUMAN_SIGNOFF',
         canonicalOwnerKinds: ['GOAL_DECISION', 'RISK_ACCEPTANCE', 'NEW_AUTHORIZATION', 'EXTERNAL_IDENTITY'],
       },
@@ -350,85 +348,6 @@ export class OutcomeSurfaceService {
     return { projectId: row.projectId, canonicalIdentity: surface.canonicalIdentity, ...item };
   }
 
-  /** Owner Ratification has its own revision and authority protocol. The opaque CTA token is
-   * resolved on the server and therefore never enters an API, CLI, log or browser payload. */
-  async ratificationView(tenantId: string, projectId: string): Promise<Record<string, unknown>> {
-    await this.assertProjectTenant(tenantId, projectId);
-    const state = await this.acceptance.ownerRatification(tenantId, projectId);
-    const request = record(state.decisionRequest);
-    const safeRequest = Object.fromEntries(
-      Object.entries(request).filter(([key]) => key !== 'ctaToken'),
-    );
-    const payload = record(redactOutcomePayload(request.payload));
-    const protocol: HumanDecisionProtocol | null = Object.keys(request).length === 0 ? null : {
-      decisionType: 'OWNER_RATIFICATION',
-      agentWorkCompleted: array(payload.agentWorkCompleted),
-      whyNotAgent: String(payload.whyNotAgent ?? ''),
-      options: array(payload.options),
-      impacts: array(payload.impacts).length > 0 ? array(payload.impacts) : [payload.impact],
-      recommendation: payload.recommendation ?? payload.recommended,
-      cost: payload.cost ?? payload.costAndDeadline,
-      deadline: payload.deadline ?? { expiresAt: request.expiresAt },
-      noActionConsequence: payload.noActionConsequence ?? payload.consequenceOfNoAction,
-      resumeBehavior: payload.resumeBehavior ?? payload.resumeAfterDecision,
-    };
-    if (protocol) assertOutcomeDecisionProtocol(protocol);
-    return boundedRedacted({
-      ...state,
-      decisionRequest: Object.keys(request).length === 0 ? null : {
-        ...safeRequest,
-        payload,
-        requestRevision: `${String(state.contractRevision)}:${String(request.requestGeneration)}`,
-        protocol: protocol!,
-      },
-      decisionType: 'OWNER_RATIFICATION',
-      separation: 'Owner Ratification approves the project contract; it is not per-item HUMAN_SIGNOFF.',
-    }) as Record<string, unknown>;
-  }
-
-  async decideRatification(tenantId: string, requestId: string, input: {
-    requestRevision: string;
-    contractDigest: string;
-    decision: 'APPROVE' | 'DENY';
-    idempotencyKey: string;
-  }): Promise<Record<string, unknown>> {
-    if (!input || !['APPROVE', 'DENY'].includes(input.decision)
-        || !input.idempotencyKey?.trim()) {
-      throw new BadRequestException('decision and idempotencyKey are required');
-    }
-    const [request] = await this.prisma.$queryRaw<Array<{
-      projectId: string;
-      contractDigest: string;
-      contractRevision: bigint;
-      requestGeneration: bigint;
-      ctaToken: string;
-      expiresAt: Date;
-      status: string;
-    }>>(Prisma.sql`
-      SELECT request.project_id AS "projectId", request.contract_digest AS "contractDigest",
-             request.contract_revision AS "contractRevision",
-             request.request_generation AS "requestGeneration", request.cta_token AS "ctaToken",
-             request.expires_at AS "expiresAt", request.status
-        FROM project_owner_decision_request request
-        JOIN project ON project.id = request.project_id
-       WHERE request.id = ${requestId}::uuid AND request.owner_id = ${tenantId}::uuid
-         AND project.owner_id = ${tenantId}::uuid
-    `);
-    if (!request) throw new NotFoundException('ratification request not found');
-    const revision = `${request.contractRevision}:${request.requestGeneration}`;
-    if (request.status !== 'PENDING' || request.expiresAt.getTime() <= Date.now()
-        || input.requestRevision !== revision || input.contractDigest !== request.contractDigest) {
-      throw new ConflictException('OWNER_RATIFICATION_CTA_STALE_OR_EXPIRED');
-    }
-    return this.acceptance.ratifyByOwner(tenantId, request.projectId, {
-      expectedContractDigest: request.contractDigest,
-      decisionRequestId: requestId,
-      ctaToken: request.ctaToken,
-      decision: input.decision,
-      idempotencyKey: input.idempotencyKey,
-    });
-  }
-
   private async assertProjectTenant(tenantId: string, projectId: string): Promise<void> {
     const owned = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId: tenantId },
@@ -487,100 +406,4 @@ export class OutcomeSurfaceService {
     };
   }
 
-  private async ratificationInbox(tenantId: string, limit: number): Promise<Array<Record<string, unknown>>> {
-    const rows = await this.prisma.$queryRaw<Array<{
-      requestId: string;
-      projectId: string;
-      projectTitle: string;
-      contractDigest: string;
-      contractRevision: bigint;
-      requestGeneration: bigint;
-      reasonCode: string;
-      semanticDiff: Prisma.JsonValue;
-      payload: Prisma.JsonValue;
-      expiresAt: Date;
-      eligibility: Prisma.JsonValue;
-    }>>(Prisma.sql`
-      SELECT request.id AS "requestId", request.project_id AS "projectId",
-             project.title AS "projectTitle", request.contract_digest AS "contractDigest",
-             request.contract_revision AS "contractRevision",
-             request.request_generation AS "requestGeneration",
-             routing.value->>'reasonCode' AS "reasonCode",
-             request.semantic_diff AS "semanticDiff",
-             request.decision_payload AS payload, request.expires_at AS "expiresAt",
-             routing.value AS eligibility
-        FROM project_owner_decision_request request
-        JOIN project ON project.id = request.project_id AND project.owner_id = ${tenantId}::uuid
-       CROSS JOIN LATERAL (
-         SELECT project_owner_ratification_eligibility(
-           request.owner_id, request.project_id, request.id
-         ) AS value
-       ) routing
-       WHERE request.owner_id = ${tenantId}::uuid AND request.status = 'PENDING'
-         AND routing.value->>'eligible' = 'true'
-       ORDER BY request.created_at DESC, request.id DESC
-       LIMIT ${limit}
-    `);
-    return rows.map((row) => {
-      const payload = record(redactOutcomePayload(row.payload));
-      const eligibility = record(redactOutcomePayload(row.eligibility));
-      const primary = record(array(eligibility.linkedObligations)[0]);
-      const obligationId = String(primary.obligationId ?? row.requestId);
-      const obligationRevision = String(
-        primary.obligationRevision ?? row.requestGeneration,
-      );
-      const bindingDigest = String(primary.bindingDigest ?? row.contractDigest);
-      const evaluatedThroughWatermark = String(
-        primary.evaluatedThroughWatermark ?? row.contractRevision,
-      );
-      const protocol: HumanDecisionProtocol = {
-        decisionType: 'OWNER_RATIFICATION',
-        agentWorkCompleted: array(payload.agentWorkCompleted),
-        whyNotAgent: String(payload.whyNotAgent ?? ''),
-        options: array(payload.options),
-        impacts: array(payload.impacts).length > 0 ? array(payload.impacts) : [payload.impact],
-        recommendation: payload.recommendation ?? payload.recommended ?? null,
-        cost: payload.cost ?? payload.costAndDeadline ?? null,
-        deadline: payload.deadline ?? { expiresAt: row.expiresAt.toISOString() },
-        noActionConsequence: payload.noActionConsequence ?? payload.consequenceOfNoAction ?? null,
-        resumeBehavior: payload.resumeBehavior ?? payload.resumeAfterDecision ?? null,
-      };
-      assertOutcomeDecisionProtocol(protocol);
-      return boundedRedacted({
-        decisionType: 'OWNER_RATIFICATION',
-        projectId: row.projectId,
-        projectTitle: row.projectTitle,
-        requestId: row.requestId,
-        requestRevision: `${row.contractRevision}:${row.requestGeneration}`,
-        contractDigest: row.contractDigest,
-        reasonCode: row.reasonCode,
-        reason: eligibility.reason,
-        obligationId,
-        obligationRevision,
-        bindingDigest,
-        evaluatedThroughWatermark,
-        eligibility,
-        semanticDiff: redactOutcomePayload(row.semanticDiff),
-        protocol,
-        cta: {
-          actor: 'OWNER',
-          kind: 'DECIDE',
-          label: 'Review owner ratification',
-          method: 'POST',
-          href: `/outcomes/ratifications/${row.requestId}`,
-          binding: {
-            requestId: row.requestId,
-            requestRevision: `${row.contractRevision}:${row.requestGeneration}`,
-            contractDigest: row.contractDigest,
-            obligationId,
-            obligationRevision,
-            bindingDigest,
-            evaluatedThroughWatermark,
-            reasonCode: row.reasonCode,
-            expiresAt: row.expiresAt.toISOString(),
-          },
-        },
-      });
-    });
-  }
 }

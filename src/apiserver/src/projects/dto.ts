@@ -196,14 +196,6 @@ export class UpdateProjectAcceptanceCriterionDto extends CreateProjectAcceptance
   @IsOptional() @IsPublicId() id?: string;
 }
 
-export class AtomicOwnerRatificationDto {
-  /** Atomic create supports approval only. Denial is simply omission of this object. */
-  @IsIn(['APPROVE']) decision!: 'APPROVE';
-  @IsOptional() @IsString() @Matches(SHA256_DIGEST_PATTERN)
-  expectedContractDigest?: string;
-  @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
-}
-
 export class CreateProjectDto {
   @IsString()
   @MinLength(1)
@@ -228,18 +220,13 @@ export class CreateProjectDto {
    *  prompt in this phase (see the Project model). */
   @IsOptional() @IsString() @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS) instructions?: string;
 
-  /** Owner-selected governance may be part of the same request whose exact resulting digest is
-   * ratified. Runner callers are refused these fields at their boundary. */
+  /** Owner-selected governance, settable in the same request that creates the project. Runner
+   * callers are refused these fields at their boundary. */
   @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
   @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
   @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
   @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
   sessionBudgetPerDay?: number | null;
-
-  /** Explicit owner approval committed in the same transaction as Project creation. Merely using
-   * the user API does not ratify; the caller must submit this decision object. */
-  @IsOptional() @ValidateNested() @Type(() => AtomicOwnerRatificationDto)
-  ownerRatification?: AtomicOwnerRatificationDto;
 }
 
 export class UpdateProjectDto {
@@ -420,16 +407,6 @@ export const CONTENT_HASH_PATTERN = /^[0-9a-fA-F]{64}$/;
 const ACCEPTANCE_VERDICTS = ['PASS', 'FAIL', 'INCONCLUSIVE'] as const;
 const ACCEPTANCE_DECIDERS = ['COORDINATOR_AGENT', 'USER'] as const;
 
-export class OwnerRatificationDecisionDto {
-  @IsIn(['APPROVE', 'DENY']) decision!: 'APPROVE' | 'DENY';
-  @IsString() @Matches(SHA256_DIGEST_PATTERN) expectedContractDigest!: string;
-  @IsPublicId() decisionRequestId!: string;
-  /** Opaque one-use CTA capability. It is a UUID but deliberately not a public row id. */
-  @IsString() @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
-  ctaToken!: string;
-  @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
-}
-
 /**
  * An agent's proposal to change what this project counts as done.
  *
@@ -468,67 +445,6 @@ export class CriteriaProposalDecisionDto {
   @IsPublicId() proposalId!: string;
   @IsString() @Matches(SHA256_DIGEST_PATTERN) expectedCardDigest!: string;
   @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
-}
-
-export class PreapprovedRatificationDto {
-  @IsIn(['PREAPPROVED_TEMPLATE', 'BOUND_DELEGATION'])
-  authority!: 'PREAPPROVED_TEMPLATE' | 'BOUND_DELEGATION';
-  @IsPublicId() authorityId!: string;
-  @IsString() @Matches(SHA256_DIGEST_PATTERN) expectedContractDigest!: string;
-  @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
-}
-
-class RatificationSemanticCriterionDto {
-  @IsString() @Matches(SHA256_DIGEST_PATTERN) semanticHash!: string;
-  @IsString() @MinLength(1) @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS) text!: string;
-}
-
-class RatificationCriterionTrustDto {
-  @IsIn(TASK_COMPLETION_CRITERIA) completionCriterion!: TaskCompletionCriterionValue;
-  @IsString() @Matches(SHA256_DIGEST_PATTERN) semanticHash!: string;
-}
-
-class RatificationContractConstraintDto {
-  @IsString() @MinLength(1) @MaxLength(MAX_PROJECT_GOAL_CHARS) goal!: string;
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
-  @IsString({ each: true }) outcomes!: string[];
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
-  @ValidateNested({ each: true }) @Type(() => RatificationSemanticCriterionDto)
-  criteria!: RatificationSemanticCriterionDto[];
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
-  @ValidateNested({ each: true }) @Type(() => RatificationCriterionTrustDto)
-  criteriaTrust!: RatificationCriterionTrustDto[];
-  @IsObject() riskBoundary!: Record<string, unknown>;
-  // The owner-facing contract JSON renders this as a public id; normalize it back before the
-  // exact constraint is signed so copying the displayed contract produces usable authority.
-  @IsPublicId() ownerId!: string;
-}
-
-class RatificationAuthorityBoundsDto {
-  @ValidateNested() @Type(() => RatificationContractConstraintDto)
-  contractConstraint!: RatificationContractConstraintDto;
-  @IsArray() @ArrayMinSize(1) @ArrayUnique() @Matches(SHA256_DIGEST_PATTERN, { each: true })
-  riskPolicyDigests!: string[];
-  @IsArray() @ArrayMinSize(1) @ArrayUnique() @Matches(SHA256_DIGEST_PATTERN, { each: true })
-  permissionDigests!: string[];
-  @IsArray() @ArrayMinSize(1) @ArrayUnique() @Matches(SHA256_DIGEST_PATTERN, { each: true })
-  budgetDigests!: string[];
-  @IsArray() @ArrayMinSize(1) @ArrayUnique() @Matches(SHA256_DIGEST_PATTERN, { each: true })
-  recipientDigests!: string[];
-  @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
-  maxSessionBudgetPerDay!: number;
-  @IsInt() @Min(1) @Max(10_000) maxUses!: number;
-  @IsDateString() validThrough!: string;
-}
-
-export class CreateRatificationTemplateDto extends RatificationAuthorityBoundsDto {
-  @IsString() @MinLength(1) @MaxLength(200) name!: string;
-}
-
-export class CreateRatificationDelegationDto extends RatificationAuthorityBoundsDto {
-  @IsIn(['AGENT', 'RUNNER', 'SERVICE']) delegateType!: 'AGENT' | 'RUNNER' | 'SERVICE';
-  @IsString() @MinLength(1) @MaxLength(200) delegateId!: string;
-  @IsOptional() @IsPublicId() projectId?: string;
 }
 
 export class OpenAcceptanceRunDto {

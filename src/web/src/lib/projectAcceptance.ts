@@ -15,8 +15,7 @@ export interface ProjectAcceptanceInboxItem {
   answeredCount: number;
   unansweredCount: number;
   currentVerdict: 'UNDECIDED';
-  criteriaConfirmed: boolean;
-  confirmationRequired: boolean;
+  criteriaDeclared: boolean;
 }
 
 export interface ProjectAcceptanceInboxPage {
@@ -81,18 +80,6 @@ export interface ProjectAcceptanceOverview {
   criteriaDigest: string;
   contractDigest?: string;
   evaluationPlanDigest?: string;
-  criteriaConfirmation: {
-    confirmed: boolean;
-    criteriaDigest: string;
-    confirmation: null | {
-      id: string;
-      criteriaDigest: string;
-      confirmedByType: 'USER' | 'RUNNER';
-      confirmedById: string;
-      actingSessionId: string | null;
-      confirmedAt: string;
-    };
-  };
   runs: ProjectAcceptanceRun[];
   runsEmptyReason: string | null;
   audit: unknown[];

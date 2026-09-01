@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Client } from 'pg';
 
-import { ratifyProjectWithPgClientForTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractWithPgClientForTest } from '../projects/project-contract-test-helper';
 import { historicalTouchSql } from './pre-0132-dispatch-touch';
 
 /**
@@ -133,7 +133,7 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
       `UPDATE "task" SET "assignee_id" = $2::uuid WHERE "id" = $1::uuid`,
       [ids.dependentTaskId, ids.workspaceId],
     );
-    await ratifyProjectWithPgClientForTest(client, ids.ownerId, ids.projectId, ids.label);
+    await establishProjectContractWithPgClientForTest(client, ids.ownerId, ids.projectId, ids.label);
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK').catch(() => undefined);

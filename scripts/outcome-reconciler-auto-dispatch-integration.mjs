@@ -260,7 +260,7 @@ function validateRegression(regression, targetSha) {
     deliveredSignals: 2, activeSessions: 1, totalSessions: 1, runRequests: 1,
   });
   assert.deepEqual(regression.results.policyRefusal, {
-    reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+    reasonCode: 'AGGREGATE_PARENT_HAS_NO_DIRECT_WORK',
     dispatchAttempt: 1,
     canonicalObligations: 1,
     wakeupStateBeforeRecovery: 'PENDING',

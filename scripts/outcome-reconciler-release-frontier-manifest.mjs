@@ -227,8 +227,7 @@ if (phase === 'final') {
   assert.equal(live.outcome, 'PASS');
   assert.equal(live.targetSha, targetSha);
   assert.notEqual(live.canonicalState.doneGate?.reason?.code, 'CURRENT_BINDING_MISSING');
-  assert.equal(live.ownerRatification.effective, true);
-  assert.equal(live.ownerRatification.contractDigest,
+  assert.equal(live.projectContract.currentContractDigest,
     contract.ownerRatification.contractDigest);
   assert.equal(live.runtimeBinding.state, 'HEALTHY');
 }
@@ -300,7 +299,7 @@ const body = {
   },
   liveState: live ? {
     manifestDigest: live.manifestDigest,
-    ownerRatification: live.ownerRatification,
+    projectContract: live.projectContract,
     bindingDigest: live.canonicalState.binding.digest,
     cutId: live.canonicalState.cut.id,
     releaseEvidenceId: live.releaseEvidence.id,

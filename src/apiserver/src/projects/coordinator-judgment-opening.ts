@@ -218,7 +218,7 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + 'task_get 给出某个任务的完整描述和历史评论。\n\n'
     + '手上有哪些工具：读——project_get、task_list、task_get、session_list、session_get、project_acceptance；'
     + '写——task_create、task_update、task_comment、task_start、project_update、project_merge_evidence、'
-    + 'project_acceptance_run、project_acceptance_verdict、project_criteria_confirm。\n\n'
+    + 'project_acceptance_run、project_acceptance_verdict。\n\n'
     + '写的时候有三条边界，服务端会照着拒（不是建议）：'
     + '① 普通新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
     + '并受这个项目每天能开多少个任务的预算限制；只有服务端已将本会话绑定到 ACTIVE canonical remediation '

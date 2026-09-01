@@ -45,8 +45,6 @@
     "test:outcome-reconciler:failure-routing": "bash scripts/outcome-reconciler-failure-routing.sh",
     "test:outcome-reconciler:failure-successor-handoff": "bash scripts/outcome-reconciler-failure-successor-handoff.sh",
     "test:outcome-reconciler:failure-coordination-e2e": "bash scripts/outcome-reconciler-failure-coordination-e2e.sh",
-    "test:outcome-reconciler:owner-ratification-ui": "bash scripts/outcome-reconciler-owner-ratification-ui.sh",
-    "test:outcome-reconciler:owner-ratification-inbox-routing": "bash scripts/outcome-reconciler-owner-ratification-inbox-routing.sh",
     "test:outcome-reconciler:replay": "bash scripts/outcome-reconciler-replay.sh",
     "test:outcome-reconciler:canary": "bash scripts/outcome-reconciler-canary.sh",
     "test:outcome-reconciler:authoritative-target": "bash scripts/outcome-reconciler-authoritative-target.sh",

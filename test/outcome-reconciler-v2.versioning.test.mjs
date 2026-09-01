@@ -59,9 +59,8 @@ const evidence = {
   invariants: {
     everyBindingFieldInvalidates: false,
     oldProofRetainedButIneligible: false,
-    oldRatificationBindingIneligible: false,
-    semanticPlanCarriesOwnerDecision: false,
-    semanticChangeRequiresFreshDecision: false,
+    evaluationPlanLaneIsIndependent: false,
+    semanticChangeAdvancesTheContract: false,
     oldActionIntentRejected: false,
     zeroSuccessorDecided: false,
     multipleSuccessorsAllowed: false,
@@ -71,7 +70,7 @@ const evidence = {
     authorityRevocationReevaluated: false,
     recipientAndBudgetVersioned: false,
     registryAndEvaluatorVersioned: false,
-    ctaAbaPrevented: false,
+    semanticEpochAbaPrevented: false,
     noFalseClose: false,
     noForeverPendingRequest: false,
   },
@@ -80,7 +79,6 @@ const evidence = {
     concurrentDoubleSuccessor: false,
     lateContradictionVsClosedProof: false,
     authorityRevokeVsAction: false,
-    oldCtaReplay: false,
   },
   samples: {},
 };
@@ -112,12 +110,22 @@ before(async () => {
   );
 });
 
-async function ratificationState(projectId, client = pool) {
-  return jsonCall(
-    client,
-    'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS result',
-    [ownerId, projectId],
-  );
+async function contractState(projectId, client = pool) {
+  await client.query({
+    text: 'SELECT project_refresh_completion_contract($1::uuid,$2) AS result',
+    values: [projectId, 'VERSIONING_READ'],
+  });
+  return (await client.query({
+    text: `SELECT "contract_digest"::text AS "contractDigest",
+                  "contract_revision"::text AS "contractRevision",
+                  "evaluation_plan_digest"::text AS "evaluationPlanDigest",
+                  "risk_policy_digest"::text AS "riskPolicyDigest",
+                  "permission_digest"::text AS "permissionDigest",
+                  "budget_digest"::text AS "budgetDigest",
+                  "recipient_digest"::text AS "recipientDigest"
+             FROM "project_completion_contract" WHERE "project_id" = $1::uuid`,
+    values: [projectId],
+  })).rows[0];
 }
 
 async function createProject(label) {
@@ -138,35 +146,7 @@ async function createProject(label) {
      ) VALUES ($1,$2,1,$3,$4,'HUMAN_SIGNOFF'::"task_completion_criterion",$5)`,
     [definitionId, projectId, criterionText, `verify ${label} evidence`, digest(`placeholder:${definitionId}`)],
   );
-  return { projectId, definitionId, criterionText, state: await ratificationState(projectId) };
-}
-
-async function ownerDecision(project, overrides = {}) {
-  const current = overrides.state ?? await ratificationState(project.projectId);
-  const request = overrides.request ?? current.decisionRequest;
-  return jsonCall(
-    pool,
-    `SELECT project_owner_ratify_contract(
-       $1::uuid,$2::uuid,'OWNER',$1::text,$3,$4::uuid,$5::uuid,'APPROVE',$6,false
-     ) AS result`,
-    [
-      ownerId,
-      project.projectId,
-      overrides.expectedContractDigest ?? current.contractDigest,
-      overrides.requestId ?? request?.id ?? null,
-      overrides.ctaToken ?? request?.ctaToken ?? null,
-      overrides.idempotencyKey ?? `owner:${project.projectId}:${randomUUID()}`,
-    ],
-  );
-}
-
-async function createRatifiedProject(label) {
-  const project = await createProject(label);
-  const approved = await ownerDecision(project);
-  assert.equal(approved.ok, true);
-  project.state = await ratificationState(project.projectId);
-  assert.equal(project.state.ratified, true);
-  return project;
+  return { projectId, definitionId, criterionText, state: await contractState(projectId) };
 }
 
 async function registerGrant(project, label) {
@@ -358,7 +338,7 @@ async function commitEvaluation(scope, cut, evaluation, client = pool) {
 }
 
 async function submitAction(scope, key) {
-  const state = await ratificationState(scope.project.projectId);
+  const state = await contractState(scope.project.projectId);
   return jsonCall(
     pool,
     `SELECT project_submit_ratified_action(
@@ -394,7 +374,7 @@ async function commitAction(projectId, intent) {
 }
 
 async function setupScope(label, options = {}) {
-  const project = await createRatifiedProject(label);
+  const project = await createProject(label);
   const grant = await registerGrant(project, label);
   const binding = makeBinding(project, grant, label);
   const registered = await registerBinding(binding);
@@ -455,11 +435,10 @@ test('requires isolated PostgreSQL 16 and installs the versioning ledger', async
   };
 });
 
-test('every semantic binding field atomically obsoletes proof, ratification binding, obligation and action intent', async () => {
+test('every semantic binding field atomically obsoletes proof, obligation and action intent', async () => {
   for (const [field, invalidator, ownerDecisionCarries] of bindingCases) {
     const label = `dimension-${field}`;
     const scope = await setupScope(label);
-    const oldBindingDigest = scope.bindingDigest;
     const oldEvaluationId = scope.committed.evaluationId;
     const oldObligation = scope.evaluation.activeMandatoryObligations.find(
       (entry) => entry.blocksClosureOf.includes('CRITERIA_EVALUATION'),
@@ -506,12 +485,6 @@ test('every semantic binding field atomically obsoletes proof, ratification bind
       [oldEvaluationId],
     );
     assert.deepEqual(proof.rows[0], { reason_code: 'BINDING_OBSOLETE' });
-    const oldRatification = await pool.query({
-      text: `SELECT binding_current, effective FROM outcome_current_binding_ratification
-              WHERE tenant_id=$1::uuid AND project_id=$2::uuid AND binding_digest=$3`,
-      values: [ownerId, scope.project.projectId, oldBindingDigest],
-    });
-    assert.deepEqual(oldRatification.rows[0], { binding_current: false, effective: false });
     const staleAction = await commitAction(scope.project.projectId, scope.action);
     assert.equal(staleAction.ok, false);
     assert.match(staleAction.code, /^RATIFIED_ACTION_(BINDING|AUTHORITY)_STALE$/);
@@ -531,23 +504,12 @@ test('every semantic binding field atomically obsoletes proof, ratification bind
       values: [ownerId, scope.project.projectId, oldObligation.obligationRevision],
     });
     assert.ok(successor.rows[0].successor_count >= 1);
-    const currentRatification = await pool.query({
-      text: `SELECT binding_current, effective, carried_forward FROM outcome_current_binding_ratification
-              WHERE tenant_id=$1::uuid AND project_id=$2::uuid AND binding_digest=$3`,
-      values: [ownerId, scope.project.projectId, scope.bindingDigest],
-    });
-    assert.equal(currentRatification.rows[0].binding_current, true);
-    assert.equal(currentRatification.rows[0].effective, ownerDecisionCarries);
-    if (ownerDecisionCarries) assert.equal(currentRatification.rows[0].carried_forward, true);
     await assertNoPending(scope.project.projectId);
     evidence.dimensions[field] = true;
   }
 
   evidence.invariants.everyBindingFieldInvalidates = Object.values(evidence.dimensions).every(Boolean);
   evidence.invariants.oldProofRetainedButIneligible = true;
-  evidence.invariants.oldRatificationBindingIneligible = true;
-  evidence.invariants.semanticPlanCarriesOwnerDecision = true;
-  evidence.invariants.semanticChangeRequiresFreshDecision = true;
   evidence.invariants.oldActionIntentRejected = true;
   evidence.invariants.recipientAndBudgetVersioned = true;
   evidence.invariants.registryAndEvaluatorVersioned = true;
@@ -710,112 +672,61 @@ test('stale-binding evidence is refused while a current authority revocation for
   evidence.races.authorityRevokeVsAction = true;
 });
 
-test('semantic-equivalent evaluation-plan evolution recomputes the old CTA under the current plan', async () => {
-  const project = await createProject('plan-evolution-cta');
+test('semantic-equivalent evaluation-plan evolution moves only the evaluation-plan lane',
+  async () => {
+  const project = await createProject('plan-evolution');
   const old = project.state;
   await pool.query(
     `UPDATE "project_acceptance_criterion_definition"
         SET "verification_method"='equivalent evaluator plan version two' WHERE "id"=$1`,
     [project.definitionId],
   );
-  await jsonCall(
-    pool,
-    'SELECT project_refresh_completion_contract($1::uuid,$2) AS result',
-    [project.projectId, 'SEMANTICALLY_EQUIVALENT_PLAN'],
-  );
-  const current = await ratificationState(project.projectId);
+  const current = await contractState(project.projectId);
+  // The two lanes stay independent after the approval queue is gone: changing HOW a criterion is
+  // checked moves the evaluation plan and leaves what the project counts as done exactly where it
+  // was, revision included.
   assert.equal(current.contractDigest, old.contractDigest);
   assert.equal(current.contractRevision, old.contractRevision);
   assert.notEqual(current.evaluationPlanDigest, old.evaluationPlanDigest);
-  const approved = await ownerDecision(project, {
-    state: old,
-    request: old.decisionRequest,
-    idempotencyKey: `plan-evolution:${project.projectId}`,
-  });
-  assert.equal(approved.ok, true);
-  assert.equal(approved.evaluationPlanDigest, current.evaluationPlanDigest);
-  assert.equal((await ratificationState(project.projectId)).ratified, true);
-  evidence.invariants.semanticPlanCarriesOwnerDecision = true;
+  evidence.invariants.evaluationPlanLaneIsIndependent = true;
 });
 
-test('contract A to B to A never reactivates the old ratification, CTA or idempotency key', async () => {
-  const project = await createProject('cta-aba');
+test('contract A to B to A lands on a fresh semantic epoch, never back on the old digest',
+  async () => {
+  const project = await createProject('semantic-aba');
   const initial = project.state;
-  const initialKey = `cta-aba:first:${project.projectId}`;
-  const first = await ownerDecision(project, { idempotencyKey: initialKey });
-  assert.equal(first.ok, true);
 
   await pool.query(
     `UPDATE "project_acceptance_criterion_definition" SET "text"=$2 WHERE "id"=$1`,
     [project.definitionId, 'semantic contract B'],
   );
-  await jsonCall(pool, 'SELECT project_refresh_completion_contract($1::uuid,$2) AS result', [
-    project.projectId, 'ABA_TO_B',
-  ]);
-  const middle = await ratificationState(project.projectId);
+  const middle = await contractState(project.projectId);
   assert.notEqual(middle.contractDigest, initial.contractDigest);
-  assert.equal(middle.ratified, false);
+  assert.ok(BigInt(middle.contractRevision) > BigInt(initial.contractRevision));
+  evidence.invariants.semanticChangeAdvancesTheContract = true;
 
   await pool.query(
     `UPDATE "project_acceptance_criterion_definition" SET "text"=$2 WHERE "id"=$1`,
     [project.definitionId, project.criterionText],
   );
-  await jsonCall(pool, 'SELECT project_refresh_completion_contract($1::uuid,$2) AS result', [
-    project.projectId, 'ABA_BACK_TO_A',
-  ]);
-  const current = await ratificationState(project.projectId);
+  const current = await contractState(project.projectId);
+  // This is the ABA lane, and it is exactly what the criteria-proposal channel now binds to:
+  // `semanticRevision` only ever increases, so an edit and its revert cannot land back on the
+  // digest that was cut before the edit.
   assert.notEqual(
     current.contractDigest,
     initial.contractDigest,
     'returning to the same visible contract must retain a fresh semantic epoch digest',
   );
   assert.notEqual(current.contractDigest, middle.contractDigest);
-  assert.ok(BigInt(current.contractRevision) > BigInt(initial.contractRevision));
-  assert.equal(current.ratified, false, 'the visible surface match cannot reactivate an old semantic epoch');
-
-  const replay = await ownerDecision(project, {
-    state: initial,
-    request: initial.decisionRequest,
-    idempotencyKey: initialKey,
-  });
-  assert.equal(replay.ok, true,
-    'a transport retry must recover the exact committed historical receipt');
-  assert.equal(replay.duplicate, true);
-  assert.equal(replay.contractDigest, initial.contractDigest);
-  assert.equal(replay.currentContractDigest, current.contractDigest);
-  assert.equal(replay.ratified, true, 'the recorded historical decision remains APPROVE');
-  assert.equal(replay.effectiveNow, false,
-    'recovering an old approval receipt must never authorize the current semantic epoch');
-
-  await pool.query(
-    `UPDATE "project_owner_decision_request" SET "expires_at"=now()-interval '1 second'
-      WHERE "id"=$1`,
-    [current.decisionRequest.id],
-  );
-  const expired = await ownerDecision(project, {
-    state: current,
-    request: current.decisionRequest,
-    idempotencyKey: `cta-aba:expired:${project.projectId}`,
-  });
-  assert.equal(expired.ok, false);
-  assert.equal(expired.code, 'OWNER_DECISION_CTA_EXPIRED');
-  assert.notEqual(expired.newDecisionRequestId, current.decisionRequest.id);
-  const refreshed = await ratificationState(project.projectId);
-  const approved = await ownerDecision(project, {
-    state: refreshed,
-    request: refreshed.decisionRequest,
-    idempotencyKey: `cta-aba:current:${project.projectId}`,
-  });
-  assert.equal(approved.ok, true);
-  const revisions = await pool.query(
-    `SELECT contract_revision::text AS revision FROM "project_owner_ratification"
-      WHERE "project_id"=$1 ORDER BY "ratified_at"`,
-    [project.projectId],
-  );
-  assert.equal(revisions.rows.length, 2);
-  assert.notEqual(revisions.rows[0].revision, revisions.rows[1].revision);
-  evidence.invariants.ctaAbaPrevented = true;
-  evidence.races.oldCtaReplay = true;
+  assert.ok(BigInt(current.contractRevision) > BigInt(middle.contractRevision));
+  const versions = (await pool.query({
+    text: `SELECT ("semantic_material"->'criteriaVersions'->0->>'semanticRevision')::int AS revision
+             FROM "project_completion_contract" WHERE "project_id"=$1::uuid`,
+    values: [project.projectId],
+  })).rows[0];
+  assert.equal(versions.revision, 3, 'two edits, and the revision never goes back down');
+  evidence.invariants.semanticEpochAbaPrevented = true;
 });
 
 test('all exercised scopes end with no false current close and no forever-pending reconcile request', async () => {

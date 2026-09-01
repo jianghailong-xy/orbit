@@ -8,9 +8,9 @@ import { shortDigest } from '../lib/judgments';
 /**
  * The owner's decision on an agent's proposal to change what this project counts as done.
  *
- * The proposal itself has already been written and has changed nothing: the criteria in force,
- * the completion contract digest and the standing ratification are untouched until this card is
- * answered. So this component's job is to make the change legible enough to answer honestly —
+ * The proposal itself has already been written and has changed nothing: the criteria in force are
+ * untouched until this card is answered. So this component's job is to make the change legible
+ * enough to answer honestly —
  * which is why it renders the whole eight-item decision protocol and a per-criterion diff rather
  * than a sentence and a Confirm button. A reader who cannot see that a criterion moved from
  * HUMAN_SIGNOFF to VERIFICATION cannot consent to it.
@@ -49,15 +49,14 @@ export interface CriteriaProposalCard {
 
 export interface CriteriaProposalRead {
   projectId: string;
-  currentContractDigest: string;
-  ratified: boolean;
+  currentCriteriaDigest: string;
   effectiveCriteria: Array<{ definitionId: string; text: string; completionCriterion: string }>;
   proposal: {
     id: string;
     cardDigest: string;
     reasonCode: string;
     status: string;
-    baseMatchesCurrentContract: boolean;
+    baseMatchesCurrentCriteria: boolean;
     card: CriteriaProposalCard;
     semanticDiff: {
       changedCriteria: CriteriaProposalDiffEntry[];
@@ -174,7 +173,6 @@ export function ProjectCriteriaProposalCard({ projectId }: { projectId?: string 
       });
       setOutcome(decision);
       void queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      void queryClient.invalidateQueries({ queryKey: ['owner-ratification'] });
     } catch (error) {
       setFailure(criteriaProposalFailure(error));
     } finally {
@@ -192,7 +190,7 @@ export function ProjectCriteriaProposalCard({ projectId }: { projectId?: string 
         type={outcome === 'APPROVE' ? 'success' : 'info'}
         showIcon
         message={outcome === 'APPROVE'
-          ? '已批准：新的验收标准已生效，并在同一事务里完成了 ratification。'
+          ? '已批准：新的验收标准已生效。'
           : '已拒绝：生效中的验收标准没有变化，拒绝已被记录。'}
       />
     );
@@ -213,7 +211,7 @@ export function ProjectCriteriaProposalCard({ projectId }: { projectId?: string 
         type="info"
         showIcon
         message="提议本身没有改动任何东西"
-        description={`生效中的验收标准仍然是你批准过的那一份（contract ${shortDigest(read!.currentContractDigest)}），直到你在这张卡片上作出决定。`}
+        description={`生效中的验收标准仍然是原来那一份（标准集 ${shortDigest(read!.currentCriteriaDigest)}），直到你在这张卡片上作出决定。`}
       />
       <h4>会变的是这些</h4>
       <ul className="criteria-proposal-diff">
@@ -235,11 +233,11 @@ export function ProjectCriteriaProposalCard({ projectId }: { projectId?: string 
         <dt>决定之后会自动恢复什么</dt><dd>{card.resumeBehavior}</dd>
       </dl>
       {failure && <Alert type="warning" showIcon message={failure.message} />}
-      {!proposal.baseMatchesCurrentContract && (
+      {!proposal.baseMatchesCurrentCriteria && (
         <Alert
           type="warning"
           showIcon
-          message="这份提议所基于的契约已经变了；批准会被服务器拒绝。"
+          message="这份提议所基于的那套验收标准已经变了；批准会被服务器拒绝。"
         />
       )}
       <div className="criteria-proposal-actions">

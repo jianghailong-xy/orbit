@@ -90,7 +90,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
-		"provider_list", "notify", "task_labels", "project_get", "project_criteria_confirm",
+		"provider_list", "notify", "task_labels", "project_get",
 		"project_create", "project_update", "project_delete",
 	} {
 		found := false

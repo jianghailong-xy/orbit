@@ -72,8 +72,7 @@
     { "name": "versioning", "packageScript": "test:outcome-reconciler:versioning", "manifest": "build/outcome-reconciler-v2-versioning-manifest.json" },
     { "name": "surfaces", "packageScript": "test:outcome-reconciler:surfaces", "manifest": "build/outcome-reconciler-v2-surfaces-manifest.json" },
     { "name": "replay", "packageScript": "test:outcome-reconciler:replay", "manifest": "build/outcome-reconciler-v2-replay-manifest.json" },
-    { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "manifest": "build/outcome-reconciler-v2-canary-manifest.json" },
-    { "name": "owner-ratification-ui", "packageScript": "test:outcome-reconciler:owner-ratification-ui", "manifest": "build/outcome-reconciler-owner-ratification-ui-manifest.json" }
+    { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "manifest": "build/outcome-reconciler-v2-canary-manifest.json" }
   ],
   "fullMatrices": [
     { "name": "full-api", "packageScript": "test:outcome-reconciler:full-api", "manifest": "build/outcome-reconciler-full-api-manifest.json" },

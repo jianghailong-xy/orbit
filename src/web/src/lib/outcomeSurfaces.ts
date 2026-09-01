@@ -1,8 +1,7 @@
 import { encodeId } from './idCodec';
-import type { OwnerRatificationEligibility } from './ownerRatification';
 import type { CanonicalFailureCoordination } from './failureCoordination';
 
-export type OutcomeDecisionType = 'OWNER_RATIFICATION' | 'HUMAN_SIGNOFF'
+export type OutcomeDecisionType = 'HUMAN_SIGNOFF'
   | 'GOAL_DECISION' | 'RISK_ACCEPTANCE' | 'NEW_AUTHORIZATION' | 'EXTERNAL_IDENTITY';
 
 export interface HumanDecisionProtocol {
@@ -47,25 +46,6 @@ export interface CanonicalOwnerInboxItem {
   ctaUnavailableReason: string | null;
 }
 
-export interface RatificationInboxItem {
-  decisionType: 'OWNER_RATIFICATION';
-  projectId: string;
-  projectTitle: string;
-  requestId: string;
-  requestRevision: string;
-  contractDigest: string;
-  reasonCode: string;
-  reason: string;
-  obligationId: string;
-  obligationRevision: string;
-  bindingDigest: string;
-  evaluatedThroughWatermark: string;
-  eligibility: OwnerRatificationEligibility;
-  semanticDiff: unknown;
-  protocol: HumanDecisionProtocol;
-  cta: OutcomeCta;
-}
-
 export interface FailureOwnerInboxItem extends CanonicalFailureCoordination {
   itemType: 'FAILURE_CONTINUATION_OWNER_DECISION';
   decisionType: 'FAILURE_CONTINUATION_OWNER_DECISION';
@@ -77,7 +57,7 @@ export interface OutcomeHumanInbox {
   surface: 'HUMAN_DECISION_INBOX';
   actor: 'OWNER';
   total: number;
-  items: Array<CanonicalOwnerInboxItem | RatificationInboxItem | FailureOwnerInboxItem>;
+  items: Array<CanonicalOwnerInboxItem | FailureOwnerInboxItem>;
   failureContinuationIndex?: Array<{
     obligationId: string;
     obligationRevision: string;
@@ -95,24 +75,6 @@ export interface OutcomeDecisionView {
   cta: OutcomeCta | null;
   decisionRequest: Record<string, unknown> | null;
   ctaUnavailableReason: string | null;
-}
-
-export interface OwnerRatificationView {
-  decisionType: 'OWNER_RATIFICATION';
-  contractDigest: string;
-  contractRevision: string;
-  evaluationPlanDigest: string;
-  ratified: boolean;
-  semanticContract: unknown;
-  decisionRequest: null | {
-    id: string;
-    requestRevision: string;
-    status: string;
-    expiresAt: string;
-    reasonCode: string;
-    semanticDiff: unknown;
-    protocol: HumanDecisionProtocol;
-  };
 }
 
 /** Web may choose labels and CTA layout, but it must never reinterpret this tuple. */
@@ -134,21 +96,8 @@ export const outcomeDecisionPath = (requestId: string) =>
   `/outcomes/decisions/${encodeURIComponent(encodeId(requestId))}`;
 export const outcomeDecisionReviewPath = (requestId: string) =>
   `/judgments/outcome/${encodeURIComponent(encodeId(requestId))}`;
-export const ownerRatificationPath = (projectId: string) =>
-  `/outcomes/ratifications/projects/${encodeURIComponent(encodeId(projectId))}`;
-export const ownerRatificationReviewPath = (projectId: string) =>
-  `/judgments/owner-ratification/${encodeURIComponent(encodeId(projectId))}`;
-export const ownerRatificationDecisionPath = (requestId: string) =>
-  `/outcomes/ratifications/${encodeURIComponent(encodeId(requestId))}`;
-
-export function isRatificationInboxItem(
-  item: CanonicalOwnerInboxItem | RatificationInboxItem | FailureOwnerInboxItem,
-): item is RatificationInboxItem {
-  return 'decisionType' in item && item.decisionType === 'OWNER_RATIFICATION';
-}
-
 export function isFailureOwnerInboxItem(
-  item: CanonicalOwnerInboxItem | RatificationInboxItem | FailureOwnerInboxItem,
+  item: CanonicalOwnerInboxItem | FailureOwnerInboxItem,
 ): item is FailureOwnerInboxItem {
   return 'itemType' in item && item.itemType === 'FAILURE_CONTINUATION_OWNER_DECISION';
 }

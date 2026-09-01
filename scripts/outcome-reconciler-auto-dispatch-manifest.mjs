@@ -123,7 +123,7 @@ assert.deepEqual(evidence.results.concurrentDelivery, {
   runRequests: 1,
 });
 assert.deepEqual(evidence.results.policyRefusal, {
-  reasonCode: 'OWNER_RATIFICATION_REQUIRED',
+  reasonCode: 'AGGREGATE_PARENT_HAS_NO_DIRECT_WORK',
   dispatchAttempt: 1,
   canonicalObligations: 1,
   wakeupStateBeforeRecovery: 'PENDING',
