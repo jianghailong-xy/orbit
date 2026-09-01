@@ -31,7 +31,6 @@ import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
-import { readCompletionAckObligations } from '../common/completion-ack-obligation';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
   approvalIdOf,
@@ -690,14 +689,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // A blocked permission keeps a session generating, so only a generating session can hold a
     // live approval — skip the count otherwise (mirrors the list endpoint). A self-driven turn
     // counts: it stays at AWAITING_INPUT while it runs, and its prompt still blocks it.
-    const [pendingApprovals, controlPlaneObligations] = await Promise.all([
-      isSessionGenerating(s) ? this.countPendingApprovals(sessionId) : Promise.resolve(0),
-      readCompletionAckObligations(this.prisma, {
-        tenantId: s.ownerId,
-        sessionIds: [s.id],
-        taskIds: s.taskId ? [s.taskId] : [],
-      }),
-    ]);
+    const pendingApprovals = isSessionGenerating(s)
+      ? await this.countPendingApprovals(sessionId)
+      : 0;
     return {
       id: s.id,
       taskId: s.taskId ?? null,
@@ -720,10 +714,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         : null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
-      // Always present so a recovery `session.updated` clears the exact obligation that an earlier
-      // notification installed. This is the same canonical view and normalizer as REST list/detail,
-      // not a warning reconstructed from RUNNING state or the router's chat prompt.
-      controlPlaneObligations,
       pendingApprovals,
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

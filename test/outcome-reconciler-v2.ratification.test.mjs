@@ -372,9 +372,8 @@ test('(a) the five approval-queue tables are gone, with nothing left pointing at
   // in production. The append-only migration history is excluded because it is the record of how
   // the schema got here -- 0195 must still be able to create what 0218 drops.
   // A dropped FUNCTION name cannot collide with anything, so a plain substring is exact. A
-  // dropped TABLE name is matched only next to a SQL keyword, because `project_owner_decision_
-  // request` is also the name of a live MCP tool -- the completion-ACK owner-decision protocol,
-  // which is backed by `outcome_coordinator_owner_decision_request` and is not being removed.
+  // dropped TABLE name is matched only next to a SQL keyword, because a name like
+  // `project_owner_decision_request` reads as prose and as an identifier in unrelated code.
   const droppedFunctions = [
     'outcome_current_binding_ratification',
     'project_owner_ratify_contract',

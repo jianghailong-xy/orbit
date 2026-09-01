@@ -154,7 +154,6 @@ function runnerApi(failureContinuations) {
     undefined,
     undefined,
     undefined,
-    undefined,
     failureContinuations,
   );
 }

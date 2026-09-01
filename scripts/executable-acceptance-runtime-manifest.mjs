@@ -90,66 +90,9 @@ assert.equal(evidence.compatibility.nMinusOnePlan, 'v1');
 assert.equal(evidence.compatibility.legacyMinusOneActionable, true);
 assert.equal(evidence.compatibility.stagedPre0193V1Turn, true);
 assert.equal(evidence.compatibility.crossed0193And0200, true);
-assert.equal(evidence.compatibility.stagedPre0201TerminalEvent, true);
-assert.equal(evidence.compatibility.historicalEventReceivedFullDetectionDelta, true);
-assert.equal(evidence.compatibility.stagedObligationAutoClosed, true);
+assert.equal(evidence.compatibility.historicalTerminalEventUningested, true);
 assert.equal(evidence.compatibility.runtimeSchemaIndexesPresent, true);
-for (const key of [
-  'permanent500Detected',
-  'deduplicatedActiveObligation',
-  'allSixSurfacesShareIdentity',
-  'taskProjectSessionReadsShareIdentity',
-  'coordinatorOwnedAndRouted',
-  'persistentCoordinatorWorker',
-  'coordinatorGenerationBound',
-  'failedCoordinatorDeliveryRetried',
-  'sourceClosedOnlyResolution',
-  'manualAndAutomaticRedispatchBlocked',
-  'originalCallbackRecovered',
-  'appendOnlyHistoryRetained',
-  'duplicateCallbackNoop',
-  'billingAppliedExactlyOnce',
-  'databaseRedispatchGuard',
-  'runEventProvenanceImmutable',
-  'appendOnlyUpdateDeleteRejected',
-  'observationRegisterMonotone',
-  'crossTenantLedgerForgeryRejected',
-  'eventEvidenceBoundToSourceFact',
-  'rawLedgerEvidenceSanitized',
-  'boundedDetectorFairness',
-  'standingIdentityNotResampled',
-  'missingFactCannotStarveRecovery',
-  'nonzeroCanonicalFailCloses',
-  'typedV2DetectedWithoutAttempt',
-  'atomicAckRecoveryCommit',
-  'atomicAckRecoveryRetryExactlyOnce',
-  'receiptProvenanceExact',
-  'nonCanonicalCoordinatorTerminalRejected',
-  'coordinatorDeliveryLedgerAppendOnly',
-  'concurrentCatchDetectorConverges',
-  'concurrentReplayFactsExactlyOnce',
-  'projectionFallbackOwnerExact',
-  'projectionFallbackForeignTenantDenied',
-  'projectionFallbackRequiresActiveAck',
-  'noObligationReceiptHarmless',
-  'missingTerminalEventReceiptDenied',
-  'v2FailAckClosesLiveness',
-  'v2NonExitedAckClosesLiveness',
-  'answeredAloneCannotClose',
-  'ackCommitReceiptReasonUnifiedAcrossSurfaces',
-]) {
-  assert.equal(evidence.completionAck[key], true, `completion ACK evidence missing ${key}`);
-}
-assert.ok(
-  Array.isArray(evidence.completionAck.receiptProvenanceMismatchFailClosed)
-    && evidence.completionAck.receiptProvenanceMismatchFailClosed.includes('runner')
-    && evidence.completionAck.receiptProvenanceMismatchFailClosed.includes('lease'),
-  'authorized ACK receipt provenance mismatches were not proven fail-closed',
-);
-assert.match(evidence.completionAck.p0001Fingerprint, /^[0-9a-f]{64}$/);
-assert.match(evidence.completionAck.obligationId, /^[0-9a-f]{64}$/);
-assert.match(evidence.completionAck.obligationRevision, /^[0-9a-f]{64}$/);
-assert.ok(evidence.completionAck.perTaskStorageBound <= 8192);
+assert.equal(evidence.negotiation.httpSuccessStatus, 200);
 
 const subjects = [
   'package.json',
@@ -159,6 +102,7 @@ const subjects = [
   'src/apiserver/prisma/migrations/0200_executable_acceptance_runtime_contract/migration.sql',
   'src/apiserver/prisma/migrations/0201_completion_ack_canonical_obligation/migration.sql',
   'src/apiserver/prisma/migrations/0202_completion_ack_persistent_coordinator/migration.sql',
+  'src/apiserver/prisma/migrations/0220_completion_ack_removal/migration.sql',
   'src/apiserver/src/tasks/executable-acceptance-runtime.ts',
   'src/apiserver/src/tasks/task-completion-criterion.ts',
   'src/apiserver/src/tasks/task-dependencies.ts',
@@ -166,17 +110,12 @@ const subjects = [
   'src/apiserver/src/tasks/manual-runnable-task-sql.ts',
   'src/apiserver/src/runner-api/runner-api.controller.ts',
   'src/apiserver/src/runner-api/runner-api.module.ts',
-  'src/apiserver/src/common/completion-ack-obligation.ts',
   'src/apiserver/src/common/blocker-signal-exit-inventory.ts',
   'src/apiserver/src/common/db-write-inventory.ts',
   'src/apiserver/src/outcome-watchdog/outcome-watchdog.runner.ts',
   'src/apiserver/src/outcome-watchdog/outcome-watchdog.service.ts',
   'src/apiserver/src/outcome-watchdog/outcome-watchdog.ts',
   'src/apiserver/src/outcome-reconciler/outcome-coordinator.service.ts',
-  'src/apiserver/src/outcome-coordinator/completion-ack-coordinator.resolver.ts',
-  'src/apiserver/src/outcome-coordinator/outcome-coordinator.runner.ts',
-  'src/apiserver/src/outcome-coordinator/outcome-coordinator.worker.module.ts',
-  'src/apiserver/src/outcome-coordinator/main.ts',
   'src/apiserver/src/projects/coordinator-judgment-opening.ts',
   'src/apiserver/src/projects/coordinator-judgment.module.ts',
   'src/apiserver/src/projects/coordinator-wake.ts',
@@ -195,7 +134,6 @@ const subjects = [
   'src/shared/src/dto.ts',
   'src/shared/src/realtime.ts',
   'src/web/src/api.ts',
-  'src/web/src/components/CompletionAckObligationBanner.tsx',
   'src/web/src/components/WorkspaceView.tsx',
   'src/web/src/lib/projectAttention.ts',
   'src/web/src/lib/queries.ts',

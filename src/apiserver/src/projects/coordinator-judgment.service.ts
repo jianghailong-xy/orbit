@@ -170,7 +170,7 @@ export class CoordinatorJudgmentService {
     if (!standing) return claimed;
     if (standing.status === 'SESSION_OPENED') {
       if (standing.sessionId !== plannedSessionId) {
-        throw new Error('COMPLETION_ACK_DELIVERY_SESSION_ID_CONFLICT');
+        throw new Error('COORDINATOR_WAKE_DELIVERY_SESSION_ID_CONFLICT');
       }
       return {
         outcome: 'OPENED',

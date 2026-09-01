@@ -46,12 +46,10 @@ import {
 import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
 import {
   CreateProjectDto,
-  DecideCompletionAckOwnerDecisionDto,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
   ReopenProjectDto,
-  RequestCompletionAckOwnerDecisionDto,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
@@ -1444,115 +1442,6 @@ export class ProjectsService {
       failureCoordination,
       controlPlaneObligations,
     });
-  }
-
-  /**
-   * Pause one completion-ACK remediation for a typed owner input without transferring ownership
-   * of the incident. The runner token supplies tenant + machine identity; the session header is
-   * normalized here and PostgreSQL proves that all four identities name the current, non-revoked
-   * delivery for the exact ACTIVE obligation revision.
-   */
-  async requestCompletionAckOwnerDecision(
-    ownerId: string,
-    projectId: string,
-    runnerId: string,
-    coordinatorSessionId: string | undefined,
-    dto: RequestCompletionAckOwnerDecisionDto,
-  ): Promise<Record<string, unknown>> {
-    const suppliedSessionId = coordinatorSessionId?.trim();
-    if (!suppliedSessionId) {
-      throw new ForbiddenException({
-        code: 'COMPLETION_ACK_OWNER_DECISION_SESSION_REQUIRED',
-        message: 'x-orbit-session-id must name the current completion-ACK coordinator delivery',
-      });
-    }
-    let sessionId: string;
-    try {
-      sessionId = toUuid(suppliedSessionId);
-    } catch {
-      throw new BadRequestException({
-        code: 'COMPLETION_ACK_OWNER_DECISION_SESSION_INVALID',
-        message: 'x-orbit-session-id must be an Orbit session id',
-      });
-    }
-    await this.assertOwned(ownerId, projectId);
-    try {
-      const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-        SELECT completion_ack_request_owner_decision(
-          ${ownerId}::uuid,
-          ${projectId}::uuid,
-          ${runnerId}::uuid,
-          ${sessionId}::uuid,
-          ${dto.obligationId},
-          ${dto.obligationRevision},
-          ${dto.reason},
-          ${JSON.stringify(dto.request)}::jsonb
-        ) AS result
-      `);
-      if (!row) throw new Error('COMPLETION_ACK_OWNER_DECISION_RESULT_MISSING');
-      return row.result as unknown as Record<string, unknown>;
-    } catch (error) {
-      ProjectsService.rethrowCompletionAckOwnerDecisionError(error);
-    }
-  }
-
-  /** Owner/JWT callback for the child request. It resumes the same AGENT-owned coordination; the
-   * canonical 0201 obligation remains ACTIVE until the original completion callback commits. */
-  async decideCompletionAckOwnerDecision(
-    ownerId: string,
-    projectId: string,
-    requestId: string,
-    dto: DecideCompletionAckOwnerDecisionDto,
-  ): Promise<Record<string, unknown>> {
-    await this.assertOwned(ownerId, projectId);
-    try {
-      const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-        SELECT completion_ack_decide_owner_decision(
-          ${ownerId}::uuid,
-          ${projectId}::uuid,
-          ${requestId}::uuid,
-          ${dto.obligationRevision},
-          ${dto.idempotencyKey},
-          ${JSON.stringify(dto.decision)}::jsonb
-        ) AS result
-      `);
-      if (!row) throw new Error('COMPLETION_ACK_OWNER_DECISION_RESULT_MISSING');
-      return row.result as unknown as Record<string, unknown>;
-    } catch (error) {
-      ProjectsService.rethrowCompletionAckOwnerDecisionError(error);
-    }
-  }
-
-  private static rethrowCompletionAckOwnerDecisionError(error: unknown): never {
-    const message = error instanceof Error ? error.message : String(error);
-    const code = [
-      'COMPLETION_ACK_OWNER_DECISION_PAYLOAD_INCOMPLETE',
-      'COMPLETION_ACK_OWNER_DECISION_PROTOCOL_INVALID',
-      'COMPLETION_ACK_OWNER_DECISION_ARGUMENT_INVALID',
-      'COMPLETION_ACK_OWNER_DECISION_CALLBACK_INVALID',
-    ].find((candidate) => message.includes(candidate));
-    if (code) throw new BadRequestException({ code, message: code });
-    if (message.includes('COMPLETION_ACK_OWNER_DECISION_CURRENT_DELIVERY_REQUIRED')) {
-      throw new ForbiddenException({
-        code: 'COMPLETION_ACK_OWNER_DECISION_CURRENT_DELIVERY_REQUIRED',
-        message: 'only the exact current non-revoked coordinator delivery session may ask',
-      });
-    }
-    if (message.includes('COMPLETION_ACK_OWNER_DECISION_REQUEST_NOT_FOUND')) {
-      throw new NotFoundException({
-        code: 'COMPLETION_ACK_OWNER_DECISION_REQUEST_NOT_FOUND',
-        message: 'completion-ACK owner decision request not found',
-      });
-    }
-    const conflict = [
-      'COMPLETION_ACK_OWNER_DECISION_OBLIGATION_NOT_ACTIVE',
-      'COMPLETION_ACK_OWNER_DECISION_IDEMPOTENCY_CONFLICT',
-      'COMPLETION_ACK_OWNER_DECISION_ALREADY_OPEN',
-      'COMPLETION_ACK_OWNER_DECISION_CALLBACK_CONFLICT',
-      'COMPLETION_ACK_OWNER_DECISION_REQUEST_STALE',
-    ].find((candidate) => message.includes(candidate));
-    if (conflict) throw new ConflictException({ code: conflict, message: conflict });
-    throw error;
   }
 
   /**

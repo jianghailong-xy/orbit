@@ -36,10 +36,6 @@ export function manualRunnableTaskSql(
       AND s.starts_task_work = true
       AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
   )
-  AND NOT EXISTS (
-    SELECT 1 FROM completion_ack_active_obligation completion_ack
-    WHERE completion_ack.task_id = ${alias}.id
-  )
   AND ${dependenciesSatisfiedSql(alias)}
   AND NOT (
     ${alias}.completion_criterion = 'VERIFICATION'::task_completion_criterion

@@ -719,31 +719,8 @@ export interface SessionChangedFile {
   status: string;
 }
 
-/**
- * A control-plane repair that Orbit has already made somebody's responsibility.
- *
- * This is deliberately an identity-bearing read model, not a free-form warning. Session list and
- * detail payloads carry the same obligation id/revision so every UI surface can point at the same
- * durable incident while its presentation changes independently.
- */
-export interface ControlPlaneObligation {
-  obligationId: string;
-  obligationRevision: number | string;
-  bindingDigest: string;
-  capability: string;
-  reason: string;
-  owner: string;
-  requiredAction: string;
-  actionProtocol: string | string[] | Record<string, unknown> | null;
-  firstFailureAt: string;
-  latestFailureAt: string;
-  observationCount: number;
-  factKind: string;
-  errorFingerprint: string;
-}
-
 /** Compact row returned by GET /sessions. The API evolves independently of this console, so the
- * existing row fields remain open while the canonical obligation projection is typed explicitly. */
+ * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
   runState?: string | null;
@@ -752,7 +729,6 @@ export type SessionListItem = Record<string, any> & {
   sessionState?: string | null;
   runStatus?: string | null;
   status?: string | null;
-  controlPlaneObligations?: ControlPlaneObligation[];
 };
 
 /** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
@@ -760,8 +736,6 @@ export type SessionListItem = Record<string, any> & {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
-  /** Active canonical control-plane repairs involving this session. */
-  controlPlaneObligations?: ControlPlaneObligation[];
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;
