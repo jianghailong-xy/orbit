@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
@@ -48,8 +49,8 @@ function makeService(
     // Three raw queries reach this stub: the candidate scan, the foreman history, and the dispatch
     // epoch of each filed task. Told apart by what they ask for, so a test can say "this list has N
     // prior foremen" in one place without the scan's own SQL assertions changing.
-    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-      const text = Prisma.sql(strings, ...(bound as never[])).text;
+    $queryRaw: async (...args: unknown[]) => {
+      const text = renderRawQuery(args).text;
       // A row this sweep has just created is at the epoch its seed trigger gave it.
       if (text.includes('task_dispatch_epoch')) return [{ epoch: 0n }];
       if (text.includes('is_foreman = true') && text.includes('GROUP BY')) {

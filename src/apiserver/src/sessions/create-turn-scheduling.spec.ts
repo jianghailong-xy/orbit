@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SessionsService } from './sessions.service';
@@ -51,8 +52,8 @@ function makeService(
     attachments: (opts.existingAttachmentIds ?? []).map((id) => ({ id })),
   };
   const tx = {
-    $queryRaw: async (query: { strings?: readonly string[] }) =>
-      query.strings?.join('').includes('conversation_turn') ? [] : [{ id: session.id }],
+    $queryRaw: async (...args: unknown[]) =>
+      renderRawQuery(args).text.includes('conversation_turn') ? [] : [{ id: session.id }],
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
       update: async (write: { data: Record<string, unknown> }) => {

@@ -1,4 +1,21 @@
 import { Prisma } from '@prisma/client';
+import { TransactionSurface } from '../common/prisma-transaction-surface';
+
+/**
+ * Exactly the members these three functions reach, and therefore exactly what a double for them
+ * has to supply. `conversationTurn.findMany` and `conversationTurnStartupFragment.findMany` were
+ * each, on separate days, missing from a hand-written double and cost a full acceptance round to
+ * find; naming them here is what makes the next omission a compile error instead.
+ */
+export type CurrentWorkSteerTransaction = TransactionSurface<{
+  conversationTurn: ['findMany', 'updateMany'];
+}>;
+
+export type CurrentWorkStartupTransaction = TransactionSurface<{
+  conversationTurnStartupFragment: ['findMany', 'updateMany'];
+}>;
+
+export type CurrentWorkTransaction = CurrentWorkSteerTransaction & CurrentWorkStartupTransaction;
 
 export const CURRENT_WORK_TARGET_COMPLETED = 'CURRENT_WORK_TARGET_COMPLETED';
 export const CURRENT_WORK_INTERRUPTED = 'CURRENT_WORK_INTERRUPTED';
@@ -62,7 +79,7 @@ export function acknowledgedRuntimeTurnIds(
  * that the engine did not read it.
  */
 export async function terminalizePendingCurrentWorkSteers(
-  tx: Prisma.TransactionClient,
+  tx: CurrentWorkSteerTransaction,
   sessionId: string,
   options: TerminalizeOptions,
 ): Promise<CurrentWorkTerminalization> {
@@ -126,7 +143,7 @@ export async function terminalizePendingCurrentWorkSteers(
  * lose its HTTP response before the runtime receives a byte.
  */
 export async function terminalizePendingStartupContexts(
-  tx: Prisma.TransactionClient,
+  tx: CurrentWorkStartupTransaction,
   sessionId: string,
   options: TerminalizeOptions,
 ): Promise<CurrentWorkTerminalization> {
@@ -180,7 +197,7 @@ export async function terminalizePendingStartupContexts(
 
 /** One teardown participant for target-complete/finalize/reaper and pending-only user control. */
 export async function terminalizeUndeliveredCurrentWork(
-  tx: Prisma.TransactionClient,
+  tx: CurrentWorkTransaction,
   sessionId: string,
   options: TerminalizeOptions,
 ): Promise<{

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES } from '@orbit/shared';
-import { RunnerApiController } from './runner-api.controller';
+import { RetryPlanTransaction, RunnerApiController } from './runner-api.controller';
+import { transactionDouble } from '../test-support/prisma-transaction-double';
 
 /**
  * Which retry a reply arms, decided at event ingestion. The sweeper only acts on what this
@@ -22,7 +23,7 @@ function planFor(
   session: { taskId?: string | null; retryAttempts?: number; provider?: string },
   text: string,
 ): Promise<RetryPlan> {
-  const tx = {
+  const tx = transactionDouble<RetryPlanTransaction>({
     session: {
       findUnique: async () => ({
         provider: session.provider ?? 'claude',
@@ -31,7 +32,7 @@ function planFor(
       }),
     },
     runner: { findUnique: async () => ({ planUsage: null }) },
-  };
+  });
   const controller = new RunnerApiController(
     {} as never,
     {} as never,
@@ -43,7 +44,9 @@ function planFor(
   );
   return (
     controller as unknown as {
-      retryPlanFor(tx: unknown, id: string, runnerId: string, text: string): Promise<RetryPlan>;
+      retryPlanFor(
+        tx: RetryPlanTransaction, id: string, runnerId: string, text: string,
+      ): Promise<RetryPlan>;
     }
   ).retryPlanFor(tx, 'session-1', RUNNER_ID, text);
 }

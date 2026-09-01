@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { ProjectAcceptanceVerdict, TaskCompletionCriterion } from '@prisma/client';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
@@ -356,8 +357,8 @@ test('pendingInbox returns current project acceptance beside task judgments with
   const startedAt = new Date('2026-08-27T08:00:00.000Z');
   let sql = '';
   const prisma = {
-    $queryRaw: async (query: { strings?: readonly string[] }) => {
-      sql = query.strings?.join('?') ?? '';
+    $queryRaw: async (...args: unknown[]) => {
+      sql = renderRawQuery(args).text;
       return [{
         runId: RUN_ID,
         projectId: PROJECT_ID,

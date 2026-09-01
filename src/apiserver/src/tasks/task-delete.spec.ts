@@ -4,7 +4,10 @@ import { Prisma } from '@prisma/client';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { isFailureCoordinationRead } from '../test-support/prisma-transaction-double';
+import {
+  isFailureCoordinationRead,
+  renderRawQuery,
+} from '../test-support/prisma-transaction-double';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
@@ -198,10 +201,8 @@ function deleteRecorder(runs: string[], deleted = 1) {
     // (`tx.$queryRaw\`...\``) and a prepared `Prisma.sql`. The cascade walk uses the second, and
     // reading it as a template array throws inside the client — which reads as a failure of the
     // code under test rather than of the stub.
-    $queryRaw: async (strings: TemplateStringsArray | Prisma.Sql, ...bound: unknown[]) => {
-      const query = 'raw' in strings
-        ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
-        : (strings as Prisma.Sql);
+    $queryRaw: async (...args: unknown[]) => {
+      const query = renderRawQuery(args);
       const sql = query.text.replace(/\s+/g, ' ').trim();
       // Labelled by what it DOES, and the lock clause decides first: the rank-30 session pre-lock
       // walks the same cascade to find its rows, so testing for the walk first would relabel an

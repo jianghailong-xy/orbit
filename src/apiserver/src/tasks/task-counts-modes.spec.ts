@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { TasksService } from './tasks.service';
@@ -30,9 +31,9 @@ function harness() {
         return [];
       },
     },
-    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
+    $queryRaw: async (...args: unknown[]) => {
       calls.raw += 1;
-      Prisma.sql(strings, ...(bound as never[]));
+      renderRawQuery(args);
       return [{ count: 3 }];
     },
     session: { groupBy: async () => [] },

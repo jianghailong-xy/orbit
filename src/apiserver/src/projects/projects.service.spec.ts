@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { ProjectStatus } from '@orbit/shared';
@@ -251,9 +252,9 @@ test('the index buckets every project in one aggregate, not one query per projec
   let rawQueries = 0;
   const service = serviceWith({
     project: { findMany: async () => listed },
-    $queryRaw: async (sql: any) => {
+    $queryRaw: async (...args: unknown[]) => {
       rawQueries += 1;
-      const rendered = sql.strings?.join(' ') ?? sql.sql ?? String(sql);
+      const rendered = renderRawQuery(args).text;
       if (rendered.includes('failure_continuation_obligation')) return [];
       if (rawQueries === 2) {
         return [{

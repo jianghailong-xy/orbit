@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { TasksService } from './tasks.service';
 import type { DependencyEdge } from './task-dependencies';
@@ -66,8 +67,8 @@ function taskServiceFixture(
         // Labelled by what the statement is for, so the recorded sequence reads as the canonical
         // lock order (common/lock-order.ts): the owner graph mutex, then the creator Sessions
         // this task write will foreign-key check, then the writes.
-        $queryRaw: async (strings: TemplateStringsArray) => {
-          const sql = strings.join('?');
+        $queryRaw: async (...args: unknown[]) => {
+          const sql = renderRawQuery(args).text;
           calls.push(/creator_session_id/.test(sql) ? 'creator-sessions' : 'lock');
           return [{ id: 'owner' }];
         },
