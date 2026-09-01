@@ -401,7 +401,10 @@ test('an agent cannot widen its own authority through the runner door', async ()
 
   for (const field of [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId']) {
     const dto = { [field]: field === 'coordinatorAgentId' ? AGENT_ID : 1 } as never;
-    assert.throws(
+    // `assert.rejects` rather than `assert.throws`: the door became async when acceptance criteria
+    // stopped being a write it performs. The refusal is still raised before anything is read — the
+    // stub above fails the test if the write is ever reached.
+    await assert.rejects(
       () => controller.updateProject(runner, PROJECT_ID, undefined, dto),
       (e: any) => e.status === 403 && e.message.includes(field),
       `${field} must not be writable with a runner credential`,
@@ -525,7 +528,7 @@ test('the runner door refuses those nulls too, before anything can be written', 
       (e: { status?: number }) => e.status === 400,
       `${field}: the runner door goes through the same pipe`,
     );
-    assert.throws(
+    await assert.rejects(
       () => controller.updateProject(runner, PROJECT_ID, undefined, { [field]: null } as never),
       (e: { status?: number }) => e.status === 403,
       `${field}: and the door itself does not treat null as unsent`,

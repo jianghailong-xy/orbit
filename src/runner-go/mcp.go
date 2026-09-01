@@ -1576,9 +1576,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	projectCriteriaUpdateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "Whole structured replacement; text, verificationMethod and completionCriterion are required. " +
+		"description": "The whole set you are PROPOSING; text, verificationMethod and completionCriterion " +
+			"are required on every item. Sending this does not change the criteria in force: it " +
+			"records one proposal for the account owner to approve or refuse on a card, and the " +
+			"criteria already in force keep deciding whether this project is done until they do. " +
 			"Preserve an item's id from project_get to " +
-			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
+			"edit or reorder it without replacing its identity; omit id to add a new item. " +
+			"[] is refused — a project measured by nothing cannot be ratified, so send the complete " +
+			"set you mean. " +
 			"currentStatus is derived and is not an input. Legacy acceptanceCriteria is not a " +
 			"runner write shape.",
 		"items": obj(projectCriterionProps(true), "text", "verificationMethod", "completionCriterion"),
@@ -2083,17 +2088,22 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		{
 			"name": "project_update",
 			"description": "Update a project in the account this runner belongs to: rename it, " +
-				"revise what it is trying to achieve (goal), what would settle that the goal was " +
-				"reached (acceptanceCriteriaItems) or how the work is to be done (instructions), and " +
-				"cancel or reopen work. You have authority to write these configuration fields. " +
+				"revise what it is trying to achieve (goal) or how the work is to be done " +
+				"(instructions), and cancel or reopen work. You have authority to write those " +
+				"configuration fields. " +
+				"acceptanceCriteriaItems is the one exception and it behaves differently: it is a " +
+				"PROPOSAL, not a write. What settles that this project is done is the standard you " +
+				"are measured against, so sending it records a card for the account owner and " +
+				"changes nothing until they approve it — read the acceptanceCriteriaProposal in the " +
+				"response, and keep working to the criteria still in force meanwhile. " +
 				"Existing legacy acceptanceCriteria text remains readable through project_get and " +
 				"writable through the old user/JWT API compatibility path. It is not an agent " +
 				"fallback: this runner tool refuses it because it would silently create " +
 				"HUMAN_SIGNOFF; use acceptanceCriteriaItems with an explicit completionCriterion " +
-				"on every item, and [] to clear the set. A " +
+				"on every item. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
-				"write acceptance criteria. Direct status DONE is refused for every actor: it is " +
+				"write or propose acceptance criteria. Direct status DONE is refused for every actor: it is " +
 				"produced automatically only when the exact confirmed standard set has PASS for " +
 				"every peer criterion. Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +

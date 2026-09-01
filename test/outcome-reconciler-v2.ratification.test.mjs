@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import test, { after, before } from 'node:test';
@@ -53,6 +53,19 @@ const evidence = {
     recutDerivesOneOwnerDecisionAndNoRatification: false,
     recutDoesNotPromoteDeferredBacklog: false,
     nonOwnerPrincipalRatificationRefused: false,
+    // Agent proposes, owner ratifies: the proposal itself never moves the ruler.
+    criteriaProposalDoesNotMoveTheRuler: false,
+    criteriaProposalKeepsReadModelOnRatifiedSet: false,
+    criteriaProposalCardCarriesOwnerProtocol: false,
+    criteriaProposalCardRendersSemanticDiff: false,
+    ownerApprovalAppliesAndRatifiesAtomically: false,
+    criteriaProposalApprovesWhatWasShown: false,
+    criteriaProposalMachineDecisionRefused: false,
+    criteriaProposalHasNoAutomaticApplyPath: false,
+    criteriaProposalDenialIsRecordedNotDropped: false,
+    criteriaProposalAbaProtectionSurvivesRevert: false,
+    criteriaProposalSupersedesRatherThanCoexists: false,
+    criteriaEditingHasNoWebEntryPoint: false,
   },
   races: {
     permissionRevocationFailsClosed: false,
@@ -1448,4 +1461,686 @@ test('a non-owner principal still cannot submit a ratification, at either door',
     'the create door must still refuse a ratification submitted by a non-owner principal');
   assert.match(service, /OWNER_RATIFICATION_ACTOR_FORBIDDEN/);
   evidence.invariants.nonOwnerPrincipalRatificationRefused = true;
+});
+
+// ---------------------------------------------------------------------------------------------
+// Agent proposes, owner decides.
+//
+// The lane above is about approving a contract the project already HAS. These are about the act of
+// changing what the project counts as done: an agent may state a new acceptance-criteria set, and
+// stating it must move nothing. Until the owner answers a rendered card with their own credential,
+// the criteria in force, the contract digest and the standing ratification are exactly what they
+// were — which is the whole point, because between an agent's write and an owner's answer the old
+// code left the project measured by a ruler nobody had approved.
+
+/** Every stored column of every effective definition, so "unchanged" can mean byte-for-byte. */
+async function criteriaRows(projectId) {
+  const { rows } = await pool.query(
+    `SELECT to_jsonb(definition) AS row
+       FROM "project_acceptance_criterion_definition" definition
+      WHERE definition."project_id" = $1 ORDER BY definition."id"`,
+    [projectId],
+  );
+  return rows.map((row) => row.row);
+}
+
+async function proposeCriteria(projectId, proposal, overrides = {}) {
+  return jsonCall(
+    pool,
+    `SELECT project_propose_acceptance_criteria(
+       $1::uuid,$2::uuid,$3,$4,$5::jsonb,$6
+     ) AS result`,
+    [
+      ownerId,
+      projectId,
+      overrides.actorType ?? 'AGENT',
+      overrides.actorId ?? 'proposing-agent',
+      JSON.stringify(proposal),
+      overrides.idempotencyKey ?? `proposal:${projectId}:${randomUUID()}`,
+    ],
+  );
+}
+
+async function proposalState(projectId) {
+  return jsonCall(
+    pool,
+    'SELECT project_criteria_proposal_state_json($1::uuid,$2::uuid) AS result',
+    [ownerId, projectId],
+  );
+}
+
+async function decideProposal(projectId, overrides = {}) {
+  const current = overrides.state ?? await proposalState(projectId);
+  const proposal = overrides.proposal ?? current.proposal;
+  return jsonCall(
+    pool,
+    `SELECT project_owner_decide_criteria_proposal(
+       $1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8
+     ) AS result`,
+    [
+      ownerId,
+      projectId,
+      overrides.actorType ?? 'OWNER',
+      overrides.actorId ?? ownerId,
+      overrides.proposalId === undefined ? proposal?.id ?? null : overrides.proposalId,
+      overrides.expectedCardDigest === undefined
+        ? proposal?.cardDigest ?? null
+        : overrides.expectedCardDigest,
+      overrides.decision ?? 'APPROVE',
+      overrides.idempotencyKey ?? `owner-proposal:${projectId}:${randomUUID()}`,
+    ],
+  );
+}
+
+/** A task in the project, so a criterion may name VERIFICATION evidence. */
+async function evidenceTask(projectId, label) {
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  const taskId = randomUUID();
+  await pool.query(
+    `INSERT INTO "runner" (
+       "id","owner_id","name","status","token_hash","capabilities_reported_at"
+     ) VALUES ($1,$2,$3,'ONLINE',$4,now())`,
+    [runnerId, ownerId, `${label} runner`, `token-${runnerId}`],
+  );
+  await pool.query(
+    `INSERT INTO "workspace" (
+       "id","owner_id","name","runner_id","can_create_tasks","can_delegate"
+     ) VALUES ($1,$2,$3,$4,true,true)`,
+    [workspaceId, ownerId, `${label} workspace`, runnerId],
+  );
+  await pool.query(
+    `INSERT INTO "task" (
+       "id","title","status","owner_id","creator_type","creator_id","project_id",
+       "assignee_id","updated_at"
+     ) VALUES ($1,$2,'OPEN'::"task_status",$3,'USER'::"creator_type",$3,$4,$5,now())`,
+    [taskId, `${label} verifier`, ownerId, projectId, workspaceId],
+  );
+  return taskId;
+}
+
+/** The one criterion `createProject` seeds, spelled the way a proposal spells it. */
+function retainedCriterion(fixture, overrides = {}) {
+  return {
+    completionCriterion: 'HUMAN_SIGNOFF',
+    definitionId: fixture.definitionId,
+    text: fixture.state.semanticContract.criteria[0].text,
+    verificationMethod: fixture.state.evaluationPlan.verifiers[0].verificationMethod,
+    ...overrides,
+  };
+}
+
+test('an agent proposal is inert: the criteria in force and their digest do not move', async () => {
+  const fixture = await ratifiedProject('proposal inert');
+  const before = await criteriaRows(fixture.projectId);
+  const beforeState = await state(fixture.projectId);
+
+  const proposed = await proposeCriteria(fixture.projectId, {
+    criteria: [retainedCriterion(fixture, { text: 'an agent would rather be measured by this' })],
+    whyNotAgent: 'the standard this project is judged by is not the agent to move',
+  });
+  assert.equal(proposed.ok, true, 'a well-formed proposal is accepted');
+  assert.equal(proposed.applied, false);
+  assert.equal(proposed.status, 'PENDING');
+  assert.equal(proposed.effectiveCriteriaUnchanged, true);
+  assert.equal(proposed.reasonCode, 'GOAL_DECISION');
+  assert.equal(proposed.baseContractDigest, fixture.approvedDigest);
+
+  // (a) The effective rows are byte-identical, including the revision lanes an edit would move.
+  assert.deepEqual(await criteriaRows(fixture.projectId), before,
+    'a proposal must not touch one byte of the effective criteria');
+  const afterState = await state(fixture.projectId);
+  assert.equal(afterState.contractDigest, fixture.approvedDigest,
+    'a proposal must not advance contractDigest');
+  assert.equal(afterState.contractRevision, beforeState.contractRevision);
+  assert.deepEqual(afterState.semanticContract.criteria, beforeState.semanticContract.criteria);
+  assert.deepEqual(afterState.semanticContract.criteriaTrust,
+    beforeState.semanticContract.criteriaTrust);
+  assert.deepEqual(afterState.semanticContract.criteriaVersions,
+    beforeState.semanticContract.criteriaVersions);
+  evidence.invariants.criteriaProposalDoesNotMoveTheRuler = true;
+
+  // (b) Everything that reads this project still reads the approved set. `contract_digest` and
+  // `project_owner_ratification_effective` ARE the canonical DONE gate's ratification inputs
+  // (`project_canonical_done_gate`), so a proposal cannot make the gate see an unapproved ruler.
+  assert.equal(afterState.ratified, true, 'the standing ratification survives a proposal');
+  assert.equal(afterState.decisionRequest, null, 'a proposal raises no ratification question');
+  assert.equal(await contractIsRatified(fixture.projectId), true);
+  const gateSource = readFileSync(
+    path.join(
+      ROOT,
+      'src/apiserver/prisma/migrations/0197_canonical_obligation_done_gate/migration.sql',
+    ),
+    'utf8',
+  );
+  assert.match(gateSource,
+    /effective_ratification := contract_digest_value IS NOT NULL\s*\n\s*AND project_owner_ratification_effective\(p_project, contract_digest_value\);/,
+    'the DONE gate derives its ratification verdict from exactly the two values asserted above');
+  const surface = await proposalState(fixture.projectId);
+  assert.equal(surface.currentContractDigest, fixture.approvedDigest);
+  assert.equal(surface.ratified, true);
+  assert.deepEqual(
+    surface.effectiveCriteria.map((item) => item.text),
+    beforeState.semanticContract.criteria.map((item) => item.text),
+    'the read model shows the criteria in force, not the proposed ones',
+  );
+  assert.equal(surface.proposal.proposedCriteria[0].text,
+    'an agent would rather be measured by this');
+  assert.notEqual(surface.proposal.proposedCriteria[0].text, surface.effectiveCriteria[0].text);
+  evidence.invariants.criteriaProposalKeepsReadModelOnRatifiedSet = true;
+});
+
+test('the card carries the whole owner-decision protocol and a real semantic diff', async () => {
+  const fixture = await ratifiedProject('proposal card');
+  const verifierTaskId = await evidenceTask(fixture.projectId, 'proposal card');
+  const proposed = await proposeCriteria(fixture.projectId, {
+    criteria: [
+      retainedCriterion(fixture, {
+        completionCriterion: 'VERIFICATION',
+        evidenceTaskId: verifierTaskId,
+        verificationMethod: 'an independent verifier task records a PASS verdict',
+      }),
+      {
+        completionCriterion: 'HUMAN_SIGNOFF',
+        text: 'the account owner agrees the rollout plan is acceptable',
+        verificationMethod: 'the owner says so in the project thread',
+      },
+    ],
+  });
+  assert.equal(proposed.ok, true);
+  const surface = await proposalState(fixture.projectId);
+  const proposal = surface.proposal;
+
+  // (c) A GOAL_DECISION card with all eight protocol fields actually filled in.
+  assert.equal(proposal.reasonCode, 'GOAL_DECISION');
+  assert.equal(proposal.kind, 'PROJECT_CRITERIA_PROPOSAL');
+  assert.equal(proposal.card.reason, 'GOAL_DECISION');
+  assert.ok(proposal.card.whyNotAgent.length > 0, 'whyNotAgent must be stated');
+  assert.ok(Array.isArray(proposal.card.options) && proposal.card.options.length === 2,
+    'options must offer both answers');
+  assert.deepEqual(proposal.card.options.map((option) => option.value), ['APPROVE', 'DENY']);
+  assert.ok(proposal.card.options.every((option) => option.label.length > 0));
+  assert.ok(proposal.card.impacts.APPROVE.length > 0 && proposal.card.impacts.DENY.length > 0,
+    'impacts must say what each answer does');
+  assert.ok(proposal.card.recommendation.length > 0, 'recommendation must be stated');
+  assert.ok(proposal.card.noActionConsequence.length > 0,
+    'noActionConsequence must be stated');
+  assert.ok(proposal.card.cost.length > 0, 'cost must be stated');
+  assert.ok(proposal.card.deadline.length > 0, 'deadline must be stated');
+  assert.ok(proposal.card.resumeBehavior.length > 0, 'resumeBehavior must be stated');
+  assert.match(proposal.card.noActionConsequence, /no timeout, retry or resubmission/i,
+    'the card must say in words that nothing applies itself');
+  evidence.invariants.criteriaProposalCardCarriesOwnerProtocol = true;
+
+  // (d) The diff names WHICH criteria change, HOW, and separately whether each one's
+  // completionCriterion and verificationMethod moved.
+  const diff = proposal.semanticDiff;
+  const changed = diff.changedCriteria;
+  assert.equal(diff.counts.modified, 1);
+  assert.equal(diff.counts.added, 1);
+  assert.equal(diff.counts.removed, 0);
+  assert.deepEqual(diff.changedCriterionIds.slice().sort(),
+    changed.map((entry) => entry.definitionId).slice().sort(),
+    'the diff names exactly the criteria it describes');
+  const modified = changed.find((entry) => entry.changeKind === 'MODIFIED');
+  const added = changed.find((entry) => entry.changeKind === 'ADDED');
+  assert.equal(modified.definitionId, fixture.definitionId,
+    'the changed criterion is named by its stable id');
+  assert.match(modified.summary, /MODIFIED/, 'the diff says how the criterion changes');
+  assert.match(modified.summary, /completionCriterion: HUMAN_SIGNOFF -> VERIFICATION/);
+  assert.match(added.summary, /^ADDED criterion the account owner agrees/);
+  assert.equal(modified.textChanged, false, 'the wording of the retained criterion is unchanged');
+  assert.equal(modified.completionCriterionChanged, true,
+    'the diff must say that how completion is proved changed');
+  assert.deepEqual(
+    { after: modified.completionCriterion.after, before: modified.completionCriterion.before },
+    { after: 'VERIFICATION', before: 'HUMAN_SIGNOFF' },
+  );
+  assert.equal(modified.verificationMethodChanged, true,
+    'the diff must say that the verification method changed');
+  assert.deepEqual(
+    {
+      after: modified.verificationMethod.after,
+      before: modified.verificationMethod.before,
+    },
+    {
+      after: 'an independent verifier task records a PASS verdict',
+      before: fixture.state.evaluationPlan.verifiers[0].verificationMethod,
+    },
+  );
+  assert.equal(diff.completionCriterionChanged, true);
+  assert.equal(diff.verificationMethodChanged, true);
+  assert.match(proposal.card.impacts.APPROVE, /how completion is PROVED/,
+    'the card carries the consequence of a completionCriterion change, not just the diff');
+  evidence.invariants.criteriaProposalCardRendersSemanticDiff = true;
+});
+
+test('only the owner applies a proposal, and approval applies and ratifies in one transaction',
+  async () => {
+    const fixture = await ratifiedProject('proposal approval');
+    const before = await criteriaRows(fixture.projectId);
+    await proposeCriteria(fixture.projectId, {
+      criteria: [
+        retainedCriterion(fixture, { text: 'the deployed build answers on /healthz' }),
+      ],
+    });
+    const rendered = await proposalState(fixture.projectId);
+
+    // (g) The machine principals are refused at the same door, with the same code, before
+    // anything is read or written.
+    for (const actorType of ['AGENT', 'RUNNER', 'SERVICE']) {
+      await assert.rejects(
+        decideProposal(fixture.projectId, {
+          state: rendered,
+          actorType,
+          actorId: `${actorType.toLowerCase()}-credential`,
+          idempotencyKey: `forbidden-proposal:${actorType}:${randomUUID()}`,
+        }),
+        /OWNER_RATIFICATION_ACTOR_FORBIDDEN.*agents and runners cannot ratify/i,
+        `${actorType} must not be able to approve a criteria proposal`,
+      );
+    }
+    // An OWNER-shaped claim with somebody else's id is the same refusal: the principal is the
+    // credential, not the word in the request.
+    await assert.rejects(
+      decideProposal(fixture.projectId, {
+        state: rendered, actorType: 'OWNER', actorId: randomUUID(),
+        idempotencyKey: `forbidden-proposal:substituted:${randomUUID()}`,
+      }),
+      /OWNER_RATIFICATION_ACTOR_FORBIDDEN/,
+    );
+    assert.deepEqual(await criteriaRows(fixture.projectId), before,
+      'a refused decision writes nothing');
+    evidence.invariants.criteriaProposalMachineDecisionRefused = true;
+
+    // (h) Nothing else applies one either. Re-reading, re-proposing under a new key, replaying the
+    // same key and letting the stated deadline lapse all leave the proposal pending and inert.
+    await pool.query(
+      `UPDATE "project_criteria_proposal" SET "expires_at" = now() - INTERVAL '30 days'
+        WHERE "id" = $1`,
+      [rendered.proposal.id],
+    );
+    await proposalState(fixture.projectId);
+    await state(fixture.projectId);
+    const replayed = await proposeCriteria(fixture.projectId, {
+      criteria: [retainedCriterion(fixture, { text: 'the deployed build answers on /healthz' })],
+    }, { idempotencyKey: `replay:${fixture.projectId}` });
+    assert.equal(replayed.ok, true);
+    const replayedAgain = await proposeCriteria(fixture.projectId, {
+      criteria: [retainedCriterion(fixture, { text: 'the deployed build answers on /healthz' })],
+    }, { idempotencyKey: `replay:${fixture.projectId}` });
+    assert.equal(replayedAgain.duplicate, true, 'a repeated submission is a replay, not an apply');
+    assert.equal(replayedAgain.applied, false);
+    const stillPending = await pool.query(
+      `SELECT count(*)::int AS count FROM "project_criteria_proposal"
+        WHERE "project_id" = $1 AND "status" = 'APPLIED'`,
+      [fixture.projectId],
+    );
+    assert.equal(stillPending.rows[0].count, 0,
+      'no elapsed deadline, retry or resubmission may apply a proposal');
+    assert.deepEqual(await criteriaRows(fixture.projectId), before);
+    assert.equal((await state(fixture.projectId)).contractDigest, fixture.approvedDigest);
+
+    // The schema itself contains no second caller: the apply helper is reached from exactly one
+    // place, the OWNER-gated decision, and the proposal table carries no trigger at all.
+    const migration = readFileSync(
+      path.join(
+        ROOT,
+        'src/apiserver/prisma/migrations/0217_project_criteria_proposal_card/migration.sql',
+      ),
+      'utf8',
+    );
+    assert.equal(
+      (migration.match(/CREATE OR REPLACE FUNCTION project_apply_criteria_proposal\(/g) ?? []).length,
+      1, 'the apply helper is declared once',
+    );
+    assert.equal(
+      (migration.match(/PERFORM project_apply_criteria_proposal\(/g) ?? []).length, 1,
+      'the apply helper is called from exactly one place',
+    );
+    assert.match(migration,
+      /project_owner_decide_criteria_proposal[\s\S]*PERFORM project_apply_criteria_proposal\(p_project, proposal\."proposed_criteria"\);/,
+      'that one place is the OWNER-gated decision');
+    assert.doesNotMatch(migration, /CREATE\s+(?:CONSTRAINT\s+)?TRIGGER/i,
+      'a proposal is applied by a decision, never by a trigger');
+    const callers = readdirSync(path.join(ROOT, 'src/apiserver/prisma/migrations'))
+      .filter((entry) => {
+        const file = path.join(ROOT, 'src/apiserver/prisma/migrations', entry, 'migration.sql');
+        return existsSync(file) && /project_apply_criteria_proposal/.test(readFileSync(file, 'utf8'));
+      });
+    assert.deepEqual(callers, ['0217_project_criteria_proposal_card'],
+      'no other migration reaches the apply helper');
+    evidence.invariants.criteriaProposalHasNoAutomaticApplyPath = true;
+
+    // (e) The owner's own credential applies it — criteria, contract and ratification together.
+    const current = await proposalState(fixture.projectId);
+    const approved = await decideProposal(fixture.projectId, { state: current });
+    assert.equal(approved.ok, true);
+    assert.equal(approved.decision, 'APPROVE');
+    assert.equal(approved.status, 'APPLIED');
+    assert.equal(approved.atomic, true);
+    assert.equal(approved.previousContractDigest, fixture.approvedDigest);
+    assert.notEqual(approved.appliedContractDigest, fixture.approvedDigest);
+    assert.equal(approved.ratified, true,
+      'the contract the approval produced is ratified by the same decision');
+    const settled = await state(fixture.projectId);
+    assert.equal(settled.contractDigest, approved.appliedContractDigest);
+    assert.equal(settled.ratified, true, 'no unratified window is left behind');
+    assert.equal(settled.decisionRequest, null,
+      'the owner is not asked a second time for the change they just made');
+    assert.equal(settled.semanticContract.criteria[0].text,
+      'the deployed build answers on /healthz');
+    const ratifications = await pool.query(
+      `SELECT "source","ratified_by_type","ratified_by_id","contract_digest"::text AS digest
+         FROM "project_owner_ratification"
+        WHERE "project_id" = $1 AND "contract_digest" = $2`,
+      [fixture.projectId, approved.appliedContractDigest],
+    );
+    assert.equal(ratifications.rows.length, 1);
+    assert.deepEqual(
+      {
+        by: ratifications.rows[0].ratified_by_id,
+        source: ratifications.rows[0].source,
+        type: ratifications.rows[0].ratified_by_type,
+      },
+      { by: ownerId, source: 'OWNER', type: 'OWNER' },
+    );
+    evidence.invariants.ownerApprovalAppliesAndRatifiesAtomically = true;
+  });
+
+test('a decision approves the exact rendering it was taken on, or it is refused', async () => {
+  const fixture = await ratifiedProject('proposal what you see');
+  const before = await criteriaRows(fixture.projectId);
+  await proposeCriteria(fixture.projectId, {
+    criteria: [retainedCriterion(fixture, { text: 'the first thing the agent proposed' })],
+  });
+  const firstRender = await proposalState(fixture.projectId);
+  const firstProposalId = firstRender.proposal.id;
+  const firstCardDigest = firstRender.proposal.cardDigest;
+
+  // The agent changes its mind after the owner has the card open.
+  await proposeCriteria(fixture.projectId, {
+    criteria: [retainedCriterion(fixture, { text: 'the second thing the agent proposed' })],
+  });
+
+  // (f) Answering the card that was rendered fails, and says what replaced it.
+  const staleProposal = await decideProposal(fixture.projectId, {
+    proposalId: firstProposalId, expectedCardDigest: firstCardDigest,
+  });
+  assert.equal(staleProposal.ok, false);
+  assert.equal(staleProposal.code, 'CRITERIA_PROPOSAL_ALREADY_SETTLED');
+  assert.equal(staleProposal.status, 'SUPERSEDED');
+  assert.ok(staleProposal.supersededById, 'the refusal names the proposal that replaced it');
+  assert.match(staleProposal.requiredAction, /read the current criteria proposal/);
+
+  // Answering the CURRENT proposal with the digest of the previous rendering fails too: the
+  // decision has to carry the identity of what was actually shown.
+  const secondRender = await proposalState(fixture.projectId);
+  const staleDigest = await decideProposal(fixture.projectId, {
+    state: secondRender, expectedCardDigest: firstCardDigest,
+  });
+  assert.equal(staleDigest.ok, false);
+  assert.equal(staleDigest.code, 'CRITERIA_PROPOSAL_CARD_STALE');
+  assert.equal(staleDigest.currentCardDigest, secondRender.proposal.cardDigest);
+  assert.match(staleDigest.requiredAction, /re-read the criteria proposal card/);
+  assert.deepEqual(await criteriaRows(fixture.projectId), before,
+    'neither refusal applies anything');
+
+  // (k) One proposal stands at a time, and the rule is the schema's rather than the function's:
+  // a second pending row cannot be inserted even by direct SQL.
+  await assert.rejects(
+    pool.query(
+      `INSERT INTO "project_criteria_proposal" (
+         "id","project_id","owner_id","proposal_generation","base_contract_digest",
+         "base_contract_revision","base_criteria","proposed_criteria","semantic_diff","card",
+         "card_digest","input_digest","proposed_by_type","proposed_by_id",
+         "proposal_idempotency_key","expires_at"
+       )
+       SELECT gen_random_uuid(), "project_id", "owner_id", "proposal_generation" + 100,
+              "base_contract_digest", "base_contract_revision", "base_criteria",
+              "proposed_criteria", "semantic_diff", "card", "card_digest", "input_digest",
+              "proposed_by_type", "proposed_by_id", 'second-pending', "expires_at"
+         FROM "project_criteria_proposal" WHERE "id" = $1`,
+      [secondRender.proposal.id],
+    ),
+    /project_criteria_proposal_one_pending_idx/,
+    'two proposals cannot be pending on one project even through direct SQL',
+  );
+
+  // The re-render carries a different identity, and answering THAT works.
+  assert.notEqual(secondRender.proposal.cardDigest, firstCardDigest);
+  const approved = await decideProposal(fixture.projectId, { state: secondRender });
+  assert.equal(approved.ok, true);
+  assert.equal((await state(fixture.projectId)).semanticContract.criteria[0].text,
+    'the second thing the agent proposed');
+  evidence.invariants.criteriaProposalApprovesWhatWasShown = true;
+
+  // (k) The proposal the owner never answered is recorded as superseded, with a reason, and is
+  // still there to read. One proposal stands at a time; the earlier one does not vanish.
+  const history = (await proposalState(fixture.projectId)).history;
+  const retired = history.find((entry) => entry.id === firstProposalId);
+  assert.equal(retired.status, 'SUPERSEDED');
+  assert.equal(retired.decision, null, 'a superseded proposal was never answered');
+  assert.equal(retired.supersededById, secondRender.proposal.id);
+  assert.match(retired.supersededReason, /at most one acceptance-criteria proposal/);
+  const pending = await pool.query(
+    `SELECT count(*)::int AS count FROM "project_criteria_proposal"
+      WHERE "project_id" = $1 AND "status" = 'PENDING'`,
+    [fixture.projectId],
+  );
+  assert.equal(pending.rows[0].count, 0);
+  evidence.invariants.criteriaProposalSupersedesRatherThanCoexists = true;
+});
+
+test('denial changes nothing and is recorded as an answer, not a dropped request', async () => {
+  const fixture = await ratifiedProject('proposal denial');
+  const before = await criteriaRows(fixture.projectId);
+  await proposeCriteria(fixture.projectId, {
+    criteria: [retainedCriterion(fixture, { text: 'a standard the owner does not want' })],
+  });
+  const rendered = await proposalState(fixture.projectId);
+  const denied = await decideProposal(fixture.projectId, {
+    state: rendered, decision: 'DENY',
+  });
+  assert.equal(denied.ok, true);
+  assert.equal(denied.decision, 'DENY');
+  assert.equal(denied.status, 'DENIED');
+  assert.equal(denied.effectiveCriteriaUnchanged, true);
+
+  // (i) The criteria in force are untouched and the refusal is a durable, readable fact.
+  assert.deepEqual(await criteriaRows(fixture.projectId), before);
+  const after = await state(fixture.projectId);
+  assert.equal(after.contractDigest, fixture.approvedDigest);
+  assert.equal(after.ratified, true);
+  const stored = await pool.query(
+    `SELECT "status","decision","decided_by_type","decided_by_id"
+       FROM "project_criteria_proposal" WHERE "id" = $1`,
+    [rendered.proposal.id],
+  );
+  assert.deepEqual(stored.rows, [{
+    decided_by_id: ownerId, decided_by_type: 'OWNER', decision: 'DENY', status: 'DENIED',
+  }], 'a denied proposal is kept and attributed, not deleted');
+  const surface = await proposalState(fixture.projectId);
+  assert.equal(surface.proposal, null, 'nothing is awaiting the owner any more');
+  assert.equal(surface.history.find((entry) => entry.id === rendered.proposal.id).decision,
+    'DENY');
+  evidence.invariants.criteriaProposalDenialIsRecordedNotDropped = true;
+});
+
+test('approving a proposal that undoes an earlier one does not revive the earlier approval',
+  async () => {
+    const fixture = await ratifiedProject('proposal aba');
+    const originalText = fixture.state.semanticContract.criteria[0].text;
+    const originalDigest = fixture.approvedDigest;
+    const originalVersion =
+      fixture.state.semanticContract.criteriaVersions[0].semanticRevision;
+
+    await proposeCriteria(fixture.projectId, {
+      criteria: [retainedCriterion(fixture, { text: 'briefly something else' })],
+    });
+    const away = await decideProposal(fixture.projectId);
+    assert.equal(away.ok, true);
+    assert.notEqual(away.appliedContractDigest, originalDigest);
+
+    await proposeCriteria(fixture.projectId, {
+      criteria: [retainedCriterion(fixture, { text: originalText })],
+    });
+    const back = await decideProposal(fixture.projectId);
+    assert.equal(back.ok, true);
+
+    // (j) The wording is identical again and the digest is not: `criteriaVersions` still carries
+    // the semantic revision, so the first approval cannot be the one in force.
+    const settled = await state(fixture.projectId);
+    assert.equal(settled.semanticContract.criteria[0].text, originalText);
+    assert.notEqual(settled.contractDigest, originalDigest,
+      'proposing a revert must not land back on the first approved digest');
+    assert.equal(settled.contractDigest, back.appliedContractDigest);
+    assert.ok(settled.semanticContract.criteriaVersions[0].semanticRevision > originalVersion + 1,
+      'each applied proposal advances the semantic revision');
+    const approvals = await pool.query(
+      `SELECT count(*)::int AS count FROM "project_owner_ratification"
+        WHERE "project_id" = $1 AND "contract_digest" = $2`,
+      [fixture.projectId, originalDigest],
+    );
+    assert.equal(approvals.rows[0].count, 1,
+      'the original approval is still exactly one historical fact, not a live one');
+    evidence.invariants.criteriaProposalAbaProtectionSurvivesRevert = true;
+  });
+
+test('the agent door proposes and the web app has no direct criteria editor', async () => {
+  // The runner door no longer forwards `acceptanceCriteriaItems` into the write path: it routes
+  // them into a proposal and says so in its response.
+  const runner = readFileSync(
+    path.join(ROOT, 'src/apiserver/src/runner-api/runner-projects.controller.ts'),
+    'utf8',
+  );
+  assert.match(runner,
+    /async updateProject\([\s\S]*const \{ acceptanceCriteriaItems, \.\.\.rest \} = dto;[\s\S]*this\.acceptance\.proposeCriteriaChange\(/,
+    'a runner PATCH carrying acceptance criteria must become a proposal, not a write');
+  assert.doesNotMatch(runner,
+    /async updateProject\([\s\S]*this\.projects\.update\(runner\.ownerId, id, dto,/,
+    'the whole body, acceptance criteria included, must not reach the project write path');
+  assert.match(runner, /@Post\('projects\/:id\/acceptance\/criteria-proposals'\)/,
+    'the agent has a door of its own onto the proposal channel');
+  const service = readFileSync(
+    path.join(ROOT, 'src/apiserver/src/projects/project-acceptance.service.ts'),
+    'utf8',
+  );
+  assert.match(service, /project_propose_acceptance_criteria/);
+  assert.match(service, /project_owner_decide_criteria_proposal/);
+  assert.match(service,
+    /async decideCriteriaProposal[\s\S]*actor\.actorType !== 'USER'[\s\S]*OWNER_RATIFICATION_ACTOR_FORBIDDEN/,
+    'the owner decision is refused for every non-user principal before it reaches PostgreSQL');
+  const controller = readFileSync(
+    path.join(ROOT, 'src/apiserver/src/projects/projects.controller.ts'),
+    'utf8',
+  );
+  assert.match(controller, /criteria-proposal/,
+    'the owner decides through their own authenticated connection');
+
+  // The product rule: people drive agents, they do not edit the ruler by hand. Three guards, so
+  // an editor cannot be reintroduced by routing around any one of them: the structured authoring
+  // field exists in the web only as a READ type, no request the web builds carries acceptance
+  // criteria at all, and the project-scoped writes it makes are an enumerated set that contains
+  // neither `POST /projects` nor `PATCH /projects/:id` — the only two routes that can restate a
+  // project's criteria. Creating a project and ratifying it in one owner request is a different
+  // act and is deliberately untouched.
+  const webSources = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+      webSources.push({ path: path.relative(ROOT, full), source: readFileSync(full, 'utf8') });
+    }
+  };
+  walk(path.join(ROOT, 'src/web/src'));
+  assert.ok(webSources.length > 50, 'the web scan must actually have read the app');
+
+  for (const file of webSources) {
+    for (const line of file.source.split('\n')) {
+      if (!line.includes('acceptanceCriteriaItems')) continue;
+      assert.match(line, /acceptanceCriteriaItems\?:/,
+        `${file.path} may only READ acceptanceCriteriaItems, never author it`);
+    }
+  }
+
+  /** Each `api(...)` invocation's arguments, sliced on balanced parentheses. */
+  const apiCalls = (source) => {
+    const calls = [];
+    const opening = /\bapi(?:<[\s\S]*?>)?\(/g;
+    let match;
+    while ((match = opening.exec(source))) {
+      let depth = 1;
+      let index = opening.lastIndex;
+      while (index < source.length && depth > 0) {
+        if (source[index] === '(') depth += 1;
+        else if (source[index] === ')') depth -= 1;
+        index += 1;
+      }
+      calls.push(source.slice(opening.lastIndex, index - 1));
+    }
+    return calls;
+  };
+  // Path builders are followed, so a write cannot hide behind a helper: `foo(projectId)` is
+  // resolved to the template `foo` returns, transitively.
+  const builders = new Map();
+  for (const file of webSources) {
+    for (const match of file.source.matchAll(
+      /export function ([A-Za-z0-9_]+)\([^)]*\): string \{\s*return ([^;]+);/g,
+    )) builders.set(match[1], match[2].trim());
+  }
+  const resolveUrl = (expression, hops = 0) => {
+    const literal = expression.match(/^[`'"](.*)[`'"]$/s);
+    if (literal) return literal[1];
+    const call = expression.match(/^([A-Za-z0-9_]+)\(/);
+    if (!call || hops > 3 || !builders.has(call[1])) return expression;
+    const body = builders.get(call[1]);
+    const template = body.match(/^`(.*)`$/s);
+    if (!template) return resolveUrl(body, hops + 1);
+    return template[1].replace(/\$\{([A-Za-z0-9_]+)\([^)]*\)\}/g, (whole, name) =>
+      (builders.has(name) ? resolveUrl(`${name}()`, hops + 1) : whole));
+  };
+  const projectWrites = [];
+  for (const file of webSources) {
+    for (const call of apiCalls(file.source)) {
+      assert.doesNotMatch(call, /acceptanceCriteria/,
+        `${file.path} must not send acceptance criteria in any request`);
+      const url = resolveUrl(call.split(/,(?![^{[(]*[}\])])/)[0].trim());
+      if (!url.startsWith('/projects')) continue;
+      const method = call.match(/method:\s*'([A-Z]+)'/)?.[1] ?? 'GET';
+      if (method === 'GET') continue;
+      projectWrites.push(`${method} ${url}`.replace(/\$\{[^}]*\}/g, ':id'));
+    }
+  }
+  assert.deepEqual([...new Set(projectWrites)].sort(), [
+    'POST /projects/:id/acceptance/runs/:id/verdict',
+    'POST /projects/:id/coordinator',
+    'POST /projects/:id/coordinator/rebind',
+    'POST /projects/:id/criteria-proposal/decision',
+    'POST /projects/:id/handoffs/:id/decision',
+    'POST /projects/:id/ratification',
+    'POST /projects/:id/reopen',
+  ], 'the web app writes to a project only through these routes: no POST /projects and no '
+   + 'PATCH /projects/:id, which are the only two that can restate a project\'s criteria');
+
+  const card = readFileSync(
+    path.join(ROOT, 'src/web/src/components/ProjectCriteriaProposalCard.tsx'), 'utf8',
+  );
+  for (const field of [
+    'whyNotAgent', 'options', 'impacts', 'recommendation', 'noActionConsequence',
+    'cost', 'deadline', 'resumeBehavior',
+  ]) {
+    assert.ok(card.includes(field), `the owner's card must render ${field}`);
+  }
+  assert.match(card, /completionCriterionChanged/,
+    'the card must show whether how completion is proved changed');
+  assert.match(card, /verificationMethodChanged/,
+    'the card must show whether the verification method changed');
+  assert.match(card, /expectedCardDigest: proposal\.cardDigest/,
+    'the decision must carry the digest of the rendering it was taken on');
+  assert.match(readFileSync(path.join(ROOT, 'src/apiserver/src/projects/projects.service.ts'), 'utf8'),
+    /atomicCreate/,
+    'creating a project and ratifying it in one owner request is preserved');
+  evidence.invariants.criteriaEditingHasNoWebEntryPoint = true;
 });

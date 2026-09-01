@@ -430,6 +430,46 @@ export class OwnerRatificationDecisionDto {
   @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
 }
 
+/**
+ * An agent's proposal to change what this project counts as done.
+ *
+ * The three prose fields are the parts of the owner-decision protocol only the proposer can fill
+ * in. The rest of the card — the options, what each answer does, and what happens if the owner
+ * does nothing — is derived by the server, because those are statements about what this system
+ * will do, and a proposing agent describing its own proposal's consequences is the incident this
+ * whole channel exists to prevent.
+ */
+export class ProposeCriteriaChangeDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateProjectAcceptanceCriterionDto)
+  acceptanceCriteriaItems!: UpdateProjectAcceptanceCriterionDto[];
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS)
+  whyNotAgent?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS)
+  recommendation?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS) cost?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS) deadline?: string;
+  @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
+}
+
+/**
+ * The owner's answer to a rendered proposal card.
+ *
+ * `expectedCardDigest` is what makes this "approve what you SAW": it names the exact rendering the
+ * decision was taken on, and a proposal that moved between rendering and answering is refused with
+ * the current digest so the surface re-renders. There is no CTA token — the decision travels on
+ * the owner's already-authenticated connection.
+ */
+export class CriteriaProposalDecisionDto {
+  @IsIn(['APPROVE', 'DENY']) decision!: 'APPROVE' | 'DENY';
+  @IsPublicId() proposalId!: string;
+  @IsString() @Matches(SHA256_DIGEST_PATTERN) expectedCardDigest!: string;
+  @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
+}
+
 export class PreapprovedRatificationDto {
   @IsIn(['PREAPPROVED_TEMPLATE', 'BOUND_DELEGATION'])
   authority!: 'PREAPPROVED_TEMPLATE' | 'BOUND_DELEGATION';

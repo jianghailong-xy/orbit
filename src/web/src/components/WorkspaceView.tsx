@@ -120,6 +120,7 @@ import {
   controlPlaneObligationsOf,
 } from './CompletionAckObligationBanner';
 import { SessionOwnerRatificationCard } from './SessionOwnerRatificationCard';
+import { ProjectCriteriaProposalCard } from './ProjectCriteriaProposalCard';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import {
   currentProviderChoice,
@@ -5373,6 +5374,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             itself renders nothing until the owner-scoped inbox says this session has a question. */}
         {selectedSession?.projectId && !selectedTrashed && !composing && (
           <SessionOwnerRatificationCard sessionId={selectedSession.id} />
+        )}
+
+        {/* An agent's proposal to change what this project counts as done. The proposal has
+            already been recorded and has moved nothing; this is where the owner reads the diff
+            and decides. Same conversation, same credential, same reason the card above exists. */}
+        {selectedSession?.projectId && !selectedTrashed && !composing && (
+          <ProjectCriteriaProposalCard projectId={selectedSession.projectId} />
         )}
 
         {stuck && (

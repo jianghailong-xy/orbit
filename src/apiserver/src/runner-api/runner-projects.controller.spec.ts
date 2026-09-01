@@ -20,6 +20,8 @@ function acceptanceDouble(): never {
     openRun: async () => assert.fail('this scenario does not open an acceptance run'),
     finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
     recordMergeEvidence: async () => assert.fail('this scenario does not record merge evidence'),
+    proposeCriteriaChange: async () => assert.fail('this scenario does not propose criteria'),
+    machineCriteriaProposal: async () => assert.fail('this scenario does not read a proposal'),
   } as never;
 }
 
@@ -451,7 +453,12 @@ test('updateProject writes into the runner owner, with the id and body untouched
     ownerId: 'owner-1',
     projectId: 'project-1',
   });
-  assert.equal(seen.dto, dto);
+  // Field-for-field rather than the same object: acceptance criteria now leave this body at the
+  // door and become a proposal, so the rest is forwarded as a rest-spread copy. A field the
+  // canonical DTO grows later still rides along — `{ acceptanceCriteriaItems, ...rest }` names
+  // only the one property it removes — which is what the identity check used to protect.
+  assert.deepEqual(seen.dto, dto);
+  assert.deepEqual(Object.keys(seen.dto ?? {}).sort(), Object.keys(dto).sort());
   assert.equal(result, updated);
 });
 
@@ -470,22 +477,41 @@ test('updateProject forwards an explicit structured clear rather than dropping i
 
   await controller.updateProject(RUNNER, 'project-1', undefined, {
     goal: null,
-    acceptanceCriteriaItems: [],
     instructions: null,
   });
 
-  assert.deepEqual(seen, { goal: null, acceptanceCriteriaItems: [], instructions: null });
+  assert.deepEqual(seen, { goal: null, instructions: null });
   assert.ok(seen && 'goal' in seen, 'the null clear was dropped on the way through');
 });
 
-test('updateProject refuses legacy acceptanceCriteria replacement and clear before the write', () => {
+// The one clear this door no longer performs. Emptying the set is not a proposal an owner could
+// ever approve — a project with no acceptance criteria cannot be ratified — so it is refused with
+// a sentence that says what to send instead, rather than parked on the project's one pending slot.
+test('updateProject refuses an empty structured criteria set instead of proposing nothing', async () => {
+  const projects = {
+    update: async () => assert.fail('an empty criteria set must not reach the project write'),
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+
+  await assert.rejects(
+    () => controller.updateProject(RUNNER, 'project-1', undefined, { acceptanceCriteriaItems: [] }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(error.message, /no longer a way to clear/);
+      assert.match(error.message, /at least one criterion/);
+      return true;
+    },
+  );
+});
+
+test('updateProject refuses legacy acceptanceCriteria replacement and clear before the write', async () => {
   const projects = {
     update: async () => assert.fail('legacy criteria must not reach the runner update'),
   } as never;
   const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   for (const acceptanceCriteria of ['Every shard reported', null] as const) {
-    assert.throws(
+    await assert.rejects(
       () => controller.updateProject(RUNNER, 'project-1', undefined, { acceptanceCriteria }),
       (error: unknown) => {
         assert.ok(error instanceof BadRequestException);
@@ -562,6 +588,11 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // rewrote, so a project stopped by one looks entirely ordinary from every other endpoint.
     'confirmAcceptanceCriteria',
     'createProject',
+    // The proposal channel: an agent may say what it thinks the acceptance criteria should be
+    // (`proposeCriteriaChange`) and read what the owner was asked (`criteriaProposal`). Both are
+    // deliberately here while the DECISION is not — a machine that could answer its own proposal
+    // would be moving the standard it is measured against, which is the whole line this holds.
+    'criteriaProposal',
     // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
     // three writes are here. Listing, opening a coordinator and the manual trigger are still
     // absent, which is the line this test exists to hold.
@@ -583,6 +614,8 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // reveals the standing obligation/CTA without turning the runner into its owner.
     'projectOutcome',
     'projectRatification',
+    // See `criteriaProposal` above: proposing is not deciding.
+    'proposeCriteriaChange',
     'ratifyProjectFromPreapproval',
     'recordMergeEvidence',
     'removeProject',
@@ -600,6 +633,9 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
   assert.deepEqual(verbs, {
     confirmAcceptanceCriteria: RequestMethod.POST,
     createProject: RequestMethod.POST,
+    // The proposal channel's two verbs are the assertion: a machine POSTs what it PROPOSES and
+    // GETs what the owner was asked. There is no verb here that decides one.
+    criteriaProposal: RequestMethod.GET,
     finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,
     // Unit L7: GET, both of them. The verbs are the assertion — a POST appearing on either would
@@ -611,6 +647,7 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     projectFailureCoordination: RequestMethod.GET,
     projectOutcome: RequestMethod.GET,
     projectRatification: RequestMethod.GET,
+    proposeCriteriaChange: RequestMethod.POST,
     ratifyProjectFromPreapproval: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,

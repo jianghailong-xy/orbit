@@ -298,12 +298,12 @@ Options:
   --goal TEXT                      replace what the project is trying to achieve (max 4,000)
   --goal-file -                    read the replacement goal from stdin
   --clear-goal                     leave the project with no stated goal
-  --acceptance-criteria-items JSON replace with [{"id":"...","text":"...","verificationMethod":"...","completionCriterion":"..."}]
+  --acceptance-criteria-items JSON propose [{"id":"...","text":"...","verificationMethod":"...","completionCriterion":"..."}]
   --acceptance-criteria-items-file -
-                                   read the structured replacement array from stdin
+                                   read the proposed array from stdin
   --acceptance-criteria TEXT       legacy user-API compatibility input (runner write is refused)
   --acceptance-criteria-file -     same legacy input from stdin (runner write is refused)
-  --clear-acceptance-criteria      legacy clear spelling (runner write is refused; use items [])
+  --clear-acceptance-criteria      legacy clear spelling (runner write is refused)
   --instructions TEXT              replace how the work is to be done (max 10,000 characters)
   --instructions-file -            read the replacement instructions from stdin
   --clear-instructions             leave the project with no standing instructions
@@ -315,10 +315,14 @@ Only the flags you pass are sent, so revising the goal never blanks the instruct
 Each prose field is a whole-field replacement: text replaces it, --clear-<field> removes it,
 and naming both for one field is refused rather than resolved by a preference order.
 
-Structured acceptance is also a whole-collection replacement. Preserve ids returned by
-project_get when editing or reordering; omit id to add an item; [] clears the collection. Every
-item requires verificationMethod and one peer completionCriterion. EXECUTABLE also requires its
-command, expected exit code and source Task; VERIFICATION requires an independent verifier Task.
+Structured acceptance is the one field this command does not write. It is a PROPOSAL: the whole
+set you send is recorded as one card for the account owner, the criteria already in force keep
+deciding whether this project is done, and nothing changes until the owner approves it. Read
+acceptanceCriteriaProposal in the response for the card and the semantic diff it will show them.
+Preserve ids returned by project_get when editing or reordering; omit id to add an item; [] is
+refused, because a project measured by nothing cannot be ratified. Every item requires
+verificationMethod and one peer completionCriterion. EXECUTABLE also requires its command,
+expected exit code and source Task; VERIFICATION requires an independent verifier Task.
 The legacy flags remain recognized only so old runner scripts fail with an actionable error rather
 than silently creating HUMAN_SIGNOFF. Existing legacy text remains readable and writable through
 the old user/JWT API compatibility path; it is not an agent authoring fallback.
@@ -351,7 +355,7 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 `,
 }
 
-const runnerLegacyProjectCriteriaError = "legacy acceptanceCriteria is user-API and existing-data compatibility only; runner project writes refuse it because it would implicitly create HUMAN_SIGNOFF criteria; use acceptanceCriteriaItems with an explicit verificationMethod and completionCriterion on every item (use [] to clear)"
+const runnerLegacyProjectCriteriaError = "legacy acceptanceCriteria is user-API and existing-data compatibility only; runner project writes refuse it because it would implicitly create HUMAN_SIGNOFF criteria; use acceptanceCriteriaItems with an explicit verificationMethod and completionCriterion on every item"
 
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
@@ -365,7 +369,7 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the evidence version to conclude against)", "--criteria <json> | --criteria-file - (one entry per HUMAN_SIGNOFF criterion: {criterionId|ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Append evidence-backed conclusion events for HUMAN_SIGNOFF criteria. EXECUTABLE and VERIFICATION reject fallback human verdicts and use their declared durable input. Current PASS/FAIL/INCONCLUSIVE is derived from the peer outcomes; every event records who, when and which evidence version. A judgment-session or machine-attributed call may refute; human PASS uses the owner-attributed channel. That is workflow and audit provenance, not proof of human presence.", Mutates: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up, advances the evidence version automatically, and re-evaluates the current acceptance standing without a manual reopen.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod + explicit completionCriterion)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text, reader-facing verificationMethod, and one explicit peer completionCriterion. Legacy acceptanceCriteria remains readable for existing projects and writable through the old user/JWT API compatibility path, but runner writes refuse it because it would silently declare HUMAN_SIGNOFF; it is not an agent fallback. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
-	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod + explicit completionCriterion required; [] clears)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|CANCELLED> (DONE is derived)", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement: every item requires text, verificationMethod and one explicit peer completionCriterion; preserve ids from project_get to retain identity, omit id to add, and use [] to clear. currentStatus and project DONE are derived and cannot be supplied. Legacy acceptanceCriteria remains readable for existing projects and writable through the old user/JWT API compatibility path, but runner writes refuse it because it would silently declare HUMAN_SIGNOFF; it is not an agent fallback. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (the whole set you are PROPOSING; text + verificationMethod + explicit completionCriterion required; [] is refused)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|CANCELLED> (DONE is derived)", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a PROPOSAL rather than a write: sending them records one card for the account owner and leaves the criteria in force deciding this project until the owner approves it, so read acceptanceCriteriaProposal in the response and keep working to what is still in force. Every item requires text, verificationMethod and one explicit peer completionCriterion; preserve ids from project_get to retain identity, omit id to add. [] is refused, because a project measured by nothing cannot be ratified. currentStatus and project DONE are derived and cannot be supplied. Legacy acceptanceCriteria remains readable for existing projects and writable through the old user/JWT API compatibility path, but runner writes refuse it because it would silently declare HUMAN_SIGNOFF; it is not an agent fallback. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
@@ -1105,7 +1109,7 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearGoal := fs.Bool("clear-goal", false, "leave the project with no stated goal")
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that the goal was reached")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
-	acceptanceCriteriaItems := fs.String("acceptance-criteria-items", "", "JSON array replacing the structured acceptance criteria")
+	acceptanceCriteriaItems := fs.String("acceptance-criteria-items", "", "JSON array proposing a new structured acceptance criteria set")
 	acceptanceCriteriaItemsFile := fs.String("acceptance-criteria-items-file", "", "read structured acceptance criteria JSON from stdin (-)")
 	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the project with no stated acceptance criteria")
 	instructions := fs.String("instructions", "", "replace how this project's work is to be done")
