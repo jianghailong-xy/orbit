@@ -173,6 +173,7 @@ const body = {
   evaluationCommandDigest: plan.evaluator.commandDigest,
   admittedAttemptTimeoutSeconds: plan.evaluator.attemptTimeoutSeconds,
   automaticRetries: plan.evaluator.automaticRetries,
+  retryBudgets: plan.evaluator.retryBudgets,
   declaredNodeCount: plan.nodes.length,
   evidenceCut: {
     ordering: plan.evidenceCut.ordering,
