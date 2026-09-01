@@ -59,7 +59,7 @@ const evidence = {
   independence: {
     separateSchema: false,
     separateWorkerGraph: false,
-    separateComposeService: false,
+    noComposeService: false,
     noReconcilerServiceDependency: false,
     appendOnlySamples: false,
     boundedProbes: false,
@@ -444,23 +444,21 @@ test('watchdog runs from a separate module graph and PostgreSQL schema', async (
   const workerModule = readFileSync(path.join(root,
     'src/apiserver/src/outcome-watchdog/outcome-watchdog.worker.module.ts'), 'utf8');
   const composeSource = readFileSync(path.join(root, 'docker-compose.yml'), 'utf8');
-  const watchdogService = composeSource.match(
-    /\n  watchdog:\n[\s\S]*?(?=\n  [a-z][a-z0-9-]*:\n)/,
-  )?.[0] ?? '';
   assert.doesNotMatch(serviceSource, /from ['"].*outcome-reconciler/);
   assert.doesNotMatch(workerModule, /from ['"].*app\.module|from ['"].*outcome-reconciler/);
   assert.match(workerModule, /PrismaModule/);
-  assert.match(watchdogService, /container_name: orbit-watchdog/);
-  assert.match(watchdogService, /outcome-watchdog\/main\.js/);
-  assert.match(watchdogService, /OUTCOME_WATCHDOG_COLLECTOR_SHA/);
-  assert.match(watchdogService, /OUTCOME_WATCHDOG_TARGET_SHA/);
-  assert.doesNotMatch(watchdogService, /depends_on:\s*\n\s+apiserver:/);
+  // The account owner removed the watchdog's Compose service on 2026-09-01: it had been reporting
+  // alerts no process consumed, and Compose rebuilt only apiserver/web/gateway, so it ran 37
+  // commits of stale code against a current database. The module graph below is still proven
+  // independent of AppModule and the reconciler — nothing in the deployment starts it any more.
+  assert.doesNotMatch(composeSource, /\n  watchdog:\n/);
+  assert.doesNotMatch(composeSource, /container_name: orbit-watchdog/);
   evidence.postgres.connected = true;
   evidence.postgres.version = identity.version;
   evidence.postgres.systemIdentifier = identity.system_identifier;
   evidence.independence.separateSchema = true;
   evidence.independence.separateWorkerGraph = true;
-  evidence.independence.separateComposeService = true;
+  evidence.independence.noComposeService = true;
   evidence.independence.noReconcilerServiceDependency = true;
 });
 

@@ -420,7 +420,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      assert.equal(rawQueries, 9,
+      assert.equal(rawQueries, 8,
         'one bounded set of page-wide canonical aggregates, including failure coordination');
     });
   } finally {

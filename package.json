@@ -58,7 +58,9 @@
     "test:outcome-reconciler:restart-postgres": "node --test --test-concurrency=1 --test-reporter=tap test/outcome-reconciler-restart-postgres.test.mjs",
     "test:outcome-reconciler:acceptance-deadline": "node --test --test-concurrency=1 --test-reporter=tap test/executable-acceptance-deadline.test.mjs",
     "test:session-current-work-routing": "bash scripts/session-current-work-routing.sh",
-    "test:upgrade-source-sha": "node --test test/upgrade-source-sha.test.mjs"
+    "test:upgrade-source-sha": "node --test test/upgrade-source-sha.test.mjs",
+    "test:compose-topology": "node --test --test-reporter=tap test/compose-topology.test.mjs",
+    "test:sidecar-removal-orphans": "node --test --test-reporter=tap test/sidecar-removal-orphans.test.mjs"
   },
   "engines": {
     "node": ">=26.0.0"
