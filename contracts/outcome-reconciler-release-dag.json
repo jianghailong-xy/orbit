@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "edaa2a967125723f24b311568c19cde0fe1f8ff6eb815bb4984785cfae9b8db1",
+  "declaredDagPlanDigest": "ae4c19a78b09e3a2627960838639dcbd56667a26afea9184b330d1d9ae96835c",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GlvYGNFrhA41IVx67o0",
   "supersededAttempt": {
@@ -384,7 +384,7 @@
       "scripts/outcome-reconciler-release-dag.mjs": "72a7b0d5d4a557ec3ca444b8f8251bb188a0b96cfd055e81543f2edcf5306618",
       "scripts/outcome-reconciler-watchdog-manifest.mjs": "e78023213596ef9db06e08b3890702fbe4a82d590e679d3562d6a726bcf9be7c",
       "scripts/outcome-reconciler-watchdog.sh": "d04e0c8a16ce4b57c29406aa214900562b1ad7ac1337785db15536662493edde",
-      "test/outcome-reconciler-release-dag-plan.test.mjs": "7a85d79ce94cf9caa666d04049f9579bcf09e3758b873951b69a25e40729bf4d",
+      "test/outcome-reconciler-release-dag-plan.test.mjs": "b916809aed8c4ce5179f9efe2867e6c5b27e6d990f9341d340c2797b22045a0a",
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "c7ee0ed206243f318bb02f92d8a210f74e99f20ddffcedc9aa7f91e991d342c5"
     }
   },
