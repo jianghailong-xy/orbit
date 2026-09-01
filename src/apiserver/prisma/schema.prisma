@@ -2027,13 +2027,6 @@ model ProjectCompletionContract {
   recipientDigest         String   @map("recipient_digest") @db.Char(64)
   semanticMaterial        Json     @map("semantic_material")
   evaluationPlanMaterial  Json     @map("evaluation_plan_material")
-  /// The permissiveness ceiling this project's configuration was last cut against: concurrency, the
-  /// two budgets, the coordinator switch, the automation policy and the threshold maps.
-  /// `contractDigest` binds THIS rather than the live values, so moving under the ceiling — or
-  /// tightening in any of these dimensions — leaves the digest where it is, while raising one
-  /// advances it. NULL until the envelope has ever been cut, which reads as "its current
-  /// configuration is its own ceiling".
-  authorityEnvelope       Json?    @map("authority_envelope")
   lastChangeReason        String   @map("last_change_reason")
   updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 

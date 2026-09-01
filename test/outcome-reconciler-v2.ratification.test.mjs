@@ -34,6 +34,12 @@ assert.ok(EVIDENCE_PATH, 'OWNER_RATIFICATION_EVIDENCE_PATH is required');
  * Two further groups: the 0211 fallback that rewrote ordinary engineering failures into owner
  * decisions is gone while the four real boundaries are untouched (m)-(n), and this change did not
  * overreach into HUMAN_SIGNOFF, into project acceptance, or into the deployment (o)-(q).
+ *
+ * A last group, (r)-(v), is the other half of the same subtraction. 0216's authority envelope was
+ * a permissiveness ceiling that only an APPROVAL could raise, and 0218 deleted approvals, so it
+ * became six functions computing "the current value". It is gone, and the hard part of removing it
+ * is proven rather than asserted: contractDigest -- which the proposal channel and the DONE gate
+ * are both keyed on -- does not move by one byte.
  */
 const pool = new Pool({ connectionString: URL, max: 12 });
 const ownerId = randomUUID();
@@ -44,6 +50,18 @@ const THE_FIVE_TABLES = [
   'project_ratification_template',
   'project_ratification_delegation',
 ];
+/** 0216 built six of these. 0218 already took the seventh, the trigger body. */
+const REMOVED_AUTHORITY_FUNCTIONS = [
+  'project_authority_policy_rank',
+  'project_authority_limit_ceiling',
+  'project_authority_envelope_material',
+  'project_authority_envelope',
+  'project_authority_envelope_ratified',
+  'project_authority_envelope_recut',
+];
+const ENVELOPE_REMOVAL_MIGRATION_DIR = '0219_project_authority_envelope_removal';
+/** Where the pre-removal composition is replayed, so "before" is a value and not a memory. */
+const PRE_REMOVAL_SCHEMA = 'authority_envelope_pre_removal';
 const REMOVED_WEB_FILES = [
   'src/web/src/pages/OwnerRatificationReviewPage.tsx',
   'src/web/src/pages/OwnerRatificationLegacyReviewPage.tsx',
@@ -80,6 +98,13 @@ const evidence = {
     humanSignoffUntouched: false,
     projectAcceptanceUntouched: false,
     noNewComposeServiceOrResidentProcess: false,
+    // The authority envelope is gone and took nothing with it.
+    contractSnapshotDoesNotReadTheEnvelope: false,
+    authorityEnvelopeHasNoResidualReference: false,
+    contractDigestUnmovedByEnvelopeRemoval: false,
+    envelopeRemovalFiledNoOwnerDecision: false,
+    envelopeRemovalDidNotTouchAcceptance: false,
+    envelopeRemovalIsSubtraction: false,
   },
   races: {
     // ABA: three independent ways an old proposal could come back to life, all refused.
@@ -88,6 +113,8 @@ const evidence = {
     abaIdentityReplacement: false,
   },
   removals: {
+    // Six functions, one trigger and one column.
+    authorityEnvelopeMachineryRemoved: false,
     // The 0211 fallback is gone and the four real boundaries are not.
     staleContractFallbackBranchRemoved: false,
     goalBoundaryStillRoutesToOwner: false,
@@ -238,6 +265,55 @@ async function installedFunction(name) {
   return rows[0].prosrc;
 }
 
+const ENVELOPE_REMOVAL_MIGRATION = read(
+  `src/apiserver/prisma/migrations/${ENVELOPE_REMOVAL_MIGRATION_DIR}/migration.sql`,
+);
+
+/**
+ * One function definition, lifted verbatim out of the append-only migration history.
+ *
+ * This is how "before" stays a fact rather than a transcription: the pre-removal composition is
+ * read from the file that installed it, not re-typed here, so a test that agreed with a mistake in
+ * the new body would have to find the same mistake already sitting in 0216 or 0218.
+ */
+function historicalFunction(migration, name) {
+  const source = read(`src/apiserver/prisma/migrations/${migration}/migration.sql`);
+  const match = source.match(new RegExp(
+    `CREATE (?:OR REPLACE )?FUNCTION ${name}\\([\\s\\S]*?\\n\\$\\$ LANGUAGE (?:sql|plpgsql)[A-Z ]*;`,
+  ));
+  assert.ok(match, `${migration} must still contain ${name}`);
+  return match[0];
+}
+
+/**
+ * Install the composition contractDigest had BEFORE the envelope was removed, under its own schema.
+ *
+ * The one substitution: the envelope reader took the approved ceiling from
+ * `project_completion_contract.authority_envelope`, and that column is dropped. It could only ever
+ * be written by the ratification trigger 0218 deleted, so on any database carrying 0218 it holds
+ * NULL for every row -- and NULL is what the replay hands the builder.
+ */
+async function installPreRemovalComposition() {
+  const replayed = [
+    historicalFunction('0216_project_authority_envelope', 'project_authority_policy_rank'),
+    historicalFunction('0216_project_authority_envelope', 'project_authority_limit_ceiling'),
+    historicalFunction('0216_project_authority_envelope', 'project_authority_envelope_material'),
+    historicalFunction('0216_project_authority_envelope', 'project_authority_envelope'),
+    historicalFunction('0218_owner_ratification_queue_removal',
+      'project_completion_contract_snapshot'),
+  ].join('\n\n')
+    .replaceAll('project_completion_contract_snapshot', `${PRE_REMOVAL_SCHEMA}.contract_snapshot`)
+    .replaceAll('project_authority_', `${PRE_REMOVAL_SCHEMA}.authority_`)
+    .replace('contract."authority_envelope"', 'NULL::jsonb');
+  assert.doesNotMatch(replayed, /contract\."authority_envelope"/,
+    'the replay must not read the dropped column');
+  assert.match(replayed, new RegExp(`${PRE_REMOVAL_SCHEMA}\\.authority_envelope\\(base`),
+    'the replayed snapshot must still be the one that reads an envelope');
+  await pool.query(`DROP SCHEMA IF EXISTS ${PRE_REMOVAL_SCHEMA} CASCADE`);
+  await pool.query(`CREATE SCHEMA ${PRE_REMOVAL_SCHEMA}`);
+  await pool.query(replayed);
+}
+
 test('requires an isolated PostgreSQL 16 carrying the removal migration', async () => {
   const server = (await pool.query(`
     SELECT current_database() AS database,
@@ -250,10 +326,13 @@ test('requires an isolated PostgreSQL 16 carrying the removal migration', async 
   assert.equal(server.system_identifier, EXPECTED_SYSTEM_IDENTIFIER);
   assert.match(server.version, /^1[6-9]\./);
   const applied = (await pool.query(
-    `SELECT count(*)::int AS count FROM _prisma_migrations
-      WHERE finished_at IS NOT NULL AND migration_name = '0218_owner_ratification_queue_removal'`,
-  )).rows[0].count;
-  assert.equal(applied, 1, 'the removal migration must be applied exactly once');
+    `SELECT migration_name FROM _prisma_migrations
+      WHERE finished_at IS NOT NULL AND migration_name = ANY($1::text[]) ORDER BY 1`,
+    [['0218_owner_ratification_queue_removal', ENVELOPE_REMOVAL_MIGRATION_DIR]],
+  )).rows.map((row) => row.migration_name);
+  assert.deepEqual(applied,
+    ['0218_owner_ratification_queue_removal', ENVELOPE_REMOVAL_MIGRATION_DIR],
+    'both removal migrations must be applied exactly once');
   evidence.postgres = {
     required: true,
     connected: true,
@@ -1193,4 +1272,281 @@ test('(q) this change adds no compose service and no resident process', () => {
   assert.doesNotMatch(migration, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /,
     'the migration starts nothing that keeps running after it commits');
   evidence.invariants.noNewComposeServiceOrResidentProcess = true;
+});
+
+// ------------------------------------------------------------------------------------------------
+// (r)-(v) The authority envelope, removed.
+//
+// 0216 built a permissiveness CEILING so that moving under an approved limit left contractDigest
+// where it was. 0218 deleted the approval queue, which took the only writer of that ceiling with
+// it, so what remained was six functions and a column recomputing "the current value" on every
+// snapshot. These five prove the removal happened and that it cost nothing.
+// ------------------------------------------------------------------------------------------------
+
+// (r) --------------------------------------------------------------------------------------------
+test('(r) the authority envelope is gone: six functions, its trigger, its column, no caller',
+  async () => {
+  const installed = (await pool.query(
+    'SELECT p.proname FROM pg_proc p WHERE p.proname = ANY($1::text[]) ORDER BY 1',
+    [REMOVED_AUTHORITY_FUNCTIONS],
+  )).rows.map((row) => row.proname);
+  assert.deepEqual(installed, [], 'every project_authority_* function must be dropped');
+
+  const triggers = (await pool.query(
+    `SELECT t.tgname FROM pg_trigger t
+      WHERE NOT t.tgisinternal AND t.tgname LIKE 'project_authority%'`,
+  )).rows.map((row) => row.tgname);
+  assert.deepEqual(triggers, [], 'project_authority_envelope_ratified must be gone with its table');
+
+  const column = (await pool.query(
+    `SELECT a.attname FROM pg_attribute a
+      WHERE a.attrelid = 'project_completion_contract'::regclass
+        AND a.attname = 'authority_envelope' AND NOT a.attisdropped`,
+  )).rows.map((row) => row.attname);
+  assert.deepEqual(column, [], 'project_completion_contract.authority_envelope must be dropped');
+  evidence.removals.authorityEnvelopeMachineryRemoved = true;
+
+  // The one function that DID call the envelope no longer does, and no longer publishes it either.
+  const snapshot = await installedFunction('project_completion_contract_snapshot');
+  assert.doesNotMatch(snapshot, /authority_envelope|authorityEnvelope|project_authority_/,
+    'the snapshot must neither read the envelope nor publish it');
+  const bodies = (await pool.query(
+    `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname IN ('public','outcome_projection')
+        AND p.prosrc ~ 'authority_envelope|authorityEnvelope|project_authority_' ORDER BY 1`,
+  )).rows.map((row) => row.proname);
+  assert.deepEqual(bodies, [], 'no installed function may still name the envelope');
+  const views = (await pool.query(
+    `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('v','m') AND pg_get_viewdef(c.oid) ~ 'authority_envelope' ORDER BY 1`,
+  )).rows.map((row) => row.relname);
+  assert.deepEqual(views, [], 'no view may still read the envelope');
+  evidence.invariants.contractSnapshotDoesNotReadTheEnvelope = true;
+
+  // The repository half, and the same reason as (a): this codebase reaches PostgreSQL through
+  // `$queryRaw`, so a dropped function survives `tsc` and fails in production.
+  // `0216_project_authority_envelope` is a migration DIRECTORY name and the history is append-only:
+  // a harness pinning the frontier at 0216 is naming a folder, not calling anything.
+  const residual = [];
+  for (const file of trackedSources()) {
+    // This suite is where the removal is asserted, so it names what it asserts the absence of.
+    if (file === 'test/outcome-reconciler-v2.ratification.test.mjs') continue;
+    for (const line of readFileSync(path.join(ROOT, file), 'utf8').split('\n')) {
+      if (/\d{4}_project_authority_envelope/.test(line)) continue;
+      for (const needle of ['project_authority_', 'authority_envelope', 'authorityEnvelope']) {
+        if (line.includes(needle)) residual.push(`${file}: ${needle}`);
+      }
+    }
+  }
+  assert.deepEqual([...new Set(residual)], [],
+    'no live source may still name the authority envelope');
+  evidence.invariants.authorityEnvelopeHasNoResidualReference = true;
+});
+
+// (s) --------------------------------------------------------------------------------------------
+test('(s) contractDigest is byte-identical across the removal, for every project', async () => {
+  // Six shapes across every dimension the envelope covered, so "identical" is not identical on one
+  // uniform row: both limit maps null, empty and populated; sessionBudgetPerDay absent, zero and
+  // set; all three automation policies; the coordinator switch both ways.
+  const shapes = [
+    { policy: 'GUARDED_AUTO', coordinator: true, concurrency: 3, sessions: 10,
+      attempt: { maxAttempts: 4 }, thresholds: { maxRepeats: 2 } },
+    { policy: 'MANUAL', coordinator: false, concurrency: 1, sessions: null,
+      attempt: null, thresholds: null },
+    { policy: 'AUTO', coordinator: true, concurrency: 9, sessions: 0,
+      attempt: { maxAttempts: 0 }, thresholds: {} },
+    { policy: 'GUARDED_AUTO', coordinator: true, concurrency: 7, sessions: 7,
+      attempt: { a: null, b: 60 }, thresholds: { c: null } },
+    { policy: 'AUTO', coordinator: false, concurrency: 12, sessions: 99,
+      attempt: {}, thresholds: null },
+    { policy: 'MANUAL', coordinator: true, concurrency: 2, sessions: 5,
+      attempt: null, thresholds: { maxRepeats: 0 } },
+  ];
+  for (const shape of shapes) {
+    const projectId = randomUUID();
+    await pool.query(
+      `INSERT INTO "project" (
+         "id","owner_id","title","goal","coordinator_enabled","automation_policy",
+         "max_concurrent_tasks","session_budget_per_day","attempt_budget","convergence_thresholds",
+         "updated_at"
+       ) VALUES ($1,$2,$3,$4,$5,$6::"project_automation_policy",$7,$8,$9::jsonb,$10::jsonb,now())`,
+      [projectId, ownerId, `envelope shape ${shape.policy}`, `goal for ${projectId}`,
+        shape.coordinator, shape.policy, shape.concurrency, shape.sessions,
+        shape.attempt === null ? null : JSON.stringify(shape.attempt),
+        shape.thresholds === null ? null : JSON.stringify(shape.thresholds)],
+    );
+    await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
+      [projectId, 'ENVELOPE_REMOVAL_SHAPE']);
+  }
+
+  await installPreRemovalComposition();
+  const rows = (await pool.query(
+    `SELECT p."id"::text AS project_id,
+            before.value->>'contractDigest' AS before_digest,
+            after.value->>'contractDigest' AS after_digest,
+            (before.value - 'authorityEnvelope')::text = after.value::text AS whole_snapshot
+       FROM "project" p,
+            LATERAL ${PRE_REMOVAL_SCHEMA}.contract_snapshot(p."id") AS before(value),
+            LATERAL project_completion_contract_snapshot(p."id") AS after(value)
+      ORDER BY p."id"`,
+  )).rows;
+  assert.ok(rows.length >= shapes.length,
+    'every project this suite has created is compared, not a sample');
+  assert.equal(rows.filter((row) => row.after_digest === null).length, 0,
+    'a null digest on either side would make the comparison vacuous');
+  for (const row of rows) {
+    assert.equal(row.after_digest, row.before_digest,
+      `project ${row.project_id} moved its contractDigest`);
+    assert.equal(row.whole_snapshot, true,
+      `project ${row.project_id} moved something else in its snapshot`);
+  }
+
+  // The one recorded envelope in production is a ceiling that has not drifted from the
+  // configuration it bounds. Handed it, the builder returns those same live values -- which is why
+  // substituting them is neutral for that project too. The migration does not take this on trust:
+  // it re-derives every project's whole snapshot and refuses to commit if one of them moved.
+  const productionCeiling = {
+    attemptBudget: null, automationPolicy: 'GUARDED_AUTO', convergenceThresholds: null,
+    coordinatorEnabled: true, maxConcurrentTasks: 3, sessionBudgetPerDay: 10,
+  };
+  const resolved = (await pool.query(
+    `SELECT ${PRE_REMOVAL_SCHEMA}.authority_envelope_material(
+       $1::jsonb, true, 'GUARDED_AUTO', 3, 10, NULL, NULL) AS result`,
+    [JSON.stringify(productionCeiling)],
+  )).rows[0].result;
+  assert.deepEqual(resolved, productionCeiling,
+    'a ceiling equal to the configuration it bounds resolves to that configuration');
+
+  await pool.query(`DROP SCHEMA ${PRE_REMOVAL_SCHEMA} CASCADE`);
+  evidence.invariants.contractDigestUnmovedByEnvelopeRemoval = true;
+  evidence.samples.contractDigestSet = digest(
+    rows.map((row) => `${row.project_id}:${row.after_digest}`).join('\n'));
+});
+
+// (t) --------------------------------------------------------------------------------------------
+test('(t) removing the envelope filed no owner decision and voided no proposal', async () => {
+  // Comments and both kinds of dollar-quoted body removed: what is left is the statements the file
+  // actually runs, which is what "wrote nothing" has to be true of.
+  const statements = ENVELOPE_REMOVAL_MIGRATION
+    .replace(/AS \$\$[\s\S]*?\$\$ LANGUAGE/g, 'AS $$ $$ LANGUAGE')
+    .replace(/DO \$\$[\s\S]*?END \$\$;/g, 'DO $$ $$;')
+    .split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
+  for (const relation of ['outcome_coordinator_owner_decision_request', 'project_criteria_proposal',
+    'project_completion_contract', 'project']) {
+    assert.doesNotMatch(statements,
+      new RegExp(`(INSERT INTO|UPDATE|DELETE FROM)\\s+"?${relation}\\b`, 'i'),
+      `the migration must contain no statement that writes ${relation}`);
+  }
+  // Re-cutting the contract is what would have derived a decision, and nothing re-cuts one: the
+  // stored contracts already carry the digest the new composition produces. The recut function is
+  // named exactly once in this file, on the line that deletes it.
+  assert.doesNotMatch(statements, /project_refresh_completion_contract/,
+    'the migration must refresh no contract');
+  assert.deepEqual(
+    statements.split('\n').filter((line) => line.includes('project_authority_envelope_recut')),
+    ['DROP FUNCTION project_authority_envelope_recut(UUID[]);'],
+    'the recut may only be dropped, never called');
+
+  // Live, and the part a file scan cannot reach: a proposal standing against the criteria set
+  // survives a re-cut under the new snapshot, and no owner decision appears behind it.
+  const fixture = await createProject('envelope-removal-negative');
+  const proposed = await propose(fixture, {
+    criteria: [criterionBody(fixture, { text: 'a different standard' })],
+  });
+  assert.equal(proposed.ok, true);
+  const decisionsBefore = (await pool.query(
+    'SELECT count(*)::int AS count FROM "outcome_coordinator_owner_decision_request"',
+  )).rows[0].count;
+  const proposalRow = async () => (await pool.query(
+    `SELECT "status","base_criteria_digest","card_digest","superseded_reason"
+       FROM "project_criteria_proposal" WHERE "id" = $1::uuid`,
+    [proposed.proposalId],
+  )).rows[0];
+  const before = await proposalRow();
+  assert.equal(before.status, 'PENDING');
+  await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
+    [fixture.projectId, 'ENVELOPE_REMOVAL_NEGATIVE']);
+  assert.deepEqual(await proposalRow(), before,
+    'the pending proposal must not move when the contract is re-cut');
+  assert.equal((await pool.query(
+    'SELECT count(*)::int AS count FROM "outcome_coordinator_owner_decision_request"',
+  )).rows[0].count, decisionsBefore, 'no owner decision request may be derived');
+  evidence.invariants.envelopeRemovalFiledNoOwnerDecision = true;
+});
+
+// (u) --------------------------------------------------------------------------------------------
+test('(u) removing the envelope did not reach project acceptance', async () => {
+  const topLevel = ENVELOPE_REMOVAL_MIGRATION.replace(/AS \$\$[\s\S]*?\$\$ LANGUAGE/g,
+    'AS $$ $$ LANGUAGE');
+  for (const relation of [
+    'project_acceptance_criterion_definition', 'project_acceptance_criterion',
+    'project_acceptance_run', 'project_acceptance_conclusion',
+  ]) {
+    assert.doesNotMatch(topLevel,
+      new RegExp(`(INSERT INTO|UPDATE|DELETE FROM|ALTER TABLE|DROP TABLE)\\s+"?${relation}`, 'i'),
+      `the migration must contain no statement that writes ${relation}`);
+  }
+  // The definitions a project is measured by round-trip field for field across the new snapshot,
+  // which reads them and writes nothing.
+  const fixture = await createProject('envelope-removal-acceptance');
+  const before = await criteriaRows(fixture.projectId);
+  assert.equal(before.length, 1, 'the fixture has the definition the comparison is about');
+  await pool.query('SELECT project_completion_contract_snapshot($1::uuid)', [fixture.projectId]);
+  await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
+    [fixture.projectId, 'ENVELOPE_REMOVAL_ACCEPTANCE']);
+  assert.deepEqual(await criteriaRows(fixture.projectId), before,
+    'the new snapshot must not move one field of a definition');
+  evidence.invariants.envelopeRemovalDidNotTouchAcceptance = true;
+});
+
+// (v) --------------------------------------------------------------------------------------------
+test('(v) this is subtraction: nothing new runs, and less SQL is in force than before', () => {
+  const compose = read('docker-compose.yml');
+  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  assert.deepEqual(services.sort(), [
+    'apiserver', 'executable-dead-man', 'gateway', 'outcome-coordinator',
+    'outcome-coordinator-secondary', 'pg-socket', 'pgbackup', 'postgres', 'watchdog', 'web',
+  ], 'the deployment is exactly the services it already had');
+  const packageJson = JSON.parse(read('package.json'));
+  const apiserver = JSON.parse(read('src/apiserver/package.json'));
+  assert.deepEqual(Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
+    ['start:dev', 'start:outcome-coordinator', 'start:watchdog'],
+    'no new long-running entry point');
+  assert.equal(Object.keys(packageJson.scripts).some((name) => /daemon|worker|cron/i.test(name)),
+    false, 'no new scheduled or resident runner');
+  assert.doesNotMatch(ENVELOPE_REMOVAL_MIGRATION, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /,
+    'the migration starts nothing that keeps running after it commits');
+
+  // Its whole DDL vocabulary: replace one function, drop five, drop one column. No table, no index,
+  // no trigger, no type -- the temporary table lives for the length of the transaction and holds
+  // what the digests were before the redefinition.
+  const ddl = [...ENVELOPE_REMOVAL_MIGRATION.matchAll(
+    /^(?:CREATE|ALTER|DROP)(?: OR REPLACE)?(?: TEMPORARY)? [A-Z]+/gm)].map((match) => match[0]);
+  assert.deepEqual([...new Set(ddl)].sort(), [
+    'ALTER TABLE', 'CREATE OR REPLACE FUNCTION', 'CREATE TEMPORARY TABLE', 'DROP FUNCTION',
+  ], 'the migration creates no relation and no trigger');
+  assert.match(ENVELOPE_REMOVAL_MIGRATION,
+    /ALTER TABLE "project_completion_contract" DROP COLUMN "authority_envelope";/);
+
+  // "Fewer lines" measured where the claim is actually true and stays true: the SQL the database
+  // RUNS. A landed migration is never deleted, so counting the working tree would count the
+  // append-only history and report the opposite of what happened. In force before this file: the
+  // snapshot builder plus the six envelope functions. In force after it: the snapshot builder.
+  const before = [
+    ['0216_project_authority_envelope', 'project_authority_policy_rank'],
+    ['0216_project_authority_envelope', 'project_authority_limit_ceiling'],
+    ['0216_project_authority_envelope', 'project_authority_envelope_material'],
+    ['0216_project_authority_envelope', 'project_authority_envelope'],
+    ['0216_project_authority_envelope', 'project_authority_envelope_ratified'],
+    ['0218_owner_ratification_queue_removal', 'project_authority_envelope_recut'],
+    ['0218_owner_ratification_queue_removal', 'project_completion_contract_snapshot'],
+  ].reduce((total, [migration, name]) =>
+    total + historicalFunction(migration, name).split('\n').length, 0);
+  const after = historicalFunction(
+    ENVELOPE_REMOVAL_MIGRATION_DIR, 'project_completion_contract_snapshot',
+  ).split('\n').length;
+  assert.ok(after < before,
+    `the SQL in force must shrink: ${after} lines replaced ${before}`);
+  evidence.invariants.envelopeRemovalIsSubtraction = true;
+  evidence.samples.sqlInForce = digest(`${before}->${after}`);
 });

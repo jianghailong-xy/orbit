@@ -64,6 +64,7 @@ const sourceFiles = [
   'scripts/outcome-reconciler-ratification.sh',
   'src/apiserver/prisma/migrations/0217_project_criteria_proposal_card/migration.sql',
   'src/apiserver/prisma/migrations/0218_owner_ratification_queue_removal/migration.sql',
+  'src/apiserver/prisma/migrations/0219_project_authority_envelope_removal/migration.sql',
   'src/apiserver/prisma/schema.prisma',
   'src/apiserver/src/common/db-write-inventory.ts',
   'src/apiserver/src/projects/dto.ts',
