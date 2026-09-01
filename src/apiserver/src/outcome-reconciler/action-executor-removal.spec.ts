@@ -171,16 +171,13 @@ test('the executor removal is subtraction: it installs no new relation', () => {
   }
 });
 
-test('the load-bearing acceptance and canonical relations were not taken down with it', () => {
+// The canonical fact/obligation relations used to be asserted here too. 0222 removed the whole
+// obligation algebra by a separate account-owner decision, so what this file still owns is the
+// acceptance evidence and the EXECUTABLE admission/attempt machinery.
+test('the load-bearing acceptance relations were not taken down with it', () => {
   const standing = [
     'task_executable_attempt',
     'task_executable_admission',
-    'outcome_canonical_fact',
-    'outcome_obligation_revision',
-    'outcome_obligation_event',
-    'outcome_obligation_reduction',
-    'outcome_obligation_successor',
-    'outcome_active_obligation',
     'project_acceptance_run',
     'project_acceptance_criterion',
     'project_acceptance_criterion_definition',

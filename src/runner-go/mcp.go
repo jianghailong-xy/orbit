@@ -372,24 +372,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "project_obligations":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		surface := getString(args, "surface")
-		if surface == "" {
-			surface = "AGENT_QUEUE"
-		}
-		if !isOutcomeSurface(surface) {
-			return toolResult("surface must be one of DONE_GATE, AGENT_QUEUE, PROJECT_ATTENTION, WEB", true)
-		}
-		raw, err := s.t.getProjectOutcome(id, surface)
-		if err != nil {
-			return toolResult("get project obligations failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "project_acceptance_run":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1794,29 +1776,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"branch was last observed to CONTAIN and at which " +
 				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
 				"and refused, and every reopen with the fact that caused it; the current " +
-				"revision-bearing criteriaDigest and its set-level confirmation; and canonical " +
-				"doneGate — the exact binding/evaluation cut, proof graph, active obligations, " +
-				"structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED " +
-				"carries that complete view; unknown types, stale projection and read failures deny " +
-				"closure explicitly. Legacy blocker/signal summaries do not decide closure.",
+				"revision-bearing criteriaDigest and its set-level confirmation; and doneGate — " +
+				"allowed, or the code and sentence the write would be refused with " +
+				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker " +
+				"or unresolved verification failure is still open).",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
-				},
-			}, "projectId"),
-		},
-		{
-			"name":        "project_obligations",
-			"description": "Read the canonical obligation surface for this project. All surfaces preserve the exact obligation id/revision, semantic binding, reason/proof and evaluated-through watermark; only the authenticated AGENT CTA differs. AGENT_QUEUE is the default. A stale projection is an explicit control-plane error and never an empty queue.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type": "string", "description": "The project to read.",
-				},
-				"surface": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"DONE_GATE", "AGENT_QUEUE", "PROJECT_ATTENTION", "WEB"},
-					"description": "Actor view to read; defaults to AGENT_QUEUE.",
 				},
 			}, "projectId"),
 		},

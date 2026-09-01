@@ -5,7 +5,8 @@ import { ProjectAcceptanceVerdict, TaskCompletionCriterion } from '@prisma/clien
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import {
   ACCEPTANCE_DIGEST_VERSION,
-  CANONICAL_DONE_GATE_BLOCKED,
+  ACCEPTANCE_FINDING_ROUTING,
+  ACCEPTANCE_MISSING,
   criteriaFromDefinitions,
   criteriaSemanticRevision,
   sha256,
@@ -16,42 +17,6 @@ const PROJECT_ID = '00000000-0000-7000-8000-000000000101';
 const RUN_ID = '00000000-0000-7000-8000-000000000201';
 const CRITERION_A_ID = '00000000-0000-7000-8000-000000000301';
 const CRITERION_B_ID = '00000000-0000-7000-8000-000000000302';
-
-function canonicalGate(overrides: Record<string, unknown> = {}) {
-  const reason = {
-    code: 'CRITERION_UNSATISFIED',
-    category: 'EVALUATION',
-    message: '#2 "Image boots" is UNSATISFIED on the current cut.',
-    owner: OWNER_ID,
-    actor: 'OWNER',
-    nextAction: 'provide-proof-for-image-boots',
-    blocksGate: true,
-    evidenceFactIds: [],
-    attemptedActions: [],
-    detail: { criterionId: CRITERION_B_ID },
-  };
-  return {
-    schemaVersion: 2,
-    allowed: false,
-    decision: 'DENY',
-    staleness: 'CURRENT',
-    canonicalIdentity: { bindingDigest: 'b'.repeat(64), evaluationCutId: 'cut-1' },
-    proof: { conclusion: 'UNSATISFIED' },
-    proofGraph: { conclusion: 'UNSATISFIED' },
-    reasons: [reason],
-    blockingReasons: [reason],
-    diagnostics: [],
-    reason,
-    obligations: [],
-    blockingObligations: [],
-    nonBlockingObligations: [],
-    owner: OWNER_ID,
-    actor: 'OWNER',
-    nextAction: reason.nextAction,
-    compatibility: { legacyBlockerSignalInputs: false, projectionIsAuthority: false },
-    ...overrides,
-  };
-}
 
 function definition(id: string, ordinal: number, text: string, revision = 1) {
   return {
@@ -94,10 +59,45 @@ test('acceptance facts omit task state while retaining an empty mechanical-evide
   });
 });
 
-test('a denied canonical gate returns its complete structured reason and next action', async () => {
-  const gate = canonicalGate();
+test('a non-PASS gate refusal names the exact acceptance criterion and routing rule', async () => {
+  const definitions = [
+    definition(CRITERION_A_ID, 1, 'Build succeeds'),
+    definition(CRITERION_B_ID, 2, 'Image boots'),
+  ];
+  let rawRead = 0;
   const prisma = {
-    $queryRaw: async () => [{ gate }],
+    projectAcceptanceCriterionDefinition: { findMany: async () => definitions },
+    projectAcceptanceConclusion: {
+      findMany: async () => [
+        {
+          id: 'event-a', criterionKey: sha256('Build succeeds').slice(0, 32),
+          definitionId: CRITERION_A_ID,
+          definitionRevision: 1, verdict: ProjectAcceptanceVerdict.PASS, summary: null,
+          evidence: {}, evidenceTaskId: null, evidenceSessionId: null,
+          decidedAt: new Date('2026-08-24T12:00:00.000Z'), evidenceVersion: 1n,
+        },
+        {
+          id: 'event-b', criterionKey: sha256('Image boots').slice(0, 32),
+          definitionId: CRITERION_B_ID,
+          definitionRevision: 1, verdict: ProjectAcceptanceVerdict.FAIL, summary: null,
+          evidence: {}, evidenceTaskId: null, evidenceSessionId: null,
+          decidedAt: new Date('2026-08-24T12:00:00.000Z'), evidenceVersion: 1n,
+        },
+      ],
+      createMany: async () => ({ count: 0 }),
+    },
+    $queryRaw: async () => {
+      rawRead += 1;
+      return [{ count: 0 }];
+    },
+    projectAcceptanceRun: {
+      findFirst: async () => ({ id: RUN_ID, attempt: 1n }),
+    },
+    project: {
+      findUnique: async () => ({ acceptanceCriteria: 'legacy' }),
+      findUniqueOrThrow: async () => ({ acceptanceCriteria: 'legacy' }),
+    },
+    // Intentionally no `task` delegate: task completion cannot make this refusal disappear.
   };
 
   await assert.rejects(
@@ -105,15 +105,20 @@ test('a denied canonical gate returns its complete structured reason and next ac
     (error: unknown) => {
       assert.ok(error instanceof AcceptanceRefusal);
       const body = error.getResponse() as Record<string, unknown>;
-      assert.equal(body.code, CANONICAL_DONE_GATE_BLOCKED);
-      assert.equal(body.reasonCode, 'CRITERION_UNSATISFIED');
-      assert.equal(body.requiredAction, 'provide-proof-for-image-boots');
-      assert.deepEqual(body.doneGate, gate);
+      assert.equal(body.code, ACCEPTANCE_MISSING);
+      assert.match(String(body.message), /#2 \"Image boots\" \(FAIL\)/);
+      assert.match(String(body.message), /changes an acceptance criterion/);
+      assert.deepEqual(body.unmetCriteria, [{
+        ordinal: 2,
+        criterionKey: sha256('Image boots').slice(0, 32),
+        criterionText: 'Image boots',
+        verdict: 'FAIL',
+      }]);
+      assert.ok(rawRead >= 1, 'the blocker/verification-failure counts are read at the gate');
       return true;
     },
   );
 });
-
 test('criteriaSummary remaps a matching run by stable id after a pure reorder', async () => {
   const current = [
     definition(CRITERION_B_ID, 1, 'Image boots'),
@@ -440,23 +445,13 @@ test('finalizeRun rejects a partial checklist and names every missing ordinal', 
   );
 });
 
-test('evaluateGate returns one canonical cut and gives that read explicit scale headroom', async () => {
-  let gateReads = 0;
+test('evaluateGate digests a large project once and gives that read explicit scale headroom', async () => {
+  let digestReads = 0;
   let transactionOptions: unknown;
-  const gate = canonicalGate({
-    allowed: true,
-    decision: 'ALLOW',
-    proof: { conclusion: 'SATISFIED' },
-    proofGraph: { conclusion: 'SATISFIED' },
-    reasons: [],
-    blockingReasons: [],
-    blockingObligations: [],
-  });
   const tx = {
-    $queryRaw: async () => {
-      gateReads += 1;
-      return [{ gate }];
-    },
+    project: { findUniqueOrThrow: async () => ({ acceptanceCriteria: 'legacy' }) },
+    projectAcceptanceRun: { findFirst: async () => null },
+    $queryRaw: async () => [{ count: 0 }],
   };
   const prisma = {
     $transaction: async (work: (client: typeof tx) => unknown, options: unknown) => {
@@ -465,10 +460,22 @@ test('evaluateGate returns one canonical cut and gives that read explicit scale 
     },
   };
   const service = new ProjectAcceptanceService(prisma as never);
+  service.digest = async () => {
+    digestReads += 1;
+    return 'current-digest';
+  };
 
   const evaluated = await service.evaluateGate(PROJECT_ID);
 
-  assert.equal(gateReads, 1, 'the read must resolve one canonical evaluator cut');
+  assert.equal(digestReads, 1, 'the overview must not materialize and hash every task twice');
   assert.deepEqual(transactionOptions, { timeout: 30_000, maxWait: 10_000 });
-  assert.deepEqual(evaluated, gate);
+  assert.deepEqual(evaluated, {
+    digest: 'current-digest',
+    allowed: false,
+    runId: null,
+    code: ACCEPTANCE_MISSING,
+    reason:
+      'this project has no current evidence version — evaluate the current evidence set once ' +
+      'before recording DONE. ' + ACCEPTANCE_FINDING_ROUTING,
+  });
 });

@@ -23,7 +23,6 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
-import { establishCanonicalClosedEvaluationForPgTest } from '../outcome-reconciler/outcome-closed-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -343,11 +342,6 @@ test('late typed attempts advance the evidence version and back all four wired E
         overview.runs[0]?.criteria.map((criterion) => criterion.verdict),
         Array(4).fill(ProjectAcceptanceVerdict.INCONCLUSIVE),
       );
-      assert.deepEqual(
-        (overview.doneGate.evaluationPlanMaterial as { collectorVersions?: string[] } | undefined)
-          ?.collectorVersions ?? [EXECUTABLE_ATTEMPT_COLLECTOR_VERSION],
-        [EXECUTABLE_ATTEMPT_COLLECTOR_VERSION],
-      );
       const criteriaRevision = overview.runs[0]!.criteriaRevision;
       const criteriaDigest = overview.criteriaDigest;
       const initialConclusionIds = new Set(overview.runs[0]!.conclusions.map((event) => event.id));
@@ -422,9 +416,6 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
       acceptanceExpectedExitCode: 0,
       evidenceTaskId: source.id,
     });
-    await establishCanonicalClosedEvaluationForPgTest(
-      db, target.ownerId, target.projectId, 'executable criterion passes', 'executable',
-    );
 
     const run = await acceptance.openRun(
       target.ownerId,
@@ -497,9 +488,6 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
       completionCriterion: TaskCompletionCriterion.VERIFICATION,
       evidenceTaskId: verifier.id,
     });
-    await establishCanonicalClosedEvaluationForPgTest(
-      db, target.ownerId, target.projectId, 'verification criterion passes', 'verification',
-    );
     // The same trigger the two verdict steps below use, and the one the runner API and
     // tasks.service call whenever an evidence Task moves. It is what makes the first assertion
     // "an undecided verifier projects INCONCLUSIVE" rather than the far weaker "nothing has
@@ -534,9 +522,6 @@ test('HUMAN_SIGNOFF waits for the human criterion conclusion', { skip }, async (
       verificationMethod: 'Owner reviews the release tradeoff',
       completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
     });
-    await establishCanonicalClosedEvaluationForPgTest(
-      db, target.ownerId, target.projectId, 'owner accepts the release tradeoff', 'human',
-    );
     assert.equal(
       await db.project.findUniqueOrThrow({ where: { id: target.projectId } }).then((p) => p.status),
       ProjectStatus.OPEN,

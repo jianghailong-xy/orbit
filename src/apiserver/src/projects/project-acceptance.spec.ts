@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { NEVER_PUBLIC_ID_FIELDS, PUBLIC_ID_FIELDS } from '@orbit/shared';
 import {
   ACCEPTANCE_BLOCKED,
-  CANONICAL_DONE_GATE_BLOCKED,
   ACCEPTANCE_MISSING,
   ACCEPTANCE_DIGEST_VERSION,
   AcceptanceFacts,
@@ -196,9 +195,8 @@ test('acceptance refusals distinguish missing conclusions from known blockers', 
     [...new Set([
       ACCEPTANCE_MISSING,
       ACCEPTANCE_BLOCKED,
-      CANONICAL_DONE_GATE_BLOCKED,
     ])].sort(),
-    ['ACCEPTANCE_BLOCKED', 'ACCEPTANCE_MISSING', 'CANONICAL_DONE_GATE_BLOCKED'],
+    ['ACCEPTANCE_BLOCKED', 'ACCEPTANCE_MISSING'],
   );
 });
 

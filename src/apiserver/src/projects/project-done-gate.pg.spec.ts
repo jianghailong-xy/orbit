@@ -14,7 +14,6 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
-import { establishCanonicalClosedEvaluationForPgTest } from '../outcome-reconciler/outcome-closed-test-helper';
 import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -144,12 +143,9 @@ test('all criteria PASS allows DONE with an OPEN task; only a criterion change r
       ProjectAcceptanceVerdict.PASS,
       ProjectAcceptanceVerdict.PASS,
     ]);
-    await establishCanonicalClosedEvaluationForPgTest(
-      db, target.ownerId, target.projectId, 'both project criteria pass', 'pass-open-task',
-    );
 
     const before = await acceptance.evaluateGate(target.projectId);
-    assert.equal(before.allowed, true, String(before.reason.message ?? 'gate refused without a reason'));
+    assert.equal(before.allowed, true, String(before.reason ?? 'gate refused without a reason'));
     await settle(db, acceptance, target);
 
     const settled = await db.project.findUniqueOrThrow({
@@ -203,9 +199,9 @@ test('all tasks DONE cannot pass a failed criterion, and both gates name that cr
     );
     const serviceGate = await acceptance.evaluateGate(target.projectId);
     assert.equal(serviceGate.allowed, false);
-    assert.equal(serviceGate.decision, 'DENY');
-    assert.ok(serviceGate.blockingReasons.length > 0);
-    assert.equal(typeof serviceGate.reason.code, 'string');
+    assert.equal(serviceGate.runId, null);
+    assert.equal(typeof serviceGate.code, 'string');
+    assert.equal(typeof serviceGate.reason, 'string');
 
     const client = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
     await client.connect();
@@ -217,7 +213,7 @@ test('all tasks DONE cannot pass a failed criterion, and both gates name that cr
         ),
         (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          assert.match(message, /CANONICAL_DONE_GATE_BLOCKED/);
+          assert.match(message, /ACCEPTANCE_MISSING|ACCEPTANCE_BLOCKED|ACCEPTANCE_EVIDENCE_STALE/);
           return true;
         },
       );

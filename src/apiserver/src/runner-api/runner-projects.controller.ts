@@ -115,22 +115,9 @@ export class RunnerProjectsController {
     return this.projects.get(runner.ownerId, id);
   }
 
-  /** The same semantic projection served to the owner and Web, with an AGENT-derived CTA. */
-  @Get('projects/:id/outcome')
-  projectOutcome(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Query('surface') requestedSurface = 'AGENT_QUEUE',
-  ) {
-    return this.outcomeSurfaces.readProjectSurface({
-      tenantId: runner.ownerId,
-      projectId: id,
-      surface: this.outcomeSurfaces.parseSurface(requestedSurface),
-      actor: 'AGENT',
-    });
-  }
-
-  /** Canonical failure queue is independent from the generic outcome projection's availability. */
+  /** The canonical obligation surface this door served was removed with the obligation algebra;
+   *  `orbit project obligations` / MCP `project_obligations` went with it. Failure Continuations
+   *  never came from that projection and keep their own door below. */
   @Get('projects/:id/failure-coordination')
   projectFailureCoordination(
     @CurrentRunner() runner: Runner,

@@ -37,7 +37,6 @@ Usage:
   orbit project crossings PROJECT_ID [--state STATE] [--json]
   orbit project reopen-impact PROJECT_ID [--json]
   orbit project acceptance PROJECT_ID [--json]
-  orbit project obligations PROJECT_ID [--surface SURFACE] [--json]
   orbit project acceptance-run PROJECT_ID [--json]
   orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
@@ -126,25 +125,15 @@ Returns:
                    refGeneration
   audit            append-only: runs opened and concluded, DONEs bound and refused, and
                    every reopen with the fact that caused it
-  doneGate         the exact current binding/evaluation identity, proof graph, canonical
-                   obligations, structured reasons, owner/actor and next action; UNKNOWN,
-                   stale projection and read failure all deny closure explicitly
+  doneGate         whether a DONE would be allowed right now and, if not, the code and the
+                   sentence the write would be refused with
 
-DONE refusal uses CANONICAL_DONE_GATE_BLOCKED and returns the full doneGate. Its reason codes name
-the actual dimension, delivery, obligation, attribution or reconciler condition.
-Legacy blocker/signal summaries are diagnostic history and do not independently decide closure.
+The two refusals: ACCEPTANCE_MISSING (there is no current evidence version, or one or more current
+criteria have no PASS conclusion) and ACCEPTANCE_BLOCKED (an open blocker or an unresolved
+verification failure). Evidence changes advance the version and are re-evaluated; they do not
+create a stale-attempt refusal.
 
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
-`,
-	"obligations": `orbit project obligations — the canonical next obligations for this actor
-
-Usage:
-  orbit project obligations PROJECT_ID [--surface AGENT_QUEUE|DONE_GATE|PROJECT_ATTENTION|WEB] [--json]
-
-Every view carries the same obligation id and revision, semantic binding, structured reason and
-proof, and evaluated-through watermark as the API and Web. Only the AGENT-specific CTA is derived
-for this runner. AGENT_QUEUE is the default. RECONCILER_STALE is an error state, never an empty
-queue and never evidence that the project has nothing left to do.
 `,
 	"acceptance-run": `orbit project acceptance-run — evaluate the current evidence version
 
@@ -325,8 +314,7 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_reopen_impact", Argv: []string{"orbit", "project", "reopen-impact"}, Usage: "orbit project reopen-impact PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what reopening a settled project would cost: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, readable afterwards and no longer a claim about the world the project is in — so an account owner asked for one should be asked with those numbers in hand. Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into."},
-	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the current acceptance history and the canonical doneGate: exact binding/evaluation cut, proof graph, active obligations, structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED carries this complete view; unknown types, stale projection and read failures deny closure explicitly, while legacy blocker/signal summaries do not decide it."},
-	{Tool: "project_obligations", Argv: []string{"orbit", "project", "obligations"}, Usage: "orbit project obligations PROJECT_ID [--surface SURFACE] [--json]", Arguments: []string{"[project-id] (required)", "--surface <AGENT_QUEUE|DONE_GATE|PROJECT_ATTENTION|WEB>", "--json"}, Description: "Read the canonical obligation identity, revision, binding, structured reason/proof and evaluated-through watermark, with only the AGENT CTA derived for this runner. Stale projection is explicit and never an empty queue."},
+	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the current acceptance evaluation: peer criteria, the criteria+merge evidence identity, the revision-bearing standard-set digest and its confirmation, immutable evidence versions, append-only conclusion events, merge observations, audit and doneGate. Refusals are ACCEPTANCE_MISSING and ACCEPTANCE_BLOCKED; evidence changes are evaluated instead of becoming stale attempts."},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Evaluate the current project acceptance evidence version. This is idempotent: concurrent callers observing the same criteria and merge evidence receive the same version. Evidence changes advance it automatically; prior conclusion events carry forward until refuted.", Mutates: true},
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the evidence version to conclude against)", "--criteria <json> | --criteria-file - (one entry per HUMAN_SIGNOFF criterion: {criterionId|ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Append evidence-backed conclusion events for HUMAN_SIGNOFF criteria. EXECUTABLE and VERIFICATION reject fallback human verdicts and use their declared durable input. Current PASS/FAIL/INCONCLUSIVE is derived from the peer outcomes; every event records who, when and which evidence version. A judgment-session or machine-attributed call may refute; human PASS uses the owner-attributed channel. That is workflow and audit provenance, not proof of human presence.", Mutates: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up, advances the evidence version automatically, and re-evaluates the current acceptance standing without a manual reopen.", Mutates: true},
@@ -376,8 +364,6 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectReopenImpact(args[1:], out)
 	case "acceptance":
 		return cliProjectAcceptance(args[1:], out)
-	case "obligations":
-		return cliProjectObligations(args[1:], out)
 	case "acceptance-run":
 		return cliProjectAcceptanceRun(args[1:], out)
 	case "acceptance-verdict":
@@ -509,41 +495,6 @@ func cliProjectAcceptance(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func isOutcomeSurface(surface string) bool {
-	switch surface {
-	case "DONE_GATE", "AGENT_QUEUE", "PROJECT_ATTENTION", "WEB":
-		return true
-	}
-	return false
-}
-
-func cliProjectObligations(args []string, out io.Writer) error {
-	id, rest := peelLeadingID(args)
-	fs := newCLIFlagSet("orbit project obligations")
-	surface := fs.String("surface", "AGENT_QUEUE", "canonical surface to read")
-	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	if err := fs.Parse(rest); err != nil {
-		return err
-	}
-	if err := rejectTrailing(fs); err != nil {
-		return err
-	}
-	if id == "" {
-		return fmt.Errorf("project id is required")
-	}
-	if !isOutcomeSurface(*surface) {
-		return fmt.Errorf("--surface must be one of AGENT_QUEUE, DONE_GATE, PROJECT_ATTENTION, WEB")
-	}
-	t, err := cliTransport()
-	if err != nil {
-		return err
-	}
-	raw, err := t.getProjectOutcome(id, *surface)
-	if err != nil {
-		return fmt.Errorf("get project obligations: %w", err)
-	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
-}
 
 func cliProjectAcceptanceRun(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)

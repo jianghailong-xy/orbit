@@ -47,12 +47,10 @@ export const ACCEPTANCE_FINDING_ROUTING =
  * still prevents settlement. Evidence changes are evaluated and never form a third stale state. */
 export const ACCEPTANCE_MISSING = 'ACCEPTANCE_MISSING';
 export const ACCEPTANCE_BLOCKED = 'ACCEPTANCE_BLOCKED';
-export const CANONICAL_DONE_GATE_BLOCKED = 'CANONICAL_DONE_GATE_BLOCKED';
 
 export type AcceptanceRefusalCode =
   | typeof ACCEPTANCE_MISSING
-  | typeof ACCEPTANCE_BLOCKED
-  | typeof CANONICAL_DONE_GATE_BLOCKED;
+  | typeof ACCEPTANCE_BLOCKED;
 
 export type ProjectCriterionKind = 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
 

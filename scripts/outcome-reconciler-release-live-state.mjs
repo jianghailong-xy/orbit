@@ -407,138 +407,36 @@ assert.match(mergeReceipt.targetShaBefore, SHA);
 if (mergeReceipt.result === 'MERGED') assert.notEqual(mergeReceipt.targetShaBefore, targetSha);
 else assert.equal(mergeReceipt.targetShaBefore, targetSha);
 
+// 0222 removed the obligation algebra, the canonical DONE gate and delivery attestation. The
+// live-state boundary used to read one current binding, its sealed evaluation cut, the fact
+// summary, the delivery receipts and the canonical gate out of the deployment. There is nothing
+// behind those reads any more, so what replaces them is the assertion that the relations are gone
+// rather than merely empty — the same shape 0221 left below for the watchdog binding ledger.
 const canonicalState = queryJson(`
-  WITH current_binding AS (
-    SELECT * FROM outcome_fact_binding
-     WHERE tenant_id='${contract.ownerRatification.ownerDatabaseId}'::uuid
-       AND project_id='${contract.project.databaseId}'::uuid
-     ORDER BY binding_epoch DESC LIMIT 1
-  ), current_evaluation AS (
-    SELECT evaluation.* FROM outcome_evaluator_result evaluation
-    JOIN current_binding binding USING (tenant_id,project_id,binding_digest)
-     WHERE evaluation.subject_type='PROJECT'
-       AND evaluation.subject_id='${contract.project.databaseId}'
-     ORDER BY evaluation.watermark_logical_time DESC, evaluation.committed_at DESC LIMIT 1
-  ), fact_summary AS (
-    SELECT jsonb_build_object(
-      'count', count(*),
-      'dimensionCount', count(DISTINCT fact.payload->>'dimensionId'),
-      'evidenceDigests', jsonb_agg(DISTINCT fact.payload->>'releaseEvidenceDigest'),
-      'evidenceIds', jsonb_agg(DISTINCT fact.payload->>'releaseEvidenceId'),
-      'targetShas', jsonb_agg(DISTINCT fact.payload->>'targetSha'),
-      'artifactDigests', jsonb_agg(DISTINCT fact.payload->>'artifactDigest'),
-      'pendingDimensions', COALESCE(jsonb_agg(fact.payload->>'dimensionId')
-        FILTER (WHERE fact.payload->>'state'='UNSATISFIED'), '[]'::jsonb),
-      'pendingReasons', COALESCE(jsonb_agg(fact.payload->>'reasonCode')
-        FILTER (WHERE fact.payload->>'state'='UNSATISFIED'), '[]'::jsonb),
-      'nonTerminalCount', count(*) FILTER (
-        WHERE fact.payload->>'state' NOT IN ('SATISFIED','NOT_APPLICABLE'))
-    ) AS value
-      FROM outcome_canonical_fact fact
-      JOIN current_binding binding USING (tenant_id,project_id,binding_digest)
-     WHERE fact.fact_kind='DIMENSION_EVALUATED'
-  ), delivery AS (
-    SELECT jsonb_build_object(
-      'deliveryBindingDigest', binding.delivery_binding_digest::text,
-      'bindingRevisionDigest', binding.binding_revision_digest::text,
-      'targetSha', binding.current_target_sha,
-      'targetContentDigest', binding.current_target_content_digest::text,
-      'artifactDigest', binding.artifact_digest::text,
-      'attestationCount', (SELECT count(*) FROM outcome_delivery_attestation attestation
-        WHERE attestation.tenant_id=binding.tenant_id
-          AND attestation.project_id=binding.project_id
-          AND attestation.binding_revision_digest=binding.binding_revision_digest
-          AND attestation.result IN ('INTEGRATED','ALREADY_INTEGRATED')),
-      'verificationCount', (SELECT count(*) FROM outcome_delivery_verification verification
-        WHERE verification.tenant_id=binding.tenant_id
-          AND verification.project_id=binding.project_id
-          AND verification.binding_revision_digest=binding.binding_revision_digest
-          AND verification.result='PASS' AND verification.exit_code=0
-          AND verification.skip_count=0)
-    ) AS value
-      FROM outcome_delivery_binding binding
-      JOIN current_binding canonical
-        ON canonical.tenant_id=binding.tenant_id AND canonical.project_id=binding.project_id
-       AND canonical.binding_digest=binding.canonical_binding_digest
-     ORDER BY binding.binding_sequence DESC LIMIT 1
-  )
   SELECT jsonb_build_object(
-    'binding', (SELECT jsonb_build_object(
-      'digest', binding_digest::text, 'epoch', binding_epoch::text,
-      'targetDigest', target_digest::text, 'targetRef', target_ref,
-      'binding', binding
-    ) FROM current_binding),
-    'evaluation', (SELECT jsonb_build_object(
-      'id', evaluation_id::text, 'cutId', cut_id::text,
-      'watermarkLogicalTime', watermark_logical_time::text,
-      'evaluatorDigest', evaluator_digest::text,
-      'proofDigest', proof_digest::text, 'closed', is_closed,
-      'factCutDigest', result#>>'{proof,factCutDigest}',
-      'modelGaps', result#>'{proof,modelGaps}',
-      'activeMandatoryObligations', result->'activeMandatoryObligations'
-    ) FROM current_evaluation),
-    'cut', (SELECT jsonb_build_object(
-      'id', cut.cut_id::text, 'bindingDigest', cut.binding_digest::text,
-      'watermarkLogicalTime', cut.watermark_logical_time::text,
-      'factCount', cut.fact_count, 'proofFactCount', cut.proof_fact_count,
-      'factSetDigest', cut.fact_set_digest::text,
-      'complete', cut.complete, 'linearizable', cut.linearizable
-    ) FROM outcome_evaluation_cut cut JOIN current_evaluation evaluation
-      ON evaluation.tenant_id=cut.tenant_id AND evaluation.project_id=cut.project_id
-     AND evaluation.cut_id=cut.cut_id),
-    'facts', (SELECT value FROM fact_summary),
-    'delivery', (SELECT value FROM delivery),
-    'doneGate', project_canonical_done_gate(
-      '${contract.project.databaseId}'::uuid, 'PROJECT', '${contract.project.databaseId}')
+    'factStream', to_regclass('public.outcome_fact_stream')::text,
+    'factBinding', to_regclass('public.outcome_fact_binding')::text,
+    'canonicalFact', to_regclass('public.outcome_canonical_fact')::text,
+    'evaluatorResult', to_regclass('public.outcome_evaluator_result')::text,
+    'activeObligation', to_regclass('public.outcome_active_obligation')::text,
+    'deliveryAttestation', to_regclass('public.outcome_delivery_attestation')::text,
+    'projectionSchema', (SELECT nspname FROM pg_namespace WHERE nspname='outcome_projection'),
+    'canonicalDoneGate', (SELECT proname FROM pg_proc WHERE proname='project_canonical_done_gate'),
+    'acceptanceDoneGate', (SELECT proname FROM pg_proc WHERE proname='project_acceptance_done_gate')
   )
 `);
-assert.ok(canonicalState.binding);
-assert.match(canonicalState.binding.digest, DIGEST);
-assert.equal(canonicalState.binding.targetDigest, targetDigest);
-assert.equal(canonicalState.binding.targetRef, contract.repository.targetRef);
-assert.equal(canonicalState.binding.binding.contractDigest,
-  contract.ownerRatification.contractDigest);
-assert.equal(canonicalState.binding.binding.evaluationPlanDigest,
-  contract.ownerRatification.evaluationPlanDigest);
-assert.equal(canonicalState.binding.binding.artifactDigest,
-  releaseEvidence.evidence.artifactDigest);
-assert.equal(canonicalState.binding.binding.targetDigest, targetDigest);
-assert.equal(canonicalState.binding.binding.targetRef, contract.repository.targetRef);
-assert.equal(canonicalState.cut.bindingDigest, canonicalState.binding.digest);
-assert.equal(canonicalState.cut.id, canonicalState.evaluation.cutId);
-assert.equal(canonicalState.cut.watermarkLogicalTime,
-  canonicalState.evaluation.watermarkLogicalTime);
-assert.equal(canonicalState.cut.complete, true);
-assert.equal(canonicalState.cut.linearizable, true);
-assert.equal(canonicalState.cut.factCount, 15);
-assert.equal(canonicalState.cut.proofFactCount, 15);
-assert.equal(canonicalState.cut.factSetDigest, canonicalState.evaluation.factCutDigest);
-assert.equal(canonicalState.evaluation.closed, false,
-  'the independent target verifier is still a real successor obligation');
-assert.deepEqual(canonicalState.evaluation.modelGaps, []);
-assert.equal(Number(canonicalState.facts.count), 15);
-assert.equal(Number(canonicalState.facts.dimensionCount), 15);
-assert.deepEqual(canonicalState.facts.evidenceDigests, [releaseEvidence.evidenceDigest]);
-assert.deepEqual(canonicalState.facts.evidenceIds, [releaseEvidence.id]);
-assert.deepEqual(canonicalState.facts.targetShas, [targetSha]);
-assert.deepEqual(canonicalState.facts.artifactDigests,
-  [releaseEvidence.evidence.artifactDigest]);
-assert.deepEqual(canonicalState.facts.pendingDimensions,
-  [contract.canonicalBinding.pendingDimension]);
-assert.deepEqual(canonicalState.facts.pendingReasons,
-  [contract.canonicalBinding.pendingReasonCode]);
-assert.equal(Number(canonicalState.facts.nonTerminalCount), 1);
-assert.equal(canonicalState.delivery.targetSha, targetSha);
-assert.equal(canonicalState.delivery.targetContentDigest, targetContentDigest);
-assert.equal(canonicalState.delivery.artifactDigest, releaseEvidence.evidence.artifactDigest);
-assert.ok(Number(canonicalState.delivery.attestationCount) >= 1);
-assert.ok(Number(canonicalState.delivery.verificationCount) >= 1);
-assert.notEqual(canonicalState.doneGate?.reason?.code, 'CURRENT_BINDING_MISSING');
-assert.equal(canonicalState.doneGate?.canonicalIdentity?.bindingDigest,
-  canonicalState.binding.digest);
-assert.equal(canonicalState.doneGate?.canonicalIdentity?.cutId, canonicalState.cut.id);
-assert.equal(canonicalState.doneGate?.ratification, undefined,
-  'the DONE gate must no longer carry a ratification clause');
+assert.deepEqual(canonicalState, {
+  factStream: null,
+  factBinding: null,
+  canonicalFact: null,
+  evaluatorResult: null,
+  activeObligation: null,
+  deliveryAttestation: null,
+  projectionSchema: null,
+  canonicalDoneGate: null,
+  // What still decides a project's DONE on the deployment: the 0150 acceptance gate.
+  acceptanceDoneGate: 'project_acceptance_done_gate',
+});
 
 // 0221 removed the outcome-watchdog current-binding ledger together with the process it bound.
 // The deployment no longer runs a watchdog container, so there is no current binding to attest;
@@ -559,7 +457,6 @@ const sourceFiles = [
   'scripts/outcome-reconciler-release-frontier.sh',
   'scripts/outcome-reconciler-release-live-state.mjs',
   'scripts/outcome-reconciler-release-frontier-manifest.mjs',
-  'scripts/outcome-reconciler-release-publish.mjs',
 ];
 const sources = Object.fromEntries(sourceFiles.map((relative) => [relative, fileEvidence(relative)]));
 const body = {

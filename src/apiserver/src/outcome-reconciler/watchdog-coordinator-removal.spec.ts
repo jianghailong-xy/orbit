@@ -166,9 +166,20 @@ test('(a) 0221 drops every table, view, function and trigger the four migrations
   }
 });
 
-test('(a) the four migrations stay in the ledger and 0221 is the newest', () => {
+test('(a) the four migrations stay in the ledger and nothing replays them after the removal', () => {
   const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
-  assert.equal(names.at(-1), REMOVAL_DIR, 'nothing may replay after the removal');
+  assert.ok(names.includes(REMOVAL_DIR), 'the removal itself must remain in the ledger');
+  // Later migrations are allowed — 0222 removed the obligation algebra after this — but none of
+  // them may put back what this one took away. `CREATE OR REPLACE` in a later file is exactly the
+  // way a removal silently un-happens, so the check is on what comes after, not on being last.
+  for (const later of names.filter((name) => name > REMOVAL_DIR)) {
+    const sql = readFileSync(path.join(MIGRATIONS, later, 'migration.sql'), 'utf8');
+    for (const name of [...COORDINATOR_TABLES, ...BINDING_TABLES, ...COORDINATOR_FUNCTIONS]) {
+      assert.doesNotMatch(sql, new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:TABLE|FUNCTION|VIEW)\\s+"?${name}"?`),
+        `${later} re-creates ${name}, which ${REMOVAL_DIR} removed`);
+    }
+    assert.doesNotMatch(sql, /CREATE\s+SCHEMA\s+outcome_watchdog/);
+  }
   for (const retired of ['0198_outcome_persistent_coordinator',
     '0199_outcome_independent_watchdog_slo_security', '0206_watchdog_current_binding',
     '0214_watchdog_goal_progress_channel']) {

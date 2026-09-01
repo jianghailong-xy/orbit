@@ -157,7 +157,7 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// than behind the orchestration gate for the reason project_create is — the session
 			// that most needs to run a project's acceptance is a coordinator, which has no
 			// session_* tools at all.
-			"project_acceptance", "project_obligations", "project_acceptance_run",
+			"project_acceptance", "project_acceptance_run",
 			"project_acceptance_verdict",
 			"project_merge_evidence",
 			// Unit L7: two READS and no third write. A coordinator refused
