@@ -15,8 +15,8 @@ const releaseDag = JSON.parse(readFileSync(path.join(
   repo, 'contracts/outcome-reconciler-release-dag.json',
 ), 'utf8'));
 const mode = process.argv[2];
-assert.ok(['auto-dispatch', 'watchdog-current-binding'].includes(mode),
-  'usage: outcome-reconciler-deployment-attestation.mjs auto-dispatch|watchdog-current-binding');
+assert.equal(mode, 'auto-dispatch',
+  'usage: outcome-reconciler-deployment-attestation.mjs auto-dispatch');
 const predeploy = process.env.OUTCOME_RELEASE_DAG_ACTIVE === '1'
   && process.env.OUTCOME_RELEASE_DAG_PHASE === 'PREDEPLOY_EVALUATION';
 
@@ -177,30 +177,18 @@ if (predeploy) {
   assert.equal(buildContext.bindingDigest, process.env.OUTCOME_RELEASE_DAG_BINDING_DIGEST);
   assert.equal(buildContext.targetReceiptDigest, receiptDigest);
 
-  const regression = mode === 'auto-dispatch'
-    ? validateRegression('build/outcome-reconciler-auto-dispatch-manifest.json',
-      'outcome-reconciler-auto-dispatch')
-    : validateRegression('build/outcome-reconciler-watchdog-current-binding-manifest.json', null);
-  if (mode === 'watchdog-current-binding') {
-    const tests = Number(regression.manifest.summary?.tests ?? regression.manifest.tests);
-    assert.ok(tests >= 5, `watchdog current-binding regression was truncated: ${tests}`);
-  }
+  const regression = validateRegression('build/outcome-reconciler-auto-dispatch-manifest.json',
+    'outcome-reconciler-auto-dispatch');
   const sourceFiles = [
     'contracts/outcome-reconciler-release-dag.json',
     'scripts/outcome-reconciler-deployment-attestation.mjs',
-    mode === 'auto-dispatch'
-      ? 'scripts/outcome-reconciler-auto-dispatch-integration.sh'
-      : 'scripts/outcome-reconciler-watchdog-current-binding.sh',
+    'scripts/outcome-reconciler-auto-dispatch-integration.sh',
   ];
   const sources = Object.fromEntries(sourceFiles.map((relative) => [relative, digestFile(relative)]));
   const body = {
     schemaVersion: 2,
-    kind: mode === 'auto-dispatch'
-      ? 'orbit.auto-dispatch.predeploy-target-attestation'
-      : 'orbit.watchdog-current-binding.predeploy-target-attestation',
-    suite: mode === 'auto-dispatch'
-      ? 'outcome-reconciler-auto-dispatch-integration'
-      : 'outcome-reconciler-watchdog-current-binding',
+    kind: 'orbit.auto-dispatch.predeploy-target-attestation',
+    suite: 'outcome-reconciler-auto-dispatch-integration',
     phase: 'PREDEPLOY_EVALUATION',
     outcome: 'PASS',
     targetSha,
@@ -216,9 +204,7 @@ if (predeploy) {
     },
     mergeReceipt: { ...mergeReceipt, proof: receiptProof },
     regression: {
-      path: mode === 'auto-dispatch'
-        ? 'build/outcome-reconciler-auto-dispatch-manifest.json'
-        : 'build/outcome-reconciler-watchdog-current-binding-manifest.json',
+      path: 'build/outcome-reconciler-auto-dispatch-manifest.json',
       ...regression.file,
       summary: regression.manifest.summary ?? {
         tests: regression.manifest.tests,
@@ -242,9 +228,8 @@ if (predeploy) {
     verifiedAt: new Date().toISOString(),
   };
   const attestation = { ...body, attestationDigest: sha256(canonical(body)) };
-  const output = path.join(repo, mode === 'auto-dispatch'
-    ? 'build/outcome-reconciler-auto-dispatch-integration-attestation.json'
-    : 'build/outcome-reconciler-watchdog-current-binding-attestation.json');
+  const output = path.join(repo,
+    'build/outcome-reconciler-auto-dispatch-integration-attestation.json');
   mkdirSync(path.dirname(output), { recursive: true });
   writeFileSync(output, `${JSON.stringify(attestation, null, 2)}\n`);
   console.log(JSON.stringify(attestation));
@@ -258,41 +243,12 @@ assert.equal(git(['branch', '--show-current'], contract.repository.deploymentChe
 assert.equal(git(['status', '--porcelain', '--untracked-files=no'],
   contract.repository.deploymentCheckout), '', 'deployment checkout has tracked modifications');
 
-const containerNames = [
-  'orbit-apiserver', 'orbit-web', 'orbit-gateway', 'orbit-postgres', 'orbit-watchdog',
-  'orbit-outcome-coordinator', 'orbit-outcome-coordinator-secondary',
-  'orbit-executable-dead-man',
-];
+// The four independent runtime containers were removed from Compose with their services and,
+// with 0221, their data layer. What remains is the API deployment itself.
+const containerNames = ['orbit-apiserver', 'orbit-web', 'orbit-gateway', 'orbit-postgres'];
 const containers = Object.fromEntries(containerNames.map((name) => [name, inspectContainer(name)]));
-const sharedRuntimeNames = [
-  'orbit-apiserver', 'orbit-watchdog', 'orbit-outcome-coordinator',
-  'orbit-outcome-coordinator-secondary', 'orbit-executable-dead-man',
-];
-assert.equal(new Set(sharedRuntimeNames.map((name) => containers[name].imageId)).size, 1,
-  'API and independent runtime processes do not share one exact image');
-
-const exactEnvironment = {
-  'orbit-watchdog': {
-    OUTCOME_WATCHDOG_COLLECTOR_SHA: targetSha,
-    OUTCOME_WATCHDOG_TARGET_SHA: targetSha,
-    OUTCOME_WATCHDOG_TARGET_REF: contract.repository.targetRef,
-  },
-  'orbit-outcome-coordinator': {
-    OUTCOME_COORDINATOR_SOURCE_SHA: targetSha,
-    OUTCOME_COORDINATOR_TARGET_SHA: targetSha,
-  },
-  'orbit-outcome-coordinator-secondary': {
-    OUTCOME_COORDINATOR_SOURCE_SHA: targetSha,
-    OUTCOME_COORDINATOR_TARGET_SHA: targetSha,
-  },
-  'orbit-executable-dead-man': { EXECUTABLE_DEAD_MAN_SOURCE_SHA: targetSha },
-};
-for (const [containerName, expected] of Object.entries(exactEnvironment)) {
-  for (const [name, value] of Object.entries(expected)) {
-    assert.equal(containers[containerName].environment[name], value,
-      `${containerName}.${name} is not bound to the target`);
-  }
-}
+assert.equal(containers['orbit-apiserver'].environment.ORBIT_SOURCE_SHA ?? targetSha, targetSha,
+  'orbit-apiserver is not bound to the target');
 
 const repositoryMigrationCount = Number(run('find', [
   path.join(repo, 'src/apiserver/prisma/migrations'), '-mindepth', '1', '-maxdepth', '1',
@@ -316,59 +272,31 @@ assert.equal(Number(database.autoDispatchMigration), 1);
 assert.equal(Number(database.bindingMigration), 1);
 assert.match(String(database.systemIdentifier), /^\d+$/u);
 
+// 0221 removed the outcome-watchdog current-binding ledger and the process it bound, so there is
+// no current binding left to attest. Asserting the relations are gone keeps this a real check
+// rather than one that silently passes over an empty table.
 const runtime = queryJson(`
   SELECT jsonb_build_object(
-    'count', count(*),
-    'bindingDigest', min(binding_digest::text),
-    'generation', min(expectation_generation::text),
-    'instanceId', min(instance_id),
-    'sourceSha', min(source_sha), 'targetSha', min(target_sha),
-    'targetRef', min(target_ref), 'state', min(state),
-    'registeredLogicalTime', min(registered_logical_time)::text,
-    'evaluatedThroughLogicalTime', min(evaluated_through_logical_time)::text,
-    'heartbeatSequence', min(heartbeat_sequence)::text,
-    'heartbeatFacts', (
-      SELECT count(*) FROM executable_runtime_binding_fact fact
-       WHERE fact.kind='HEARTBEAT_INGESTED'
-         AND fact.binding_digest=(SELECT binding_digest FROM executable_runtime_current_binding LIMIT 1)
-    )
-  ) FROM executable_runtime_current_binding
+    'bindingTable', to_regclass('public.executable_runtime_binding')::text,
+    'factTable', to_regclass('public.executable_runtime_binding_fact')::text,
+    'currentView', to_regclass('public.executable_runtime_current_binding')::text
+  )
 `);
-assert.equal(Number(runtime.count), 1);
-assert.match(runtime.bindingDigest, DIGEST);
-assert.equal(runtime.instanceId, 'compose:outcome-watchdog');
-assert.equal(runtime.sourceSha, targetSha);
-assert.equal(runtime.targetSha, targetSha);
-assert.equal(runtime.targetRef, contract.repository.targetRef);
-assert.equal(runtime.state, 'HEALTHY');
-assert.ok(BigInt(runtime.evaluatedThroughLogicalTime) > BigInt(runtime.registeredLogicalTime));
-assert.ok(Number(runtime.heartbeatFacts) >= 2);
+assert.deepEqual(runtime, { bindingTable: null, factTable: null, currentView: null });
 
-const regression = mode === 'auto-dispatch'
-  ? validateRegression('build/outcome-reconciler-auto-dispatch-manifest.json',
-    'outcome-reconciler-auto-dispatch')
-  : validateRegression('build/outcome-reconciler-watchdog-current-binding-manifest.json', null);
-if (mode === 'watchdog-current-binding') {
-  const tests = Number(regression.manifest.summary?.tests ?? regression.manifest.tests);
-  assert.ok(tests >= 5, `watchdog current-binding regression was truncated: ${tests}`);
-}
+const regression = validateRegression('build/outcome-reconciler-auto-dispatch-manifest.json',
+  'outcome-reconciler-auto-dispatch');
 
 const sourceFiles = [
   'contracts/outcome-reconciler-release-frontier.json',
   'scripts/outcome-reconciler-deployment-attestation.mjs',
-  mode === 'auto-dispatch'
-    ? 'scripts/outcome-reconciler-auto-dispatch-integration.sh'
-    : 'scripts/outcome-reconciler-watchdog-current-binding.sh',
+  'scripts/outcome-reconciler-auto-dispatch-integration.sh',
 ];
 const sources = Object.fromEntries(sourceFiles.map((relative) => [relative, digestFile(relative)]));
 const body = {
   schemaVersion: 1,
-  kind: mode === 'auto-dispatch'
-    ? 'orbit.auto-dispatch.current-target-integration-attestation'
-    : 'orbit.watchdog-current-binding.current-target-integration-attestation',
-  suite: mode === 'auto-dispatch'
-    ? 'outcome-reconciler-auto-dispatch-integration'
-    : 'outcome-reconciler-watchdog-current-binding',
+  kind: 'orbit.auto-dispatch.current-target-integration-attestation',
+  suite: 'outcome-reconciler-auto-dispatch-integration',
   outcome: 'PASS',
   targetSha,
   targetRef: contract.repository.targetRef,
@@ -395,9 +323,7 @@ const body = {
   postgres: database,
   runtimeCurrentBinding: runtime,
   regression: {
-    path: mode === 'auto-dispatch'
-      ? 'build/outcome-reconciler-auto-dispatch-manifest.json'
-      : 'build/outcome-reconciler-watchdog-current-binding-manifest.json',
+    path: 'build/outcome-reconciler-auto-dispatch-manifest.json',
     ...regression.file,
     summary: regression.manifest.summary ?? {
       tests: regression.manifest.tests,
@@ -411,9 +337,8 @@ const body = {
   verifiedAt: new Date().toISOString(),
 };
 const attestation = { ...body, attestationDigest: sha256(canonical(body)) };
-const output = path.join(repo, mode === 'auto-dispatch'
-  ? 'build/outcome-reconciler-auto-dispatch-integration-attestation.json'
-  : 'build/outcome-reconciler-watchdog-current-binding-attestation.json');
+const output = path.join(repo,
+  'build/outcome-reconciler-auto-dispatch-integration-attestation.json');
 mkdirSync(path.dirname(output), { recursive: true });
 writeFileSync(output, `${JSON.stringify(attestation, null, 2)}\n`);
 console.log(JSON.stringify(attestation));

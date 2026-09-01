@@ -154,7 +154,6 @@ function runnerApi(failureContinuations) {
     undefined,
     undefined,
     undefined,
-    undefined,
     failureContinuations,
   );
 }
@@ -382,10 +381,13 @@ async function originalCommandTurnCount(taskId) {
 }
 
 async function ownerDecisionCounts(projectId, taskId) {
+  // The generic coordinator owner-decision request table was removed with the persistent
+  // coordinator (0221). Its absence is the stronger form of the "no generic owner work was
+  // created" assertion these cases make, so it is checked instead of counted.
   return (await pool.query(`
     SELECT
-      (SELECT count(*)::integer FROM outcome_coordinator_owner_decision_request
-        WHERE project_id = $1::uuid) outcome_owner,
+      (SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
+                   THEN 0 ELSE 1 END) outcome_owner,
       (SELECT count(*)::integer FROM task_judgment_request
         WHERE task_id = $2::uuid AND kind = 'HUMAN_SIGNOFF') human_signoff
   `, [projectId, taskId])).rows[0];

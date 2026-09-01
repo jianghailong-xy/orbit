@@ -15,9 +15,7 @@ import {
 } from '../lib/projectAcceptance';
 import {
   isFailureOwnerInboxItem,
-  outcomeDecisionReviewPath,
   outcomeInboxPath,
-  type CanonicalOwnerInboxItem,
   type OutcomeHumanInbox,
 } from '../lib/outcomeSurfaces';
 import { FailureCoordinationCard } from '../components/FailureCoordinationCard';
@@ -38,11 +36,8 @@ export function JudgmentInboxPage() {
     queryKey: ['outcomes', 'inbox'],
     queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
   });
-  const genericOutcomeItems = (outcomeInbox.data?.items ?? [])
-    .filter((item): item is CanonicalOwnerInboxItem => !isFailureOwnerInboxItem(item));
   const failureOutcomeItems = (outcomeInbox.data?.items ?? []).filter(isFailureOwnerInboxItem);
   const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0)
-    + genericOutcomeItems.length
     + failureOutcomeItems.length;
   const entries = [
     ...(taskInbox.data?.items ?? []).map((item) => ({
@@ -100,33 +95,10 @@ export function JudgmentInboxPage() {
             </Button>
           )}
         />
-      ) : entries.length === 0 && genericOutcomeItems.length === 0 && failureOutcomeItems.length === 0 ? (
+      ) : entries.length === 0 && failureOutcomeItems.length === 0 ? (
         <Empty description="没有待判定的证据" />
       ) : (
         <ul className="judgment-inbox-list" aria-label="Open human decisions">
-          {genericOutcomeItems.map((item) => {
-            const protocol = item.decision;
-            const requestId = String(item.decisionRequest?.requestId ?? '');
-            return (
-              <li key={`outcome:${requestId}`} className="judgment-inbox-card">
-                <Link to={outcomeDecisionReviewPath(requestId)}>
-                  <Tag color="gold">{protocol.decisionType}</Tag>
-                  <div className="judgment-inbox-title">{item.projectTitle}</div>
-                  <div className="judgment-inbox-project">Canonical project obligation</div>
-                  <dl className="judgment-inbox-facts">
-                    <div><dt>Agent 已做</dt><dd>{JSON.stringify(protocol.agentWorkCompleted)}</dd></div>
-                    <div><dt>whyNotAgent</dt><dd>{protocol.whyNotAgent}</dd></div>
-                    <div><dt>选项 / 影响</dt><dd>{JSON.stringify(protocol.options)} / {JSON.stringify(protocol.impacts)}</dd></div>
-                    <div><dt>推荐</dt><dd>{JSON.stringify(protocol.recommendation)}</dd></div>
-                    <div><dt>成本 / 期限</dt><dd>{JSON.stringify(protocol.cost)} / {JSON.stringify(protocol.deadline)}</dd></div>
-                    <div><dt>不处理</dt><dd>{JSON.stringify(protocol.noActionConsequence)}</dd></div>
-                    <div><dt>决定后自动续跑</dt><dd>{JSON.stringify(protocol.resumeBehavior)}</dd></div>
-                  </dl>
-                  <span className="judgment-inbox-open">Review bound revision and decide →</span>
-                </Link>
-              </li>
-            );
-          })}
           {failureOutcomeItems.map((item) => (
             <li
               key={`failure:${item.obligationId}`}

@@ -1,8 +1,4 @@
 import { Module } from '@nestjs/common';
-import {
-  OutcomeCoordinatorResolverRegistry,
-  OutcomeCoordinatorService,
-} from './outcome-coordinator.service';
 import { OutcomeEvaluatorService } from './outcome-evaluator.service';
 import { OutcomeFactIngressService } from './outcome-fact-ingress.service';
 import { OutcomeProjectionService } from './outcome-projection.service';
@@ -18,8 +14,6 @@ import { ProjectAcceptanceModule } from '../projects/project-acceptance.module';
     OutcomeEvaluatorService,
     OutcomeProjectionService,
     DeliveryAttestationService,
-    OutcomeCoordinatorResolverRegistry,
-    OutcomeCoordinatorService,
     OutcomeVersioningService,
     OutcomeSurfaceService,
   ],
@@ -28,8 +22,6 @@ import { ProjectAcceptanceModule } from '../projects/project-acceptance.module';
     OutcomeEvaluatorService,
     OutcomeProjectionService,
     DeliveryAttestationService,
-    OutcomeCoordinatorResolverRegistry,
-    OutcomeCoordinatorService,
     OutcomeVersioningService,
     OutcomeSurfaceService,
   ],

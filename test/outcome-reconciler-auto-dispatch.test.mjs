@@ -132,7 +132,6 @@ function runnerApi() {
     undefined,
     undefined,
     undefined,
-    undefined,
     tasks,
   );
 }
@@ -424,7 +423,7 @@ async function rollingV1Fixture(label) {
   };
 }
 
-test('rolling-upgrade v1 completion ACK replay releases one successor and stays idempotent', async () => {
+test('rolling-upgrade v1 shell replay releases one successor and stays idempotent', async () => {
   const fixture = await rollingV1Fixture('rolling-v1');
   const api = runnerApi();
   await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, {

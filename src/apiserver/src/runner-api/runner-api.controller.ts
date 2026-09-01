@@ -205,7 +205,6 @@ import {
   runnerAdvertisesProvider,
 } from './runner-provider-support';
 import { sessionExecRuntime } from '../providers/custom-provider';
-import { OutcomeWatchdogService } from '../outcome-watchdog/outcome-watchdog.service';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -746,45 +745,6 @@ function sameIds(next: readonly string[], stored: readonly string[]): boolean {
   return next.length === stored.length && next.every((v, i) => v === stored[i]);
 }
 
-function completionAckFailureEvidence(error: unknown): {
-  fingerprint: string;
-  detail: Record<string, unknown>;
-} | null {
-  if (error instanceof HttpException && error.getStatus() < 500) return null;
-  const candidate = error && typeof error === 'object'
-    ? error as Record<string, unknown>
-    : {};
-  const meta = candidate.meta && typeof candidate.meta === 'object'
-    ? candidate.meta as Record<string, unknown>
-    : {};
-  const database = meta.database_error && typeof meta.database_error === 'object'
-    ? meta.database_error as Record<string, unknown>
-    : {};
-  const message = String(database.message ?? candidate.message ?? error ?? 'UNKNOWN');
-  const symbols = message.match(/\b[A-Z][A-Z0-9_]{4,}\b/g) ?? [];
-  const invariant = symbols.find((value) => value.includes('_')) ?? 'UNCLASSIFIED_SERVER_FAILURE';
-  const material = {
-    endpoint: 'runner.turn-complete',
-    prismaCode: typeof candidate.code === 'string' ? candidate.code : null,
-    sqlstate: typeof database.code === 'string'
-      ? database.code
-      : (typeof meta.code === 'string' ? meta.code : null),
-    invariant,
-  };
-  return {
-    fingerprint: sha256(JSON.stringify(material)),
-    detail: {
-      ...material,
-      // The immutable incident ledger must never become a second copy of a driver/SQL error.
-      // Such messages can contain query values, paths or credentials and cannot be redacted
-      // after append.  The allow-listed classification above is enough to route the incident;
-      // retain only a digest for forensic correlation with the ephemeral server log.
-      messageDigest: sha256(message),
-      source: 'RUNNER_API_TURN_COMPLETE_CATCH',
-    },
-  };
-}
-
 /** `runner.findUnique` is the whole of the quota snapshot read, and was itself a drift point. */
 export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] }>;
 
@@ -818,8 +778,6 @@ export class RunnerApiController {
     private readonly completionInputs?: CompletionInputRouter,
     /** Project EXECUTABLE criteria consume the Task's exact durable typed-attempt fact. */
     private readonly projectAcceptance?: ProjectAcceptanceService,
-    /** Separate-transaction completion-ACK observations. Optional only in direct controller specs. */
-    private readonly completionAckMonitor?: OutcomeWatchdogService,
     /**
      * The exact Task=DONE commit made by an executable callback must release its dependents just
      * like the interactive completion doors in TasksService. Optional only for direct unit
@@ -3252,9 +3210,7 @@ export class RunnerApiController {
     // billing accrual — is taken from the Session row read under its own lock inside the closure,
     // so a re-run cannot accrue against a turn the winner already closed. `dto` and its usage are
     // outside, so a retry books the same numbers and not a second set.
-    const finalized = await (async () => {
-      try {
-        return await withTransactionRetry(this.prisma, async (tx) => {
+    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
@@ -4101,26 +4057,6 @@ export class RunnerApiController {
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
-      if (taskAcceptanceTurn && completedTurn) {
-        // The completion receipt is part of the ACK commit, not a best-effort epilogue. If this
-        // append cannot be proven against the exact ingested shell event, the callback rolls back
-        // and the runner retries the same receipt. That removes the process-crash gap between
-        // turn=ANSWERED and closing an already ACTIVE completion-ACK obligation.
-        await tx.$queryRaw(Prisma.sql`
-          SELECT completion_ack_record_recovery(
-            ${sessionId}::uuid,
-            ${completedTurn.id}::uuid,
-            statement_timestamp(),
-            ${JSON.stringify({
-              source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
-              runnerId: runner.id,
-              callbackStatus: dto.status,
-              callbackSubtype: dto.subtype ?? null,
-              applied: true,
-            })}::jsonb
-          )
-        `);
-      }
       return {
         applied: true,
         steer: false,
@@ -4135,54 +4071,7 @@ export class RunnerApiController {
         taskCompleted: acceptanceTaskCompleted,
         acceptanceAttemptTerminatedId,
       };
-        }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
-      } catch (error) {
-        const failure = completionAckFailureEvidence(error);
-        if (failure && this.completionAckMonitor) {
-          try {
-            await this.completionAckMonitor.recordCompletionAckFailure({
-              sessionId,
-              turnId: dto.turnId,
-              // leaseOwner identifies the runner process holding the Session. It is not the
-              // acceptance turn's inbox lease generation. The independent monitor resolves the
-              // durable turn generation (and matching terminal event provenance) after rollback.
-              leaseGeneration: null,
-              errorFingerprint: failure.fingerprint,
-              observedAt: new Date(),
-              evidenceSource: {
-                ...failure.detail,
-                runnerId: runner.id,
-                callbackStatus: dto.status,
-                callbackSubtype: dto.subtype ?? null,
-              },
-            });
-          } catch (monitorError) {
-            this.logger.error(
-              `completion ACK failure fact could not be appended for ${sessionId}/${dto.turnId}: `
-              + `${monitorError instanceof Error ? monitorError.message : monitorError}`,
-            );
-          }
-        }
-        throw error;
-      }
-    })();
-    // This is outside the monitored transaction: recovery history must not make a successful ACK
-    // fail, and the independent watchdog will converge it if this best-effort edge write misses.
-    if (!finalized.steer && this.completionAckMonitor) {
-      await this.completionAckMonitor.recordCompletionAckRecovery({
-        sessionId,
-        turnId: dto.turnId,
-        observedAt: new Date(),
-        evidenceSource: {
-          source: 'RUNNER_API_TURN_COMPLETE_COMMITTED',
-          runnerId: runner.id,
-          applied: finalized.applied,
-        },
-      }).catch((error) => this.logger.error(
-        `completion ACK recovery fact could not be appended for ${sessionId}/${dto.turnId}: `
-        + `${error instanceof Error ? error.message : error}`,
-      ));
-    }
+    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
     // This is the immediate completion edge for both the legacy rolling-v1 shell receipt and the
     // current executable callback. The ACK transaction above is authoritative and idempotent:
     // only its first compare-and-set reports taskCompleted. A process crash here loses latency,

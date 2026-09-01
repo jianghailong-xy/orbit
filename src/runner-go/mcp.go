@@ -210,41 +210,6 @@ const maxProjectAcceptanceCriteriaChars = 4000
 const maxProjectAcceptanceCriteriaItems = 100
 const maxProjectAcceptanceVerificationMethodChars = 4000
 
-func isCompletionAckOwnerDecisionReason(reason string) bool {
-	switch reason {
-	case "NEW_AUTHORIZATION", "RISK_ACCEPTANCE", "GOAL_DECISION", "EXTERNAL_IDENTITY":
-		return true
-	}
-	return false
-}
-
-func validateCompletionAckOwnerDecisionRequest(request map[string]interface{}) error {
-	why, ok := request["whyNotAgent"].(string)
-	if !ok || strings.TrimSpace(why) == "" {
-		return fmt.Errorf("request.whyNotAgent is required")
-	}
-	for _, field := range []string{"options", "impacts"} {
-		values, ok := request[field].([]interface{})
-		if !ok || len(values) == 0 {
-			return fmt.Errorf("request.%s must be a non-empty array", field)
-		}
-	}
-	for _, field := range []string{
-		"recommendation", "noActionConsequence", "cost", "deadline", "resumeBehavior",
-	} {
-		if value, present := request[field]; !present || value == nil {
-			return fmt.Errorf("request.%s is required", field)
-		}
-	}
-	key, ok := request["idempotencyKey"].(string)
-	if !ok || strings.TrimSpace(key) == "" {
-		return fmt.Errorf("request.idempotencyKey is required")
-	}
-	return nil
-}
-
-// callTool dispatches one tool. A tool's own failure (bad args, transport error) is
-// reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
 	switch name {
 	case "task_list":
@@ -404,36 +369,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.getProjectAcceptance(id)
 		if err != nil {
 			return toolResult("get project acceptance failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
-	case "project_owner_decision_request":
-		id := getString(args, "projectId")
-		obligationID := getString(args, "obligationId")
-		obligationRevision := getString(args, "obligationRevision")
-		reason := getString(args, "reason")
-		if id == "" || obligationID == "" || obligationRevision == "" || reason == "" {
-			return toolResult("projectId, obligationId, obligationRevision and reason are required", true)
-		}
-		if strings.TrimSpace(s.sessionID) == "" {
-			return toolResult("project_owner_decision_request requires the current Orbit coordinator Session", true)
-		}
-		if !isCompletionAckOwnerDecisionReason(reason) {
-			return toolResult("reason must be NEW_AUTHORIZATION, RISK_ACCEPTANCE, GOAL_DECISION or EXTERNAL_IDENTITY", true)
-		}
-		request, ok := args["request"].(map[string]interface{})
-		if !ok {
-			return toolResult("request must be one object containing the complete owner-decision protocol", true)
-		}
-		if err := validateCompletionAckOwnerDecisionRequest(request); err != nil {
-			return toolResult(err.Error(), true)
-		}
-		raw, err := s.t.requestProjectOwnerDecision(id, s.sessionID, map[string]interface{}{
-			"obligationId": obligationID, "obligationRevision": obligationRevision,
-			"reason": reason, "request": request,
-		})
-		if err != nil {
-			return toolResult("request project owner decision failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1870,41 +1805,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
-		},
-		{
-			"name": "project_owner_decision_request",
-			"description": "Pause this exact completion-ACK remediation only when it needs one " +
-				"irreducibly owner-shaped input. The only reasons are NEW_AUTHORIZATION, " +
-				"RISK_ACCEPTANCE, GOAL_DECISION and EXTERNAL_IDENTITY; code defects, tests, " +
-				"deployment and verification remain coordinator work. The request must carry the " +
-				"complete decision protocol. The server admits it only from this exact current, " +
-				"non-revoked coordinator delivery Session and keeps the parent canonical obligation " +
-				"ACTIVE and AGENT-owned.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{"type": "string"},
-				"obligationId": map[string]interface{}{
-					"type": "string", "pattern": "^[0-9a-f]{64}$",
-				},
-				"obligationRevision": map[string]interface{}{
-					"type": "string", "pattern": "^[0-9a-f]{64}$",
-				},
-				"reason": map[string]interface{}{
-					"type": "string",
-					"enum": []string{"NEW_AUTHORIZATION", "RISK_ACCEPTANCE", "GOAL_DECISION", "EXTERNAL_IDENTITY"},
-				},
-				"request": obj(map[string]interface{}{
-					"whyNotAgent":         map[string]interface{}{"type": "string", "minLength": 1},
-					"options":             map[string]interface{}{"type": "array", "minItems": 1, "maxItems": 16},
-					"impacts":             map[string]interface{}{"type": "array", "minItems": 1, "maxItems": 16},
-					"recommendation":      map[string]interface{}{},
-					"noActionConsequence": map[string]interface{}{},
-					"cost":                map[string]interface{}{},
-					"deadline":            map[string]interface{}{},
-					"resumeBehavior":      map[string]interface{}{},
-					"idempotencyKey":      map[string]interface{}{"type": "string", "minLength": 1, "maxLength": 200},
-				}, "whyNotAgent", "options", "impacts", "recommendation", "noActionConsequence",
-					"cost", "deadline", "resumeBehavior", "idempotencyKey"),
-			}, "projectId", "obligationId", "obligationRevision", "reason", "request"),
 		},
 		{
 			"name":        "project_obligations",

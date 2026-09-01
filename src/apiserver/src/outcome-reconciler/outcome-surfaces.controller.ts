@@ -1,11 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import {
-  OutcomeSurfaceService,
-  type BoundOutcomeDecisionInput,
-} from './outcome-surface.service';
+import { OutcomeSurfaceService } from './outcome-surface.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('outcomes')
@@ -45,23 +42,6 @@ export class OutcomeSurfacesController {
       projectId,
       this.surfaces.parseFailureSurface(surface),
     );
-  }
-
-  @Get('decisions/:requestId')
-  decision(
-    @CurrentUser() user: AuthUser,
-    @Param('requestId', PublicIdPipe) requestId: string,
-  ) {
-    return this.surfaces.ownerDecisionView(user.userId, requestId);
-  }
-
-  @Post('decisions/:requestId')
-  decide(
-    @CurrentUser() user: AuthUser,
-    @Param('requestId', PublicIdPipe) requestId: string,
-    @Body() input: BoundOutcomeDecisionInput,
-  ) {
-    return this.surfaces.decideOwnerRequest(user.userId, requestId, input);
   }
 
 }

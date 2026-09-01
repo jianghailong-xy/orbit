@@ -4,7 +4,7 @@ import {
   executableEvaluationPlan,
   negotiateExecutableAcceptance,
 } from '../tasks/executable-acceptance-runtime';
-import { sanitizeWatchdogPayload } from '../outcome-watchdog/outcome-watchdog';
+import { sanitizeWatchdogPayload } from './outcome-payload-redaction';
 
 export const CANARY_METRICS = [
   'falseClose',

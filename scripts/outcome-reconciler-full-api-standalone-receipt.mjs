@@ -11,14 +11,24 @@ import path from 'node:path';
 
 const [output, indexText, specPath, database, emptyDatabase, role,
   identityDatabase, identityRole, identitySystemIdentifier,
-  tapPath, exitCodeText, cleanupCodeText] = process.argv.slice(2);
-assert.ok(cleanupCodeText != null,
-  'usage: full-api-standalone-receipt OUTPUT INDEX SPEC DB EMPTY ROLE ID_DB ID_ROLE ID_SYSTEM TAP EXIT CLEANUP');
+  tapPath, exitCodeText, cleanupCodeText,
+  failureKind, elapsedText, timeoutText] = process.argv.slice(2);
+assert.ok(timeoutText != null,
+  'usage: full-api-standalone-receipt OUTPUT INDEX SPEC DB EMPTY ROLE ID_DB ID_ROLE ID_SYSTEM TAP EXIT CLEANUP KIND ELAPSED TIMEOUT');
 
 const index = Number(indexText);
 const exitCode = Number(exitCodeText);
 const cleanupCode = Number(cleanupCodeText);
+const elapsedSeconds = Number(elapsedText);
+const timeoutSeconds = Number(timeoutText);
 assert.ok(Number.isInteger(index) && index >= 1);
+// The case script's own vocabulary for how a case ended, copied rather than re-derived: only it
+// knows whether 124 came from the wall clock it set. An unknown word here would be a receipt
+// claiming something no reader could interpret, so it is refused rather than recorded.
+assert.ok(['COMPLETED', 'TIMED_OUT', 'SIGNALED', 'CRASHED_BEFORE_TAP', 'SPEC_FAILED'].includes(failureKind),
+  `unknown case failure kind: ${failureKind}`);
+assert.ok(Number.isInteger(elapsedSeconds) && elapsedSeconds >= 0);
+assert.ok(Number.isInteger(timeoutSeconds) && timeoutSeconds > 0);
 for (const identity of [database, emptyDatabase, role]) {
   assert.match(identity, /^pcc[0-9a-z]*_[a-z0-9_]+$/u,
     'destructive Full API cases must retain pcc_* identities');
@@ -75,6 +85,13 @@ const body = {
     resourcesRemaining: cleanupCode === 0 ? 0 : 1,
   },
   exitCode,
+  // A case that reported nothing says nothing about WHY. These three do: 124 is the wall clock
+  // this run enforced, 128+N is a signal someone else sent, and neither is the same failure as a
+  // spec that ran and failed. Kept beside the exit code so a reader who has only the receipt --
+  // the case log is deleted with its directory when the run ends -- can still tell them apart.
+  failureKind,
+  elapsedSeconds,
+  timeoutSeconds,
   cleanupCode,
   summary,
 };

@@ -461,7 +461,7 @@ export function validatePlan(plan) {
     throw new Error('the evidence cut must define its non-recursive publisher boundary');
   }
   const predeployAttestations = plan.nodes.filter((node) => node.kind === 'predeploy-attestation');
-  if (predeployAttestations.length !== 2
+  if (predeployAttestations.length !== 1
       || predeployAttestations.some((node) => node.testBearing !== false)) {
     throw new Error('deployment-only attestations must be typed, deferred and non-test-bearing');
   }

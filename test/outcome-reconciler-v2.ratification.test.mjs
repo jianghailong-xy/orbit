@@ -372,9 +372,8 @@ test('(a) the five approval-queue tables are gone, with nothing left pointing at
   // in production. The append-only migration history is excluded because it is the record of how
   // the schema got here -- 0195 must still be able to create what 0218 drops.
   // A dropped FUNCTION name cannot collide with anything, so a plain substring is exact. A
-  // dropped TABLE name is matched only next to a SQL keyword, because `project_owner_decision_
-  // request` is also the name of a live MCP tool -- the completion-ACK owner-decision protocol,
-  // which is backed by `outcome_coordinator_owner_decision_request` and is not being removed.
+  // dropped TABLE name is matched only next to a SQL keyword, because a name like
+  // `project_owner_decision_request` reads as prose and as an identifier in unrelated code.
   const droppedFunctions = [
     'outcome_current_binding_ratification',
     'project_owner_ratify_contract',
@@ -1434,7 +1433,9 @@ test('(t) removing the envelope filed no owner decision and voided no proposal',
     .replace(/AS \$\$[\s\S]*?\$\$ LANGUAGE/g, 'AS $$ $$ LANGUAGE')
     .replace(/DO \$\$[\s\S]*?END \$\$;/g, 'DO $$ $$;')
     .split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
-  for (const relation of ['outcome_coordinator_owner_decision_request', 'project_criteria_proposal',
+  // The coordinator's owner-decision request table used to be in this list; 0221 dropped it, so a
+  // statement writing it is no longer expressible rather than merely absent.
+  for (const relation of ['project_criteria_proposal',
     'project_completion_contract', 'project']) {
     assert.doesNotMatch(statements,
       new RegExp(`(INSERT INTO|UPDATE|DELETE FROM)\\s+"?${relation}\\b`, 'i'),
@@ -1457,8 +1458,11 @@ test('(t) removing the envelope filed no owner decision and voided no proposal',
     criteria: [criterionBody(fixture, { text: 'a different standard' })],
   });
   assert.equal(proposed.ok, true);
+  // 0221 removed the persistent coordinator's request table, so "no owner decision was derived"
+  // is now checked as absence of the relation rather than as a count that cannot move.
   const decisionsBefore = (await pool.query(
-    'SELECT count(*)::int AS count FROM "outcome_coordinator_owner_decision_request"',
+    `SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
+                 THEN 0 ELSE 1 END AS count`,
   )).rows[0].count;
   const proposalRow = async () => (await pool.query(
     `SELECT "status","base_criteria_digest","card_digest","superseded_reason"
@@ -1472,7 +1476,8 @@ test('(t) removing the envelope filed no owner decision and voided no proposal',
   assert.deepEqual(await proposalRow(), before,
     'the pending proposal must not move when the contract is re-cut');
   assert.equal((await pool.query(
-    'SELECT count(*)::int AS count FROM "outcome_coordinator_owner_decision_request"',
+    `SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
+                 THEN 0 ELSE 1 END AS count`,
   )).rows[0].count, decisionsBefore, 'no owner decision request may be derived');
   evidence.invariants.envelopeRemovalFiledNoOwnerDecision = true;
 });
@@ -1507,14 +1512,12 @@ test('(v) this is subtraction: nothing new runs, and less SQL is in force than b
   const compose = read('docker-compose.yml');
   const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
   assert.deepEqual(services.sort(), [
-    'apiserver', 'executable-dead-man', 'gateway', 'outcome-coordinator',
-    'outcome-coordinator-secondary', 'pg-socket', 'pgbackup', 'postgres', 'watchdog', 'web',
+    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web',
   ], 'the deployment is exactly the services it already had');
   const packageJson = JSON.parse(read('package.json'));
   const apiserver = JSON.parse(read('src/apiserver/package.json'));
   assert.deepEqual(Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev', 'start:outcome-coordinator', 'start:watchdog'],
-    'no new long-running entry point');
+    ['start:dev'], 'no new long-running entry point');
   assert.equal(Object.keys(packageJson.scripts).some((name) => /daemon|worker|cron/i.test(name)),
     false, 'no new scheduled or resident runner');
   assert.doesNotMatch(ENVELOPE_REMOVAL_MIGRATION, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /,
