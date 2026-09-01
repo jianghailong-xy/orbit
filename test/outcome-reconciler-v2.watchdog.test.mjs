@@ -1070,7 +1070,6 @@ test("this project's own 10 -> 25 -> 31 -> 36 -> 36 curve advances three times a
 const SELF_CORRECTION_RELATIONS = [
   'task_convergence_decision',
   'project_convergence_decision',
-  'outcome_action_failure_fingerprint',
   'outcome_coordinator_failure_fingerprint',
 ];
 const SELF_CORRECTION_COLUMNS = [

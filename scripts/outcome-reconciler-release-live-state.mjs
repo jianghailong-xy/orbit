@@ -107,7 +107,7 @@ function inspectContainer(name) {
 }
 
 assert.equal(contract.schemaVersion, 1);
-assert.equal(contract.namedSuites.length, 17, 'the independent verifier named exactly 17 suites');
+assert.equal(contract.namedSuites.length, 16, 'the independent verifier named exactly 16 suites');
 assert.equal(contract.restoredSuites.length, 6, 'the independent verifier named exactly six missing suites');
 const packageJson = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
 for (const suite of [...contract.namedSuites, ...contract.restoredSuites, ...contract.fullMatrices]) {

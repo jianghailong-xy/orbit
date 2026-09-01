@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ActionCapabilityRegistry, ActionExecutorService } from './action-executor.service';
 import {
   OutcomeCoordinatorResolverRegistry,
   OutcomeCoordinatorService,
@@ -19,8 +18,6 @@ import { ProjectAcceptanceModule } from '../projects/project-acceptance.module';
     OutcomeEvaluatorService,
     OutcomeProjectionService,
     DeliveryAttestationService,
-    ActionCapabilityRegistry,
-    ActionExecutorService,
     OutcomeCoordinatorResolverRegistry,
     OutcomeCoordinatorService,
     OutcomeVersioningService,
@@ -31,8 +28,6 @@ import { ProjectAcceptanceModule } from '../projects/project-acceptance.module';
     OutcomeEvaluatorService,
     OutcomeProjectionService,
     DeliveryAttestationService,
-    ActionCapabilityRegistry,
-    ActionExecutorService,
     OutcomeCoordinatorResolverRegistry,
     OutcomeCoordinatorService,
     OutcomeVersioningService,

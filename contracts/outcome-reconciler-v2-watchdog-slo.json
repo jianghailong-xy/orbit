@@ -215,7 +215,6 @@
       "task.last_progress_at",
       "task_convergence_decision",
       "project_convergence_decision",
-      "outcome_action_failure_fingerprint",
       "outcome_coordinator_failure_fingerprint",
       "task_executable_attempt.failure_fingerprint"
     ],

@@ -47,7 +47,7 @@ const summary = {
   cancelled: counter('cancelled'),
   todo: counter('todo'),
 };
-assert.ok(summary.tests >= 18, 'the coordinator suite is unexpectedly empty or truncated');
+assert.ok(summary.tests >= 17, 'the coordinator suite is unexpectedly empty or truncated');
 assert.equal(summary.passed, summary.tests, 'not every coordinator test passed');
 assert.equal(summary.failed, 0, 'coordinator suite contains failures');
 assert.equal(summary.skipped, 0, 'skipped coordinator tests are forbidden');
@@ -62,7 +62,7 @@ assert.match(evidence.postgres.systemIdentifier, /^[0-9]+$/);
 for (const label of ['persistence', 'recovery', 'bounded', 'scheduling', 'decisions', 'executor']) {
   assertAllTrue(evidence[label], label);
 }
-for (const field of ['discoveryCoordinationId', 'ownerRequestId', 'actionIntentId']) {
+for (const field of ['discoveryCoordinationId', 'ownerRequestId']) {
   assert.match(evidence.samples[field], /^[0-9a-f-]{36}$/, `${field} is missing`);
 }
 assert.equal(evidence.samples.takeoverWorkers.length, 2);
@@ -75,7 +75,6 @@ const sourceFiles = [
   'src/apiserver/prisma/migrations/0198_outcome_persistent_coordinator/migration.sql',
   'src/apiserver/prisma/schema.prisma',
   'src/apiserver/src/common/db-write-inventory.ts',
-  'src/apiserver/src/outcome-reconciler/action-executor.service.ts',
   'src/apiserver/src/outcome-reconciler/outcome-coordinator.ts',
   'src/apiserver/src/outcome-reconciler/outcome-coordinator.service.ts',
   'src/apiserver/src/outcome-reconciler/outcome-reconciler.module.ts',

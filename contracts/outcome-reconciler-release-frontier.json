@@ -55,7 +55,6 @@
     { "name": "evaluator", "packageScript": "test:outcome-reconciler:evaluator", "manifest": "build/outcome-reconciler-v2-evaluator-manifest.json" },
     { "name": "projection", "packageScript": "test:outcome-reconciler:projection", "manifest": "build/outcome-reconciler-v2-projection-manifest.json" },
     { "name": "done-gate", "packageScript": "test:outcome-reconciler:done-gate", "manifest": "build/outcome-reconciler-v2-done-gate-manifest.json" },
-    { "name": "actions", "packageScript": "test:outcome-reconciler:actions", "manifest": "build/outcome-reconciler-v2-actions-manifest.json" },
     { "name": "coordinator", "packageScript": "test:outcome-reconciler:coordinator", "manifest": "build/outcome-reconciler-v2-coordinator-manifest.json" },
     { "name": "watchdog", "packageScript": "test:outcome-reconciler:watchdog", "manifest": "build/outcome-reconciler-v2-watchdog-manifest.json" },
     { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "manifest": "build/executable-acceptance-runtime-manifest.json" },

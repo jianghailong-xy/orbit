@@ -41,10 +41,10 @@
  * validated batch — and everything it MUST re-derive is read inside it, under the locks it takes.
  * `identity` is the first half of that claim and `replay` is the second. `effects` is the third
  * thing that decides it: an external action inside a retried closure would happen once per
- * attempt, so retried units keep every such action after commit. The constrained Action Executor
- * is the deliberate exception to "nothing external in a transaction": it is a `TX_BARE` unit
- * whose transaction is the authorization/binding commit fence, whose provider call is
- * provider-idempotent, and which is never automatically replayed by a database retry loop.
+ * attempt, so retried units keep every such action after commit. Nothing is exempt from that
+ * today: the constrained Action Executor was the one deliberate exception, and 0219 removed it
+ * along with the only `TX_BARE` unit. The shape stays in the vocabulary for whatever next has to
+ * state a one-attempt decision, and the checks below still hold such a unit to one attempt.
  *
  * ISOLATION
  * ---------
@@ -96,10 +96,8 @@ export interface TransactionUnit {
  * Every transaction boundary in the API server.
  *
  * Ordinary database-only units are retried. A unit that cannot be re-run appears here as
- * `TX_BARE`, with its one-attempt decision and recovery path stated explicitly. In particular,
- * ActionExecutorService.executeNext holds the fact-stream serialization lock across the provider
- * commit so revocation or rebinding is ordered before or after that effect; provider idempotency
- * and the durable lease recover an ambiguous database outcome without an in-process retry.
+ * `TX_BARE`, with its one-attempt decision and recovery path stated explicitly. Every unit below
+ * is `TX_RETRIED`; the one `TX_BARE` entry belonged to the Action Executor 0219 deleted.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
@@ -864,17 +862,6 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
   },
   {
-    at: 'outcome-reconciler/action-executor.service.ts#executeNext',
-    shape: 'TX_BARE',
-    locks: 'outcome_fact_stream FOR UPDATE (the project serialization fence), then outcome_action_intent FOR UPDATE and outcome_action_budget_account FOR UPDATE; executor obligation/event children are appended after those parents. Authority revocation, binding replacement, precondition replacement and evaluator publication take the same fact-stream row first, so provider commit and every authority-changing fact are totally ordered.',
-    identity: 'The frozen actionIntentId plus its provider-enforced idempotencyKey. The lease token identifies this attempt; a provider replay returns the same effect receipt instead of repeating the effect.',
-    isolation: '',
-    attempts: 1,
-    replay: 'Deliberately not retried in process. The provider may already have committed when PostgreSQL rejects or loses the transaction, so replaying this closure would be unsafe. Rollback restores CLAIMED; durable logical lease expiry moves it through bounded BACKOFF, and a later claim invokes the provider with the same idempotency key to recover the standing receipt. Attempt and cost budgets make that recovery finite.',
-    effects: 'The provider action and, only for a reported partial/wrong effect, its compensator run inside this one-attempt transaction while the project fact-stream fence is held. Non-read-only adapters must assert that fence immediately before committing and must enforce the idempotency key. A timeout/partial/wrong receipt becomes an executor remediation obligation; a process/database ambiguity remains leased until the bounded recovery pass.',
-    answer: 'A commit-time authorization/binding/precondition refusal is persisted as its canonical obligation. A database conflict is not absorbed: it escapes the unit, the lease remains the durable recovery fact after rollback, and the next bounded claim recovers by provider-idempotent replay.',
-  },
-  {
     at: 'outcome-reconciler/outcome-versioning.service.ts#replaceBindingAndReevaluate',
     shape: 'TX_RETRIED',
     locks: 'outcome_fact_stream FOR UPDATE is first and remains the one project-wide serialization fence through binding replacement, optional fact appends, cut sealing and evaluation commit. Binding/fact invalidation triggers re-enter that row and then retire outcome_active_obligation children and append transition, obsolescence, successor and obligation-event children; evaluation publication takes the same stream first before rebuilding active obligations. Concurrent units for one project therefore serialize at the stream, while different projects touch disjoint child keys.',
@@ -1292,11 +1279,6 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"failure_successor_handoff","trigger":"failure_successor_handoff_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0212_failure_successor_handoff","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_opencode_guard_delete","event":"BEFORE DELETE","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_opencode_guard_rename","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
-  {"table":"outcome_action_attempt","trigger":"outcome_action_attempt_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
-  {"table":"outcome_action_diagnostic","trigger":"outcome_action_diagnostic_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
-  {"table":"outcome_action_event","trigger":"outcome_action_event_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
-  {"table":"outcome_action_intent","trigger":"outcome_action_committing_must_finish","event":"AFTER INSERT OR UPDATE OF status","kind":"CONSTRAINT","since":"0196_outcome_constrained_action_executor","takes":[]},
-  {"table":"outcome_action_receipt","trigger":"outcome_action_receipt_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
   {"table":"outcome_binding_transition","trigger":"outcome_binding_transition_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_binding_version_invalidation","takes":[]},
   {"table":"outcome_canonical_fact","trigger":"outcome_canonical_fact_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0194_outcome_canonical_fact_ingress","takes":[]},
   {"table":"outcome_canonical_fact","trigger":"outcome_matching_fact_invalidates_reduction","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0196_outcome_binding_version_invalidation","takes":["outcome_active_obligation LOCK","outcome_active_obligation WRITE","outcome_obligation_event WRITE","outcome_obsolete_obligation WRITE","outcome_proof_obsolescence WRITE"]},
@@ -1316,8 +1298,6 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"outcome_evaluation_cut_fact","trigger":"outcome_evaluation_cut_fact_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0194_outcome_canonical_fact_ingress","takes":[]},
   {"table":"outcome_evaluator_result","trigger":"outcome_evaluator_result_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0195_outcome_evaluator_obligation_reduction","takes":[]},
   {"table":"outcome_evaluator_result","trigger":"outcome_evaluator_result_projection_reduce","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0196_obligation_projection_shadow_reconciler","takes":[]},
-  {"table":"outcome_executor_obligation_event","trigger":"outcome_executor_obligation_event_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
-  {"table":"outcome_executor_obligation_revision","trigger":"outcome_executor_obligation_revision_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0196_outcome_constrained_action_executor","takes":[]},
   {"table":"outcome_fact_authority_grant","trigger":"outcome_fact_authority_grant_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0194_outcome_canonical_fact_ingress","takes":[]},
   {"table":"outcome_fact_authority_matrix","trigger":"outcome_fact_authority_matrix_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0194_outcome_canonical_fact_ingress","takes":[]},
   {"table":"outcome_fact_authority_revocation","trigger":"outcome_authority_revocation_invalidates_reduction","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0196_outcome_binding_version_invalidation","takes":["outcome_active_obligation LOCK","outcome_active_obligation WRITE","outcome_obligation_event WRITE","outcome_obsolete_obligation WRITE","outcome_proof_obsolescence WRITE"]},
