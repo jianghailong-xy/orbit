@@ -40,6 +40,7 @@ import {
   deriveReleaseAttemptIdentity,
   nodeDatabaseIdentity,
 } from './outcome-reconciler-release-dag-database.mjs';
+import { guardDisposableResources } from './outcome-reconciler-release-dag-disposable.mjs';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const processStartedAtMs = Date.now();
@@ -871,30 +872,45 @@ async function executeNode(node, attemptDeadlineMs) {
   return receipt;
 }
 
-function cleanupPostgres() {
-  const context = path.join(runRoot, 'postgres-context.json');
-  if (!existsSync(context)) {
-    if (!focusedMode) return;
-    const expected = `orbit-release-dag-pg-${binding.bindingDigest.slice(0, 12)}`;
-    const inspected = run('docker', [
-      'inspect', '--format', '{{ index .Config.Labels "orbit.release-dag.binding" }}', expected,
-    ], { allowFailure: true });
-    if (inspected.status === 0 && inspected.stdout === binding.bindingDigest) {
-      run('docker', ['rm', '-fv', expected], { allowFailure: true });
-    }
-    return;
-  }
-  const result = run('timeout', [
+// The declared cleanup entry point stays the prepare script whenever its context exists. The
+// binding label sweep behind it is what makes the manifest true, and is the whole of cleanup when
+// the context is missing -- a case formal mode used to answer by abandoning cleanup entirely.
+function declaredContextCleanup(context) {
+  return run('timeout', [
     '-k', '5', '30', 'bash',
     'scripts/outcome-reconciler-release-dag-prepare.sh', 'cleanup-postgres', context,
   ], { allowFailure: true });
-  if (result.status !== 0) {
-    console.error(`!! release-dag: PostgreSQL cleanup failed: ${result.stderr || result.stdout}`);
+}
+
+// Cleanup is a fact about the attempt, so it is recorded beside it and folded into the attempt
+// document when one was already written. Both writes are synchronous: this runs from `exit`.
+function recordDisposableCleanup(manifest) {
+  atomicJson(path.join(runRoot, 'disposable-cleanup.json'), manifest);
+  const attemptFile = path.join(runRoot, 'attempt.json');
+  if (existsSync(attemptFile)) {
+    atomicJson(attemptFile, {
+      ...JSON.parse(readFileSync(attemptFile, 'utf8')),
+      disposableCleanup: manifest,
+    });
   }
+  if (manifest.outcome === 'CLEAN') {
+    console.log(`==> release-dag: disposable cleanup CLEAN reason=${manifest.reason} removed=${manifest.removed.length} remaining=0`);
+    return;
+  }
+  console.error(`!! release-dag: disposable cleanup ${manifest.outcome} reason=${manifest.reason} remaining=${manifest.resourcesRemaining} failures=${JSON.stringify(manifest.failures)}`);
 }
 
 const attemptStartedAtMs = processStartedAtMs;
 const attemptDeadlineMs = attemptStartedAtMs + (plan.evaluator.schedulerDeadlineSeconds * 1000);
+// Installed before anything can be provisioned or fail, so the disposable server this attempt owns
+// is removed on every exit path this process has: completion, `process.exit` after a failed node,
+// an uncaught exception, a deadline that admits nothing, and SIGTERM.
+guardDisposableResources({
+  bindingDigest: binding.bindingDigest,
+  contextPath: path.join(runRoot, 'postgres-context.json'),
+  declaredContextCleanup,
+  onManifest: recordDisposableCleanup,
+});
 // The focused rebind preflight is an observation, not a resumable formal attempt. It always
 // exercises the disposable PostgreSQL and isolated Prisma fixture from scratch.
 const completed = focusedMode ? new Map() : loadReusable();
@@ -955,8 +971,9 @@ try {
     }
   }
 } finally {
-  // A bounded evaluator timeout or failed node leaves the exact-binding template available for
-  // the next invocation, so only unfinished nodes are rescheduled. Successful cuts clean it up.
+  // Artifact checkpoints survive a bounded evaluator timeout or a failed node, so only unfinished
+  // nodes are rescheduled. The disposable server does not survive with them: a partial cut
+  // re-prepares it rather than holding 3 GiB of the host hostage until the next attempt.
 }
 
 let focusedRegression = null;
@@ -1055,9 +1072,7 @@ console.log(JSON.stringify(attempt, null, 2));
 // a run that fails on the same nodes must digest the same, and nothing that varies per run (time,
 // path, pid, log body) is allowed to reach it. Printed last so a truncated head cannot fake it.
 console.log(`##orbit-failure-sites:v1 ${[...new Set([...failed, ...timedOut])].sort().join(' ')}`);
-if (focusedMode) cleanupPostgres();
 if (incomplete.length !== 0
   || ((focusPccRebind || focusRegressionRebind) && focusedRegression?.outcome !== 'PASS')) {
   process.exit(1);
 }
-if (!focusedMode) cleanupPostgres();
