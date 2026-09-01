@@ -60,7 +60,7 @@ const sourceFiles = [
   'src/web/src/lib/outcomeSurfaces.ts',
   'src/web/src/lib/outcomeSurfaces.contract.test.ts',
   'src/web/src/pages/JudgmentInboxPage.tsx',
-  'src/web/src/pages/OwnerRatificationReviewPage.tsx',
+  'src/web/src/components/ProjectCriteriaProposalCard.tsx',
   'test/outcome-reconciler-v2.surfaces.test.mjs',
 ];
 const sources = Object.fromEntries(sourceFiles.map((file) => [file, fileDigest(file)]));

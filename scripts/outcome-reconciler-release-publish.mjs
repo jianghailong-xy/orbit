@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Explicit one-shot production publisher. Run only after the exact remote target has passed the
-// prebinding matrix and its immutable task evidence exists. It never creates or replaces Owner
-// Ratification, never writes Project/Task status, and leaves the independent verifier dimension
-// honestly open for the successor verifier task.
+// prebinding matrix and its immutable task evidence exists. It never writes Project/Task status,
+// and leaves the independent verifier dimension honestly open for the successor verifier task.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -62,6 +61,8 @@ let committed = false;
 try {
   await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
 
+  // The approval queue is gone (migration 0218). The publisher still refuses to substitute for a
+  // contract that moved: the deployed completion contract must be exactly the declared one.
   const scope = await one(`
     SELECT project.id::text AS "projectId", project.owner_id::text AS "ownerId",
            project.goal,
@@ -71,46 +72,23 @@ try {
            btrim(contract.risk_policy_digest::text) AS "riskPolicyDigest",
            btrim(contract.permission_digest::text) AS "permissionDigest",
            btrim(contract.budget_digest::text) AS "budgetDigest",
-           btrim(contract.recipient_digest::text) AS "recipientDigest",
-           ratification.id::text AS "ratificationId",
-           ratification.contract_revision::text AS "ratificationContractRevision",
-           btrim(ratification.contract_digest::text) AS "ratificationContractDigest",
-           btrim(ratification.evaluation_plan_digest_at_decision::text)
-             AS "ratificationEvaluationPlanDigest",
-           ratification.source AS "ratificationSource",
-           ratification.ratified_by_type AS "ratifiedByType",
-           ratification.ratified_by_id AS "ratifiedById",
-           project_owner_ratification_effective(
-             project.id, contract.contract_digest::text) AS "ratificationEffective"
+           btrim(contract.recipient_digest::text) AS "recipientDigest"
       FROM project
       JOIN project_completion_contract contract ON contract.project_id=project.id
-      JOIN project_owner_ratification ratification
-        ON ratification.id=$3::uuid AND ratification.project_id=project.id
      WHERE project.id=$1::uuid AND project.owner_id=$2::uuid
      FOR UPDATE OF project
   `, [
     contract.project.databaseId,
     contract.ownerRatification.ownerDatabaseId,
-    contract.ownerRatification.databaseId,
   ]);
   assert.equal(scope.projectId, contract.project.databaseId);
   assert.equal(scope.ownerId, contract.ownerRatification.ownerDatabaseId);
   assert.equal(scope.contractDigest, contract.ownerRatification.contractDigest,
-    'semantic contract changed; owner decision is required');
+    'semantic contract changed since the declared frontier');
   assert.equal(scope.contractRevision, contract.ownerRatification.contractRevision,
-    'semantic contract revision changed; owner decision is required');
+    'semantic contract revision changed since the declared frontier');
   assert.equal(scope.evaluationPlanDigest, contract.ownerRatification.evaluationPlanDigest,
-    'evaluation plan changed after the declared ratification');
-  assert.equal(scope.ratificationId, contract.ownerRatification.databaseId);
-  assert.equal(scope.ratificationContractRevision, contract.ownerRatification.contractRevision);
-  assert.equal(scope.ratificationContractDigest, contract.ownerRatification.contractDigest);
-  assert.equal(scope.ratificationEvaluationPlanDigest,
-    contract.ownerRatification.evaluationPlanDigest);
-  assert.equal(scope.ratificationSource, 'OWNER');
-  assert.equal(scope.ratifiedByType, 'OWNER');
-  assert.equal(scope.ratifiedById, contract.ownerRatification.ownerDatabaseId);
-  assert.equal(scope.ratificationEffective, true,
-    'Owner Ratification is not effective; this publisher will not substitute for the owner');
+    'evaluation plan changed since the declared frontier');
 
   const evidence = await one(`
     SELECT evidence.id::text AS id,
@@ -326,11 +304,13 @@ try {
     contractDigest: scope.contractDigest,
     evaluationPlanDigest: scope.evaluationPlanDigest,
     ratification: {
+      // A supplied canonical fact in the frozen outcome-reconciler v2 goal shape. It reads no
+      // approval row: the publisher has already proved the deployed contract is the declared one.
       status: 'RATIFIED',
       ratifierType: 'OWNER',
       ratifierId: scope.ownerId,
       contractDigest: scope.contractDigest,
-      factId: scope.ratificationId,
+      factId: contract.project.databaseId,
     },
     disposition: contract.canonicalBinding.goalDisposition,
   };
@@ -447,9 +427,8 @@ try {
   assert.notEqual(gate?.reason?.code, 'CURRENT_BINDING_MISSING');
   assert.equal(gate?.canonicalIdentity?.bindingDigest, registration.bindingDigest);
   assert.equal(gate?.canonicalIdentity?.cutId, cut.cutId);
-  assert.equal(gate?.ratification?.effectiveNow, true);
-  assert.equal(gate?.ratification?.currentContractDigest, scope.contractDigest);
-  assert.equal(gate?.ratification?.boundContractDigest, scope.contractDigest);
+  assert.equal(gate?.ratification, undefined,
+    'the DONE gate must no longer carry a ratification clause');
 
   await client.query('COMMIT');
   committed = true;
@@ -463,12 +442,10 @@ try {
     releaseEvidenceId,
     releaseEvidenceDigest,
     mergeReceiptId,
-    ownerRatification: {
-      id: scope.ratificationId,
+    projectContract: {
       contractDigest: scope.contractDigest,
       contractRevision: scope.contractRevision,
       evaluationPlanDigest: scope.evaluationPlanDigest,
-      effective: true,
       unchanged: true,
     },
     canonicalBinding: registration,

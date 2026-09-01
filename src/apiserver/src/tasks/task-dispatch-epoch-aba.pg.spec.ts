@@ -20,7 +20,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -132,7 +132,7 @@ async function fixture(
       autoRunWhenReady: task.autoRunWhenReady ?? false,
     },
   });
-  await ratifyProjectForPgTest(db, ids.ownerId, ids.projectId, `dispatch-epoch-${label}`);
+  await establishProjectContractForPgTest(db, ids.ownerId, ids.projectId, `dispatch-epoch-${label}`);
   return ids;
 }
 

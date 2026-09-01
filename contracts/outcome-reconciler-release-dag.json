@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "c45d9c5415a0a608b40f5fcff3bb88261ec1f0ab3dd8710b5ecc7a70783de955",
+  "declaredDagPlanDigest": "c9d20c1f8117a19d0aec9d4a91a25c00603e40bbac79d2197529ea38f1bb96e9",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34GlvYGNFrhA41IVx67o0",
   "supersededAttempt": {
@@ -167,7 +167,6 @@
       "full-shared": 16,
       "full-swift": 150,
       "full-web": 609,
-      "owner-ratification-inbox-routing": 67,
       "preflight-binding": 1,
       "prepare-build": 97,
       "prepare-dependencies": 15,
@@ -185,7 +184,6 @@
       "suite-done-gate": 20,
       "suite-evaluator": 22,
       "suite-fact-ingress": 11,
-      "suite-owner-ratification-ui": 58,
       "suite-projection": 20,
       "suite-protocol": 5,
       "suite-ratification": 27,
@@ -514,8 +512,6 @@
       "suite-versioning": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "suite-surfaces": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "suite-replay": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "suite-owner-ratification-ui": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "owner-ratification-inbox-routing": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "full-api-inventory": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "full-api-shard-0": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
       "full-api-shard-1": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
@@ -568,7 +564,6 @@
     { "name": "surfaces", "packageScript": "test:outcome-reconciler:surfaces", "nodeId": "suite-surfaces" },
     { "name": "replay", "packageScript": "test:outcome-reconciler:replay", "nodeId": "suite-replay" },
     { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "nodeId": "suite-canary" },
-    { "name": "owner-ratification-ui", "packageScript": "test:outcome-reconciler:owner-ratification-ui", "nodeId": "suite-owner-ratification-ui" },
     { "name": "full-api", "packageScript": "test:outcome-reconciler:full-api", "nodeId": "full-api" },
     { "name": "full-clients", "packageScript": "test:outcome-reconciler:full-clients", "nodeId": "full-clients" },
     { "name": "authoritative-target", "packageScript": "test:outcome-reconciler:authoritative-target", "nodeId": "authoritative-target" }
@@ -670,8 +665,6 @@
     { "id": "suite-surfaces", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified", "web-src"] },"kind": "restored-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:surfaces"], "timeoutSeconds": 60, "resources": { "cpu": 2, "memoryMiB": 2048, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-surfaces-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-replay", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "restored-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:replay"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-replay-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "suite-canary", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified"] },"kind": "restored-suite", "dependsOn": ["suite-watchdog-111k", "suite-acceptance-runtime"], "command": ["npm", "run", "test:outcome-reconciler:canary"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1024 }, "outputs": ["build/outcome-reconciler-v2-canary-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true },
-    { "id": "suite-owner-ratification-ui", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified", "web-src"] },"kind": "restored-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:owner-ratification-ui"], "timeoutSeconds": 120, "resources": { "cpu": 2, "memoryMiB": 2048, "postgres": 1 }, "outputs": ["build/outcome-reconciler-owner-ratification-ui-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "owner-ratification-inbox-routing", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified", "web-src"] },"kind": "target-regression", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:owner-ratification-inbox-routing"], "timeoutSeconds": 140, "resources": { "cpu": 2, "memoryMiB": 2048, "postgres": 1 }, "outputs": ["build/outcome-reconciler-owner-ratification-inbox-routing-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "postgresTemplate": "before-owner-routing" },
 
     { "id": "full-api-inventory", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "matrix-preparation", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "inventory", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 512, "io": 1 }, "outputs": ["${RUN_ROOT}/full-api-inventory.json"], "cacheable": true, "testBearing": false, "usesSharedBuild": true, "usesSharedPostgres": true },
     { "id": "full-api-shard-0", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "full-api-shard", "dependsOn": ["full-api-inventory"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "shard", "0", "4", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 1860, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["${RUN_ROOT}/full-api-shard-0.json", "${RUN_ROOT}/full-api-shard-0.tap"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "partition": { "index": 0, "count": 4, "class": "parallel" } },
@@ -700,8 +693,8 @@
         "suite-ratification", "suite-auto-dispatch", "suite-work-overview-readiness",
         "suite-auto-dispatch-integration", "suite-watchdog-current-binding-regression",
         "suite-watchdog-current-binding", "suite-delivery", "suite-versioning",
-        "suite-surfaces", "suite-replay", "suite-canary", "suite-owner-ratification-ui",
-        "owner-ratification-inbox-routing", "full-api", "full-clients", "authoritative-target"
+        "suite-surfaces", "suite-replay", "suite-canary",
+        "full-api", "full-clients", "authoritative-target"
       ],
       "command": ["node", "scripts/outcome-reconciler-release-dag-aggregate.mjs", "${RUN_ROOT}", "build/outcome-reconciler-release-dag-manifest.json"],
       "timeoutSeconds": 180,

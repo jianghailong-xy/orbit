@@ -28,7 +28,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { TasksService } from './tasks.service';
-import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -68,7 +68,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   for (const [id, title] of [[projectId, label], [otherProjectId, `${label}-other`]] as const) {
     await db.project.create({ data: { id, ownerId, title } });
     await db.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
-    await ratifyProjectForPgTest(db, ownerId, id, title);
+    await establishProjectContractForPgTest(db, ownerId, id, title);
   }
   return { ownerId, projectId, otherProjectId, workspaceId };
 }

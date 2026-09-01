@@ -15,7 +15,6 @@ import {
   type ProjectAcceptanceRun,
   type ProjectAcceptanceVerdict,
 } from '../lib/projectAcceptance';
-import { ownerRatificationReviewPath } from '../lib/outcomeSurfaces';
 
 type DraftVerdict = ProjectAcceptanceVerdict | '';
 
@@ -290,9 +289,8 @@ export function ProjectAcceptanceReviewPage() {
     if (inlineError) errorRef.current?.focus();
   }, [inlineError]);
 
-  const criteriaConfirmed = review.data?.criteriaConfirmation.confirmed ?? false;
   const actionable = Boolean(
-    run && !run.supersededAt && review.data?.status !== 'DONE' && criteriaConfirmed,
+    run && !run.supersededAt && review.data?.status !== 'DONE',
   );
   const unanswered = humanCriteria.filter((criterion) => !drafts[criterion.id]?.verdict);
   const invalidExitCodes = humanCriteria.filter((criterion) => {
@@ -304,7 +302,6 @@ export function ProjectAcceptanceReviewPage() {
   const submit = useMutation({
     mutationFn: () => {
       if (!projectId || !runId || !run) throw new Error('项目验收尚未准备好。');
-      if (!criteriaConfirmed) throw new Error('请先在独立的 Owner Ratification 流程批准当前项目合约。');
       if (unanswered.length > 0) {
         throw new Error(`每条判据都要回答；尚未回答：${unanswered.map((item) => item.ordinal).join('、')}。`);
       }
@@ -381,15 +378,10 @@ export function ProjectAcceptanceReviewPage() {
 
       <Alert
         className="judgment-state-alert project-criteria-confirmation"
-        type={criteriaConfirmed ? 'success' : 'warning'}
+        type="info"
         showIcon
-        title={criteriaConfirmed ? '当前项目合约已完成 Owner Ratification' : '当前项目合约尚未 Owner Ratification'}
-        description={criteriaConfirmed
-          ? `Ratification 绑定 contract digest ${review.data.contractDigest ?? review.data.criteriaDigest}；本页只处理逐项 HUMAN_SIGNOFF。`
-          : 'Owner Ratification 是项目合约的价值与授权决定；它与本页逐项 HUMAN_SIGNOFF 明确分离。'}
-        action={criteriaConfirmed ? undefined : (
-          <Link to={ownerRatificationReviewPath(projectId)}>前往 Owner Ratification →</Link>
-        )}
+        title="本页只处理逐项 HUMAN_SIGNOFF"
+        description={`当前标准集 digest ${review.data.criteriaDigest}；改动这套标准要走 agent 提议、账号所有者在卡片上确认的通道，不在本页。`}
       />
 
       <Alert
@@ -457,9 +449,7 @@ export function ProjectAcceptanceReviewPage() {
         <p id="project-acceptance-submit-help">
           {unanswered.length > 0
             ? `还需回答判据：${unanswered.map((criterion) => criterion.ordinal).join('、')}。`
-            : !criteriaConfirmed
-              ? '先在独立页面完成 Owner Ratification，再提交逐项人工判定。'
-              : invalidExitCodes.length > 0
+            : invalidExitCodes.length > 0
               ? `退出码必须是整数：判据 ${invalidExitCodes.map((criterion) => criterion.ordinal).join('、')}。`
               : '全部判据已回答。最终 run verdict 由服务端根据逐条结论推导。'}
         </p>
@@ -480,7 +470,7 @@ export function ProjectAcceptanceReviewPage() {
           type="info"
           showIcon
           title="没有需要人工逐条判定的标准"
-          description="Owner Ratification 完成后，EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE；这里不会制造 HUMAN_SIGNOFF。"
+          description="EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE；这里不会制造 HUMAN_SIGNOFF。"
         />
       )}
 

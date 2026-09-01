@@ -119,7 +119,6 @@ import {
   CompletionAckObligationBanner,
   controlPlaneObligationsOf,
 } from './CompletionAckObligationBanner';
-import { SessionOwnerRatificationCard } from './SessionOwnerRatificationCard';
 import { ProjectCriteriaProposalCard } from './ProjectCriteriaProposalCard';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import {
@@ -5369,16 +5368,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           />
         )}
 
-        {/* A contract drafted by the agent in THIS conversation is confirmed in this conversation.
-            Gated on the coordinator pointer so an ordinary session issues no extra read; the card
-            itself renders nothing until the owner-scoped inbox says this session has a question. */}
-        {selectedSession?.projectId && !selectedTrashed && !composing && (
-          <SessionOwnerRatificationCard sessionId={selectedSession.id} />
-        )}
-
         {/* An agent's proposal to change what this project counts as done. The proposal has
             already been recorded and has moved nothing; this is where the owner reads the diff
-            and decides. Same conversation, same credential, same reason the card above exists. */}
+            and decides: same conversation, same credential the agent could not use. */}
         {selectedSession?.projectId && !selectedTrashed && !composing && (
           <ProjectCriteriaProposalCard projectId={selectedSession.projectId} />
         )}

@@ -27,7 +27,7 @@ import { buildJudgmentOpening, judgmentSessionTitle } from './coordinator-judgme
 import { WakeFact, attemptEndedUnsettledFact, projectTasksSettledFact } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { ratifyProjectForPgTest } from './project-ratification-test-helper';
+import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectsService } from './projects.service';
 
 /**
@@ -126,7 +126,7 @@ async function fixture(db: PrismaClient, label: string, landed = true): Promise<
       creatorType: CreatorType.USER, creatorId: ownerId, status: TaskStatus.IN_PROGRESS,
     },
   });
-  await ratifyProjectForPgTest(db, ownerId, projectId, label);
+  await establishProjectContractForPgTest(db, ownerId, projectId, label);
   return { ownerId, workspaceId, projectId, taskId };
 }
 

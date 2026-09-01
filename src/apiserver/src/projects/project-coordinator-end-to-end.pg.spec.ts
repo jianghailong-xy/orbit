@@ -46,7 +46,7 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { ratifyProjectForPgTest } from './project-ratification-test-helper';
+import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 
@@ -214,7 +214,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
     );
     assert.equal(project.coordinatorEnabled, true);
     assert.equal(project.coordinatorWorkspaceId, workspaceId);
-    await ratifyProjectForPgTest(db, ownerId, project.id, 'T8 integrated replay');
+    await establishProjectContractForPgTest(db, ownerId, project.id, 'T8 integrated replay');
 
     // Create the edge before releasing it. The production signoff service owns the instant
     // dependency trigger; the explicit sweep immediately afterwards proves that its backstop is

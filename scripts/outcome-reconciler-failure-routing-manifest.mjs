@@ -88,8 +88,10 @@ assert.deepEqual(
   evidence.results.convergence.map(({ path }) => path),
   ['PRIMARY_RECOVERY', 'ALTERNATE_DIAGNOSIS', 'PROJECT_ATTENTION'],
 );
-assert.equal(evidence.results.evaluationPlan.ratified, true);
-assert.equal(evidence.results.evaluationPlan.routedDomain, 'EVALUATION_HARNESS');
+assert.equal(evidence.results.evaluationPlan.routedNode, 'PRODUCT_BEHAVIOR');
+assert.equal(evidence.results.evaluationPlan.routedDomain, 'PRODUCT_ARTIFACT');
+assert.equal(evidence.results.evaluationPlan.ownerReason, null);
+assert.equal(evidence.results.evaluationPlan.routedOwnerInboxRows, 0);
 assert.notEqual(
   evidence.results.evaluationPlan.beforeEvaluationPlanDigest,
   evidence.results.evaluationPlan.afterEvaluationPlanDigest,

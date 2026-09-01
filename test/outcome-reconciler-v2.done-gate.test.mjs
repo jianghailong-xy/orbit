@@ -42,7 +42,7 @@ const evidence = {
     structuredReasons: false,
     unknownAndConflictFailClosed: false,
     modelGapFailClosed: false,
-    ownerRatificationEnforced: false,
+    contractDriftBlocksTheGate: false,
     deliveryPolicyEnforced: false,
     mandatoryObligationsEnforced: false,
     crossProjectEdgesOrthogonal: false,
@@ -88,15 +88,7 @@ async function jsonCall(client, text, values) {
   return result.rows[0].result;
 }
 
-async function ratificationState(projectId, client = pool) {
-  return jsonCall(
-    client,
-    'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS result',
-    [ownerId, projectId],
-  );
-}
-
-async function createProject(label, { ratify = true } = {}) {
+async function createProject(label) {
   const projectId = randomUUID();
   const definitionId = randomUUID();
   const goal = `${label} canonical goal`;
@@ -120,27 +112,18 @@ async function createProject(label, { ratify = true } = {}) {
       digest(`criterion:${definitionId}`),
     ],
   );
-  let current = await ratificationState(projectId);
-  if (ratify) {
-    const request = current.decisionRequest;
-    const approved = await jsonCall(
-      pool,
-      `SELECT project_owner_ratify_contract(
-         $1::uuid,$2::uuid,'OWNER',$1::text,$3,$4::uuid,$5::uuid,'APPROVE',$6,false
-       ) AS result`,
-      [
-        ownerId,
-        projectId,
-        current.contractDigest,
-        request?.id ?? null,
-        request?.ctaToken ?? null,
-        `done-gate-owner:${projectId}:${randomUUID()}`,
-      ],
-    );
-    assert.equal(approved.ok, true);
-    current = await ratificationState(projectId);
-    assert.equal(current.ratified, true);
-  }
+  await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
+    [projectId, 'DONE_GATE_FIXTURE']);
+  const current = (await pool.query(
+    `SELECT "contract_digest"::text AS "contractDigest",
+            "evaluation_plan_digest"::text AS "evaluationPlanDigest",
+            "risk_policy_digest"::text AS "riskPolicyDigest",
+            "permission_digest"::text AS "permissionDigest",
+            "budget_digest"::text AS "budgetDigest",
+            "recipient_digest"::text AS "recipientDigest"
+       FROM "project_completion_contract" WHERE "project_id" = $1::uuid`,
+    [projectId],
+  )).rows[0];
   return { projectId, definitionId, goal, state: current };
 }
 
@@ -191,8 +174,8 @@ function makeBinding(scope) {
   };
 }
 
-async function setupScope(label, options = {}) {
-  const project = await createProject(label, options);
+async function setupScope(label) {
+  const project = await createProject(label);
   const scope = {
     project,
     tenantId: ownerId,
@@ -384,7 +367,7 @@ function assertStructuredGate(gate) {
     'reasons', 'blockingReasons', 'diagnostics', 'obligations',
     'blockingObligations', 'nonBlockingObligations',
   ]) assert.ok(Array.isArray(gate[field]), `${field} must be an array`);
-  for (const field of ['canonicalIdentity', 'ratification', 'deliveryPolicy', 'crossProject']) {
+  for (const field of ['canonicalIdentity', 'deliveryPolicy', 'crossProject']) {
     assert.ok(gate[field] && typeof gate[field] === 'object', `${field} must be an object`);
   }
   assert.ok(gate.reason && typeof gate.reason === 'object');
@@ -499,7 +482,6 @@ test('gate and evaluator return the exact same current cut, proof and empty obli
   );
   assert.equal(gate.canonicalIdentity.bindingDigest, scope.bindingDigest);
   assert.equal(gate.canonicalIdentity.proofDigest, closedFixture.evaluation.proof.proofDigest);
-  assert.equal(gate.ratification.effectiveNow, true);
   assert.equal(gate.deliveryPolicy.mode, 'POST_MERGE_VERIFIED');
   evidence.invariants.sameCutAgreement = true;
   evidence.invariants.canonicalProofReturned = true;
@@ -522,7 +504,6 @@ test('an unknown evaluator result shape is still a complete actionable gate view
   assert.equal(gate.reason.owner, 'SYSTEM');
   assert.equal(gate.reason.actor, 'SYSTEM');
   assert.equal(gate.reason.nextAction, 'outcome.evaluator.repair');
-  assert.equal(gate.ratification.validOnEvaluationCut, false);
   assert.equal(gate.deliveryPolicy.mode, 'UNKNOWN');
 });
 
@@ -586,24 +567,30 @@ test('a missing required dimension becomes MODEL_GAP and cannot look like empty 
   evidence.invariants.modelGapFailClosed = true;
 });
 
-test('a contract change invalidates Owner Ratification after an otherwise closed evaluation', async () => {
-  const scope = await setupScope('ratification-invalid');
-  await createEvaluation(scope, 'ratification-invalid');
+test('a contract change after the evaluation cut blocks the gate as staleness, not authority',
+  async () => {
+  const scope = await setupScope('contract-drift');
+  await createEvaluation(scope, 'contract-drift');
   assert.equal((await queryGate(scope.projectId)).allowed, true);
   await pool.query(
     'UPDATE project SET goal=$2, updated_at=now() WHERE id=$1::uuid',
-    [scope.projectId, `${scope.project.goal} changed after ratification`],
+    [scope.projectId, `${scope.project.goal} changed after the cut`],
   );
-  const current = await ratificationState(scope.projectId);
-  assert.equal(current.ratified, false);
   const gate = await queryGate(scope.projectId);
   assertStructuredGate(gate);
   assert.equal(gate.allowed, false);
-  assert.equal(gate.reason.code, 'OWNER_RATIFICATION_INVALID');
-  assert.equal(gate.reason.owner, 'OWNER');
-  assert.equal(gate.reason.actor, 'OWNER');
-  assert.equal(gate.reason.nextAction, 'owner.ratification.review');
-  evidence.invariants.ownerRatificationEnforced = true;
+  // The refusal is that this gate is speaking for a cut that has moved -- a staleness fact the
+  // reconciler repairs by rebinding. It is no longer "nobody signed this contract".
+  assert.equal(gate.reason.code, 'COMPLETION_CONTRACT_DRIFTED');
+  assert.equal(gate.reason.category, 'STALENESS');
+  assert.equal(gate.reason.owner, 'SYSTEM');
+  assert.equal(gate.reason.actor, 'SYSTEM');
+  assert.equal(gate.reason.nextAction, 'reconciler.rebind');
+  assert.equal(gate.ratification, undefined,
+    'the DONE gate no longer carries a ratification clause at all');
+  assert.ok(!JSON.stringify(gate.reasons).includes('OWNER_RATIFICATION'),
+    'no reason may name owner ratification');
+  evidence.invariants.contractDriftBlocksTheGate = true;
 });
 
 test('missing delivery attestation is explicit and names the bound dimensions to repair', async () => {

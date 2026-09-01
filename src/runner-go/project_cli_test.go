@@ -208,7 +208,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"acceptance", "owner-decision-request", "obligations", "criteria-confirm", "acceptance-run", "acceptance-verdict", "merge-evidence",
+		"acceptance", "owner-decision-request", "obligations", "acceptance-run", "acceptance-verdict", "merge-evidence",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -240,7 +240,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. Unit L7's two reads are here — what has been
 	// asked about work crossing this project's line, and what reopening it would cost. Neither has
 	// a companion that WRITES, and that absence is the point.
-	if len(specs) != 13 {
+	if len(specs) != 12 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -273,7 +273,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
 		"project_owner_decision_request",
-		"project_criteria_confirm", "project_acceptance_run", "project_acceptance_verdict",
+		"project_acceptance_run", "project_acceptance_verdict",
 		"project_merge_evidence",
 	} {
 		write, ok := specs[tool]
@@ -352,38 +352,13 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	}
 }
 
-func TestProjectCriteriaConfirmPostsDigestActionWithSessionContext(t *testing.T) {
-	var method, path, session string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method, path = r.Method, r.URL.Path
-		session = r.Header.Get("X-Orbit-Session-Id")
-		_, _ = w.Write([]byte(`{"current":true}`))
-	}))
-	defer srv.Close()
-	configureCLITestRunner(t, srv.URL)
-	t.Setenv("ORBIT_SESSION_ID", "judgment-session-1")
-
-	var out bytes.Buffer
-	if err := cmdProjectCLI([]string{
-		"criteria-confirm", "proj-1", "--json",
-	}, strings.NewReader(""), &out); err != nil {
-		t.Fatalf("project criteria-confirm: %v", err)
-	}
-	if method != http.MethodPost || path != "/api/runner/projects/proj-1/acceptance/criteria-confirmation" {
-		t.Fatalf("project criteria-confirm hit %s %s", method, path)
-	}
-	if session != "judgment-session-1" {
-		t.Fatalf("project criteria-confirm session = %q", session)
-	}
-}
-
 // The command capabilities advertises must also be pre-approved, or the agent hits a permission
 // prompt for something the document just told it to run.
 func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	rules := strings.Join(orbitCLIAllowedTools("/usr/local/bin/orbit", false), "\n")
 	// Every verb capabilities advertises, individually. A write the document names but that is not
 	// pre-approved stalls on a permission prompt the agent cannot answer headless.
-	for _, action := range []string{"get", "criteria-confirm", "create", "update", "delete"} {
+	for _, action := range []string{"get", "create", "update", "delete"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}

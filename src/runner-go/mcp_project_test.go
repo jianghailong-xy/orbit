@@ -108,31 +108,6 @@ func TestMCPProjectGetReportsTheServerError(t *testing.T) {
 	}
 }
 
-func TestMCPProjectCriteriaConfirmCarriesTheJudgmentSession(t *testing.T) {
-	var method, path, session string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method, path = r.Method, r.URL.Path
-		session = r.Header.Get("X-Orbit-Session-Id")
-		_, _ = w.Write([]byte(`{"current":true}`))
-	}))
-	defer srv.Close()
-
-	mcp := &mcpServer{
-		t:         NewTransport(srv.URL, "tok"),
-		sessionID: "judgment-session-1",
-	}
-	res := mcp.callTool("project_criteria_confirm", map[string]interface{}{"projectId": "proj-1"})
-	if res["isError"] == true {
-		t.Fatalf("project_criteria_confirm returned an error: %#v", res["content"])
-	}
-	if method != http.MethodPost || path != "/api/runner/projects/proj-1/acceptance/criteria-confirmation" {
-		t.Fatalf("project_criteria_confirm hit %s %s", method, path)
-	}
-	if session != "judgment-session-1" {
-		t.Fatalf("project_criteria_confirm session = %q", session)
-	}
-}
-
 func TestMCPProjectOwnerDecisionRequestIsStructuredAndBoundToCurrentSession(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	props := mcpToolProps(tools, "project_owner_decision_request")
@@ -238,7 +213,7 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// than behind the orchestration gate for the reason project_create is — the session
 			// that most needs to run a project's acceptance is a coordinator, which has no
 			// session_* tools at all.
-			"project_acceptance", "project_owner_decision_request", "project_obligations", "project_criteria_confirm", "project_acceptance_run",
+			"project_acceptance", "project_owner_decision_request", "project_obligations", "project_acceptance_run",
 			"project_acceptance_verdict",
 			"project_merge_evidence",
 			// Unit L7: two READS and no third write. A coordinator refused

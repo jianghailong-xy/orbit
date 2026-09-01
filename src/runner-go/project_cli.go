@@ -39,7 +39,6 @@ Usage:
   orbit project acceptance PROJECT_ID [--json]
   orbit project owner-decision-request PROJECT_ID --obligation-id SHA256 --obligation-revision SHA256 --reason REASON --request JSON [--json]
   orbit project obligations PROJECT_ID [--surface SURFACE] [--json]
-  orbit project criteria-confirm PROJECT_ID [--json]
   orbit project acceptance-run PROJECT_ID [--json]
   orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
@@ -133,7 +132,7 @@ Returns:
                    stale projection and read failure all deny closure explicitly
 
 DONE refusal uses CANONICAL_DONE_GATE_BLOCKED and returns the full doneGate. Its reason codes name
-the actual dimension, ratification, delivery, obligation, attribution or reconciler condition.
+the actual dimension, delivery, obligation, attribution or reconciler condition.
 Legacy blocker/signal summaries are diagnostic history and do not independently decide closure.
 
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
@@ -168,19 +167,6 @@ Every view carries the same obligation id and revision, semantic binding, struct
 proof, and evaluated-through watermark as the API and Web. Only the AGENT-specific CTA is derived
 for this runner. AGENT_QUEUE is the default. RECONCILER_STALE is an error state, never an empty
 queue and never evidence that the project has nothing left to do.
-`,
-	"criteria-confirm": `orbit project criteria-confirm — confirm the current standard set once
-
-Usage:
-  orbit project criteria-confirm PROJECT_ID [--json]
-
-Records that the complete current project acceptance standard set expresses the goal. The record
-is bound to its revision-bearing digest: changing any criterion text, method, peer criterion,
-command, expected exit code, or evidence Task makes it non-current and requires a new confirmation.
-
-This is a HUMAN_ONLY workflow action, not proof of human presence. A PROJECT_COORDINATOR one-shot
-judgment Session is refused. A headless runner credential is admitted and recorded as RUNNER audit
-provenance; borrowed or minted owner credentials remain indistinguishable from owner use.
 `,
 	"acceptance-run": `orbit project acceptance-run — evaluate the current evidence version
 
@@ -320,7 +306,7 @@ set you send is recorded as one card for the account owner, the criteria already
 deciding whether this project is done, and nothing changes until the owner approves it. Read
 acceptanceCriteriaProposal in the response for the card and the semantic diff it will show them.
 Preserve ids returned by project_get when editing or reordering; omit id to add an item; [] is
-refused, because a project measured by nothing cannot be ratified. Every item requires
+refused, because a project cannot be measured by nothing. Every item requires
 verificationMethod and one peer completionCriterion. EXECUTABLE also requires its command,
 expected exit code and source Task; VERIFICATION requires an independent verifier Task.
 The legacy flags remain recognized only so old runner scripts fail with an actionable error rather
@@ -364,12 +350,11 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the current acceptance history and the canonical doneGate: exact binding/evaluation cut, proof graph, active obligations, structured reasons, owner/actor and next action. CANONICAL_DONE_GATE_BLOCKED carries this complete view; unknown types, stale projection and read failures deny closure explicitly, while legacy blocker/signal summaries do not decide it."},
 	{Tool: "project_owner_decision_request", Argv: []string{"orbit", "project", "owner-decision-request"}, Usage: "orbit project owner-decision-request PROJECT_ID --obligation-id SHA256 --obligation-revision SHA256 --reason REASON --request JSON [--json]", Arguments: []string{"[project-id] (required)", "--obligation-id <sha256> (required)", "--obligation-revision <sha256> (required)", "--reason <NEW_AUTHORIZATION|RISK_ACCEPTANCE|GOAL_DECISION|EXTERNAL_IDENTITY> (required)", "--request <json object> | --request-file - (whyNotAgent, options, impacts, recommendation, noActionConsequence, cost, deadline, resumeBehavior, idempotencyKey)", "--json"}, Description: "Request one irreducibly owner-shaped input for the exact active completion-ACK remediation delivered to this coordinator Session. The server binds the request to the current non-revoked delivery and keeps the canonical parent ACTIVE and AGENT-owned; ordinary code repair, deployment and verification remain coordinator work.", Mutates: true},
 	{Tool: "project_obligations", Argv: []string{"orbit", "project", "obligations"}, Usage: "orbit project obligations PROJECT_ID [--surface SURFACE] [--json]", Arguments: []string{"[project-id] (required)", "--surface <AGENT_QUEUE|DONE_GATE|PROJECT_ATTENTION|WEB>", "--json"}, Description: "Read the canonical obligation identity, revision, binding, structured reason/proof and evaluated-through watermark, with only the AGENT CTA derived for this runner. Stale projection is explicit and never an empty queue."},
-	{Tool: "project_criteria_confirm", Argv: []string{"orbit", "project", "criteria-confirm"}, Usage: "orbit project criteria-confirm PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Confirm the complete current standard set once, bound to its revision-bearing digest. Any semantic edit requires a new confirmation. A judgment Session is refused; a headless runner is admitted with RUNNER audit provenance, which is visibility rather than proof of human presence.", Mutates: true},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Evaluate the current project acceptance evidence version. This is idempotent: concurrent callers observing the same criteria and merge evidence receive the same version. Evidence changes advance it automatically; prior conclusion events carry forward until refuted.", Mutates: true},
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the evidence version to conclude against)", "--criteria <json> | --criteria-file - (one entry per HUMAN_SIGNOFF criterion: {criterionId|ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Append evidence-backed conclusion events for HUMAN_SIGNOFF criteria. EXECUTABLE and VERIFICATION reject fallback human verdicts and use their declared durable input. Current PASS/FAIL/INCONCLUSIVE is derived from the peer outcomes; every event records who, when and which evidence version. A judgment-session or machine-attributed call may refute; human PASS uses the owner-attributed channel. That is workflow and audit provenance, not proof of human presence.", Mutates: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up, advances the evidence version automatically, and re-evaluates the current acceptance standing without a manual reopen.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod + explicit completionCriterion)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text, reader-facing verificationMethod, and one explicit peer completionCriterion. Legacy acceptanceCriteria remains readable for existing projects and writable through the old user/JWT API compatibility path, but runner writes refuse it because it would silently declare HUMAN_SIGNOFF; it is not an agent fallback. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
-	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (the whole set you are PROPOSING; text + verificationMethod + explicit completionCriterion required; [] is refused)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|CANCELLED> (DONE is derived)", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a PROPOSAL rather than a write: sending them records one card for the account owner and leaves the criteria in force deciding this project until the owner approves it, so read acceptanceCriteriaProposal in the response and keep working to what is still in force. Every item requires text, verificationMethod and one explicit peer completionCriterion; preserve ids from project_get to retain identity, omit id to add. [] is refused, because a project measured by nothing cannot be ratified. currentStatus and project DONE are derived and cannot be supplied. Legacy acceptanceCriteria remains readable for existing projects and writable through the old user/JWT API compatibility path, but runner writes refuse it because it would silently declare HUMAN_SIGNOFF; it is not an agent fallback. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (the whole set you are PROPOSING; text + verificationMethod + explicit completionCriterion required; [] is refused)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|CANCELLED> (DONE is derived)", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a PROPOSAL rather than a write: sending them records one card for the account owner and leaves the criteria in force deciding this project until the owner approves it, so read acceptanceCriteriaProposal in the response and keep working to what is still in force. Every item requires text, verificationMethod and one explicit peer completionCriterion; preserve ids from project_get to retain identity, omit id to add. [] is refused, because a project cannot be measured by nothing. currentStatus and project DONE are derived and cannot be supplied. Legacy acceptanceCriteria remains readable for existing projects and writable through the old user/JWT API compatibility path, but runner writes refuse it because it would silently declare HUMAN_SIGNOFF; it is not an agent fallback. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
@@ -418,8 +403,6 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectOwnerDecisionRequest(args[1:], in, out)
 	case "obligations":
 		return cliProjectObligations(args[1:], out)
-	case "criteria-confirm":
-		return cliProjectCriteriaConfirm(args[1:], out)
 	case "acceptance-run":
 		return cliProjectAcceptanceRun(args[1:], out)
 	case "acceptance-verdict":
@@ -651,35 +634,6 @@ func cliProjectObligations(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliProjectCriteriaConfirm(args []string, out io.Writer) error {
-	id, rest := peelLeadingID(args)
-	fs := newCLIFlagSet("orbit project criteria-confirm")
-	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	if err := fs.Parse(rest); err != nil {
-		return err
-	}
-	if err := rejectTrailing(fs); err != nil {
-		return err
-	}
-	if id == "" {
-		return fmt.Errorf("project id is required")
-	}
-	t, err := cliTransport()
-	if err != nil {
-		return err
-	}
-	raw, err := t.confirmProjectAcceptanceCriteria(
-		id,
-		strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
-	)
-	if err != nil {
-		return fmt.Errorf("confirm project acceptance standard set: %w", err)
-	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
-}
-
-// cliProjectAcceptanceRun evaluates the current evidence version. No flags beyond --json: its
-// identity is derived from the current durable facts rather than supplied by this process.
 func cliProjectAcceptanceRun(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit project acceptance-run")

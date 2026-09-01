@@ -384,8 +384,6 @@ async function originalCommandTurnCount(taskId) {
 async function ownerDecisionCounts(projectId, taskId) {
   return (await pool.query(`
     SELECT
-      (SELECT count(*)::integer FROM project_owner_decision_request
-        WHERE project_id = $1::uuid) project_owner,
       (SELECT count(*)::integer FROM outcome_coordinator_owner_decision_request
         WHERE project_id = $1::uuid) outcome_owner,
       (SELECT count(*)::integer FROM task_judgment_request

@@ -14,7 +14,6 @@ import {
   type ProjectAcceptanceInboxPage,
 } from '../lib/projectAcceptance';
 import {
-  isRatificationInboxItem,
   isFailureOwnerInboxItem,
   outcomeDecisionReviewPath,
   outcomeInboxPath,
@@ -23,12 +22,6 @@ import {
 } from '../lib/outcomeSurfaces';
 import { FailureCoordinationCard } from '../components/FailureCoordinationCard';
 import { encodeId } from '../lib/idCodec';
-import {
-  isActiveOwnerRatificationReference,
-  ownerRatificationInboxPath,
-  ownerRatificationReviewPath,
-  type OwnerRatificationInboxPage,
-} from '../lib/ownerRatification';
 
 const when = (value: string): string => new Date(value).toLocaleString();
 
@@ -45,20 +38,12 @@ export function JudgmentInboxPage() {
     queryKey: ['outcomes', 'inbox'],
     queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
   });
-  const ratificationInbox = useQuery({
-    queryKey: ['owner-ratification', 'pending'],
-    queryFn: () => api<OwnerRatificationInboxPage>(ownerRatificationInboxPath(100)),
-  });
   const genericOutcomeItems = (outcomeInbox.data?.items ?? [])
-    .filter((item): item is CanonicalOwnerInboxItem =>
-      !isRatificationInboxItem(item) && !isFailureOwnerInboxItem(item));
+    .filter((item): item is CanonicalOwnerInboxItem => !isFailureOwnerInboxItem(item));
   const failureOutcomeItems = (outcomeInbox.data?.items ?? []).filter(isFailureOwnerInboxItem);
-  const activeRatifications = (ratificationInbox.data?.items ?? [])
-    .filter(isActiveOwnerRatificationReference);
   const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0)
     + genericOutcomeItems.length
-    + failureOutcomeItems.length
-    + activeRatifications.length;
+    + failureOutcomeItems.length;
   const entries = [
     ...(taskInbox.data?.items ?? []).map((item) => ({
       kind: 'TASK' as const,
@@ -70,30 +55,21 @@ export function JudgmentInboxPage() {
       at: item.startedAt,
       item,
     })),
-    ...activeRatifications.map((item) => ({
-      kind: 'RATIFICATION' as const,
-      at: item.createdAt,
-      item,
-    })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  const hasAnyData = Boolean(
-    taskInbox.data || projectInbox.data || outcomeInbox.data || ratificationInbox.data,
-  );
+  const hasAnyData = Boolean(taskInbox.data || projectInbox.data || outcomeInbox.data);
   const loading = !hasAnyData && (taskInbox.isLoading || projectInbox.isLoading
-    || outcomeInbox.isLoading || ratificationInbox.isLoading);
+    || outcomeInbox.isLoading);
   const failed = !hasAnyData && (taskInbox.isError || projectInbox.isError
-    || outcomeInbox.isError || ratificationInbox.isError);
-  const error = taskInbox.error ?? projectInbox.error
-    ?? outcomeInbox.error ?? ratificationInbox.error;
-  const fetching = taskInbox.isFetching || projectInbox.isFetching
-    || outcomeInbox.isFetching || ratificationInbox.isFetching;
+    || outcomeInbox.isError);
+  const error = taskInbox.error ?? projectInbox.error ?? outcomeInbox.error;
+  const fetching = taskInbox.isFetching || projectInbox.isFetching || outcomeInbox.isFetching;
 
   return (
     <div className="judgment-page judgment-inbox-page">
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>任务级 HUMAN_SIGNOFF、项目验收与 Owner Ratification 共用一个收件箱；Failure Continuation 只在 owner-only 决策时进入这里，普通工程故障由 coordinator 自动处理。</p>
+          <p>任务级 HUMAN_SIGNOFF 与项目验收共用一个收件箱；Failure Continuation 只在 owner-only 决策时进入这里，普通工程故障由 coordinator 自动处理。</p>
         </div>
         {hasAnyData
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>
@@ -118,7 +94,6 @@ export function JudgmentInboxPage() {
                 void taskInbox.refetch();
                 void projectInbox.refetch();
                 void outcomeInbox.refetch();
-                void ratificationInbox.refetch();
               }}
             >
               Retry
@@ -189,58 +164,21 @@ export function JudgmentInboxPage() {
             <li key={`project:${entry.item.runId}`} className="judgment-inbox-card project-acceptance-inbox-card">
               <Link to={projectAcceptanceReviewPath(entry.item.projectId, entry.item.runId)}>
                 <Tag color="gold">
-                  {entry.item.confirmationRequired ? '确认项目标准集' : '项目人工验收'}
+                  项目人工验收
                 </Tag>
                 <div className="judgment-inbox-title">{entry.item.projectTitle}</div>
                 <div className="judgment-inbox-project">Project {entry.item.projectStatus}</div>
                 <dl className="judgment-inbox-facts">
                   <div><dt>Evidence version</dt><dd>attempt {entry.item.attempt}</dd></div>
                   <div><dt>Current verdict</dt><dd>{entry.item.currentVerdict}</dd></div>
-                  <div><dt>标准集</dt><dd>{entry.item.criteriaConfirmed ? '已确认' : '待确认'}</dd></div>
+                  <div><dt>标准集</dt><dd>{entry.item.criteriaDeclared ? '已声明' : '未声明'}</dd></div>
                   <div><dt>人工标准</dt><dd>{entry.item.answeredCount}/{entry.item.humanCriterionCount} answered</dd></div>
                   <div><dt>Opened</dt><dd>{when(entry.item.startedAt)}</dd></div>
                 </dl>
-                <span className="judgment-inbox-open">确认标准集并处理人工标准 →</span>
+                <span className="judgment-inbox-open">处理人工标准 →</span>
               </Link>
             </li>
-          ) : (
-            <li
-              key={`ratification:${entry.item.decisionRequestId}`}
-              className="judgment-inbox-card owner-ratification-inbox-card"
-              data-decision-request-id={entry.item.decisionRequestId}
-              data-obligation-id={entry.item.obligationId}
-              data-obligation-revision={entry.item.obligationRevision}
-              data-contract-digest={entry.item.contractDigest}
-              data-reason={entry.item.reasonCode}
-              data-eligibility-reason={entry.item.eligibility.reasonCode}
-              data-binding-status={entry.item.eligibility.bindingStatus}
-              data-owner={entry.item.owner}
-              data-evaluated-through-watermark={entry.item.evaluatedThroughWatermark}
-            >
-              <Link to={ownerRatificationReviewPath(
-                entry.item.projectId,
-                entry.item.decisionRequestId,
-              )}>
-                <Tag color="volcano">Owner Ratification</Tag>
-                <div className="judgment-inbox-title">{entry.item.projectTitle}</div>
-                <div className="judgment-inbox-project">
-                  {entry.item.reasonCode} · owner {entry.item.owner}
-                </div>
-                <dl className="judgment-inbox-facts">
-                  <div><dt>Request</dt><dd>{entry.item.decisionRequestId}</dd></div>
-                  <div><dt>Revision</dt><dd>{entry.item.requestRevision}</dd></div>
-                  <div><dt>Obligation</dt><dd>{entry.item.obligationId}</dd></div>
-                  <div><dt>Obligation revision</dt><dd>{entry.item.obligationRevision}</dd></div>
-                  <div><dt>Contract digest</dt><dd>{shortDigest(entry.item.contractDigest)}</dd></div>
-                  <div><dt>Why now</dt><dd>{entry.item.reason}</dd></div>
-                  <div><dt>Binding</dt><dd>{entry.item.eligibility.bindingStatus}</dd></div>
-                  <div><dt>Evaluated through</dt><dd>{entry.item.evaluatedThroughWatermark}</dd></div>
-                  <div><dt>Expires</dt><dd>{when(entry.item.expiresAt)}</dd></div>
-                </dl>
-                <span className="judgment-inbox-open">Review exact contract and decide →</span>
-              </Link>
-            </li>
-          ))}
+          ) : null)}
         </ul>
       )}
     </div>

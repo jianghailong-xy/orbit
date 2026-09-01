@@ -527,8 +527,6 @@ test('the inbox repair is integrated and frozen-target verification is mandatory
   assert.equal(plan.target.requiredReceipt.sourceBranch, plan.builder.sourceBranch);
   assert.equal(plan.target.requiredReceipt.recordedBy, 'AGENT');
   assert.equal(plan.target.remoteMustRemainExactlyTarget, true);
-  assert.equal(packageJson.scripts['test:outcome-reconciler:owner-ratification-inbox-routing'],
-    'bash scripts/outcome-reconciler-owner-ratification-inbox-routing.sh');
   assert.match(read('scripts/outcome-reconciler-release-dag-regression-rebind.sh'),
     /outcome-reconciler-release-dag-target-check\.mjs/u);
   const runner = read('scripts/outcome-reconciler-release-dag.mjs');
@@ -902,21 +900,21 @@ test('the transaction-double repair keeps Swift, Go, Web and the 111k watchdog r
   }
   // Every node whose artifacts do not name the round survives a round it did not change.
   const contentOnly = plan.nodes.filter((node) => node.artifactBinding === 'CONTENT_ONLY');
-  assert.equal(contentOnly.length, 29);
+  assert.equal(contentOnly.length, 27);
   for (const node of contentOnly) {
     assert.equal(projection.reusable.has(node.id), true,
       `${node.id}: ${projection.invalid.get(node.id)}`);
   }
-  assert.equal(projection.reusable.size, 29);
+  assert.equal(projection.reusable.size, 27);
   assert.equal(projection.incomplete.length, 16);
-  // Before this change the same edit discarded all 45.
-  assert.equal(plan.nodes.length, 45);
+  // Before this change the same edit discarded all 43.
+  assert.equal(plan.nodes.length, 43);
 });
 
 test('an edit inside a node input set invalidates exactly that node', () => {
   const projection = projectNextRound({ 'src/web/src/App.tsx': 'edited-web-source' });
-  for (const id of ['full-web', 'full-clients', 'suite-surfaces', 'suite-owner-ratification-ui',
-    'suite-work-overview-readiness', 'owner-ratification-inbox-routing']) {
+  for (const id of ['full-web', 'full-clients', 'suite-surfaces',
+    'suite-work-overview-readiness']) {
     assert.equal(projection.invalid.get(id), 'STALE_INPUTS', id);
     assert.equal(nodeById.get(id).inputs.scopes.includes('web-src'), true, id);
   }
@@ -1011,7 +1009,7 @@ test('a node whose input set cannot be determined exactly is never reused', () =
 test('the publication gate still demands every declared node under the current input set', () => {
   const publish = read('scripts/outcome-reconciler-release-dag-publish.mjs');
   const aggregate = read('scripts/outcome-reconciler-release-dag-aggregate.mjs');
-  assert.equal(plan.nodes.length, 45);
+  assert.equal(plan.nodes.length, 43);
   assert.equal(plan.evidenceCut.requiredNodeState, 'SUCCESS');
   assert.equal(plan.evidenceCut.membership, 'ALL_SUCCESSFUL_NODE_RECEIPTS_EXCEPT_PUBLISHER_SELF');
   assert.match(publish, /expectedReceiptIds\.length \+ 1, plan\.nodes\.length/u);
@@ -1570,7 +1568,7 @@ test('(d)(f) the shipped contract itself passes the new admission with a measure
   }
 
   // The calibration is what bought the headroom, and it is 110% -- not a relaxed deadline.
-  assert.equal(shipped.nodes.reduce((total, node) => total + node.timeoutSeconds, 0), 14110);
+  assert.equal(shipped.nodes.reduce((total, node) => total + node.timeoutSeconds, 0), 13850);
 });
 
 test('(e) every node timeout clears its observed maximum times the declared margin', () => {
@@ -1584,7 +1582,7 @@ test('(e) every node timeout clears its observed maximum times the declared marg
   assert.equal(calibration.completedTerminationsOnly, true);
 
   const observed = calibration.observedMaximumSeconds;
-  assert.equal(Object.keys(observed).length, 42);
+  assert.equal(Object.keys(observed).length, 40);
   for (const [id, seconds] of Object.entries(observed)) {
     assert.ok(nodeById.has(id), `${id} is calibrated but is not a node`);
     assert.ok(Number.isInteger(seconds) && seconds >= 1, id);
@@ -2319,13 +2317,13 @@ containerTest('a successful attempt leaves no container carrying its binding lab
 });
 
 containerTest('a formal attempt that exits on a failed node leaves no container either', () => {
-  // The regression fixture is the 2026-08-31 attempt: 39 of the plan's 45 nodes succeeded and
+  // The regression fixture is the 2026-08-31 attempt: 39 of the plan's nodes succeeded and
   // full-api-shard-3 failed, so the evaluator exited 1 from the middle of the file.
   const bindingDigest = disposableBinding('disposable-node-failure');
   const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
   const order = topologicalOrder(plan);
   const failedNode = 'full-api-shard-3';
-  assert.equal(plan.nodes.length, 45);
+  assert.equal(plan.nodes.length, 43);
   assert.ok(order.includes(failedNode));
   const attempt = {
     executionMode: 'FORMAL_RELEASE_DAG',
@@ -2335,7 +2333,7 @@ containerTest('a formal attempt that exits on a failed node leaves no container 
     outcome: 'FAIL',
   };
   assert.equal(attempt.successfulNodes.length, 39);
-  assert.equal(attempt.successfulNodes.length + 6, attempt.nodeCount);
+  assert.equal(attempt.successfulNodes.length + 4, attempt.nodeCount);
   try {
     startDisposable(container, bindingDigest);
     const { exitCode, document } = exitPath(bindingDigest, 'node-failure');

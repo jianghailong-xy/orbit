@@ -64,25 +64,4 @@ export class OutcomeSurfacesController {
     return this.surfaces.decideOwnerRequest(user.userId, requestId, input);
   }
 
-  @Get('ratifications/projects/:projectId')
-  ratification(
-    @CurrentUser() user: AuthUser,
-    @Param('projectId', PublicIdPipe) projectId: string,
-  ) {
-    return this.surfaces.ratificationView(user.userId, projectId);
-  }
-
-  @Post('ratifications/:requestId')
-  decideRatification(
-    @CurrentUser() user: AuthUser,
-    @Param('requestId', PublicIdPipe) requestId: string,
-    @Body() input: {
-      requestRevision: string;
-      contractDigest: string;
-      decision: 'APPROVE' | 'DENY';
-      idempotencyKey: string;
-    },
-  ) {
-    return this.surfaces.decideRatification(user.userId, requestId, input);
-  }
 }

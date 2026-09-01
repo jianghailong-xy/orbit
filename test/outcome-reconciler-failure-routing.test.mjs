@@ -103,7 +103,7 @@ const evidence = {
     threeNoEvidenceAttention: false,
     fourOwnerReasonsOnly: false,
     ordinaryFailuresNotInDecisionInbox: false,
-    evaluationPlanDoesNotStaleRatification: false,
+    evaluationPlanEditCreatesNoOwnerWork: false,
     noDailyAutomationBudgetRequired: false,
     replayStable: false,
     canonicalResultComplete: false,
@@ -332,30 +332,6 @@ async function routeFailure(project, label, observation, options = {}) {
     observation,
   );
   return { ...failure, route };
-}
-
-async function ratificationState(ownerId, projectId) {
-  return (await pool.query(
-    'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS result',
-    [ownerId, projectId],
-  )).rows[0].result;
-}
-
-async function ratify(project, state) {
-  return (await pool.query(
-    `SELECT project_owner_ratify_contract(
-       $1::uuid,$2::uuid,'OWNER',$3,$4,$5::uuid,$6::uuid,'APPROVE',$7,false
-     ) AS result`,
-    [
-      project.ownerId,
-      project.projectId,
-      project.ownerId,
-      state.contractDigest,
-      state.decisionRequest.id,
-      state.decisionRequest.ctaToken,
-      `failure-routing-ratification:${project.projectId}`,
-    ],
-  )).rows[0].result;
 }
 
 /**
@@ -677,7 +653,7 @@ test('exactly the four owner-only reasons enter the failure decision inbox',
     evidence.coverage.fourOwnerReasonsOnly = true;
   });
 
-test('evaluation-plan-only evolution preserves contract ratification and routes revalidation',
+test('an evaluation-plan-only edit creates no owner work and does not rewrite the failure node',
   { timeout: 120_000 }, async () => {
     await empty();
     const project = await projectFixture('evaluation-plan');
@@ -693,35 +669,36 @@ test('evaluation-plan-only evolution preserves contract ratification and routes 
       'run evaluation harness version one',
       sha256(`criterion:${definitionId}`),
     ]);
-    const initial = await ratificationState(project.ownerId, project.projectId);
-    assert.ok(initial.decisionRequest?.id && initial.decisionRequest?.ctaToken);
-    const approved = await ratify(project, initial);
-    assert.equal(approved.ok, true);
-    const before = await ratificationState(project.ownerId, project.projectId);
-    assert.equal(before.ratified, true);
+    const readContract = async () => {
+      await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
+        [project.projectId, 'FAILURE_ROUTING_READ']);
+      return (await pool.query(`
+        SELECT contract_digest::text AS "contractDigest",
+               evaluation_plan_digest::text AS "evaluationPlanDigest"
+          FROM project_completion_contract WHERE project_id=$1::uuid
+      `, [project.projectId])).rows[0];
+    };
+    const before = await readContract();
     const failure = await committedFailure(project, 'evaluation-plan-failure');
     await pool.query(`
       UPDATE project_acceptance_criterion_definition
          SET verification_method='run evaluation harness version two'
        WHERE id=$1::uuid
     `, [definitionId]);
-    const evolved = await ratificationState(project.ownerId, project.projectId);
+    const evolved = await readContract();
+    // The two lanes are still independent: HOW a criterion is checked moved, WHAT the project
+    // counts as done did not.
     assert.equal(evolved.contractDigest, before.contractDigest);
     assert.notEqual(evolved.evaluationPlanDigest, before.evaluationPlanDigest);
-    assert.equal(evolved.ratified, true);
-    assert.equal(evolved.decisionRequest, null);
     const route = await controller.routeClaim(failure.claim, failure.observedAt, {
       failureNode: 'PRODUCT_BEHAVIOR',
     });
-    assert.equal(route.contractRatificationState, 'CURRENT');
-    assert.equal(route.projectEvaluationPlanChanged, true);
-    assert.equal(route.failureDomain, 'EVALUATION_HARNESS');
+    // The whole point of removing the approval queue's fallback branch: an ordinary engineering
+    // failure keeps its real node and its real domain. Nothing about the project's approval state
+    // -- which no longer exists -- may rewrite either.
+    assert.equal(route.failureNode, 'PRODUCT_BEHAVIOR');
+    assert.equal(route.failureDomain, 'PRODUCT_ARTIFACT');
     assert.equal(route.ownerReason, null);
-    assert.equal(route.nextAction.kind, 'REVALIDATE_EVALUATION_PLAN');
-    const pending = (await pool.query(`
-      SELECT count(*)::integer AS count FROM project_owner_decision_request
-       WHERE project_id=$1::uuid AND status='PENDING'
-    `, [project.projectId])).rows[0].count;
     const routedOwner = (await pool.query(`
       SELECT count(*)::integer AS count FROM failure_continuation_owner_decision_inbox
        WHERE goal_id=$1::uuid
@@ -730,20 +707,20 @@ test('evaluation-plan-only evolution preserves contract ratification and routes 
       'SELECT session_budget_per_day AS budget FROM project WHERE id=$1::uuid',
       [project.projectId],
     )).rows[0].budget;
-    assert.equal(pending, 0);
     assert.equal(routedOwner, 0);
     assert.equal(budget, null);
     assertCompleteRoute(route);
     evidence.samples.evaluationPlanChanges = 1;
-    evidence.coverage.evaluationPlanDoesNotStaleRatification = true;
+    evidence.coverage.evaluationPlanEditCreatesNoOwnerWork = true;
     evidence.coverage.noDailyAutomationBudgetRequired = true;
     evidence.results.evaluationPlan = {
       contractDigest: evolved.contractDigest,
       beforeEvaluationPlanDigest: before.evaluationPlanDigest,
       afterEvaluationPlanDigest: evolved.evaluationPlanDigest,
-      ratified: evolved.ratified,
+      routedNode: route.failureNode,
       routedDomain: route.failureDomain,
-      nextAction: route.nextAction.kind,
+      ownerReason: route.ownerReason,
+      routedOwnerInboxRows: routedOwner,
     };
   });
 

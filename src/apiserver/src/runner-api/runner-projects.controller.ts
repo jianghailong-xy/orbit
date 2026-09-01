@@ -19,7 +19,6 @@ import {
   CreateProjectDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
-  PreapprovedRatificationDto,
   ProposeCriteriaChangeDto,
   RecordMergeEvidenceDto,
   RequestCompletionAckOwnerDecisionDto,
@@ -172,52 +171,6 @@ export class RunnerProjectsController {
     return this.acceptance.overview(runner.ownerId, id);
   }
 
-  @Get('projects/:id/ratification')
-  projectRatification(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.acceptance.machineRatification(runner.ownerId, id);
-  }
-
-  /** A machine may spend an authority the owner already bounded; it may never claim OWNER. */
-  @Post('projects/:id/ratification')
-  ratifyProjectFromPreapproval(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: PreapprovedRatificationDto,
-  ) {
-    return this.acceptance.ratifyByPreapproval(
-      runner.ownerId,
-      id,
-      { actorType: 'RUNNER', actorId: runner.id },
-      dto,
-    );
-  }
-
-  /**
-   * Deprecated compatibility route. It still attributes the real runner principal so the service
-   * rejects self-ratification; machine callers must instead spend an owner-created, bounded
-   * template/delegation through the ratification route above.
-   */
-  @Post('projects/:id/acceptance/criteria-confirmation')
-  confirmAcceptanceCriteria(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Headers('x-orbit-session-id') sessionId: string | undefined,
-  ) {
-    return this.acceptance.confirmCriteriaSet(runner.ownerId, id, {
-      actorType: 'RUNNER',
-      actorId: runner.id,
-      actingSessionId: sessionId?.trim() || undefined,
-    });
-  }
-
-  /**
-   * Evaluate an acceptance evidence version, and append conclusions to it.
-   *
-   * These ARE the agent's door in the sense §13.4 clause 2 means: acceptance is executed by the
-   * coordinator agent inside a turn. What the agent cannot do is grant itself the outcome — the
-   * current verdict is derived from append-only per-criterion conclusions, and the DONE that may follow is
-   * gated on the same facts through the same service.
-   */
   @Post('projects/:id/acceptance/runs')
   openAcceptanceRun(
     @CurrentRunner() runner: Runner,
@@ -330,10 +283,9 @@ export class RunnerProjectsController {
   /**
    * Propose a different acceptance-criteria set, and change nothing.
    *
-   * The agent's door onto the owner-decision channel. It writes a proposal bound to the contract
-   * digest it was drafted against; the criteria in force, the digest and the standing ratification
-   * are untouched when this returns. Only the owner, on the card this produces and through their
-   * own credential, applies it.
+   * The agent's door onto the owner-decision channel. It writes a proposal bound to the criteria
+   * set it was drafted against; the criteria in force are untouched when this returns. Only the
+   * owner, on the card this produces and through their own credential, applies it.
    */
   @Post('projects/:id/acceptance/criteria-proposals')
   proposeCriteriaChange(
@@ -449,18 +401,17 @@ export class RunnerProjectsController {
   /**
    * `acceptanceCriteriaItems: []` used to mean "clear the set". It has no meaning as a proposal.
    *
-   * A project with no acceptance criteria cannot be ratified at all — `project_owner_ratify_contract`
-   * refuses one as OWNER_RATIFICATION_CONTRACT_INCOMPLETE — so a proposal to remove every criterion
-   * is a card whose APPROVE button could never work. Refused here rather than accepted and left
-   * pending forever, because a proposal an owner cannot answer is worse than no proposal: it
-   * occupies the project's one pending slot and reads as work waiting on them.
+   * A project measured by nothing has no standard at all, so a proposal to remove every criterion
+   * is a card whose APPROVE button says "measure this by nothing". Refused here rather than
+   * accepted and left pending forever, because a proposal an owner cannot sensibly answer is worse
+   * than no proposal: it occupies the project's one pending slot and reads as work waiting on them.
    */
   private static refuseEmptyCriteriaProposal(dto: UpdateProjectDto): void {
     if (dto.acceptanceCriteriaItems === undefined || dto.acceptanceCriteriaItems.length > 0) return;
     throw new BadRequestException(
       'acceptanceCriteriaItems: [] is no longer a way to clear a project’s acceptance criteria. ' +
-        'Acceptance criteria now change by proposal, and a project measured by nothing cannot be ' +
-        'ratified — send the complete set you are proposing, with at least one criterion.',
+        'Acceptance criteria now change by proposal, and a project cannot be measured by ' +
+        'nothing — send the complete set you are proposing, with at least one criterion.',
     );
   }
 
@@ -485,7 +436,6 @@ export class RunnerProjectsController {
     const named = [
       ...ProjectsService.AUTHORIZATION_FIELDS,
       ...('coordinatorAgentId' in dto ? ['coordinatorAgentId' as const] : []),
-      ...('ownerRatification' in dto ? ['ownerRatification' as const] : []),
     ].filter((field) => (dto as unknown as Record<string, unknown>)[field] !== undefined);
     if (named.length === 0) return;
     throw new ForbiddenException(

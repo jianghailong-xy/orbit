@@ -20,7 +20,6 @@ import {
   ACCEPTANCE_MISSING,
   CANONICAL_DONE_GATE_BLOCKED,
   EXECUTABLE_ATTEMPT_COLLECTOR_VERSION,
-  OWNER_RATIFICATION_REQUIRED,
   AcceptanceFacts,
   AcceptanceRefusalCode,
   StatedAcceptanceCriterion,
@@ -38,11 +37,6 @@ import {
   refuseHumanOnlyAction,
 } from './coordinator-authority';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
-import {
-  ownerRatificationReference,
-  withoutOwnerRatificationCapability,
-  type OwnerRatificationReference,
-} from './owner-ratification-surface';
 
 /** What a caller may say when opening a run. Both attributions are historical ids: they record who
  *  ran an acceptance, and nothing later may rewrite that by deleting a session. */
@@ -164,23 +158,8 @@ export interface CriteriaConfirmationActor {
   actingSessionId?: string;
 }
 
-export interface OwnerRatificationDecisionInput {
-  expectedContractDigest?: string | null;
-  decisionRequestId?: string | null;
-  ctaToken?: string | null;
-  decision: 'APPROVE' | 'DENY';
-  idempotencyKey: string;
-  atomicCreate?: boolean;
-}
-
-export interface PreapprovedRatificationInput {
-  authority: 'PREAPPROVED_TEMPLATE' | 'BOUND_DELEGATION';
-  authorityId: string;
-  expectedContractDigest?: string | null;
-  idempotencyKey: string;
-}
-
-export interface RatificationPrincipal {
+/** A machine principal that may PROPOSE a criteria change. It can never decide one. */
+export interface ProposalPrincipal {
   actorType: 'AGENT' | 'RUNNER' | 'SERVICE';
   actorId: string;
 }
@@ -219,23 +198,6 @@ export interface CriteriaProposalDecisionInput {
   expectedCardDigest: string;
   decision: 'APPROVE' | 'DENY';
   idempotencyKey: string;
-}
-
-interface PendingOwnerRatificationRow {
-  projectId: string;
-  projectTitle: string;
-  coordinatorSessionId: string | null;
-  ownerId: string;
-  requestId: string;
-  requestGeneration: bigint;
-  contractDigest: string;
-  contractRevision: bigint;
-  reasonCode: string;
-  createdAt: Date;
-  expiresAt: Date;
-  linkedObligations: Prisma.JsonValue;
-  eligibility: Prisma.JsonValue;
-  total?: number;
 }
 
 /** The DONE decision is returned as the canonical proof/obligation view, not as a writable
@@ -569,213 +531,17 @@ export class ProjectAcceptanceService {
       ) AS state
     `);
     if (!row?.state || typeof row.state !== 'object' || Array.isArray(row.state)) {
-      throw new Error('Owner Ratification contract refresh returned no state');
+      throw new Error('completion contract refresh returned no state');
     }
     return row.state as Record<string, unknown>;
   }
 
-  /**
-   * Secret-free pending references for project list/detail and the global inbox.
-   *
-   * The database eligibility function is the sole routing decision used by every consumer. Its
-   * linked-obligation order is deterministic, while the oldest immutable observation is the
-   * canonical identity displayed beside the one owner request. No CTA column is selected, which
-   * is stronger than selecting it and promising to redact it later.
-   */
-  private async pendingOwnerRatificationRows(
-    ownerId: string,
-    projectIds?: readonly string[],
-    limit?: number,
-    coordinatorSessionId?: string,
-  ): Promise<PendingOwnerRatificationRow[]> {
-    if (projectIds?.length === 0) return [];
-    const projectFilter = projectIds
-      ? Prisma.sql`AND request."project_id" IN (${Prisma.join(
-          projectIds.map((id) => Prisma.sql`${id}::uuid`),
-        )})`
-      : Prisma.empty;
-    // Narrow to the conversation the contract was drafted in. It reads the project's own
-    // coordinator pointer under the owner predicate that is already on the join, so a session id
-    // belonging to somebody else selects nothing rather than widening the owner scope.
-    const sessionFilter = coordinatorSessionId
-      ? Prisma.sql`AND project."coordinator_session_id" = ${coordinatorSessionId}::uuid`
-      : Prisma.empty;
-    const bounded = limit === undefined ? Prisma.empty : Prisma.sql`LIMIT ${limit}`;
-    return this.prisma.$queryRaw<PendingOwnerRatificationRow[]>(Prisma.sql`
-      SELECT request."project_id" AS "projectId", project."title" AS "projectTitle",
-             project."coordinator_session_id" AS "coordinatorSessionId",
-             request."owner_id" AS "ownerId", request."id" AS "requestId",
-             request."request_generation" AS "requestGeneration",
-             request."contract_digest"::text AS "contractDigest",
-             contract."contract_revision" AS "contractRevision",
-             routing.value->>'reasonCode' AS "reasonCode", request."created_at" AS "createdAt",
-             request."expires_at" AS "expiresAt",
-             routing.value->'linkedObligations' AS "linkedObligations",
-             routing.value AS "eligibility",
-             count(*) OVER ()::int AS "total"
-        FROM "project_owner_decision_request" request
-        JOIN "project" project
-          ON project."id" = request."project_id"
-         AND project."owner_id" = ${ownerId}::uuid
-        JOIN "project_completion_contract" contract
-          ON contract."project_id" = request."project_id"
-         AND contract."contract_digest" = request."contract_digest"
-       CROSS JOIN LATERAL (
-         SELECT project_owner_ratification_eligibility(
-           request."owner_id", request."project_id", request."id"
-         ) AS value
-       ) routing
-       WHERE request."owner_id" = ${ownerId}::uuid
-         AND request."status" = 'PENDING'
-         AND routing.value->>'eligible' = 'true'
-         ${projectFilter}
-         ${sessionFilter}
-       ORDER BY request."created_at" DESC, request."id" DESC
-       ${bounded}
-    `);
-  }
-
-  async pendingOwnerRatificationReferences(
-    ownerId: string,
-    projectIds?: readonly string[],
-  ): Promise<OwnerRatificationReference[]> {
-    const rows = await this.pendingOwnerRatificationRows(ownerId, projectIds);
-    return rows.map((row) => ownerRatificationReference(row));
-  }
-
-  /**
-   * The owner's pending questions. `coordinatorSessionId` narrows the same list to the one
-   * conversation a contract was drafted in, which is the only thing a session view needs in order
-   * to show the question where it was raised. It is a filter on an owner-scoped read, not a second
-   * authority: the rows, the eligibility function and the redaction are unchanged, and no CTA is
-   * selected here in either shape.
-   */
-  async pendingOwnerRatificationInbox(
-    ownerId: string,
-    requestedLimit = 100,
-    coordinatorSessionId?: string,
-  ): Promise<{
-    total: number;
-    items: OwnerRatificationReference[];
-  }> {
-    if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 200) {
-      throw new BadRequestException('limit must be an integer from 1 through 200');
-    }
-    const rows = await this.pendingOwnerRatificationRows(
-      ownerId,
-      undefined,
-      requestedLimit,
-      coordinatorSessionId,
-    );
-    return {
-      total: rows[0]?.total ?? 0,
-      items: rows.map((row) => ownerRatificationReference(row)),
-    };
-  }
-
-  /** The owner-facing current contract, its independent evaluation plan, and at most one CTA. */
-  async ownerRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
-    const [row] = await this.prisma.$queryRaw<Array<{
-      projectTitle: string;
-      coordinatorSessionId: string | null;
-      state: Prisma.JsonValue;
-      latestDecision: Prisma.JsonValue | null;
-    }>>(Prisma.sql`
-      SELECT project."title" AS "projectTitle",
-             project."coordinator_session_id" AS "coordinatorSessionId",
-             project_owner_ratification_state_json(
-               ${ownerId}::uuid, ${projectId}::uuid
-             ) AS state,
-             (
-               SELECT jsonb_build_object(
-                 'decisionRequestId', decided."id",
-                 'contractDigest', decided."contract_digest"::text,
-                 'decision', COALESCE(decided."decision", CASE decided."status"
-                   WHEN 'APPROVED' THEN 'APPROVE' WHEN 'DENIED' THEN 'DENY' END),
-                 'status', decided."status",
-                 'decidedAt', decided."decided_at",
-                 'decidedByType', decided."decided_by_type"
-               )
-                 FROM "project_owner_decision_request" decided
-                WHERE decided."project_id" = project."id"
-                  AND decided."owner_id" = ${ownerId}::uuid
-                  AND decided."status" IN ('APPROVED', 'DENIED')
-                  AND decided."decided_at" IS NOT NULL
-                ORDER BY decided."decided_at" DESC, decided."request_generation" DESC
-                LIMIT 1
-             ) AS "latestDecision"
-        FROM "project" project
-       WHERE project."id" = ${projectId}::uuid
-         AND project."owner_id" = ${ownerId}::uuid
-    `);
-    if (!row?.state || typeof row.state !== 'object' || Array.isArray(row.state)) {
-      throw new NotFoundException('project not found');
-    }
-    const state = row.state as Record<string, unknown>;
-    const [reference] = await this.pendingOwnerRatificationReferences(ownerId, [projectId]);
-    const request = state.decisionRequest && typeof state.decisionRequest === 'object'
-      && !Array.isArray(state.decisionRequest)
-      ? state.decisionRequest as Record<string, unknown>
-      : null;
-    const payload = request?.payload && typeof request.payload === 'object'
-      && !Array.isArray(request.payload)
-      ? request.payload as Record<string, unknown>
-      : {};
-    const decisionSurface = reference && request
-      && String(request.id) === reference.decisionRequestId
-      ? {
-          reference,
-          semanticContract: state.semanticContract ?? {},
-          evaluationPlan: state.evaluationPlan ?? {},
-          semanticDiff: request.semanticDiff ?? {},
-          impact: payload.impact ?? null,
-          impacts: payload.impacts ?? {
-            APPROVE:
-              'Ratifies only this exact contract digest and permits guarded automatic execution ' +
-              'to continue inside its risk, permission, recipient and budget envelope.',
-            DENY:
-              'Does not ratify this contract. Automatic side-effecting execution remains disabled ' +
-              'until the owner reviews a current request after changing or reconsidering it.',
-          },
-          recommendation: payload.recommended ?? payload.recommendation ?? null,
-          noActionConsequence:
-            payload.consequenceOfNoAction ?? payload.noActionConsequence ?? null,
-          whyNotAgent: payload.whyNotAgent ?? null,
-          resumeAfterDecision: payload.resumeAfterDecision ?? payload.resumeBehavior ?? null,
-          options: payload.options ?? ['APPROVE', 'DENY'],
-        }
-      : null;
-    return {
-      ...state,
-      projectId,
-      projectTitle: row.projectTitle,
-      // Lets a session-scoped surface prove the private read it rendered is the one belonging to
-      // the conversation it is embedded in, rather than trusting the id it navigated with.
-      coordinatorSessionId: row.coordinatorSessionId,
-      owner: 'OWNER',
-      ownerId,
-      latestDecision: row.latestDecision ?? null,
-      decisionSurface,
-    };
-  }
-
-  /** Machine-readable status contains the question and every digest needed to escalate it, but
-   * never the owner's one-use CTA capability. A runner can spend an owner-created bounded
-   * authority through the preapproval path; possessing the decision button is not such authority. */
-  async machineRatification(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
-    const state = await this.ownerRatification(ownerId, projectId);
-    return withoutOwnerRatificationCapability(state) as Record<string, unknown>;
-  }
-
-  private static ratificationValue(result: unknown): Record<string, unknown> {
+  /** A structured `ok:false` from a database boundary is the answer, not an exception to log. */
+  private static sqlResult(result: unknown): Record<string, unknown> {
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
-      throw new Error('Owner Ratification operation returned no result');
+      throw new Error('project criteria operation returned no result');
     }
-    return withoutOwnerRatificationCapability(result) as Record<string, unknown>;
-  }
-
-  private static ratificationResult(result: unknown): Record<string, unknown> {
-    const value = ProjectAcceptanceService.ratificationValue(result);
+    const value = result as Record<string, unknown>;
     if (value.ok === false) {
       throw new ConflictException({
         statusCode: 409,
@@ -784,124 +550,6 @@ export class ProjectAcceptanceService {
       });
     }
     return value;
-  }
-
-  /** Owner decision, optionally inside the same transaction that creates the Project. */
-  async ratifyByOwnerInTransaction(
-    tx: Prisma.TransactionClient | PrismaService,
-    ownerId: string,
-    projectId: string,
-    input: OwnerRatificationDecisionInput,
-    options: { commitRefusal?: boolean } = {},
-  ): Promise<Record<string, unknown>> {
-    const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-      SELECT project_owner_ratify_contract(
-        ${ownerId}::uuid,
-        ${projectId}::uuid,
-        'OWNER',
-        ${ownerId},
-        ${input.expectedContractDigest ?? null},
-        ${input.decisionRequestId ?? null}::uuid,
-        ${input.ctaToken ?? null}::uuid,
-        ${input.decision},
-        ${input.idempotencyKey},
-        ${input.atomicCreate ?? false}
-      ) AS result
-    `);
-    const result = ProjectAcceptanceService.ratificationValue(row?.result);
-    // Expiry rotates the CTA and records the old request as EXPIRED. The user endpoint must commit
-    // that recovery state before translating the typed refusal to HTTP; atomic Project creation
-    // keeps the historical rollback-on-refusal behavior.
-    if (result.ok === false) {
-      if (options.commitRefusal) return result;
-      return ProjectAcceptanceService.ratificationResult(result);
-    }
-    // A persistent auto-dispatch wake already owns retrying the refused task. Approval moves its
-    // due time forward inside the same transaction as the ratification, so "resume automatically"
-    // is a committed fact rather than a hopeful UI sentence. The wake still re-enters the ordinary
-    // guarded admission path; ratification never creates a Session directly.
-    const rearmedWakeups = input.decision === 'APPROVE'
-      ? await tx.$executeRaw(Prisma.sql`
-          UPDATE "task_auto_dispatch_wakeup" wake
-             SET "due_at" = LEAST(wake."due_at", clock_timestamp()),
-                 "updated_at" = clock_timestamp()
-            FROM "task_auto_dispatch_state" state,
-                 "task_auto_dispatch_obligation_revision" revision
-           WHERE wake."tenant_id" = ${ownerId}::uuid
-             AND wake."project_id" = ${projectId}::uuid
-             AND wake."state" = 'PENDING'
-             AND state."tenant_id" = wake."tenant_id"
-             AND state."task_id" = wake."task_id"
-             AND state."watermark" = wake."watermark"
-             AND state."obligation_revision" = wake."obligation_revision"
-             AND state."state" = 'ACTIVE'
-             AND revision."tenant_id" = state."tenant_id"
-             AND revision."task_id" = state."task_id"
-             AND revision."obligation_revision" = state."obligation_revision"
-             AND revision."reason_code" = 'OWNER_RATIFICATION_REQUIRED'
-             AND revision."binding"->>'contractDigest' = ${input.expectedContractDigest}
-        `)
-      : 0;
-    return {
-      ...result,
-      automaticResume: {
-        scheduled: input.decision === 'APPROVE',
-        rearmedWakeups,
-        behavior: input.decision === 'APPROVE'
-          ? 'Persistent auto-dispatch wakes re-enter guarded admission without another click.'
-          : 'Automatic side-effecting execution remains disabled.',
-      },
-    };
-  }
-
-  async ratifyByOwner(
-    ownerId: string,
-    projectId: string,
-    input: OwnerRatificationDecisionInput,
-  ): Promise<Record<string, unknown>> {
-    // Cross-account ids get the ordinary project 404 before entering a database function. The
-    // function repeats the owner predicate under lock, so this is an information-safe API answer,
-    // not the authority check itself.
-    await this.assertOwned(projectId, ownerId);
-    const result = await withTransactionRetry(
-      this.prisma,
-      (tx) => this.ratifyByOwnerInTransaction(
-        tx,
-        ownerId,
-        projectId,
-        input,
-        { commitRefusal: true },
-      ),
-      loggedRetry(this.logger, 'projectAcceptance.ratifyByOwner'),
-    );
-    const decision = ProjectAcceptanceService.ratificationResult(result);
-    await this.reconcile(ownerId, projectId);
-    return decision;
-  }
-
-  async ratifyByPreapproval(
-    ownerId: string,
-    projectId: string,
-    principal: RatificationPrincipal,
-    input: PreapprovedRatificationInput,
-  ): Promise<Record<string, unknown>> {
-    const result = await withTransactionRetry(this.prisma, async (tx) => {
-      const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-        SELECT project_preapproved_ratify_contract(
-          ${ownerId}::uuid,
-          ${projectId}::uuid,
-          ${principal.actorType},
-          ${principal.actorId},
-          ${input.authority},
-          ${input.authorityId}::uuid,
-          ${input.expectedContractDigest ?? null},
-          ${input.idempotencyKey}
-        ) AS result
-      `);
-      return ProjectAcceptanceService.ratificationResult(row?.result);
-    }, loggedRetry(this.logger, 'projectAcceptance.ratifyByPreapproval'));
-    await this.reconcile(ownerId, projectId);
-    return result;
   }
 
   /**
@@ -921,15 +569,15 @@ export class ProjectAcceptanceService {
    * Record what an agent WOULD change the acceptance criteria to.
    *
    * The whole point is what this does not do. It writes one proposal row and never touches
-   * `project_acceptance_criterion_definition`, so the criteria in force, the contract digest and
-   * the standing Owner Ratification are exactly what they were when it returns. The proposal is
-   * bound to the digest it was drafted against, and only `decideCriteriaProposal` — under the
-   * owner's own credential, against the digest of the card that was rendered — applies one.
+   * `project_acceptance_criterion_definition`, so the criteria in force are exactly what they were
+   * when it returns. The proposal is bound to the criteria set it was drafted against — and to
+   * nothing else about the project — and only `decideCriteriaProposal`, under the owner's own
+   * credential and against the digest of the card that was rendered, applies one.
    */
   async proposeCriteriaChange(
     ownerId: string,
     projectId: string,
-    principal: RatificationPrincipal | { actorType: 'USER'; actorId: string },
+    principal: ProposalPrincipal | { actorType: 'USER'; actorId: string },
     input: CriteriaProposalInput,
   ): Promise<Record<string, unknown>> {
     await this.assertOwned(projectId, ownerId);
@@ -964,7 +612,7 @@ export class ProjectAcceptanceService {
           ${input.idempotencyKey}
         ) AS result
       `);
-      return ProjectAcceptanceService.ratificationResult(row?.result);
+      return ProjectAcceptanceService.sqlResult(row?.result);
     }, loggedRetry(this.logger, 'projectAcceptance.proposeCriteriaChange'));
     return { ...result, ...(await this.criteriaProposal(ownerId, projectId)) };
   }
@@ -982,23 +630,20 @@ export class ProjectAcceptanceService {
     return row.state as Record<string, unknown>;
   }
 
-  /** The same card without any owner capability, for the machine that proposed it. */
+  /** The same card, read by the machine that proposed it. It carries no decision capability. */
   async machineCriteriaProposal(
     ownerId: string,
     projectId: string,
   ): Promise<Record<string, unknown>> {
-    const state = await this.criteriaProposal(ownerId, projectId);
-    return withoutOwnerRatificationCapability(state) as Record<string, unknown>;
+    return this.criteriaProposal(ownerId, projectId);
   }
 
   /**
-   * The owner's answer, taken on their own authenticated connection rather than a CTA capability —
-   * the same shape `inlineratify` gave the ratification card, for the same reason: the decision
-   * belongs to the person the connection already proved, and a link that carries the answer is a
-   * link that can be forwarded.
+   * The owner's answer, taken on their own authenticated connection rather than a forwardable
+   * link: the decision belongs to the person the connection already proved.
    *
-   * APPROVE applies the criteria, advances the contract and appends the ratification inside one
-   * database transaction, so the project is never measured by a set nobody approved.
+   * APPROVE applies the criteria and records the decision in one database transaction, so the
+   * project is never measured by a set the owner did not answer for.
    */
   async decideCriteriaProposal(
     ownerId: string,
@@ -1010,7 +655,7 @@ export class ProjectAcceptanceService {
       throw new ForbiddenException({
         statusCode: 403,
         error: 'Forbidden',
-        code: 'OWNER_RATIFICATION_ACTOR_FORBIDDEN',
+        code: 'PROJECT_CRITERIA_DECISION_ACTOR_FORBIDDEN',
         message:
           'a runner or agent cannot approve a change to the acceptance criteria it is measured ' +
           'by; the account owner decides this on the proposal card',
@@ -1031,7 +676,7 @@ export class ProjectAcceptanceService {
           ${input.idempotencyKey}
         ) AS result
       `);
-      const decision = ProjectAcceptanceService.ratificationResult(row?.result);
+      const decision = ProjectAcceptanceService.sqlResult(row?.result);
       // The evidence version follows the definitions it grades, exactly as the direct-edit path
       // has always kept it, and inside the same transaction that moved them.
       if (decision.status === 'APPLIED') await this.ensureCurrentEvidenceVersion(tx, projectId);
@@ -1039,94 +684,6 @@ export class ProjectAcceptanceService {
     }, loggedRetry(this.logger, 'projectAcceptance.decideCriteriaProposal'));
     await this.reconcile(ownerId, projectId);
     return { ...result, ...(await this.criteriaProposal(ownerId, projectId)) };
-  }
-
-  async createRatificationTemplate(ownerId: string, spec: object) {
-    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-      SELECT project_create_ratification_template(
-        ${ownerId}::uuid, ${JSON.stringify(spec)}::jsonb
-      ) AS result
-    `);
-    return ProjectAcceptanceService.ratificationResult(row?.result);
-  }
-
-  async createRatificationDelegation(ownerId: string, spec: object) {
-    const [row] = await this.prisma.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-      SELECT project_create_ratification_delegation(
-        ${ownerId}::uuid, ${JSON.stringify(spec)}::jsonb
-      ) AS result
-    `);
-    return ProjectAcceptanceService.ratificationResult(row?.result);
-  }
-
-  /**
-   * Rolling user-route alias. A runner can no longer spend this mutation: unlike the former
-   * criteria checklist, Owner Ratification is an authority decision, not credential provenance.
-   */
-  async criteriaConfirmation(ownerId: string, projectId: string) {
-    const state = await this.ownerRatification(ownerId, projectId);
-    return {
-      confirmed: state.ratified === true,
-      criteriaDigest: state.contractDigest,
-      confirmation: state.ratification ?? null,
-      deprecatedSpelling: true,
-    };
-  }
-
-  async confirmCriteriaSet(
-    ownerId: string,
-    projectId: string,
-    actor: CriteriaConfirmationActor,
-  ) {
-    if (actor.actorType !== 'USER') {
-      throw new ForbiddenException({
-        statusCode: 403,
-        error: 'Forbidden',
-        code: 'OWNER_RATIFICATION_ACTOR_FORBIDDEN',
-        message:
-          'a runner or agent cannot approve its own goal, risk, permissions, budget, recipient ' +
-          'or completion contract; use an owner decision or an already bounded template/delegation',
-        owner: 'USER',
-      });
-    }
-    let acting: { dispatchOrigin: string } | null = null;
-    if (actor.actingSessionId) {
-      acting = await this.prisma.session.findFirst({
-        where: { id: actor.actingSessionId, ownerId },
-        select: { dispatchOrigin: true },
-      });
-    }
-    const refusal = refuseHumanOnlyAction(
-      authorityPrincipal(acting?.dispatchOrigin),
-      'CONFIRM_ACCEPTANCE_CRITERIA',
-    );
-    if (refusal) throw new ForbiddenException(refusal);
-    const state = await this.ownerRatification(ownerId, projectId);
-    if (state.ratified === true) {
-      const ratification = state.ratification as Record<string, unknown>;
-      return {
-        ...ratification,
-        // Compatibility response names. No row is written to the deprecated confirmation table.
-        id: String(ratification.id),
-        criteriaDigest: String(state.contractDigest),
-        current: true,
-      };
-    }
-    const request = state.decisionRequest as Record<string, unknown> | null;
-    if (!request) throw new ConflictException('owner ratification request is unavailable');
-    const ratification = await this.ratifyByOwner(ownerId, projectId, {
-      expectedContractDigest: String(state.contractDigest),
-      decisionRequestId: String(request.id),
-      ctaToken: String(request.ctaToken),
-      decision: 'APPROVE',
-      idempotencyKey: `legacy-owner-ratification:${String(request.id)}`,
-    });
-    return {
-      ...ratification,
-      id: String(ratification.ratificationId),
-      criteriaDigest: String(ratification.contractDigest),
-      current: true,
-    };
   }
 
   static async writeAudit(
@@ -1644,9 +1201,9 @@ export class ProjectAcceptanceService {
       await ProjectAcceptanceService.concludeRunTx(tx, run.id);
       try {
         const gate = await this.assertDoneAllowed(tx, projectId);
-        // Owner ratification and canonical-cut validity are checked first so their typed routing
-        // reason is never hidden by an as-yet unjudged legacy criterion. Once that authority
-        // boundary is open, the declared criterion conjunction is still independently required.
+        // Canonical-cut validity is checked first so its typed routing reason is never hidden by
+        // an as-yet unjudged legacy criterion. Once that is open, the declared criterion
+        // conjunction is still independently required.
         if (ProjectAcceptanceService.projectedVerdict(reconciledStanding)
             !== ProjectAcceptanceVerdict.PASS) {
           return { done: false, runId: run.id, code: ACCEPTANCE_MISSING };
@@ -1681,14 +1238,7 @@ export class ProjectAcceptanceService {
             code: AcceptanceRefusalCode;
             reasonCode?: string;
           };
-          // Preserve the owner-only boundary as the public refusal. The generic wrapper remains
-          // correct for every other structured canonical reason, while this one is an existing
-          // closed API code clients use to route the request to the owner.
-          const code = body.reasonCode === OWNER_RATIFICATION_REQUIRED
-            || body.reasonCode === 'OWNER_RATIFICATION_INVALID'
-            ? OWNER_RATIFICATION_REQUIRED
-            : body.code;
-          return { done: false, runId: run.id, code };
+          return { done: false, runId: run.id, code: body.code };
         }
         throw error;
       }
@@ -1804,10 +1354,9 @@ export class ProjectAcceptanceService {
       await ProjectAcceptanceService.lockProject(
         tx, projectId, ownerId, 'FOR NO KEY UPDATE',
       );
-      // Evaluation and ratification are independent lanes. A verifier may evaluate an unratified
-      // draft, and an evaluation-plan-only edit may be re-evaluated without asking the owner to
-      // approve the same semantics again. The DONE gate, not this evidence writer, requires the
-      // exact current contractDigest to be ratified.
+      // Evidence and the DONE gate are independent lanes: this writer records what a verifier
+      // observed, and the gate decides separately whether the cut it was observed against is the
+      // one still standing.
       const run = await tx.projectAcceptanceRun.findFirst({
         where: { id: runId, projectId },
         include: { criteria: { orderBy: { ordinal: 'asc' } } },
@@ -2446,7 +1995,7 @@ export class ProjectAcceptanceService {
       criterionCount: number;
       humanCriterionCount: number;
       unansweredCount: number;
-      criteriaConfirmed: boolean;
+      criteriaDeclared: boolean;
       total: number;
     }>>(Prisma.sql`
       WITH standing AS (
@@ -2482,13 +2031,10 @@ export class ProjectAcceptanceService {
                       )
                  )
                )::int AS "unansweredCount",
-               COALESCE((
-                 SELECT project_owner_ratification_effective(
-                   contract."project_id", contract."contract_digest"
-                 )
-                   FROM "project_completion_contract" contract
-                  WHERE contract."project_id" = p."id"
-               ), false) AS "criteriaConfirmed"
+               EXISTS (
+                 SELECT 1 FROM "project_acceptance_criterion_definition" d
+                  WHERE d."project_id" = p."id"
+               ) AS "criteriaDeclared"
           FROM "project_acceptance_run" r
           JOIN "project" p ON p."id" = r."project_id"
           JOIN "project_acceptance_criterion" c ON c."run_id" = r."id"
@@ -2497,9 +2043,8 @@ export class ProjectAcceptanceService {
            AND r."superseded_at" IS NULL
          GROUP BY r."id", p."id", p."title", p."status", r."attempt", r."started_at"
       ), pending AS (
-        -- Ratification has its own project-level decision request and is not a fake unanswered
-        -- acceptance criterion. In particular, an evaluation-plan-only edit may create a new
-        -- evidence version without manufacturing work for the owner.
+        -- Only an unanswered stated criterion counts. An evaluation-plan-only edit may create a
+        -- new evidence version without manufacturing work for anybody.
         SELECT * FROM standing WHERE "unansweredCount" > 0
       )
       SELECT pending.*, count(*) OVER ()::int AS "total"
@@ -2520,8 +2065,7 @@ export class ProjectAcceptanceService {
         humanCriterionCount: row.humanCriterionCount,
         answeredCount: row.humanCriterionCount - row.unansweredCount,
         unansweredCount: row.unansweredCount,
-        criteriaConfirmed: row.criteriaConfirmed,
-        confirmationRequired: false,
+        criteriaDeclared: row.criteriaDeclared,
         currentVerdict: ACCEPTANCE_UNDECIDED,
       })),
     };
@@ -2610,13 +2154,17 @@ export class ProjectAcceptanceService {
       : undefined;
 
     const evaluated = await this.evaluateGate(projectId);
-    const ownerRatification = await this.ownerRatification(ownerId, projectId);
-    const criteriaConfirmation = {
-      confirmed: ownerRatification.ratified === true,
-      criteriaDigest: ownerRatification.contractDigest,
-      confirmation: ownerRatification.ratification ?? null,
-      deprecatedSpelling: true,
-    };
+    const [contract] = await this.prisma.$queryRaw<Array<{
+      contractDigest: string;
+      evaluationPlanDigest: string;
+      criteriaDigest: string;
+    }>>(Prisma.sql`
+      SELECT state."contract_digest"::text AS "contractDigest",
+             state."evaluation_plan_digest"::text AS "evaluationPlanDigest",
+             project_acceptance_criteria_set_digest(state."project_id") AS "criteriaDigest"
+        FROM "project_completion_contract" state
+       WHERE state."project_id" = ${projectId}::uuid
+    `);
 
     const criteria = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
@@ -2643,11 +2191,9 @@ export class ProjectAcceptanceService {
       acceptanceDigest: typeof evaluated.canonicalIdentity.bindingDigest === 'string'
         ? evaluated.canonicalIdentity.bindingDigest
         : null,
-      criteriaDigest: criteriaConfirmation.criteriaDigest,
-      criteriaConfirmation,
-      contractDigest: ownerRatification.contractDigest,
-      evaluationPlanDigest: ownerRatification.evaluationPlanDigest,
-      ownerRatification,
+      criteriaDigest: contract?.criteriaDigest ?? null,
+      contractDigest: contract?.contractDigest ?? null,
+      evaluationPlanDigest: contract?.evaluationPlanDigest ?? null,
       acceptedRunId: project.acceptedRunId,
       legacyAcceptedAt: project.legacyAcceptedAt,
       legacyEvidence: project.legacyAcceptedAt !== null && project.acceptedRunId === null,

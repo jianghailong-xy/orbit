@@ -38,7 +38,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
-import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import { ProjectsService } from '../projects/projects.service';
 import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 import { TasksService } from './tasks.service';
@@ -98,7 +98,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
     // the whole point: aggregation has to work without one.
     await db.project.create({ data: { id, ownerId, title } });
     await db.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
-    await ratifyProjectForPgTest(db, ownerId, id, title);
+    await establishProjectContractForPgTest(db, ownerId, id, title);
   }
   return { ownerId, projectId, otherProjectId, workspaceId };
 }

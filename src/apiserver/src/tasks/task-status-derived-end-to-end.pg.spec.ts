@@ -270,47 +270,27 @@ async function establishCanonicalClosedEvaluation(
   projectId: string,
   goal: string,
 ): Promise<void> {
+  await sql.query('SELECT project_refresh_completion_contract($1::uuid, $2)',
+    [projectId, 'N9_END_TO_END_FIXTURE']);
   const stateResult = await sql.query(
-    'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS state',
-    [ownerId, projectId],
+    `SELECT "contract_digest"::text AS "contractDigest",
+            "evaluation_plan_digest"::text AS "evaluationPlanDigest",
+            "risk_policy_digest"::text AS "riskPolicyDigest",
+            "permission_digest"::text AS "permissionDigest",
+            "budget_digest"::text AS "budgetDigest",
+            "recipient_digest"::text AS "recipientDigest"
+       FROM "project_completion_contract" WHERE "project_id" = $1::uuid`,
+    [projectId],
   );
-  let state = stateResult.rows[0].state as Record<string, unknown> & {
+  const state = stateResult.rows[0] as {
     contractDigest: string;
     evaluationPlanDigest: string;
     riskPolicyDigest: string;
     permissionDigest: string;
     budgetDigest: string;
     recipientDigest: string;
-    ratified: boolean;
-    decisionRequest?: { id?: string; ctaToken?: string };
   };
-  if (!state.ratified) {
-    const request = state.decisionRequest;
-    assert.ok(request?.id && request.ctaToken, 'owner decision request has an exact CTA');
-    const ratification = await sql.query(
-      `SELECT project_owner_ratify_contract(
-         $1::uuid,$2::uuid,'OWNER',$1::text,$3,$4::uuid,$5::uuid,'APPROVE',$6,false
-       ) AS result`,
-      [
-        ownerId,
-        projectId,
-        state.contractDigest,
-        request.id,
-        request.ctaToken,
-        `n9-owner-ratification:${projectId}`,
-      ],
-    );
-    assert.equal(
-      ratification.rows[0].result.ok,
-      true,
-      `owner ratification failed: ${JSON.stringify(ratification.rows[0].result)}`,
-    );
-    state = (await sql.query(
-      'SELECT project_owner_ratification_state_json($1::uuid,$2::uuid) AS state',
-      [ownerId, projectId],
-    )).rows[0].state;
-  }
-  assert.equal(state.ratified, true);
+  assert.ok(state?.contractDigest, 'the project has a completion contract');
 
   const grantId = randomUUID();
   const principalId = randomUUID();
@@ -1100,10 +1080,6 @@ suite(
     // N3/N4/N5: structured criteria are concluded from the four durable facts. The source and
     // verifier Sessions are still AWAITING_INPUT, and two ordinary project tasks remain OPEN.
     const acceptanceRun = await acceptance.openRun(ownerId, project.id, { decidedBy: 'USER' });
-    await acceptance.confirmCriteriaSet(ownerId, project.id, {
-      actorType: 'USER',
-      actorId: ownerId,
-    });
     const passedRun = await acceptance.finalizeRun(
       ownerId,
       project.id,

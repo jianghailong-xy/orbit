@@ -369,7 +369,7 @@ test('pendingInbox returns current project acceptance beside task judgments with
       criterionCount: 10,
       humanCriterionCount: 10,
       unansweredCount: 10,
-      criteriaConfirmed: true,
+      criteriaDeclared: true,
         total: 1,
       }];
     },
@@ -390,8 +390,7 @@ test('pendingInbox returns current project acceptance beside task judgments with
       humanCriterionCount: 10,
       answeredCount: 0,
       unansweredCount: 10,
-      criteriaConfirmed: true,
-      confirmationRequired: false,
+      criteriaDeclared: true,
       currentVerdict: 'UNDECIDED',
     }],
   });

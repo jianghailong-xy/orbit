@@ -64,12 +64,7 @@ import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { JudgmentRequestSummary } from '../components/JudgmentRequestSummary';
-import { OwnerRatificationSummary } from '../components/OwnerRatificationSummary';
 import { FailureCoordinationCard } from '../components/FailureCoordinationCard';
-import {
-  isActiveOwnerRatificationReference,
-  type OwnerRatificationReference,
-} from '../lib/ownerRatification';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -106,7 +101,6 @@ interface Project {
   /** Canonical failure stages; only `needsYou` is eligible for Project Attention. */
   failureCoordination?: FailureCoordinationSummary;
   /** Secret-free pending owner decision; identical to the inbox/detail reference. */
-  ownerRatification?: OwnerRatificationReference | null;
 }
 
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
@@ -503,22 +497,10 @@ export function ProjectsPage() {
             // quiet, or that it is finished and still open. Null on most rows, which is the point
             // (see attentionChipOf).
             const chip = attentionChipOf(p, now);
-            const ratification = isActiveOwnerRatificationReference(p.ownerRatification)
-              ? p.ownerRatification
-              : null;
             return (
               <List.Item
                 className="project-row"
                 style={{ padding: '11px 10px' }}
-                data-decision-request-id={ratification?.decisionRequestId}
-                data-obligation-id={ratification?.obligationId}
-                data-obligation-revision={ratification?.obligationRevision}
-                data-contract-digest={ratification?.contractDigest}
-                data-reason={ratification?.reasonCode}
-                data-eligibility-reason={ratification?.eligibility.reasonCode}
-                data-binding-status={ratification?.eligibility.bindingStatus}
-                data-owner={ratification?.owner}
-                data-evaluated-through-watermark={ratification?.evaluatedThroughWatermark}
               >
                 {/* One link spanning the whole row — meta and count alike — so the entire row is a
                     single click and a single tab stop, rather than a title-sized target with dead
@@ -545,14 +527,6 @@ export function ProjectsPage() {
                       ) : null}
                     </div>
                     <div className="project-row-goal">{goal}</div>
-                    {ratification ? (
-                      <div className="project-row-ratification">
-                        Request r{ratification.requestRevision} ·{' '}
-                        {ratification.decisionRequestId} · digest{' '}
-                        {ratification.contractDigest.slice(0, 10)}… · watermark{' '}
-                        {ratification.evaluatedThroughWatermark}
-                      </div>
-                    ) : null}
                   </div>
                   <ProjectRowMeter buckets={p.buckets} />
                   {/* Furthest right, and the smaller of the two: when the project last moved is
@@ -730,8 +704,6 @@ export function ProjectDetailPage() {
               coordinator. A long brief stays complete here; its full Markdown remains the one
               source rather than being hidden behind a disclosure or repeated below the graph. */}
           <ProjectGoalCard goal={p.goal} />
-
-          <OwnerRatificationSummary reference={p.ownerRatification} />
 
           <JudgmentRequestSummary projectId={id} heading="待我判定" />
 

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { PrismaClient } from '@prisma/client';
 
-import { ratifyProjectForPgTest } from '../projects/project-ratification-test-helper';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import {
   OUTCOME_DIMENSIONS,
   evaluateCanonicalOutcome,
@@ -22,15 +22,7 @@ async function establishCanonicalEvaluationForPgTest(
   expectedClosed: boolean,
   refutedDimensionId?: string,
 ): Promise<void> {
-  const state = await ratifyProjectForPgTest(db, ownerId, projectId, label) as {
-    contractDigest: string;
-    evaluationPlanDigest: string;
-    riskPolicyDigest: string;
-    permissionDigest: string;
-    budgetDigest: string;
-    recipientDigest: string;
-    ratification?: { id?: string };
-  };
+  const state = await establishProjectContractForPgTest(db, ownerId, projectId, label);
   const principalId = randomUUID();
   const collectorId = `pg-test-canonical-${randomUUID()}`;
   const [grant] = await db.$queryRawUnsafe<Array<{ authority: Record<string, unknown> }>>(
@@ -164,7 +156,7 @@ async function establishCanonicalEvaluationForPgTest(
         ratifierType: 'OWNER',
         ratifierId: ownerId,
         contractDigest: binding.contractDigest,
-        factId: state.ratification?.id ?? randomUUID(),
+        factId: randomUUID(),
       },
       disposition: 'ACHIEVED',
     },

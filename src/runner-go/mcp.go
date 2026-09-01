@@ -455,17 +455,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "project_criteria_confirm":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		raw, err := s.t.confirmProjectAcceptanceCriteria(id, s.sessionID)
-		if err != nil {
-			return toolResult("confirm project acceptance standard set failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "project_acceptance_run":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1582,7 +1571,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"criteria already in force keep deciding whether this project is done until they do. " +
 			"Preserve an item's id from project_get to " +
 			"edit or reorder it without replacing its identity; omit id to add a new item. " +
-			"[] is refused — a project measured by nothing cannot be ratified, so send the complete " +
+			"[] is refused — a project cannot be measured by nothing, so send the complete " +
 			"set you mean. " +
 			"currentStatus is derived and is not an input. Legacy acceptanceCriteria is not a " +
 			"runner write shape.",
@@ -1928,21 +1917,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"enum":        []string{"DONE_GATE", "AGENT_QUEUE", "PROJECT_ATTENTION", "WEB"},
 					"description": "Actor view to read; defaults to AGENT_QUEUE.",
-				},
-			}, "projectId"),
-		},
-		{
-			"name": "project_criteria_confirm",
-			"description": "Confirm once that the complete current acceptance-standard set expresses " +
-				"the project's goal. The append-only record is bound to the set's revision-bearing " +
-				"digest; editing any assertion or declared criterion invalidates it mechanically. A " +
-				"PROJECT_COORDINATOR one-shot judgment Session is refused. A headless runner call is " +
-				"admitted and recorded as RUNNER provenance, which provides audit visibility rather " +
-				"than proof that a human was present.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project whose complete current standard set is being confirmed.",
 				},
 			}, "projectId"),
 		},

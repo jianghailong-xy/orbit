@@ -18,8 +18,6 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
-  CreateRatificationDelegationDto,
-  CreateRatificationTemplateDto,
   CriteriaProposalDecisionDto,
   DecideCompletionAckOwnerDecisionDto,
   DecideProjectHandoffDto,
@@ -27,7 +25,6 @@ import {
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
-  OwnerRatificationDecisionDto,
   RebindProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
@@ -63,25 +60,6 @@ export class ProjectsController {
     );
   }
 
-  /** Create a reusable exact/bounded ratification authority. This is owner-authenticated and does
-   * not ratify any Project by itself. */
-  @Post('ratification/templates')
-  createRatificationTemplate(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CreateRatificationTemplateDto,
-  ) {
-    return this.acceptance.createRatificationTemplate(user.userId, dto);
-  }
-
-  /** Delegate only the declared semantic/digest/budget/time/use envelope to one principal. */
-  @Post('ratification/delegations')
-  createRatificationDelegation(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CreateRatificationDelegationDto,
-  ) {
-    return this.acceptance.createRatificationDelegation(user.userId, dto);
-  }
-
   /** The owner's projects, newest first. `?status=OPEN|DONE|CANCELLED` narrows; absent means all. */
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
@@ -97,28 +75,6 @@ export class ProjectsController {
     return this.acceptance.pendingInbox(
       user.userId,
       limit === undefined ? 100 : Number(limit),
-    );
-  }
-
-  /** Pending Owner Ratification questions, projected without their one-use CTA capability.
-   *
-   * `?sessionId=` narrows the same owner-authenticated list to the conversation a contract was
-   * drafted in, so the session view can raise the question where it was written instead of only in
-   * a separate inbox. It changes nothing about who may read or decide: the owner's JWT is still
-   * the only credential accepted here, and the decision still goes through POST :id/ratification. */
-  @Get('ratification/pending')
-  @Header('Cache-Control', 'private, no-store, max-age=0')
-  @Header('Pragma', 'no-cache')
-  @Header('Vary', 'Authorization')
-  pendingOwnerRatification(
-    @CurrentUser() user: AuthUser,
-    @Query('limit') limit?: string,
-    @Query('sessionId', PublicIdPipe) sessionId?: string,
-  ) {
-    return this.acceptance.pendingOwnerRatificationInbox(
-      user.userId,
-      limit === undefined ? 100 : Number(limit),
-      sessionId,
     );
   }
 
@@ -341,31 +297,6 @@ export class ProjectsController {
     );
   }
 
-  @Get(':id/ratification')
-  @Header('Cache-Control', 'private, no-store, max-age=0')
-  @Header('Pragma', 'no-cache')
-  @Header('Vary', 'Authorization')
-  @Header('Referrer-Policy', 'no-referrer')
-  ownerRatification(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-  ) {
-    return this.acceptance.ownerRatification(user.userId, id);
-  }
-
-  @Post(':id/ratification')
-  @Header('Cache-Control', 'private, no-store, max-age=0')
-  @Header('Pragma', 'no-cache')
-  @Header('Vary', 'Authorization')
-  @Header('Referrer-Policy', 'no-referrer')
-  decideOwnerRatification(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: OwnerRatificationDecisionDto,
-  ) {
-    return this.acceptance.ratifyByOwner(user.userId, id, dto);
-  }
-
   /**
    * The pending proposal to change this project's acceptance criteria, rendered whole.
    *
@@ -403,18 +334,6 @@ export class ProjectsController {
     return this.acceptance.decideCriteriaProposal(
       user.userId, id, { actorType: 'USER', actorId: user.userId }, dto,
     );
-  }
-
-  /** @deprecated Compatibility alias for an owner approval of the current contract digest. */
-  @Post(':id/acceptance/criteria-confirmation')
-  confirmAcceptanceCriteria(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-  ) {
-    return this.acceptance.confirmCriteriaSet(user.userId, id, {
-      actorType: 'USER',
-      actorId: user.userId,
-    });
   }
 
   /**
