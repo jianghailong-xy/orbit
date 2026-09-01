@@ -187,26 +187,59 @@ struct AgentContentColumn: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
+    /// The session-list search field's text — owned by the column because the field is declared on
+    /// the column root (see `body`). macOS carries it too but never shows a field: its window
+    /// searches from the ⌘K palette instead.
+    @State private var searchQuery = ""
     var body: some View {
         @Bindable var app = app
-        if let agents = app.agents, let id = app.selectedAgentID, let a = agents.agent(id) {
-            AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID)
-                .id(a.id)
-                .navigationTitle(a.name)
-                #if os(iOS)
-                // The iPhone list keeps its roomy large title. In the regular-width three-column
-                // iPad shell, an inline title leaves the vertical room below it to the persistent
-                // scope control and search field instead of spending a second row on the Workspace.
-                .navigationBarTitleDisplayMode(
-                    SessionListPresentation.resolve(
-                        isCompactWidth: horizontalSizeClass == .compact
-                    ).showsPersistentScope ? .inline : .automatic
-                )
-                #endif
-        } else {
-            ContentUnavailableView("Select a workspace", systemImage: "folder",
-                                   description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
+        // Both branches in one `Group` so the search field below can be declared on the column root
+        // *unconditionally*. It used to hang off `AgentPanes`' list — inside the `if let` — which
+        // left it missing on any column born on the placeholder branch: at cold launch the workspace
+        // list is still loading (`AppModel.loadAgentsThenLand` resolves the landing agent only after
+        // the fetch), so this column first appears as "Select a workspace", and the search bar UIKit
+        // installs on the column's navigation item at that first configuration simply wasn't there to
+        // install. Swapping the branch in afterwards doesn't add one — which is why the field stayed
+        // gone (scrolling to the top didn't bring it back) until you left the section and came back,
+        // rebuilding the column with the workspace already resolved. Declared here it exists from the
+        // column's first breath, in either branch.
+        Group {
+            if let agents = app.agents, let id = app.selectedAgentID, let a = agents.agent(id) {
+                AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID,
+                           searchQuery: $searchQuery)
+                    .id(a.id)
+                    .navigationTitle(a.name)
+                    #if os(iOS)
+                    // The iPhone list keeps its roomy large title. In the regular-width three-column
+                    // iPad shell, an inline title leaves the vertical room below it to the persistent
+                    // scope control and search field instead of spending a second row on the Workspace.
+                    .navigationBarTitleDisplayMode(
+                        SessionListPresentation.resolve(
+                            isCompactWidth: horizontalSizeClass == .compact
+                        ).showsPersistentScope ? .inline : .automatic
+                    )
+                    #endif
+            } else {
+                ContentUnavailableView("Select a workspace", systemImage: "folder",
+                                       description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
+            }
         }
+        #if os(iOS)
+        // Search, in the list rather than over it. Until it existed the list was only searchable from
+        // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
+        // `.navigationBarDrawer` is what keeps the field *below* the workspace title instead of over
+        // it — the system owns that layout, which a hand-placed bar can't do — and `.always` keeps it
+        // visible rather than hidden until you pull down, since not being able to find it is what
+        // started this. Typing searches the server (every workspace, scope and message text); the
+        // hits replace the list's sections until the field is cleared (see `AgentPanes`).
+        .searchable(text: $searchQuery,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search sessions")
+        // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
+        // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
+        // rather than on the old workspace's search results.
+        .onChange(of: app.selectedAgentID) { _, _ in searchQuery = "" }
+        #endif
     }
 }
 
@@ -218,6 +251,9 @@ struct AgentPanes: View {
     let agents: AgentsModel
     let agent: Agent
     @Binding var selectedSessionID: String?
+    /// The search field's text. The field itself lives on `AgentContentColumn` (which is why this is
+    /// a binding and not local state — see the comment on that column's `body`).
+    @Binding var searchQuery: String
     @State private var view: SessionView = .open
     @State private var showSettings = false
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
@@ -228,10 +264,8 @@ struct AgentPanes: View {
     /// Whether the iOS list is grouped by tag instead of by recency (iOS list only).
     @State private var groupByTag = false
     #if os(iOS)
-    /// The inline search field's text, and what came back for it. The list searches in place —
-    /// results replace its sections — rather than opening the palette sheet over the very list
-    /// you're looking at.
-    @State private var searchQuery = ""
+    /// What came back for the current query. The list searches in place — the hits replace its
+    /// sections — rather than opening the palette sheet over the very list you're looking at.
     @State private var hits: [SessionSearchHit] = []
     /// The query `hits` came from — what their snippets are highlighted against, so highlighting
     /// can't run ahead of the results while typing.
@@ -318,16 +352,9 @@ struct AgentPanes: View {
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
         .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
-        // Search, in the list rather than over it. Until now it was only reachable from inside the
-        // drawer (or ⌘K, which needs a keyboard), so the list itself looked like it had none.
-        // `.navigationBarDrawer` is what keeps the field *below* the agent title instead of over
-        // it — the system owns that layout, which a hand-placed bar can't do — and `.always` keeps
-        // it visible rather than hidden until you pull down, since not being able to find it is
-        // what started this. Typing searches the server (every agent, scope and message text) and
-        // shows the hits here; clearing the field restores the sections.
-        .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search sessions")
+        // Typing in the column's search field (declared on `AgentContentColumn`) searches the server —
+        // every workspace, scope and message text — and the hits show here in place of the sections;
+        // clearing the field restores them.
         .task(id: searchQuery) { await runSearch() }
         // Regular iPad keeps the lifecycle scope visible instead of burying it in the filter menu.
         // It lives below the inline title/search chrome and stays fixed while the rows scroll. The
