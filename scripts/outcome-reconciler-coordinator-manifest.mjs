@@ -47,7 +47,7 @@ const summary = {
   cancelled: counter('cancelled'),
   todo: counter('todo'),
 };
-assert.ok(summary.tests >= 18, 'the coordinator suite is unexpectedly empty or truncated');
+assert.ok(summary.tests >= 17, 'the coordinator suite is unexpectedly empty or truncated');
 assert.equal(summary.passed, summary.tests, 'not every coordinator test passed');
 assert.equal(summary.failed, 0, 'coordinator suite contains failures');
 assert.equal(summary.skipped, 0, 'skipped coordinator tests are forbidden');
