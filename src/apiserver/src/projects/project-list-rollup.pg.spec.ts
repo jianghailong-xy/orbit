@@ -246,8 +246,8 @@ test('the project index buckets every project in one pass and agrees with the pr
         rawQueries = 0;
         const rows = await projects.list(ownerId);
         assert.equal(rows.length, 3);
-        assert.equal(rawQueries, 9,
-          'canonical task lanes, blockers, ratification, control-plane obligations and failure coordination stay page-wide');
+        assert.equal(rawQueries, 8,
+          'canonical task lanes, blockers, control-plane obligations and failure coordination stay page-wide');
       });
 
       await t.test('lastActivityAt is the latest task write, and Project.updatedAt is not',
