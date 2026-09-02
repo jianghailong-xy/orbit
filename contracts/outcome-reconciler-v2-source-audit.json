@@ -143,7 +143,7 @@
       ],
       "writers": [
         {
-          "path": "src/apiserver/prisma/migrations/0227_task_judgment_removal/migration.sql",
+          "path": "src/apiserver/prisma/migrations/0228_task_judgment_removal/migration.sql",
           "symbol": "DROP TABLE \"task_judgment_request\"",
           "authority": "REMOVAL_OF_THE_SURFACE"
         }
@@ -179,7 +179,7 @@
       ],
       "writers": [
         {
-          "path": "src/apiserver/prisma/migrations/0227_task_judgment_removal/migration.sql",
+          "path": "src/apiserver/prisma/migrations/0228_task_judgment_removal/migration.sql",
           "symbol": "DROP VIEW \"task_judgment_signal\"",
           "authority": "REMOVAL_OF_THE_SURFACE"
         }
@@ -227,7 +227,7 @@
           "authority": "V1_CONVERGENCE_BLOCKER_WRITER"
         },
         {
-          "path": "src/apiserver/prisma/migrations/0227_task_judgment_removal/migration.sql",
+          "path": "src/apiserver/prisma/migrations/0228_task_judgment_removal/migration.sql",
           "symbol": "DROP VIEW \"project_judgment_blocker\"",
           "authority": "REMOVAL_OF_THE_PROJECTION"
         }

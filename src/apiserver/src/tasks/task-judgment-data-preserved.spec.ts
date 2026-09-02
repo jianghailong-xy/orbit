@@ -20,7 +20,7 @@ import { test } from 'node:test';
 
 const API = path.resolve(__dirname, '../..');
 const MIGRATIONS = path.join(API, 'prisma/migrations');
-const REMOVAL_DIR = '0227_task_judgment_removal';
+const REMOVAL_DIR = '0228_task_judgment_removal';
 const REMOVAL_SQL = readFileSync(path.join(MIGRATIONS, REMOVAL_DIR, 'migration.sql'), 'utf8');
 
 /** The removal's statements, comments stripped: prose naming a table is not a statement on it. */

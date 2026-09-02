@@ -21,7 +21,7 @@ import { test } from 'node:test';
 const API = path.resolve(__dirname, '../..');
 const ROOT = path.resolve(API, '../..');
 const MIGRATIONS = path.join(API, 'prisma/migrations');
-const REMOVAL_DIR = '0227_task_judgment_removal';
+const REMOVAL_DIR = '0228_task_judgment_removal';
 const REMOVAL_SQL = readFileSync(path.join(MIGRATIONS, REMOVAL_DIR, 'migration.sql'), 'utf8');
 
 /** The five tables the judgment machine kept its own running state in. */

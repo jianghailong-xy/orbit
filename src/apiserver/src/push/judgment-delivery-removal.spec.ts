@@ -52,7 +52,7 @@ test('the push module keeps only the sender, and gained no resident process', ()
 
 test('the removal migration takes the inbox and the outbox, and adds no table in their place', () => {
   const removal = readFileSync(
-    path.join(API, 'prisma/migrations/0227_task_judgment_removal/migration.sql'), 'utf8',
+    path.join(API, 'prisma/migrations/0228_task_judgment_removal/migration.sql'), 'utf8',
   );
   assert.match(removal, /DROP TABLE "task_judgment_push_delivery";/u);
   assert.match(removal, /DROP TABLE "task_judgment_inbox_item";/u);

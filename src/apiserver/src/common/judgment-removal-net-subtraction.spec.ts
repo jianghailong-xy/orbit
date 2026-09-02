@@ -19,7 +19,7 @@ import { test } from 'node:test';
 const API = path.resolve(__dirname, '../..');
 const ROOT = path.resolve(API, '../..');
 const MIGRATIONS = path.join(API, 'prisma/migrations');
-const REMOVAL_DIR = '0227_task_judgment_removal';
+const REMOVAL_DIR = '0228_task_judgment_removal';
 
 /** The vocabulary this removal owns. A later migration that returns to it is charged here. */
 const VOCABULARY = [

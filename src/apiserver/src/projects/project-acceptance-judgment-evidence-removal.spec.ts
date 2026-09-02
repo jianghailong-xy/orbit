@@ -50,7 +50,7 @@ test('the gate itself, its triggers and its data are untouched', () => {
   }
   // And the removal migration names none of them.
   const removal = readFileSync(
-    path.join(API, 'prisma/migrations/0227_task_judgment_removal/migration.sql'), 'utf8',
+    path.join(API, 'prisma/migrations/0228_task_judgment_removal/migration.sql'), 'utf8',
   );
   const statements = removal.split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
   assert.doesNotMatch(statements, /project_acceptance/u,
