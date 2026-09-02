@@ -21,7 +21,25 @@ const ROOT = path.resolve(__dirname, '../../../..');
 const API = path.resolve(__dirname, '../..');
 const MIGRATIONS = path.join(API, 'prisma/migrations');
 const REMOVAL_DIR = '0221_watchdog_persistent_coordinator_removal';
-const REMOVAL_SQL = readFileSync(path.join(MIGRATIONS, REMOVAL_DIR, 'migration.sql'), 'utf8');
+
+/** The four migrations that installed what 0221 took out. The ledger is append-only: these stay. */
+const INSTALLERS = [
+  '0198_outcome_persistent_coordinator',
+  '0199_outcome_independent_watchdog_slo_security',
+  '0206_watchdog_current_binding',
+  '0214_watchdog_goal_progress_channel',
+];
+
+function migrationSql(dir: string): string {
+  return readFileSync(path.join(MIGRATIONS, dir, 'migration.sql'), 'utf8');
+}
+
+/** Every `NNNN_` directory in the ledger, in the order PostgreSQL replayed them. */
+function ledger(): string[] {
+  return readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
+}
+
+const REMOVAL_SQL = migrationSql(REMOVAL_DIR);
 
 function read(relative: string): string {
   return readFileSync(path.join(ROOT, relative), 'utf8');
@@ -167,11 +185,9 @@ test('(a) 0221 drops every table, view, function and trigger the four migrations
 });
 
 test('(a) the four migrations stay in the ledger and 0221 is the newest', () => {
-  const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
+  const names = ledger();
   assert.equal(names.at(-1), REMOVAL_DIR, 'nothing may replay after the removal');
-  for (const retired of ['0198_outcome_persistent_coordinator',
-    '0199_outcome_independent_watchdog_slo_security', '0206_watchdog_current_binding',
-    '0214_watchdog_goal_progress_channel']) {
+  for (const retired of INSTALLERS) {
     assert.ok(names.includes(retired), `${retired} must remain in the append-only ledger`);
   }
 });
@@ -300,16 +316,57 @@ test('(i) this is subtraction: no new service, no new resident process', () => {
   assert.deepEqual(created, [], 'the removal migration installs no new relation, trigger or index');
 });
 
+/**
+ * Every object 0221 took out, spelled the way a CREATE would have to spell it to put it back. The
+ * two dropped columns are here too: re-adding a column is the same net addition as re-adding a
+ * table. `outcome_watchdog` is the schema itself, which covers everything 0199 and 0214 named
+ * inside it.
+ */
+const REMOVED_OBJECTS = [
+  ...COORDINATOR_TABLES,
+  ...COORDINATOR_FUNCTIONS,
+  ...BINDING_TABLES,
+  'executable_runtime_current_binding',
+  'executable_runtime_register_current_binding',
+  'executable_runtime_append_current_heartbeat',
+  'outcome_watchdog',
+  'runtime_binding_digest',
+  'runtime_binding_logical_time',
+];
+
+/** Which of the removed objects this migration text puts back on the schema. */
+function reinstalls(sql: string): string[] {
+  return REMOVED_OBJECTS.filter((name) => new RegExp(
+    '(?:CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:MATERIALIZED\\s+)?'
+    + '(?:TABLE|VIEW|SCHEMA|FUNCTION|PROCEDURE|TRIGGER|INDEX)\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?'
+    + `|ADD\\s+COLUMN\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?)${name}\\b`, 'i').test(sql));
+}
+
 test('(i) the removal deletes far more than it adds', () => {
-  const diff = execFileSync('git', ['diff', '--numstat', 'main...HEAD', '--',
-    ':!package-lock.json'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  let added = 0;
-  let deleted = 0;
-  for (const line of diff.split('\n').filter(Boolean)) {
-    const [plus, minus] = line.split('\t');
-    if (plus === '-' || minus === '-') continue;
-    added += Number(plus);
-    deleted += Number(minus);
-  }
-  assert.ok(deleted > added, `the branch added ${added} and deleted ${deleted} lines`);
+  // This used to be `git diff --numstat main...HEAD`, which measured the work against wherever the
+  // branch happened to be standing. That reads "8,666 deleted, 0 added" on the branch and "0 added,
+  // 0 deleted" the moment it merges, so the assertion inverted on the tree it was written to
+  // protect. The arithmetic below is read out of the tree itself and says the same thing before and
+  // after the merge, on a clone with no `main` ref, and on an export with no history at all.
+
+  // What it retired. The ledger is append-only and the test above pins these four in place, so this
+  // is a fixed quantity that no later commit can dilute — which is exactly what a baseline SHA
+  // could not promise: unrelated work landing on main would eventually out-add the 8,666 lines.
+  const retired = INSTALLERS.reduce((total, dir) => total + migrationSql(dir).split('\n').length, 0);
+  assert.ok(retired > 4_000,
+    `expected the 4,160 lines the four migrations installed, saw ${retired}`);
+
+  // What it spent. 0221, plus any later migration that goes back to the same vocabulary — a
+  // compatibility shim for the machinery being removed is part of the removal's bill, while an
+  // unrelated migration landing on top of it is not.
+  const spending = ledger().filter((dir) => dir >= REMOVAL_DIR)
+    .filter((dir) => DROPPED_NAMES.some((name) => migrationSql(dir).includes(name)));
+  const spent = spending.reduce((total, dir) => total + migrationSql(dir).split('\n').length, 0);
+  assert.ok(spent * 5 < retired,
+    `the removal spent ${spent} lines (${spending.join(', ')}) to retire ${retired}`);
+
+  // And it spent none of them putting any of it back. A removal that re-creates what it dropped is
+  // a net addition however the line counts come out, so this half is absolute rather than a ratio.
+  assert.deepEqual(spending.flatMap((dir) => reinstalls(migrationSql(dir)).map((n) => `${dir}: ${n}`)),
+    [], 'nothing at or after the removal may re-create what it dropped');
 });
