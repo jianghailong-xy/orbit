@@ -25,10 +25,6 @@ import {
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import {
-  controlPlaneObligationsBy,
-  readControlPlaneObligations,
-} from '../common/control-plane-obligation';
-import {
   failureCoordinationByProject,
   failureCoordinationByTask,
   readFailureCoordination,
@@ -1358,20 +1354,15 @@ export class ProjectsService {
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key.
-    const [rollups, attention, activeObligations, failureCoordination] = await Promise.all([
+    const [rollups, attention, failureCoordination] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
-      readControlPlaneObligations(this.prisma, {
-        tenantId: ownerId,
-        projectIds: projects.map((project) => project.id),
-      }),
       readFailureCoordination(this.prisma, {
         tenantId: ownerId,
         projectIds: projects.map((project) => project.id),
         surface: 'PROJECT_WORK_OVERVIEW',
       }),
     ]);
-    const obligationsByProject = controlPlaneObligationsBy(activeObligations, 'projectId');
     const failuresByProject = failureCoordinationByProject(failureCoordination);
     return projects.map((project) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
@@ -1389,7 +1380,6 @@ export class ProjectsService {
         attention: attention.get(project.id) ?? emptyProjectListAttention(),
         failureCoordination:
           failuresByProject.get(project.id)?.summary ?? summarizeFailureCoordination([]),
-        controlPlaneObligations: obligationsByProject.get(project.id) ?? [],
       };
     });
   }
@@ -1419,7 +1409,6 @@ export class ProjectsService {
     const [
       byStatus,
       acceptance,
-      controlPlaneObligations,
       failureCoordination,
     ] = await Promise.all([
       this.prisma.task.groupBy({
@@ -1428,7 +1417,6 @@ export class ProjectsService {
         _count: { _all: true },
       }),
       this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
-      readControlPlaneObligations(this.prisma, { tenantId: ownerId, projectIds: [id] }),
       readFailureCoordination(this.prisma, {
         tenantId: ownerId,
         projectIds: [id],
@@ -1440,7 +1428,6 @@ export class ProjectsService {
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
       acceptance,
       failureCoordination,
-      controlPlaneObligations,
     });
   }
 
@@ -1591,7 +1578,7 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates, activeObligations, failureCoordination] = await Promise.all([
+    const [dependencies, workStates, failureCoordination] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -1603,11 +1590,6 @@ export class ProjectsService {
         projectId,
         page.map((task) => task.id),
       ),
-      readControlPlaneObligations(this.prisma, {
-        tenantId: ownerId,
-        projectIds: [projectId],
-        taskIds: page.map((task) => task.id),
-      }),
       readFailureCoordination(this.prisma, {
         tenantId: ownerId,
         projectIds: [projectId],
@@ -1615,7 +1597,6 @@ export class ProjectsService {
         surface: 'TASK_DETAIL',
       }),
     ]);
-    const obligationsByTask = controlPlaneObligationsBy(activeObligations, 'taskId');
     const failuresByTask = failureCoordinationByTask(failureCoordination);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -1623,7 +1604,6 @@ export class ProjectsService {
         workState: 'BLOCKED' as const,
         verificationState: null,
       };
-      const controlPlaneObligations = obligationsByTask.get(task.id) ?? [];
       return {
         ...task,
         ...work,
@@ -1632,8 +1612,7 @@ export class ProjectsService {
         // carries all four keys, because an absent key reads to a client as "this endpoint does not
         // report dependencies" rather than as "this task has none".
         ...dependency,
-        blocked: dependency.dependencyState !== 'READY' || controlPlaneObligations.length > 0,
-        controlPlaneObligations,
+        blocked: dependency.dependencyState !== 'READY',
         failureCoordination: failuresByTask.get(task.id) ?? [],
       };
     });

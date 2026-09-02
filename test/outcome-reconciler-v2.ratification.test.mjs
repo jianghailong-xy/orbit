@@ -446,14 +446,19 @@ test('(c) automatic dispatch no longer waits for an approval that no longer exis
       WHERE NOT t.tgisinternal AND c.relname = 'session' AND t.tgname ~ 'ratifi'`,
   )).rows;
   assert.deepEqual(triggers, [], 'no session trigger may consult an approval');
-  const obligations = (await pool.query(
-    `SELECT count(*)::int AS count FROM "task_auto_dispatch_obligation_revision"
-      WHERE "reason_code" = 'OWNER_RATIFICATION_REQUIRED'`,
-  )).rows[0].count;
-  assert.equal(obligations, 0, 'no OWNER_RATIFICATION_REQUIRED obligation may be recordable');
-  const disposition = read('src/apiserver/src/common/auto-dispatch-obligation.ts');
-  assert.doesNotMatch(disposition, /OWNER_RATIFICATION_REQUIRED/,
-    'the refusal-to-disposition mapper must have no ratification branch left to take');
+  // Stronger than "no such row": 0224 removed the whole automatic-dispatch obligation framework,
+  // so there is no relation an OWNER_RATIFICATION_REQUIRED reason could be written into and no
+  // recorder that would write one. Asserted against the migrated database rather than the source.
+  assert.equal((await pool.query(
+    `SELECT count(*)::int AS count FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname LIKE 'task_auto_dispatch%'`,
+  )).rows[0].count, 0, 'no automatic-dispatch obligation relation may hold a ratification reason');
+  assert.equal((await pool.query(
+    `SELECT count(*)::int AS count FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname LIKE 'task_auto_dispatch%'`,
+  )).rows[0].count, 0, 'no automatic-dispatch recorder is left to raise one');
+  assert.equal(existsSync(path.join(ROOT, 'src/apiserver/src/common/auto-dispatch-obligation.ts')),
+    false, 'the refusal-to-disposition mapper that carried the ratification branch is gone');
   const tasksService = read('src/apiserver/src/tasks/tasks.service.ts');
   assert.doesNotMatch(tasksService, /project_owner_ratification_effective/,
     'neither dispatch sweep may prefilter on an approval');
