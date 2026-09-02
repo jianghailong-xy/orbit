@@ -139,6 +139,54 @@ function lastVerdict(created: RegExp, dropped: RegExp): { dir: string; verdict: 
 }
 
 /**
+ * Every object the seven migrations installed and 0222 takes away, each carrying the two patterns
+ * that say who put it on the schema and who took it off. One list rather than two spellings of the
+ * same set: `(a)` proves each object's standing verdict from it, and the subtraction arithmetic in
+ * `(s)` reads the same patterns to work out which migrations installed what is being retired, so
+ * the two cannot drift apart into disagreeing about what this removal is removing.
+ */
+const DROPPED_OBJECTS: ReadonlyArray<{
+  name: string; kind: 'TABLE' | 'VIEW' | 'FUNCTION'; created: RegExp; dropped: RegExp;
+}> = [
+  ...DROPPED_TABLES.map((name) => ({
+    name,
+    kind: 'TABLE' as const,
+    created: new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${name}"?[\\s(]`, 'i'),
+    dropped: new RegExp(
+      `DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${name}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i'),
+  })),
+  ...DROPPED_VIEWS.map((name) => ({
+    name,
+    kind: 'VIEW' as const,
+    created: new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW\\s+"?${name}"?`, 'i'),
+    dropped: new RegExp(`DROP\\s+VIEW\\s+(?:IF\\s+EXISTS\\s+)?"?${name}"?`, 'i'),
+  })),
+  ...DROPPED_FUNCTIONS.map((name) => ({
+    name,
+    kind: 'FUNCTION' as const,
+    created: new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+"?${name}"?\\s*\\(`, 'i'),
+    dropped: new RegExp(`DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?"?${name}"?\\s*\\(`, 'i'),
+  })),
+];
+
+/**
+ * The migrations that installed what 0222 takes away: for each dropped object, the first migration
+ * in the ledger that creates it. Derived from the same `created` patterns `(a)` proves the drops
+ * with, so there is no second, hand-written spelling of the list to fall out of date — and if one
+ * of those patterns ever stopped matching, `(a)` fails before this does. Every one of them is older
+ * than the removal and the ledger is append-only, so the set is fixed for good.
+ */
+function installers(): string[] {
+  const earlier = migrations().filter(({ dir }) => dir < REMOVAL_DIR);
+  const dirs = new Set<string>();
+  for (const { created } of DROPPED_OBJECTS) {
+    const first = earlier.find(({ sql }) => created.test(sql));
+    if (first) dirs.add(first.dir);
+  }
+  return [...dirs].sort();
+}
+
+/**
  * Every file the worktree actually has, tracked or merely known about, minus the migration ledger
  * and build output. `--others --exclude-standard` is load-bearing: plain `git ls-files` reports the
  * INDEX, so a file written but not yet staged is invisible and the scan goes green on a tree it
@@ -180,29 +228,13 @@ function isRemovalSuite(file: string): boolean {
 
 // (a) ---------------------------------------------------------------------------------------------
 test('(a) every relation, view and function the seven migrations installed is dropped by 0222', () => {
-  for (const table of DROPPED_TABLES) {
-    const create = new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${table}"?[\\s(]`, 'i');
-    const drop = new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${table}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i');
-    const standing = lastVerdict(create, drop);
-    assert.ok(standing, `${table} is named by no migration at all`);
-    assert.equal(standing.verdict, 'DROPPED', `${table} is still installed by ${standing.dir}`);
-    assert.equal(standing.dir, REMOVAL_DIR, `${table} was dropped by ${standing.dir}, not this removal`);
-  }
-  for (const view of DROPPED_VIEWS) {
-    const standing = lastVerdict(
-      new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW\\s+"?${view}"?`, 'i'),
-      new RegExp(`DROP\\s+VIEW\\s+(?:IF\\s+EXISTS\\s+)?"?${view}"?`, 'i'),
-    );
-    assert.ok(standing, `${view} is named by no migration at all`);
-    assert.equal(standing.verdict, 'DROPPED', `${view} is still installed by ${standing.dir}`);
-  }
-  for (const fn of DROPPED_FUNCTIONS) {
-    const standing = lastVerdict(
-      new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+"?${fn}"?\\s*\\(`, 'i'),
-      new RegExp(`DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?"?${fn}"?\\s*\\(`, 'i'),
-    );
-    assert.ok(standing, `${fn} is named by no migration at all`);
-    assert.equal(standing.verdict, 'DROPPED', `${fn} is still installed by ${standing.dir}`);
+  for (const { name, kind, created, dropped } of DROPPED_OBJECTS) {
+    const standing = lastVerdict(created, dropped);
+    assert.ok(standing, `${name} is named by no migration at all`);
+    assert.equal(standing.verdict, 'DROPPED', `${name} is still installed by ${standing.dir}`);
+    if (kind === 'TABLE') {
+      assert.equal(standing.dir, REMOVAL_DIR, `${name} was dropped by ${standing.dir}, not this removal`);
+    }
   }
   assert.match(REMOVAL_SQL, new RegExp(`DROP SCHEMA ${DROPPED_SCHEMA} CASCADE;`),
     'the shadow projection schema is the unit its seven tables and two triggers go with');
@@ -325,22 +357,70 @@ test('(s) the removal is subtraction: no new relation, no replacement completion
   }
 });
 
+/**
+ * Every name 0222 took off the schema, spelled the way a CREATE would have to spell it to put the
+ * thing back. The three columns 0196 added to `project_ratified_action_intent` are here too —
+ * re-adding a column is the same net addition as re-adding a table — and `outcome_projection` is
+ * the shadow schema itself, which stands for the seven tables and two triggers that lived in it.
+ */
+const REMOVED_OBJECTS = [
+  ...DROPPED_TABLES, ...DROPPED_VIEWS, ...DROPPED_FUNCTIONS, DROPPED_SCHEMA,
+  'project_acceptance_done_insert_gate',
+  'outcome_binding_digest', 'outcome_binding_epoch', 'outcome_watermark_logical_time',
+];
+
+/**
+ * Which of the removed objects this migration text puts back on the schema. `RENAME TO` is one of
+ * the ways in, not a flourish: 0196 is how `outcome_commit_evaluation_v1` came to exist, and it
+ * never held a `CREATE` of that name — without this alternative that one entry could never match,
+ * which is an unfalsifiable line rather than a check.
+ */
+function reinstalls(sql: string): string[] {
+  return REMOVED_OBJECTS.filter((name) => new RegExp(
+    '(?:CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:MATERIALIZED\\s+)?'
+    + '(?:TABLE|VIEW|SCHEMA|FUNCTION|PROCEDURE|TRIGGER|INDEX)\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?'
+    + '|ADD\\s+COLUMN\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?'
+    + `|RENAME\\s+TO\\s+)"?${name}"?\\b`, 'i').test(sql));
+}
+
 test('(s) no compose service or resident process is added, and the removal deletes more than it writes', () => {
   const compose = read('docker-compose.yml');
   assert.equal(/outcome[-_]?(projection|evaluator|delivery|obligation)/i.test(compose), false,
     'the removal must add no compose service');
-  const diff = execFileSync('git', ['diff', '--numstat', 'main...HEAD'], {
-    cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-  }).split('\n').filter(Boolean).map((line) => line.split('\t'));
-  let added = 0;
-  let removed = 0;
-  for (const [plus, minus] of diff) {
-    if (plus === '-' || minus === '-') continue;
-    added += Number(plus);
-    removed += Number(minus);
-  }
-  assert.ok(removed > added,
-    `this branch adds ${added} lines and removes ${removed}; a removal must be net subtraction`);
+
+  // The subtraction used to be proved with `git diff --numstat main...HEAD`, which measured where
+  // the branch was standing rather than whether the change was a subtraction: 15,905 deleted
+  // against 1,809 added while the work sat on a branch, and 0 against 0 the instant it merged. The
+  // assertion therefore inverted on the one tree it exists to protect. Pinning a baseline SHA would
+  // only have moved the problem — unrelated work landing on main keeps accumulating on the `added`
+  // side until it out-adds the deletion, and it would fail for a reason that has nothing to do with
+  // this removal — so the baseline here is content rather than a revision. Everything below is read
+  // out of the worktree and says the same thing before a merge, after a merge, on a clone with no
+  // `main` ref, and on an export with no history at all.
+  const ledger = migrations();
+
+  // What it retired: the migrations that installed the objects 0222 drops. The ledger is
+  // append-only and all of them are older than the removal, so no later commit can dilute it.
+  const installed = installers();
+  const retired = ledger.filter(({ dir }) => installed.includes(dir))
+    .reduce((total, { sql }) => total + sql.split('\n').length, 0);
+  assert.ok(retired > 7_000,
+    `expected the ~7,900 lines that installed this machinery, saw ${retired} in ${installed.join(', ')}`);
+
+  // What it spent: 0222, plus any later migration that returns to the same vocabulary. A
+  // compatibility shim for the machinery being removed goes on the removal's bill; an unrelated
+  // migration that merely lands on top of it does not.
+  const spending = ledger.filter(({ dir }) => dir >= REMOVAL_DIR)
+    .filter(({ sql }) => DROPPED_NAMES.some((name) => sql.includes(name)));
+  const spent = spending.reduce((total, { sql }) => total + sql.split('\n').length, 0);
+  assert.ok(spent * 5 < retired, `the removal spent ${spent} lines `
+    + `(${spending.map(({ dir }) => dir).join(', ')}) to retire ${retired}`);
+
+  // And none of it went back. A removal that re-creates what it dropped is a net addition however
+  // the line counts come out, so this half is absolute rather than a ratio.
+  assert.deepEqual(
+    spending.flatMap(({ dir, sql }) => reinstalls(sql).map((name) => `${dir}: ${name}`)), [],
+    'nothing at or after the removal may re-create what it dropped');
 });
 
 test('(l)(m) the removal writes no row: the stated criteria and their conclusions are untouched', () => {
