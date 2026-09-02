@@ -186,7 +186,7 @@
       ],
       "readers": [
         {
-          "path": "src/apiserver/src/tasks/task-judgment-removal.pg.spec.ts",
+          "path": "src/apiserver/src/tasks/task-judgment-removal.spec.ts",
           "symbol": "task_judgment_signal",
           "purpose": "ABSENCE_AUDIT"
         }
