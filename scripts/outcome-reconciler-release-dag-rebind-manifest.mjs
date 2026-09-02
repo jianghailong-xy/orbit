@@ -167,7 +167,6 @@ assert.doesNotMatch(focusLog, /Failed to load config file/u);
 assert.doesNotMatch(focusLog, /Cannot find module 'prisma\/config'/u);
 
 assert.equal(postgres.migrations, postgres.migrationFrontier.repositoryCount);
-assert.equal(postgres.beforeMigrations, postgres.migrations - 1);
 assert.equal(postgres.lastMigration, '0216_project_authority_envelope');
 assert.equal(postgres.prismaFixture.packageLock.target.sha256,
   binding.environment.dependencies.targetPackageLock.sha256);

@@ -348,7 +348,6 @@ test('shared preparation and resource ceilings prevent repeated setup and oversu
   assert.match(prepare, /materialize target-lock-isolated Prisma fixture/u);
   assert.match(prepare, /outcome-reconciler-release-dag-prisma-fixture\.mjs/u);
   assert.match(prepare, /node node_modules\/prisma\/build\/index\.js migrate deploy --config/u);
-  assert.match(prepare, /clone pre-owner fixture and reach current frontier/u);
   assert.doesNotMatch(prepare, /\$API\/node_modules\/\.bin\/prisma.*migrate deploy/su);
   assert.match(prepare, /--cpus 2 --memory 3072m --memory-swap 3072m/u);
   const step = read('scripts/outcome-reconciler-release-dag-step.mjs');

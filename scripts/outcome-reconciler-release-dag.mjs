@@ -466,12 +466,12 @@ function postgresOutputsValid(receipt) {
       '-X', '-v', 'ON_ERROR_STOP=1', '-At', '-F', '\t', '-c',
       `SELECT current_setting('server_version'), system_identifier::text,
               (SELECT count(*) FROM pg_database
-                WHERE datname IN ('${context.currentTemplate}','${context.beforeOwnerRoutingTemplate}'))
+                WHERE datname = '${context.currentTemplate}')
          FROM pg_control_system()`,
     ], { allowFailure: true });
     if (server.status !== 0) return false;
     const [version, systemIdentifier, templates] = server.stdout.split('\t');
-    if (version !== context.version || systemIdentifier !== context.systemIdentifier || templates !== '2') {
+    if (version !== context.version || systemIdentifier !== context.systemIdentifier || templates !== '1') {
       return false;
     }
     const migrations = run('docker', [
@@ -654,9 +654,7 @@ function postgresEnvironment(node) {
     OUTCOME_RELEASE_DAG_PG_VERSION: context.version,
     OUTCOME_RELEASE_DAG_PG_MIGRATIONS: String(context.migrations),
     OUTCOME_RELEASE_DAG_PG_LAST_MIGRATION: context.lastMigration,
-    OUTCOME_RELEASE_DAG_PG_TEMPLATE: node.postgresTemplate === 'before-owner-routing'
-      ? context.beforeOwnerRoutingTemplate
-      : context.currentTemplate,
+    OUTCOME_RELEASE_DAG_PG_TEMPLATE: context.currentTemplate,
     OUTCOME_RELEASE_DAG_DATABASE: allocation.database,
     OUTCOME_RELEASE_DAG_DATABASE_USER: allocation.role,
     OUTCOME_RELEASE_DAG_DATABASE_PREFIX: policy.postgresDatabasePrefix,

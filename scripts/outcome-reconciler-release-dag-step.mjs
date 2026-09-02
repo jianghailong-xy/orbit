@@ -163,10 +163,9 @@ if (action === 'preflight') {
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
 } else if (action === 'postgres-context') {
   const [output, container, admin, _password, host, port, systemIdentifier, version,
-    migrations, beforeMigrations, lastMigration, currentTemplate, beforeOwnerRoutingTemplate,
-    imageId, prismaFixturePath] = args;
+    migrations, lastMigration, currentTemplate, imageId, prismaFixturePath] = args;
   assert.ok(prismaFixturePath,
-    'usage: release-dag-step postgres-context OUTPUT CONTAINER ADMIN PASSWORD HOST PORT SYSTEM VERSION MIGRATIONS BEFORE_MIGRATIONS LAST CURRENT BEFORE IMAGE_ID PRISMA_FIXTURE');
+    'usage: release-dag-step postgres-context OUTPUT CONTAINER ADMIN PASSWORD HOST PORT SYSTEM VERSION MIGRATIONS LAST CURRENT IMAGE_ID PRISMA_FIXTURE');
   assert.equal(_password, 'pccrd_disposable_password');
   assert.match(admin, /^pcc[0-9a-z]*_/u,
     'Release DAG provisioner must remain a dedicated pcc_* disposable role');
@@ -205,17 +204,13 @@ if (action === 'preflight') {
     systemIdentifier,
     version,
     migrations: Number(migrations),
-    beforeMigrations: Number(beforeMigrations),
     lastMigration,
     migrationFrontier: {
       repositoryCount: repositoryMigrations.length,
-      beforeOwnerRoutingCount: Number(beforeMigrations),
       currentCount: Number(migrations),
       lastMigration,
-      ownerRoutingDeltaApplied: true,
     },
     currentTemplate,
-    beforeOwnerRoutingTemplate,
     imageId,
     prismaFixture: {
       path: path.relative(repo, path.resolve(prismaFixturePath)),
@@ -236,7 +231,6 @@ if (action === 'preflight') {
   assert.match(imageId, /^sha256:[0-9a-f]{64}$/u);
   assert.ok(body.migrations >= 210);
   assert.equal(body.migrations, repositoryMigrations.length);
-  assert.equal(body.beforeMigrations, body.migrations - 1);
   assert.equal(body.lastMigration, repositoryMigrations.at(-1));
   writeJson(output, { ...body, artifactDigest: sha256(canonical(body)) });
 } else if (action === 'full-api-case-receipt') {

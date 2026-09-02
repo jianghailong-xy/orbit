@@ -246,7 +246,6 @@ assert.equal(focus.cleanup.resourcesRemaining, 0);
 
 assert.equal(postgres.outcome, 'PASS');
 assert.equal(postgres.migrations, postgres.migrationFrontier.repositoryCount);
-assert.equal(postgres.beforeMigrations, postgres.migrations - 1);
 assert.equal(postgres.lastMigration, '0216_project_authority_envelope');
 assert.equal(postgres.prismaFixture.regression.reproducedBeforeRepair, true);
 assert.equal(postgres.prismaFixture.regression.absentAfterRepair, true);

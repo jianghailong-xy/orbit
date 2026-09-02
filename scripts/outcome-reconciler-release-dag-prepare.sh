@@ -160,10 +160,9 @@ case "$ACTION" in
     ADMIN='pccrd_provisioner'
     PASSWORD='pccrd_disposable_password'
     CURRENT_TEMPLATE='pccrd_template_current'
-    BEFORE_OWNER_TEMPLATE='pccrd_template_before_owner_routing'
     IMAGE="${OUTCOME_RELEASE_DAG_PG_IMAGE:-postgres:16-alpine}"
-    STAGE="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-before-owner-routing"
-    PRISMA_FIXTURE_MANIFEST="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-before-owner-routing-fixture.json"
+    STAGE="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-target-lock"
+    PRISMA_FIXTURE_MANIFEST="$OUTCOME_RELEASE_DAG_RUN_ROOT/prisma-target-lock-fixture.json"
     STAGE_API="$STAGE/src/apiserver"
 
     while IFS= read -r STALE_CONTAINER; do
@@ -232,26 +231,16 @@ case "$ACTION" in
     node "$REPO/scripts/outcome-reconciler-release-dag-prisma-fixture.mjs" \
       "$STAGE" "$PRISMA_FIXTURE_MANIFEST"
 
-    echo '==> release-dag prepare-postgres: apply every target migration except owner routing'
+    # Every migration in the repository, in its recorded order, in one pass. An earlier revision
+    # withheld 0210_owner_ratification_inbox_eligibility to build a second template holding the
+    # schema from before owner routing, and replayed 0210 last, after 0211..0225. No node ever
+    # declared that second template, and 0218_owner_ratification_queue_removal drops the very
+    # table 0210's first ALTER needs, so the replay could only ever fail once 0218 landed.
+    # Migrations are ordered history: they are applied in that order or not at all.
+    echo '==> release-dag prepare-postgres: apply every target migration and reach current frontier'
     docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-      -c "CREATE DATABASE $BEFORE_OWNER_TEMPLATE" >/dev/null
-    BEFORE_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$BEFORE_OWNER_TEMPLATE"
-    rm -rf -- "$STAGE_API/prisma/migrations/0210_owner_ratification_inbox_eligibility"
-    ( cd "$STAGE_API" && DATABASE_URL="$BEFORE_URL" \
-      node node_modules/prisma/build/index.js migrate deploy --config prisma.config.ts >/dev/null )
-    BEFORE_MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$BEFORE_OWNER_TEMPLATE" -tAc \
-      'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"
-    [ "$BEFORE_MIGRATIONS" -eq $((REPOSITORY_MIGRATIONS - 1)) ] || {
-      echo "pre-owner-routing migration mismatch applied=$BEFORE_MIGRATIONS repository=$REPOSITORY_MIGRATIONS" >&2
-      exit 1
-    }
-
-    echo '==> release-dag prepare-postgres: clone pre-owner fixture and reach current frontier'
-    docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -v ON_ERROR_STOP=1 \
-      -c "CREATE DATABASE $CURRENT_TEMPLATE TEMPLATE $BEFORE_OWNER_TEMPLATE" >/dev/null
+      -c "CREATE DATABASE $CURRENT_TEMPLATE" >/dev/null
     CURRENT_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$CURRENT_TEMPLATE"
-    cp -R "$API/prisma/migrations/0210_owner_ratification_inbox_eligibility" \
-      "$STAGE_API/prisma/migrations/0210_owner_ratification_inbox_eligibility"
     ( cd "$STAGE_API" && DATABASE_URL="$CURRENT_URL" \
       node node_modules/prisma/build/index.js migrate deploy --config prisma.config.ts >/dev/null )
     MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$CURRENT_TEMPLATE" -tAc \
@@ -267,8 +256,8 @@ case "$ACTION" in
 
     node "$REPO/scripts/outcome-reconciler-release-dag-step.mjs" postgres-context \
       "$OUTPUT" "$CONTAINER" "$ADMIN" "$PASSWORD" '127.0.0.1' "$PORT" \
-      "$SYSTEM_ID" "$VERSION" "$MIGRATIONS" "$BEFORE_MIGRATIONS" "$LAST_MIGRATION" \
-      "$CURRENT_TEMPLATE" "$BEFORE_OWNER_TEMPLATE" "$OBSERVED_IMAGE_ID" \
+      "$SYSTEM_ID" "$VERSION" "$MIGRATIONS" "$LAST_MIGRATION" \
+      "$CURRENT_TEMPLATE" "$OBSERVED_IMAGE_ID" \
       "$PRISMA_FIXTURE_MANIFEST"
     ;;
 
