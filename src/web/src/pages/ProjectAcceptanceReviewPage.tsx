@@ -381,7 +381,7 @@ export function ProjectAcceptanceReviewPage() {
         type="info"
         showIcon
         title="本页只处理逐项 HUMAN_SIGNOFF"
-        description={`当前标准集 digest ${review.data.criteriaDigest}；改动这套标准要走 agent 提议、账号所有者在卡片上确认的通道，不在本页。`}
+        description={`当前标准集 digest ${review.data.criteriaDigest}；改动这套标准是 project_update 的直接写入，不在本页。`}
       />
 
       <Alert

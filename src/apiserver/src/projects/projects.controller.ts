@@ -5,7 +5,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Param,
   Patch,
   Post,
@@ -18,7 +17,6 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
-  CriteriaProposalDecisionDto,
   DecideProjectHandoffDto,
   ReopenProjectDto,
   FinalizeAcceptanceRunDto,
@@ -275,45 +273,6 @@ export class ProjectsController {
     const parsed = Number(limit);
     return this.acceptance.overview(
       user.userId, id, Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20,
-    );
-  }
-
-  /**
-   * The pending proposal to change this project's acceptance criteria, rendered whole.
-   *
-   * It carries the criteria in force alongside the proposed ones and the semantic diff between
-   * them, because a card that shows only "confirm?" is a card whose reader cannot tell what they
-   * are agreeing to. No CTA capability is issued: the answer below travels on this same
-   * authenticated connection.
-   */
-  @Get(':id/criteria-proposal')
-  @Header('Cache-Control', 'private, no-store, max-age=0')
-  @Header('Pragma', 'no-cache')
-  @Header('Vary', 'Authorization')
-  @Header('Referrer-Policy', 'no-referrer')
-  criteriaProposal(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-  ) {
-    return this.acceptance.criteriaProposal(user.userId, id);
-  }
-
-  /**
-   * Answer it. `expectedCardDigest` is the identity of the rendering the reader decided on, so a
-   * proposal that changed underneath them is refused rather than approved on their behalf.
-   */
-  @Post(':id/criteria-proposal/decision')
-  @Header('Cache-Control', 'private, no-store, max-age=0')
-  @Header('Pragma', 'no-cache')
-  @Header('Vary', 'Authorization')
-  @Header('Referrer-Policy', 'no-referrer')
-  decideCriteriaProposal(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: CriteriaProposalDecisionDto,
-  ) {
-    return this.acceptance.decideCriteriaProposal(
-      user.userId, id, { actorType: 'USER', actorId: user.userId }, dto,
     );
   }
 

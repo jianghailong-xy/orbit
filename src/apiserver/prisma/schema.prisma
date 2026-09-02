@@ -2034,64 +2034,6 @@ model ProjectCompletionContract {
   @@map("project_completion_contract")
 }
 
-/// One agent-authored proposal to change what a project counts as done (migrations 0217, 0218).
-///
-/// Holding a row here changes nothing: the effective `ProjectAcceptanceCriterionDefinition` rows
-/// are untouched while a proposal stands. Only `project_owner_decide_criteria_proposal`, under
-/// OWNER credentials and against `cardDigest` — the identity of the exact rendering the owner
-/// answered — applies one.
-///
-/// It is bound to the CRITERIA SET it was drafted against and to nothing else, so a budget, member
-/// or risk-boundary edit cannot invalidate it, while an edit-then-revert, a delete-and-recreate or
-/// an identity swap inside the criteria still does: `definitionId` and `semanticRevision` are part
-/// of what `baseCriteriaDigest` hashes.
-///
-/// At most one proposal per project may be PENDING (partial unique index). A newer proposal
-/// retires the older one as SUPERSEDED with `supersededById` and `supersededReason`, which a CHECK
-/// makes mandatory: a replaced proposal is never an absence.
-model ProjectCriteriaProposal {
-  id                     String    @id @db.Uuid
-  projectId              String    @map("project_id") @db.Uuid
-  ownerId                String    @map("owner_id") @db.Uuid
-  proposalGeneration     BigInt    @map("proposal_generation")
-  /// The owner-decision protocol reason. Changing the standard is a goal decision, never one of
-  /// the other three reasons.
-  reasonCode             String    @default("GOAL_DECISION") @map("reason_code")
-  kind                   String    @default("PROJECT_CRITERIA_PROPOSAL")
-  status                 String    @default("PENDING")
-  /// The exact criteria set this proposal was drafted against. A decision is refused once it moves.
-  baseCriteriaDigest     String    @map("base_criteria_digest") @db.Char(64)
-  baseCriteria           Json      @map("base_criteria")
-  proposedCriteria       Json      @map("proposed_criteria")
-  semanticDiff           Json      @map("semantic_diff")
-  card                   Json
-  /// Approve-what-you-see identity over the proposed set, diff, card and base criteria digest.
-  cardDigest             String    @map("card_digest") @db.Char(64)
-  /// Digest of the submitted body, so an idempotency replay can tell a repeat from a new proposal.
-  inputDigest            String    @map("input_digest") @db.Char(64)
-  proposedByType         String    @map("proposed_by_type")
-  proposedById           String    @map("proposed_by_id")
-  proposalIdempotencyKey String    @map("proposal_idempotency_key")
-  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
-  supersededById         String?   @map("superseded_by_id") @db.Uuid
-  supersededReason       String?   @map("superseded_reason")
-  supersededAt           DateTime? @map("superseded_at") @db.Timestamptz(6)
-  decision               String?
-  decisionIdempotencyKey String?   @map("decision_idempotency_key")
-  decidedAt              DateTime? @map("decided_at") @db.Timestamptz(6)
-  decidedByType          String?   @map("decided_by_type")
-  decidedById            String?   @map("decided_by_id")
-  appliedCriteriaDigest  String?   @map("applied_criteria_digest") @db.Char(64)
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@unique([projectId, proposalGeneration])
-  @@unique([ownerId, proposalIdempotencyKey], map: "project_criteria_proposal_idempotency_idx")
-  @@unique([ownerId, decisionIdempotencyKey], map: "project_criteria_proposal_decision_idempotency_idx")
-  @@index([ownerId, status, createdAt(sort: Desc)], map: "project_criteria_proposal_inbox_idx")
-  @@map("project_criteria_proposal")
-}
-
 model ProjectRatifiedActionIntent {
   id                   String   @id @db.Uuid
   projectId            String   @map("project_id") @db.Uuid

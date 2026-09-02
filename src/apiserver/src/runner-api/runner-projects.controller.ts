@@ -12,14 +12,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
-  ProposeCriteriaChangeDto,
   RecordMergeEvidenceDto,
   UpdateProjectDto,
 } from '../projects/dto';
@@ -245,42 +243,8 @@ export class RunnerProjectsController {
     return this.projects.reopenPreview(runner.ownerId, id);
   }
 
-  /**
-   * Propose a different acceptance-criteria set, and change nothing.
-   *
-   * The agent's door onto the owner-decision channel. It writes a proposal bound to the criteria
-   * set it was drafted against; the criteria in force are untouched when this returns. Only the
-   * owner, on the card this produces and through their own credential, applies it.
-   */
-  @Post('projects/:id/acceptance/criteria-proposals')
-  proposeCriteriaChange(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    // Same header and same reason as the PATCH below: the judgment session's HUMAN_ONLY boundary
-    // applies to proposing as well, so it has to reach the service.
-    @Headers('x-orbit-session-id') sessionId: string | undefined,
-    @Body() dto: ProposeCriteriaChangeDto,
-  ) {
-    return this.acceptance.proposeCriteriaChange(
-      runner.ownerId,
-      id,
-      { actorType: 'RUNNER', actorId: runner.id },
-      {
-        ...dto,
-        actingSessionId: sessionId?.trim() || undefined,
-        criteria: ProjectAcceptanceService.criteriaProposalItems(dto.acceptanceCriteriaItems),
-      },
-    );
-  }
-
-  /** What the owner has been asked, with no owner capability in it. */
-  @Get('projects/:id/acceptance/criteria-proposal')
-  criteriaProposal(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.acceptance.machineCriteriaProposal(runner.ownerId, id);
-  }
-
   @Patch('projects/:id')
-  async updateProject(
+  updateProject(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     // The session this edit is being made from, read for the acceptance-criteria HUMAN_ONLY
@@ -292,41 +256,7 @@ export class RunnerProjectsController {
   ) {
     RunnerProjectsController.refuseLegacyAcceptanceCriteria(dto);
     RunnerProjectsController.refuseGovernance(dto);
-    RunnerProjectsController.refuseEmptyCriteriaProposal(dto);
-    // Acceptance criteria leave this body here and become a proposal. An agent may say what it
-    // thinks the standard should be; it may not move the standard it is measured against, and a
-    // PATCH that quietly did both would put the project on an unapproved ruler for as long as it
-    // took the owner to answer. Everything else on the body is an ordinary fact about the work and
-    // is written exactly as before, in its own transaction — the two are deliberately separate
-    // outcomes, and the response says which of them happened.
-    const { acceptanceCriteriaItems, ...rest } = dto;
-    // A body carrying nothing but criteria performs no project write at all — not even the read
-    // that would shape a response — because nothing about the project changed. A body that also
-    // carries ordinary facts writes them exactly as before, and an empty body still meets the
-    // service's own "name at least one field" refusal rather than being quietly accepted.
-    const project = acceptanceCriteriaItems === undefined || Object.keys(rest).length > 0
-      ? await this.projects.update(runner.ownerId, id, rest, sessionId)
-      : null;
-    if (acceptanceCriteriaItems === undefined) return project;
-    const proposal = await this.acceptance.proposeCriteriaChange(
-      runner.ownerId,
-      id,
-      { actorType: 'RUNNER', actorId: runner.id },
-      {
-        actingSessionId: sessionId?.trim() || undefined,
-        criteria: ProjectAcceptanceService.criteriaProposalItems(acceptanceCriteriaItems),
-        idempotencyKey: `runner-patch:${runner.id}:${randomUUID()}`,
-      },
-    );
-    return {
-      id,
-      ...(project as Record<string, unknown> | null),
-      acceptanceCriteriaProposal: proposal,
-      acceptanceCriteriaApplied: false,
-      acceptanceCriteriaNote:
-        'Acceptance criteria were recorded as a proposal for the account owner to decide. The '
-        + 'criteria in force have not changed; read GET projects/:id/acceptance/criteria-proposal.',
-    };
+    return this.projects.update(runner.ownerId, id, dto, sessionId);
   }
 
   /**
@@ -360,23 +290,6 @@ export class RunnerProjectsController {
         'creates HUMAN_SIGNOFF criteria. Send acceptanceCriteriaItems and explicitly set ' +
         'verificationMethod and completionCriterion on every item; send [] to clear the set. ' +
         'Legacy acceptanceCriteria remains a user-API and existing-data compatibility shape.',
-    );
-  }
-
-  /**
-   * `acceptanceCriteriaItems: []` used to mean "clear the set". It has no meaning as a proposal.
-   *
-   * A project measured by nothing has no standard at all, so a proposal to remove every criterion
-   * is a card whose APPROVE button says "measure this by nothing". Refused here rather than
-   * accepted and left pending forever, because a proposal an owner cannot sensibly answer is worse
-   * than no proposal: it occupies the project's one pending slot and reads as work waiting on them.
-   */
-  private static refuseEmptyCriteriaProposal(dto: UpdateProjectDto): void {
-    if (dto.acceptanceCriteriaItems === undefined || dto.acceptanceCriteriaItems.length > 0) return;
-    throw new BadRequestException(
-      'acceptanceCriteriaItems: [] is no longer a way to clear a project’s acceptance criteria. ' +
-        'Acceptance criteria now change by proposal, and a project cannot be measured by ' +
-        'nothing — send the complete set you are proposing, with at least one criterion.',
     );
   }
 

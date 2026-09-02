@@ -777,7 +777,7 @@ func TestProjectUpdateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
 		if err == nil || !strings.Contains(err.Error(), "HUMAN_SIGNOFF") ||
-			!strings.Contains(err.Error(), "acceptanceCriteriaItems") {
+			!strings.Contains(err.Error(), "use [] to clear") {
 			t.Fatalf("legacy project update = %v", err)
 		}
 	}

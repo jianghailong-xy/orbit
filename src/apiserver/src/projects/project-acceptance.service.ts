@@ -153,55 +153,6 @@ export interface RecordMergeEvidenceInput {
   detail?: Record<string, unknown>;
 }
 
-export interface CriteriaConfirmationActor {
-  /** Credential/channel provenance only. Neither value is a human-presence attestation. */
-  actorType: 'USER' | 'RUNNER';
-  actorId: string;
-  actingSessionId?: string;
-}
-
-/** A machine principal that may PROPOSE a criteria change. It can never decide one. */
-export interface ProposalPrincipal {
-  actorType: 'AGENT' | 'RUNNER' | 'SERVICE';
-  actorId: string;
-}
-
-/** One criterion as a proposal states it. `definitionId` retains an existing criterion; its
- *  absence proposes a new one, whose id the database mints so the card names the exact rows an
- *  approval would write. */
-export interface CriteriaProposalItem {
-  definitionId?: string | null;
-  text: string;
-  verificationMethod: string;
-  completionCriterion: TaskCompletionCriterion;
-  acceptanceCommand?: string | null;
-  acceptanceExpectedExitCode?: number | null;
-  evidenceTaskId?: string | null;
-  completionCriterionOverrideReason?: string | null;
-}
-
-/** What an agent submits. The three protocol fields it may sharpen are the ones only the proposer
- *  knows; it cannot author `options`, `impacts` or `noActionConsequence`, which state what this
- *  system will and will not do. */
-export interface CriteriaProposalInput {
-  criteria: CriteriaProposalItem[];
-  whyNotAgent?: string;
-  recommendation?: string;
-  cost?: string;
-  deadline?: string;
-  idempotencyKey: string;
-  /** Credential/channel provenance for the HUMAN_ONLY role check, never a presence attestation. */
-  actingSessionId?: string;
-}
-
-export interface CriteriaProposalDecisionInput {
-  proposalId: string;
-  /** The digest of the rendering the decision was taken on. A card that moved is refused. */
-  expectedCardDigest: string;
-  decision: 'APPROVE' | 'DENY';
-  idempotencyKey: string;
-}
-
 /** A DONE that was refused, with the code the caller switches on. Thrown as a 409 because it is a
  *  statement about the world's current state, not about the request being malformed.
  *
@@ -519,156 +470,6 @@ export class ProjectAcceptanceService {
       throw new Error('completion contract refresh returned no state');
     }
     return row.state as Record<string, unknown>;
-  }
-
-  /** A structured `ok:false` from a database boundary is the answer, not an exception to log. */
-  private static sqlResult(result: unknown): Record<string, unknown> {
-    if (!result || typeof result !== 'object' || Array.isArray(result)) {
-      throw new Error('project criteria operation returned no result');
-    }
-    const value = result as Record<string, unknown>;
-    if (value.ok === false) {
-      throw new ConflictException({
-        statusCode: 409,
-        error: 'Conflict',
-        ...value,
-      });
-    }
-    return value;
-  }
-
-  /**
-   * The authoring shape every door already speaks, in the one the proposal stores.
-   *
-   * `id` on the wire is the stable definition a caller is RETAINING; the proposal calls it
-   * `definitionId` because a proposal also names criteria that do not exist yet, and "id" for a
-   * row the caller has never seen would read as one it could choose. Nothing else moves.
-   */
-  static criteriaProposalItems(
-    items: ReadonlyArray<{ id?: string | null } & Omit<CriteriaProposalItem, 'definitionId'>>,
-  ): CriteriaProposalItem[] {
-    return items.map(({ id, ...criterion }) => ({ ...criterion, definitionId: id ?? null }));
-  }
-
-  /**
-   * Record what an agent WOULD change the acceptance criteria to.
-   *
-   * The whole point is what this does not do. It writes one proposal row and never touches
-   * `project_acceptance_criterion_definition`, so the criteria in force are exactly what they were
-   * when it returns. The proposal is bound to the criteria set it was drafted against — and to
-   * nothing else about the project — and only `decideCriteriaProposal`, under the owner's own
-   * credential and against the digest of the card that was rendered, applies one.
-   */
-  async proposeCriteriaChange(
-    ownerId: string,
-    projectId: string,
-    principal: ProposalPrincipal | { actorType: 'USER'; actorId: string },
-    input: CriteriaProposalInput,
-  ): Promise<Record<string, unknown>> {
-    await this.assertOwned(projectId, ownerId);
-    // The judgment session's existing boundary, kept rather than quietly dropped. A one-shot
-    // judgment conversation could not rewrite the acceptance criteria before this channel existed,
-    // and "it is only a proposal" is not a reason to hand it the pen: the thing it must not do is
-    // influence the standard it was opened to judge against.
-    if (input.actingSessionId) {
-      const acting = await this.prisma.session.findFirst({
-        where: { id: input.actingSessionId, ownerId },
-        select: { dispatchOrigin: true },
-      });
-      const refusal = refuseHumanOnlyAction(
-        authorityPrincipal(acting?.dispatchOrigin), 'EDIT_ACCEPTANCE_CRITERIA',
-      );
-      if (refusal) throw new ForbiddenException(refusal);
-    }
-    const result = await withTransactionRetry(this.prisma, async (tx) => {
-      const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-        SELECT project_propose_acceptance_criteria(
-          ${ownerId}::uuid,
-          ${projectId}::uuid,
-          ${principal.actorType === 'USER' ? 'USER' : principal.actorType},
-          ${principal.actorId},
-          ${JSON.stringify({
-            cost: input.cost,
-            criteria: input.criteria,
-            deadline: input.deadline,
-            recommendation: input.recommendation,
-            whyNotAgent: input.whyNotAgent,
-          })}::jsonb,
-          ${input.idempotencyKey}
-        ) AS result
-      `);
-      return ProjectAcceptanceService.sqlResult(row?.result);
-    }, loggedRetry(this.logger, 'projectAcceptance.proposeCriteriaChange'));
-    return { ...result, ...(await this.criteriaProposal(ownerId, projectId)) };
-  }
-
-  /** The owner-facing card: what is in force, what would replace it, and the whole diff. */
-  async criteriaProposal(ownerId: string, projectId: string): Promise<Record<string, unknown>> {
-    const [row] = await this.prisma.$queryRaw<Array<{ state: Prisma.JsonValue }>>(Prisma.sql`
-      SELECT project_criteria_proposal_state_json(
-        ${ownerId}::uuid, ${projectId}::uuid
-      ) AS state
-    `);
-    if (!row?.state || typeof row.state !== 'object' || Array.isArray(row.state)) {
-      throw new NotFoundException('project not found');
-    }
-    return row.state as Record<string, unknown>;
-  }
-
-  /** The same card, read by the machine that proposed it. It carries no decision capability. */
-  async machineCriteriaProposal(
-    ownerId: string,
-    projectId: string,
-  ): Promise<Record<string, unknown>> {
-    return this.criteriaProposal(ownerId, projectId);
-  }
-
-  /**
-   * The owner's answer, taken on their own authenticated connection rather than a forwardable
-   * link: the decision belongs to the person the connection already proved.
-   *
-   * APPROVE applies the criteria and records the decision in one database transaction, so the
-   * project is never measured by a set the owner did not answer for.
-   */
-  async decideCriteriaProposal(
-    ownerId: string,
-    projectId: string,
-    actor: CriteriaConfirmationActor,
-    input: CriteriaProposalDecisionInput,
-  ): Promise<Record<string, unknown>> {
-    if (actor.actorType !== 'USER') {
-      throw new ForbiddenException({
-        statusCode: 403,
-        error: 'Forbidden',
-        code: 'PROJECT_CRITERIA_DECISION_ACTOR_FORBIDDEN',
-        message:
-          'a runner or agent cannot approve a change to the acceptance criteria it is measured ' +
-          'by; the account owner decides this on the proposal card',
-        owner: 'USER',
-      });
-    }
-    await this.assertOwned(projectId, ownerId);
-    const result = await withTransactionRetry(this.prisma, async (tx) => {
-      const [row] = await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(Prisma.sql`
-        SELECT project_owner_decide_criteria_proposal(
-          ${ownerId}::uuid,
-          ${projectId}::uuid,
-          'OWNER',
-          ${ownerId},
-          ${input.proposalId}::uuid,
-          ${input.expectedCardDigest},
-          ${input.decision},
-          ${input.idempotencyKey}
-        ) AS result
-      `);
-      const decision = ProjectAcceptanceService.sqlResult(row?.result);
-      // The evidence version follows the definitions it grades, exactly as the direct-edit path
-      // has always kept it, and inside the same transaction that moved them.
-      if (decision.status === 'APPLIED') await this.ensureCurrentEvidenceVersion(tx, projectId);
-      return decision;
-    }, loggedRetry(this.logger, 'projectAcceptance.decideCriteriaProposal'));
-    await this.reconcile(ownerId, projectId);
-    return { ...result, ...(await this.criteriaProposal(ownerId, projectId)) };
   }
 
   static async writeAudit(
@@ -2146,8 +1947,9 @@ export class ProjectAcceptanceService {
     }>>(Prisma.sql`
       SELECT state."contract_digest"::text AS "contractDigest",
              state."evaluation_plan_digest"::text AS "evaluationPlanDigest",
-             project_acceptance_criteria_set_digest(state."project_id") AS "criteriaDigest"
+             p."acceptance_criteria_digest"::text AS "criteriaDigest"
         FROM "project_completion_contract" state
+        JOIN "project" p ON p."id" = state."project_id"
        WHERE state."project_id" = ${projectId}::uuid
     `);
 

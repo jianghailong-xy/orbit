@@ -22,24 +22,32 @@ assert.ok(EXPECTED_SYSTEM_IDENTIFIER, 'OWNER_RATIFICATION_PG_EXPECTED_SYSTEM_IDE
 assert.ok(EVIDENCE_PATH, 'OWNER_RATIFICATION_EVIDENCE_PATH is required');
 
 /**
- * The approval queue is removed; the write protection on acceptance criteria is not.
+ * The approval queue is removed, and so is the write protection on acceptance criteria.
  *
- * This suite used to prove a signature protocol. What it proves now is the pair the account owner
- * separated: that the queue is gone from the schema, the API, the web app and the dispatch path
- * (a)-(d), and that the one thing the queue was carrying which had a reason of its own -- an agent
- * cannot silently rewrite the standard it is measured against -- still holds, and now holds
- * against the CRITERIA SET rather than against a whole-contract digest that moved for reasons that
- * had nothing to do with the criteria (e)-(l).
+ * This suite used to prove a signature protocol. 0218 deleted the queue and kept one narrow thing
+ * beside it -- an agent must not silently rewrite the standard it is measured against. On
+ * 2026-09-01 the account owner decided to remove that too, so 0223 deletes
+ * `project_criteria_proposal` whole: the relation, its six indexes, its nine stored functions,
+ * both HTTP doors, the web card and the copy that described them.
+ *
+ * What this suite proves is therefore the queue's removal (a)-(d) and the proposal channel's
+ * (e)-(h): that the channel is gone from the installed schema rather than merely unreferenced,
+ * that no half of it survives, that `acceptanceCriteriaItems` is a direct write again, and that
+ * every surface says so. The four invariants the channel carried --
+ * criteriaEditingHasNoWebEntryPoint, criteriaProposalHasNoAutomaticApplyPath,
+ * criteriaProposalDoesNotMoveTheRuler and criteriaProposalMachineDecisionRefused -- are gone with
+ * it. That is the accepted cost, not an oversight, and nothing here reinstates an equivalent
+ * protection under another name.
  *
  * Two further groups: the 0211 fallback that rewrote ordinary engineering failures into owner
- * decisions is gone while the four real boundaries are untouched (m)-(n), and this change did not
- * overreach into HUMAN_SIGNOFF, into project acceptance, or into the deployment (o)-(q).
+ * decisions is gone while the four real boundaries are untouched (m)-(n), and neither removal
+ * overreached into HUMAN_SIGNOFF, into project acceptance, or into the deployment (o)-(q).
  *
  * A last group, (r)-(v), is the other half of the same subtraction. 0216's authority envelope was
  * a permissiveness ceiling that only an APPROVAL could raise, and 0218 deleted approvals, so it
  * became six functions computing "the current value". It is gone, and the hard part of removing it
- * is proven rather than asserted: contractDigest -- which the proposal channel and the DONE gate
- * are both keyed on -- does not move by one byte.
+ * is proven rather than asserted: contractDigest -- which the DONE gate is keyed on -- does not
+ * move by one byte.
  */
 const pool = new Pool({ connectionString: URL, max: 12 });
 const ownerId = randomUUID();
@@ -76,11 +84,6 @@ const evidence = {
   suite: 'outcome-reconciler-v2-owner-ratification',
   postgres: { required: true, connected: false, version: null, systemIdentifier: null },
   invariants: {
-    // The four the account owner named. They are the reason this channel is kept at all.
-    criteriaEditingHasNoWebEntryPoint: false,
-    criteriaProposalHasNoAutomaticApplyPath: false,
-    criteriaProposalDoesNotMoveTheRuler: false,
-    criteriaProposalMachineDecisionRefused: false,
     // The queue is gone.
     approvalQueueTablesRemoved: false,
     approvalQueueHasNoResidualReference: false,
@@ -88,12 +91,12 @@ const evidence = {
     automaticDispatchNoLongerWaitsForApproval: false,
     automaticDispatchRaisesNoRatificationObligation: false,
     doneGateHasNoRatificationClause: false,
-    // The proposal is decoupled from the completion contract and bound to the criteria set.
-    proposalHasNoRatificationForeignKey: false,
-    proposalDoesNotDependOnContractDigest: false,
-    proposalSurvivesBudgetRecipientAndRiskEdits: false,
-    proposalOnePendingPerProject: false,
-    proposalSupersedesRatherThanCoexists: false,
+    // And so is the proposal channel the queue used to sit beside.
+    criteriaProposalChannelRemoved: false,
+    criteriaProposalHasNoResidualImplementation: false,
+    acceptanceCriteriaWriteIsDirect: false,
+    criteriaCopyMatchesTheWrite: false,
+    criteriaProposalRemovalIsSubtraction: false,
     // Nothing overreached.
     humanSignoffUntouched: false,
     projectAcceptanceUntouched: false,
@@ -106,12 +109,10 @@ const evidence = {
     envelopeRemovalDidNotTouchAcceptance: false,
     envelopeRemovalIsSubtraction: false,
   },
-  races: {
-    // ABA: three independent ways an old proposal could come back to life, all refused.
-    abaEditThenRevert: false,
-    abaDeleteAndRecreate: false,
-    abaIdentityReplacement: false,
-  },
+  // The three ABA races this suite used to run -- edit-then-revert, delete-and-recreate and
+  // identity replacement -- were all about reviving a stale PROPOSAL. There is no proposal to
+  // revive, so they are gone with it rather than rewritten into something they never tested.
+  races: {},
   removals: {
     // Six functions, one trigger and one column.
     authorityEnvelopeMachineryRemoved: false,
@@ -190,8 +191,7 @@ async function contract(projectId) {
             "contract_revision"::text AS "contractRevision",
             "budget_digest"::text AS "budgetDigest",
             "recipient_digest"::text AS "recipientDigest",
-            "risk_policy_digest"::text AS "riskPolicyDigest",
-            project_acceptance_criteria_set_digest("project_id") AS "criteriaDigest"
+            "risk_policy_digest"::text AS "riskPolicyDigest"
        FROM "project_completion_contract" WHERE "project_id" = $1::uuid`,
     [projectId],
   )).rows[0];
@@ -206,52 +206,6 @@ async function criteriaRows(projectId) {
       WHERE "project_id" = $1::uuid ORDER BY "ordinal", "id"`,
     [projectId],
   )).rows;
-}
-
-function criterionBody(fixture, overrides = {}) {
-  return {
-    definitionId: overrides.definitionId === undefined ? fixture.definitionId : overrides.definitionId,
-    text: overrides.text ?? fixture.criterionText,
-    verificationMethod: overrides.verificationMethod ?? 'review the evidence',
-    completionCriterion: overrides.completionCriterion ?? 'HUMAN_SIGNOFF',
-  };
-}
-
-async function propose(fixture, body, options = {}) {
-  return jsonCall(
-    `SELECT project_propose_acceptance_criteria($1::uuid,$2::uuid,$3,$4,$5::jsonb,$6) AS result`,
-    [
-      ownerId,
-      fixture.projectId,
-      options.actorType ?? 'AGENT',
-      options.actorId ?? `agent:${fixture.projectId}`,
-      JSON.stringify(body),
-      options.idempotencyKey ?? `propose:${fixture.projectId}:${randomUUID()}`,
-    ],
-  );
-}
-
-async function decide(fixture, proposal, options = {}) {
-  return jsonCall(
-    `SELECT project_owner_decide_criteria_proposal(
-       $1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8
-     ) AS result`,
-    [
-      ownerId,
-      fixture.projectId,
-      options.actorType ?? 'OWNER',
-      options.actorId ?? ownerId,
-      proposal.proposalId,
-      options.expectedCardDigest ?? proposal.cardDigest,
-      options.decision ?? 'APPROVE',
-      options.idempotencyKey ?? `decide:${fixture.projectId}:${randomUUID()}`,
-    ],
-  );
-}
-
-async function proposalState(projectId) {
-  return jsonCall('SELECT project_criteria_proposal_state_json($1::uuid,$2::uuid) AS result',
-    [ownerId, projectId]);
 }
 
 /** The live installed body, not the file: what the database will actually run. */
@@ -531,496 +485,204 @@ test('(d) the DONE gate carries no ratification clause', async () => {
   evidence.invariants.doneGateHasNoRatificationClause = true;
 });
 
+// (e)-(h) The acceptance-criteria proposal channel, removed.
+//
+// 0217 built it and 0218 re-bound it to the criteria set. What follows proves it is gone from the
+// database that exists rather than merely unreferenced by TypeScript, that no half of it survives,
+// that the write it intercepted is direct again, and that every surface says so.
+// ------------------------------------------------------------------------------------------------
+
+/** Everything 0217 and 0218 installed for the channel, by name. */
+const PROPOSAL_FUNCTIONS = [
+  'project_acceptance_criteria_set_digest',
+  'project_apply_criteria_proposal',
+  'project_criteria_proposal_card',
+  'project_criteria_proposal_diff',
+  'project_criteria_proposal_effective_criteria',
+  'project_criteria_proposal_normalize',
+  'project_criteria_proposal_state_json',
+  'project_owner_decide_criteria_proposal',
+  'project_propose_acceptance_criteria',
+];
+const PROPOSAL_REMOVAL_MIGRATION_DIR = '0223_project_criteria_proposal_removal';
+const PROPOSAL_REMOVAL_MIGRATION = read(
+  `src/apiserver/prisma/migrations/${PROPOSAL_REMOVAL_MIGRATION_DIR}/migration.sql`,
+);
+
 // (e) --------------------------------------------------------------------------------------------
-test('(e) criteriaEditingHasNoWebEntryPoint: the web app cannot restate a project\'s criteria', () => {
-  // The agent's door routes `acceptanceCriteriaItems` into a proposal instead of a write.
-  const runner = read('src/apiserver/src/runner-api/runner-projects.controller.ts');
-  assert.match(runner,
-    /async updateProject\([\s\S]*const \{ acceptanceCriteriaItems, \.\.\.rest \} = dto;[\s\S]*this\.acceptance\.proposeCriteriaChange\(/,
-    'a runner PATCH carrying acceptance criteria must become a proposal, not a write');
-  assert.doesNotMatch(runner,
-    /async updateProject\([\s\S]*this\.projects\.update\(runner\.ownerId, id, dto,/,
-    'the whole body, acceptance criteria included, must not reach the project write path');
-  assert.match(runner, /@Post\('projects\/:id\/acceptance\/criteria-proposals'\)/,
-    'the agent has a door of its own onto the proposal channel');
+test('(e) criteriaProposalChannelRemoved: the relation, its six indexes and its nine functions '
+  + 'are gone from the installed schema', async () => {
+  const relation = (await pool.query(
+    "SELECT to_regclass('public.project_criteria_proposal')::text AS oid",
+  )).rows[0];
+  assert.equal(relation.oid, null, 'project_criteria_proposal is still installed');
 
-  // Three independent guards on the web side, so an editor cannot be reintroduced by routing
-  // around any one of them: the authoring field exists only as a READ type, no request the web
-  // builds carries acceptance criteria, and the project-scoped writes it makes are an enumerated
-  // set containing neither POST /projects nor PATCH /projects/:id.
-  const webSources = [];
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) { walk(full); continue; }
-      if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
-      webSources.push({ path: path.relative(ROOT, full), source: readFileSync(full, 'utf8') });
-    }
-  };
-  walk(path.join(ROOT, 'src/web/src'));
-  assert.ok(webSources.length > 50, 'the web scan must actually have read the app');
-  for (const file of webSources) {
-    for (const line of file.source.split('\n')) {
-      if (!line.includes('acceptanceCriteriaItems')) continue;
-      assert.match(line, /acceptanceCriteriaItems\?:/,
-        `${file.path} may only READ acceptanceCriteriaItems, never author it`);
-    }
-  }
+  // The six the relation owned: its primary key, the (project_id, proposal_generation) unique
+  // constraint, and the four 0217 declared -- one_pending, idempotency, decision_idempotency and
+  // inbox. Dropping the table takes all of them, which is what this asks the catalog to confirm.
+  const indexes = (await pool.query(
+    `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'i'
+        AND c.relname LIKE 'project_criteria_proposal%' ORDER BY 1`,
+  )).rows.map((row) => row.relname);
+  assert.deepEqual(indexes, [], 'an index of the dropped relation survived it');
 
-  /** Each `api(...)` invocation's arguments, sliced on balanced parentheses. */
-  const apiCalls = (source) => {
-    const calls = [];
-    const opening = /\bapi(?:<[\s\S]*?>)?\(/g;
-    let match;
-    while ((match = opening.exec(source))) {
-      let depth = 1;
-      let index = opening.lastIndex;
-      while (index < source.length && depth > 0) {
-        if (source[index] === '(') depth += 1;
-        else if (source[index] === ')') depth -= 1;
-        index += 1;
-      }
-      calls.push(source.slice(opening.lastIndex, index - 1));
-    }
-    return calls;
-  };
-  const builders = new Map();
-  for (const file of webSources) {
-    for (const match of file.source.matchAll(
-      /export function ([A-Za-z0-9_]+)\([^)]*\): string \{\s*return ([^;]+);/g,
-    )) builders.set(match[1], match[2].trim());
+  const installed = (await pool.query(
+    `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = ANY($1::text[]) ORDER BY 1`,
+    [PROPOSAL_FUNCTIONS],
+  )).rows.map((row) => row.proname);
+  assert.deepEqual(installed, [], 'a proposal function is still installed');
+
+  // 0217 and 0218 created no view over the proposal, so "the views are gone" is a fact about an
+  // empty set rather than something a reader should go looking for.
+  for (const dir of ['0217_project_criteria_proposal_card', '0218_owner_ratification_queue_removal']) {
+    assert.doesNotMatch(read(`src/apiserver/prisma/migrations/${dir}/migration.sql`),
+      /CREATE\s+(?:OR\s+REPLACE\s+)?VIEW/i, `${dir} installed a view over the proposal`);
   }
-  const resolveUrl = (expression, hops = 0) => {
-    const literal = expression.match(/^[`'"](.*)[`'"]$/s);
-    if (literal) return literal[1];
-    const call = expression.match(/^([A-Za-z0-9_]+)\(/);
-    if (!call || hops > 3 || !builders.has(call[1])) return expression;
-    const body = builders.get(call[1]);
-    const template = body.match(/^`(.*)`$/s);
-    if (!template) return resolveUrl(body, hops + 1);
-    return template[1].replace(/\$\{([A-Za-z0-9_]+)\([^)]*\)\}/g, (whole, name) =>
-      (builders.has(name) ? resolveUrl(`${name}()`, hops + 1) : whole));
-  };
-  const projectWrites = [];
-  for (const file of webSources) {
-    for (const call of apiCalls(file.source)) {
-      assert.doesNotMatch(call, /acceptanceCriteria/,
-        `${file.path} must not send acceptance criteria in any request`);
-      const url = resolveUrl(call.split(/,(?![^{[(]*[}\])])/)[0].trim());
-      if (!url.startsWith('/projects')) continue;
-      const method = call.match(/method:\s*'([A-Z]+)'/)?.[1] ?? 'GET';
-      if (method === 'GET') continue;
-      projectWrites.push(`${method} ${url}`.replace(/\$\{[^}]*\}/g, ':id'));
-    }
-  }
-  assert.deepEqual([...new Set(projectWrites)].sort(), [
-    'POST /projects/:id/acceptance/runs/:id/verdict',
-    'POST /projects/:id/coordinator',
-    'POST /projects/:id/coordinator/rebind',
-    'POST /projects/:id/criteria-proposal/decision',
-    'POST /projects/:id/handoffs/:id/decision',
-    'POST /projects/:id/reopen',
-  ], 'the web app writes to a project only through these routes: no POST /projects and no '
-   + 'PATCH /projects/:id, which are the only two that can restate a project\'s criteria');
-  evidence.invariants.criteriaEditingHasNoWebEntryPoint = true;
+  evidence.invariants.criteriaProposalChannelRemoved = true;
+  evidence.samples.proposalRemoval = digest(PROPOSAL_FUNCTIONS.join(','));
 });
 
 // (f) --------------------------------------------------------------------------------------------
-test('(f) criteriaProposalHasNoAutomaticApplyPath: nothing but the owner\'s answer applies one',
+test('(f) criteriaProposalHasNoResidualImplementation: nothing survives that could reach it',
   async () => {
-  // Structural: exactly one caller of the apply, and it is the decision function -- which begins
-  // by refusing every non-OWNER principal.
+  // No surviving function body names the channel. This is the half-removal a text scan is worst
+  // at catching: a plpgsql body is a string, so a caller left behind compiles, deploys, and fails
+  // at the first call.
   const callers = (await pool.query(
     `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public' AND p.prosrc ~ 'project_apply_criteria_proposal'
-        AND p.proname <> 'project_apply_criteria_proposal' ORDER BY 1`,
+      WHERE n.nspname = 'public'
+        AND (p.prosrc ~ 'criteria_proposal' OR p.prosrc ~ 'project_acceptance_criteria_set_digest')
+      ORDER BY 1`,
   )).rows.map((row) => row.proname);
-  assert.deepEqual(callers, ['project_owner_decide_criteria_proposal'],
-    'the apply has exactly one caller and it is the owner decision');
-  const decide = await installedFunction('project_owner_decide_criteria_proposal');
-  assert.match(decide, /p_actor_type <> 'OWNER'/,
-    'the one caller refuses every non-owner principal in its first lines');
-  const triggers = (await pool.query(
-    `SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-      WHERE NOT t.tgisinternal AND c.relname = 'project_criteria_proposal'`,
-  )).rows.map((row) => row.tgname);
-  assert.deepEqual(triggers, [], 'no trigger may apply, expire or auto-answer a proposal');
+  assert.deepEqual(callers, [], 'a surviving function body still calls the removed channel');
 
-  // Behavioural: an expired proposal is still PENDING and still un-applied. Expiry is not a
-  // decision, and no timeout, sweep or resubmission substitutes for one.
-  const fixture = await createProject('no-auto-apply');
-  const before = await criteriaRows(fixture.projectId);
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'an agent would rather be measured by this' })],
-  });
-  assert.equal(proposed.ok, true);
-  await pool.query(
-    `UPDATE "project_criteria_proposal" SET "expires_at" = now() - interval '30 days'
-      WHERE "id" = $1::uuid`,
-    [proposed.proposalId],
-  );
-  await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
-    [fixture.projectId, 'AFTER_EXPIRY']);
-  const state = await proposalState(fixture.projectId);
-  assert.equal(state.proposal.status, 'PENDING', 'an expired proposal stays pending');
-  assert.deepEqual(await criteriaRows(fixture.projectId), before,
-    'an expired proposal applies nothing');
-  assert.equal(state.currentCriteriaDigest, fixture.criteriaDigest);
-  evidence.invariants.criteriaProposalHasNoAutomaticApplyPath = true;
+  // Nor is there a trigger, a constraint or a sequence left pointing at a relation that is gone.
+  const dependents = (await pool.query(
+    `SELECT c.conname FROM pg_constraint c JOIN pg_class t ON t.oid = c.confrelid
+      WHERE t.relname = 'project_criteria_proposal'`,
+  )).rows;
+  assert.deepEqual(dependents, []);
+
+  // And the four invariant names the account owner used appear in no live source at all. They go
+  // together or the channel is half-standing: a web guard with no schema behind it, or a database
+  // refusal no door can reach, is worse than either state on its own.
+  const invariants = [
+    'criteriaEditingHasNoWebEntryPoint',
+    'criteriaProposalHasNoAutomaticApplyPath',
+    'criteriaProposalDoesNotMoveTheRuler',
+    'criteriaProposalMachineDecisionRefused',
+  ];
+  const offenders = [];
+  for (const file of trackedSources()) {
+    if (file === 'test/outcome-reconciler-v2.ratification.test.mjs') continue;
+    if (file.endsWith('criteria-proposal-removal.spec.ts')) continue;
+    if (file.endsWith('criteria-proposal-removal.pg.spec.ts')) continue;
+    const source = read(file);
+    for (const invariant of invariants) {
+      if (source.includes(invariant)) offenders.push(`${file}: ${invariant}`);
+    }
+  }
+  assert.deepEqual(offenders, [], 'one of the four invariants still has an implementation');
+  evidence.invariants.criteriaProposalHasNoResidualImplementation = true;
 });
 
 // (g) --------------------------------------------------------------------------------------------
-test('(g) criteriaProposalDoesNotMoveTheRuler: the standard in force is the one that judges',
+test('(g) acceptanceCriteriaWriteIsDirect: nothing in the database applies criteria for anybody',
   async () => {
-  const fixture = await createProject('inert');
-  const before = await criteriaRows(fixture.projectId);
+  // The proposal apply was the ONLY database function that wrote the acceptance definitions. With
+  // it gone, no stored procedure can move the ruler at all: the write is the application's own
+  // `replaceAcceptanceDefinitions`, it lands when it commits, and there is no second step.
+  const writers = (await pool.query(
+    `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.prosrc ~ '(INSERT INTO|UPDATE|DELETE FROM)\s+"?project_acceptance_criterion_definition'
+      ORDER BY 1`,
+  )).rows.map((row) => row.proname);
+  assert.deepEqual(writers, [],
+    'a stored function still writes the acceptance definitions — the write must be the '
+      + "application's direct one");
 
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'a standard the agent would prefer' })],
-    whyNotAgent: 'the standard this project is judged by is not the agent\'s to move',
-  });
-  assert.equal(proposed.ok, true);
-  assert.equal(proposed.applied, false);
-  assert.equal(proposed.status, 'PENDING');
-  assert.equal(proposed.effectiveCriteriaUnchanged, true);
-  assert.equal(proposed.reasonCode, 'GOAL_DECISION');
-  assert.equal(proposed.baseCriteriaDigest, fixture.criteriaDigest);
+  // The agent's door forwards the whole body, acceptance criteria included, straight to the write.
+  const runner = read('src/apiserver/src/runner-api/runner-projects.controller.ts');
+  assert.match(runner,
+    /@Patch\('projects\/:id'\)[\s\S]*?return this\.projects\.update\(runner\.ownerId, id, dto, sessionId\);/,
+    'the runner PATCH must reach the project write with the criteria still on the body');
+  assert.doesNotMatch(runner, /criteria-proposal|proposeCriteriaChange/,
+    'the runner door still carries a proposal route');
+  assert.doesNotMatch(read('src/apiserver/src/projects/projects.controller.ts'),
+    /criteria-proposal|criteria-confirmation/,
+    'the user door still carries a proposal or confirmation route');
 
-  // Not one byte of the effective rows, including the two revision lanes an edit would advance.
-  assert.deepEqual(await criteriaRows(fixture.projectId), before,
-    'a proposal must not touch one byte of the effective criteria');
-  const after = await contract(fixture.projectId);
-  assert.equal(after.criteriaDigest, fixture.criteriaDigest);
-  assert.equal(after.contractDigest, fixture.contractDigest);
-  assert.equal(after.contractRevision, fixture.contractRevision);
-
-  // And what judges the project is still the set in force: the DONE gate reads the acceptance
-  // definitions, and the proposal is not among them.
-  const judging = await jsonCall(
-    `SELECT jsonb_agg("text" ORDER BY "ordinal") AS result
-       FROM "project_acceptance_criterion_definition" WHERE "project_id" = $1::uuid`,
-    [fixture.projectId],
-  );
-  assert.deepEqual(judging, [fixture.criterionText],
-    'the criteria that decide completion are the ones in force, never the proposed ones');
-  const surface = await proposalState(fixture.projectId);
-  assert.deepEqual(surface.effectiveCriteria.map((item) => item.text), [fixture.criterionText]);
-  assert.equal(surface.proposal.proposedCriteria[0].text, 'a standard the agent would prefer');
-  assert.notEqual(surface.proposal.proposedCriteria[0].text, surface.effectiveCriteria[0].text);
-  evidence.invariants.criteriaProposalDoesNotMoveTheRuler = true;
+  // The web card and its mount point are gone, and no web file is left importing them.
+  for (const removed of [
+    'src/web/src/components/ProjectCriteriaProposalCard.tsx',
+    'src/web/src/components/ProjectCriteriaProposalCard.test.tsx',
+  ]) {
+    assert.equal(existsSync(path.join(ROOT, removed)), false, `${removed} still exists`);
+  }
+  assert.doesNotMatch(read('src/web/src/components/WorkspaceView.tsx'), /CriteriaProposal/);
+  evidence.invariants.acceptanceCriteriaWriteIsDirect = true;
 });
 
 // (h) --------------------------------------------------------------------------------------------
-test('(h) criteriaProposalMachineDecisionRefused: a runner or agent cannot answer its own card',
-  async () => {
-  const fixture = await createProject('machine-decision');
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'the agent approves of this standard' })],
-  });
-  assert.equal(proposed.ok, true);
-  const before = await criteriaRows(fixture.projectId);
-
-  // Every machine principal the propose door accepts, plus a USER id that is not the owner: each
-  // is refused by the database, not by a caller that could be routed around.
-  for (const [actorType, actorId] of [
-    ['AGENT', `agent:${fixture.projectId}`],
-    ['RUNNER', `runner:${fixture.projectId}`],
-    ['SERVICE', `service:${fixture.projectId}`],
-    ['USER', randomUUID()],
-    ['OWNER', randomUUID()],
-  ]) {
-    await assert.rejects(
-      () => decide(fixture, proposed, { actorType, actorId }),
-      (error) => {
-        assert.match(String(error.message), /PROJECT_CRITERIA_DECISION_ACTOR_FORBIDDEN/);
-        assert.equal(error.code, '42501', 'the refusal is insufficient_privilege');
-        return true;
-      },
-      `${actorType} must not be able to decide a criteria proposal`,
-    );
+test('(h) criteriaCopyMatchesTheWrite, and the removal is subtraction', () => {
+  // Copy that lies is worse than no copy: a model told "this is a proposal, nothing changes until
+  // the owner approves it" reports the criteria as unchanged and keeps working to a standard that
+  // has already moved. Every surface that describes acceptanceCriteriaItems is scanned.
+  const lies = [
+    /\bPROPOSAL\b/,
+    /you are PROPOSING/i,
+    /acceptanceCriteriaProposal/,
+    /records? (?:one|a) proposal for the account owner/i,
+    /nothing changes until (?:they|the owner)/i,
+    /until the (?:account )?owner (?:approves|answers) it/i,
+    /\[\] is refused/,
+    // The web app's copy is Chinese, so an English-only scan would have missed the one sentence
+    // on the acceptance review page that said the ruler moves by proposal and owner confirmation.
+    // Scoped to lines about the standard: "approve" alone is the evidence-signoff channel.
+    /标准[^\n]{0,40}(?:提议|批准|卡片上确认)/,
+    /(?:提议|批准)[^\n]{0,40}标准/,
+  ];
+  const surfaces = ['src/runner-go/mcp.go', 'src/runner-go/project_cli.go',
+    'src/apiserver/src/projects/dto.ts',
+    'src/apiserver/src/runner-api/runner-projects.controller.ts',
+    ...trackedSources().filter((file) => file.startsWith('src/web/src/') && /\.tsx?$/.test(file))];
+  const offenders = [];
+  for (const file of surfaces) {
+    read(file).split('\n').forEach((line, index) => {
+      for (const lie of lies) if (lie.test(line)) offenders.push(`${file}:${index + 1}`);
+    });
   }
-  assert.deepEqual(await criteriaRows(fixture.projectId), before,
-    'a refused machine decision applies nothing');
-  assert.equal((await proposalState(fixture.projectId)).proposal.status, 'PENDING');
+  assert.deepEqual(offenders, [],
+    'a surface still calls acceptance criteria a proposal while the write lands immediately');
+  // The positive half, so the copy is not merely silent about what it does.
+  assert.match(read('src/runner-go/mcp.go'), /Whole structured replacement/);
+  assert.match(read('src/runner-go/project_cli.go'), /whole-collection replacement/);
+  evidence.invariants.criteriaCopyMatchesTheWrite = true;
 
-  // The HTTP door in front of it refuses the same thing one layer earlier, so a machine never even
-  // reaches the database function.
-  const service = read('src/apiserver/src/projects/project-acceptance.service.ts');
-  assert.match(service,
-    /async decideCriteriaProposal[\s\S]*actor\.actorType !== 'USER'[\s\S]*PROJECT_CRITERIA_DECISION_ACTOR_FORBIDDEN/,
-    'the owner decision is refused for every non-user principal before it reaches PostgreSQL');
-  const runner = read('src/apiserver/src/runner-api/runner-projects.controller.ts');
-  assert.doesNotMatch(runner, /decideCriteriaProposal|criteria-proposal\/decision/,
-    'the machine door has no decision route at all');
-
-  // And the owner CAN, on the same proposal: the refusal above is about the principal, not about
-  // a proposal that had become undecidable.
-  const approved = await decide(fixture, proposed);
-  assert.equal(approved.ok, true);
-  assert.equal(approved.status, 'APPLIED');
-  evidence.invariants.criteriaProposalMachineDecisionRefused = true;
-});
-
-// (i) --------------------------------------------------------------------------------------------
-test('(i) the proposal is bound to the criteria set and to nothing else', async () => {
-  const foreignKeys = (await pool.query(
-    `SELECT con.conname, tgt.relname AS target
-       FROM pg_constraint con
-       JOIN pg_class src ON src.oid = con.conrelid
-       JOIN pg_class tgt ON tgt.oid = con.confrelid
-      WHERE con.contype = 'f' AND src.relname = 'project_criteria_proposal'
-      ORDER BY con.conname`,
-  )).rows;
-  assert.deepEqual(foreignKeys.map((row) => row.target).sort(),
-    ['project', 'project_criteria_proposal', 'user'],
-    'the proposal points at its project, its owner and its own successor -- nothing else');
-  assert.ok(!foreignKeys.some((row) => row.conname.includes('ratification_id')),
-    'the ratification foreign key must be gone');
-  evidence.invariants.proposalHasNoRatificationForeignKey = true;
-
-  const columns = (await pool.query(
-    `SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'project_criteria_proposal' ORDER BY column_name`,
-  )).rows.map((row) => row.column_name);
-  assert.ok(!columns.includes('ratification_id'));
-  assert.ok(!columns.includes('base_contract_digest'));
-  assert.ok(!columns.includes('base_contract_revision'));
-  assert.ok(!columns.includes('applied_contract_digest'));
-  assert.ok(columns.includes('base_criteria_digest'));
-  assert.ok(columns.includes('applied_criteria_digest'));
-
-  // The three functions that make up the channel must not consult the completion contract's
-  // digest for the base check any more. `project_refresh_completion_contract` is still called
-  // after an APPROVE -- keeping the read model current is not the same as binding to it.
-  const propose = await installedFunction('project_propose_acceptance_criteria');
-  const decide = await installedFunction('project_owner_decide_criteria_proposal');
-  const surface = await installedFunction('project_criteria_proposal_state_json');
-  for (const [name, body] of [['propose', propose], ['decide', decide], ['state', surface]]) {
-    assert.doesNotMatch(body, /state\."contract_digest"|contract_revision/,
-      `${name} must not bind the proposal to the completion contract`);
+  // Subtraction, in the migration's own DDL vocabulary: nine drops and one, and nothing else.
+  const ddl = [...PROPOSAL_REMOVAL_MIGRATION.matchAll(
+    /^(?:CREATE|ALTER|DROP)(?: OR REPLACE)? [A-Z]+/gm)].map((match) => match[0]);
+  assert.deepEqual([...new Set(ddl)].sort(), ['DROP FUNCTION', 'DROP TABLE'],
+    'the removal migration creates or alters something');
+  assert.doesNotMatch(PROPOSAL_REMOVAL_MIGRATION, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /,
+    'the migration starts nothing that keeps running after it commits');
+  // And it cannot reach the ruler's CONTENT: it names no acceptance RELATION in any statement, so
+  // no criterion's text or verification_method can move by one byte. (It does drop one
+  // `project_acceptance_`-prefixed FUNCTION -- 0218's criteria-set digest -- which read those rows
+  // and never wrote them.)
+  for (const line of PROPOSAL_REMOVAL_MIGRATION.split('\n')) {
+    if (line.trimStart().startsWith('--')) continue;
+    for (const table of ['project_acceptance_audit', 'project_acceptance_conclusion',
+      'project_acceptance_criteria_confirmation', 'project_acceptance_criterion',
+      'project_acceptance_criterion_definition', 'project_acceptance_run']) {
+      assert.equal(line.includes(table), false,
+        `the removal names ${table} in a statement: ${line.trim()}`);
+    }
   }
-  assert.match(decide, /project_acceptance_criteria_set_digest\(p_project\)/,
-    'the base check compares criteria-set digests');
-  evidence.invariants.proposalDoesNotDependOnContractDigest = true;
-});
-
-// (j) --------------------------------------------------------------------------------------------
-test('(j) a budget, recipient or risk edit does not invalidate a pending criteria proposal',
-  async () => {
-  const fixture = await createProject('narrowing');
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'a narrower standard' })],
-  });
-  assert.equal(proposed.ok, true);
-  assert.equal(proposed.baseCriteriaDigest, fixture.criteriaDigest);
-
-  // Exactly the three groups the old whole-contract digest folded in, and one member of each.
-  const memberRunnerId = randomUUID();
-  const memberAgentId = randomUUID();
-  await pool.query(
-    `INSERT INTO "runner" ("id","owner_id","name","token_hash","status","max_concurrent",
-                           "last_heartbeat_at","capabilities","capabilities_reported_at")
-     VALUES ($1,$2,'narrowing runner',$3,'ONLINE'::"runner_status",4,now(),'{}',now())`,
-    [memberRunnerId, ownerId, `fixture-${memberRunnerId}`],
-  );
-  await pool.query(
-    `INSERT INTO "workspace" ("id","owner_id","runner_id","name","enabled")
-     VALUES ($1,$2,$3,'recipient workspace',true)`,
-    [memberAgentId, ownerId, memberRunnerId],
-  );
-  await pool.query(
-    `INSERT INTO "project_member" ("id","project_id","agent_id","role")
-     VALUES ($1::uuid,$2::uuid,$3::uuid,'COORDINATOR'::"project_role")`,
-    [randomUUID(), fixture.projectId, memberAgentId],
-  );
-  await pool.query(
-    `UPDATE "project"
-        SET "session_budget_per_day" = 99, "attempt_budget" = '{"perTask": 7}'::jsonb,
-            "automation_policy" = 'MANUAL'::"project_automation_policy",
-            "max_concurrent_tasks" = 7, "config_revision" = "config_revision" + 1,
-            "updated_at" = now()
-      WHERE "id" = $1::uuid`,
-    [fixture.projectId],
-  );
-  await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
-    [fixture.projectId, 'BUDGET_RECIPIENT_RISK_EDIT']);
-  const moved = await contract(fixture.projectId);
-
-  // The narrowing, stated as the two facts side by side: the whole-contract digest DID move --
-  // which is what used to invalidate this proposal -- and the criteria-set digest did not.
-  assert.notEqual(moved.contractDigest, fixture.contractDigest,
-    'budget, recipients and risk still move the completion contract');
-  assert.notEqual(moved.budgetDigest, fixture.budgetDigest);
-  assert.notEqual(moved.recipientDigest, fixture.recipientDigest);
-  assert.notEqual(moved.riskPolicyDigest, fixture.riskPolicyDigest);
-  assert.equal(moved.criteriaDigest, fixture.criteriaDigest,
-    'none of them moves the criteria set');
-
-  const state = await proposalState(fixture.projectId);
-  assert.equal(state.proposal.status, 'PENDING');
-  assert.equal(state.proposal.baseMatchesCurrentCriteria, true,
-    'the pending proposal is still drafted against the criteria in force');
-  const approved = await decide(fixture, proposed);
-  assert.equal(approved.ok, true, 'and the owner can still answer it');
-  assert.equal(approved.status, 'APPLIED');
-  assert.equal(approved.previousCriteriaDigest, fixture.criteriaDigest);
-  assert.notEqual(approved.appliedCriteriaDigest, fixture.criteriaDigest);
-  evidence.invariants.proposalSurvivesBudgetRecipientAndRiskEdits = true;
-});
-
-// (k) --------------------------------------------------------------------------------------------
-test('(k) ABA: an edit and its revert cannot revive a proposal drafted before the edit',
-  async () => {
-  const fixture = await createProject('aba-revert');
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'proposed against the original wording' })],
-  });
-  assert.equal(proposed.ok, true);
-  await pool.query(
-    'UPDATE "project_acceptance_criterion_definition" SET "text" = $2 WHERE "id" = $1::uuid',
-    [fixture.definitionId, 'briefly something else'],
-  );
-  await pool.query(
-    'UPDATE "project_acceptance_criterion_definition" SET "text" = $2 WHERE "id" = $1::uuid',
-    [fixture.definitionId, fixture.criterionText],
-  );
-  const back = await contract(fixture.projectId);
-  const rows = await criteriaRows(fixture.projectId);
-  assert.equal(rows[0].text, fixture.criterionText, 'the wording is byte-identical again');
-  assert.equal(rows[0].semantic_revision, 3, 'semanticRevision only ever goes up');
-  assert.notEqual(back.criteriaDigest, fixture.criteriaDigest,
-    'edit-then-revert must not land back on the drafting digest');
-  const refused = await decide(fixture, proposed);
-  assert.equal(refused.ok, false);
-  assert.equal(refused.code, 'CRITERIA_PROPOSAL_BASE_MOVED');
-  assert.equal(refused.currentCriteriaDigest, back.criteriaDigest);
-  assert.equal((await proposalState(fixture.projectId)).proposal.status, 'PENDING');
-  evidence.races.abaEditThenRevert = true;
-});
-
-test('(k) ABA: deleting and recreating a criterion cannot revive a proposal', async () => {
-  const fixture = await createProject('aba-recreate');
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'proposed against the original row' })],
-  });
-  assert.equal(proposed.ok, true);
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      'DELETE FROM "project_acceptance_criterion_definition" WHERE "id" = $1::uuid',
-      [fixture.definitionId],
-    );
-    await client.query(
-      `INSERT INTO "project_acceptance_criterion_definition" (
-         "id","project_id","ordinal","text","verification_method","completion_criterion",
-         "content_hash"
-       ) VALUES ($1,$2,1,$3,$4,'HUMAN_SIGNOFF'::"task_completion_criterion",$5)`,
-      [randomUUID(), fixture.projectId, fixture.criterionText, 'review aba-recreate evidence',
-        digest(`recreated:${fixture.projectId}`)],
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
-  const rows = await criteriaRows(fixture.projectId);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].text, fixture.criterionText, 'the wording is byte-identical');
-  assert.notEqual(rows[0].id, fixture.definitionId, 'behind a different row');
-  const refused = await decide(fixture, proposed);
-  assert.equal(refused.ok, false);
-  assert.equal(refused.code, 'CRITERIA_PROPOSAL_BASE_MOVED');
-  evidence.races.abaDeleteAndRecreate = true;
-});
-
-test('(k) ABA: swapping the row behind identical wording cannot revive a proposal', async () => {
-  const fixture = await createProject('aba-identity');
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'proposed against the original identity' })],
-  });
-  assert.equal(proposed.ok, true);
-  const replacementId = randomUUID();
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO "project_acceptance_criterion_definition" (
-         "id","project_id","ordinal","text","verification_method","completion_criterion",
-         "content_hash"
-       ) VALUES ($1,$2,2,$3,$4,'HUMAN_SIGNOFF'::"task_completion_criterion",$5)`,
-      [replacementId, fixture.projectId, fixture.criterionText, `review ${'aba-identity'} evidence`,
-        digest(`replacement:${fixture.projectId}`)],
-    );
-    await client.query(
-      'DELETE FROM "project_acceptance_criterion_definition" WHERE "id" = $1::uuid',
-      [fixture.definitionId],
-    );
-    await client.query('UPDATE "project_acceptance_criterion_definition" SET "ordinal" = 1 '
-      + 'WHERE "id" = $1::uuid', [replacementId]);
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
-  const rows = await criteriaRows(fixture.projectId);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].text, fixture.criterionText);
-  assert.equal(rows[0].verification_method, 'review aba-identity evidence');
-  assert.equal(rows[0].id, replacementId, 'the identity behind the wording was swapped');
-  const refused = await decide(fixture, proposed);
-  assert.equal(refused.ok, false);
-  assert.equal(refused.code, 'CRITERIA_PROPOSAL_BASE_MOVED');
-  evidence.races.abaIdentityReplacement = true;
-});
-
-// (l) --------------------------------------------------------------------------------------------
-test('(l) a project has at most one pending proposal, and the replaced one says why', async () => {
-  const index = (await pool.query(
-    `SELECT pg_get_indexdef(i.indexrelid) AS definition
-       FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-      WHERE c.relname = 'project_criteria_proposal_one_pending_idx'`,
-  )).rows[0];
-  assert.ok(index, 'the partial unique index must survive the decoupling');
-  assert.match(index.definition, /UNIQUE INDEX.*\(project_id\).*WHERE \(status = 'PENDING'::text\)/);
-
-  const fixture = await createProject('one-pending');
-  const first = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'the first proposal' })],
-  });
-  assert.equal(first.ok, true);
-  const second = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'the second proposal' })],
-  }, { actorType: 'RUNNER', actorId: 'runner:one-pending' });
-  assert.equal(second.ok, true);
-  assert.equal(second.supersededProposalId, first.proposalId);
-
-  const pending = (await pool.query(
-    `SELECT count(*)::int AS count FROM "project_criteria_proposal"
-      WHERE "project_id" = $1::uuid AND "status" = 'PENDING'`,
-    [fixture.projectId],
-  )).rows[0].count;
-  assert.equal(pending, 1, 'exactly one proposal may await the owner');
-  const retired = (await pool.query(
-    `SELECT "status","superseded_by_id"::text AS "supersededById","superseded_reason" AS reason,
-            "superseded_at" IS NOT NULL AS "hasTime"
-       FROM "project_criteria_proposal" WHERE "id" = $1::uuid`,
-    [first.proposalId],
-  )).rows[0];
-  assert.equal(retired.status, 'SUPERSEDED');
-  assert.equal(retired.supersededById, second.proposalId);
-  assert.equal(retired.hasTime, true);
-  assert.match(retired.reason, /Replaced by a newer proposal from RUNNER runner:one-pending/,
-    'a replaced proposal is never an absence: it names who replaced it and why');
-  const settled = await decide(fixture, first);
-  assert.equal(settled.ok, false);
-  assert.equal(settled.code, 'CRITERIA_PROPOSAL_ALREADY_SETTLED');
-  evidence.invariants.proposalOnePendingPerProject = true;
-  evidence.invariants.proposalSupersedesRatherThanCoexists = true;
+  evidence.invariants.criteriaProposalRemovalIsSubtraction = true;
 });
 
 // (m) --------------------------------------------------------------------------------------------
@@ -1099,9 +761,7 @@ for (const [node, reason, key] of [
 test('(o) HUMAN_SIGNOFF is untouched: the migration cannot reach it, and it still works',
   async () => {
   // Static: 0218 contains no statement that could write task completion criteria or signoffs.
-  // Function bodies are excluded from this scan because a CREATE FUNCTION is not a write -- and
-  // the only body that writes acceptance definitions is the owner-decision apply, which is the
-  // channel being kept.
+  // Function bodies are excluded from this scan because a CREATE FUNCTION is not a write.
   const migration = read(
     'src/apiserver/prisma/migrations/0218_owner_ratification_queue_removal/migration.sql',
   );
@@ -1197,15 +857,10 @@ test('(p) project acceptance is untouched: 0178-0190 keeps its schema and its ro
   // function, which reads them and writes nothing.
   const fixture = await createProject('acceptance-untouched');
   const before = await criteriaRows(fixture.projectId);
-  const digestOne = (await pool.query(
-    'SELECT project_acceptance_criteria_set_digest($1::uuid) AS result', [fixture.projectId],
-  )).rows[0].result;
-  const digestTwo = (await pool.query(
-    'SELECT project_acceptance_criteria_set_digest($1::uuid) AS result', [fixture.projectId],
-  )).rows[0].result;
-  assert.equal(digestOne, digestTwo, 'the digest is stable');
+  await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
+    [fixture.projectId, 'ACCEPTANCE_UNTOUCHED']);
   assert.deepEqual(await criteriaRows(fixture.projectId), before,
-    'reading the digest must not move one field of a definition');
+    're-cutting the contract must not move one field of a definition');
 
   // And the per-run acceptance rows -- 313 of them in production -- still write and read back.
   const runId = randomUUID();
@@ -1410,7 +1065,7 @@ test('(s) contractDigest is byte-identical across the removal, for every project
 });
 
 // (t) --------------------------------------------------------------------------------------------
-test('(t) removing the envelope filed no owner decision and voided no proposal', async () => {
+test('(t) removing the envelope filed no owner decision', async () => {
   // Comments and both kinds of dollar-quoted body removed: what is left is the statements the file
   // actually runs, which is what "wrote nothing" has to be true of.
   const statements = ENVELOPE_REMOVAL_MIGRATION
@@ -1419,8 +1074,7 @@ test('(t) removing the envelope filed no owner decision and voided no proposal',
     .split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
   // The coordinator's owner-decision request table used to be in this list; 0221 dropped it, so a
   // statement writing it is no longer expressible rather than merely absent.
-  for (const relation of ['project_criteria_proposal',
-    'project_completion_contract', 'project']) {
+  for (const relation of ['project_completion_contract', 'project']) {
     assert.doesNotMatch(statements,
       new RegExp(`(INSERT INTO|UPDATE|DELETE FROM)\\s+"?${relation}\\b`, 'i'),
       `the migration must contain no statement that writes ${relation}`);
@@ -1435,30 +1089,18 @@ test('(t) removing the envelope filed no owner decision and voided no proposal',
     ['DROP FUNCTION project_authority_envelope_recut(UUID[]);'],
     'the recut may only be dropped, never called');
 
-  // Live, and the part a file scan cannot reach: a proposal standing against the criteria set
-  // survives a re-cut under the new snapshot, and no owner decision appears behind it.
+  // Live, and the part a file scan cannot reach: re-cutting a contract under the new snapshot
+  // derives no owner decision. (This test also used to check that a pending criteria proposal
+  // survived the re-cut. 0223 deleted proposals, so that half went with them.)
   const fixture = await createProject('envelope-removal-negative');
-  const proposed = await propose(fixture, {
-    criteria: [criterionBody(fixture, { text: 'a different standard' })],
-  });
-  assert.equal(proposed.ok, true);
   // 0221 removed the persistent coordinator's request table, so "no owner decision was derived"
   // is now checked as absence of the relation rather than as a count that cannot move.
   const decisionsBefore = (await pool.query(
     `SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
                  THEN 0 ELSE 1 END AS count`,
   )).rows[0].count;
-  const proposalRow = async () => (await pool.query(
-    `SELECT "status","base_criteria_digest","card_digest","superseded_reason"
-       FROM "project_criteria_proposal" WHERE "id" = $1::uuid`,
-    [proposed.proposalId],
-  )).rows[0];
-  const before = await proposalRow();
-  assert.equal(before.status, 'PENDING');
   await pool.query('SELECT project_refresh_completion_contract($1::uuid,$2)',
     [fixture.projectId, 'ENVELOPE_REMOVAL_NEGATIVE']);
-  assert.deepEqual(await proposalRow(), before,
-    'the pending proposal must not move when the contract is re-cut');
   assert.equal((await pool.query(
     `SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
                  THEN 0 ELSE 1 END AS count`,
@@ -1495,6 +1137,9 @@ test('(u) removing the envelope did not reach project acceptance', async () => {
 test('(v) this is subtraction: nothing new runs, and less SQL is in force than before', () => {
   const compose = read('docker-compose.yml');
   const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // The same list (q) asserts, and for the same reason: watchdog, outcome-coordinator,
+  // outcome-coordinator-secondary and executable-dead-man were removed from Compose after 0218
+  // landed. The list shrank; the claim is still that nothing here ADDS a service.
   assert.deepEqual(services.sort(), [
     'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web',
   ], 'the deployment is exactly the services it already had');
