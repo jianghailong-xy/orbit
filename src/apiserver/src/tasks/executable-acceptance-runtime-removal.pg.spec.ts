@@ -87,15 +87,25 @@ const DROPPED_TYPES = [
   'project_acceptance_run_state',
 ];
 
-/** 0141 and 0192's verification guards: ten triggers this removal may not touch. */
+/** 0141 and 0192's verification guards: the four triggers this removal may not touch. */
 const VERIFICATION_TRIGGERS = [
-  'task_judgment_verifier_delete_guard',
-  'task_judgment_verifier_terminal_guard',
-  'task_open_verification_request_carrier_guard',
   'task_verification_carrier_status_derive_insert',
   'task_verification_carrier_status_derive_update',
   'task_verification_verdict_atomic_insert',
   'task_verification_verdict_atomic_update',
+];
+
+/**
+ * 0192's other three guards used to be on this list. They went on 2026-09-02 with 0228, because
+ * each one reads `task_judgment_request`: `assert_verification_request_carrier_state` — which
+ * `task_open_verification_request_carrier_guard` on `task` does nothing but call — is four EXISTS
+ * clauses over that table. A guard that queries a dropped relation is not a guard, it is the next
+ * production error. Named here so this suite still fails if one of them comes back.
+ */
+const VERIFICATION_TRIGGERS_REMOVED_BY_0228 = [
+  'task_judgment_verifier_delete_guard',
+  'task_judgment_verifier_terminal_guard',
+  'task_open_verification_request_carrier_guard',
 ];
 
 /**
@@ -322,12 +332,14 @@ suite('(d)(e) 0141 and 0192 keep every verification guard', async (t) => {
   const client = await connectSql();
   t.after(async () => { await client.end(); });
 
-  const installed = (await client.query<{ name: string }>(
+  const named = async (names: readonly string[]) => (await client.query<{ name: string }>(
     `SELECT t.tgname AS name FROM pg_trigger t
       WHERE NOT t.tgisinternal AND t.tgname = ANY($1::text[]) ORDER BY 1`,
-    [VERIFICATION_TRIGGERS],
+    [names],
   )).rows.map((row) => row.name);
-  assert.deepEqual(installed, [...VERIFICATION_TRIGGERS].sort());
+
+  assert.deepEqual(await named(VERIFICATION_TRIGGERS), [...VERIFICATION_TRIGGERS].sort());
+  assert.deepEqual(await named(VERIFICATION_TRIGGERS_REMOVED_BY_0228), []);
 });
 
 suite('(f)(g) a VERIFICATION subject is still settled by a PASS and only by a PASS', async (t) => {
