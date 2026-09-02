@@ -21,7 +21,25 @@ const ROOT = path.resolve(__dirname, '../../../..');
 const API = path.resolve(__dirname, '../..');
 const MIGRATIONS = path.join(API, 'prisma/migrations');
 const REMOVAL_DIR = '0221_watchdog_persistent_coordinator_removal';
-const REMOVAL_SQL = readFileSync(path.join(MIGRATIONS, REMOVAL_DIR, 'migration.sql'), 'utf8');
+
+/** The four migrations that installed what 0221 took out. The ledger is append-only: these stay. */
+const INSTALLERS = [
+  '0198_outcome_persistent_coordinator',
+  '0199_outcome_independent_watchdog_slo_security',
+  '0206_watchdog_current_binding',
+  '0214_watchdog_goal_progress_channel',
+];
+
+function migrationSql(dir: string): string {
+  return readFileSync(path.join(MIGRATIONS, dir, 'migration.sql'), 'utf8');
+}
+
+/** Every `NNNN_` directory in the ledger, in the order PostgreSQL replayed them. */
+function ledger(): string[] {
+  return readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
+}
+
+const REMOVAL_SQL = migrationSql(REMOVAL_DIR);
 
 function read(relative: string): string {
   return readFileSync(path.join(ROOT, relative), 'utf8');
@@ -166,24 +184,24 @@ test('(a) 0221 drops every table, view, function and trigger the four migrations
   }
 });
 
-test('(a) the four migrations stay in the ledger and nothing after 0221 replays them', () => {
+test('(a) the four migrations stay in the ledger and nothing replays them after the removal', () => {
   const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
-  assert.ok(names.includes(REMOVAL_DIR),
-    'the removal must stay in the ledger, so a database that applied it can replay it');
+  assert.ok(names.includes(REMOVAL_DIR), 'the removal itself must remain in the ledger');
+  // Later migrations are allowed — 0222 removed the obligation algebra after this — but none of
+  // them may put back what this one took away. `CREATE OR REPLACE` in a later file is exactly the
+  // way a removal silently un-happens, so the check is on what comes after, not on being last.
+  for (const later of names.filter((name) => name > REMOVAL_DIR)) {
+    const sql = readFileSync(path.join(MIGRATIONS, later, 'migration.sql'), 'utf8');
+    for (const name of [...COORDINATOR_TABLES, ...BINDING_TABLES, ...COORDINATOR_FUNCTIONS]) {
+      assert.doesNotMatch(sql, new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:TABLE|FUNCTION|VIEW)\\s+"?${name}"?`),
+        `${later} re-creates ${name}, which ${REMOVAL_DIR} removed`);
+    }
+    assert.doesNotMatch(sql, /CREATE\s+SCHEMA\s+outcome_watchdog/);
+  }
   for (const retired of ['0198_outcome_persistent_coordinator',
     '0199_outcome_independent_watchdog_slo_security', '0206_watchdog_current_binding',
     '0214_watchdog_goal_progress_channel']) {
     assert.ok(names.includes(retired), `${retired} must remain in the append-only ledger`);
-  }
-  // What "0221 is the newest migration" was reaching for. Being last in the repository is not that
-  // claim: it says the schema may never move again, so the next migration to land fails it whatever
-  // it does. The claim worth keeping is that nothing AFTER this removal re-creates what it dropped,
-  // and that is what the ledger is read for here.
-  for (const later of names.filter((name) => name > REMOVAL_DIR)) {
-    const sql = readFileSync(path.join(MIGRATIONS, later, 'migration.sql'), 'utf8');
-    for (const name of DROPPED_NAMES) {
-      assert.equal(sql.includes(name), false, `${later} puts ${name} back`);
-    }
   }
 });
 
@@ -311,26 +329,57 @@ test('(i) this is subtraction: no new service, no new resident process', () => {
   assert.deepEqual(created, [], 'the removal migration installs no new relation, trigger or index');
 });
 
+/**
+ * Every object 0221 took out, spelled the way a CREATE would have to spell it to put it back. The
+ * two dropped columns are here too: re-adding a column is the same net addition as re-adding a
+ * table. `outcome_watchdog` is the schema itself, which covers everything 0199 and 0214 named
+ * inside it.
+ */
+const REMOVED_OBJECTS = [
+  ...COORDINATOR_TABLES,
+  ...COORDINATOR_FUNCTIONS,
+  ...BINDING_TABLES,
+  'executable_runtime_current_binding',
+  'executable_runtime_register_current_binding',
+  'executable_runtime_append_current_heartbeat',
+  'outcome_watchdog',
+  'runtime_binding_digest',
+  'runtime_binding_logical_time',
+];
+
+/** Which of the removed objects this migration text puts back on the schema. */
+function reinstalls(sql: string): string[] {
+  return REMOVED_OBJECTS.filter((name) => new RegExp(
+    '(?:CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:MATERIALIZED\\s+)?'
+    + '(?:TABLE|VIEW|SCHEMA|FUNCTION|PROCEDURE|TRIGGER|INDEX)\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?'
+    + `|ADD\\s+COLUMN\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?)${name}\\b`, 'i').test(sql));
+}
+
 test('(i) the removal deletes far more than it adds', () => {
-  // Anchored to the commit that introduced this removal rather than to `main...HEAD`. The branch
-  // form asked whether whatever branch you happen to be on is a net deletion, which is two
-  // different wrong questions: against main it compares main with itself and reads `0 > 0`, and on
-  // every later branch it turns one task's proof into a constraint on somebody else's work. The
-  // fact being preserved is about THIS removal, and the commit carrying it is where it is legible.
-  const commit = execFileSync('git', [
-    'log', '--diff-filter=A', '--format=%H', '-1', '--',
-    `src/apiserver/prisma/migrations/${REMOVAL_DIR}/migration.sql`,
-  ], { cwd: ROOT, encoding: 'utf8' }).trim();
-  assert.match(commit, /^[0-9a-f]{40}$/, 'the removal migration must be reachable in the history');
-  const diff = execFileSync('git', ['show', '--numstat', '--format=', commit, '--',
-    ':!package-lock.json'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  let added = 0;
-  let deleted = 0;
-  for (const line of diff.split('\n').filter(Boolean)) {
-    const [plus, minus] = line.split('\t');
-    if (plus === '-' || minus === '-') continue;
-    added += Number(plus);
-    deleted += Number(minus);
-  }
-  assert.ok(deleted > added, `${commit} added ${added} and deleted ${deleted} lines`);
+  // This used to be `git diff --numstat main...HEAD`, which measured the work against wherever the
+  // branch happened to be standing. That reads "8,666 deleted, 0 added" on the branch and "0 added,
+  // 0 deleted" the moment it merges, so the assertion inverted on the tree it was written to
+  // protect. The arithmetic below is read out of the tree itself and says the same thing before and
+  // after the merge, on a clone with no `main` ref, and on an export with no history at all.
+
+  // What it retired. The ledger is append-only and the test above pins these four in place, so this
+  // is a fixed quantity that no later commit can dilute — which is exactly what a baseline SHA
+  // could not promise: unrelated work landing on main would eventually out-add the 8,666 lines.
+  const retired = INSTALLERS.reduce((total, dir) => total + migrationSql(dir).split('\n').length, 0);
+  assert.ok(retired > 4_000,
+    `expected the 4,160 lines the four migrations installed, saw ${retired}`);
+
+  // What it spent. 0221, plus any later migration that goes back to the same vocabulary — a
+  // compatibility shim for the machinery being removed is part of the removal's bill, while an
+  // unrelated migration landing on top of it is not.
+  const spending = ledger().filter((dir) => dir >= REMOVAL_DIR)
+    .filter((dir) => DROPPED_NAMES.some((name) => migrationSql(dir).includes(name)));
+  const spent = spending.reduce((total, dir) => total + migrationSql(dir).split('\n').length, 0);
+  assert.ok(spent * 5 < retired,
+    `the removal spent ${spent} lines (${spending.join(', ')}) to retire ${retired}`);
+
+  // And it spent none of them putting any of it back. A removal that re-creates what it dropped is
+  // a net addition however the line counts come out, so this half is absolute rather than a ratio.
+  assert.deepEqual(spending.flatMap((dir) => reinstalls(migrationSql(dir)).map((n) => `${dir}: ${n}`)),
+    [], 'nothing at or after the removal may re-create what it dropped');
 });

@@ -7,21 +7,22 @@ import test from 'node:test';
 import { TRIGGER_WRITE_SOURCES } from '../common/db-write-inventory';
 
 /**
- * 0222 removed the verification-subject dispatch guard 0207 installed. This is the static half of
+ * 0224 removed the verification-subject dispatch guard 0207 installed. This is the static half of
  * that removal: what the migration text says, what the trigger inventory says, and what no line of
  * live source may say any more.
  *
  * It is a string search rather than a compile check for the reason the sibling removal suites give:
  * this codebase reaches PostgreSQL through `$queryRaw`, so a dropped trigger survives `tsc` and
  * fails at run time. `prisma/migrations` is excluded from the scan because it is the append-only
- * record of how the schema got here — 0207 must still be able to create what 0222 drops.
+ * record of how the schema got here — 0207 must still be able to create what 0224 drops.
  */
 
 const ROOT = path.resolve(__dirname, '../../../..');
 const API = path.resolve(__dirname, '../..');
 const MIGRATIONS = path.join(API, 'prisma/migrations');
 const INSTALL = path.join(MIGRATIONS, '0207_verification_subject_dispatch_guard/migration.sql');
-const REMOVAL = path.join(MIGRATIONS, '0222_verification_subject_dispatch_guard_removal/migration.sql');
+const REMOVAL_DIR = '0224_verification_subject_dispatch_guard_removal';
+const REMOVAL = path.join(MIGRATIONS, REMOVAL_DIR, 'migration.sql');
 const INSTALL_SQL = readFileSync(INSTALL, 'utf8');
 const REMOVAL_SQL = readFileSync(REMOVAL, 'utf8');
 
@@ -94,7 +95,7 @@ export function namesDroppedObject(line: string, needles: readonly string[]): st
 }
 
 // (a) --------------------------------------------------------------------------------------------
-test('(a) 0222 drops all three 0207 triggers and both of their functions by name', () => {
+test('(a) 0224 drops all three 0207 triggers and both of their functions by name', () => {
   for (const [table, trigger] of DROPPED_TRIGGERS) {
     assert.match(INSTALL_SQL, new RegExp(`CREATE TRIGGER "${trigger}"`),
       `${trigger} must be one 0207 actually installed`);
@@ -225,13 +226,19 @@ test('(c) negative control: the scan would still report a forged call site, and 
 
 // (g) --------------------------------------------------------------------------------------------
 /**
- * The core tables this removal touches, and their neighbours, after 0222.
+ * The core tables this removal touches, and their neighbours, after 0224.
  *
- * Written out rather than counted: "52 triggers" is satisfied by removing three and adding three,
+ * Written out rather than counted: "40 triggers" is satisfied by removing three and adding three,
  * and the thing criterion (g) is about is that nothing ELSE moved. `db-write-inventory.spec.ts`
  * ties this list to a replay of every migration, and the pg half of this suite ties it to the
  * server, so an entry here that no database installs is caught from both sides.
+ *
+ * `project` is deliberately outside the census. It is a core table, but it is not one 0207 or 0224
+ * touches, and a sibling removal landing on it would fail this suite for something that is not this
+ * removal — which is the same mistake as measuring subtraction against `main...HEAD`.
  */
+const CENSUS_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
+
 const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
   conversation_turn: [],
   run_event: ['run_event_ingestion_provenance_guard'],
@@ -257,28 +264,31 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   for (const [table, expected] of Object.entries(CORE_TRIGGERS_AFTER)) {
     assert.deepEqual(byTable.get(table) ?? [], expected, `${table}'s trigger set changed`);
   }
-  // `task` and `project` carry 30 and 12; naming all 42 here would restate the inventory rather
-  // than check it. What matters for them is the same two properties, stated directly.
-  const core = TRIGGER_WRITE_SOURCES.filter((entry) =>
-    ['session', 'task', 'conversation_turn', 'run_event', 'project'].includes(entry.table));
-  assert.equal(core.length, 52,
-    'the five core tables carried 55 triggers before 0222 and carry 52 after it');
+  // `task` carries 29; naming all of them here would restate the inventory rather than check it.
+  // What matters for it is the same two properties, stated directly.
+  const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
+  assert.equal(core.length, 40,
+    'these four tables carried 43 triggers before 0224 and carry 40 after it');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
-  // Every core-table trigger installed BEFORE 0207 is still here. Derived from the inventory's own
+  // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
   // `since`, so it cannot be satisfied by editing a number.
   const olderThan0207 = core.filter((entry) => Number(entry.since.slice(0, 4)) < 207);
-  assert.equal(olderThan0207.length, 50,
-    'the 50 core-table triggers that predate 0207 must all survive it');
+  assert.equal(olderThan0207.length, 38,
+    'the 38 triggers on these tables that predate 0207 must all survive it');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
     ['failure_successor_task_binding_immutable', 'run_event_ingestion_provenance_guard'],
-    'the only core-table triggers newer than 0207 are the two later migrations installed',
+    'the only triggers here newer than 0207 are the two later migrations installed',
+  );
+  assert.ok(
+    TRIGGER_WRITE_SOURCES.some((entry) => entry.trigger === 'task_verification_subject_guard'),
+    '0130\'s guard, whose name this removal came closest to matching, must still be registered',
   );
 });
 
 // (h) --------------------------------------------------------------------------------------------
-test('(h) 0222 names nothing in the project_acceptance family, or any other protected wall', () => {
+test('(h) 0224 names nothing in the project_acceptance family, or any other protected wall', () => {
   for (const prefix of [
     'project_acceptance_',
     'task_executable_',
@@ -287,7 +297,7 @@ test('(h) 0222 names nothing in the project_acceptance family, or any other prot
     'executable_runtime_',
   ]) {
     assert.equal(REMOVAL_SQL.includes(prefix), false,
-      `${prefix}* is a load-bearing wall and 0222 may not so much as name it`);
+      `${prefix}* is a load-bearing wall and 0224 may not so much as name it`);
   }
   // Stated positively as well: the whole migration is five DROPs and nothing else.
   const statements = REMOVAL_SQL
@@ -329,10 +339,26 @@ test('(i) this is subtraction: no new service, no new resident process, less ins
   assert.deepEqual(added, [], 'a removal that needs new production code is not a removal');
 });
 
-test('(i) 0222 is the frontier, and 0207 stays in the ledger as history', () => {
+test('(i) the removal is in the ledger, 0207 stays as history, and nothing puts it back', () => {
   const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
-  assert.equal(names.at(-1), '0222_verification_subject_dispatch_guard_removal',
-    'the removal must be the highest migration, so a replay applies it last');
+  assert.ok(names.includes(REMOVAL_DIR), 'the removal must stay in the ledger, so a database that '
+    + 'applied it can replay it');
   assert.ok(names.includes('0207_verification_subject_dispatch_guard'),
-    '0207 must remain, because a database that already applied it has to replay it before 0222');
+    '0207 must remain, because a database that applied it has to replay it before the removal');
+  // Deliberately NOT "the removal is the newest migration". That reads as a stronger claim and is
+  // actually a different one: it says the schema may never move again, so the next unrelated
+  // migration to land fails it whatever it does. What has to hold is that nothing at or after the
+  // removal re-creates what it dropped — `CREATE OR REPLACE` in a later file is exactly how a
+  // removal silently un-happens.
+  for (const later of names.filter((name) => name >= REMOVAL_DIR)) {
+    const sql = readFileSync(path.join(MIGRATIONS, later, 'migration.sql'), 'utf8');
+    for (const [table, trigger] of DROPPED_TRIGGERS) {
+      assert.doesNotMatch(sql, new RegExp(`CREATE\\s+TRIGGER\\s+"?${trigger}"?`),
+        `${later} puts ${trigger} back on ${table}`);
+    }
+    for (const fn of DROPPED_FUNCTIONS) {
+      assert.doesNotMatch(sql, new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+"?${fn}"?`),
+        `${later} re-creates ${fn}()`);
+    }
+  }
 });

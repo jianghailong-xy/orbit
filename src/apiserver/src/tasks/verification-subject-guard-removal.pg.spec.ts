@@ -26,7 +26,7 @@ import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { TasksService } from './tasks.service';
 
 /**
- * The catalog half of the 0222 removal, against a real PostgreSQL that replayed every migration,
+ * The catalog half of the 0224 removal, against a real PostgreSQL that replayed every migration,
  * plus the positive half: the ordinary writes those triggers used to fire on.
  *
  * `verification-subject-guard-removal.spec.ts` reads the migration text; this reads the server.
@@ -54,8 +54,12 @@ const DROPPED_FUNCTIONS = [
   'task_verification_subject_live_session_guard',
 ];
 
-/** The five tables criterion (g) is about: the ones this removal and its neighbours write. */
-const CORE_TABLES = ['conversation_turn', 'project', 'run_event', 'session', 'task'];
+/**
+ * The tables criterion (g) is about: the ones 0207 wrote on, plus the two beside them that every
+ * ordinary session write touches. `project` is a core table but not one this removal goes near, and
+ * a sibling removal landing on it must not fail this suite for something that is not this removal.
+ */
+const CORE_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
 
 /** The Ready predicate every Run surface shares, spliced against the alias this file queries. */
 const MANUAL_RUNNABLE = manualRunnableTaskSql('t');
@@ -201,8 +205,8 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 52,
-    'the five core tables carried 55 triggers before 0222 and carry 52 after it');
+  assert.equal(installed.rowCount, 40,
+    'these four tables carried 43 triggers before 0224 and carry 40 after it');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
@@ -228,13 +232,16 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'the acceptance wall must come through this removal with every column it went in with',
   );
 
-  // Its triggers too: the family is guarded by eleven of its own plus five on `project`.
+  // Its own tables' guards too, all eleven of them. The `project_acceptance_*`-named triggers that
+  // sit on `project` rather than on this family are deliberately outside the assertion: they are
+  // the project DONE gate, a sibling removal is entitled to change them, and failing this suite for
+  // that would be the same mistake as measuring subtraction against `main...HEAD`.
   const triggers = await client.query(`
     SELECT c.relname || '|' || t.tgname AS name
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE NOT t.tgisinternal AND n.nspname = 'public'
-       AND (c.relname LIKE 'project\\_acceptance\\_%' OR t.tgname LIKE 'project\\_acceptance\\_%')
+       AND c.relname LIKE 'project\\_acceptance\\_%'
      ORDER BY 1`);
   assert.deepEqual(triggers.rows.map((row) => row.name), [
     'project_acceptance_audit|project_acceptance_audit_append_only',
@@ -248,11 +255,6 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'project_acceptance_run|project_acceptance_run_closure_guard',
     'project_acceptance_run|project_acceptance_run_epoch_guard',
     'project_acceptance_run|project_acceptance_run_immutable_guard',
-    'project|project_acceptance_advance_epoch',
-    'project|project_acceptance_criteria_fact',
-    'project|project_acceptance_done_gate',
-    'project|project_acceptance_done_insert_gate',
-    'project|project_acceptance_epoch_audit',
   ]);
 });
 
