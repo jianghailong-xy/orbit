@@ -669,19 +669,27 @@ suite('(q) the core tables keep every trigger that predates this project', async
   t.after(async () => { await client.end(); });
 
   // Measured on origin/main at the start of this task and then reduced by exactly the one trigger
-  // this removal takes off `task`. Only the tables this removal touched are counted: pinning a
-  // table it never wrote on would make a sibling removal's work show up as a failure here.
+  // this removal takes off `task` — and by the three 0228 takes off it the same day, which is why
+  // 27 became 24. Only the tables these removals touched are counted: pinning a table neither
+  // wrote on would make some third removal's work show up as a failure here.
   const counts = Object.fromEntries((await client.query<{ table: string; n: number }>(
     `SELECT c.relname AS table, count(*)::int AS n FROM pg_trigger t
        JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname IN ('task', 'session', 'run_event')
       GROUP BY 1 ORDER BY 1`)).rows.map((row) => [row.table, row.n]));
-  assert.deepEqual(counts, { run_event: 1, session: 10, task: 27 });
+  assert.deepEqual(counts, { run_event: 1, session: 10, task: 24 });
 
-  // And the one that went is named, so a reader can tell a removal from an accident.
-  const gone = await client.query(
-    `SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgname = 'task_executable_plan_bind'`);
-  assert.equal(gone.rowCount, 0);
+  // And every one that went is named, so a reader can tell a removal from an accident.
+  for (const trigger of [
+    'task_executable_plan_bind',                         // 0227, this removal
+    'task_judgment_verifier_delete_guard',               // 0228
+    'task_judgment_verifier_terminal_guard',             // 0228
+    'task_open_verification_request_carrier_guard',      // 0228
+  ]) {
+    const gone = await client.query(
+      `SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgname = $1`, [trigger]);
+    assert.equal(gone.rowCount, 0, `${trigger} is still installed`);
+  }
   // `session_dispatch_dependency_check` is 0200's too and stays: it is task dependency
   // resolution, not acceptance, and it gates every task-work session dispatch in the database.
   const kept = await client.query(
