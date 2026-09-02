@@ -121,11 +121,11 @@ suite('(j) every protected family is still installed and still guarded', async (
   t.after(async () => { await client.end(); });
 
   for (const [prefix, minimum] of [
-    // One, not six: 0227 removed 0200's admission/attempt/continuation/diagnosis and 0187's two
-    // backfill relations by a later and separate decision, leaving 0181's recorded command result
-    // as the whole of this family. What 0220 does to it is still asserted, over 0220's own frozen
-    // text, by `PROTECTED_PREFIXES` in completion-ack-removal.spec.ts.
-    ['task_executable_', 1],
+    // `task_executable_*` was here too, and is empty now: 0227 removed 0200's
+    // admission/attempt/continuation/diagnosis and 0187's two backfill relations, and 0228 took
+    // 0181's recorded command result with the judgment machinery — three later and separate
+    // account-owner decisions. What 0220 does to that family is still asserted, over 0220's own
+    // frozen text, by `PROTECTED_PREFIXES` in completion-ack-removal.spec.ts.
     // `failure_continuation_*` / `failure_successor_*` were here too. Migration 0226 removed that
     // family on purpose — the failure router, not this protocol — so the catalog has no relation
     // left to count.
