@@ -259,10 +259,9 @@ export class ProjectsController {
    *
    * The stated criteria as the parser decomposes them, the digest of the facts a DONE would be
    * checked against, every evidence version with its derived criteria and conclusion events, the newest
-   * merge observation per requirement, the append-only audit — and the canonical `doneGate`, with
-   * its exact binding/evaluation cut, proof graph, active obligations, structured reasons,
-   * owner/actor and next action. It is the same decision the write path makes, evaluated as a read
-   * so a client can say what is missing before anybody presses a button. Ids are Base62.
+   * merge observation per requirement, the append-only audit — and `doneGate`, which is the same
+   * decision the write path makes, evaluated as a read so a client can say what is missing before
+   * anybody presses a button. Ids are Base62.
    *
    * A read holds no lock and grants nothing: the gate that DECIDES runs inside the transaction that
    * writes DONE, under `FOR UPDATE` (§13.4 AE7).

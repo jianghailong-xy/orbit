@@ -176,22 +176,10 @@ suite('(d)(e)(f)(g) every load-bearing wall beside the removal is still standing
   assert.ok(failureTables.rows.length >= 2,
     'the failure continuation and successor tables are a different decision and must remain');
 
-  // (f) the obligation algebra and the canonical DONE gate, which belong to the sibling task.
-  const algebra = await client.query(`
-    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'public' AND c.relkind = 'r'
-       AND c.relname IN ('outcome_fact_stream', 'outcome_fact_binding', 'outcome_active_obligation',
-                         'outcome_obligation_revision', 'outcome_obligation_reduction',
-                         'outcome_binding_transition', 'outcome_obsolete_obligation')
-     ORDER BY 1`);
-  assert.deepEqual(algebra.rows.map((row) => row.relname), [
-    'outcome_active_obligation', 'outcome_binding_transition', 'outcome_fact_binding',
-    'outcome_fact_stream', 'outcome_obligation_reduction', 'outcome_obligation_revision',
-    'outcome_obsolete_obligation',
-  ]);
-  assert.equal((await client.query(`
-    SELECT count(*)::int AS count FROM pg_proc WHERE proname = 'project_canonical_done_gate'`))
-    .rows[0].count, 1, 'the canonical DONE gate is not this task to remove');
+  // (f) the obligation algebra and the canonical DONE gate were the sibling task's to keep or
+  // remove, and it removed them in 0222. The assertion that used to stand here — that 0221 left
+  // them installed — now belongs to that task's own removal spec; what remains checkable from
+  // here is that 0221 names none of those relations, which the static spec asserts.
 
   // (g) project acceptance, untouched.
   const acceptance = await client.query(`

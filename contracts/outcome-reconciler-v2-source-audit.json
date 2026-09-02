@@ -81,8 +81,8 @@
       ],
       "sourceOfTruth": [
         {
-          "storage": "outcome_fact_binding + outcome_evaluation_cut + outcome_evaluator_result",
-          "role": "IMMUTABLE_EXACT_CUT_PROOF_AND_CANONICAL_OBLIGATIONS"
+          "storage": "project_acceptance_run + project_acceptance_criterion + project_acceptance_conclusion",
+          "role": "IMMUTABLE_EVIDENCE_VERSION_AND_APPEND_ONLY_CONCLUSIONS"
         },
         {
           "storage": "project_completion_contract",
@@ -91,8 +91,7 @@
       ],
       "projections": [
         "project.status",
-        "outcome_projection.done_gate",
-        "project acceptance canonical doneGate response",
+        "project acceptance doneGate response",
         "acceptedRunId historical link"
       ],
       "writers": [
@@ -102,9 +101,9 @@
           "authority": "APPLICATION_CANONICAL_GATE_CONSUMER"
         },
         {
-          "path": "src/apiserver/prisma/migrations/0197_canonical_obligation_done_gate/migration.sql",
-          "symbol": "project_canonical_done_gate",
-          "authority": "DATABASE_CANONICAL_GATE_AND_DONE_WALL"
+          "path": "src/apiserver/prisma/migrations/0150_task_provenance_project_acceptance_epoch/migration.sql",
+          "symbol": "project_acceptance_done_gate",
+          "authority": "DATABASE_ACCEPTANCE_GATE_AND_DONE_WALL"
         }
       ],
       "readers": [

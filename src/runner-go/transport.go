@@ -1023,9 +1023,8 @@ func (t *Transport) getProjectReopenImpact(id string) (json.RawMessage, error) {
 // getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
 // as the server decomposes them, the digest of the facts a DONE would be checked against, every
 // evidence version with its projected per-criterion conclusions, the newest merge observation per
-// requirement, the append-only audit, and canonical doneGate — the exact current cut, proof graph,
-// obligations, structured reasons, owner/actor and next action. Unknown or stale inputs deny
-// closure; legacy blocker/signal summaries are not an alternate decision source.
+// requirement, the append-only audit, and doneGate — whether a DONE would be allowed right now and,
+// if not, the code and the sentence the write path would refuse with.
 //
 // The read to make BEFORE claiming a project is finished. "The tests passed" written in a comment
 // is not evidence the server can check; a durable conclusion event in this record is.
@@ -1035,16 +1034,6 @@ func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
 	}
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/acceptance", nil, &out, taskOpTimeout)
-	return out, err
-}
-
-func (t *Transport) getProjectOutcome(id, surface string) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/projects/" + url.PathEscape(id) + "/outcome?surface=" + url.QueryEscape(surface)
-	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 

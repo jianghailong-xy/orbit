@@ -8,10 +8,6 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  establishCanonicalClosedEvaluationForPgTest,
-  establishCanonicalRefutedEvaluationForPgTest,
-} from '../outcome-reconciler/outcome-closed-test-helper';
-import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
@@ -114,9 +110,6 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
   try {
     const target = await fixture(db, 'merge-carries-pass');
     const passed = await humanConclusion(acceptance, target, [ProjectAcceptanceVerdict.PASS]);
-    await establishCanonicalClosedEvaluationForPgTest(
-      db, target.ownerId, target.projectId, 'merge evidence stays current', 'merge-carries-pass',
-    );
     await settle(db, acceptance, target);
 
     const merged = await acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
@@ -130,8 +123,8 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
     assert.notEqual(merged.evidenceVersion, passed.evidenceVersion);
 
     const gate = await acceptance.evaluateGate(target.projectId);
-    assert.equal(gate.allowed, true, String(gate.reason.message ?? 'derived PASS unexpectedly disappeared'));
-    assert.doesNotMatch(String(gate.reason.message ?? ''), /ACCEPTANCE_EVIDENCE_STALE/);
+    assert.equal(gate.allowed, true, String(gate.reason ?? 'derived PASS unexpectedly disappeared'));
+    assert.doesNotMatch(String(gate.reason ?? ''), /ACCEPTANCE_EVIDENCE_STALE/);
 
     const project = await db.project.findUniqueOrThrow({
       where: { id: target.projectId },
@@ -190,10 +183,15 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
       { columnName: 'evidence_version', nullable: 'NO' },
     ]);
 
+    // The gate DOES have a stale-evidence branch — 0222 restored 0150's body, whose whole point is
+    // that a superseded or reopened run stops being a claim about now. What this asserts is that
+    // merge evidence does not TAKE that branch: the assertion above is on the answer, this one is
+    // on the branch being present to answer with, so a gate that silently lost it would not read
+    // as a passing test.
     const [gateDefinition] = await db.$queryRaw<Array<{ definition: string }>>(Prisma.sql`
       SELECT pg_get_functiondef('project_acceptance_done_gate()'::regprocedure) AS definition
     `);
-    assert.doesNotMatch(gateDefinition?.definition ?? '', /ACCEPTANCE_EVIDENCE_STALE/);
+    assert.match(gateDefinition?.definition ?? '', /ACCEPTANCE_EVIDENCE_STALE: acceptance run % was superseded/);
   } finally {
     await db.$disconnect();
   }
@@ -204,9 +202,6 @@ test('a newer non-PASS conclusion automatically removes a project from the compl
   try {
     const target = await fixture(db, 'refutation-reopens');
     await humanConclusion(acceptance, target, [ProjectAcceptanceVerdict.PASS]);
-    await establishCanonicalClosedEvaluationForPgTest(
-      db, target.ownerId, target.projectId, 'new evidence may refute completion', 'refutation-reopens',
-    );
     await settle(db, acceptance, target);
 
     const merged = await acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
@@ -223,13 +218,6 @@ test('a newer non-PASS conclusion automatically removes a project from the compl
     );
     // The legacy conclusion is append-only evidence, not a second Project-status writer. Drive the
     // same newer fact through the canonical evaluator before asserting the derived reopen.
-    await establishCanonicalRefutedEvaluationForPgTest(
-      db,
-      target.ownerId,
-      target.projectId,
-      'new evidence may refute completion',
-      'refutation-reopens-new-cut',
-    );
 
     const project = await db.project.findUniqueOrThrow({
       where: { id: target.projectId },
@@ -238,9 +226,9 @@ test('a newer non-PASS conclusion automatically removes a project from the compl
     assert.deepEqual(project, { status: ProjectStatus.OPEN, acceptedRunId: null });
     const gate = await acceptance.evaluateGate(target.projectId);
     assert.equal(gate.allowed, false);
-    assert.equal(gate.decision, 'DENY');
-    assert.ok(gate.blockingReasons.length > 0);
-    assert.equal(typeof gate.reason.code, 'string');
+    assert.equal(gate.runId, null);
+    assert.equal(typeof gate.code, 'string');
+    assert.equal(typeof gate.reason, 'string');
   } finally {
     await db.$disconnect();
   }

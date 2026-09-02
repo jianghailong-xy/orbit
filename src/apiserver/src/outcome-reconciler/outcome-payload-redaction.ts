@@ -127,3 +127,56 @@ export function sanitizeWatchdogPayload(
     payloadDigest: createHash('sha256').update(storedJson).digest('hex'),
   };
 }
+
+/**
+ * Transport bounds for the owner decision inbox, kept verbatim from the removed canonical surface
+ * module. The canonical obligation inbox is gone; the same inbox still renders failure-continuation
+ * decisions, and a decision payload that reaches API, CLI or Web must still be redacted and bounded
+ * in one traversal so a secret cannot hide behind an unbounded object.
+ */
+export const OUTCOME_SURFACE_LIMITS = Object.freeze({
+  maxProjectionBytes: 256 * 1024,
+  maxStringBytes: 8 * 1024,
+  maxArrayItems: 50,
+  maxObjectKeys: 100,
+  maxDepth: 8,
+});
+
+// Match snake/kebab/camel/plain keys. Payloads come from integrations, so one naming convention
+// must not be able to bypass the transport boundary (for example `apiToken` versus `api_token`).
+const SURFACE_SECRET_KEY = /(authorization|cookie|credential|password|private[_-]?key|secret|token|api[_-]?key)/i;
+const SURFACE_SECRET_VALUE = /(?:\b(?:bearer|basic)\s+\S+|\bsk-[A-Za-z0-9_-]{12,}|\bgh[pousr]_[A-Za-z0-9_]{12,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN [A-Z ]*PRIVATE KEY-----|[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^/\s@]+@|[?&](?:access[_-]?token|api[_-]?key|authorization|password|secret|token)=[^&\s]+)/i;
+
+export function redactOutcomePayload(
+  value: unknown,
+  depth = 0,
+  seen = new Set<object>(),
+): unknown {
+  if (depth > OUTCOME_SURFACE_LIMITS.maxDepth) return '[TRUNCATED_DEPTH]';
+  if (typeof value === 'string') {
+    if (SURFACE_SECRET_VALUE.test(value.trim())) return '[REDACTED]';
+    return Buffer.byteLength(value, 'utf8') > OUTCOME_SURFACE_LIMITS.maxStringBytes
+      ? `${value.slice(0, OUTCOME_SURFACE_LIMITS.maxStringBytes)}…[TRUNCATED]`
+      : value;
+  }
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value !== 'object' || value === undefined) return String(value);
+  if (seen.has(value)) return '[REDACTED_CYCLE]';
+  seen.add(value);
+  let result: unknown;
+  if (Array.isArray(value)) {
+    result = value.slice(0, OUTCOME_SURFACE_LIMITS.maxArrayItems)
+      .map((entry) => redactOutcomePayload(entry, depth + 1, seen));
+  } else {
+    result = Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .slice(0, OUTCOME_SURFACE_LIMITS.maxObjectKeys)
+        .map(([key, entry]) => [
+          key,
+          SURFACE_SECRET_KEY.test(key) ? '[REDACTED]' : redactOutcomePayload(entry, depth + 1, seen),
+        ]),
+    );
+  }
+  seen.delete(value);
+  return result;
+}

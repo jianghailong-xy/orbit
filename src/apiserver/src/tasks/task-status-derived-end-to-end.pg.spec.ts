@@ -45,12 +45,6 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TaskJudgmentReviewService } from './task-judgment-review.service';
 import { TasksService } from './tasks.service';
-import {
-  OUTCOME_DIMENSIONS,
-  evaluateCanonicalOutcome,
-  outcomeDigest,
-  outcomeEvaluatorDigest,
-} from '../outcome-reconciler/outcome-evaluator';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -262,170 +256,6 @@ async function dependencyState(tasks: TasksService, ownerId: string, taskId: str
 
 function n9Digest(label: string): string {
   return createHash('sha256').update(label).digest('hex');
-}
-
-async function establishCanonicalClosedEvaluation(
-  sql: Client,
-  ownerId: string,
-  projectId: string,
-  goal: string,
-): Promise<void> {
-  await sql.query('SELECT project_refresh_completion_contract($1::uuid, $2)',
-    [projectId, 'N9_END_TO_END_FIXTURE']);
-  const stateResult = await sql.query(
-    `SELECT "contract_digest"::text AS "contractDigest",
-            "evaluation_plan_digest"::text AS "evaluationPlanDigest",
-            "risk_policy_digest"::text AS "riskPolicyDigest",
-            "permission_digest"::text AS "permissionDigest",
-            "budget_digest"::text AS "budgetDigest",
-            "recipient_digest"::text AS "recipientDigest"
-       FROM "project_completion_contract" WHERE "project_id" = $1::uuid`,
-    [projectId],
-  );
-  const state = stateResult.rows[0] as {
-    contractDigest: string;
-    evaluationPlanDigest: string;
-    riskPolicyDigest: string;
-    permissionDigest: string;
-    budgetDigest: string;
-    recipientDigest: string;
-  };
-  assert.ok(state?.contractDigest, 'the project has a completion contract');
-
-  const grantId = randomUUID();
-  const principalId = randomUUID();
-  const collectorId = `n9-canonical-${randomUUID()}`;
-  const authority = (await sql.query(
-    `SELECT outcome_register_authority_grant(
-       $1::uuid,$2::uuid,$3::uuid,'SYSTEM',$4,'DIMENSION_EVALUATED',
-       'ATTESTATION','OUTCOME_EVALUATOR',$5,'n9-canonical-v1',NULL,
-       1::bigint,NULL::bigint,$6
-     ) AS authority`,
-    [ownerId, projectId, grantId, principalId, collectorId, state.riskPolicyDigest],
-  )).rows[0].authority as Record<string, unknown> & { grantDigest: string };
-  const binding = {
-    tenantId: ownerId,
-    projectId,
-    subjectType: 'PROJECT',
-    subjectId: projectId,
-    goalId: `goal:${projectId}`,
-    goalRevision: '1',
-    contractDigest: state.contractDigest,
-    evaluationPlanDigest: state.evaluationPlanDigest,
-    policyDigest: n9Digest(`policy:${projectId}`),
-    riskPolicyDigest: state.riskPolicyDigest,
-    permissionDigest: state.permissionDigest,
-    authorityGrantDigest: authority.grantDigest,
-    budgetDigest: state.budgetDigest,
-    capabilityRegistryDigest: n9Digest(`registry:${projectId}`),
-    recipientDigest: state.recipientDigest,
-    evaluatorDigest: outcomeEvaluatorDigest('outcome-reducer-v2'),
-    factSchemaDigest: n9Digest('n9-canonical-fact-schema-v2'),
-    environmentDigest: n9Digest(`environment:${projectId}`),
-    artifactDigest: n9Digest(`artifact:${projectId}`),
-    targetDigest: n9Digest(`target:${projectId}`),
-    targetRef: 'refs/heads/main',
-    asOfLogicalTime: '0',
-    factCutDigest: n9Digest(`prospective-cut:${projectId}`),
-  };
-  const registered = (await sql.query(
-    'SELECT outcome_register_fact_binding($1::uuid,$2::uuid,$3::jsonb) AS result',
-    [ownerId, projectId, JSON.stringify(binding)],
-  )).rows[0].result as { bindingDigest: string };
-  for (const dimension of OUTCOME_DIMENSIONS) {
-    const payload = {
-      dimensionId: dimension.id,
-      state: 'SATISFIED',
-      applicabilityProofDigest: null,
-      reasonCode: `${dimension.id}_SATISFIED`,
-    };
-    const draft = {
-      factKind: 'DIMENSION_EVALUATED',
-      tenantId: ownerId,
-      subject: { type: 'PROJECT', id: projectId, projectId },
-      binding,
-      schemaVersion: 2,
-      schemaDigest: binding.factSchemaDigest,
-      payload,
-      payloadDigest: outcomeDigest(payload),
-      claimType: 'ATTESTATION',
-      principal: { type: 'SYSTEM', id: principalId },
-      authority,
-      observedAt: '2026-08-29T00:00:00.000Z',
-      causalPredecessorFactId: null,
-      idempotencyKey: `n9:${projectId}:${dimension.id}`,
-      source: {
-        system: 'OUTCOME_EVALUATOR',
-        collectorId,
-        collectorVersion: 'n9-canonical-v1',
-      },
-      signature: null,
-    };
-    await sql.query(
-      `SELECT outcome_ingest_canonical_fact($1::uuid,'SYSTEM',$2,$3::jsonb)`,
-      [ownerId, principalId, JSON.stringify(draft)],
-    );
-  }
-  const cut = (await sql.query(
-    'SELECT outcome_seal_evaluation_cut($1::uuid,$2::uuid,$3,$4,$5) AS result',
-    [ownerId, projectId, registered.bindingDigest, `n9:${projectId}:cut`, 'n9-canonical-v1'],
-  )).rows[0].result as { cutId: string; watermarkLogicalTime: string };
-  const facts = (await sql.query(
-    `SELECT cut_fact.trust_decision AS "trustDecision",
-            cut_fact.proof_eligible AS "proofEligible", fact.envelope
-       FROM outcome_evaluation_cut_fact cut_fact
-       JOIN outcome_canonical_fact fact
-         ON fact.tenant_id=cut_fact.tenant_id AND fact.project_id=cut_fact.project_id
-        AND fact.fact_id=cut_fact.fact_id
-      WHERE cut_fact.tenant_id=$1::uuid AND cut_fact.project_id=$2::uuid
-        AND cut_fact.cut_id=$3::uuid
-      ORDER BY cut_fact.ordinal`,
-    [ownerId, projectId, cut.cutId],
-  )).rows;
-  const evaluation = evaluateCanonicalOutcome({
-    binding,
-    goal: {
-      goalId: binding.goalId,
-      goalRevision: binding.goalRevision,
-      tenantId: ownerId,
-      projectId,
-      statement: goal,
-      contractDigest: binding.contractDigest,
-      evaluationPlanDigest: binding.evaluationPlanDigest,
-      ratification: {
-        status: 'RATIFIED',
-        ratifierType: 'OWNER',
-        ratifierId: ownerId,
-        contractDigest: binding.contractDigest,
-        factId: randomUUID(),
-      },
-      disposition: 'ACHIEVED',
-    },
-    factCut: cut,
-    facts,
-    clock: {
-      logicalNow: cut.watermarkLogicalTime,
-      clockId: 'n9-canonical-clock',
-      evaluatedThroughLogicalTime: cut.watermarkLogicalTime,
-    },
-    evaluatorVersion: 'outcome-reducer-v2',
-  });
-  assert.equal(evaluation.closed, true);
-  await sql.query(
-    `SELECT outcome_commit_evaluation(
-       $1::uuid,$2::uuid,'PROJECT',$2::text,$3::uuid,$4,$5::bigint,$6,$7,$8::jsonb
-     )`,
-    [
-      ownerId,
-      projectId,
-      cut.cutId,
-      registered.bindingDigest,
-      cut.watermarkLogicalTime,
-      evaluation.evaluatorVersion,
-      evaluation.evaluatorDigest,
-      JSON.stringify(evaluation),
-    ],
-  );
 }
 
 suite(
@@ -1139,12 +969,11 @@ suite(
     assert.ok(conclusions.every(
       (row) => row.evidenceVersion.toString() === acceptanceRun.attempt,
     ));
-    await establishCanonicalClosedEvaluation(sql, ownerId, project.id, project.goal ?? '');
     const reconciled = await acceptance.reconcile(ownerId, project.id);
     assert.equal(reconciled.done, true);
     const gateBeforeOptional = await acceptance.evaluateGate(project.id);
     assert.equal(gateBeforeOptional.allowed, true,
-      String(gateBeforeOptional.reason.message ?? 'doneGate refused'));
+      String(gateBeforeOptional.reason ?? 'doneGate refused'));
 
     const optional = await tasks.create(ownerId, {
       title: 'N9 optional follow-up outside acceptance criteria',
@@ -1155,7 +984,7 @@ suite(
     assert.equal(optional.status, TaskStatus.OPEN);
     const gateAfterOptional = await acceptance.evaluateGate(project.id);
     assert.equal(gateAfterOptional.allowed, true,
-      String(gateAfterOptional.reason.message ?? 'an irrelevant OPEN task changed acceptance'));
+      String(gateAfterOptional.reason ?? 'an irrelevant OPEN task changed acceptance'));
     assert.equal(await db.projectAcceptanceRun.count({ where: { projectId: project.id } }), 1,
       'task creation does not mint or invalidate an acceptance evidence version');
 

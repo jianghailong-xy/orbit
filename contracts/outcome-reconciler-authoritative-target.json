@@ -419,34 +419,6 @@
   ],
   "requiredEntrypoints": [
     {
-      "suite": "delivery",
-      "packageScript": "test:outcome-reconciler:delivery",
-      "command": "bash scripts/outcome-reconciler-delivery.sh",
-      "shell": "scripts/outcome-reconciler-delivery.sh",
-      "manifestGenerator": "scripts/outcome-reconciler-delivery-manifest.mjs"
-    },
-    {
-      "suite": "versioning",
-      "packageScript": "test:outcome-reconciler:versioning",
-      "command": "bash scripts/outcome-reconciler-versioning.sh",
-      "shell": "scripts/outcome-reconciler-versioning.sh",
-      "manifestGenerator": "scripts/outcome-reconciler-versioning-manifest.mjs"
-    },
-    {
-      "suite": "surfaces",
-      "packageScript": "test:outcome-reconciler:surfaces",
-      "command": "bash scripts/outcome-reconciler-surfaces.sh",
-      "shell": "scripts/outcome-reconciler-surfaces.sh",
-      "manifestGenerator": "scripts/outcome-reconciler-surfaces-manifest.mjs"
-    },
-    {
-      "suite": "replay",
-      "packageScript": "test:outcome-reconciler:replay",
-      "command": "bash scripts/outcome-reconciler-replay.sh",
-      "shell": "scripts/outcome-reconciler-replay.sh",
-      "manifestGenerator": "scripts/outcome-reconciler-replay-manifest.mjs"
-    },
-    {
       "suite": "canary",
       "packageScript": "test:outcome-reconciler:canary",
       "command": "bash scripts/outcome-reconciler-canary.sh",

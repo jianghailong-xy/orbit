@@ -509,41 +509,25 @@ test('(c) automatic dispatch no longer waits for an approval that no longer exis
 });
 
 // (d) --------------------------------------------------------------------------------------------
-test('(d) the DONE gate carries no ratification clause at either layer', async () => {
-  const fixture = await createProject('done-gate');
-  const gate = await jsonCall(
-    `SELECT project_canonical_done_gate($1::uuid,'PROJECT',$1::text) AS result`,
-    [fixture.projectId],
-  );
-  assert.ok(gate && typeof gate === 'object', 'the gate returns a structured view');
-  assert.equal(gate.ratification, undefined, 'the gate must not carry a ratification key');
-  assert.ok(!JSON.stringify(gate).includes('OWNER_RATIFICATION'),
-    'no reason, obligation or next action may name owner ratification');
-  assert.ok(!JSON.stringify(gate).includes('owner.ratification.review'),
-    'the gate must not route anybody to an owner-ratification review that no longer exists');
-
-  // Both layers, because the outer gate returns the projection's value as its base: a clause left
-  // in `outcome_projection.done_gate_value` would keep the refusal under a different call.
+test('(d) the DONE gate carries no ratification clause', async () => {
+  // 0222 removed the canonical obligation gate this used to read on both layers and restored the
+  // 0150 project acceptance gate as the single body that decides a project's DONE. That body is
+  // where a reintroduced ratification clause would have to appear, so it is what this reads.
   const body = (await pool.query(
     `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public'
-        AND p.proname = 'project_canonical_done_gate_projection_integrity_body'`,
+      WHERE n.nspname = 'public' AND p.proname = 'project_acceptance_done_gate'`,
   )).rows[0].prosrc;
-  assert.doesNotMatch(body, /effective_ratification|OWNER_RATIFICATION_INVALID/,
-    'the outer gate must not compute or report a ratification verdict');
-  const projection = (await pool.query(
-    `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'outcome_projection' AND p.proname = 'done_gate_value'`,
-  )).rows[0].prosrc;
-  assert.doesNotMatch(projection, /'ratification', jsonb_build_object|OWNER_RATIFICATION_INVALID/,
-    'the projection gate must not emit or block on a ratification clause');
+  assert.doesNotMatch(body, /ratification|OWNER_RATIFICATION/i,
+    'the DONE gate must not compute or report a ratification verdict');
+  assert.equal((await pool.query(
+    `SELECT count(*)::int AS count FROM pg_proc
+      WHERE proname LIKE 'project_owner_ratification%'`,
+  )).rows[0].count, 0, 'no ratification helper is left for a gate to call');
 
-  // The staleness clause that shares that code path is kept, and is what now refuses a gate whose
-  // cut has moved. Removing the authority clause must not have removed this one.
-  assert.match(body, /COMPLETION_CONTRACT_DRIFTED/,
-    'binding/evaluation drift must still block the gate');
-  assert.match(body, /'category', 'STALENESS'/,
-    'contract drift is a staleness fact, not an authority one');
+  // The acceptance clauses that share that body are kept, and are what now refuse a DONE whose
+  // evidence has moved. Removing the authority clause must not have removed those.
+  assert.match(body, /ACCEPTANCE_MISSING/, 'missing acceptance evidence must still block DONE');
+  assert.match(body, /ACCEPTANCE_EVIDENCE_STALE/, 'a superseded or reopened run must still block DONE');
   evidence.invariants.doneGateHasNoRatificationClause = true;
 });
 

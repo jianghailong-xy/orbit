@@ -243,7 +243,6 @@ const sources = [
   'scripts/outcome-reconciler-release-frontier.sh',
   'scripts/outcome-reconciler-release-frontier-manifest.mjs',
   'scripts/outcome-reconciler-release-live-state.mjs',
-  'scripts/outcome-reconciler-release-publish.mjs',
 ];
 const sourceEvidence = Object.fromEntries(sources.map((relative) => [relative, fileEvidence(relative)]));
 const body = {
