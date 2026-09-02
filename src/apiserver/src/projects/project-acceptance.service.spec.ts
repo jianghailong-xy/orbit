@@ -430,7 +430,6 @@ test('finalizeRun rejects a partial checklist and names every missing ordinal', 
         ],
       }),
     },
-    projectAcceptanceCriteriaConfirmation: { findUnique: async () => ({ id: 'confirmed' }) },
   };
   prisma.$transaction = async (work: (tx: any) => unknown) => work(prisma);
 

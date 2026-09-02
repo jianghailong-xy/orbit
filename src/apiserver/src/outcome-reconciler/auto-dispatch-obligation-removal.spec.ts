@@ -113,7 +113,6 @@ const REMOVED_DAG_NODES = ['suite-auto-dispatch', 'suite-auto-dispatch-integrati
 const ACCEPTANCE_TABLES = [
   'project_acceptance_audit',
   'project_acceptance_conclusion',
-  'project_acceptance_criteria_confirmation',
   'project_acceptance_criterion',
   'project_acceptance_criterion_definition',
   'project_acceptance_run',

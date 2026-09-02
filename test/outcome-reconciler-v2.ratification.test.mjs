@@ -681,8 +681,8 @@ test('(h) criteriaCopyMatchesTheWrite, and the removal is subtraction', () => {
   for (const line of PROPOSAL_REMOVAL_MIGRATION.split('\n')) {
     if (line.trimStart().startsWith('--')) continue;
     for (const table of ['project_acceptance_audit', 'project_acceptance_conclusion',
-      'project_acceptance_criteria_confirmation', 'project_acceptance_criterion',
-      'project_acceptance_criterion_definition', 'project_acceptance_run']) {
+      'project_acceptance_criterion', 'project_acceptance_criterion_definition',
+      'project_acceptance_run']) {
       assert.equal(line.includes(table), false,
         `the removal names ${table} in a statement: ${line.trim()}`);
     }

@@ -1826,7 +1826,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"branch was last observed to CONTAIN and at which " +
 				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
 				"and refused, and every reopen with the fact that caused it; the current " +
-				"revision-bearing criteriaDigest and its set-level confirmation; and doneGate — " +
+				"revision-bearing criteriaDigest; and doneGate — " +
 				"allowed, or the code and sentence the write would be refused with " +
 				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker " +
 				"or unresolved verification failure is still open).",

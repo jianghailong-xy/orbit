@@ -287,8 +287,12 @@ test('0189 migrates both named project populations conservatively without PASS o
       before.map((row) => row.semantic_rows_digest),
       'criterion identity, ordinal, literal text, method, and revision must survive migration',
     );
+    // 0189 created `project_acceptance_criteria_confirmation` and this replay used to assert the
+    // migration left it empty. 0226 dropped the relation outright -- zero writers, zero readers --
+    // so the same claim is now made against the isolated schema this test builds: 0189 still
+    // creates the table it always created, and still puts no row in it.
     const confirmations = await client.query<{ count: number }>(
-      'SELECT count(*)::int AS count FROM "project_acceptance_criteria_confirmation"',
+      `SELECT count(*)::int AS count FROM ${SCHEMA}."project_acceptance_criteria_confirmation"`,
     );
     assert.equal(confirmations.rows[0]?.count, 0, 'migration must not invent a standard-set confirmation');
     console.log(`n22-migration-counts before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);

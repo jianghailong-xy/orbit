@@ -44,7 +44,6 @@ const PROPOSAL_FUNCTIONS = [
 const ACCEPTANCE_TABLES = [
   'project_acceptance_audit',
   'project_acceptance_conclusion',
-  'project_acceptance_criteria_confirmation',
   'project_acceptance_criterion',
   'project_acceptance_criterion_definition',
   'project_acceptance_run',
@@ -265,8 +264,8 @@ test('an empty structured set clears the criteria instead of being refused', { s
 
 // The acceptance overview read `project_acceptance_criteria_set_digest` for its `criteriaDigest`
 // until 0223 dropped that function with the rest of the channel. It reads `acceptance_criteria_
-// digest` again -- the 0189 column the set-level confirmation is keyed on, which is where the
-// field came from before 0218 introduced the proposal-facing one. Exercised end to end because a
+// digest` again -- the 0189 column, which is where the field came from before 0218 introduced
+// the proposal-facing one. Exercised end to end because a
 // dropped function behind a `$queryRaw` is not a compile error, it is a 500 in production.
 test('the acceptance overview still reports the criteria set, and it is the one just written',
   { skip }, async () => {

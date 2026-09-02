@@ -327,8 +327,7 @@ suite('(l)-(n) the acceptance standard set itself is untouched and still conclud
     t.after(async () => { await client.end(); });
 
     for (const table of ['project_acceptance_criterion_definition', 'project_acceptance_criterion',
-      'project_acceptance_conclusion', 'project_acceptance_run', 'project_acceptance_audit',
-      'project_acceptance_criteria_confirmation']) {
+      'project_acceptance_conclusion', 'project_acceptance_run', 'project_acceptance_audit']) {
       assert.equal((await client.query(
         `SELECT to_regclass($1)::text AS name`, [table])).rows[0].name, table);
     }

@@ -436,8 +436,7 @@ test('(l)(m) the removal writes no row: the stated criteria and their conclusion
   const altered = [...statements.matchAll(/ALTER\s+TABLE\s+"?([a-z_0-9]+)"?/gi)].map((m) => m[1]);
   assert.deepEqual([...new Set(altered)], ['project_ratified_action_intent']);
   for (const relation of ['project_acceptance_criterion_definition', 'project_acceptance_criterion',
-    'project_acceptance_conclusion', 'project_acceptance_run', 'project_acceptance_audit',
-    'project_acceptance_criteria_confirmation']) {
+    'project_acceptance_conclusion', 'project_acceptance_run', 'project_acceptance_audit']) {
     const drop = new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${relation}"?`, 'i');
     assert.equal(drop.test(statements), false, `${relation} is not this removal's to drop`);
   }
