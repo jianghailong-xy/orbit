@@ -8,7 +8,7 @@ import { test } from 'node:test';
  *
  * 0217_project_criteria_proposal_card made an agent's `acceptanceCriteriaItems` a card the account
  * owner had to answer, and 0218 kept that card while deleting the approval queue around it. The
- * account owner decided to remove the protection itself, so 0220 takes the whole channel out: the
+ * account owner decided to remove the protection itself, so 0223 takes the whole channel out: the
  * relation, its six indexes, its nine stored functions, both HTTP doors, the web card and the copy
  * that described them.
  *
@@ -88,7 +88,7 @@ const PROPOSAL_IDENTIFIERS = [
 ];
 
 const CREATED_BY = '0217_project_criteria_proposal_card';
-const REMOVED_BY = '0220_project_criteria_proposal_removal';
+const REMOVED_BY = '0223_project_criteria_proposal_removal';
 
 function migrations(): Array<{ dir: string; sql: string }> {
   return readdirSync(MIGRATIONS)
@@ -129,7 +129,7 @@ function exists(relative: string): boolean {
   return statSync(path.join(REPO, relative), { throwIfNoEntry: false }) !== undefined;
 }
 
-test('the proposal relation and its six indexes are created by 0217 and dropped by 0220', () => {
+test('the proposal relation and its six indexes are created by 0217 and dropped by 0223', () => {
   const table = lastVerdict(
     new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${PROPOSAL_TABLE}"?[\\s(]`, 'i'),
     new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${PROPOSAL_TABLE}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i'),
@@ -348,7 +348,7 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
   assert.match(cli, /\[\] clears the collection/, 'the CLI help must document the clear again');
 });
 
-test('0220 is subtraction: it only takes machinery away', () => {
+test('0223 is subtraction: it only takes machinery away', () => {
   const sql = removalMigration();
   for (const forbidden of [/CREATE\s+TABLE/i, /CREATE\s+(?:CONSTRAINT\s+)?TRIGGER/i,
     /CREATE\s+(?:UNIQUE\s+)?INDEX/i, /CREATE\s+(?:OR\s+REPLACE\s+)?VIEW/i, /CREATE\s+TYPE/i,
@@ -363,7 +363,7 @@ test('0220 is subtraction: it only takes machinery away', () => {
     'the migration starts nothing that keeps running after it commits');
 });
 
-test('0220 cannot reach the ruler it stops protecting', () => {
+test('0223 cannot reach the ruler it stops protecting', () => {
   const sql = removalMigration();
   // Unit (h)/(i): the ruler's CONTENT is not what is being removed. The migration names no
   // acceptance RELATION in any statement, so no criterion's text or verification_method can move

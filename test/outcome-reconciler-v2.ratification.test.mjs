@@ -26,7 +26,7 @@ assert.ok(EVIDENCE_PATH, 'OWNER_RATIFICATION_EVIDENCE_PATH is required');
  *
  * This suite used to prove a signature protocol. 0218 deleted the queue and kept one narrow thing
  * beside it -- an agent must not silently rewrite the standard it is measured against. On
- * 2026-09-01 the account owner decided to remove that too, so 0220 deletes
+ * 2026-09-01 the account owner decided to remove that too, so 0223 deletes
  * `project_criteria_proposal` whole: the relation, its six indexes, its nine stored functions,
  * both HTTP doors, the web card and the copy that described them.
  *
@@ -504,7 +504,7 @@ const PROPOSAL_FUNCTIONS = [
   'project_owner_decide_criteria_proposal',
   'project_propose_acceptance_criteria',
 ];
-const PROPOSAL_REMOVAL_MIGRATION_DIR = '0220_project_criteria_proposal_removal';
+const PROPOSAL_REMOVAL_MIGRATION_DIR = '0223_project_criteria_proposal_removal';
 const PROPOSAL_REMOVAL_MIGRATION = read(
   `src/apiserver/prisma/migrations/${PROPOSAL_REMOVAL_MIGRATION_DIR}/migration.sql`,
 );
@@ -1091,7 +1091,7 @@ test('(t) removing the envelope filed no owner decision', async () => {
 
   // Live, and the part a file scan cannot reach: re-cutting a contract under the new snapshot
   // derives no owner decision. (This test also used to check that a pending criteria proposal
-  // survived the re-cut. 0220 deleted proposals, so that half went with them.)
+  // survived the re-cut. 0223 deleted proposals, so that half went with them.)
   const fixture = await createProject('envelope-removal-negative');
   // 0221 removed the persistent coordinator's request table, so "no owner decision was derived"
   // is now checked as absence of the relation rather than as a count that cannot move.
