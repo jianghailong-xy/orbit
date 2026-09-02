@@ -75,7 +75,7 @@ test('(a) the fast gate is a named entry point with the three stages it promises
   assert.equal(plan.status, 0, plan.stderr);
   const output = `${plan.stdout}${plan.stderr}`;
   assert.match(output, /fast-gate \[1\/3\]: build orphans/u);
-  assert.match(output, /stage 2 would run: tsc -p tsconfig\.test\.json --noEmit/u);
+  assert.match(output, /stage 2 would run: tsc -p tsconfig\.outcome-reconciler\.json --noEmit/u);
   assert.match(output, /stage 3 would run \d+ spec\(s\)/u);
 });
 
@@ -101,6 +101,24 @@ test('(b) the gate states its own budget and reports the wall clock it took', ()
   // to ignore, and this one has to be believed the one time it is right.
   assert.match(gate, /OVER BUDGET/u);
   assert.doesNotMatch(gate, /OVER BUDGET[\s\S]{0,200}exit 1/u);
+});
+
+test('(b) the gate typechecks against this tree\'s own Prisma Client, not a shared one', () => {
+  // `@prisma/client` resolves through node_modules, which a worktree shares with the main
+  // checkout: a `prisma generate` in any concurrent session replaces it, and a gate that reads it
+  // goes red over models this tree never touched. Observed while this gate was written -- twenty
+  // errors, none about the change, on a tree the full run then passed 361/361.
+  const gate = read(GATE);
+  assert.match(gate, /tsc -p tsconfig\.outcome-reconciler\.json --noEmit/u);
+  assert.doesNotMatch(gate, /tsc -p tsconfig\.test\.json/u);
+  assert.match(gate, /CLIENT="\$API\/build\/node_modules\/@prisma\/client"/u);
+  // The same config, and therefore the same client, that the full run compiles the cases with.
+  assert.match(read(FULL_API), /tsc -p tsconfig\.outcome-reconciler\.json/u);
+  const config = JSON.parse(read('src/apiserver/tsconfig.outcome-reconciler.json')) as {
+    compilerOptions: { paths: Record<string, string[]> };
+  };
+  assert.deepEqual(config.compilerOptions.paths['@prisma/client'],
+    ['./build/node_modules/@prisma/client']);
 });
 
 // (f) -------------------------------------------------------------------------------------------

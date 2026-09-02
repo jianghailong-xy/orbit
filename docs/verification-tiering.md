@@ -30,8 +30,17 @@ Three stages, in this order:
    saw. The full run enumerates `src/apiserver/build/**/*.spec.js`, so every stale artifact becomes
    an extra case run against a tree that no longer contains what it tests. Three of them turned
    into three phantom reds in one evening. Fix: `rm -rf src/apiserver/build`.
-2. **`tsc -p tsconfig.test.json --noEmit`.** `--noEmit` on purpose: this stage must not be able to
-   leave an artifact behind, because stage 1 is the thing that notices artifacts.
+2. **`tsc -p tsconfig.outcome-reconciler.json --noEmit`.** The same config, and therefore the same
+   isolated Prisma Client, that the full run compiles the cases with — generated from *this* tree's
+   schema into `build/node_modules`. `tsconfig.test.json` would resolve `@prisma/client` through
+   `node_modules`, which a worktree shares with the main checkout, so a `prisma generate` in any
+   concurrent session turns this gate red over models the change never touched (observed: twenty
+   errors on a tree the full run then passed 361/361). A gate somebody else's schema can redden is
+   a gate people learn to ignore. `--noEmit` on purpose: this stage must not be able to leave an
+   artifact behind, because stage 1 is the thing that notices artifacts.
+
+   Measured, `origin/main` + node 26, 8 cores: **16s** on a clean tree, **22s** in a fresh worktree
+   that has to generate the client first, **33s** carrying two changed specs (21 tests).
 3. **The specs this change is answerable for.** A changed spec selects itself; a changed source
    file selects its `.spec.ts` / `.pg.spec.ts` / `.http.spec.ts` siblings; anything else selects
    nothing. `.pg` specs are listed but deferred — they need the disposable server the full run

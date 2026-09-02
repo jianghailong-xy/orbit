@@ -100,7 +100,7 @@ done
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "==> fast-gate: plan for ${#CHANGED[@]} changed path(s) against ${BASE:0:12}"
-  echo "==> fast-gate: stage 2 would run: tsc -p tsconfig.test.json --noEmit"
+  echo "==> fast-gate: stage 2 would run: tsc -p tsconfig.outcome-reconciler.json --noEmit"
   echo "==> fast-gate: stage 3 would run ${#RUNNABLE[@]} spec(s)"
   [ "${#RUNNABLE[@]}" = 0 ] || printf '    run      %s\n' "${RUNNABLE[@]}"
   [ "${#DEFERRED[@]}" = 0 ] || printf '    deferred %s\n' "${DEFERRED[@]}"
@@ -108,11 +108,32 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------
-# Stage 2: types. --noEmit on purpose: this stage must not be able to leave an artifact behind,
-# because stage 1 is the thing that notices artifacts.
+# Stage 2: types, against the same isolated Prisma Client the full run compiles against.
+#
+# `tsconfig.test.json` resolves `@prisma/client` through node_modules, which a worktree shares with
+# the main checkout -- so a `prisma generate` in ANY concurrent session replaces it, and this gate
+# goes red over models this tree never touched. That happened while this gate was being written:
+# twenty errors, none of them about the change, on a tree the full run then passed 361/361. A gate
+# that can be turned red by somebody else's schema is a gate people learn to ignore, so it reads
+# the client generated from THIS tree's schema, exactly as the full run does.
+#
+# --noEmit on purpose: this stage must not be able to leave an artifact behind, because stage 1 is
+# the thing that notices artifacts. The generated client lives under `build/node_modules`, which
+# stage 1 prunes.
 # ---------------------------------------------------------------------------------------------
 echo '==> fast-gate [2/3]: tsc --noEmit'
-( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.test.json --noEmit )
+CLIENT="$API/build/node_modules/@prisma/client"
+if [ ! -f "$CLIENT/index.d.ts" ] || [ "$API/prisma/schema.prisma" -nt "$CLIENT/index.d.ts" ]; then
+  echo '    generating the isolated Prisma Client for this tree'
+  node "$REPO/scripts/outcome-reconciler-isolated-prisma-schema.mjs" \
+    "$API/prisma/schema.prisma" "$API/build/outcome-reconciler-prisma.schema.prisma" "$CLIENT"
+  ( cd "$API" && ./node_modules/.bin/prisma format \
+    --schema build/outcome-reconciler-prisma.schema.prisma >/dev/null )
+  ( cd "$API" && ./node_modules/.bin/prisma generate \
+    --schema build/outcome-reconciler-prisma.schema.prisma >/dev/null )
+fi
+( cd "$REPO" && npm run build -w @orbit/shared >/dev/null )
+( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.outcome-reconciler.json --noEmit )
 
 # ---------------------------------------------------------------------------------------------
 # Stage 3: the specs this change is answerable for.
@@ -123,7 +144,7 @@ if [ "${#DEFERRED[@]}" -gt 0 ]; then
 fi
 if [ "${#RUNNABLE[@]}" -gt 0 ]; then
   printf '    %s\n' "${RUNNABLE[@]}"
-  ( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.test.json )
+  ( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.outcome-reconciler.json )
   COMPILED=()
   for SPEC in "${RUNNABLE[@]}"; do
     RELATIVE="${SPEC#src/apiserver/src/}"
