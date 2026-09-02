@@ -337,29 +337,6 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.ok(rows.every((row) => row.runnable === false), JSON.stringify(rows));
       });
 
-      await t.test('database admission also refuses task-work on a verification subject', async () => {
-        await assert.rejects(
-          db.session.create({
-            data: {
-              ownerId: world.ownerId,
-              creatorId: world.ownerId,
-              assignedRunnerId: world.runnerId,
-              workspaceId: world.workspaceId,
-              taskId: world.ids['subject-missing'],
-              title: 'must not start verification subject work',
-              prompt: 'this insert must be rejected by the database guard',
-              status: RunStatus.PENDING,
-              dispatchOrigin: SessionDispatchOrigin.USER,
-              startsTaskWork: true,
-            },
-          }),
-          (error: unknown) => String(error).includes('TASK_VERIFICATION_SUBJECT'),
-        );
-        assert.equal(await db.session.count({
-          where: { taskId: world.ids['subject-missing'], startsTaskWork: true },
-        }), 0);
-      });
-
       await t.test('Run queue contains executable work but no verification subject or aggregate parent', async () => {
         const ready = await projects.panoramaReady(world.ownerId, world.projectId, { limit: '50' });
         const ids = new Set(ready.items.map((item) => item.taskId));

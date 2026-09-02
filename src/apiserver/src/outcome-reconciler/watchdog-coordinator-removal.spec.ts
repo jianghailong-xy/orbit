@@ -166,13 +166,24 @@ test('(a) 0221 drops every table, view, function and trigger the four migrations
   }
 });
 
-test('(a) the four migrations stay in the ledger and 0221 is the newest', () => {
+test('(a) the four migrations stay in the ledger and nothing after 0221 replays them', () => {
   const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
-  assert.equal(names.at(-1), REMOVAL_DIR, 'nothing may replay after the removal');
+  assert.ok(names.includes(REMOVAL_DIR),
+    'the removal must stay in the ledger, so a database that applied it can replay it');
   for (const retired of ['0198_outcome_persistent_coordinator',
     '0199_outcome_independent_watchdog_slo_security', '0206_watchdog_current_binding',
     '0214_watchdog_goal_progress_channel']) {
     assert.ok(names.includes(retired), `${retired} must remain in the append-only ledger`);
+  }
+  // What "0221 is the newest migration" was reaching for. Being last in the repository is not that
+  // claim: it says the schema may never move again, so the next migration to land fails it whatever
+  // it does. The claim worth keeping is that nothing AFTER this removal re-creates what it dropped,
+  // and that is what the ledger is read for here.
+  for (const later of names.filter((name) => name > REMOVAL_DIR)) {
+    const sql = readFileSync(path.join(MIGRATIONS, later, 'migration.sql'), 'utf8');
+    for (const name of DROPPED_NAMES) {
+      assert.equal(sql.includes(name), false, `${later} puts ${name} back`);
+    }
   }
 });
 
@@ -301,7 +312,17 @@ test('(i) this is subtraction: no new service, no new resident process', () => {
 });
 
 test('(i) the removal deletes far more than it adds', () => {
-  const diff = execFileSync('git', ['diff', '--numstat', 'main...HEAD', '--',
+  // Anchored to the commit that introduced this removal rather than to `main...HEAD`. The branch
+  // form asked whether whatever branch you happen to be on is a net deletion, which is two
+  // different wrong questions: against main it compares main with itself and reads `0 > 0`, and on
+  // every later branch it turns one task's proof into a constraint on somebody else's work. The
+  // fact being preserved is about THIS removal, and the commit carrying it is where it is legible.
+  const commit = execFileSync('git', [
+    'log', '--diff-filter=A', '--format=%H', '-1', '--',
+    `src/apiserver/prisma/migrations/${REMOVAL_DIR}/migration.sql`,
+  ], { cwd: ROOT, encoding: 'utf8' }).trim();
+  assert.match(commit, /^[0-9a-f]{40}$/, 'the removal migration must be reachable in the history');
+  const diff = execFileSync('git', ['show', '--numstat', '--format=', commit, '--',
     ':!package-lock.json'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   let added = 0;
   let deleted = 0;
@@ -311,5 +332,5 @@ test('(i) the removal deletes far more than it adds', () => {
     added += Number(plus);
     deleted += Number(minus);
   }
-  assert.ok(deleted > added, `the branch added ${added} and deleted ${deleted} lines`);
+  assert.ok(deleted > added, `${commit} added ${added} and deleted ${deleted} lines`);
 });
