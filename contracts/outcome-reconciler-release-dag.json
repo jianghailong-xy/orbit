@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "69c72e444f4be075bb64fceda6c9dba4f95ab98c9f31bfb13605d352ff5b8a3e",
+  "declaredDagPlanDigest": "8599527f22bfd309ff35a890cc267ab599ae0e0f50f5374e996b8b0ceb750da6",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34H5SHbLmdFIEgEj5jVzZ",
   "supersededAttempt": {
@@ -58,7 +58,9 @@
     ],
     "classificationSummary": {
       "productRegression": [],
-      "staleTestFixtures": ["CURRENT_WORK_TRANSACTION_DOUBLE_DRIFT"],
+      "staleTestFixtures": [
+        "CURRENT_WORK_TRANSACTION_DOUBLE_DRIFT"
+      ],
       "concurrencyIsolation": [],
       "manifestBinding": []
     },
@@ -151,7 +153,11 @@
     "marginFactor": 2,
     "minimumTimeoutSeconds": 60,
     "quantumSeconds": 10,
-    "unobservedNodes": ["manifest-aggregate", "publish-evidence-cut", "release-live-state-boundary"],
+    "unobservedNodes": [
+      "manifest-aggregate",
+      "publish-evidence-cut",
+      "release-live-state-boundary"
+    ],
     "method": "timeoutSeconds >= ceil(observedMaximumSeconds * marginFactor); the declared value is max(minimumTimeoutSeconds, that floor rounded up to quantumSeconds). Nodes with no completed observation keep their prior declaration and are listed in unobservedNodes. The four Full API shards partition one case set, so each carries the whole family's ceiling. Durations come from 164 release DAG node receipts; the one TIMED_OUT receipt (prepare-build, 958.9s under host starvation) is excluded because a run killed by its own timeout never reported how long it needed.",
     "observedMaximumSeconds": {
       "authoritative-target": 132,
@@ -192,7 +198,10 @@
       "sourceBranch": "orbit/45-release-dag-bbaa16",
       "targetBranch": "main",
       "recordedBy": "AGENT",
-      "results": ["MERGED", "ALREADY_MERGED"]
+      "results": [
+        "MERGED",
+        "ALREADY_MERGED"
+      ]
     },
     "checkoutMustEqualTarget": true,
     "trackedCheckoutMustBeClean": true,
@@ -340,15 +349,15 @@
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs"
     ],
     "digests": {
-      "package.json": "1cdcb4b6eeb188a61c2aac2284ba8c65d8b63a937cb710d22846b3f2712f8dd4",
+      "package.json": "29e7f983431aad6fa6a99862bf74551279426b08d1392902f7c00ee00bf6f4ed",
       "package-lock.json": "50bc5c50f24724a9860ae8cad2fe5cfc55d4297bd79dca7cdd3bf7608642887c",
       "contracts/outcome-reconciler-authoritative-target.json": "21faa58bdc22dbc468f793343cfd0f31125f157440704596141e20fd3e7d2ee3",
-      "contracts/outcome-reconciler-release-frontier.json": "24342d1028c0a99dad4b42d6c7a8221d20238e0132b0a9980bd43d4c104e1aa6",
+      "contracts/outcome-reconciler-release-frontier.json": "6d24aa082b75ab897f7cc3090e161b46a65564648a2c052e569799995179de18",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "824e2ee95da23ce30677cb17d50717005a62badb67e23c926b0eb12f0f138339",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "eb83cc6a08d8eca609a1d30aba2622dec0c1eac87a567a2f3a0d58a1280633cc",
-      "src/apiserver/src/runner-api/inbox-lease-generation.spec.ts": "06579d2727dc2f315bded7652955fe22b53175f3662b7f3c2b07ec9550d0dffd",
-      "src/apiserver/src/runner-api/runner-write-lease-owner.spec.ts": "4026bd62dea8cdd2be16d73d57315d7372f91f03cb874ddafa7975683274f10e",
+      "src/apiserver/src/runner-api/inbox-lease-generation.spec.ts": "d2a1622ce78807c44de50d4a8c8adf8e86baf139652fae6f5c15d226341ad3ee",
+      "src/apiserver/src/runner-api/runner-write-lease-owner.spec.ts": "dce70b95c9112aff083bba75281838cbaa412a991fadb7a5e5d97df851bfce80",
       "src/web/src/components/ProjectReadyToRun.test.tsx": "84973ea8d2c1710e4c02e0dee7eebe414372baaa5723e4e327d33990f63ad42c",
       "scripts/lib/outcome-reconciler-release-dag.sh": "5710c06e0ac173cc0d59c3b3387b122a3deb4b373df18e12a8d264d889826da8",
       "scripts/outcome-reconciler-full-api-case.sh": "1b51e134b73ff877151193e28ffa9e66cd0c8c7b6e3d8dad12ce92cbd627f662",
@@ -360,15 +369,15 @@
       "scripts/outcome-reconciler-release-dag-lib.mjs": "7f06ed3eebe570f06adb48399124b81fbfcfe0b8c3c4f72ee80dc3cc2dbf2e97",
       "scripts/outcome-reconciler-release-dag-prepare.sh": "920de903577e6f0082ad212580aff9839aef6f08a9a761c944637cffe232391d",
       "scripts/outcome-reconciler-release-dag-prisma-fixture.mjs": "ecd95eda1e601cae804139d5c8ba743cc3955df512de9d7cd61e4cb0d61be7c5",
-      "scripts/outcome-reconciler-release-dag-regression-focus.mjs": "05de71c10bba951720af4ab948e1cd593daf4b6b20c6652ad17ea2d58b3f2fbb",
-      "scripts/outcome-reconciler-release-dag-regression-rebind-manifest.mjs": "bb6c9b542a4538b5fe3bb75a8fdb12a5a18c3a84e0fdddacb8fa14acfcc1107f",
+      "scripts/outcome-reconciler-release-dag-regression-focus.mjs": "5a642952969e7d86dc01ce799a569e304112d27006dc05f5f6fa6b57d29cd5b4",
+      "scripts/outcome-reconciler-release-dag-regression-rebind-manifest.mjs": "a7c4c2e3b2d54d64125a9c8c37300a27e3670c37be3f370adc60fec8f4bbcd23",
       "scripts/outcome-reconciler-release-dag-regression-rebind.sh": "4e0267d9606113c25ec6994a6f4e2a70b76aa3579f3185bbf6ac4b565a1bb2f2",
       "scripts/outcome-reconciler-release-dag-step.mjs": "409c13384715aaa3260e7714ce379816f3e4b6de9011b1e45d925fce3a4e0dd6",
       "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
       "scripts/outcome-reconciler-release-dag.mjs": "a139e0a2da523b4d0cc44cfdba9e8ee269496f99030db1a8ef86e5d98c28124e",
       "test/fixtures/release-dag-disposable-exit-path.mjs": "14328f8254aff4b852fd13e54da46c18d2ad2b6f6383662078261797a039465f",
       "test/outcome-reconciler-release-dag-plan.test.mjs": "5fb973e0f36148c384ca1fda5552e4e0e06ff953a772754150505892766c7d15",
-      "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "c7ee0ed206243f318bb02f92d8a210f74e99f20ddffcedc9aa7f91e991d342c5"
+      "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "6f45433309bd0fa3f79bc53087791221e6f8a93a8f6ebb3f2a1476505295190a"
     }
   },
   "inputScopes": {
@@ -381,54 +390,106 @@
       {
         "name": "release-round-binding",
         "selectors": [
-          { "path": "contracts/outcome-reconciler-release-dag.json" },
-          { "path": "contracts/outcome-reconciler-authoritative-target.json" },
-          { "path": "contracts/outcome-reconciler-release-frontier.json" }
+          {
+            "path": "contracts/outcome-reconciler-release-dag.json"
+          },
+          {
+            "path": "contracts/outcome-reconciler-authoritative-target.json"
+          },
+          {
+            "path": "contracts/outcome-reconciler-release-frontier.json"
+          }
         ]
       },
       {
         "name": "apiserver-test-support",
-        "selectors": [{ "prefix": "src/apiserver/src/test-support/" }]
+        "selectors": [
+          {
+            "prefix": "src/apiserver/src/test-support/"
+          }
+        ]
       },
       {
         "name": "apiserver-spec",
-        "selectors": [{ "prefix": "src/apiserver/src/", "suffix": ".spec.ts" }]
+        "selectors": [
+          {
+            "prefix": "src/apiserver/src/",
+            "suffix": ".spec.ts"
+          }
+        ]
       },
       {
         "name": "apiserver-prisma",
-        "selectors": [{ "prefix": "src/apiserver/prisma/" }]
+        "selectors": [
+          {
+            "prefix": "src/apiserver/prisma/"
+          }
+        ]
       },
       {
         "name": "apiserver-src",
-        "selectors": [{ "prefix": "src/apiserver/" }]
+        "selectors": [
+          {
+            "prefix": "src/apiserver/"
+          }
+        ]
       },
       {
         "name": "shared-src",
-        "selectors": [{ "prefix": "src/shared/" }]
+        "selectors": [
+          {
+            "prefix": "src/shared/"
+          }
+        ]
       },
       {
         "name": "web-src",
-        "selectors": [{ "prefix": "src/web/" }]
+        "selectors": [
+          {
+            "prefix": "src/web/"
+          }
+        ]
       },
       {
         "name": "swift-src",
-        "selectors": [{ "prefix": "src/macos/" }, { "prefix": "src/ios/" }]
+        "selectors": [
+          {
+            "prefix": "src/macos/"
+          },
+          {
+            "prefix": "src/ios/"
+          }
+        ]
       },
       {
         "name": "go-src",
-        "selectors": [{ "prefix": "src/runner-go/" }]
+        "selectors": [
+          {
+            "prefix": "src/runner-go/"
+          }
+        ]
       },
       {
         "name": "dependency-manifest",
         "selectors": [
-          { "path": "package.json" },
-          { "path": "package-lock.json" },
-          { "path": "tsconfig.base.json" }
+          {
+            "path": "package.json"
+          },
+          {
+            "path": "package-lock.json"
+          },
+          {
+            "path": "tsconfig.base.json"
+          }
         ]
       },
       {
         "name": "unclassified",
-        "selectors": [{ "prefix": "" }]
+        "selectors": [
+          {
+            "prefix": ""
+          }
+        ]
       }
     ]
   },
@@ -437,16 +498,48 @@
     "platform": "linux",
     "postgresImage": "postgres:16-alpine",
     "swiftImage": "swift:6.1",
-    "requiredTools": ["node", "npm", "git", "docker", "go", "chromium"],
-    "boundInputs": ["PUBLIC_ORIGIN"],
+    "requiredTools": [
+      "node",
+      "npm",
+      "git",
+      "docker",
+      "go",
+      "chromium"
+    ],
+    "boundInputs": [
+      "PUBLIC_ORIGIN"
+    ],
     "versionCommands": {
-      "node": ["node", "--version"],
-      "npm": ["npm", "--version"],
-      "git": ["git", "--version"],
-      "dockerClient": ["docker", "--version"],
-      "dockerServer": ["docker", "version", "--format", "{{.Server.Version}}"],
-      "go": ["go", "version"],
-      "chromium": ["chromium", "--version"]
+      "node": [
+        "node",
+        "--version"
+      ],
+      "npm": [
+        "npm",
+        "--version"
+      ],
+      "git": [
+        "git",
+        "--version"
+      ],
+      "dockerClient": [
+        "docker",
+        "--version"
+      ],
+      "dockerServer": [
+        "docker",
+        "version",
+        "--format",
+        "{{.Server.Version}}"
+      ],
+      "go": [
+        "go",
+        "version"
+      ],
+      "chromium": [
+        "chromium",
+        "--version"
+      ]
     },
     "secretPolicy": "SERIALIZE_ALLOWLISTED_NON_SECRET_ENVIRONMENT_AND_REDACT_LOG_VALUES"
   },
@@ -469,24 +562,71 @@
   "hostResourceEnvelope": {
     "cpu": 8,
     "memoryMiB": 12288,
-    "persistentPostgresReservation": { "cpu": 2, "memoryMiB": 3072 }
+    "persistentPostgresReservation": {
+      "cpu": 2,
+      "memoryMiB": 3072
+    }
   },
   "postgresIsolation": {
     "schemaVersion": 1,
     "allocator": "ATTEMPT_BOUND_NODE_AND_CASE_DISPOSABLE_DATABASE_ROLE_V2",
     "concurrentShardPolicy": "UNIQUE_DATABASE_AND_ROLE_PER_GLOBAL_CASE_INDEX",
     "nodes": {
-      "suite-bootstrap": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "suite-acceptance-runtime": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "suite-ratification": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "suite-work-overview-readiness": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api-inventory": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api-shard-0": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api-shard-1": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api-shard-2": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api-shard-3": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api-serial": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true },
-      "full-api": { "postgresDatabasePrefix": "pccrd", "postgresRolePrefix": "pccrd", "destructiveCoordinatorSpecs": true }
+      "suite-bootstrap": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "suite-acceptance-runtime": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "suite-ratification": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "suite-work-overview-readiness": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api-inventory": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api-shard-0": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api-shard-1": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api-shard-2": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api-shard-3": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api-serial": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      },
+      "full-api": {
+        "postgresDatabasePrefix": "pccrd",
+        "postgresRolePrefix": "pccrd",
+        "destructiveCoordinatorSpecs": true
+      }
     }
   },
   "checkpointPolicy": {
@@ -510,21 +650,64 @@
     "resumeOnlyIncompleteNodes": true
   },
   "legacyEntrypoints": [
-    { "name": "bootstrap", "packageScript": "test:outcome-reconciler:bootstrap", "nodeId": "suite-bootstrap" },
-    { "name": "contract", "packageScript": "test:outcome-reconciler:contract", "nodeId": "suite-contract" },
-    { "name": "protocol", "packageScript": "test:outcome-reconciler:protocol", "nodeId": "suite-protocol" },
-    { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "nodeId": "suite-acceptance-runtime" },
-    { "name": "ratification", "packageScript": "test:outcome-reconciler:ratification", "nodeId": "suite-ratification" },
-    { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "nodeId": "suite-work-overview-readiness" },
-    { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "nodeId": "suite-canary" },
-    { "name": "full-api", "packageScript": "test:outcome-reconciler:full-api", "nodeId": "full-api" },
-    { "name": "full-clients", "packageScript": "test:outcome-reconciler:full-clients", "nodeId": "full-clients" },
-    { "name": "authoritative-target", "packageScript": "test:outcome-reconciler:authoritative-target", "nodeId": "authoritative-target" }
+    {
+      "name": "bootstrap",
+      "packageScript": "test:outcome-reconciler:bootstrap",
+      "nodeId": "suite-bootstrap"
+    },
+    {
+      "name": "contract",
+      "packageScript": "test:outcome-reconciler:contract",
+      "nodeId": "suite-contract"
+    },
+    {
+      "name": "protocol",
+      "packageScript": "test:outcome-reconciler:protocol",
+      "nodeId": "suite-protocol"
+    },
+    {
+      "name": "acceptance-runtime",
+      "packageScript": "test:outcome-reconciler:acceptance-runtime",
+      "nodeId": "suite-acceptance-runtime"
+    },
+    {
+      "name": "ratification",
+      "packageScript": "test:outcome-reconciler:ratification",
+      "nodeId": "suite-ratification"
+    },
+    {
+      "name": "work-overview-readiness",
+      "packageScript": "test:outcome-reconciler:work-overview-readiness",
+      "nodeId": "suite-work-overview-readiness"
+    },
+    {
+      "name": "canary",
+      "packageScript": "test:outcome-reconciler:canary",
+      "nodeId": "suite-canary"
+    },
+    {
+      "name": "full-api",
+      "packageScript": "test:outcome-reconciler:full-api",
+      "nodeId": "full-api"
+    },
+    {
+      "name": "full-clients",
+      "packageScript": "test:outcome-reconciler:full-clients",
+      "nodeId": "full-clients"
+    },
+    {
+      "name": "authoritative-target",
+      "packageScript": "test:outcome-reconciler:authoritative-target",
+      "nodeId": "authoritative-target"
+    }
   ],
   "legacyDirectEntrypoints": [
     {
       "name": "release-live-state",
-      "command": ["node", "scripts/outcome-reconciler-release-live-state.mjs"],
+      "command": [
+        "node",
+        "scripts/outcome-reconciler-release-live-state.mjs"
+      ],
       "nodeId": "release-live-state-boundary"
     }
   ],
@@ -532,121 +715,996 @@
     {
       "id": "preflight-binding",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["dependency-manifest", "release-round-binding", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "release-round-binding",
+          "unclassified"
+        ]
+      },
       "kind": "preflight",
       "dependsOn": [],
-      "command": ["node", "scripts/outcome-reconciler-release-dag-step.mjs", "preflight", "${RUN_ROOT}/preflight.json"],
+      "command": [
+        "node",
+        "scripts/outcome-reconciler-release-dag-step.mjs",
+        "preflight",
+        "${RUN_ROOT}/preflight.json"
+      ],
       "timeoutSeconds": 60,
-      "resources": { "cpu": 1, "memoryMiB": 256, "io": 1 },
-      "outputs": ["${RUN_ROOT}/preflight.json"],
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 256,
+        "io": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/preflight.json"
+      ],
       "cacheable": true,
       "testBearing": false
     },
     {
       "id": "prepare-dependencies",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["dependency-manifest", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "unclassified"
+        ]
+      },
       "kind": "preparation",
-      "dependsOn": ["preflight-binding"],
-      "command": ["bash", "scripts/outcome-reconciler-release-dag-prepare.sh", "dependencies", "${RUN_ROOT}/dependency-context.json"],
+      "dependsOn": [
+        "preflight-binding"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-prepare.sh",
+        "dependencies",
+        "${RUN_ROOT}/dependency-context.json"
+      ],
       "timeoutSeconds": 60,
-      "resources": { "cpu": 1, "memoryMiB": 2048, "io": 2 },
-      "outputs": ["${RUN_ROOT}/dependency-context.json"],
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 2048,
+        "io": 2
+      },
+      "outputs": [
+        "${RUN_ROOT}/dependency-context.json"
+      ],
       "cacheable": true,
       "testBearing": false
     },
     {
       "id": "prepare-prisma",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
       "kind": "preparation",
-      "dependsOn": ["prepare-dependencies"],
-      "command": ["bash", "scripts/outcome-reconciler-release-dag-prepare.sh", "prisma", "${RUN_ROOT}/prisma-context.json"],
+      "dependsOn": [
+        "prepare-dependencies"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-prepare.sh",
+        "prisma",
+        "${RUN_ROOT}/prisma-context.json"
+      ],
       "timeoutSeconds": 330,
-      "resources": { "cpu": 2, "memoryMiB": 2048, "io": 2 },
-      "outputs": ["${RUN_ROOT}/prisma-context.json"],
+      "resources": {
+        "cpu": 2,
+        "memoryMiB": 2048,
+        "io": 2
+      },
+      "outputs": [
+        "${RUN_ROOT}/prisma-context.json"
+      ],
       "cacheable": true,
       "testBearing": false
     },
     {
       "id": "prepare-build",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified", "web-src"] },
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified",
+          "web-src"
+        ]
+      },
       "kind": "preparation",
-      "dependsOn": ["prepare-prisma"],
-      "command": ["bash", "scripts/outcome-reconciler-release-dag-prepare.sh", "build", "${RUN_ROOT}/build-context.json"],
+      "dependsOn": [
+        "prepare-prisma"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-prepare.sh",
+        "build",
+        "${RUN_ROOT}/build-context.json"
+      ],
       "timeoutSeconds": 200,
-      "resources": { "cpu": 4, "memoryMiB": 4096, "io": 2 },
-      "outputs": ["${RUN_ROOT}/build-context.json"],
+      "resources": {
+        "cpu": 4,
+        "memoryMiB": 4096,
+        "io": 2
+      },
+      "outputs": [
+        "${RUN_ROOT}/build-context.json"
+      ],
       "cacheable": true,
       "testBearing": false
     },
     {
       "id": "prepare-postgres",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
       "kind": "preparation",
-      "dependsOn": ["prepare-prisma"],
-      "command": ["bash", "scripts/outcome-reconciler-release-dag-prepare.sh", "postgres", "${RUN_ROOT}/postgres-context.json"],
+      "dependsOn": [
+        "prepare-prisma"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-prepare.sh",
+        "postgres",
+        "${RUN_ROOT}/postgres-context.json"
+      ],
       "timeoutSeconds": 150,
-      "resources": { "cpu": 2, "memoryMiB": 3072, "postgres": 4, "dockerHeavy": 1, "io": 1 },
-      "outputs": ["${RUN_ROOT}/postgres-context.json"],
+      "resources": {
+        "cpu": 2,
+        "memoryMiB": 3072,
+        "postgres": 4,
+        "dockerHeavy": 1,
+        "io": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/postgres-context.json"
+      ],
       "cacheable": true,
       "testBearing": false
     },
-
-    { "id": "suite-bootstrap", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:bootstrap"], "timeoutSeconds": 130, "resources": { "cpu": 1, "memoryMiB": 1024, "postgres": 1 }, "outputs": ["build/outcome-reconciler-bootstrap-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "suite-contract", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build"], "command": ["npm", "run", "test:outcome-reconciler:contract"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 768 }, "outputs": ["build/outcome-reconciler-v2-contract-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true },
-    { "id": "suite-protocol", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build"], "command": ["npm", "run", "test:outcome-reconciler:protocol"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 768 }, "outputs": ["build/outcome-reconciler-v2-protocol-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true },
-    { "id": "suite-acceptance-runtime", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:acceptance-runtime"], "timeoutSeconds": 620, "resources": { "cpu": 2, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["build/executable-acceptance-runtime-evidence.json", "build/executable-acceptance-runtime-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "suite-ratification", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:ratification"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1024, "postgres": 1 }, "outputs": ["build/outcome-reconciler-v2-ratification-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "suite-work-overview-readiness", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "shared-src", "unclassified", "web-src"] },"kind": "named-suite", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["npm", "run", "test:outcome-reconciler:work-overview-readiness"], "timeoutSeconds": 100, "resources": { "cpu": 2, "memoryMiB": 2048, "postgres": 1 }, "outputs": ["build/work-overview-readiness-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "suite-canary", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["apiserver-prisma", "apiserver-src", "dependency-manifest", "go-src", "shared-src", "unclassified"] },"kind": "restored-suite", "dependsOn": ["suite-acceptance-runtime"], "command": ["npm", "run", "test:outcome-reconciler:canary"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1024 }, "outputs": ["build/outcome-reconciler-v2-canary-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true },
-
-    { "id": "full-api-inventory", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "matrix-preparation", "dependsOn": ["prepare-build", "prepare-postgres"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "inventory", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 512, "io": 1 }, "outputs": ["${RUN_ROOT}/full-api-inventory.json"], "cacheable": true, "testBearing": false, "usesSharedBuild": true, "usesSharedPostgres": true },
-    { "id": "full-api-shard-0", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "full-api-shard", "dependsOn": ["full-api-inventory"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "shard", "0", "4", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 1860, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["${RUN_ROOT}/full-api-shard-0.json", "${RUN_ROOT}/full-api-shard-0.tap"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "partition": { "index": 0, "count": 4, "class": "parallel" } },
-    { "id": "full-api-shard-1", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "full-api-shard", "dependsOn": ["full-api-inventory"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "shard", "1", "4", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 1860, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["${RUN_ROOT}/full-api-shard-1.json", "${RUN_ROOT}/full-api-shard-1.tap"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "partition": { "index": 1, "count": 4, "class": "parallel" } },
-    { "id": "full-api-shard-2", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "full-api-shard", "dependsOn": ["full-api-inventory"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "shard", "2", "4", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 1860, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["${RUN_ROOT}/full-api-shard-2.json", "${RUN_ROOT}/full-api-shard-2.tap"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "partition": { "index": 2, "count": 4, "class": "parallel" } },
-    { "id": "full-api-shard-3", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "full-api-shard", "dependsOn": ["full-api-inventory"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "shard", "3", "4", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 1860, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["${RUN_ROOT}/full-api-shard-3.json", "${RUN_ROOT}/full-api-shard-3.tap"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "partition": { "index": 3, "count": 4, "class": "parallel" } },
-    { "id": "full-api-serial", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "full-api-shard", "dependsOn": ["full-api-shard-0", "full-api-shard-1", "full-api-shard-2", "full-api-shard-3"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "serial", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 270, "resources": { "cpu": 1, "memoryMiB": 1536, "postgres": 1 }, "outputs": ["${RUN_ROOT}/full-api-serial.json", "${RUN_ROOT}/full-api-serial.tap"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true, "partition": { "class": "serial" } },
-    { "id": "full-api", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["apiserver-prisma", "apiserver-spec", "apiserver-src", "apiserver-test-support", "dependency-manifest", "shared-src", "unclassified"] },"kind": "matrix-aggregate", "dependsOn": ["full-api-shard-0", "full-api-shard-1", "full-api-shard-2", "full-api-shard-3", "full-api-serial"], "command": ["bash", "scripts/outcome-reconciler-release-dag-full-api.sh", "aggregate", "${RUN_ROOT}/full-api-inventory.json"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 768, "io": 1 }, "outputs": ["build/outcome-reconciler-full-api-manifest.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true, "usesSharedPostgres": true },
-
-    { "id": "full-shared", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["dependency-manifest", "shared-src", "unclassified"] },"kind": "client-matrix", "dependsOn": ["prepare-build"], "command": ["bash", "scripts/outcome-reconciler-release-dag-client.sh", "shared"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 1536 }, "outputs": ["build/outcome-reconciler-full-shared.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true },
-    { "id": "full-web", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["dependency-manifest", "shared-src", "unclassified", "web-src"] },"kind": "client-matrix", "dependsOn": ["prepare-build"], "command": ["bash", "scripts/outcome-reconciler-release-dag-client.sh", "web"], "timeoutSeconds": 1220, "resources": { "cpu": 2, "memoryMiB": 3072 }, "outputs": ["build/outcome-reconciler-full-web.json"], "cacheable": true, "testBearing": true, "usesSharedBuild": true },
-    { "id": "full-go", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["dependency-manifest", "go-src", "unclassified"] },"kind": "client-matrix", "dependsOn": ["preflight-binding"], "command": ["bash", "scripts/outcome-reconciler-release-dag-client.sh", "go"], "environment": { "GOMAXPROCS": "2" }, "timeoutSeconds": 400, "resources": { "cpu": 2, "memoryMiB": 2048 }, "outputs": ["build/outcome-reconciler-full-go.jsonl"], "cacheable": true, "testBearing": true },
-    { "id": "full-swift", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["dependency-manifest", "swift-src", "unclassified"] },"kind": "client-matrix", "dependsOn": ["suite-acceptance-runtime"], "command": ["bash", "scripts/outcome-reconciler-release-dag-client.sh", "swift"], "timeoutSeconds": 300, "resources": { "cpu": 3, "memoryMiB": 4096, "dockerHeavy": 1 }, "outputs": ["build/outcome-reconciler-full-swift.log"], "cacheable": true, "testBearing": true },
-    { "id": "full-clients", "artifactBinding": "CONTENT_ONLY", "inputs": { "scopes": ["dependency-manifest", "go-src", "shared-src", "swift-src", "unclassified", "web-src"] },"kind": "matrix-aggregate", "dependsOn": ["full-shared", "full-web", "full-go", "full-swift"], "command": ["bash", "scripts/outcome-reconciler-release-dag-client.sh", "aggregate"], "timeoutSeconds": 60, "resources": { "cpu": 1, "memoryMiB": 768, "io": 1 }, "outputs": ["build/outcome-reconciler-full-clients-manifest.json"], "cacheable": true, "testBearing": true },
-
-    { "id": "authoritative-target", "artifactBinding": "BINDING_EMBEDDED", "inputs": { "scopes": ["dependency-manifest", "release-round-binding", "unclassified"] },"kind": "target-attestation", "dependsOn": ["preflight-binding"], "command": ["npm", "run", "test:outcome-reconciler:authoritative-target"], "timeoutSeconds": 270, "resources": { "cpu": 1, "memoryMiB": 768, "io": 1 }, "outputs": ["build/outcome-reconciler-authoritative-target-manifest.json"], "cacheable": true, "testBearing": false },
+    {
+      "id": "suite-bootstrap",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "go-src",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "named-suite",
+      "dependsOn": [
+        "prepare-build",
+        "prepare-postgres"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:bootstrap"
+      ],
+      "timeoutSeconds": 130,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1024,
+        "postgres": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-bootstrap-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true
+    },
+    {
+      "id": "suite-contract",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "named-suite",
+      "dependsOn": [
+        "prepare-build"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:contract"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 768
+      },
+      "outputs": [
+        "build/outcome-reconciler-v2-contract-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true
+    },
+    {
+      "id": "suite-protocol",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "named-suite",
+      "dependsOn": [
+        "prepare-build"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:protocol"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 768
+      },
+      "outputs": [
+        "build/outcome-reconciler-v2-protocol-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true
+    },
+    {
+      "id": "suite-acceptance-runtime",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "go-src",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "named-suite",
+      "dependsOn": [
+        "prepare-build",
+        "prepare-postgres"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:acceptance-runtime"
+      ],
+      "timeoutSeconds": 620,
+      "resources": {
+        "cpu": 2,
+        "memoryMiB": 1536,
+        "postgres": 1
+      },
+      "outputs": [
+        "build/executable-acceptance-runtime-evidence.json",
+        "build/executable-acceptance-runtime-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true
+    },
+    {
+      "id": "suite-ratification",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "named-suite",
+      "dependsOn": [
+        "prepare-build",
+        "prepare-postgres"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:ratification"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1024,
+        "postgres": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-v2-ratification-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true
+    },
+    {
+      "id": "suite-work-overview-readiness",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified",
+          "web-src"
+        ]
+      },
+      "kind": "named-suite",
+      "dependsOn": [
+        "prepare-build",
+        "prepare-postgres"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:work-overview-readiness"
+      ],
+      "timeoutSeconds": 100,
+      "resources": {
+        "cpu": 2,
+        "memoryMiB": 2048,
+        "postgres": 1
+      },
+      "outputs": [
+        "build/work-overview-readiness-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true
+    },
+    {
+      "id": "suite-canary",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-src",
+          "dependency-manifest",
+          "go-src",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "restored-suite",
+      "dependsOn": [
+        "suite-acceptance-runtime"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:canary"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1024
+      },
+      "outputs": [
+        "build/outcome-reconciler-v2-canary-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true
+    },
+    {
+      "id": "full-api-inventory",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "matrix-preparation",
+      "dependsOn": [
+        "prepare-build",
+        "prepare-postgres"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "inventory",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 512,
+        "io": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "cacheable": true,
+      "testBearing": false,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true
+    },
+    {
+      "id": "full-api-shard-0",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "full-api-shard",
+      "dependsOn": [
+        "full-api-inventory"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "shard",
+        "0",
+        "4",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 1860,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1536,
+        "postgres": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/full-api-shard-0.json",
+        "${RUN_ROOT}/full-api-shard-0.tap"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true,
+      "partition": {
+        "index": 0,
+        "count": 4,
+        "class": "parallel"
+      }
+    },
+    {
+      "id": "full-api-shard-1",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "full-api-shard",
+      "dependsOn": [
+        "full-api-inventory"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "shard",
+        "1",
+        "4",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 1860,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1536,
+        "postgres": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/full-api-shard-1.json",
+        "${RUN_ROOT}/full-api-shard-1.tap"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true,
+      "partition": {
+        "index": 1,
+        "count": 4,
+        "class": "parallel"
+      }
+    },
+    {
+      "id": "full-api-shard-2",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "full-api-shard",
+      "dependsOn": [
+        "full-api-inventory"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "shard",
+        "2",
+        "4",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 1860,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1536,
+        "postgres": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/full-api-shard-2.json",
+        "${RUN_ROOT}/full-api-shard-2.tap"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true,
+      "partition": {
+        "index": 2,
+        "count": 4,
+        "class": "parallel"
+      }
+    },
+    {
+      "id": "full-api-shard-3",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "full-api-shard",
+      "dependsOn": [
+        "full-api-inventory"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "shard",
+        "3",
+        "4",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 1860,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1536,
+        "postgres": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/full-api-shard-3.json",
+        "${RUN_ROOT}/full-api-shard-3.tap"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true,
+      "partition": {
+        "index": 3,
+        "count": 4,
+        "class": "parallel"
+      }
+    },
+    {
+      "id": "full-api-serial",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "full-api-shard",
+      "dependsOn": [
+        "full-api-shard-0",
+        "full-api-shard-1",
+        "full-api-shard-2",
+        "full-api-shard-3"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "serial",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 270,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1536,
+        "postgres": 1
+      },
+      "outputs": [
+        "${RUN_ROOT}/full-api-serial.json",
+        "${RUN_ROOT}/full-api-serial.tap"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true,
+      "partition": {
+        "class": "serial"
+      }
+    },
+    {
+      "id": "full-api",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "apiserver-prisma",
+          "apiserver-spec",
+          "apiserver-src",
+          "apiserver-test-support",
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "matrix-aggregate",
+      "dependsOn": [
+        "full-api-shard-0",
+        "full-api-shard-1",
+        "full-api-shard-2",
+        "full-api-shard-3",
+        "full-api-serial"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-full-api.sh",
+        "aggregate",
+        "${RUN_ROOT}/full-api-inventory.json"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 768,
+        "io": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-full-api-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true,
+      "usesSharedPostgres": true
+    },
+    {
+      "id": "full-shared",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "shared-src",
+          "unclassified"
+        ]
+      },
+      "kind": "client-matrix",
+      "dependsOn": [
+        "prepare-build"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-client.sh",
+        "shared"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 1536
+      },
+      "outputs": [
+        "build/outcome-reconciler-full-shared.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true
+    },
+    {
+      "id": "full-web",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "shared-src",
+          "unclassified",
+          "web-src"
+        ]
+      },
+      "kind": "client-matrix",
+      "dependsOn": [
+        "prepare-build"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-client.sh",
+        "web"
+      ],
+      "timeoutSeconds": 1220,
+      "resources": {
+        "cpu": 2,
+        "memoryMiB": 3072
+      },
+      "outputs": [
+        "build/outcome-reconciler-full-web.json"
+      ],
+      "cacheable": true,
+      "testBearing": true,
+      "usesSharedBuild": true
+    },
+    {
+      "id": "full-go",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "go-src",
+          "unclassified"
+        ]
+      },
+      "kind": "client-matrix",
+      "dependsOn": [
+        "preflight-binding"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-client.sh",
+        "go"
+      ],
+      "environment": {
+        "GOMAXPROCS": "2"
+      },
+      "timeoutSeconds": 400,
+      "resources": {
+        "cpu": 2,
+        "memoryMiB": 2048
+      },
+      "outputs": [
+        "build/outcome-reconciler-full-go.jsonl"
+      ],
+      "cacheable": true,
+      "testBearing": true
+    },
+    {
+      "id": "full-swift",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "swift-src",
+          "unclassified"
+        ]
+      },
+      "kind": "client-matrix",
+      "dependsOn": [
+        "suite-acceptance-runtime"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-client.sh",
+        "swift"
+      ],
+      "timeoutSeconds": 300,
+      "resources": {
+        "cpu": 3,
+        "memoryMiB": 4096,
+        "dockerHeavy": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-full-swift.log"
+      ],
+      "cacheable": true,
+      "testBearing": true
+    },
+    {
+      "id": "full-clients",
+      "artifactBinding": "CONTENT_ONLY",
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "go-src",
+          "shared-src",
+          "swift-src",
+          "unclassified",
+          "web-src"
+        ]
+      },
+      "kind": "matrix-aggregate",
+      "dependsOn": [
+        "full-shared",
+        "full-web",
+        "full-go",
+        "full-swift"
+      ],
+      "command": [
+        "bash",
+        "scripts/outcome-reconciler-release-dag-client.sh",
+        "aggregate"
+      ],
+      "timeoutSeconds": 60,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 768,
+        "io": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-full-clients-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": true
+    },
+    {
+      "id": "authoritative-target",
+      "artifactBinding": "BINDING_EMBEDDED",
+      "inputs": {
+        "scopes": [
+          "dependency-manifest",
+          "release-round-binding",
+          "unclassified"
+        ]
+      },
+      "kind": "target-attestation",
+      "dependsOn": [
+        "preflight-binding"
+      ],
+      "command": [
+        "npm",
+        "run",
+        "test:outcome-reconciler:authoritative-target"
+      ],
+      "timeoutSeconds": 270,
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 768,
+        "io": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-authoritative-target-manifest.json"
+      ],
+      "cacheable": true,
+      "testBearing": false
+    },
     {
       "id": "manifest-aggregate",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["apiserver-src", "dependency-manifest", "release-round-binding", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "apiserver-src",
+          "dependency-manifest",
+          "release-round-binding",
+          "unclassified"
+        ]
+      },
       "kind": "manifest-aggregate",
       "dependsOn": [
-        "suite-bootstrap", "suite-contract", "suite-protocol",
+        "suite-bootstrap",
+        "suite-contract",
+        "suite-protocol",
         "suite-acceptance-runtime",
-        "suite-ratification", "suite-work-overview-readiness",
+        "suite-ratification",
+        "suite-work-overview-readiness",
         "suite-canary",
-        "full-api", "full-clients", "authoritative-target"
+        "full-api",
+        "full-clients",
+        "authoritative-target"
       ],
-      "command": ["node", "scripts/outcome-reconciler-release-dag-aggregate.mjs", "${RUN_ROOT}", "build/outcome-reconciler-release-dag-manifest.json"],
+      "command": [
+        "node",
+        "scripts/outcome-reconciler-release-dag-aggregate.mjs",
+        "${RUN_ROOT}",
+        "build/outcome-reconciler-release-dag-manifest.json"
+      ],
       "timeoutSeconds": 180,
-      "resources": { "cpu": 1, "memoryMiB": 768, "io": 1 },
-      "outputs": ["build/outcome-reconciler-release-dag-manifest.json"],
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 768,
+        "io": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-release-dag-manifest.json"
+      ],
       "cacheable": true,
       "testBearing": false
     },
     {
       "id": "publish-evidence-cut",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["apiserver-src", "dependency-manifest", "release-round-binding", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "apiserver-src",
+          "dependency-manifest",
+          "release-round-binding",
+          "unclassified"
+        ]
+      },
       "kind": "publication",
-      "dependsOn": ["release-live-state-boundary"],
-      "command": ["node", "scripts/outcome-reconciler-release-dag-publish.mjs", "build/outcome-reconciler-release-dag-manifest.json", "build/outcome-reconciler-release-dag-publication.json"],
+      "dependsOn": [
+        "release-live-state-boundary"
+      ],
+      "command": [
+        "node",
+        "scripts/outcome-reconciler-release-dag-publish.mjs",
+        "build/outcome-reconciler-release-dag-manifest.json",
+        "build/outcome-reconciler-release-dag-publication.json"
+      ],
       "timeoutSeconds": 180,
-      "resources": { "cpu": 1, "memoryMiB": 512, "io": 1 },
-      "outputs": ["build/outcome-reconciler-release-dag-publication.json"],
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 512,
+        "io": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-release-dag-publication.json"
+      ],
       "cacheable": true,
       "testBearing": false,
       "evidenceWriter": true
@@ -654,13 +1712,31 @@
     {
       "id": "release-live-state-boundary",
       "artifactBinding": "BINDING_EMBEDDED",
-      "inputs": { "scopes": ["apiserver-src", "dependency-manifest", "release-round-binding", "unclassified"] },
+      "inputs": {
+        "scopes": [
+          "apiserver-src",
+          "dependency-manifest",
+          "release-round-binding",
+          "unclassified"
+        ]
+      },
       "kind": "predeploy-release-boundary",
-      "dependsOn": ["manifest-aggregate"],
-      "command": ["node", "scripts/outcome-reconciler-release-live-state.mjs"],
+      "dependsOn": [
+        "manifest-aggregate"
+      ],
+      "command": [
+        "node",
+        "scripts/outcome-reconciler-release-live-state.mjs"
+      ],
       "timeoutSeconds": 180,
-      "resources": { "cpu": 1, "memoryMiB": 512, "io": 1 },
-      "outputs": ["build/outcome-reconciler-release-live-state-manifest.json"],
+      "resources": {
+        "cpu": 1,
+        "memoryMiB": 512,
+        "io": 1
+      },
+      "outputs": [
+        "build/outcome-reconciler-release-live-state-manifest.json"
+      ],
       "cacheable": true,
       "testBearing": false
     }
