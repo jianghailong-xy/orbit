@@ -159,6 +159,13 @@ CASE_STARTED_AT="$(date +%s)"
 set +e
 (
   cd "$API"
+  # node:test tells a child runner, through the environment, to report to a parent that is
+  # listening. Whoever launched this script may itself be a test -- the case-runner diagnostics
+  # are, and so is anything that drives acceptance from a spec -- and the inherited context makes
+  # the runner below report into a channel nobody is reading: empty stdout, exit 0, a case that
+  # tested nothing and said it passed. The variables are dropped here rather than at each call
+  # site so no caller has to remember.
+  for NAME in "${!NODE_TEST_@}"; do unset "$NAME"; done
   DATABASE_URL="$CASE_URL" \
   COORDINATOR_PG_URL="$CASE_URL" \
   WORK_OVERVIEW_PG_URL="$CASE_URL" \
@@ -179,6 +186,16 @@ SPEC_KIND="$(case_kind "$SPEC_RC")"
 
 if [ "$SPEC_RC" != 0 ]; then
   echo "==> full-api FAILED [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC $SPEC_KIND exit=$SPEC_RC elapsed=${SPEC_ELAPSED}s timeout=$OUTCOME_API_CASE_TIMEOUT" >&2
+  if [ -n "${OUTCOME_API_CASE_FAILURE_LOG:-}" ]; then
+    # Written the moment this case ends rather than when the run does. The run keeps going -- the
+    # point of a full run is the whole list of failures, not the first one -- but waiting until the
+    # end to say anything is what made a case that died in three seconds arrive twenty minutes
+    # later. One short line, appended: under PIPE_BUF that is atomic, so the parallel workers
+    # cannot interleave halves of two failures.
+    printf '%s [%s/%s] %s %s exit=%s elapsed=%ss\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$INDEX" "$OUTCOME_API_CASE_TOTAL" "$SPEC_KIND" \
+      "$RELATIVE_SPEC" "$SPEC_RC" "$SPEC_ELAPSED" >> "$OUTCOME_API_CASE_FAILURE_LOG"
+  fi
   if grep -q '^not ok' "$LOG"; then
     sed -n '/^not ok/,$p' "$LOG" >&2
   else
