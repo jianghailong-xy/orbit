@@ -169,8 +169,13 @@ test('an EXECUTABLE criterion is still declarable and can no longer conclude', {
       },
     );
 
-    // And with no evidence source left it stays INCONCLUSIVE, and says why, however the task ends.
-    await db.task.update({ where: { id: source.id }, data: { status: TaskStatus.DONE } });
+    // The evidence task cannot even reach DONE any more — 0193's fence has no lane an EXECUTABLE
+    // task can take — which is the same removal seen from the task side.
+    await assert.rejects(
+      db.task.update({ where: { id: source.id }, data: { status: TaskStatus.DONE } }),
+      /TASK_DONE_CANONICAL_FACT_REQUIRED/,
+    );
+    // And with no evidence source left the criterion stays INCONCLUSIVE, and says why.
     assert.equal(await acceptance.reconcileForEvidenceTask(source.id), undefined);
     const overview = await acceptance.overview(target.ownerId, target.projectId);
     assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.INCONCLUSIVE);
