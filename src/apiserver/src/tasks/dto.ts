@@ -233,30 +233,6 @@ export class TaskHandoffDto {
   @IsOptional() @IsString() @MaxLength(1_000) reason?: string;
 }
 
-/**
- * Exact durable Failure Continuation decision this task is taking over.
- *
- * These are comparison values, not authority: PostgreSQL derives the source attempt, Task,
- * fingerprint and next binding generation from the obligation and verifies that the calling
- * Session is the one its committed wake opened. Keeping them together makes a stale/mixed replay
- * unrepresentable and lets a lost-response retry adopt the already-committed successor.
- */
-export class FailureSuccessorHandoffDto {
-  @IsPublicId()
-  obligationId!: string;
-
-  @IsString()
-  @Matches(/^[0-9a-f]{64}$/)
-  obligationRevision!: string;
-
-  @IsPublicId()
-  routeDecisionId!: string;
-
-  @IsString()
-  @Matches(/^[0-9a-f]{64}$/)
-  routeDecisionDigest!: string;
-}
-
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -356,16 +332,6 @@ export class CreateTaskDto {
   // predecessor that has not stopped, batch-created tasks are OPEN, and a parameter that is
   // refused every time it is used is worse than one that does not exist.
   @IsOptional() @IsPublicId() supersedesTaskId?: string;
-  // The specialized atomic takeover layered on supersedesTaskId. Presence means this task is not
-  // merely a manually chosen replacement: it is the durable result of the exact routed Failure
-  // Continuation named here. The task INSERT, predecessor retirement, current binding generation,
-  // continuation resolution, dependency rebinding and durable auto-dispatch trigger all commit or
-  // all roll back. Accepted only on the single-task create path and only from the coordinator
-  // Session opened for that obligation.
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => FailureSuccessorHandoffDto)
-  failureSuccessorHandoff?: FailureSuccessorHandoffDto;
   @IsOptional() @IsDateString() dueDate?: string;
   // The earliest time this task may start automatically (ISO 8601, stored and returned UTC).
   // Omitted means unscheduled, which is what every task has always been. Distinct from dueDate on

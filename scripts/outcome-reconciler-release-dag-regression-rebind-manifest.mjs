@@ -133,51 +133,14 @@ SELECT id::text, kind, source, btrim(evidence_digest::text)
   'TYPED_ATTEMPT',
   'fe6015abb1a5dcd0b11c03d434e832acda26dee61651ea427152e7843296571f',
 ]);
-assert.deepEqual(psql(`
-SELECT decision_id::text, diagnostic_path, reason_code,
-       btrim(canonical_reason_digest::text), btrim(decision_digest::text),
-       next_action->>'allowsUnchangedRetry', next_action->>'requiresOwnerDecision'
-  FROM failure_continuation_route_decision
- WHERE decision_id='c790003a-5d67-4f6d-8798-5bd9a5555bbd'::uuid`).split('\t'), [
-  'c790003a-5d67-4f6d-8798-5bd9a5555bbd',
-  'ALTERNATE_DIAGNOSIS',
-  'TRANSIENT_EXTERNAL_EXITED',
-  'bfe2fe00263c90bf08bacf35bdfac0e9d7952ecc6304447e5b4a523036b30a8c',
-  old.routeDecision.decisionDigest,
-  'false',
-  'false',
-]);
-assert.deepEqual(psql(`
-SELECT receipt_id::text, btrim(receipt_digest::text), btrim(output_digest::text),
-       attempt_id::text
-  FROM failure_continuation_attempt_receipt
- WHERE attempt_id='096973d5-dff8-41f4-afce-f3a2b835ee46'::uuid`).split('\t'), [
-  '740a4129-fbfc-4bb6-b2ae-fadf09e5ce3e',
-  old.receiptDigest,
-  old.rawOutput.sha256,
-  '096973d5-dff8-41f4-afce-f3a2b835ee46',
-]);
-assert.deepEqual(psql(`
-SELECT source_task_id::text, successor_task_id::text, source_binding_revision::text,
-       source_attempt_generation::text, binding_generation::text,
-       btrim(route_decision_digest::text), btrim(binding_digest::text),
-       dependency_rebind_count::text, continuation_disposition
-  FROM failure_successor_handoff
- WHERE handoff_id='3a2308a9-26fc-40d4-b55f-62dd2b631568'::uuid`).split('\t'), [
-  '01a05616-b60b-73e9-b696-535f278d9df5',
-  '01a05650-3ee0-72dc-addb-439a55e0931a',
-  '1', '1', '3', old.routeDecision.decisionDigest,
-  'd00a17d6fb94721f4b2dfb0e45ae372f80bef81e2774fea21f5e7caeeba810fe',
-  '0', 'RESOLVED_TO_SUCCESSOR',
-]);
-assert.deepEqual(psql(`
-SELECT current_successor_task_id::text, binding_generation::text, btrim(binding_digest::text)
-  FROM failure_successor_current_binding
- WHERE lineage_root_task_id='01a055a0-35cd-77fb-85b8-33d2042157c6'::uuid`).split('\t'), [
-  '01a05650-3ee0-72dc-addb-439a55e0931a',
-  '3',
-  'd00a17d6fb94721f4b2dfb0e45ae372f80bef81e2774fea21f5e7caeeba810fe',
-]);
+// The four reads that stood here asked the live database to re-confirm this superseded attempt's
+// route decision, its immutable attempt receipt, its successor handoff and its current binding.
+// Migration 0226 removed the failure router and every one of those relations, so the rows are gone
+// and the statements could only raise `relation does not exist`. What they were evidence FOR is
+// unchanged and still checked: the attempt row above (its raw output, exit code and fingerprint),
+// its continuation and its diagnosis are all `task_executable_*` and all still read. The route and
+// handoff values themselves survive as frozen data on `plan.supersededAttempt` and are still
+// carried into this manifest's output below.
 
 const oldWorktree = '/root/.orbit/worktrees/c1360bed-d18f-58b3-b39e-187bfdabb9b6';
 const oldRunRoot = path.join(oldWorktree, 'build', 'outcome-reconciler-release-dag',

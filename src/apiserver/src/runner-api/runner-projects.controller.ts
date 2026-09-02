@@ -27,7 +27,6 @@ import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
-import { OutcomeSurfaceService } from '../outcome-reconciler/outcome-surface.service';
 
 /**
  * A project's durable context, read and written by `orbit project` and the `project_*` MCP tools
@@ -63,10 +62,6 @@ export class RunnerProjectsController {
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
-    // Keep direct constructions in older focused controller specs source-compatible. Nest still
-    // injects the typed service in production; only tests that never reach an outcome route use
-    // the default, matching the compatibility defaults on ProjectsService itself.
-    private readonly outcomeSurfaces: OutcomeSurfaceService = undefined as unknown as OutcomeSurfaceService,
   ) {}
 
   /**
@@ -111,22 +106,6 @@ export class RunnerProjectsController {
   @Get('projects/:id')
   getProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(runner.ownerId, id);
-  }
-
-  /** The canonical obligation surface this door served was removed with the obligation algebra;
-   *  `orbit project obligations` / MCP `project_obligations` went with it. Failure Continuations
-   *  never came from that projection and keep their own door below. */
-  @Get('projects/:id/failure-coordination')
-  projectFailureCoordination(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Query('surface') requestedSurface = 'AGENT_QUEUE',
-  ) {
-    return this.outcomeSurfaces.readFailureProjectSurface(
-      runner.ownerId,
-      id,
-      this.outcomeSurfaces.parseFailureSurface(requestedSurface),
-    );
   }
 
   @Get('projects/:id/acceptance')

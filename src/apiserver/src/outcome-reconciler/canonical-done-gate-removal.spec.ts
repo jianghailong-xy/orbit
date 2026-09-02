@@ -102,7 +102,7 @@ const DROPPED_SCHEMA = 'outcome_projection';
  */
 const RETAINED_HELPERS: ReadonlyArray<readonly [string, string]> = [
   ['outcome_append_only_guard', 'task_executable_attempt'],
-  ['outcome_sha256_json', 'failure_continuation_route_claim'],
+  ['outcome_sha256_json', 'project_acceptance_run_derive_conclusion'],
   ['outcome_canonical_json', 'outcome_sha256_json'],
   ['outcome_canonical_number', 'outcome_canonical_json'],
   ['outcome_valid_digest', 'executable_runtime_expectation'],
@@ -295,10 +295,11 @@ test('(c) each of the eight canonical-gate readers is handled, and none holds ra
     assert.equal(existsSync(path.join(ROOT, file)), false, `${file} must be gone with the layer`);
   }
   const trimmed: Record<string, RegExp[]> = {
-    // The canonical obligation surface read is gone; the Failure Continuation surfaces stay.
-    'src/apiserver/src/outcome-reconciler/outcome-surface.service.ts': [
-      /readFailureProjectSurface/, /humanInbox/,
-    ],
+    // The canonical obligation surface read is gone. The Failure Continuation surface stood beside
+    // it and stayed, until migration 0226 removed the router it projected; what is left of this
+    // file is the owner inbox, which is what it was cut back TO rather than what it was cut back
+    // FROM, and is therefore still the property worth pinning here.
+    'src/apiserver/src/outcome-reconciler/outcome-surface.service.ts': [/humanInbox/],
     // 0150's acceptance gate is restored here; the 0197 canonical gate reader is gone.
     'src/apiserver/src/projects/project-acceptance.ts': [/ACCEPTANCE_MISSING/, /ACCEPTANCE_BLOCKED/],
     'src/apiserver/src/projects/project-acceptance.service.ts': [

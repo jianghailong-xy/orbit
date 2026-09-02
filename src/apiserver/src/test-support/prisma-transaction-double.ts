@@ -94,18 +94,6 @@ function flattenSql(
 }
 
 /**
- * The owner-scoped failure-coordination rollup every task-detail read issues.
- *
- * It is a plain read, but a double that labels unrecognized statements by their lock clause — or
- * as a lock outright — silently reclassifies it and breaks exact call-order assertions in specs
- * that never meant to say anything about it. Recognizing it by table keeps that classification
- * honest without teaching each double the whole statement.
- */
-export function isFailureCoordinationRead(sql: string): boolean {
-  return /FROM failure_continuation_obligation\b/.test(sql);
-}
-
-/**
  * Bind one hand-written body to the exact member type Prisma declares for it.
  *
  * Prisma's delegate methods return a branded `PrismaPromise`, so a plain `async` function is not

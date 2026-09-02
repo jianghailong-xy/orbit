@@ -583,7 +583,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "failureSuccessorHandoff")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "acceptanceOwnerTimeoutCeilingSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -1582,28 +1582,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"project, or has already been replaced (two racing replacements give one winner " +
 					"and one error, never a pointer that depends on timing).",
 			},
-			"failureSuccessorHandoff": map[string]interface{}{
-				"type":        "object",
-				"description": "The exact routed Failure Continuation this successor atomically takes over. Use only with supersedesTaskId and copy all four values from the FAILURE_CONTINUATION_ACTIONABLE opening. The server creates/adopts one current successor, advances its binding generation, rebinds downstream dependencies, resolves the continuation, and durably auto-dispatches a capable ownerless route. Replay the same object after a lost response; do not task_update or task_start afterwards.",
-				"properties": map[string]interface{}{
-					"obligationId":       str,
-					"obligationRevision": map[string]interface{}{"type": "string", "pattern": "^[0-9a-f]{64}$"},
-					"routeDecisionId":    str,
-					"routeDecisionDigest": map[string]interface{}{
-						"type": "string", "pattern": "^[0-9a-f]{64}$",
-					},
-				},
-				"required":             []string{"obligationId", "obligationRevision", "routeDecisionId", "routeDecisionDigest"},
-				"additionalProperties": false,
-			},
 			"labels": labelsProp,
 		}
 	}
 	taskBatchItemProps := func() map[string]interface{} {
 		props := taskCreateProps()
-		// A failure takeover is one serialized current-binding decision, never one item in a
-		// separately approved DAG batch. The server enforces the same rule for non-MCP callers.
-		delete(props, "failureSuccessorHandoff")
 		props["ref"] = map[string]interface{}{
 			"type":        "string",
 			"description": "A short label for this item, unique within the batch, so later items can depend on it via dependsOnRefs. Not stored — it only wires the batch together, and comes back on the created task so you can map it to the real id.",

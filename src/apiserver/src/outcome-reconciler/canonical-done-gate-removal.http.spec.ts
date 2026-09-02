@@ -37,8 +37,6 @@ const PROJECT_ID = randomUUID();
 const ownerScope = { id: randomUUID(), ownerId: randomUUID() };
 
 const surfaces = {
-  parseFailureSurface: (value: string) => value.toUpperCase(),
-  readFailureProjectSurface: async () => ({ schemaVersion: 1, surface: 'AGENT_QUEUE', items: [] }),
   humanInbox: async () => ({ schemaVersion: 2, surface: 'HUMAN_DECISION_INBOX', items: [] }),
 };
 
@@ -93,15 +91,20 @@ test('(d)(e) the removed obligation surfaces are gone, and the doors beside them
     assert.equal(runnerOutcome.status, 404,
       `GET /runner/projects/:id/outcome answered ${runnerOutcome.status}: ${runnerOutcome.text}`);
 
-    // Nothing above is a 500, and nothing below became one either: the Failure Continuation
-    // surfaces and the human inbox never came from the obligation projection and still answer.
-    const kept = [
-      `outcomes/inbox?limit=10`,
+    // The two Failure Continuation surfaces stood beside them and answered 200 here until
+    // migration 0226 removed the router they projected. They take the same disposition for the
+    // same reason, so they move up into the removed list rather than being deleted from this file:
+    // a route that is gone has to keep proving it is gone.
+    for (const route of [
       `outcomes/projects/${PROJECT_ID}/failure-coordination/AGENT_QUEUE`,
       `runner/projects/${PROJECT_ID}/failure-coordination?surface=AGENT_QUEUE`,
-    ];
-    for (const route of kept) {
+    ]) {
       const answer = await get(route);
-      assert.equal(answer.status, 200, `GET /${route} answered ${answer.status}: ${answer.text}`);
+      assert.equal(answer.status, 404, `GET /${route} answered ${answer.status}: ${answer.text}`);
     }
+
+    // Nothing above is a 500, and the human inbox — which never came from the obligation
+    // projection and is not what 0226 removed either — still answers.
+    const inbox = await get('outcomes/inbox?limit=10');
+    assert.equal(inbox.status, 200, `GET /outcomes/inbox answered ${inbox.status}: ${inbox.text}`);
   });

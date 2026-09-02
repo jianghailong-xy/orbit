@@ -205,8 +205,9 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 40,
-    'these four tables carried 43 triggers before 0224 and carry 40 after it');
+  assert.equal(installed.rowCount, 39,
+    'these four tables carried 43 triggers before 0224, 40 after it, and 39 once 0226 removed '
+    + '`failure_successor_task_binding_immutable` from `task`');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }

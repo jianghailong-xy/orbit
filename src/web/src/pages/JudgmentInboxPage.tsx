@@ -13,13 +13,6 @@ import {
   projectAcceptanceReviewPath,
   type ProjectAcceptanceInboxPage,
 } from '../lib/projectAcceptance';
-import {
-  isFailureOwnerInboxItem,
-  outcomeInboxPath,
-  type OutcomeHumanInbox,
-} from '../lib/outcomeSurfaces';
-import { FailureCoordinationCard } from '../components/FailureCoordinationCard';
-import { encodeId } from '../lib/idCodec';
 
 const when = (value: string): string => new Date(value).toLocaleString();
 
@@ -32,13 +25,7 @@ export function JudgmentInboxPage() {
     queryKey: ['project-acceptance', 'pending'],
     queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(100)),
   });
-  const outcomeInbox = useQuery({
-    queryKey: ['outcomes', 'inbox'],
-    queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
-  });
-  const failureOutcomeItems = (outcomeInbox.data?.items ?? []).filter(isFailureOwnerInboxItem);
-  const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0)
-    + failureOutcomeItems.length;
+  const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0);
   const entries = [
     ...(taskInbox.data?.items ?? []).map((item) => ({
       kind: 'TASK' as const,
@@ -51,20 +38,18 @@ export function JudgmentInboxPage() {
       item,
     })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  const hasAnyData = Boolean(taskInbox.data || projectInbox.data || outcomeInbox.data);
-  const loading = !hasAnyData && (taskInbox.isLoading || projectInbox.isLoading
-    || outcomeInbox.isLoading);
-  const failed = !hasAnyData && (taskInbox.isError || projectInbox.isError
-    || outcomeInbox.isError);
-  const error = taskInbox.error ?? projectInbox.error ?? outcomeInbox.error;
-  const fetching = taskInbox.isFetching || projectInbox.isFetching || outcomeInbox.isFetching;
+  const hasAnyData = Boolean(taskInbox.data || projectInbox.data);
+  const loading = !hasAnyData && (taskInbox.isLoading || projectInbox.isLoading);
+  const failed = !hasAnyData && (taskInbox.isError || projectInbox.isError);
+  const error = taskInbox.error ?? projectInbox.error;
+  const fetching = taskInbox.isFetching || projectInbox.isFetching;
 
   return (
     <div className="judgment-page judgment-inbox-page">
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>任务级 EVIDENCE_JUDGMENT 与项目验收共用一个收件箱；Failure Continuation 只在 owner-only 决策时进入这里，普通工程故障由 coordinator 自动处理。</p>
+          <p>任务级 EVIDENCE_JUDGMENT 与项目验收共用一个收件箱。</p>
         </div>
         {hasAnyData
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>
@@ -88,35 +73,16 @@ export function JudgmentInboxPage() {
               onClick={() => {
                 void taskInbox.refetch();
                 void projectInbox.refetch();
-                void outcomeInbox.refetch();
               }}
             >
               Retry
             </Button>
           )}
         />
-      ) : entries.length === 0 && failureOutcomeItems.length === 0 ? (
+      ) : entries.length === 0 ? (
         <Empty description="没有待判定的证据" />
       ) : (
         <ul className="judgment-inbox-list" aria-label="Open human decisions">
-          {failureOutcomeItems.map((item) => (
-            <li
-              key={`failure:${item.obligationId}`}
-              className="judgment-inbox-card failure-continuation-inbox-card"
-              data-obligation-id={item.obligationId}
-              data-obligation-revision={item.obligationRevision}
-              data-binding-digest={item.bindingDigest}
-              data-reason={String(item.canonicalReason.code ?? '')}
-            >
-              <Tag color="volcano">Owner-only failure decision</Tag>
-              <div className="judgment-inbox-title">{item.projectTitle}</div>
-              <div className="judgment-inbox-project">{item.sourceTaskTitle}</div>
-              <FailureCoordinationCard item={item} compact />
-              <Link className="judgment-inbox-open" to={`/tasks/${encodeId(item.sourceTaskId)}`}>
-                Review bound failure and decide →
-              </Link>
-            </li>
-          ))}
           {entries.map((entry) => entry.kind === 'TASK' ? (
             <li key={`task:${entry.item.requestId}`} className="judgment-inbox-card">
               <Link to={judgmentReviewPath(entry.item.requestId)}>

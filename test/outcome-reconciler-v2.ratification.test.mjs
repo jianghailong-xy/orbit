@@ -116,12 +116,12 @@ const evidence = {
   removals: {
     // Six functions, one trigger and one column.
     authorityEnvelopeMachineryRemoved: false,
-    // The 0211 fallback is gone and the four real boundaries are not.
-    staleContractFallbackBranchRemoved: false,
-    goalBoundaryStillRoutesToOwner: false,
-    riskBoundaryStillRoutesToOwner: false,
-    authorizationBoundaryStillRoutesToOwner: false,
-    externalIdentityBoundaryStillRoutesToOwner: false,
+    // (m) and (n) stood here: this suite pinned the 0211 routing function's stale-contract
+    // fallback as removed and its four real owner boundaries as intact. Migration 0226 removed
+    // `failure_continuation_route_claim` and the whole failure router with it, so both the branch
+    // that was forbidden and the branches that were required are gone. There is no function left
+    // to read, and a test that asserted a removed function does not contain something would pass
+    // for the wrong reason.
   },
   samples: {},
 };
@@ -689,78 +689,6 @@ test('(h) criteriaCopyMatchesTheWrite, and the removal is subtraction', () => {
   }
   evidence.invariants.criteriaProposalRemovalIsSubtraction = true;
 });
-
-// (m) --------------------------------------------------------------------------------------------
-test('(m) the stale-contract fallback that rewrote engineering failures is gone', async () => {
-  const claim = await installedFunction('failure_continuation_route_claim');
-
-  // The exact branch, removed. It read: any unrouted failure, on a project whose ratification
-  // happened to be STALE, becomes GOAL_DECISION / GOAL_BOUNDARY -- overwriting the real
-  // failure_node of a timeout or a leaked container and filing an owner obligation with no
-  // discharging action.
-  assert.doesNotMatch(claim, /v_contract_ratification_state/,
-    'the routing function may not compute a contract ratification state at all');
-  assert.doesNotMatch(claim, /ELSIF[\s\S]{0,120}'STALE'[\s\S]{0,120}v_owner_reason := 'GOAL_DECISION'/,
-    'the stale-contract fallback branch must be gone');
-  assert.doesNotMatch(claim, /project_owner_ratification/,
-    'the routing function may not read an approval row');
-
-  // Structural, so it cannot come back under another name: `v_owner_reason` is assigned in exactly
-  // two places -- from the caller's explicit owner reason, and from a real boundary node.
-  const assignments = claim.match(/v_owner_reason :=/g) ?? [];
-  assert.equal(assignments.length, 2,
-    'an owner reason may only come from the caller or from a real boundary node');
-
-  // And a route can no longer even record the state that branch keyed on.
-  const columns = (await pool.query(
-    `SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'failure_continuation_route_decision'`,
-  )).rows.map((row) => row.column_name);
-  assert.ok(!columns.includes('contract_ratification_state'));
-  assert.ok(!columns.includes('ratified_evaluation_plan_digest'));
-  const routeRead = await installedFunction('failure_continuation_route_read');
-  assert.doesNotMatch(routeRead, /contractRatificationState|ratifiedEvaluationPlanDigest/,
-    'no route projection may report a ratification state');
-
-  // The text lane that selects an engineering node is untouched, so the same input that was being
-  // rewritten still reaches its real node.
-  assert.match(claim, /v_failure_node := 'PRODUCT_BEHAVIOR';/,
-    'an unrecognised engineering failure still lands on its real node');
-  assert.match(claim, /v_failure_node := 'TEST_HARNESS';/);
-  assert.match(claim, /-- Text can select an engineering node only\. It can never manufacture an owner decision\./,
-    'the rule the removed branch violated is still stated where it is enforced');
-  evidence.removals.staleContractFallbackBranchRemoved = true;
-});
-
-// (n) --------------------------------------------------------------------------------------------
-for (const [node, reason, key] of [
-  ['GOAL_BOUNDARY', 'GOAL_DECISION', 'goalBoundaryStillRoutesToOwner'],
-  ['RISK_BOUNDARY', 'RISK_ACCEPTANCE', 'riskBoundaryStillRoutesToOwner'],
-  ['AUTHORIZATION_BOUNDARY', 'NEW_AUTHORIZATION', 'authorizationBoundaryStillRoutesToOwner'],
-  ['EXTERNAL_IDENTITY_BOUNDARY', 'EXTERNAL_IDENTITY', 'externalIdentityBoundaryStillRoutesToOwner'],
-]) {
-  test(`(n) a real ${node} failure still routes to the owner as ${reason}`, async () => {
-    const claim = await installedFunction('failure_continuation_route_claim');
-    // The boundary block above the removed fallback: a real boundary node still derives its owner
-    // reason, and an owner reason still selects the OWNER_REQUIRED domain.
-    assert.match(claim, new RegExp(`WHEN '${node}' THEN '${reason}'`),
-      `${node} must still derive ${reason}`);
-    assert.match(claim, new RegExp(`WHEN '${reason}' THEN '${node}'`),
-      `${reason} must still require ${node}, so text cannot forge one without the other`);
-    assert.match(claim, /IF v_owner_reason IS NOT NULL THEN\s*\n\s*v_failure_domain := 'OWNER_REQUIRED';/,
-      'an owner reason still selects the owner domain');
-    // The closed sets are still declared as CHECK constraints, so a route cannot record a fifth
-    // owner reason or drop one of the four.
-    const constraint = (await pool.query(
-      `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
-        WHERE conrelid = 'failure_continuation_route_decision'::regclass
-          AND conname LIKE '%owner_reason%'`,
-    )).rows[0];
-    assert.ok(constraint, 'the owner-reason set is still a database constraint');
-    assert.match(constraint.definition, new RegExp(`'${reason}'`));
-    evidence.removals[key] = true;
-  });
-}
 
 // (o) --------------------------------------------------------------------------------------------
 test('(o) EVIDENCE_JUDGMENT is untouched: the migration cannot reach it, and it still works',

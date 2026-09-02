@@ -378,14 +378,10 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
     assert.equal((await client.query(
       `SELECT to_regclass($1)::text AS name`, [table])).rows[0].name, table);
   }
-  // (p) the failure continuation and successor decision.
-  const failureTables = await client.query(`
-    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'public' AND c.relkind = 'r'
-       AND (c.relname LIKE 'failure\\_continuation\\_%' OR c.relname LIKE 'failure\\_successor\\_%')
-     ORDER BY 1`);
-  assert.ok(failureTables.rows.length >= 2,
-    'the failure continuation and successor tables are a different decision and must remain');
+  // (p) stood here: the failure continuation and successor tables, which this removal was told not
+  // to touch and did not. Migration 0226 removed them — a different, later decision about the
+  // failure router — so there is no relation left to count. What 0222 does to them is still
+  // asserted where it belongs, in `canonical-done-gate-removal.spec.ts`, over 0222's frozen text.
 
   // (r) the 0193 writer fence, which names none of this and stays.
   assert.equal((await client.query(`
@@ -432,6 +428,16 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
       JOIN pg_proc p ON p.oid = t.tgfoid
      WHERE NOT t.tgisinternal AND p.proname = 'outcome_append_only_guard'
      ORDER BY 1`);
-  assert.ok(guarded.rows.length >= 10,
-    'the shared append-only guard is what task_executable_* and failure_* rely on');
+  // Six after migration 0226 took the failure family's six with it: the two on
+  // `task_executable_*` and the four on the `executable_runtime_*` / dead-man liveness wall. The
+  // point of the assertion is unchanged — 0222 kept 0194's shared guard because subsystems it may
+  // not touch fire it — so it is named exactly rather than counted loosely.
+  assert.deepEqual(guarded.rows.map((row) => row.name), [
+    'executable_dead_man_event.executable_dead_man_event_append_only',
+    'executable_runtime_expectation.executable_runtime_expectation_append_only',
+    'executable_runtime_expectation_event.executable_runtime_expectation_event_append_only',
+    'executable_runtime_heartbeat.executable_runtime_heartbeat_append_only',
+    'task_executable_attempt.task_executable_attempt_no_delete',
+    'task_executable_diagnosis.task_executable_diagnosis_append_only',
+  ], 'the shared append-only guard is what task_executable_* and executable_runtime_* rely on');
 });

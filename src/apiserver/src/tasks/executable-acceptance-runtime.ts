@@ -13,12 +13,6 @@ export const DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS = 3_600;
 export const EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS = 86_400;
 export const EXECUTABLE_ACCEPTANCE_MAX_ATTEMPTS = 3;
 
-/** The one line a command prints to name where it failed; ids follow, space separated. */
-export const FAILURE_SITE_SUMMARY_MARKER = '##orbit-failure-sites:v1';
-
-/** Why a fingerprint carries the site identity it carries. A degradation is named, never silent. */
-export const FAILURE_SITE_SOURCES = ['REPORTED', 'ABSENT', 'UNPARSABLE'] as const;
-
 export const ATTEMPT_TERMINATION_KINDS = [
   'EXITED',
   'TIMED_OUT',
@@ -29,19 +23,8 @@ export const ATTEMPT_TERMINATION_KINDS = [
 ] as const;
 
 export type AttemptTerminationKind = (typeof ATTEMPT_TERMINATION_KINDS)[number];
-export type FailureSiteSource = (typeof FAILURE_SITE_SOURCES)[number];
 export type AdmissionDecision = 'ADMITTED' | 'REJECTED';
 export type ExecutableCriterionState = 'SATISFIED' | 'UNSATISFIED' | 'ACTIONABLE';
-
-/** A site id is a plain token so that TypeScript and PL/pgSQL can agree on it without a parser. */
-const FAILURE_SITE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
-export interface ExecutableFailureSiteIdentity {
-  source: FailureSiteSource;
-  /** Sorted and de-duplicated; empty unless the source is REPORTED. */
-  sites: string[];
-  digest: string;
-}
 
 export interface ExecutableAcceptancePlanInput {
   command: string;
@@ -294,67 +277,27 @@ export function continuationAfterExecutableAttempt(
   };
 }
 
-function failureSiteIdentity(
-  source: FailureSiteSource,
-  sites: string[],
-): ExecutableFailureSiteIdentity {
-  return {
-    source,
-    sites,
-    digest: sha256([
-      'executable-failure-site:v1',
-      `source=${source}`,
-      ...sites.map((site) => `site=${site}`),
-    ].join('\n')),
-  };
-}
-
 /**
- * Where the attempt failed, as a value a fingerprint can carry.
+ * The four inputs a failed attempt is identified by.
  *
- * Only the summary line is read, and only node ids off it: no timestamp, path, pid, nonce or log
- * body reaches the digest, so the same set of failing sites digests the same on every run and a
- * different set digests differently.  A command that prints no parseable summary degrades to a
- * NAMED source instead of to silence -- the source is persisted beside the fingerprint it produced,
- * so a constant fingerprint is readable as "nothing said where", not mistaken for "same failure".
- *
- * Keep this byte-for-byte identical to executable_failure_site_identity() in migration 0213.
+ * Migration 0213 added a fifth -- a digest of the sites a command named on its own summary line --
+ * and 0226 removed it with the failure router that was its only consumer. What is left is the
+ * composition 0200 shipped, in the encoding the dead-man sweep in
+ * `executable_acceptance_mark_stale_attempts()` writes: `evaluationPlanDigest`, `terminationKind`,
+ * `actualExitCode` and `signal`, newline-delimited, `NULL` spelled out for the two that are absent
+ * on every non-EXITED termination. Keep it byte-for-byte identical to that function -- one column
+ * written by two writers has to have one scheme.
  */
-export function executableFailureSiteIdentity(
-  rawOutput: string | null | undefined,
-): ExecutableFailureSiteIdentity {
-  // The summary is printed last, so a later line supersedes anything the run echoed earlier.
-  const line = rawOutput == null ? undefined : rawOutput
-    .split('\n')
-    .map((value) => value.replace(/\r+$/, ''))
-    .filter((value) => value === FAILURE_SITE_SUMMARY_MARKER
-      || value.startsWith(`${FAILURE_SITE_SUMMARY_MARKER} `))
-    .at(-1);
-  if (line == null) return failureSiteIdentity('ABSENT', []);
-  const sites = [...new Set(line
-    .slice(FAILURE_SITE_SUMMARY_MARKER.length + 1)
-    .split(' ')
-    .filter((value) => value !== ''))].sort();
-  if (sites.some((site) => !FAILURE_SITE_ID.test(site))) {
-    return failureSiteIdentity('UNPARSABLE', []);
-  }
-  return failureSiteIdentity('REPORTED', sites);
-}
-
-/** Keep this byte-for-byte identical to executable_failure_fingerprint() in migration 0213. */
 export function executableFailureFingerprint(input: {
   evaluationPlanDigest: string;
   terminationKind: AttemptTerminationKind;
   actualExitCode?: number | null;
   signal?: string | null;
-  failureSiteDigest: string;
 }): string {
   return sha256([
-    'executable-failure-fingerprint:v2',
     `evaluationPlanDigest=${input.evaluationPlanDigest}`,
     `terminationKind=${input.terminationKind}`,
     `actualExitCode=${input.actualExitCode ?? 'NULL'}`,
     `signal=${input.signal ?? 'NULL'}`,
-    `failureSiteDigest=${input.failureSiteDigest}`,
   ].join('\n'));
 }

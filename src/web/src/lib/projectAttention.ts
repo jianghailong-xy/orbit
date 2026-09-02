@@ -1,6 +1,5 @@
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
-import type { FailureCoordinationSummary } from './failureCoordination';
 
 /**
  * The projects index is an execution-and-attention router, not a second activity feed.
@@ -30,8 +29,6 @@ export interface AttentionProject {
   lastActivityAt: string | null;
   /** Durable open-blocker ownership aggregated by GET /projects. Optional for older servers. */
   attention?: ProjectAttentionSummary;
-  /** Canonical failure routing. Raw FAILED counts never imply human attention. */
-  failureCoordination?: FailureCoordinationSummary;
 }
 
 export interface ProjectAttentionSummary {
@@ -54,7 +51,6 @@ export type AttentionSectionKey =
 export type AttentionReason =
   | 'needs-user'
   | 'auto-remediation'
-  | 'failure-needs-you'
   | 'no-activity-running'
   | 'no-activity-ready'
   | 'ready-to-close';
@@ -163,13 +159,11 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
 /**
  * Why an OPEN project needs a visible attention signal.
  *
- * A failed engineering attempt remains coordinator-owned while diagnosis/repair/revalidation is
- * progressing. Only the canonical read model may promote it here: owner-only work, a missed claim
- * SLA, or convergence failure. Raw FAILED counts are evidence, never a human-attention rule.
+ * Raw FAILED counts are evidence, never a human-attention rule: a failed task is reported by the
+ * row's own status, and it is a durable open blocker — not the tally — that says somebody must act.
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
-  if ((project.failureCoordination?.needsYou ?? 0) > 0) return 'failure-needs-you';
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
 
@@ -222,11 +216,10 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
 
 const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
   'needs-user': 1,
-  'failure-needs-you': 2,
-  'auto-remediation': 3,
-  'no-activity-running': 4,
-  'no-activity-ready': 5,
-  'ready-to-close': 6,
+  'auto-remediation': 2,
+  'no-activity-running': 3,
+  'no-activity-ready': 4,
+  'ready-to-close': 5,
 };
 
 const ATTENTION_SEVERITY_RANK: Record<NonNullable<ProjectAttentionSummary['maxSeverity']>, number> = {
@@ -346,18 +339,6 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
         `${blockers} blocker${blockers === 1 ? '' : 's'}`,
         userBlockers > 0 ? `${userBlockers} need you` : null,
       ].filter(Boolean).join(' · '),
-    };
-  }
-
-  if (reason === 'failure-needs-you') {
-    const summary = project.failureCoordination!;
-    const reasons = Object.entries(summary.byAttentionReason ?? {})
-      .filter(([, count]) => (count ?? 0) > 0)
-      .map(([name, count]) => `${name} ${count}`)
-      .join(' · ');
-    return {
-      tone: 'warning',
-      text: `Needs you · ${summary.needsYou} failure continuation${summary.needsYou === 1 ? '' : 's'}${reasons ? ` · ${reasons}` : ''}`,
     };
   }
 

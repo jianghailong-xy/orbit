@@ -110,7 +110,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
-import { FailureContinuationService } from '../projects/failure-continuation.service';
 import {
   appendCoordinatorDeliveryContext,
   buildCoordinatorDeliveryContextKey,
@@ -164,7 +163,6 @@ import {
   evaluateExecutableAttempt,
   executableEvaluationPlan,
   executableFailureFingerprint,
-  executableFailureSiteIdentity,
   negotiateExecutableAcceptance,
   type AttemptTerminationKind,
   type RunnerExecutableAcceptanceCapability,
@@ -779,8 +777,6 @@ export class RunnerApiController {
      * fixtures; RunnerApiModule imports the one shared TasksService instance in production.
      */
     private readonly tasks?: TasksService,
-    /** Durable typed-failure outbox courier. Optional only for direct controller fixtures. */
-    private readonly failureContinuations?: FailureContinuationService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -3451,16 +3447,12 @@ export class RunnerApiController {
             actualExitCode,
           };
           const criterion = evaluateExecutableAttempt(result);
-          // Parsed from the output that is about to be STORED, so the SQL fallback in migration
-          // 0213 reads the same bytes and reaches the same site identity.
           const rawOutput = stripNul(dto.shellOutput);
-          const site = executableFailureSiteIdentity(rawOutput);
           const fingerprint = criterion.state === 'SATISFIED' ? null : executableFailureFingerprint({
             evaluationPlanDigest: queuedAcceptanceIdentity.evaluationPlanDigest,
             terminationKind: typedTermination,
             actualExitCode,
             signal: dto.acceptanceSignal ?? null,
-            failureSiteDigest: site.digest,
           });
           const sameFingerprintCount = fingerprint == null ? 0 : await
             supersessionLineageFingerprintCount(
@@ -3481,8 +3473,6 @@ export class RunnerApiController {
               rawOutput,
               outputTruncated: dto.acceptanceOutputTruncated === true,
               failureFingerprint: fingerprint,
-              failureSiteSource: fingerprint == null ? null : site.source,
-              failureSiteDigest: fingerprint == null ? null : site.digest,
             },
           });
           acceptanceAttemptTerminatedId = attempt.id;
@@ -3992,15 +3982,6 @@ export class RunnerApiController {
           + `${error instanceof Error ? error.message : error}`,
         ),
       );
-    }
-    if (
-      'acceptanceAttemptTerminatedId' in finalized
-      && finalized.acceptanceAttemptTerminatedId
-      && this.failureContinuations
-    ) {
-      // The trigger committed the immutable receipt, obligation and outbox with the attempt. This
-      // is only the low-latency nudge; a lost process edge is recovered by the service's sweep.
-      void this.failureContinuations.kick();
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound

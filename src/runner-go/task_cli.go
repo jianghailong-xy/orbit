@@ -140,10 +140,6 @@ Options:
                               Record, in this same write, that the new task REPLACES that
                               stopped attempt (CANCELLED or FAILED, same project, not
                               already replaced)
-  --failure-successor-handoff JSON
-                              Exact {obligationId,obligationRevision,routeDecisionId,
-                              routeDecisionDigest} from FAILURE_CONTINUATION_ACTIONABLE;
-                              requires --supersedes-task-id
   --acceptance-criteria TEXT  What would settle that this task is done (max 4,000 characters)
   --acceptance-criteria-file -
                               Read the acceptance criteria from stdin; paths are rejected
@@ -182,12 +178,6 @@ call was never made, and months later the control loop dispatched the abandoned 
 because nothing structured said it had been replaced. Refused if the predecessor is still open,
 belongs to another project or another owner, or has already been replaced (only one attempt can
 take over from another, so two racing replacements produce one winner and one error).
-
---failure-successor-handoff is the routed-failure form of that replacement. Copy the exact four-field
-object from the FAILURE_CONTINUATION_ACTIONABLE opening. The server atomically chooses or adopts one
-current successor, advances its binding generation, moves downstream dependency edges, resolves the
-continuation, and durably auto-dispatches it when no owner decision is required and the capability is
-available. Replay the same object after a lost response; do not follow it with task update/start.
 
 --project-id files the new task under a project you own — what a coordinator wants when the
 work it is creating belongs to the goal it was given. It is orthogonal to --list-id: the
@@ -1184,7 +1174,6 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	parentTaskID := fs.String("parent-task-id", "", "make the new task a subtask of this existing task")
 	verifiesTaskID := fs.String("verifies-task-id", "", "file the new task as a verification of this existing task")
 	supersedesTaskID := fs.String("supersedes-task-id", "", "record that this new task REPLACES that stopped attempt, in the same write")
-	failureSuccessorHandoff := fs.String("failure-successor-handoff", "", "exact routed Failure Continuation handoff as one JSON object")
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
@@ -1324,23 +1313,6 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--supersedes-task-id cannot be empty")
 		}
 		body["supersedesTaskId"] = *supersedesTaskID
-	}
-	// The four comparison values from FAILURE_CONTINUATION_ACTIONABLE travel as one object so a
-	// shell invocation cannot accidentally combine the obligation from one decision with the route
-	// digest from another. The server remains the authority and validates every field against its
-	// immutable rows; this parser only keeps the CLI door structurally equal to task_create over MCP.
-	if flagWasSet(fs, "failure-successor-handoff") {
-		if !flagWasSet(fs, "supersedes-task-id") {
-			return fmt.Errorf("--failure-successor-handoff requires --supersedes-task-id")
-		}
-		var handoff map[string]interface{}
-		if err := json.Unmarshal([]byte(*failureSuccessorHandoff), &handoff); err != nil || handoff == nil {
-			if err == nil {
-				err = fmt.Errorf("value is not an object")
-			}
-			return fmt.Errorf("--failure-successor-handoff must be one JSON object: %w", err)
-		}
-		body["failureSuccessorHandoff"] = handoff
 	}
 	// Free text, not an id, so the blank-is-a-typo rule above does not apply: the server's DTO has
 	// no MinLength, and `--acceptance-criteria ""` is a caller deliberately recording none. Sent
@@ -2316,10 +2288,8 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 	for i := range capabilities {
 		switch capabilities[i].Tool {
 		case "task_create":
-			capabilities[i].Description += " --failure-successor-handoff carries the exact routed Failure Continuation binding together with --supersedes-task-id; that atomic successor is auto-dispatched by the server when authorised, so do not call task_start after it."
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
-				"--failure-successor-handoff <JSON object> (exact obligation/route binding; requires --supersedes-task-id)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (required for every runner task creation; EVIDENCE_JUDGMENT is never inferred)",
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",

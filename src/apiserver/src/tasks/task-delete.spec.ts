@@ -4,10 +4,7 @@ import { Prisma } from '@prisma/client';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import {
-  isFailureCoordinationRead,
-  renderRawQuery,
-} from '../test-support/prisma-transaction-double';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
@@ -210,12 +207,6 @@ function deleteRecorder(runs: string[], deleted = 1) {
       if (/FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE/.test(sql)) {
         calls.push('lock');
         calls.push(sql);
-        return [];
-      }
-      // A task-detail read carries the failure-coordination rollup. It takes no lock, so the
-      // catch-all below would otherwise count it as one and make the lock order read wrong.
-      if (isFailureCoordinationRead(sql)) {
-        calls.push('failure-coordination');
         return [];
       }
       if (/WITH RECURSIVE cascaded/.test(sql)) {

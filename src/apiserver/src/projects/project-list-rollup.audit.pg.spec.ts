@@ -420,11 +420,12 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      // Four since 0224 removed the control-plane obligation overlay — two of the six, because
-      // this proxy counts every GET of `$queryRaw` and that reader probed for the delegate before
-      // spending one — after 0220 removed the completion-ACK overlay's two page-wide reads.
-      assert.equal(rawQueries, 4,
-        'one bounded set of page-wide canonical aggregates, including failure coordination');
+      // Two. Eight originally; 0220 took the completion-ACK overlay's two, 0224 the control-plane
+      // obligation overlay's two, and this removal the failure-coordination overlay's two. Two
+      // apiece rather than one because the counter is a Proxy over `$queryRaw` property GETS and
+      // each reader probes for the delegate before spending one on the read.
+      assert.equal(rawQueries, 2,
+        'one bounded set of page-wide canonical aggregates');
     });
   } finally {
     await db.$disconnect();
