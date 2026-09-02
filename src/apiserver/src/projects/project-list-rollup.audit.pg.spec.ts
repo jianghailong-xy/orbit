@@ -420,8 +420,10 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      // Six since 0220 removed the completion-ACK overlay's two page-wide reads.
-      assert.equal(rawQueries, 6,
+      // Four since 0224 removed the control-plane obligation overlay — two of the six, because
+      // this proxy counts every GET of `$queryRaw` and that reader probed for the delegate before
+      // spending one — after 0220 removed the completion-ACK overlay's two page-wide reads.
+      assert.equal(rawQueries, 4,
         'one bounded set of page-wide canonical aggregates, including failure coordination');
     });
   } finally {

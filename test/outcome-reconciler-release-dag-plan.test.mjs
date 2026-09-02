@@ -223,7 +223,7 @@ test('the formal evaluator and every DAG node have bounded admission', () => {
 });
 
 test('all former release-frontier entrypoints map one-to-one to explicit nodes', () => {
-  assert.equal(frontier.namedSuites.length, 8);
+  assert.equal(frontier.namedSuites.length, 6);
   const former = [
     ...frontier.namedSuites,
     ...frontier.restoredSuites,
@@ -299,9 +299,10 @@ test('the matrix is exhaustive and has no release-level test filter', () => {
   assert.match(workOverview, /WorkOverviewReadiness\.acceptance\.test\.tsx/u);
   assert.match(workOverview, /PREDEPLOY_EVALUATION/u);
   assert.match(workOverview, /DEFERRED_TO_BOUND_TASK/u);
-  const deferred = plan.nodes.filter((node) => node.kind === 'predeploy-attestation');
-  assert.deepEqual(deferred.map((node) => node.id), ['suite-auto-dispatch-integration']);
-  assert.ok(deferred.every((node) => node.testBearing === false && node.usesSharedBuild === true));
+  // The deferred predeploy attestation went with 0224: `suite-auto-dispatch-integration` was the
+  // only node of that kind, and it bound a removed suite's regression to a deployed target. Stated
+  // as an empty set rather than deleted, so reintroducing the kind has to come past this line.
+  assert.deepEqual(plan.nodes.filter((node) => node.kind === 'predeploy-attestation'), []);
 });
 
 test('there is one matrix orchestrator and one evidence-cut writer', () => {
@@ -436,20 +437,20 @@ test('a simulated timeout reschedules only unfinished nodes', () => {
   for (const id of projection.reusable) assert.equal(unfinished.has(id), false, id);
 
   const mixedReceipts = new Map(plan.nodes.map((node) => [node.id, successReceipt(node)]));
-  mixedReceipts.set('suite-auto-dispatch', {
-    ...successReceipt(nodeById.get('suite-auto-dispatch')),
+  mixedReceipts.set('suite-acceptance-runtime', {
+    ...successReceipt(nodeById.get('suite-acceptance-runtime')),
     state: 'TIMED_OUT',
     exitCode: null,
   });
   const mixed = resumeProjection({
     plan, binding, receipts: mixedReceipts, scopeDigests: resumeScopes,
   });
-  assert.equal(mixed.invalid.get('suite-auto-dispatch'), 'CHECKPOINT_NOT_SUCCESSFUL');
+  assert.equal(mixed.invalid.get('suite-acceptance-runtime'), 'CHECKPOINT_NOT_SUCCESSFUL');
   // A node that has to run again does not discard a successor whose own inputs never
   // moved -- the round still fails, because the cut below demands a SUCCESS receipt for
   // every declared node, but it fails without rebuilding what nothing touched.
-  assert.equal(mixed.reusable.has('suite-auto-dispatch-integration'), true);
-  assert.equal(mixed.incomplete.includes('suite-auto-dispatch'), true);
+  assert.equal(mixed.reusable.has('suite-canary'), true);
+  assert.equal(mixed.incomplete.includes('suite-acceptance-runtime'), true);
 
   // Without scope digests nothing can be pinned down, so nothing is reused.
   const blind = resumeProjection({ plan, binding, receipts: mixedReceipts });
@@ -889,15 +890,15 @@ test('the transaction-double repair keeps Swift, Go and Web reusable', () => {
   }
   // Every node whose artifacts do not name the round survives a round it did not change.
   const contentOnly = plan.nodes.filter((node) => node.artifactBinding === 'CONTENT_ONLY');
-  assert.equal(contentOnly.length, 14);
+  assert.equal(contentOnly.length, 12);
   for (const node of contentOnly) {
     assert.equal(projection.reusable.has(node.id), true,
       `${node.id}: ${projection.invalid.get(node.id)}`);
   }
-  assert.equal(projection.reusable.size, 14);
+  assert.equal(projection.reusable.size, 12);
   assert.equal(projection.incomplete.length, 16);
-  // Before this change the same edit discarded all 30.
-  assert.equal(plan.nodes.length, 30);
+  // Before this change the same edit discarded all 28.
+  assert.equal(plan.nodes.length, 28);
 });
 
 test('an edit inside a node input set invalidates exactly that node', () => {
@@ -996,7 +997,7 @@ test('a node whose input set cannot be determined exactly is never reused', () =
 test('the publication gate still demands every declared node under the current input set', () => {
   const publish = read('scripts/outcome-reconciler-release-dag-publish.mjs');
   const aggregate = read('scripts/outcome-reconciler-release-dag-aggregate.mjs');
-  assert.equal(plan.nodes.length, 30);
+  assert.equal(plan.nodes.length, 28);
   assert.equal(plan.evidenceCut.requiredNodeState, 'SUCCESS');
   assert.equal(plan.evidenceCut.membership, 'ALL_SUCCESSFUL_NODE_RECEIPTS_EXCEPT_PUBLISHER_SELF');
   assert.match(publish, /expectedReceiptIds\.length \+ 1, plan\.nodes\.length/u);
@@ -1555,7 +1556,7 @@ test('(d)(f) the shipped contract itself passes the new admission with a measure
   }
 
   // The calibration is what bought the headroom, and it is 110% -- not a relaxed deadline.
-  assert.equal(shipped.nodes.reduce((total, node) => total + node.timeoutSeconds, 0), 12690);
+  assert.equal(shipped.nodes.reduce((total, node) => total + node.timeoutSeconds, 0), 12570);
 });
 
 test('(e) every node timeout clears its observed maximum times the declared margin', () => {
@@ -1569,7 +1570,7 @@ test('(e) every node timeout clears its observed maximum times the declared marg
   assert.equal(calibration.completedTerminationsOnly, true);
 
   const observed = calibration.observedMaximumSeconds;
-  assert.equal(Object.keys(observed).length, 27);
+  assert.equal(Object.keys(observed).length, 25);
   for (const [id, seconds] of Object.entries(observed)) {
     assert.ok(nodeById.has(id), `${id} is calibrated but is not a node`);
     assert.ok(Number.isInteger(seconds) && seconds >= 1, id);
@@ -2313,16 +2314,16 @@ containerTest('a formal attempt that exits on a failed node leaves no container 
   const container = `orbit-release-dag-pg-${bindingDigest.slice(0, 12)}`;
   const order = topologicalOrder(plan);
   const failedNode = 'full-api-shard-3';
-  assert.equal(plan.nodes.length, 30);
+  assert.equal(plan.nodes.length, 28);
   assert.ok(order.includes(failedNode));
   const attempt = {
     executionMode: 'FORMAL_RELEASE_DAG',
     nodeCount: plan.nodes.length,
-    successfulNodes: order.filter((id) => id !== failedNode).slice(0, 27),
+    successfulNodes: order.filter((id) => id !== failedNode).slice(0, 25),
     failedNodes: [failedNode],
     outcome: 'FAIL',
   };
-  assert.equal(attempt.successfulNodes.length, 27);
+  assert.equal(attempt.successfulNodes.length, 25);
   assert.equal(attempt.successfulNodes.length + 3, attempt.nodeCount);
   try {
     startDisposable(container, bindingDigest);

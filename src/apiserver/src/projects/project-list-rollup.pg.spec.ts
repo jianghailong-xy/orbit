@@ -246,11 +246,13 @@ test('the project index buckets every project in one pass and agrees with the pr
         rawQueries = 0;
         const rows = await projects.list(ownerId);
         assert.equal(rows.length, 3);
-        // Six since 0220: the completion-ACK overlay was two of the eight, and removing the
-        // protocol removed its reads with it. The property under test is that the count is
-        // page-wide rather than per project, so the number moves when a whole reader does.
-        assert.equal(rawQueries, 6,
-          'canonical task lanes, blockers, control-plane obligations and failure coordination stay page-wide');
+        // Four since 0224. 0220's completion-ACK overlay was two of the original eight; the
+        // control-plane obligation overlay was two more, because this proxy counts every GET of
+        // `$queryRaw` and that reader took one for its capability probe before the one it spent on
+        // the read. The property under test is that the count is page-wide rather than per
+        // project, so the number moves when a whole reader does — as it just did.
+        assert.equal(rawQueries, 4,
+          'canonical task lanes, blockers and failure coordination stay page-wide');
       });
 
       await t.test('lastActivityAt is the latest task write, and Project.updatedAt is not',

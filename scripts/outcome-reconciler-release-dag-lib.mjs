@@ -460,9 +460,13 @@ export function validatePlan(plan) {
   if (plan.evidenceCut.membership !== 'ALL_SUCCESSFUL_NODE_RECEIPTS_EXCEPT_PUBLISHER_SELF') {
     throw new Error('the evidence cut must define its non-recursive publisher boundary');
   }
+  // A deployment-only attestation is optional. It was mandatory while `suite-auto-dispatch-
+  // integration` existed -- the one node of this kind, bound to a suite 0224 removed -- and a rule
+  // demanding a node no plan can now declare rejects every plan. What the kind still MEANS is
+  // enforced: a node that claims to defer its assertions past deployment cannot also claim to
+  // have borne tests before it.
   const predeployAttestations = plan.nodes.filter((node) => node.kind === 'predeploy-attestation');
-  if (predeployAttestations.length !== 1
-      || predeployAttestations.some((node) => node.testBearing !== false)) {
+  if (predeployAttestations.some((node) => node.testBearing !== false)) {
     throw new Error('deployment-only attestations must be typed, deferred and non-test-bearing');
   }
   const releaseBoundaries = plan.nodes.filter((node) => node.kind === 'predeploy-release-boundary');

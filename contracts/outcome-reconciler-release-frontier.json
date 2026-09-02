@@ -54,9 +54,7 @@
     { "name": "protocol", "packageScript": "test:outcome-reconciler:protocol", "manifest": "build/outcome-reconciler-v2-protocol-manifest.json" },
     { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "manifest": "build/executable-acceptance-runtime-manifest.json" },
     { "name": "ratification", "packageScript": "test:outcome-reconciler:ratification", "manifest": "build/outcome-reconciler-v2-ratification-manifest.json" },
-    { "name": "auto-dispatch", "packageScript": "test:outcome-reconciler:auto-dispatch", "manifest": "build/outcome-reconciler-auto-dispatch-manifest.json" },
-    { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "manifest": "build/work-overview-readiness-manifest.json" },
-    { "name": "auto-dispatch-integration", "packageScript": "test:outcome-reconciler:auto-dispatch:integration", "manifest": "build/outcome-reconciler-auto-dispatch-integration-attestation.json" }
+    { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "manifest": "build/work-overview-readiness-manifest.json" }
   ],
   "restoredSuites": [
     { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "manifest": "build/outcome-reconciler-v2-canary-manifest.json" }
