@@ -94,8 +94,12 @@ async function seedAcceptedProject(client: Client, label: string, run: {
              'HUMAN_SIGNOFF'::"task_completion_criterion",$3,$4,$5,now(),now())`,
     [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
   );
+  // `project_acceptance_definition_digest` is the digest the 0172 trigger writes to
+  // `project.acceptance_criteria_digest`, and the one 0182's gate compares `criteria_revision`
+  // against. The proposal channel's own set-digest helper used to be read here; 0223 dropped it
+  // with the rest of that channel, and it was never the value this gate compares.
   const criteriaDigest = (await client.query(
-    'SELECT project_acceptance_criteria_set_digest($1::uuid) AS digest', [projectId],
+    'SELECT project_acceptance_definition_digest($1::uuid) AS digest', [projectId],
   )).rows[0].digest as string;
   await client.query(
     `UPDATE "project" SET "acceptance_criteria_digest" = $2 WHERE "id" = $1::uuid`,
