@@ -22,7 +22,7 @@
           "role": "V1_COMPATIBILITY_LIFECYCLE_CLAIM"
         },
         {
-          "storage": "task_completion_evidence + task_judgment_request + task_attempt",
+          "storage": "task_completion_evidence + task_attempt",
           "role": "V1_EVIDENCE_AND_ATTEMPT_FACTS"
         }
       ],
@@ -41,11 +41,6 @@
           "path": "src/apiserver/src/projects/task-aggregation-writer.ts",
           "symbol": "applyTaskAggregations",
           "authority": "DERIVED_PARENT_PROJECTION_WRITER"
-        },
-        {
-          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
-          "symbol": "class TaskJudgmentReviewService",
-          "authority": "EVIDENCE_DECISION_WRITER"
         },
         {
           "path": "src/apiserver/prisma/migrations/0193_task_done_writer_fence/migration.sql",
@@ -133,44 +128,34 @@
       ],
       "sourceOfTruth": [
         {
-          "storage": "task_judgment_request",
-          "role": "APPEND_OR_MONOTONIC_EVIDENCE_BOUND_REQUEST"
+          "storage": "REMOVED 2026-09-02: task_judgment_request",
+          "role": "NO_SURVIVING_STORAGE"
         },
         {
-          "storage": "task_executable_judgment_result + task_judgment_request.decision + task.verdict",
-          "role": "DECISION_FACTS"
+          "storage": "REMOVED 2026-09-02: task_executable_judgment_result + task_judgment_request.decision",
+          "role": "NO_SURVIVING_DECISION_FACT"
         }
       ],
       "projections": [
-        "task_judgment_inbox_item",
-        "task_judgment_push_delivery",
-        "judgment review derived status"
+        "REMOVED 2026-09-02: task_judgment_inbox_item",
+        "REMOVED 2026-09-02: task_judgment_push_delivery",
+        "REMOVED 2026-09-02: judgment review derived status"
       ],
       "writers": [
         {
-          "path": "src/apiserver/src/tasks/task-completion-evidence.service.ts",
-          "symbol": "class TaskCompletionEvidenceService",
-          "authority": "REQUEST_INGRESS"
-        },
-        {
-          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
-          "symbol": "decide",
-          "authority": "DECLARED_RECIPIENT_DECISION"
+          "path": "src/apiserver/prisma/migrations/0227_task_judgment_removal/migration.sql",
+          "symbol": "DROP TABLE \"task_judgment_request\"",
+          "authority": "REMOVAL_OF_THE_SURFACE"
         }
       ],
       "readers": [
         {
-          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
-          "symbol": "async get",
-          "purpose": "REVIEW_API"
-        },
-        {
-          "path": "src/web/src/lib/judgments.ts",
-          "symbol": "judgment",
-          "purpose": "WEB_PRESENTATION"
+          "path": "src/apiserver/src/tasks/task-judgment-removal.pg.spec.ts",
+          "symbol": "task_judgment_request",
+          "purpose": "ABSENCE_AUDIT"
         }
       ],
-      "v2Treatment": "TRANSLATE_REQUEST_AND_DECISION_TO_SEPARATE_FACTS; OWNER_INBOX_IS_AN_OBLIGATION_PROJECTION"
+      "v2Treatment": "SURFACE_REMOVED_BY_OWNER_DECISION_2026_09_02; NO_REPLACEMENT_MECHANISM; THE_DECLARATION_AND_ITS_DATA_WERE_KEPT"
     },
     {
       "id": "JUDGMENT_SIGNAL",
@@ -180,38 +165,33 @@
       ],
       "sourceOfTruth": [
         {
-          "storage": "task_judgment_request",
-          "role": "AUTHORITATIVE_REQUEST"
+          "storage": "REMOVED 2026-09-02: task_judgment_request",
+          "role": "NO_SURVIVING_REQUEST"
         },
         {
-          "storage": "task_judgment_signal SQL view",
-          "role": "READ_ONLY_COMPATIBILITY_PROJECTION"
+          "storage": "REMOVED 2026-09-02: task_judgment_signal SQL view",
+          "role": "NO_SURVIVING_PROJECTION"
         }
       ],
       "projections": [
-        "task_judgment_signal",
-        "derived.signalOpen"
+        "REMOVED 2026-09-02: task_judgment_signal",
+        "REMOVED 2026-09-02: derived.signalOpen"
       ],
       "writers": [
         {
-          "path": "src/apiserver/prisma/migrations/0181_task_judgment_request/migration.sql",
-          "symbol": "CREATE VIEW \"task_judgment_signal\"",
-          "authority": "SQL_VIEW_DEFINITION_ONLY"
+          "path": "src/apiserver/prisma/migrations/0227_task_judgment_removal/migration.sql",
+          "symbol": "DROP VIEW \"task_judgment_signal\"",
+          "authority": "REMOVAL_OF_THE_SURFACE"
         }
       ],
       "readers": [
         {
-          "path": "src/apiserver/src/tasks/task-judgment-review.service.ts",
-          "symbol": "signalOpen",
-          "purpose": "REVIEW_PROJECTION"
-        },
-        {
-          "path": "src/apiserver/src/tasks/tasks.service.ts",
-          "symbol": "request/signal/blocker projection",
-          "purpose": "TASK_MUTATION_RESPONSE"
+          "path": "src/apiserver/src/tasks/task-judgment-removal.pg.spec.ts",
+          "symbol": "task_judgment_signal",
+          "purpose": "ABSENCE_AUDIT"
         }
       ],
-      "v2Treatment": "DO_NOT_INGEST_VIEW_AS_AUTHORITY; PROJECT_FROM_CANONICAL_JUDGMENT_OBLIGATION"
+      "v2Treatment": "SURFACE_REMOVED_BY_OWNER_DECISION_2026_09_02; NOTHING_PROJECTS_AN_OPEN_JUDGMENT_ANY_MORE"
     },
     {
       "id": "JUDGMENT_BLOCKER",
@@ -226,12 +206,12 @@
           "role": "V1_DURABLE_BLOCKER_EPISODE"
         },
         {
-          "storage": "project_judgment_blocker SQL view",
-          "role": "JUDGMENT_REQUEST_PROJECTION"
+          "storage": "REMOVED 2026-09-02: project_judgment_blocker SQL view",
+          "role": "NO_SURVIVING_PROJECTION"
         }
       ],
       "projections": [
-        "project_judgment_blocker",
+        "REMOVED 2026-09-02: project_judgment_blocker",
         "project blocker counts",
         "attention blocker reason"
       ],
@@ -247,9 +227,9 @@
           "authority": "V1_CONVERGENCE_BLOCKER_WRITER"
         },
         {
-          "path": "src/apiserver/prisma/migrations/0181_task_judgment_request/migration.sql",
-          "symbol": "CREATE VIEW \"project_judgment_blocker\"",
-          "authority": "SQL_VIEW_DEFINITION_ONLY"
+          "path": "src/apiserver/prisma/migrations/0227_task_judgment_removal/migration.sql",
+          "symbol": "DROP VIEW \"project_judgment_blocker\"",
+          "authority": "REMOVAL_OF_THE_PROJECTION"
         }
       ],
       "readers": [
@@ -264,7 +244,7 @@
           "purpose": "EXIT_AUDIT"
         }
       ],
-      "v2Treatment": "MAP_EACH_OPEN_EPISODE_TO_STABLE_OBLIGATION; EXIT_FACTS_ARE_APPEND_ONLY; LEGACY_VIEW_IS_NOT_INPUT"
+      "v2Treatment": "MAP_EACH_OPEN_EPISODE_TO_STABLE_OBLIGATION; EXIT_FACTS_ARE_APPEND_ONLY; THE_JUDGMENT_VIEW_WAS_REMOVED_2026_09_02"
     },
     {
       "id": "PROJECT_ATTENTION",

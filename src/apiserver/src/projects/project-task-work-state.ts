@@ -86,27 +86,14 @@ export function projectTaskWorkStateSql(alias = 't'): string {
  *
  * The lateral row uses the same newest-live selector and exact PASS predicate as dependency
  * release. FAIL/INCONCLUSIVE are terminal negative conclusions; a live run wins over static Run
- * eligibility; an OPEN check that cannot pass the shared execute predicate is BLOCKED. An OPEN
- * judgment request committed just before its deterministic verifier task is PENDING, not missing.
+ * eligibility; an OPEN check that cannot pass the shared execute predicate is BLOCKED.
  */
 function projectTaskVerificationStateSql(subject = 't', check = 'current_verifier'): string {
   return `CASE
     WHEN NOT (${verificationSubjectSql(subject)}) THEN NULL
-    WHEN ${check}."id" IS NULL AND EXISTS (
-      SELECT 1 FROM "task_judgment_request" pending_verification_request
-       WHERE pending_verification_request."task_id" = ${subject}."id"
-         AND pending_verification_request."kind" = 'VERIFICATION'
-         AND pending_verification_request."recipient_type" = 'VERIFIER_TASK'
-         AND pending_verification_request."status" = 'OPEN'
-    ) THEN 'PENDING'
     WHEN ${check}."id" IS NULL THEN 'MISSING'
     WHEN ${check}."passed" THEN 'PASSED'
-    WHEN (
-      (${check}."requestStatus" = 'DECIDED'
-       AND ${check}."requestDecision" IN ('FAIL', 'INCONCLUSIVE'))
-      OR (${check}."requestStatus" IS NULL
-          AND ${check}."verdict" IN ('FAIL', 'INCONCLUSIVE'))
-    ) THEN 'FAILED'
+    WHEN ${check}."verdict" IN ('FAIL', 'INCONCLUSIVE') THEN 'FAILED'
     WHEN ${check}."running" THEN 'RUNNING'
     WHEN ${check}."status" = 'OPEN' AND NOT ${check}."runnable" THEN 'BLOCKED'
     ELSE 'PENDING'
@@ -143,18 +130,10 @@ export async function readProjectTaskWorkStates(
         SELECT verifier_task."id",
                verifier_task."status"::text AS "status",
                verifier_task."verdict"::text AS "verdict",
-               verifier_request."status"::text AS "requestStatus",
-               verifier_request."decision"::text AS "requestDecision",
                (${verifierPassed}) AS "passed",
                (${verifierRunning}) AS "running",
                (${verifierRunnable}) AS "runnable"
           FROM "task" verifier_task
-          LEFT JOIN "task_judgment_request" verifier_request
-            ON verifier_request."id" = verifier_task."id"
-           AND verifier_request."task_id" = t."id"
-           AND verifier_request."kind" = 'VERIFICATION'
-           AND verifier_request."recipient_type" = 'VERIFIER_TASK'
-           AND verifier_request."recipient_id" = verifier_task."id"::text
          WHERE verifier_task."id" = (${latestVerifier})
       ) current_verifier ON true
      WHERE t."owner_id" = ${ownerId}::uuid

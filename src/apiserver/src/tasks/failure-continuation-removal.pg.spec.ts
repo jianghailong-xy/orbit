@@ -122,7 +122,6 @@ function connect(): World {
       {} as never,
       { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
       undefined,
-      new CompletionInputRouter(new CoordinatorWakeService(prisma)),
     ),
   };
 }
@@ -502,8 +501,9 @@ suite('(i) an EXECUTABLE task still runs admission -> attempt -> verdict, failur
       'the continuation is the completion-decision mechanism that stays');
     assert.equal(
       (await db.task.findUniqueOrThrow({ where: { id: declared.id } })).status,
-      TaskStatus.FAILED,
-      'and a failed command still fails its task rather than being routed somewhere',
+      TaskStatus.OPEN,
+      'and a failed command routes the task nowhere: since 2026-09-02 nothing derives a status '
+      + 'from an exit code at all, so the conservative FAILED is gone with the optimistic DONE',
     );
 
     // The dead-man sweep 0213 also rewrote: it still runs, and it still writes the same column.

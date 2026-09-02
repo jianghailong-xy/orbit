@@ -21,9 +21,6 @@ assert.match(sourceSha ?? '', /^[0-9a-f]{40}$/);
 const { Pool } = require('pg');
 const { prismaClientFor } = require(path.join(apiDist, 'prisma/prisma-client.js'));
 const { TasksService } = require(path.join(apiDist, 'tasks/tasks.service.js'));
-const { TaskCompletionEvidenceService, normalizeCompletionEvidence } = require(path.join(
-  apiDist, 'tasks/task-completion-evidence.service.js',
-));
 const { ProjectsService } = require(path.join(apiDist, 'projects/projects.service.js'));
 const { SessionsService } = require(path.join(apiDist, 'sessions/sessions.service.js'));
 const { RunnerApiController } = require(path.join(apiDist, 'runner-api/runner-api.controller.js'));
@@ -184,7 +181,7 @@ function controller(projectAcceptance) {
     realtime(),
     {}, {}, {},
     { appendFor: async (_tx, _sessionId, content) => content },
-    undefined, undefined, projectAcceptance,
+    undefined, projectAcceptance,
   );
 }
 
@@ -293,101 +290,7 @@ async function forceStatus(taskId, status) {
   }
 }
 
-async function seedExistingExecutableRequest(
-  fixture,
-  delivery,
-  {
-    command = 'true',
-    expectedExitCode = 0,
-    actualExitCode = expectedExitCode,
-    rawOutput,
-    recordedById = fixture.runnerId,
-    decide = false,
-    evidenceOverride,
-    label = randomUUID(),
-  },
-) {
-  const evidenceService = new TaskCompletionEvidenceService(db);
-  await evidenceService.submit(
-    fixture.ownerId,
-    fixture.taskId,
-    { type: 'AGENT', id: fixture.workspaceId },
-    {
-      sourceSessionId: fixture.sessionId,
-      idempotencyKey: `existing-open:${label}:${delivery.turnId}`,
-      // Deliberately not the bridge evidence shape. Recovery authority is the exact decided
-      // request/result plus its persisted v1 turn and runner event, never a magic source label.
-      evidence: evidenceOverride ?? {
-        source: 'ROLLING_UPGRADE_PREEXISTING_REQUEST',
-        turnId: delivery.turnId,
-        rawOutputDigest: sha(rawOutput),
-      },
-    },
-  );
-  let request = await db.taskJudgmentRequest.findFirstOrThrow({
-    where: { taskId: fixture.taskId, status: 'OPEN' },
-  });
-  await db.taskExecutableJudgmentResult.create({ data: {
-    id: randomUUID(), requestId: request.id, command, expectedExitCode,
-    actualExitCode, rawOutput, recordedById,
-  } });
-  if (decide) {
-    request = await db.taskJudgmentRequest.update({
-      where: { id: request.id },
-      data: {
-        status: 'DECIDED',
-        decidedAt: new Date(),
-        decidedByType: 'SYSTEM',
-        decidedById: recordedById,
-        decision: actualExitCode === expectedExitCode ? 'PASS' : 'FAIL',
-      },
-    });
-  }
-  return request;
-}
 
-function exactLegacyV1Evidence(state, rawOutput, actualExitCode = 0) {
-  const { fixture, delivery, turn } = state;
-  return normalizeCompletionEvidence({
-    schemaVersion: 1,
-    source: 'LEGACY_V1_TURN_COMPLETE',
-    protocol: {
-      name: 'legacy-executable-acceptance',
-      version: 1,
-      typedAttempt: false,
-    },
-    binding: {
-      tenantId: fixture.ownerId,
-      projectId: fixture.projectId,
-      taskId: fixture.taskId,
-      sessionId: fixture.sessionId,
-      turnId: delivery.turnId,
-      turnClientId: turn.clientTurnId,
-      turnLeaseGeneration: turn.leaseGeneration,
-      runnerId: fixture.runnerId,
-      assignedRunnerId: fixture.runnerId,
-      workspaceId: fixture.workspaceId,
-    },
-    observation: {
-      command: 'true',
-      commandDigest: sha('true'),
-      expectedExitCode: 0,
-      actualExitCode,
-      rawOutputDigest: sha(rawOutput),
-      rawOutputBytes: Buffer.byteLength(rawOutput, 'utf8'),
-      evidenceSource: 'RUNNER_TURN_COMPLETE_CALLBACK',
-    },
-  });
-}
-
-async function markTurnAnswered(sessionId, turnId) {
-  await db.conversationTurn.update({
-    where: { id: turnId },
-    data: { status: 'ANSWERED', answeredAt: new Date() },
-  });
-  const turn = await db.conversationTurn.findUniqueOrThrow({ where: { id: turnId } });
-  assert.equal(turn.sessionId, sessionId);
-}
 
 async function assertSqlRejected(sql, params, expected) {
   const client = await pool.connect();
@@ -571,9 +474,13 @@ test('typed timeout/cancel/signal/start-failure/infrastructure-loss keep real ta
   }
 });
 
-test('typed EXITED alone derives DONE or FAILED from the expected code', async () => {
+// Until 2026-09-02 a typed EXITED termination derived DONE or FAILED from the declared code. The
+// account owner had that evaluator removed with the judgment machinery, to be rebuilt, so what the
+// typed lane still does is record the attempt exactly and hand it to project acceptance — and what
+// it no longer does is move the task.
+test('typed EXITED records the attempt exactly and no longer derives a task status', async () => {
   await empty();
-  for (const [actualExitCode, expectedStatus] of [[0, TaskStatus.DONE], [9, TaskStatus.FAILED]]) {
+  for (const actualExitCode of [0, 9]) {
     const reconciledTaskIds = [];
     const { fixture, api, delivery, started } = await admitAndStart(`exited-${actualExitCode}`, {
       projectAcceptance: {
@@ -586,53 +493,46 @@ test('typed EXITED alone derives DONE or FAILED from the expected code', async (
       acceptanceAttemptId: started.attemptId, acceptanceTerminationKind: 'EXITED',
       acceptanceActualExitCode: actualExitCode,
     });
-    assert.equal(
-      (await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status,
-      expectedStatus,
-    );
+    const settled = await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } });
+    assert.equal(settled.status, TaskStatus.OPEN,
+      `exit ${actualExitCode} must derive nothing: EXECUTABLE has no implementation`);
+    assert.equal(settled.completionCriterion, 'EXECUTABLE');
+    assert.ok(settled.acceptanceCommand, 'and the declaration it was run from is untouched');
+    const attempt = await db.taskExecutableAttempt.findFirstOrThrow({
+      where: { taskId: fixture.taskId },
+    });
+    assert.equal(attempt.terminationKind, 'EXITED');
+    assert.equal(attempt.actualExitCode, actualExitCode);
     assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: fixture.taskId } }), 0);
-    assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 0);
     assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 1);
     assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 1);
     assert.deepEqual(
       reconciledTaskIds,
       [fixture.taskId],
-      'the committed typed attempt is delivered to project acceptance without a judgment result',
+      'the committed typed attempt is still delivered to project acceptance',
     );
   }
 });
 
-test('rolling v1/no-request callback atomically creates one canonical judgment and replays no side effects', async () => {
+/**
+ * What a pre-0193 v1 callback does now.
+ *
+ * Three tests stood here: one proved the callback created a canonical judgment atomically and
+ * replayed as a no-op, one proved a nonzero exit recorded FAIL, and one proved it never consumed a
+ * stale OPEN request. All three were about the evidence/request/result bridge the account owner
+ * had removed on 2026-09-02. What has to remain true — and is the reason this replaces rather than
+ * merely deletes them — is that an old runner still on the v1 wire cannot wedge or corrupt
+ * anything: the ACK commits, the turn is answered, the session ends with an explicit signal rather
+ * than silently, and the task keeps both its status and its declaration.
+ */
+test('a rolling v1 callback settles nothing and leaves the declaration intact', async () => {
   await empty();
-  const fixture = await executableFixture('rolling-v1-pass', { legacy: true });
+  const fixture = await executableFixture('rolling-v1-inert', { legacy: true });
   const api = controller();
   await queueAcceptance(api, fixture);
   const delivery = await dequeue(api, fixture, null);
   assert.equal(delivery.taskAcceptance, true);
-  assert.equal(delivery.acceptancePlan, undefined);
-  assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 0);
-
-  // Fail after ACK, fact, result, verdict, Task projection and comment have all been written. A
-  // PostgreSQL sequence is intentionally non-transactional, so withTransactionRetry's second pass
-  // is allowed through while every row from the first pass must have rolled back.
-  await pool.query('CREATE SEQUENCE rolling_v1_retry_once');
-  await pool.query(`
-    CREATE FUNCTION rolling_v1_fail_first_park() RETURNS trigger AS $$
-    BEGIN
-      IF nextval('rolling_v1_retry_once') = 1 THEN
-        RAISE EXCEPTION 'ROLLING_V1_RETRY_INJECTION' USING ERRCODE = '40001';
-      END IF;
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql
-  `);
-  await pool.query(`
-    CREATE TRIGGER rolling_v1_fail_first_park
-    AFTER UPDATE OF status ON session
-    FOR EACH ROW WHEN (OLD.id = '${fixture.sessionId}'::uuid AND NEW.status <> OLD.status)
-    EXECUTE FUNCTION rolling_v1_fail_first_park()
-  `);
+  assert.equal(delivery.acceptancePlan, undefined, 'a legacy fixture stays on the v1 wire');
 
   const rawOutput = '16 tests\n16 pass\n0 fail\n';
   const callback = {
@@ -643,152 +543,37 @@ test('rolling v1/no-request callback atomically creates one canonical judgment a
     shellOutput: rawOutput,
     costUsd: 1.25,
     usage: { input_tokens: 11, output_tokens: 7, cache_read_input_tokens: 3 },
-    modelUsage: {
-      'legacy-evaluator': {
-        inputTokens: 11, outputTokens: 7, cacheCreationInputTokens: 0,
-        cacheReadInputTokens: 3, costUSD: 1.25,
-      },
-    },
   };
   const first = await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback);
-  assert.deepEqual(first, { ok: true, status: RunStatus.AWAITING_INPUT });
-  await pool.query('DROP TRIGGER rolling_v1_fail_first_park ON session');
-  await pool.query('DROP FUNCTION rolling_v1_fail_first_park()');
-  await pool.query('DROP SEQUENCE rolling_v1_retry_once');
+  assert.deepEqual(first, { ok: true, status: RunStatus.FAILED },
+    'a reserved turn with nothing left to compare it ends the session explicitly');
 
-  const [task, session, turn, evidenceRow, request] = await Promise.all([
+  const [task, session, turn] = await Promise.all([
     db.task.findUniqueOrThrow({ where: { id: fixture.taskId } }),
     db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } }),
     db.conversationTurn.findUniqueOrThrow({ where: { id: delivery.turnId } }),
-    db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId: fixture.taskId } }),
-    db.taskJudgmentRequest.findFirstOrThrow({
-      where: { taskId: fixture.taskId }, include: { executableResult: true },
-    }),
   ]);
-  assert.equal(task.status, TaskStatus.DONE);
-  assert.equal(turn.status, 'ANSWERED');
-  assert.equal(session.status, RunStatus.AWAITING_INPUT);
+  assert.equal(turn.status, 'ANSWERED', 'the ACK still commits: an old runner is not wedged');
   assert.equal(session.engineTurnActive, false);
-  assert.equal(session.costUsd, 1.25);
-  assert.deepEqual(
-    [session.sumInputTokens, session.sumOutputTokens, session.sumCacheRead],
-    [11, 7, 3],
-  );
-  assert.equal(request.status, 'DECIDED');
-  assert.equal(request.decision, 'PASS');
-  assert.equal(request.recipientId, fixture.sessionId);
-  assert.equal(request.executableResult.actualExitCode, 0);
-  assert.equal(request.executableResult.rawOutput, rawOutput);
-  assert.equal(request.executableResult.recordedById, fixture.runnerId);
-  assert.equal(evidenceRow.sourceSessionId, fixture.sessionId);
-  assert.equal(evidenceRow.evidence.source, 'LEGACY_V1_TURN_COMPLETE');
-  assert.equal(evidenceRow.evidence.protocol.typedAttempt, false);
-  assert.equal(evidenceRow.evidence.observation.rawOutputDigest, sha(rawOutput));
-  assert.equal(await db.taskCompletionEvidenceIdempotency.count({ where: { taskId: fixture.taskId } }), 1);
+  assert.equal(session.costUsd, 1.25, 'and its usage is still booked');
+  assert.equal(task.status, TaskStatus.OPEN);
+  assert.equal(task.completionCriterion, 'EXECUTABLE');
+  assert.ok(task.acceptanceCommand);
+  assert.equal(task.acceptanceExpectedExitCode, 0);
+  assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: fixture.taskId } }), 0,
+    'the v1 bridge that used to mint evidence from a shell result is gone');
   assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
   assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskComment.count({ where: { taskId: fixture.taskId } }), 1);
-  assert.equal(await db.llmUsage.count({ where: { sessionId: fixture.sessionId } }), 1);
+  assert.equal(await db.taskComment.count({ where: { taskId: fixture.taskId } }), 1,
+    'exactly one human-facing signal, and it is the needs-human one');
 
   const repeated = await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback);
-  assert.deepEqual(repeated, { ok: true, status: RunStatus.AWAITING_INPUT });
-  assert.deepEqual({
-    evidence: await db.taskCompletionEvidence.count({ where: { taskId: fixture.taskId } }),
-    idempotency: await db.taskCompletionEvidenceIdempotency.count({ where: { taskId: fixture.taskId } }),
-    requests: await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }),
-    results: await db.taskExecutableJudgmentResult.count({ where: { requestId: request.id } }),
-    comments: await db.taskComment.count({ where: { taskId: fixture.taskId } }),
-    usage: await db.llmUsage.count({ where: { sessionId: fixture.sessionId } }),
-  }, { evidence: 1, idempotency: 1, requests: 1, results: 1, comments: 1, usage: 1 });
-  const replayedSession = await db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } });
-  assert.equal(replayedSession.costUsd, 1.25);
-  assert.deepEqual(
-    [replayedSession.sumInputTokens, replayedSession.sumOutputTokens, replayedSession.sumCacheRead],
-    [11, 7, 3],
-  );
-  evidence.compatibility.rollingV1CanonicalBridge = {
-    retryRollback: true, duplicateNoop: true, canonicalFacts: 1, typedAttempts: 0,
+  assert.deepEqual(repeated, { ok: true, status: RunStatus.FAILED });
+  assert.equal(await db.taskComment.count({ where: { taskId: fixture.taskId } }), 1,
+    'a retried callback duplicates nothing');
+  evidence.compatibility.rollingV1CallbackIsInert = {
+    ackCommitted: true, duplicateNoop: true, taskStatusDerived: false, declarationIntact: true,
   };
-});
-
-test('rolling v1/no-request nonzero exit records FAIL without a typed attempt', async () => {
-  await empty();
-  const fixture = await executableFixture('rolling-v1-fail', {
-    legacy: true, command: 'exit 9', expectedExitCode: 0,
-  });
-  const api = controller();
-  await queueAcceptance(api, fixture);
-  const delivery = await dequeue(api, fixture, null);
-  const result = await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, {
-    turnId: delivery.turnId, status: RunStatus.SUCCEEDED, subtype: 'shell',
-    shellExitCode: 9, shellOutput: 'assertion failed\n',
-  });
-  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
-  const request = await db.taskJudgmentRequest.findFirstOrThrow({
-    where: { taskId: fixture.taskId }, include: { executableResult: true },
-  });
-  assert.equal(request.status, 'DECIDED');
-  assert.equal(request.decision, 'FAIL');
-  assert.equal(request.executableResult.actualExitCode, 9);
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status, TaskStatus.FAILED);
-  assert.equal((await db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } })).status, RunStatus.FAILED);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-});
-
-test('rolling v1 callback never consumes a stale OPEN executable request', async () => {
-  await empty();
-  const fixture = await executableFixture('rolling-v1-stale-open', { legacy: true });
-  const api = controller();
-  await queueAcceptance(api, fixture);
-  const delivery = await dequeue(api, fixture, null);
-  const rawOutput = 'exact callback output\n';
-  const stale = await seedExistingExecutableRequest(fixture, delivery, {
-    rawOutput: 'stale request output\n',
-    label: 'different-evidence-digest',
-  });
-  const staleBefore = await db.taskJudgmentRequest.findUniqueOrThrow({
-    where: { id: stale.id }, include: { executableResult: true, evidence: true },
-  });
-  assert.equal(staleBefore.status, 'OPEN');
-  assert.equal(staleBefore.decision, null);
-  assert.notEqual(staleBefore.executableResult.rawOutput, rawOutput);
-
-  const reply = await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, {
-    turnId: delivery.turnId,
-    status: RunStatus.SUCCEEDED,
-    subtype: 'shell',
-    shellExitCode: 0,
-    shellOutput: rawOutput,
-  });
-  assert.deepEqual(reply, { ok: true, status: RunStatus.AWAITING_INPUT });
-  const requests = await db.taskJudgmentRequest.findMany({
-    where: { taskId: fixture.taskId },
-    include: { executableResult: true, evidence: true },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-  });
-  assert.equal(requests.length, 2);
-  const staleAfter = requests.find((request) => request.id === stale.id);
-  const exact = requests.find((request) => request.id !== stale.id);
-  assert.ok(staleAfter);
-  assert.ok(exact);
-  assert.equal(staleAfter.status, 'OPEN');
-  assert.equal(staleAfter.decision, null);
-  assert.equal(staleAfter.decidedAt, null);
-  assert.equal(staleAfter.executableResult.rawOutput, 'stale request output\n');
-  assert.equal(staleAfter.evidenceDigest, staleBefore.evidenceDigest);
-  assert.equal(exact.status, 'DECIDED');
-  assert.equal(exact.decision, 'PASS');
-  assert.equal(exact.recipientId, fixture.sessionId);
-  assert.equal(exact.executableResult.rawOutput, rawOutput);
-  assert.equal(exact.executableResult.recordedById, fixture.runnerId);
-  assert.equal(exact.evidence.evidence.source, 'LEGACY_V1_TURN_COMPLETE');
-  assert.notEqual(exact.evidenceDigest, staleAfter.evidenceDigest);
-  assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } })).status,
-    TaskStatus.DONE);
-  assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
-  assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
-  evidence.compatibility.rollingV1StaleOpenIsolation = true;
 });
 
 test('N-1 omission stays on v1 and legacy -1 cannot conclude the task', async () => {

@@ -12,9 +12,6 @@ import {
   RunStatus,
   RunnerStatus,
   TaskCompletionCriterion,
-  TaskJudgmentDecision,
-  TaskJudgmentRecipientType,
-  TaskJudgmentRequestStatus,
   TaskStatus,
   TaskVerdict,
 } from '@prisma/client';
@@ -103,80 +100,6 @@ async function task(
   });
 }
 
-async function recordExecutableResult(
-  db: PrismaClient,
-  target: { ownerId: string },
-  taskId: string,
-  command: string,
-  expectedExitCode: number,
-  actualExitCode: number,
-  sequence: number,
-) {
-  const sourceSessionId = randomUUID();
-  const evidence = await db.taskCompletionEvidence.create({
-    data: {
-      id: randomUUID(),
-      taskId,
-      ownerId: target.ownerId,
-      actorType: CreatorType.USER,
-      actorId: target.ownerId,
-      sourceSessionId,
-      criterionRevision: sequence.toString(16).padStart(64, 'a').slice(-64),
-      criterion: {
-        schemaVersion: 1,
-        completionCriterion: TaskCompletionCriterion.EXECUTABLE,
-        acceptanceCommand: command,
-        acceptanceExpectedExitCode: expectedExitCode,
-      },
-      evidence: { command, actualExitCode },
-      evidenceDigest: sequence.toString(16).padStart(64, 'b').slice(-64),
-      revision: BigInt(sequence),
-      submittedAt: new Date(`2026-08-27T10:00:0${sequence}.000Z`),
-    },
-  });
-  const decidedAt = new Date(`2026-08-27T10:00:1${sequence}.000Z`);
-  const request = await db.taskJudgmentRequest.create({
-    data: {
-      id: randomUUID(),
-      taskId,
-      ownerId: target.ownerId,
-      evidenceId: evidence.id,
-      criterionRevision: evidence.criterionRevision,
-      evidenceDigest: evidence.evidenceDigest,
-      kind: TaskCompletionCriterion.EXECUTABLE,
-      recipientType: TaskJudgmentRecipientType.SYSTEM_EXECUTABLE_EVALUATOR,
-      recipientId: sourceSessionId,
-      status: TaskJudgmentRequestStatus.OPEN,
-      createdAt: new Date(`2026-08-27T10:00:0${sequence}.500Z`),
-    },
-  });
-  const result = await db.taskExecutableJudgmentResult.create({
-    data: {
-      id: randomUUID(),
-      requestId: request.id,
-      command,
-      expectedExitCode,
-      actualExitCode,
-      rawOutput: `raw output ${sequence}: exit ${actualExitCode}`,
-      recordedById: randomUUID(),
-      recordedAt: decidedAt,
-    },
-  });
-  await db.taskJudgmentRequest.update({
-    where: { id: request.id },
-    data: {
-      status: TaskJudgmentRequestStatus.DECIDED,
-      decidedAt,
-      decidedByType: 'SYSTEM',
-      decidedById: randomUUID(),
-      decision: actualExitCode === expectedExitCode
-        ? TaskJudgmentDecision.PASS
-        : TaskJudgmentDecision.FAIL,
-    },
-  });
-  return result;
-}
-
 async function declare(
   projects: ProjectsService,
   target: { ownerId: string; projectId: string },
@@ -187,12 +110,13 @@ async function declare(
   } as never);
 }
 
-async function recordTypedExecutableSuccess(
+async function recordTypedExecutableAttempt(
   db: PrismaClient,
   target: { ownerId: string },
   runnerId: string,
   taskId: string,
   sequence: number,
+  actualExitCode?: number,
 ) {
   const executable = await db.task.findUniqueOrThrow({
     where: { id: taskId },
@@ -216,6 +140,12 @@ async function recordTypedExecutableSuccess(
   assert.ok(executable.acceptanceEvaluationPlanDigest);
   assert.notEqual(executable.acceptanceExpectedExitCode, null);
 
+  // One execution claim per task at a time (`session_task_execution_claim_idx`): a second attempt
+  // on the same task has to leave the first run terminal, exactly as a real second run does.
+  await db.session.updateMany({
+    where: { taskId, status: { in: [RunStatus.AWAITING_INPUT, RunStatus.RUNNING] } },
+    data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+  });
   const sessionId = randomUUID();
   const turnId = randomUUID();
   await db.session.create({
@@ -275,11 +205,14 @@ async function recordTypedExecutableSuccess(
     data: {
       terminatedAt: new Date(`2026-08-29T19:2${sequence}:00.000Z`),
       terminationKind: ExecutableAcceptanceTerminationKind.EXITED,
-      actualExitCode: executable.acceptanceExpectedExitCode,
-      rawOutput: `typed attempt ${sequence}: all assertions passed`,
+      actualExitCode: actualExitCode ?? executable.acceptanceExpectedExitCode,
+      rawOutput: `typed attempt ${sequence}: exit `
+        + `${actualExitCode ?? executable.acceptanceExpectedExitCode}`,
     },
   });
-  await db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
+  if (terminated.actualExitCode === executable.acceptanceExpectedExitCode) {
+    await db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
+  }
   return terminated;
 }
 
@@ -348,16 +281,9 @@ test('late typed attempts advance the evidence version and back all four wired E
 
       const attempts = [];
       for (const [index, source] of sources.entries()) {
-        attempts.push(await recordTypedExecutableSuccess(
+        attempts.push(await recordTypedExecutableAttempt(
           db, target, runner.id, source.id, index + 1,
         ));
-        assert.equal(
-          await db.taskExecutableJudgmentResult.count({
-            where: { request: { taskId: source.id } },
-          }),
-          0,
-          'the typed attempt is canonical without manufacturing a legacy judgment result',
-        );
         await acceptance.reconcileForEvidenceTask(source.id);
         overview = await acceptance.overview(target.ownerId, target.projectId);
         assert.equal(overview.runs[0]?.evidenceVersion, String(index + 1));
@@ -409,10 +335,28 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
   const { db, acceptance, projects } = await connect();
   try {
     const target = await base(db, 'executable');
+    const runner = await db.runner.create({
+      data: {
+        id: randomUUID(),
+        ownerId: target.ownerId,
+        name: 'executable-criterion-runner',
+        tokenHash: randomUUID(),
+        status: RunnerStatus.ONLINE,
+        acceptanceRuntimeSchemaRevision: 2,
+        acceptanceRuntimeCapabilityRevision: 2,
+        acceptanceRuntimeHardMaxSeconds: 300,
+        acceptanceRuntimeReportedAt: new Date('2026-08-29T19:00:00.000Z'),
+      },
+    });
     const source = await task(db, target, 'run the release command', {
       completionCriterion: TaskCompletionCriterion.EXECUTABLE,
       acceptanceCommand: 'npm test',
       acceptanceExpectedExitCode: 0,
+      acceptanceTimeoutSeconds: 120,
+      acceptanceOwnerTimeoutCeilingSeconds: 300,
+      acceptancePolicyTimeoutCeilingSeconds: 300,
+      acceptanceSchemaRevision: 2,
+      acceptanceCapabilityRevision: 2,
     });
     await declare(projects, target, {
       text: '验收命令退出码与预期一致',
@@ -441,7 +385,9 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
       'EXECUTABLE has no EVIDENCE_JUDGMENT fallback path',
     );
 
-    await recordExecutableResult(db, target, source.id, 'npm test', 0, 7, 1);
+    // The typed attempt is the only EXECUTABLE evidence this gate has since 2026-09-02, when the
+    // `task_executable_judgment_result` fallback was removed with the judgment machinery.
+    await recordTypedExecutableAttempt(db, target, runner.id, source.id, 1, 7);
     const failed = await acceptance.reconcileForEvidenceTask(source.id);
     assert.equal(failed, undefined);
     let overview = await acceptance.overview(target.ownerId, target.projectId);
@@ -449,7 +395,7 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
     assert.equal((overview.runs[0]?.criteria[0]?.evidence as { actualExitCode: number }).actualExitCode, 7);
     assert.equal(overview.status, ProjectStatus.OPEN);
 
-    await recordExecutableResult(db, target, source.id, 'npm test', 0, 0, 2);
+    await recordTypedExecutableAttempt(db, target, runner.id, source.id, 2);
     await acceptance.reconcileForEvidenceTask(source.id);
     overview = await acceptance.overview(target.ownerId, target.projectId);
     assert.equal(overview.runs[0]?.criteria[0]?.verdict, ProjectAcceptanceVerdict.PASS);

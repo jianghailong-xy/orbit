@@ -207,7 +207,8 @@ assert.ok(timeoutEvents.every(({ goalActionable, actualExitCode }) => (
 
 assert.ok(Array.isArray(upstreamEvidenceRows) && upstreamEvidenceRows.length > 0);
 assert.equal(upstream.taskId, '34Ex0SFCY6DpfvW2I4ydE');
-assert.equal(upstream.judgmentRequest.decision, 'PASS');
+// `judgmentRequest` left the completion-evidence read shape on 2026-09-02 with the judgment
+// machinery. `upstreamTask.status === 'DONE'` below is the fact it duplicated.
 const preflight = upstream.evidence.exactShaPreflight;
 const liveAdmission = upstreamTask.executableAcceptanceAdmissions.find(
   ({ decision }) => decision === 'ADMITTED',
@@ -368,7 +369,6 @@ const body = {
       upstreamTaskId: upstream.taskId,
       upstreamEvidenceId: upstream.id,
       upstreamEvidenceDigest: upstream.evidenceDigest,
-      judgmentDecision: upstream.judgmentRequest.decision,
       admissionId: liveAdmission.id,
       attemptId: liveAdmission.attempt.id,
       requestedTimeoutSeconds: liveAdmission.requestedTimeoutSeconds,
@@ -424,7 +424,6 @@ const body = {
     evidenceDigest: upstream.evidenceDigest,
     evidenceFileSha256: digest(upstreamEvidenceRaw),
     taskSnapshotSha256: digest(upstreamTaskRaw),
-    judgmentDecision: upstream.judgmentRequest.decision,
   },
   sources: sourceDigests,
   sourceDigest: canary.canaryDigest(sourceDigests),

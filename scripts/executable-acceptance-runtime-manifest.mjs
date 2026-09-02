@@ -79,15 +79,16 @@ assert.equal(evidence.watchdog.heartbeatGenerationAndModuleBound, true);
 for (const key of ['rest', 'cli', 'mcp', 'sharedWire']) {
   assert.equal(evidence.compatibility[key], true, `compatibility evidence missing ${key}`);
 }
-assert.deepEqual(evidence.compatibility.rollingV1CanonicalBridge, {
-  retryRollback: true, duplicateNoop: true, canonicalFacts: 1, typedAttempts: 0,
+// `rollingV1CanonicalBridge` and `rollingV1StaleOpenIsolation` described the evidence/request
+// bridge a v1 callback used to build. The account owner had it removed on 2026-09-02 together with
+// the rest of the judgment machinery, so what the rolling lane proves now is that an old runner on
+// the v1 wire is INERT: its ACK still commits and its usage is still booked, and it settles
+// nothing. `rollingV1ExistingOpenRequest` and `rollingV1ExistingResult` had already gone the same
+// way in ba1f1972.
+assert.deepEqual(evidence.compatibility.rollingV1CallbackIsInert, {
+  ackCommitted: true, duplicateNoop: true, taskStatusDerived: false, declarationIntact: true,
 });
-// `rollingV1ExistingOpenRequest` and `rollingV1ExistingResult` used to be written here by the
-// rolling-upgrade verifier. ba1f1972 removed the completion-ACK protocol they described, and
-// deleted the two lines that produced them without deleting the two that read them, so this
-// manifest has since asserted evidence that nothing writes. The rolling lane still proves what
-// survives an upgrade through `rollingV1CanonicalBridge` and `rollingV1StaleOpenIsolation`.
-assert.equal(evidence.compatibility.rollingV1StaleOpenIsolation, true);
+assert.equal(evidence.compatibility.v1CallbackNoLongerDerivesStatus, true);
 assert.equal(evidence.compatibility.nMinusOnePlan, 'v1');
 assert.equal(evidence.compatibility.legacyMinusOneActionable, true);
 assert.equal(evidence.compatibility.stagedPre0193V1Turn, true);

@@ -24,7 +24,6 @@ import {
   CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
-  JudgeTaskDto,
   UpdateTaskDto,
 } from './dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
@@ -176,15 +175,6 @@ export class TasksController {
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateTaskDto) {
     return this.tasks.update(user.userId, id, dto);
-  }
-
-  @Post(':id/judgment')
-  judge(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: JudgeTaskDto,
-  ) {
-    return this.tasks.judge(user.userId, id, dto);
   }
 
   @Delete(':id')

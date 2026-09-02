@@ -76,7 +76,8 @@ suite('(j) task_executable_* and project_acceptance_* are both still installed',
     'task_executable_attempt',
     'task_executable_continuation',
     'task_executable_diagnosis',
-    'task_executable_judgment_result',
+    // `task_executable_judgment_result` stood here until 2026-09-02, when the judgment machinery
+    // it belonged to was removed. The rest of `task_executable_*` is still a preserved wall.
     'project_acceptance_run',
     'project_acceptance_criterion',
     'project_acceptance_conclusion',

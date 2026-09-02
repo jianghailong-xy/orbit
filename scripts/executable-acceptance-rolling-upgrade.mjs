@@ -125,7 +125,6 @@ async function verify() {
     const before = await db.task.findUniqueOrThrow({ where: { id: fixture.taskId } });
     assert.equal(before.status, 'OPEN');
     assert.equal(before.acceptanceEvaluationPlanDigest, null);
-    assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 0);
     assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
     assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
 
@@ -142,7 +141,7 @@ async function verify() {
       realtime(),
       {}, {}, {},
       { appendFor: async (_tx, _sessionId, content) => content },
-      undefined, undefined, undefined,
+      undefined, undefined,
     );
     const callback = {
       turnId: fixture.turnId,
@@ -151,32 +150,34 @@ async function verify() {
       shellExitCode: 0,
       shellOutput: rawOutput,
     };
+    // The reserved acceptance turn now reaches the pre-existing needs-human signal rather than a
+    // comparison, so the SESSION ends FAILED where it used to park at AWAITING_INPUT. The task
+    // does not: a transport-shaped outcome was never allowed to guess a task status, and that is
+    // the branch this callback lands in now.
     assert.deepEqual(
       await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback),
-      { ok: true, status: RunStatus.AWAITING_INPUT },
+      { ok: true, status: RunStatus.FAILED },
     );
     assert.deepEqual(
       await api.turnComplete({ id: fixture.runnerId }, fixture.sessionId, callback),
-      { ok: true, status: RunStatus.AWAITING_INPUT },
+      { ok: true, status: RunStatus.FAILED },
     );
-    const [task, session, turn, request] = await Promise.all([
+    // What this proves changed on 2026-09-02. The pre-0193 v1 turn still SURVIVES the rolling
+    // upgrade — the ACK commits, the turn is answered, the session is not wedged and no exception
+    // reaches the runner — but it no longer settles the task, because the evaluator that compared
+    // its exit code to the declaration was removed with the judgment machinery. The declaration
+    // itself is untouched, which is the half the account owner kept.
+    const [task, session, turn] = await Promise.all([
       db.task.findUniqueOrThrow({ where: { id: fixture.taskId } }),
       db.session.findUniqueOrThrow({ where: { id: fixture.sessionId } }),
       db.conversationTurn.findUniqueOrThrow({ where: { id: fixture.turnId } }),
-      db.taskJudgmentRequest.findFirstOrThrow({
-        where: { taskId: fixture.taskId }, include: { executableResult: true },
-      }),
     ]);
-    assert.equal(task.status, 'DONE');
     assert.equal(turn.status, 'ANSWERED');
-    assert.equal(session.status, RunStatus.AWAITING_INPUT);
     assert.equal(session.engineTurnActive, false);
-    assert.equal(request.status, 'DECIDED');
-    assert.equal(request.decision, 'PASS');
-    assert.equal(request.executableResult.actualExitCode, 0);
-    assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: fixture.taskId } }), 1);
-    assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: fixture.taskId } }), 1);
-    assert.equal(await db.taskExecutableJudgmentResult.count({ where: { requestId: request.id } }), 1);
+    assert.equal(task.status, 'OPEN');
+    assert.equal(task.completionCriterion, 'EXECUTABLE');
+    assert.equal(task.acceptanceExpectedExitCode, 0);
+    assert.ok(task.acceptanceCommand);
     assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: fixture.taskId } }), 0);
     assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: fixture.taskId } }), 0);
 
@@ -187,6 +188,7 @@ async function verify() {
         : {};
       evidence.compatibility ??= {};
       evidence.compatibility.stagedPre0193V1Turn = true;
+      evidence.compatibility.v1CallbackNoLongerDerivesStatus = true;
       evidence.compatibility.crossed0193And0200 = true;
       evidence.compatibility.historicalTerminalEventUningested = true;
       writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);

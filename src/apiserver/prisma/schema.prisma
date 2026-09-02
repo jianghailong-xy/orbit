@@ -266,38 +266,6 @@ enum ExecutableAcceptanceContinuationKind {
   @@map("executable_acceptance_continuation_kind")
 }
 
-/// Lifecycle of one evidence-bound request for a criterion decision. It is monotonic: OPEN may
-/// become DECIDED or SUPERSEDED, and neither terminal fact is rewritten or reopened.
-enum TaskJudgmentRequestStatus {
-  OPEN
-  DECIDED
-  SUPERSEDED
-
-  @@map("task_judgment_request_status")
-}
-
-/// Why an OPEN judgment request stopped being actionable without being decided. Evidence
-/// revisions point at their successor; TASK_ALREADY_DONE and VERIFIER_ROLE are terminal rules
-/// with no successor. VERIFIER_ROLE closes a legacy check-of-check request after the task's own
-/// verdict is established as the verifier carrier's completion fact.
-enum TaskJudgmentSupersessionRule {
-  EVIDENCE_REVISED
-  TASK_ALREADY_DONE
-  VERIFIER_ROLE
-
-  @@map("task_judgment_supersession_rule")
-}
-
-/// How a request entered the durable judgment ledger. BACKFILL is never a migration side effect:
-/// it always names the separately invoked, bounded batch row that selected it.
-enum TaskJudgmentRequestOrigin {
-  LIVE_EVIDENCE
-  LEGACY_IMPORT
-  BACKFILL
-
-  @@map("task_judgment_request_origin")
-}
-
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
 /// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
 enum TaskJudgmentDevicePolicy {
@@ -305,41 +273,6 @@ enum TaskJudgmentDevicePolicy {
   IN_APP_ONLY
 
   @@map("task_judgment_device_policy")
-}
-
-/// The concrete principal that owns the next decision. These are peers selected from the task's
-/// declared criterion; no row moves from one recipient type to another as a fallback.
-enum TaskJudgmentRecipientType {
-  SYSTEM_EXECUTABLE_EVALUATOR
-  VERIFIER_TASK
-  ACCOUNT_OWNER
-
-  @@map("task_judgment_recipient_type")
-}
-
-/// A request conclusion. PASS is the only optimistic conclusion; the other two remain durable
-/// evidence without manufacturing Task.status DONE.
-enum TaskJudgmentDecision {
-  PASS
-  FAIL
-  INCONCLUSIVE
-
-  @@map("task_judgment_decision")
-}
-
-/// What happened to the retryable device projection of one durable in-app judgment item.
-/// PENDING/BLOCKED may be retried, DELIVERING is leased, and the remaining three values are
-/// terminal receipts. CANCELLED means the request was decided or superseded before delivery; it
-/// is deliberately different from DEAD, which means the delivery budget itself was exhausted.
-enum TaskJudgmentPushDeliveryStatus {
-  PENDING
-  DELIVERING
-  DELIVERED
-  BLOCKED
-  DEAD
-  CANCELLED
-
-  @@map("task_judgment_push_delivery_status")
 }
 
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
@@ -395,7 +328,6 @@ model User {
   handoffApprovals ProjectHandoffApproval[]
 
   legacyEvidenceImports TaskLegacyEvidenceImport[]
-  judgmentBackfillBatches TaskJudgmentBackfillBatch[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -3313,9 +3245,7 @@ model Task {
 
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
-  judgmentRequests TaskJudgmentRequest[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
-  judgmentInboxItems TaskJudgmentInboxItem[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3432,7 +3362,6 @@ model TaskCompletionEvidence {
   revision          BigInt
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
-  judgmentRequests TaskJudgmentRequest[]
   legacyImport TaskLegacyEvidenceImport?
 
   @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
@@ -3493,187 +3422,6 @@ model TaskLegacyEvidenceImport {
   @@index([importedById, importedAt(sort: Desc)], map: "task_legacy_evidence_import_reviewer_idx")
   @@index([sourceSessionId], map: "task_legacy_evidence_import_source_session_idx")
   @@map("task_legacy_evidence_import")
-}
-
-/// One bounded operator invocation of the request backfill. The selection and push allowlist are
-/// immutable input facts; all counters are filled in the same transaction as its request rows.
-model TaskJudgmentBackfillBatch {
-  id      String @id @default(uuid(7)) @db.Uuid
-  ownerId String @map("owner_id") @db.Uuid
-  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  actorType CreatorType @map("actor_type")
-  actorId String @map("actor_id") @db.Uuid
-  idempotencyKey String @map("idempotency_key")
-  inputDigest String @map("input_digest") @db.Char(64)
-  batchSize Int @map("batch_size")
-  pushTaskIds String[] @default([]) @map("push_task_ids") @db.Uuid
-  selection Json
-  startedAt DateTime @default(now()) @map("started_at")
-  finishedAt DateTime? @map("finished_at")
-  scannedCount Int? @map("scanned_count")
-  requestCount Int? @map("request_count")
-  inboxCount Int? @map("inbox_count")
-  pushSelectedCount Int? @map("push_selected_count")
-  pushSuppressedCount Int? @map("push_suppressed_count")
-  durationMs BigInt? @map("duration_ms")
-
-  requests TaskJudgmentRequest[]
-
-  @@unique([ownerId, idempotencyKey], map: "task_judgment_backfill_batch_owner_key")
-  @@index([ownerId, startedAt(sort: Desc)], map: "task_judgment_backfill_batch_owner_started_idx")
-  @@map("task_judgment_backfill_batch")
-}
-
-
-/// The durable question created for exactly one criterion snapshot and evidence digest.
-///
-/// `recipientId` is deliberately text: an account owner, Session and verifier Task are UUIDs
-/// today, but the discriminator is the authority boundary and callers must never infer one kind
-/// from another merely because their identifiers share a representation.
-model TaskJudgmentRequest {
-  id       String @id @default(uuid(7)) @db.Uuid
-  taskId   String @map("task_id") @db.Uuid
-  ownerId  String @map("owner_id") @db.Uuid
-  task     Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_judgment_request_task_fkey")
-
-  evidenceId       String @map("evidence_id") @db.Uuid
-  criterionRevision String @map("criterion_revision") @db.Char(64)
-  evidenceDigest    String @map("evidence_digest") @db.Char(64)
-  evidence           TaskCompletionEvidence @relation(fields: [evidenceId, taskId, criterionRevision, evidenceDigest], references: [id, taskId, criterionRevision, evidenceDigest], onDelete: Restrict, map: "task_judgment_request_evidence_fact_fkey")
-
-  kind          TaskCompletionCriterion
-  recipientType TaskJudgmentRecipientType @map("recipient_type")
-  recipientId   String @map("recipient_id")
-  status        TaskJudgmentRequestStatus @default(OPEN)
-  origin        TaskJudgmentRequestOrigin @default(LIVE_EVIDENCE)
-  devicePolicy  TaskJudgmentDevicePolicy @default(IMMEDIATE) @map("device_policy")
-  backfillBatchId String? @map("backfill_batch_id") @db.Uuid
-  backfillBatch TaskJudgmentBackfillBatch? @relation(fields: [backfillBatchId], references: [id], onDelete: Restrict)
-
-  createdAt   DateTime @default(now()) @map("created_at")
-  decidedAt   DateTime? @map("decided_at")
-  decidedByType String? @map("decided_by_type")
-  decidedById String? @map("decided_by_id")
-  decision    TaskJudgmentDecision?
-  /// The finding this conclusion rests on, and the whole of it: migration 0224 deleted the second
-  /// row that used to hold a PASS review text, so EVIDENCE_JUDGMENT decisions of every verdict
-  /// state their reasoning here. INCONCLUSIVE still means "wait for a new evidence revision",
-  /// never "change Task.status".
-  decisionNote String? @map("decision_note")
-  supersededAt DateTime? @map("superseded_at")
-  supersededById String? @map("superseded_by_id") @db.Uuid
-  supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)
-  supersedes TaskJudgmentRequest[] @relation("JudgmentRequestSupersession")
-  /// Audit snapshots for the transition itself. `supersededById` names a successor request;
-  /// these fields name the principal and Session that caused the transition and the rule applied.
-  supersessionRule TaskJudgmentSupersessionRule? @map("supersession_rule")
-  supersededActorType CreatorType? @map("superseded_actor_type")
-  supersededActorId String? @map("superseded_actor_id") @db.Uuid
-  supersededSourceSessionId String? @map("superseded_source_session_id") @db.Uuid
-
-  executableResult TaskExecutableJudgmentResult?
-  inboxItems TaskJudgmentInboxItem[]
-
-  @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
-  @@unique([taskId, criterionRevision, evidenceDigest, kind], map: "task_judgment_request_fact_key")
-  @@index([taskId, status, createdAt(sort: Desc)], map: "task_judgment_request_task_status_idx")
-  @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
-  @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
-  @@index([backfillBatchId], map: "task_judgment_request_backfill_batch_idx")
-  @@map("task_judgment_request")
-}
-
-/// The reliable, in-app delivery of one EVIDENCE_JUDGMENT request to one concrete person.
-///
-/// Migration 0182 files this row from an AFTER INSERT trigger on `TaskJudgmentRequest`, in the
-/// request's own transaction. `deliveredAt` is therefore the receipt for the reliable primary
-/// channel: if the request commits, this row has already committed; if either insert fails, both
-/// roll back. Titles, action and deep link are snapshots so the inbox remains an audit of what was
-/// put in front of the recipient even if the task/project is renamed later.
-model TaskJudgmentInboxItem {
-  id             String @id @default(uuid(7)) @db.Uuid
-  requestId      String @map("request_id") @db.Uuid
-  requestVersion Int    @default(1) @map("request_version")
-  request        TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  taskId         String @map("task_id") @db.Uuid
-  ownerId        String @map("owner_id") @db.Uuid
-  task           Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
-  recipientId    String @map("recipient_id") @db.Uuid
-
-  projectId     String? @map("project_id") @db.Uuid
-  projectTitle  String? @map("project_title")
-  taskTitle     String  @map("task_title")
-  requiredAction String @map("required_action")
-  deepLink       String @map("deep_link")
-  createdAt      DateTime @default(now()) @map("created_at")
-  deliveredAt    DateTime @default(now()) @map("delivered_at")
-
-  pushDelivery TaskJudgmentPushDelivery?
-
-  @@unique([requestId, requestVersion], map: "task_judgment_inbox_request_version_key")
-  @@unique([id, requestId, requestVersion], map: "task_judgment_inbox_delivery_fkey")
-  @@index([recipientId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_recipient_idx")
-  @@index([taskId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_task_idx")
-  @@map("task_judgment_inbox_item")
-}
-
-/// The retryable APNs projection of one in-app item.
-///
-/// There is one logical notification key per request/version. A worker lease prevents concurrent
-/// sends; a stable APNs collapse id makes the unavoidable "APNs accepted, process died before the
-/// receipt" replay replace the earlier banner rather than build a notification storm. `attempts`
-/// counts every transport pass, while `failures` alone spends the DEAD budget: no device or an
-/// unconfigured sender remains BLOCKED and can recover years later without losing the request.
-model TaskJudgmentPushDelivery {
-  id             String @id @default(uuid(7)) @db.Uuid
-  inboxItemId    String @unique @map("inbox_item_id") @db.Uuid
-  requestId      String @map("request_id") @db.Uuid
-  requestVersion Int    @map("request_version")
-  inboxItem      TaskJudgmentInboxItem @relation(fields: [inboxItemId, requestId, requestVersion], references: [id, requestId, requestVersion], onDelete: Cascade, map: "task_judgment_push_inbox_fkey")
-
-  logicalNotificationKey String @unique @map("logical_notification_key")
-  collapseId             String @map("collapse_id")
-  status                  TaskJudgmentPushDeliveryStatus @default(PENDING)
-  attempts                Int @default(0)
-  failures                Int @default(0)
-  /// Consecutive expired DELIVERING leases. Reset whenever a worker records an outcome.
-  claims                  Int @default(0)
-  nextAttemptAt           DateTime? @default(now()) @map("next_attempt_at")
-  leaseHolder             String? @map("lease_holder")
-  leaseExpiresAt          DateTime? @map("lease_expires_at")
-  lastAttemptAt           DateTime? @map("last_attempt_at")
-  errorCode               String? @map("error_code")
-  requiredAction          String? @map("required_action")
-  lastError               String? @map("last_error")
-  lastPayload             Json? @map("last_payload")
-  deliveredDevices        Int? @map("delivered_devices")
-  deliveredAt             DateTime? @map("delivered_at")
-  stoppedAt               DateTime? @map("stopped_at")
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
-
-  @@index([nextAttemptAt, createdAt], map: "task_judgment_push_due_idx")
-  @@index([status, updatedAt], map: "task_judgment_push_status_idx")
-  @@unique([inboxItemId, requestId, requestVersion], map: "task_judgment_push_inbox_request_version_key")
-  @@unique([requestId, requestVersion], map: "task_judgment_push_request_version_key")
-  @@map("task_judgment_push_delivery")
-}
-
-/// The command observation that decides an EXECUTABLE request. A comment may render it, but this
-/// row—not prose—is the fact consumed by completion derivation.
-model TaskExecutableJudgmentResult {
-  id               String @id @default(uuid(7)) @db.Uuid
-  requestId        String @unique @map("request_id") @db.Uuid
-  request          TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  command          String
-  expectedExitCode Int @map("expected_exit_code")
-  actualExitCode   Int @map("actual_exit_code")
-  rawOutput        String @map("raw_output")
-  recordedById     String @map("recorded_by_id")
-  recordedAt       DateTime @default(now()) @map("recorded_at")
-
-  @@index([recordedAt(sort: Desc)], map: "task_executable_judgment_result_recorded_idx")
-  @@map("task_executable_judgment_result")
 }
 
 /// The pre-spawn budget/capability decision for one v2 shell turn. It is immutable: a later

@@ -108,7 +108,6 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
-import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
   appendCoordinatorDeliveryContext,
@@ -116,7 +115,6 @@ import {
   hasCoordinatorOpening,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
-import { executableResultRecordedFact } from '../projects/completion-input';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -129,7 +127,6 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import {
-  postExecutableAcceptanceComment,
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
   reclaimStalledTask,
@@ -147,15 +144,10 @@ import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { normalizeToolOutputEvent } from './tool-output';
+import type { TaskCompletionCriterionValue } from '../tasks/task-completion-criterion';
 import {
-  deriveTaskCompletionStatus,
-  type TaskCompletionCriterionValue,
-} from '../tasks/task-completion-criterion';
-import {
-  completionCriterionSnapshot,
   completionDigest,
   normalizeCompletionEvidence,
-  type CompletionCriterionSnapshotInput,
 } from '../tasks/task-completion-evidence.service';
 import {
   ATTEMPT_TERMINATION_KINDS,
@@ -348,219 +340,6 @@ function taskAcceptanceExpectedExitCode(
 
 function isTaskAcceptanceClientTurnId(clientTurnId: string | null | undefined): boolean {
   return taskAcceptanceTurnIdentity(clientTurnId) != null;
-}
-
-interface LegacyExecutableBridgeTask extends CompletionCriterionSnapshotInput {
-  id: string;
-  ownerId: string;
-}
-
-/**
- * Rolling-upgrade bridge for a v1 shell turn that was dispatched before evidence-bound judgment
- * requests became mandatory. This function deliberately receives the caller's TransactionClient:
- * its evidence, request, result (written by the caller), Task projection, turn ACK and Session
- * park must either all commit or all disappear. It creates no v2 admission or typed attempt.
- */
-async function ensureLegacyExecutableJudgmentRequest(
-  tx: Prisma.TransactionClient,
-  input: {
-    task: LegacyExecutableBridgeTask;
-    sessionId: string;
-    creatorId: string;
-    workspaceId: string | null;
-    assignedRunnerId: string | null;
-    runnerId: string;
-    turnId: string;
-    turnClientId: string;
-    turnLeaseGeneration: string | null;
-    command: string;
-    expectedExitCode: number;
-    actualExitCode: number;
-    rawOutput: string;
-  },
-) {
-  const criterion = completionCriterionSnapshot(input.task);
-  const criterionRevision = completionDigest(criterion);
-  // Evidence submitted before the legacy callback may already have named its evaluator. An OPEN
-  // request without a result is authoritative even though the v1 wire payload cannot carry its
-  // evidence digest. A request with a result is reusable only when every result byte matches this
-  // callback; otherwise it is a stale evidence version and must remain OPEN while the exact
-  // callback gets its own request below.
-  const standingRequests = await tx.taskJudgmentRequest.findMany({
-    where: {
-      taskId: input.task.id,
-      criterionRevision,
-      kind: 'EXECUTABLE',
-      recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-      status: 'OPEN',
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    include: { executableResult: true },
-  });
-  const standingRequest = standingRequests.find((request) => {
-    const result = request.executableResult;
-    return result == null || (
-      result.command === input.command
-      && result.expectedExitCode === input.expectedExitCode
-      && result.actualExitCode === input.actualExitCode
-      && result.rawOutput === input.rawOutput
-      && result.recordedById === input.runnerId
-    );
-  });
-  if (standingRequest) return standingRequest;
-  // The legacy identity stays explicit. In particular, this is not an EXITED typed-attempt fact:
-  // it is a canonical observation of the original v1 callback and its exact persisted turn.
-  const evidence = normalizeCompletionEvidence({
-    schemaVersion: 1,
-    source: 'LEGACY_V1_TURN_COMPLETE',
-    protocol: {
-      name: 'legacy-executable-acceptance',
-      version: 1,
-      typedAttempt: false,
-    },
-    binding: {
-      tenantId: input.task.ownerId,
-      projectId: input.task.projectId,
-      taskId: input.task.id,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      turnClientId: input.turnClientId,
-      turnLeaseGeneration: input.turnLeaseGeneration,
-      runnerId: input.runnerId,
-      assignedRunnerId: input.assignedRunnerId,
-      workspaceId: input.workspaceId,
-    },
-    observation: {
-      command: input.command,
-      commandDigest: sha256(input.command),
-      expectedExitCode: input.expectedExitCode,
-      actualExitCode: input.actualExitCode,
-      rawOutputDigest: sha256(input.rawOutput),
-      rawOutputBytes: Buffer.byteLength(input.rawOutput, 'utf8'),
-      evidenceSource: 'RUNNER_TURN_COMPLETE_CALLBACK',
-    },
-  }) as Prisma.InputJsonObject;
-  const evidenceDigest = completionDigest(evidence);
-  const idempotencyKey = `legacy-v1-turn-complete:${input.turnId}:${evidenceDigest}`;
-  const actorType = input.workspaceId ? CreatorType.AGENT : CreatorType.USER;
-  const actorId = input.workspaceId ?? input.creatorId;
-
-  const replay = await tx.taskCompletionEvidenceIdempotency.findUnique({
-    where: { taskId_idempotencyKey: { taskId: input.task.id, idempotencyKey } },
-    include: { evidence: true },
-  });
-  if (replay && (
-    replay.evidence.ownerId !== input.task.ownerId
-    || replay.evidence.actorType !== actorType
-    || replay.evidence.actorId !== actorId
-    || replay.evidence.sourceSessionId !== input.sessionId
-    || replay.evidence.criterionRevision !== criterionRevision
-    || replay.evidence.evidenceDigest !== evidenceDigest
-  )) {
-    throw new ConflictException('legacy v1 completion idempotency key is bound to another fact');
-  }
-
-  let evidenceRow = replay?.evidence ?? await tx.taskCompletionEvidence.findFirst({
-    where: {
-      taskId: input.task.id,
-      actorType,
-      actorId,
-      sourceSessionId: input.sessionId,
-      criterionRevision,
-      evidenceDigest,
-    },
-  });
-  if (!evidenceRow) {
-    const [sourceAttempt, latest] = await Promise.all([
-      tx.taskAttempt.findUnique({ where: { sessionId: input.sessionId }, select: { id: true } }),
-      tx.taskCompletionEvidence.aggregate({
-        where: { taskId: input.task.id },
-        _max: { revision: true },
-      }),
-    ]);
-    evidenceRow = await tx.taskCompletionEvidence.create({
-      data: {
-        id: randomUUID(),
-        taskId: input.task.id,
-        ownerId: input.task.ownerId,
-        actorType,
-        actorId,
-        sourceSessionId: input.sessionId,
-        sourceAttemptId: sourceAttempt?.id,
-        criterionRevision,
-        criterion: criterion as Prisma.InputJsonObject,
-        evidence,
-        evidenceDigest,
-        revision: (latest._max.revision ?? 0n) + 1n,
-      },
-    });
-  }
-  if (!replay) {
-    await tx.taskCompletionEvidenceIdempotency.create({
-      data: {
-        id: randomUUID(),
-        taskId: input.task.id,
-        idempotencyKey,
-        evidenceId: evidenceRow.id,
-      },
-    });
-  }
-
-  // A v1 turn carries no request id, so the evidence digest derived from its exact persisted turn
-  // is the request identity. A same-criterion request for different output is stale evidence and
-  // must remain OPEN; selecting it would either consume the wrong fact or reject a valid rolling
-  // callback. An exact request that names another Session is still returned here and rejected by
-  // the recipient check below.
-  const existing = await tx.taskJudgmentRequest.findFirst({
-    where: {
-      taskId: input.task.id,
-      criterionRevision,
-      evidenceDigest,
-      kind: 'EXECUTABLE',
-    },
-    include: { executableResult: true },
-  });
-  if (existing) {
-    if (existing.recipientType !== 'SYSTEM_EXECUTABLE_EVALUATOR'
-      || existing.recipientId !== input.sessionId) {
-      throw new ConflictException('legacy v1 judgment request belongs to another evaluator');
-    }
-    if (existing.status === 'DECIDED') {
-      const expectedDecision = input.actualExitCode === input.expectedExitCode ? 'PASS' : 'FAIL';
-      const result = existing.executableResult;
-      if (!result
-        || existing.decision !== expectedDecision
-        || result.command !== input.command
-        || result.expectedExitCode !== input.expectedExitCode
-        || result.actualExitCode !== input.actualExitCode
-        || result.rawOutput !== input.rawOutput
-        || result.recordedById !== input.runnerId) {
-        throw new ConflictException('legacy v1 decided judgment does not match the callback');
-      }
-      return existing;
-    }
-    if (existing.status !== 'OPEN') {
-      throw new ConflictException('legacy v1 judgment request is no longer actionable');
-    }
-    return existing;
-  }
-  return tx.taskJudgmentRequest.create({
-    data: {
-      id: randomUUID(),
-      taskId: input.task.id,
-      ownerId: input.task.ownerId,
-      evidenceId: evidenceRow.id,
-      criterionRevision,
-      evidenceDigest,
-      kind: 'EXECUTABLE',
-      recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-      recipientId: input.sessionId,
-      origin: 'LIVE_EVIDENCE',
-      // This request is consumed in the same transaction and never belongs in a human channel.
-      devicePolicy: 'IN_APP_ONLY',
-    },
-    include: { executableResult: true },
-  });
 }
 
 /**
@@ -766,9 +545,6 @@ export class RunnerApiController {
      * charged on a turn is re-derived from the same columns on the next one.
      */
     private readonly attemptBudgets?: AttemptBudgetMeterService,
-    /** Criterion inputs are optional only for direct unit fixtures. Production resolves the
-     * shared, durable input router through ProjectsModule. */
-    private readonly completionInputs?: CompletionInputRouter,
     /** Project EXECUTABLE criteria consume the Task's exact durable typed-attempt fact. */
     private readonly projectAcceptance?: ProjectAcceptanceService,
     /**
@@ -3394,7 +3170,6 @@ export class RunnerApiController {
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       let acceptanceTaskChanged = false;
-      let acceptanceTaskCompleted = false;
       let acceptanceAttemptTerminatedId: string | null = null;
       let acceptanceFailureReason: string | null = null;
       const typedTermination = ATTEMPT_TERMINATION_KINDS.includes(
@@ -3519,169 +3294,6 @@ export class RunnerApiController {
           // This says the reserved evaluator turn was handled, not that Task.status changed. For
           // every non-EXITED kind the task and its criterion remain actionable by construction.
           acceptanceTaskChanged = true;
-        }
-      }
-      if (
-        taskAcceptanceTurn
-        && (
-          queuedAcceptanceIdentity?.version === 1
-          || (
-            queuedAcceptanceIdentity?.version === 2
-            && typedTermination === 'EXITED'
-            && acceptanceTaskChanged
-          )
-        )
-        && lockedAcceptanceTask != null
-        && awaitsExecutableAcceptance(lockedAcceptanceTask.status)
-        && lockedAcceptanceTask.completionCriterion === 'EXECUTABLE'
-        && lockedAcceptanceTask.acceptanceCommand != null
-        && lockedAcceptanceTask.acceptanceExpectedExitCode != null
-        && (
-          queuedAcceptanceIdentity?.version === 1
-            ? lockedAcceptanceTask.acceptanceExpectedExitCode
-              === queuedAcceptanceIdentity.expectedExitCode
-            : lockedAcceptanceTask.acceptanceEvaluationPlanDigest
-              === queuedAcceptanceIdentity?.evaluationPlanDigest
-        )
-        && completedTurn?.content === lockedAcceptanceTask.acceptanceCommand
-        && dto.status === RunStatus.SUCCEEDED
-        && (
-          queuedAcceptanceIdentity?.version === 1
-            ? Number.isInteger(dto.shellExitCode) && dto.shellExitCode !== -1
-            : Number.isInteger(dto.acceptanceActualExitCode)
-        )
-        && typeof dto.shellOutput === 'string'
-      ) {
-        const actualExitCode = queuedAcceptanceIdentity.version === 1
-          ? dto.shellExitCode!
-          : dto.acceptanceActualExitCode!;
-        const expectedExitCode = lockedAcceptanceTask.acceptanceExpectedExitCode;
-        const completed = deriveTaskCompletionStatus({
-          completionCriterion: lockedAcceptanceTask.completionCriterion,
-          acceptanceExpectedExitCode: expectedExitCode,
-          executableExitCode: actualExitCode,
-          executableTerminationKind: queuedAcceptanceIdentity.version === 2 ? 'EXITED' : null,
-        });
-        // FAILED remains the conservative L0 outcome when the declared command returns a
-        // comparable non-matching exit code. Only the optimistic branch is criterion-derived.
-        const derivedStatus = completed ?? TaskStatus.FAILED;
-        const rawOutput = stripNul(dto.shellOutput);
-        // A v1 callback has no admission/request identity in its wire payload. Resolve it from the
-        // exact persisted turn and exact evidence digest before considering any request: taking
-        // "the latest OPEN executable request" would let a stale evidence version consume this
-        // callback. v2 already carries its plan identity and follows the standing typed request.
-        let request = queuedAcceptanceIdentity.version === 1
-          ? await ensureLegacyExecutableJudgmentRequest(tx, {
-            task: lockedAcceptanceTask,
-            sessionId,
-            creatorId: current.creatorId,
-            workspaceId: current.workspaceId,
-            assignedRunnerId: current.assignedRunnerId,
-            runnerId: runner.id,
-            turnId: completedTurn.id,
-            turnClientId: completedTurn.clientTurnId,
-            turnLeaseGeneration: completedTurn.leaseGeneration,
-            command: lockedAcceptanceTask.acceptanceCommand,
-            expectedExitCode,
-            actualExitCode,
-            rawOutput,
-          })
-          : await tx.taskJudgmentRequest.findFirst({
-            where: {
-              taskId: lockedAcceptanceTask.id,
-              kind: 'EXECUTABLE',
-              recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-              status: 'OPEN',
-            },
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            include: { executableResult: true },
-          });
-        // The request names the source Session as the one system evaluator allowed to consume
-        // this evidence version. Keep the no-request branch for rolling-upgrade/legacy L0 turns,
-        // but once an OPEN request exists it is authoritative: a result from another Session may
-        // neither attach a command-result fact nor use the legacy status path to bypass the
-        // recipient. The unsettled-attempt branch below then closes that wrong Session while the
-        // request and Task remain actionable by their named evaluator.
-        const requestBelongsToThisEvaluator = request == null || request.recipientId === sessionId;
-        if (request && requestBelongsToThisEvaluator && request.status === 'OPEN') {
-          const decidedAt = new Date();
-          if (request.executableResult) {
-            if (request.executableResult.command !== lockedAcceptanceTask.acceptanceCommand
-              || request.executableResult.expectedExitCode !== expectedExitCode
-              || request.executableResult.actualExitCode !== actualExitCode
-              || request.executableResult.rawOutput !== rawOutput
-              || request.executableResult.recordedById !== runner.id) {
-              throw new ConflictException('standing executable result does not match callback');
-            }
-          } else {
-            await tx.taskExecutableJudgmentResult.create({
-              data: {
-                id: randomUUID(),
-                requestId: request.id,
-                command: lockedAcceptanceTask.acceptanceCommand,
-                expectedExitCode,
-                actualExitCode,
-                rawOutput,
-                recordedById: runner.id,
-                recordedAt: decidedAt,
-              },
-            });
-          }
-          await tx.taskJudgmentRequest.update({
-            where: { id: request.id },
-            data: {
-              status: 'DECIDED',
-              decidedAt,
-              decidedByType: 'SYSTEM',
-              decidedById: runner.id,
-              decision: completed ? 'PASS' : 'FAIL',
-            },
-          });
-          if (lockedAcceptanceTask.projectId) {
-            await tx.projectBlocker.updateMany({
-              where: {
-                projectId: lockedAcceptanceTask.projectId,
-                kind: 'HUMAN_DECISION_REQUIRED',
-                subjectType: 'TASK',
-                subjectId: lockedAcceptanceTask.id,
-                resolvedAt: null,
-              },
-              data: { resolvedAt: decidedAt, resolvedBy: 'AUTO', updatedAt: decidedAt },
-            });
-          }
-        }
-        // The command, expectation and pending state are repeated in the write even though
-        // their row is locked: they make the compare-and-set visible in SQL and fail closed if
-        // this code is ever moved away from the lock without its guard.
-        const changed = requestBelongsToThisEvaluator
-          ? await tx.task.updateMany({
-              where: {
-                id: lockedAcceptanceTask.id,
-                status: { in: [...EXECUTABLE_ACCEPTANCE_PENDING_STATUSES] },
-                acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
-                acceptanceExpectedExitCode: expectedExitCode,
-                completionCriterion: 'EXECUTABLE',
-              },
-              data: { status: derivedStatus },
-            })
-          : { count: 0 };
-        if (changed.count > 0) {
-          await postExecutableAcceptanceComment(
-            tx,
-            lockedAcceptanceTask.id,
-            lockedAcceptanceTask.acceptanceCommand,
-            expectedExitCode,
-            actualExitCode,
-            rawOutput,
-            derivedStatus,
-          );
-          acceptanceTaskChanged = true;
-          acceptanceTaskCompleted = derivedStatus === TaskStatus.DONE;
-          if (derivedStatus === TaskStatus.FAILED) {
-            failSession = true;
-            acceptanceFailureReason =
-              `acceptance command exited ${actualExitCode}; expected ${expectedExitCode}`;
-          }
         }
       }
       // A reserved turn whose evidence cannot be compared is a transport failure, not a criterion
@@ -3943,28 +3555,9 @@ export class RunnerApiController {
         taskReclaimed,
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
-        taskCompleted: acceptanceTaskCompleted,
         acceptanceAttemptTerminatedId,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
-    // This is the immediate completion edge for both the legacy rolling-v1 shell receipt and the
-    // current executable callback. The ACK transaction above is authoritative and idempotent:
-    // only its first compare-and-set reports taskCompleted. A process crash here loses latency,
-    // not work, because the periodic READY sweep observes the same dependency watermark.
-    if (
-      'taskCompleted' in finalized
-      && finalized.taskCompleted
-      && finalized.taskOwnerId
-      && finalized.taskId
-    ) {
-      await this.tasks?.dispatchDependentsAfterCompletion(
-        finalized.taskOwnerId,
-        finalized.taskId,
-      ).catch((error) => this.logger.warn(
-        `successor dispatch after executable completion ${finalized.taskId} failed: `
-        + `${error instanceof Error ? error.message : error}`,
-      ));
-    }
     // A v2 termination is itself the canonical executable fact, even when no legacy judgment
     // request exists. Reconcile after commit so the Project lock is never taken beneath the
     // Session/Task locks held by the runner ACK transaction. A failure loses latency, not the
@@ -3991,45 +3584,6 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
-    }
-    // The command observation, not the Session's resulting lifecycle state, is the criterion
-    // input. Querying it on duplicate acknowledgements is intentional: a prior authorization
-    // refusal released the key, while an already-consumed result simply loses the same INSERT.
-    if (!finalized.steer && this.completionInputs) {
-      const request = await this.prisma.taskJudgmentRequest.findFirst({
-        where: {
-          kind: 'EXECUTABLE',
-          recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-          recipientId: sessionId,
-          status: 'DECIDED',
-          executableResult: { isNot: null },
-          task: { projectId: { not: null } },
-        },
-        orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
-        include: {
-          executableResult: true,
-          task: { select: { id: true, projectId: true } },
-        },
-      });
-      if (request?.executableResult && request.task.projectId) {
-        await this.completionInputs.route(
-          executableResultRecordedFact({
-            projectId: request.task.projectId,
-            taskId: request.task.id,
-            requestId: request.id,
-            resultId: request.executableResult.id,
-            evidenceDigest: request.evidenceDigest,
-            actualExitCode: request.executableResult.actualExitCode,
-          }),
-          'DERIVED_COMPLETION_EVALUATOR',
-        );
-        await this.projectAcceptance?.reconcileForEvidenceTask(request.task.id).catch((error) =>
-          this.logger.warn(
-            `project acceptance reconciliation after executable result ${request.executableResult!.id} ` +
-            `failed: ${error?.message ?? error}`,
-          ),
-        );
-      }
     }
     if (
       'taskReclaimed' in finalized

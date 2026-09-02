@@ -93,27 +93,11 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
-    method: 'judge',
-    statements: ['task.update'],
-    holds: [
-      'await lockOwnerTaskGraph(tx, ownerId);',
-      'FOR NO KEY UPDATE`;',
-      'FOR UPDATE`;',
-    ],
-    note:
-      'Rank 10 serializes graph/project moves; rank 40 locks the task\'s project when present; ' +
-      'rank 50 locks the task before the rank-60 request/blocker children. The final status write ' +
-      'targets that already-held row and only advances its rank-70 dispatch epoch, so event, ' +
-      'blocker resolution and derived DONE commit as one descending unit.',
-  },
-  {
-    file: 'tasks.service.ts',
     method: 'update',
     statements: [
       'task.update',
       'UPDATE "task"',
       'task.update',
-      'task.updateMany',
       'taskDependency.deleteMany',
       'taskDependency.createMany',
     ],
@@ -128,9 +112,9 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'The only Task write that can need all four ranks, and each is conditional on the write ' +
       'actually reaching that relation: 10 when it restructures, 20 when it re-files, 30 when it ' +
       'writes the task row twice (a supersession, which is its own statement beside task.update), ' +
-      '40 when it names a column project_acceptance_task_fact_update is declared over. The N11 ' +
-      'verdict path locks verifier and subject together at rank 50 before its final subject ' +
-      'task.updateMany, then writes only rank-60 judgment facts.' +
+      '40 when it names a column project_acceptance_task_fact_update is declared over. The verdict ' +
+      'path still locks verifier and subject together at rank 50; since 2026-09-02 it writes only ' +
+      'the verifier row, and the subject is settled after commit by the aggregation recompute.' +
       ' Unit L3 adds one more taker at that same rank 40, in the same mode and the same UUID order: the effect-time scope fence, which re-locks and re-reads the project a coordinator write was admitted under so a rotation cannot commit inside the window between the decision and the row. Same rank, same mode, no new edge. An agent edit inside a project therefore takes the ' +
       'transaction branch it used to skip: a fence outside the transaction it fences is one the ' +
       'rotation can commit past.',
@@ -138,12 +122,12 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   {
     file: 'tasks.service.ts',
     method: 'fileVerification',
-    statements: ['task.upsert', 'task.create'],
+    statements: ['task.create'],
     holds: [],
     note:
-      'A bare legacy INSERT, or N11\'s deterministic-id upsert whose conflict branch changes no ' +
-      'columns. Neither has a creator Session or links. Same argument as create\'s rank-40 case: ' +
-      'the new row is invisible to everyone else; replay touches only the already-identical row.',
+      'A bare INSERT with no creator Session and no links. Same argument as create\'s rank-40 ' +
+      'case: the new row is invisible to everyone else. The deterministic-id upsert that stood ' +
+      'beside it was N11\'s and went with the judgment request on 2026-09-02.',
   },
   {
     file: 'tasks.service.ts',

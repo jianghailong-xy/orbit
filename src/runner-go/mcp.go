@@ -279,29 +279,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "task_judge":
-		id, ok := s.resolveTaskID(args)
-		if !ok {
-			return toolResult(noTaskMsg, true)
-		}
-		requestID := strings.TrimSpace(getString(args, "requestId"))
-		if requestID == "" {
-			return toolResult("requestId is required: name the open EVIDENCE_JUDGMENT request", true)
-		}
-		digest := strings.ToLower(strings.TrimSpace(getString(args, "evidenceDigest")))
-		if !isSHA256Hex(digest) {
-			return toolResult("evidenceDigest must be the request's 64-character sha256 digest", true)
-		}
-		finding := getString(args, "evidence")
-		if strings.TrimSpace(finding) == "" {
-			return toolResult("evidence is required: state the finding this judgment rests on", true)
-		}
-		raw, err := s.t.judgeTask(s.sessionID, id, requestID, digest, finding)
-		if err != nil {
-			return toolResult("judge task failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "project_get":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1662,38 +1639,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Stable identity reused for every transport retry of this submission.",
 				},
 			}, "evidence"),
-		},
-		{
-			"name": "task_judge",
-			"description": "Decide the task's one OPEN EVIDENCE_JUDGMENT request against the exact " +
-				"evidence revision it is bound to. `requestId` and `evidenceDigest` must name that " +
-				"current request and its digest; a superseded evidence version is refused rather " +
-				"than silently redirected. `evidence` is the finding the decision rests on and may " +
-				"not be blank — it is the whole audit for this conclusion, so state what you " +
-				"checked and what it showed rather than that you approve. The same transaction " +
-				"derives task.status = DONE, closes the request and clears its derived signal and " +
-				"blocker; it writes no comment and sends no notification. This settles only a task " +
-				"whose declared completionCriterion is EVIDENCE_JUDGMENT: EXECUTABLE is settled by " +
-				"its command's exit code and VERIFICATION by an independent verifier's verdict.",
-			"inputSchema": obj(map[string]interface{}{
-				"taskId": taskIDProp,
-				"requestId": map[string]interface{}{
-					"type":        "string",
-					"minLength":   1,
-					"description": "The task's current OPEN EVIDENCE_JUDGMENT judgment request id.",
-				},
-				"evidenceDigest": map[string]interface{}{
-					"type":        "string",
-					"minLength":   64,
-					"maxLength":   64,
-					"description": "The 64-character sha256 digest that request is bound to.",
-				},
-				"evidence": map[string]interface{}{
-					"type":        "string",
-					"minLength":   1,
-					"description": "The finding this judgment rests on. Non-blank; recorded verbatim.",
-				},
-			}, "requestId", "evidenceDigest", "evidence"),
 		},
 		{
 			"name":        "task_attribution",

@@ -161,25 +161,24 @@ const attributionKeys = (projectUuid: string) => {
   ];
 };
 
-// Every entry the head, judgment summary, and panorama cards register, in the order they mount:
+// Every entry the head and panorama cards register, in the order they mount:
 //
 //  1. the four buckets — asked for by the work overview, the first card in the command centre;
 //  2. the Coordinator surface's own read, under the SAME `['project', id]` prefix as the document,
 //     which is what makes one invalidation after a coordinator write refresh both;
-//  3. open human judgments filed under this project;
-//  4. the blocking ranking;
-//  5. the actionable queue of ready and active work.
+//  3. the blocking ranking;
+//  4. the actionable queue of ready and active work.
 //
-// Five, not seven: the acceptance card reads the project document under `['project', id]` — the
+// Four, not six: the acceptance card reads the project document under `['project', id]` — the
 // entry the page already holds — and the chain strip deliberately shares the overview's `panorama`
-// key, so neither adds a request. Spelled out rather than imported, for the same reason tasksKey
-// is: a key the page changed unilaterally should break these tests.
+// key, so neither adds a request. The judgment-request summary was a fifth until 2026-09-02, when
+// the judgment machinery it read was removed. Spelled out rather than imported, for the same
+// reason tasksKey is: a key the page changed unilaterally should break these tests.
 const headerKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
     ['project', id, 'panorama'],
     ['project', id, 'coordinator', 'status'],
-    ['judgments', 'open', { projectId: id, taskId: null }],
     ['project', id, 'panorama', 'blocking', 5],
     ['project', id, 'panorama', 'ready', 5],
   ];

@@ -387,7 +387,9 @@ test('typed TIMED_OUT attempts retain the goal and deterministically progress th
 
 test('immutable upstream evidence proves the approved 1200-second Watchdog completed 13/13 beyond legacy 120 seconds', () => {
   assert.ok(Array.isArray(upstreamEvidenceRows) && upstreamEvidenceRows.length > 0);
-  assert.equal(upstream.judgmentRequest.decision, 'PASS');
+  // `judgmentRequest` was removed from the completion-evidence read shape on 2026-09-02 with the
+  // rest of the judgment machinery. The evidence row it hung off is what this test is about and is
+  // unchanged; the task's own DONE below is the fact the decision used to duplicate.
   assert.equal(upstreamTask.status, 'DONE');
   assert.equal(upstreamAdmission.decision, 'ADMITTED');
   assert.equal(upstreamAdmission.requestedTimeoutSeconds, 1200);
@@ -421,7 +423,6 @@ test('immutable upstream evidence proves the approved 1200-second Watchdog compl
     evidenceDigest: upstream.evidenceDigest,
     rawEvidenceSha256: sha(upstreamEvidenceRaw),
     rawTaskSnapshotSha256: sha(upstreamTaskRaw),
-    judgmentDecision: upstream.judgmentRequest.decision,
     requestedTimeoutSeconds: upstream.evidence.executableDeclaration.requestedTimeoutSeconds,
     effectiveTimeoutSeconds: upstreamAdmission.effectiveTimeoutSeconds,
     runnerHardMaxSeconds: upstreamAdmission.runnerHardMaxSeconds,

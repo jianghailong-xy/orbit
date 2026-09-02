@@ -416,7 +416,7 @@ test('an owner JWT minted with the shared secret cannot directly write project.s
 
 function taskUpdateFixture(
   dispatchOrigin: SessionDispatchOrigin,
-  splitState?: { verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE'; openRequest: boolean },
+  splitState?: { verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE' },
 ) {
   const writes: Array<Record<string, unknown>> = [];
   const task = {
@@ -468,19 +468,6 @@ function taskUpdateFixture(
       }),
     },
     taskDependency: { findMany: async () => [] },
-    taskJudgmentRequest: {
-      findUnique: async () => splitState?.openRequest
-        ? {
-          id: TASK,
-          taskId: SUBJECT,
-          kind: 'VERIFICATION',
-          recipientType: 'VERIFIER_TASK',
-          recipientId: TASK,
-          status: 'OPEN',
-          decision: null,
-        }
-        : null,
-    },
     task: {
       findFirst: async () => ({ ...task }),
       findMany: async () => [],

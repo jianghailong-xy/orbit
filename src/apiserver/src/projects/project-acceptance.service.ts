@@ -784,63 +784,21 @@ export class ProjectAcceptanceService {
           evidenceSessionId: attempt.sessionId,
         };
       }
-      const result = criterion.evidenceTaskId
-        ? await tx.taskExecutableJudgmentResult.findFirst({
-            where: {
-              command: criterion.acceptanceCommand ?? undefined,
-              expectedExitCode: criterion.acceptanceExpectedExitCode ?? undefined,
-              request: {
-                taskId: criterion.evidenceTaskId,
-                kind: TaskCompletionCriterion.EXECUTABLE,
-                task: { projectId },
-              },
-            },
-            orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }],
-            select: {
-              id: true,
-              command: true,
-              expectedExitCode: true,
-              actualExitCode: true,
-              rawOutput: true,
-              recordedById: true,
-              recordedAt: true,
-              request: { select: { recipientId: true } },
-            },
-          })
-        : null;
-      if (!result) {
-        return {
-          verdict: ProjectAcceptanceVerdict.INCONCLUSIVE,
-          summary: 'No matching recorded command result exists yet',
-          evidence: {
-            kind: 'EXECUTABLE_RESULT',
-            command: criterion.acceptanceCommand,
-            expectedExitCode: criterion.acceptanceExpectedExitCode,
-            resultId: null,
-          },
-          evidenceTaskId: criterion.evidenceTaskId,
-          evidenceSessionId: null,
-        };
-      }
-      const verdict = result.actualExitCode === result.expectedExitCode
-        ? ProjectAcceptanceVerdict.PASS
-        : ProjectAcceptanceVerdict.FAIL;
+      // The typed attempt above is the only EXECUTABLE evidence this gate has. Until 2026-09-02
+      // it fell back to `task_executable_judgment_result`, the row the judgment machinery wrote
+      // from a shell exit code; that table and everything that filed into it were removed, and
+      // nothing replaces it — an EXECUTABLE criterion with no attempt is INCONCLUSIVE and says so.
       return {
-        verdict,
-        summary:
-          `Command exited ${result.actualExitCode}; expected ${result.expectedExitCode}`,
+        verdict: ProjectAcceptanceVerdict.INCONCLUSIVE,
+        summary: 'No matching recorded command result exists yet',
         evidence: {
           kind: 'EXECUTABLE_RESULT',
-          resultId: result.id,
-          command: result.command,
-          expectedExitCode: result.expectedExitCode,
-          actualExitCode: result.actualExitCode,
-          rawOutput: result.rawOutput,
-          recordedById: result.recordedById,
-          recordedAt: result.recordedAt.toISOString(),
+          command: criterion.acceptanceCommand,
+          expectedExitCode: criterion.acceptanceExpectedExitCode,
+          resultId: null,
         },
         evidenceTaskId: criterion.evidenceTaskId,
-        evidenceSessionId: result.request.recipientId,
+        evidenceSessionId: null,
       };
     }
 
@@ -1473,18 +1431,14 @@ export class ProjectAcceptanceService {
     projectId: string,
     digest: string,
   ): Promise<{ runId: string; attempt: bigint; digest: string }> {
-    // HUMAN_SIGNOFF judgment blockers are projections of OPEN requests, not mutable
-    // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
-    // merely because there is intentionally no blocker row for somebody to close by hand.
+    // Until 2026-09-02 this also counted `project_judgment_blocker`, the SQL view of OPEN
+    // judgment requests. The view and the requests behind it are gone, so `project_blocker` is
+    // once again the whole of "what is holding this project open" at this gate.
     const [{ count: openBlockers }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-      SELECT (
-        (SELECT count(*) FROM "project_blocker" blocker
-          WHERE blocker."project_id" = ${projectId}::uuid
-            AND blocker."resolved_at" IS NULL)
-        +
-        (SELECT count(*) FROM "project_judgment_blocker" judgment
-          WHERE judgment."project_id" = ${projectId}::uuid)
-      )::int AS "count"
+      SELECT count(*)::int AS "count"
+        FROM "project_blocker" blocker
+       WHERE blocker."project_id" = ${projectId}::uuid
+         AND blocker."resolved_at" IS NULL
     `);
     // §13.6 SU6: a failure whose verifier or whose subject was REPLACED is a record, not a request
     // — nothing will ever run either of them again, so the later PASS that is the only thing which

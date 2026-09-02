@@ -69,7 +69,6 @@ function controller(db: PrismaClient): RunnerApiController {
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
     undefined,
-    new CompletionInputRouter(new CoordinatorWakeService(prisma)),
   );
 }
 
@@ -191,7 +190,7 @@ async function dequeueAcceptance(api: RunnerApiController, f: Fixture): Promise<
   return next;
 }
 
-suite('(g) admission, attempt and verdict still run end to end for a passing command', async (t) => {
+suite('(g) admission and attempt still run end to end, and no longer settle the task', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
   const sql = new Client({ connectionString: URL });
   await sql.connect();
@@ -245,8 +244,11 @@ suite('(g) admission, attempt and verdict still run end to end for a passing com
     'an admitted, started attempt still does not settle the task',
   );
 
-  // VERDICT. A typed EXITED termination matching the declared code derives DONE, with no judgment
-  // request and no human evidence: the attempt itself is the durable input.
+  // TERMINATION. A typed EXITED termination matching the declared code is still recorded on the
+  // attempt. What it no longer does is settle the task: the evaluator that compared that exit
+  // code against the declaration was removed on 2026-09-02 with the judgment machinery, and
+  // EXECUTABLE is now declared-but-unimplemented. The declaration itself is untouched — the
+  // command and expected exit code below are still exactly what the task was created with.
   const settled = await api.turnComplete({ id: f.runnerId } as never, f.sessionId, {
     turnId: acceptance.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'shell',
     shellOutput: 'package.json is here',
@@ -256,25 +258,30 @@ suite('(g) admission, attempt and verdict still run end to end for a passing com
     acceptanceActualExitCode: 0,
   } as never);
   assert.equal((settled as { ok: boolean }).ok, true);
+  const declaredAfter = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
   assert.equal(
-    (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.DONE,
+    declaredAfter.status,
+    TaskStatus.OPEN,
+    'a matching exit code no longer derives DONE: EXECUTABLE has no implementation',
   );
+  assert.equal(declaredAfter.completionCriterion, 'EXECUTABLE',
+    'the declaration is preserved, not rewritten to a criterion that still works');
+  assert.equal(declaredAfter.acceptanceCommand, command);
+  assert.equal(declaredAfter.acceptanceExpectedExitCode, 0);
   const closed = await db.taskExecutableAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
   assert.equal(closed.terminationKind, 'EXITED');
   assert.equal(closed.actualExitCode, 0);
   assert.ok(closed.terminatedAt, 'the attempt is terminated by its own typed result');
   assert.equal(await db.taskExecutableAdmission.count({ where: { taskId: f.taskId } }), 1);
   assert.equal(await db.taskExecutableAttempt.count({ where: { taskId: f.taskId } }), 1);
-  assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: f.taskId } }), 0);
   assert.equal(
     await db.projectBlocker.count({ where: { projectId: f.projectId, resolvedAt: null } }),
     0,
-    'a mechanically settled task leaves no blocker behind',
+    'an unsettled task raises no blocker either: nothing is filed in its place',
   );
 });
 
-suite('(g) a nonzero exit still derives FAILED through the same lane', async (t) => {
+suite('(g) a nonzero exit no longer derives FAILED either', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
   const sql = new Client({ connectionString: URL });
   await sql.connect();
@@ -304,8 +311,9 @@ suite('(g) a nonzero exit still derives FAILED through the same lane', async (t)
 
   assert.equal(
     (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.FAILED,
-    'the declared exit code is the whole of the verdict',
+    TaskStatus.OPEN,
+    'a mismatching exit code derives nothing: the task stays where it was, awaiting a rebuilt '
+    + 'EXECUTABLE implementation rather than being conservatively failed by a removed evaluator',
   );
   const attempt = await db.taskExecutableAttempt.findUniqueOrThrow({
     where: { id: started.attemptId },

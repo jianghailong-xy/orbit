@@ -72,10 +72,6 @@ import {
   writeTaskSort,
 } from '../lib/taskSorting';
 import { useToast } from '../lib/toast';
-import {
-  judgmentRequestFromTaskDeepLink,
-  judgmentReviewPath,
-} from '../lib/judgments';
 
 // A checkbox is focusable but is not text entry, and clicking a row's checkbox leaves the
 // focus sitting on it — so treating every <input> as "typing" would silence the whole list
@@ -365,14 +361,6 @@ export function TaskListView() {
   const [searchParams, setSearchParams] = useSearchParams();
   // N12 shipped notification links on the task route. Request identity already pins the exact
   // evidence revision, so turn that legacy-compatible landing directly into the review surface.
-  const linkedJudgmentRequest = judgmentRequestFromTaskDeepLink(
-    searchParams.get('judgmentRequest'),
-  );
-  useEffect(() => {
-    if (linkedJudgmentRequest) {
-      navigate(judgmentReviewPath(linkedJudgmentRequest), { replace: true });
-    }
-  }, [linkedJudgmentRequest, navigate]);
   const setParam = (key: string, value: string, def: string) =>
     setSearchParams(
       (prev) => {

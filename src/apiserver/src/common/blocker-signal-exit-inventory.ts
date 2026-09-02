@@ -170,7 +170,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'HUMAN_DECISION_REQUIRED',
     resolveWhen:
-      'For evidence-bound completion this is the project_judgment_blocker view and disappears exactly when its judgment request is DECIDED or SUPERSEDED; legacy stored episodes also resolve when that request is created.',
+      'The stored episode resolves when the task reaches a terminal status; the evidence-bound projection that used to raise it was removed with the judgment machinery on 2026-09-02.',
   },
   {
     family: 'PROJECT_BLOCKER',
@@ -194,13 +194,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'DURABLE_SIGNAL',
     type: 'ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH',
     resolveWhen:
-      'The task is deleted, DONE or CANCELLED, records a later FAILED decision, or gains an evidence-bound judgment request; its timeline comment remains append-only audit evidence.',
-  },
-  {
-    family: 'DURABLE_SIGNAL',
-    type: 'OPEN_JUDGMENT_REQUEST',
-    resolveWhen:
-      'The bound task_judgment_request becomes DECIDED from its declared consumer or SUPERSEDED by a substantively new evidence revision; the request and old evidence remain auditable.',
+      'The task is deleted, DONE or CANCELLED, or records a later FAILED decision; its timeline comment remains append-only audit evidence.',
   },
   {
     family: 'DURABLE_SIGNAL',
