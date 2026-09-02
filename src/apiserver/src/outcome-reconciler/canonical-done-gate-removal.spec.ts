@@ -343,6 +343,26 @@ test('(s) no compose service or resident process is added, and the removal delet
     `this branch adds ${added} lines and removes ${removed}; a removal must be net subtraction`);
 });
 
+test('(l)(m) the removal writes no row: the stated criteria and their conclusions are untouched', () => {
+  // 306 criterion definitions across 43 projects, 313 criteria and 152 conclusions are account-level
+  // audit records, and the strongest thing that can be said about them is that this migration has
+  // no statement that could reach one. Its only DML is the three columns 0196 added to the ratified
+  // action intent; every `project_acceptance_*` it names is read inside a function body it rewrites.
+  const statements = REMOVAL_SQL.split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
+  for (const write of [/\bINSERT\s+INTO\b/i, /\bUPDATE\s+"?project/i, /\bDELETE\s+FROM\b/i,
+    /\bTRUNCATE\b/i]) {
+    assert.equal(write.test(statements), false, `the removal carries a ${write} of its own`);
+  }
+  const altered = [...statements.matchAll(/ALTER\s+TABLE\s+"?([a-z_0-9]+)"?/gi)].map((m) => m[1]);
+  assert.deepEqual([...new Set(altered)], ['project_ratified_action_intent']);
+  for (const relation of ['project_acceptance_criterion_definition', 'project_acceptance_criterion',
+    'project_acceptance_conclusion', 'project_acceptance_run', 'project_acceptance_audit',
+    'project_acceptance_criteria_confirmation']) {
+    const drop = new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${relation}"?`, 'i');
+    assert.equal(drop.test(statements), false, `${relation} is not this removal's to drop`);
+  }
+});
+
 test('(s) the acceptance DONE gate is not replaced by a second completion mechanism', () => {
   // Exactly one BEFORE trigger on `project` decides DONE, it is 0150's, and 0222 re-creates its
   // body rather than installing a new gate beside it.

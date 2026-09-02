@@ -495,7 +495,6 @@ func cliProjectAcceptance(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-
 func cliProjectAcceptanceRun(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit project acceptance-run")
