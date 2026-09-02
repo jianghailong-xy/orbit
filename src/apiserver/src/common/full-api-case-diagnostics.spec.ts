@@ -65,7 +65,12 @@ interface CaseRun {
 interface CaseOptions {
   /** How many cases the run believes it has, for the `[index/total]` the case prints. */
   total?: number;
-  /** The shared running list of failures, when the property under test is that one is kept. */
+  /**
+   * The running list of failures these cases should append to. It always points somewhere inside
+   * the sandbox: inherited from a real run, these deliberately-failing cases would file five
+   * `fake/*.spec.js` entries in the list that run publishes -- which is how a green acceptance
+   * ended up leaving five failures nobody could account for.
+   */
   failureLog?: string;
   /**
    * Leave `NODE_TEST_CONTEXT` in the child's environment instead of removing it here. Stripping it
@@ -124,7 +129,7 @@ function runCaseIn(
       OUTCOME_API_CASE_TEMPLATE: 'pccdiag_template',
       OUTCOME_API_CASE_PREFIX: 'pccdiag',
       OUTCOME_API_CASE_TIMEOUT: String(timeoutSeconds),
-      ...(options.failureLog ? { OUTCOME_API_CASE_FAILURE_LOG: options.failureLog } : {}),
+      OUTCOME_API_CASE_FAILURE_LOG: options.failureLog ?? path.join(root, 'sandbox-failures.log'),
     },
   });
   const stem = path.join(cases, String(index).padStart(4, '0'));
@@ -302,6 +307,28 @@ test('(vii) a failure is written the moment its case ends, and the cases after i
     assert.equal(final.length, 2);
     assert.match(final[0], /\[1\/3\] SPEC_FAILED fake\/fails\.spec\.js exit=1/u);
     assert.match(final[1], /\[3\/3\] TIMED_OUT fake\/hangs\.spec\.js exit=124/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('(viii) a sandboxed case never files its failure in the enclosing run\'s list', () => {
+  // These cases fail on purpose. Run under the Full API acceptance, the environment already names
+  // that run's failure list, and inheriting it put five `fake/*.spec.js` entries into the list a
+  // green run published -- phantom failures in the one file the tiering exists to make readable.
+  const live = process.env.OUTCOME_API_CASE_FAILURE_LOG;
+  const before = live && existsSync(live) ? readFileSync(live, 'utf8') : null;
+  const root = mkdtempSync(path.join(tmpdir(), 'full-api-case-sandbox-'));
+  try {
+    const run = runCaseIn(root, 9, 'fails.spec.js', FAILS, 120);
+    assert.equal(run.status, 1);
+    const sandbox = path.join(root, 'sandbox-failures.log');
+    assert.ok(existsSync(sandbox), 'the failure was filed inside the sandbox');
+    assert.match(readFileSync(sandbox, 'utf8'), /\[9\/1\] SPEC_FAILED fake\/fails\.spec\.js exit=1/u);
+    if (before !== null) {
+      assert.equal(readFileSync(live!, 'utf8'), before,
+        'the enclosing run\'s failure list must be exactly as it was');
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
