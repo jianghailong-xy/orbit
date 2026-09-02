@@ -140,7 +140,7 @@ export function failureContinuationProtocol(): string {
     + 'successor，不能产生第二个 active claim。\n'
     + '4. 代码缺陷、测试、部署与普通诊断由 Agent 处理，不创建 owner decision。只有确实遇到 '
     + 'GOAL_DECISION、RISK_ACCEPTANCE、NEW_AUTHORIZATION 或 EXTERNAL_IDENTITY 才能走结构化 owner-decision 协议；'
-    + '不得用 HUMAN_SIGNOFF 或评论冒充。'
+    + '不得用 EVIDENCE_JUDGMENT 或评论冒充。'
   );
 }
 
@@ -167,12 +167,12 @@ export function settledAcceptanceProtocol(projectId: string): string {
     + '不能漏项。\n'
     + '5. 服务端的判断会话角色边界仍然有效：这次判断可以完整提交全为 FAIL/INCONCLUSIVE 的 verdict；只要任何一条应为 '
     + 'PASS，就不得用假的 INCONCLUSIVE 绕过，也不能自己写 PASS。把每条候选 PASS 的证据写入相关 task_comment 并升级给人，'
-    + '由账号所有者通道确认标准集并仅提交真正 HUMAN_SIGNOFF 标准的 PASS。任何主体都不能用 project_update 直接写 '
+    + '由账号所有者通道确认标准集并仅提交真正 EVIDENCE_JUDGMENT 标准的 PASS。任何主体都不能用 project_update 直接写 '
     + 'status=DONE；标准集已确认且三种判据全部满足后，服务端自动产生 DONE。PASS/确认事件会留下 actor、时间和证据；'
     + 'DONE 会留下绑定的 run、digest 和自动求值来源。'
     + '这些记录都不证明持有凭据的一定是真人。\n\n'
     + '验收顺序再确认一次：合并到 main → project_merge_evidence → project_acceptance_run（幂等求值）→ '
-    + '自动判据求值 / owner 确认标准集并用 project_acceptance_verdict 处理 HUMAN_SIGNOFF；'
+    + '自动判据求值 / owner 确认标准集并用 project_acceptance_verdict 处理 EVIDENCE_JUDGMENT；'
     + '缺主干或缺 mergeEvidence 时停在开任务/升级。'
   );
 }

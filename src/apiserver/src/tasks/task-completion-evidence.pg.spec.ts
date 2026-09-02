@@ -115,13 +115,13 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   assert.equal(new Set(concurrent.map((row) => row.revision)).size, 1);
   assert.equal(new Set(concurrent.map((row) => row.judgmentRequest!.id)).size, 1);
   assert.equal(concurrent[0].judgmentRequest!.status, 'OPEN');
-  assert.equal(concurrent[0].judgmentRequest!.kind, 'HUMAN_SIGNOFF');
+  assert.equal(concurrent[0].judgmentRequest!.kind, 'EVIDENCE_JUDGMENT');
   assert.equal(concurrent[0].judgmentRequest!.recipientType, 'ACCOUNT_OWNER');
   assert.equal(concurrent[0].judgmentRequest!.recipientId, f.ownerId);
   assert.deepEqual(concurrent[0].consumption, {
     kind: 'JUDGMENT_REQUEST',
     judgmentRequestId: concurrent[0].judgmentRequest!.id,
-    requestKind: 'HUMAN_SIGNOFF',
+    requestKind: 'EVIDENCE_JUDGMENT',
   });
   assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 1);
   assert.equal(await db.taskCompletionEvidenceIdempotency.count({ where: { taskId: f.taskId } }), 1);
@@ -216,7 +216,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
     db as unknown as PrismaService,
     {} as never,
     { publishForUser() {} } as never,
-  ).signoff(f.ownerId, f.taskId, {
+  ).judge(f.ownerId, f.taskId, {
     requestId: changed.judgmentRequest!.id,
     evidenceDigest: changed.evidenceDigest,
     evidence: 'Owner reviewed the current N24 evidence revision.',
@@ -413,7 +413,7 @@ suite('verifier evidence is recorded for its own verdict without a check-of-chec
     assert.equal(importReplay.judgmentRequest, null);
     assert.deepEqual(importReplay.consumption, submitted.consumption);
     assert.equal(await db.taskJudgmentRequest.count({ where: { taskId: verifierId } }), 0,
-      'legacy verifier evidence must not create a HUMAN_SIGNOFF or verifier-of-verifier request');
+      'legacy verifier evidence must not create a EVIDENCE_JUDGMENT or verifier-of-verifier request');
 
     // Simulate a pre-0192 check-of-check request that the migration retained as terminal audit
     // history. It must be visible through listRequests, but it must never change the immutable
@@ -427,7 +427,7 @@ suite('verifier evidence is recorded for its own verdict without a check-of-chec
           ("id", "task_id", "owner_id", "evidence_id", "criterion_revision",
            "evidence_digest", "kind", "recipient_type", "recipient_id", "status",
            "superseded_at", "supersession_rule")
-        VALUES ($1, $2, $3::uuid, $4, $5, $6, 'HUMAN_SIGNOFF', 'ACCOUNT_OWNER', $3::text,
+        VALUES ($1, $2, $3::uuid, $4, $5, $6, 'EVIDENCE_JUDGMENT', 'ACCOUNT_OWNER', $3::text,
                 'SUPERSEDED', clock_timestamp(), 'VERIFIER_ROLE')
       `, [historicalRequestId, verifierId, f.ownerId, submitted.id,
         submitted.criterionRevision, submitted.evidenceDigest]);

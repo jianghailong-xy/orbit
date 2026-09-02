@@ -418,7 +418,7 @@ export function JudgmentReviewPage() {
           </div>
           <Link className="judgment-task-title" to={`/tasks/${encodeId(data.task.id)}`}>{data.task.title}</Link>
           <p className="judgment-task-scope">
-            <span>人工签字（HUMAN_SIGNOFF）</span>
+            <span>人工签字（EVIDENCE_JUDGMENT）</span>
             <span>task {data.derived.taskStatus}</span>
           </p>
         </div>
@@ -591,7 +591,6 @@ export function JudgmentReviewPage() {
                   <div><dt>决定</dt><dd>{historyRequest?.decision ?? historyRequest?.status ?? '无'}</dd></div>
                 </dl>
                 {historyRequest?.decisionNote && <p>决定说明：{historyRequest.decisionNote}</p>}
-                {historyRequest?.signoff && <p>签字证据：{historyRequest.signoff.evidence}</p>}
               </article>
             );
           })}

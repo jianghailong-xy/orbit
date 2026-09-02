@@ -24,7 +24,7 @@ function definition(id: string, ordinal: number, text: string, revision = 1) {
     ordinal,
     text,
     verificationMethod: `Verify exactly: ${text}`,
-    completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+    completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
     acceptanceCommand: null,
     acceptanceExpectedExitCode: null,
     evidenceTaskId: null,
@@ -318,7 +318,7 @@ test('openRun freezes definition identity, revision and text into both snapshot 
     {
       id: CRITERION_A_ID, revision: 2, ordinal: 1, text: 'Build succeeds',
       verificationMethod: 'Verify exactly: Build succeeds',
-      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+      completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
       acceptanceCommand: null,
       acceptanceExpectedExitCode: null,
       evidenceTaskId: null,
@@ -327,7 +327,7 @@ test('openRun freezes definition identity, revision and text into both snapshot 
     {
       id: CRITERION_B_ID, revision: 1, ordinal: 2, text: 'Image boots',
       verificationMethod: 'Verify exactly: Image boots',
-      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+      completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
       acceptanceCommand: null,
       acceptanceExpectedExitCode: null,
       evidenceTaskId: null,
@@ -421,11 +421,11 @@ test('finalizeRun rejects a partial checklist and names every missing ordinal', 
         criteria: [
           {
             ordinal: 1, criterionKey: 'build', criterionText: 'Build succeeds',
-            completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+            completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
           },
           {
             ordinal: 2, criterionKey: 'boot', criterionText: 'Image boots',
-            completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+            completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
           },
         ],
       }),

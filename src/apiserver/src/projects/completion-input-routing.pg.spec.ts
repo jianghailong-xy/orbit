@@ -88,7 +88,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
           title: 'human-reviewed delivery',
           creatorType: CreatorType.USER,
           creatorId: ownerId,
-          completionCriterion: 'HUMAN_SIGNOFF',
+          completionCriterion: 'EVIDENCE_JUDGMENT',
           status: TaskStatus.IN_PROGRESS,
         },
         {
@@ -140,7 +140,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       })).map((row) => [row.event, row.status, row.consumerType]),
       [
         ['COMPLETION_EVIDENCE_REVISED', 'CONSUMED', 'JUDGMENT_REQUEST_DERIVER'],
-        ['HUMAN_SIGNOFF_REQUESTED', 'CONSUMED', 'HUMAN_INBOX'],
+        ['EVIDENCE_JUDGMENT_REQUESTED', 'CONSUMED', 'HUMAN_INBOX'],
       ],
     );
 
@@ -166,14 +166,14 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     );
     assert.equal(
       await db.projectCoordinatorWake.count({
-        where: { projectId, event: 'HUMAN_SIGNOFF_REQUEST_SUPERSEDED', consumerType: 'HUMAN_INBOX' },
+        where: { projectId, event: 'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED', consumerType: 'HUMAN_INBOX' },
       }),
       1,
     );
 
     const realtime = new Proxy({}, { get: () => () => undefined }) as never;
     const tasks = new TasksService(prisma, {} as never, realtime, undefined, router);
-    const signed = await tasks.signoff(ownerId, taskId, {
+    const signed = await tasks.judge(ownerId, taskId, {
       requestId: second.judgmentRequest!.id,
       evidenceDigest: second.evidenceDigest,
       evidence: 'A person reviewed the exact revision-2 artifact and test output.',
@@ -183,20 +183,20 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       await db.projectCoordinatorWake.count({
         where: {
           projectId,
-          event: 'HUMAN_SIGNOFF_DECIDED',
+          event: 'EVIDENCE_JUDGMENT_DECIDED',
           status: 'CONSUMED',
           consumerType: 'DERIVED_COMPLETION_EVALUATOR',
         },
       }),
       1,
     );
-    await tasks.signoff(ownerId, taskId, {
+    await tasks.judge(ownerId, taskId, {
       requestId: second.judgmentRequest!.id,
       evidenceDigest: second.evidenceDigest,
-      evidence: 'transport replay must return the original signoff',
+      evidence: 'transport replay must return the original decision',
     });
     assert.equal(
-      await db.projectCoordinatorWake.count({ where: { projectId, event: 'HUMAN_SIGNOFF_DECIDED' } }),
+      await db.projectCoordinatorWake.count({ where: { projectId, event: 'EVIDENCE_JUDGMENT_DECIDED' } }),
       1,
     );
 

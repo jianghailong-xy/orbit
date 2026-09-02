@@ -201,10 +201,10 @@ test('a key holding a different session is refused', async () => {
   assert.deepEqual(writes, []);
 });
 
-test('an explicit non-human declaration cannot replay an older HUMAN_SIGNOFF winner', async () => {
+test('an explicit non-human declaration cannot replay an older EVIDENCE_JUDGMENT winner', async () => {
   const priorHuman = {
     ...legitimateWinner(),
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCommand: null,
     acceptanceExpectedExitCode: null,
     completionCriterionOverrideReason: null,

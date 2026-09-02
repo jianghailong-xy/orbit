@@ -271,7 +271,7 @@ export class RunnerProjectsController {
 
   /**
    * The legacy prose authoring shape has no place to declare how each assertion is decided. The
-   * project service therefore has to backfill HUMAN_SIGNOFF when an old user client sends it. That
+   * project service therefore has to backfill EVIDENCE_JUDGMENT when an old user client sends it. That
    * remains a necessary compatibility path on the JWT/user API and for reading existing projects,
    * but it is not a safe default for an agent: a stale CLI would otherwise silently turn every
    * mechanically decidable outcome into work only a person can close.
@@ -287,7 +287,7 @@ export class RunnerProjectsController {
     if (dto.acceptanceCriteria === undefined) return;
     throw new BadRequestException(
       'Runner project writes do not accept legacy acceptanceCriteria because it implicitly ' +
-        'creates HUMAN_SIGNOFF criteria. Send acceptanceCriteriaItems and explicitly set ' +
+        'creates EVIDENCE_JUDGMENT criteria. Send acceptanceCriteriaItems and explicitly set ' +
         'verificationMethod and completionCriterion on every item; send [] to clear the set. ' +
         'Legacy acceptanceCriteria remains a user-API and existing-data compatibility shape.',
     );

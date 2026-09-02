@@ -11,7 +11,7 @@ import {
 
 const when = (value: string): string => new Date(value).toLocaleString();
 
-/** Open HUMAN_SIGNOFF requests embedded on a task or project page. Actions stay on the review. */
+/** Open EVIDENCE_JUDGMENT requests embedded on a task or project page. Actions stay on the review. */
 export function JudgmentRequestSummary({
   projectId,
   taskId,

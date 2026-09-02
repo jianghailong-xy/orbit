@@ -114,7 +114,7 @@ test('a stalled list gets a foreman task, filed and dispatched', async () => {
   assert.equal(f.created[0].isForeman, true);
   assert.equal(f.created[0].listId, LIST.id);
   assert.equal(f.created[0].assigneeId, LIST.workspaceId);
-  assert.equal(f.created[0].completionCriterion, 'HUMAN_SIGNOFF');
+  assert.equal(f.created[0].completionCriterion, 'EVIDENCE_JUDGMENT');
   assert.match(f.created[0].completionCriterionOverrideReason, /owner to review/);
   assert.deepEqual(f.executed, [TASK_IDS[0]]);
   assert.deepEqual(f.published, [[

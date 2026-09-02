@@ -105,7 +105,7 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
          "completion_criterion", "content_hash", "semantic_hash", "evaluation_plan_hash"
        ) VALUES (
          gen_random_uuid(), $1::uuid, 1, 'dependency dispatch remains fenced',
-         'exercise both observed PostgreSQL commit orders', 'HUMAN_SIGNOFF',
+         'exercise both observed PostgreSQL commit orders', 'EVIDENCE_JUDGMENT',
          repeat('a', 64), repeat('b', 64), repeat('c', 64)
        )`,
       [ids.projectId],

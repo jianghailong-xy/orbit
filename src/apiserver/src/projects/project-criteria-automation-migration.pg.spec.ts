@@ -20,10 +20,13 @@ const skip = URL ? false : 'set COORDINATOR_PG_URL to run';
 const SCHEMA = 'n22_project_criteria_migration';
 const PROJECT_34CN = '01a03488-be19-7568-a461-6ce7915ab97d';
 const PROJECT_N22 = '01a03d90-3897-77d8-9076-8fa44255a2ea';
+// 0189 was written when the third completion criterion was spelled HUMAN_SIGNOFF; migration 0224
+// renamed that enum LABEL in place, without touching a single row. Replaying an append-only
+// migration against today's catalogue therefore needs today's spelling — and only the spelling.
 const MIGRATION = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0189_project_criteria_automation/migration.sql'),
   'utf8',
-);
+).replaceAll("'HUMAN_SIGNOFF'", "'EVIDENCE_JUDGMENT'");
 
 interface Counts {
   project_id: string;
@@ -51,7 +54,7 @@ async function seedPre0189(client: Client): Promise<void> {
   await client.query(`SET search_path TO ${SCHEMA}, public`);
   await client.query(String.raw`
     CREATE TYPE "task_completion_criterion" AS ENUM
-      ('EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF');
+      ('EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT');
     CREATE TYPE "project_acceptance_verdict" AS ENUM
       ('PASS', 'FAIL', 'INCONCLUSIVE');
 
@@ -189,7 +192,7 @@ async function seedPre0189(client: Client): Promise<void> {
 
 async function counts(client: Client, migrated: boolean): Promise<Counts[]> {
   const human = migrated
-    ? `count(*) FILTER (WHERE d."completion_criterion" = 'HUMAN_SIGNOFF')::int`
+    ? `count(*) FILTER (WHERE d."completion_criterion" = 'EVIDENCE_JUDGMENT')::int`
     : '0::int';
   const configured = migrated
     ? `count(*) FILTER (WHERE d."acceptance_command" IS NOT NULL
@@ -254,7 +257,7 @@ test('0189 migrates both named project populations conservatively without PASS o
     assert.deepEqual(after.map((row) => ({
       projectId: row.project_id,
       criteria: row.criteria,
-      humanSignoff: row.human_signoff,
+      evidenceJudgment: row.human_signoff,
       mechanicalConfiguration: row.mechanical_configuration,
       passConclusions: row.pass_conclusions,
       passRuns: row.pass_runs,
@@ -263,7 +266,7 @@ test('0189 migrates both named project populations conservatively without PASS o
       {
         projectId: PROJECT_34CN,
         criteria: 10,
-        humanSignoff: 10,
+        evidenceJudgment: 10,
         mechanicalConfiguration: 0,
         passConclusions: 9,
         passRuns: 0,
@@ -272,7 +275,7 @@ test('0189 migrates both named project populations conservatively without PASS o
       {
         projectId: PROJECT_N22,
         criteria: 11,
-        humanSignoff: 11,
+        evidenceJudgment: 11,
         mechanicalConfiguration: 0,
         passConclusions: 0,
         passRuns: 0,

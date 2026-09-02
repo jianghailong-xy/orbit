@@ -49,7 +49,7 @@ async function addEvidence(
       criterionRevision: input.criterionRevision,
       criterion: {
         schemaVersion: 1,
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         acceptanceCriteria: 'A person confirms the exact evidence revision.',
       },
       evidence: input.evidence,
@@ -79,7 +79,7 @@ async function addRequest(
       evidenceId: input.evidenceId,
       criterionRevision: input.criterionRevision,
       evidenceDigest: input.digest,
-      kind: 'HUMAN_SIGNOFF',
+      kind: 'EVIDENCE_JUDGMENT',
       recipientType: 'ACCOUNT_OWNER',
       recipientId: input.ownerId,
       createdAt: input.createdAt,
@@ -129,7 +129,7 @@ suite('human judgment review preserves evidence identity and server-derived life
         acceptanceCriteria: 'Inbox, review, and both decisions work on phone and desktop.',
         creatorType: CreatorType.USER,
         creatorId: ownerId,
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         status: TaskStatus.OPEN,
       },
     });
@@ -192,7 +192,7 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.equal(initial.isCurrent, true);
     assert.equal(initial.task.objective,
       'Let a person judge this completion without searching the project.');
-    assert.equal(initial.task.completionCriterion, 'HUMAN_SIGNOFF');
+    assert.equal(initial.task.completionCriterion, 'EVIDENCE_JUDGMENT');
     assert.equal(initial.evidence.revision, '1');
     assert.equal(initial.evidence.digest, firstDigest);
     assert.equal(initial.evidence.commit, '0123456789abcdef');
@@ -210,7 +210,7 @@ suite('human judgment review preserves evidence identity and server-derived life
         requestStatus: 'OPEN',
         evidenceIsCurrent: true,
       },
-      task: { id: taskId, resultingStatus: 'DONE', basis: 'HUMAN_SIGNOFF' },
+      task: { id: taskId, resultingStatus: 'DONE', basis: 'EVIDENCE_JUDGMENT' },
       request: { id: firstRequest.id, resultingStatus: 'DECIDED', decision: 'PASS' },
       signal: { resultingOpen: false },
       blocker: { resultingOpen: false },
@@ -253,7 +253,7 @@ suite('human judgment review preserves evidence identity and server-derived life
       (error: unknown) => {
         assert.ok(error instanceof ConflictException);
         assert.equal((error.getResponse() as Record<string, unknown>).code,
-          'HUMAN_SIGNOFF_REQUEST_NOT_OPEN');
+          'EVIDENCE_JUDGMENT_REQUEST_NOT_OPEN');
         return true;
       },
     );
@@ -313,8 +313,12 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.ok(dependent);
     assert.notEqual(dependent.dependencyState, 'BLOCKED');
     const approvedReplay = await reviews.decide(ownerId, secondRequest.id, passPayload);
-    assert.equal(approvedReplay.request.signoff?.id, approved.request.signoff?.id);
-    assert.equal(await db.taskHumanSignoff.count({ where: { taskId } }), 1);
+    assert.equal(approvedReplay.request.decidedAt?.toISOString(),
+      approved.request.decidedAt?.toISOString(),
+      'a replay reads the committed decision back rather than restamping it');
+    assert.equal(await db.taskJudgmentRequest.count({
+      where: { taskId, status: 'DECIDED', decision: 'PASS' },
+    }), 1);
 
     // A separate still-open task proves superseded request refusal and the refresh target it names.
     const staleTaskId = randomUUID();
@@ -326,7 +330,7 @@ suite('human judgment review preserves evidence identity and server-derived life
         title: 'Reject a stale evidence revision',
         creatorType: CreatorType.USER,
         creatorId: ownerId,
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
       },
     });
     const staleEvidence = await addEvidence(db, {
@@ -379,7 +383,7 @@ suite('human judgment review preserves evidence identity and server-derived life
       (error: unknown) => {
         assert.ok(error instanceof ConflictException);
         assert.equal((error.getResponse() as Record<string, unknown>).code,
-          'HUMAN_SIGNOFF_REQUEST_SUPERSEDED');
+          'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED');
         return true;
       },
     );
@@ -387,5 +391,7 @@ suite('human judgment review preserves evidence identity and server-derived life
     assert.equal(staleReview.reviewState, 'SUPERSEDED');
     assert.equal(staleReview.isCurrent, false);
     assert.equal(staleReview.currentEvidence.requestId, currentRequest.id);
-    assert.equal(await db.taskHumanSignoff.count({ where: { taskId: staleTaskId } }), 0);
+    assert.equal(await db.taskJudgmentRequest.count({
+      where: { taskId: staleTaskId, status: 'DECIDED' },
+    }), 0);
   });

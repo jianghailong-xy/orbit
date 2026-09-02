@@ -1817,7 +1817,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
       code: 'TASK_CRITERION_SHAPE_ADVICE',
       kind: 'ADVISORY',
       advisory: true,
-      declaredCriterion: 'HUMAN_SIGNOFF',
+      declaredCriterion: 'EVIDENCE_JUDGMENT',
       suggestedCriterion: 'EXECUTABLE',
       reason: 'The acceptance prose matched “spec 通过”.',
     } as const;
@@ -1829,27 +1829,27 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     );
 
     expect(taskCriterionShapeAdviceFrom(error)).toEqual({
-      declaredCriterion: 'HUMAN_SIGNOFF',
+      declaredCriterion: 'EVIDENCE_JUDGMENT',
       suggestedCriterion: 'EXECUTABLE',
       reason: body.reason,
     });
     const rendered = renderForm({
       title: 'N17',
       acceptanceCriteria: 'spec 通过',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     }, { error });
     expect(rendered).toContain('Consider EXECUTABLE');
-    expect(rendered).toContain('Why keep HUMAN_SIGNOFF?');
+    expect(rendered).toContain('Why keep EVIDENCE_JUDGMENT?');
     expect(rendered).toContain('Required to override this advice; stored on the task');
 
     expect(newProjectTaskBody(encodeId(P1), {
       title: 'N17',
       acceptanceCriteria: '  spec 通过  ',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       completionCriterionOverrideReason: '  L0 cannot safely judge its own execution path  ',
     })).toMatchObject({
       acceptanceCriteria: 'spec 通过',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       completionCriterionOverrideReason: 'L0 cannot safely judge its own execution path',
     });
   });

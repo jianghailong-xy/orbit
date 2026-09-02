@@ -288,8 +288,8 @@ func TestMCPTaskCreateBatchPostsEveryItemInOneCall(t *testing.T) {
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{
-			map[string]interface{}{"title": "first", "ref": "s0", "completionCriterion": "HUMAN_SIGNOFF"},
-			map[string]interface{}{"title": "second", "dependsOnRefs": []interface{}{"s0"}, "assigneeId": nil, "completionCriterion": "HUMAN_SIGNOFF"},
+			map[string]interface{}{"title": "first", "ref": "s0", "completionCriterion": "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "second", "dependsOnRefs": []interface{}{"s0"}, "assigneeId": nil, "completionCriterion": "EVIDENCE_JUDGMENT"},
 		},
 	})
 	if res["isError"] == true {
@@ -828,7 +828,7 @@ func TestMCPTaskCreateBatchAsksBeforeWriting(t *testing.T) {
 
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
-		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "HUMAN_SIGNOFF"}, map[string]interface{}{"title": "b", "completionCriterion": "HUMAN_SIGNOFF"}},
+		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}, map[string]interface{}{"title": "b", "completionCriterion": "EVIDENCE_JUDGMENT"}},
 	})
 	if res["isError"] == true {
 		t.Fatalf("batch returned an error: %#v", res["content"])
@@ -862,7 +862,7 @@ func TestMCPTaskCreateBatchWritesNothingWhenDenied(t *testing.T) {
 
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
-		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "HUMAN_SIGNOFF"}},
+		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
 	})
 
 	if wrote {
@@ -900,7 +900,7 @@ func TestMCPTaskCreateBatchDoesNotAskWhenNothingStarts(t *testing.T) {
 
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
-		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "HUMAN_SIGNOFF"}},
+		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
 	})
 
 	if res["isError"] == true {
@@ -934,7 +934,7 @@ func TestMCPTaskCreateBatchStillAsksWhenRunsWouldStart(t *testing.T) {
 
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	mcp.callTool("task_create_batch", map[string]interface{}{
-		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "HUMAN_SIGNOFF"}},
+		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
 	})
 
 	if !asked {
@@ -954,7 +954,7 @@ func TestMCPTaskCreateBatchHeadlessDoesNotAsk(t *testing.T) {
 
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
-		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "HUMAN_SIGNOFF"}},
+		"tasks": []interface{}{map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}},
 	})
 
 	if res["isError"] == true {

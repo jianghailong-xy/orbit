@@ -146,7 +146,7 @@ export class JudgmentDeliveryService implements OnModuleInit, OnModuleDestroy {
           JOIN "task_judgment_inbox_item" inbox ON inbox."id" = delivery."inbox_item_id"
           JOIN "task_judgment_request" request ON request."id" = inbox."request_id"
          WHERE request."status" = 'OPEN'
-           AND request."kind" = 'HUMAN_SIGNOFF'
+           AND request."kind" = 'EVIDENCE_JUDGMENT'
            AND ((delivery."status" IN ('PENDING', 'BLOCKED')
                  AND delivery."next_attempt_at" <= statement_timestamp()) OR
                 (delivery."status" = 'DELIVERING'
@@ -187,12 +187,12 @@ export class JudgmentDeliveryService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (!row || row.inboxItem.request.status !== 'OPEN'
-        || row.inboxItem.request.kind !== 'HUMAN_SIGNOFF') return;
+        || row.inboxItem.request.kind !== 'EVIDENCE_JUDGMENT') return;
 
       const openCount = await this.prisma.taskJudgmentInboxItem.count({
         where: {
           recipientId: row.inboxItem.recipientId,
-          request: { status: 'OPEN', kind: 'HUMAN_SIGNOFF' },
+          request: { status: 'OPEN', kind: 'EVIDENCE_JUDGMENT' },
         },
       });
       const result = await this.push.deliverJudgmentRequest({
@@ -266,7 +266,7 @@ export class JudgmentDeliveryService implements OnModuleInit, OnModuleDestroy {
              JOIN "task_judgment_request" request ON request."id" = inbox."request_id"
             WHERE inbox."id" = delivery."inbox_item_id"
               AND request."status" = 'OPEN'
-              AND request."kind" = 'HUMAN_SIGNOFF'
+              AND request."kind" = 'EVIDENCE_JUDGMENT'
          )
     `);
   }
@@ -283,7 +283,7 @@ export class JudgmentDeliveryService implements OnModuleInit, OnModuleDestroy {
         JOIN "task_judgment_inbox_item" inbox ON inbox."id" = delivery."inbox_item_id"
         JOIN "task_judgment_request" request ON request."id" = inbox."request_id"
        WHERE request."status" = 'OPEN'
-         AND request."kind" = 'HUMAN_SIGNOFF'
+         AND request."kind" = 'EVIDENCE_JUDGMENT'
          AND delivery."status" IN ('PENDING', 'BLOCKED', 'DELIVERING')
     `);
     if (row?.due) this.kick(Math.max(0, row.due.getTime() - Date.now()));

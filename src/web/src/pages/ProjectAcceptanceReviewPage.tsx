@@ -132,7 +132,7 @@ function CriterionDecisionCard({
   onChange: (next: CriterionDraft) => void;
 }) {
   const current = criterion.verdict ?? 'UNDECIDED';
-  const automatic = criterion.completionCriterion !== 'HUMAN_SIGNOFF';
+  const automatic = criterion.completionCriterion !== 'EVIDENCE_JUDGMENT';
   const prefix = `project-acceptance-criterion-${criterion.ordinal}`;
   const set = <K extends keyof CriterionDraft>(key: K, value: CriterionDraft[K]) => {
     onChange({ ...draft, [key]: value });
@@ -253,7 +253,7 @@ function stateCopy(run: ProjectAcceptanceRun): { type: 'info' | 'success' | 'war
   if (run.supersededAt) return { type: 'warning', title: '此 evidence version 已被替代，只能审计查看。' };
   if (run.verdict === 'PASS') return { type: 'success', title: '此项目验收已由服务端推导为 PASS。' };
   if (run.verdict) return { type: 'warning', title: `此项目验收已由服务端推导为 ${run.verdict}。` };
-  return { type: 'info', title: '查看自动求值结果，并只回答需要人的 HUMAN_SIGNOFF 标准。' };
+  return { type: 'info', title: '查看自动求值结果，并只回答需要人的 EVIDENCE_JUDGMENT 标准。' };
 }
 
 export function ProjectAcceptanceReviewPage() {
@@ -275,7 +275,7 @@ export function ProjectAcceptanceReviewPage() {
     [review.data?.runs, runId],
   );
   const humanCriteria = useMemo(
-    () => run?.criteria.filter((criterion) => criterion.completionCriterion === 'HUMAN_SIGNOFF') ?? [],
+    () => run?.criteria.filter((criterion) => criterion.completionCriterion === 'EVIDENCE_JUDGMENT') ?? [],
     [run],
   );
 
@@ -380,7 +380,7 @@ export function ProjectAcceptanceReviewPage() {
         className="judgment-state-alert project-criteria-confirmation"
         type="info"
         showIcon
-        title="本页只处理逐项 HUMAN_SIGNOFF"
+        title="本页只处理逐项 EVIDENCE_JUDGMENT"
         description={`当前标准集 digest ${review.data.criteriaDigest}；改动这套标准是 project_update 的直接写入，不在本页。`}
       />
 
@@ -425,7 +425,7 @@ export function ProjectAcceptanceReviewPage() {
           <span className="judgment-claim-count">{answeredCount}/{humanCriteria.length} 条人工标准已回答</span>
         </div>
         <p className="judgment-criteria-notice">
-          EXECUTABLE 与 VERIFICATION 只展示自动结果；仅 HUMAN_SIGNOFF 接受人的结论。
+          EXECUTABLE 与 VERIFICATION 只展示自动结果；仅 EVIDENCE_JUDGMENT 接受人的结论。
         </p>
         <ol className="judgment-criterion-list">
           {run.criteria.map((criterion) => (
@@ -433,7 +433,7 @@ export function ProjectAcceptanceReviewPage() {
               key={criterion.id}
               criterion={criterion}
               draft={drafts[criterion.id] ?? draftFrom(criterion)}
-              disabled={!actionable || submit.isPending || criterion.completionCriterion !== 'HUMAN_SIGNOFF'}
+              disabled={!actionable || submit.isPending || criterion.completionCriterion !== 'EVIDENCE_JUDGMENT'}
               onChange={(next) => setDrafts((current) => ({ ...current, [criterion.id]: next }))}
             />
           ))}
@@ -444,7 +444,7 @@ export function ProjectAcceptanceReviewPage() {
       <section className="judgment-decision project-acceptance-submit" aria-labelledby="project-acceptance-submit-heading">
         <div className="judgment-decision-title">
           <h2 id="project-acceptance-submit-heading">提交完整项目验收</h2>
-          <span>仅 HUMAN_SIGNOFF 必答</span>
+          <span>仅 EVIDENCE_JUDGMENT 必答</span>
         </div>
         <p id="project-acceptance-submit-help">
           {unanswered.length > 0
@@ -470,7 +470,7 @@ export function ProjectAcceptanceReviewPage() {
           type="info"
           showIcon
           title="没有需要人工逐条判定的标准"
-          description="EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE；这里不会制造 HUMAN_SIGNOFF。"
+          description="EXECUTABLE / VERIFICATION 证据全部满足时项目会自动 DONE；这里不会制造 EVIDENCE_JUDGMENT。"
         />
       )}
 

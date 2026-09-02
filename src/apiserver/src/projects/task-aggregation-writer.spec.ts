@@ -15,7 +15,7 @@ test('aggregation scope bounds the database page before retaining any partial cl
     status: 'OPEN',
     parentTaskId: null,
     completionPolicy: 'MANUAL',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     verifiesTaskId: null,
     verdict: null,
     supersededByTaskId: null,

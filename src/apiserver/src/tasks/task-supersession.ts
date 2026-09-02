@@ -410,7 +410,7 @@ export function taskFenceConflictMessage(error: unknown): string | null {
   const message = error instanceof Error ? error.message : String(error ?? '');
   if (/TASK_DONE_CANONICAL_FACT_REQUIRED|TASK_COMPLETION_FENCE_REVISION_DOWNGRADE/.test(message)) {
     return 'status DONE can only be projected from the task\'s declared executable result, '
-      + 'verification verdict, or human signoff event — record that fact instead of writing status';
+      + 'verification verdict, or evidence-judgment decision — record that fact instead of writing status';
   }
   if (/TASK_SUPERSEDED|TASK_VERIFICATION_SUBJECT_SUPERSEDED/.test(message)) {
     return "this task's work has been replaced — the attempt that took over holds it now, so no "

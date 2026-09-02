@@ -26,7 +26,7 @@ export interface JudgmentRoute {
  *
  * There is intentionally no default and no ordered list to try: an unavailable executable
  * evaluator remains an EXECUTABLE request, and an unavailable verifier remains VERIFICATION.
- * Neither silently becomes a HUMAN_SIGNOFF request.
+ * Neither silently becomes a EVIDENCE_JUDGMENT request.
  */
 export function routeTaskJudgment(
   kind: TaskCompletionCriterionValue,
@@ -45,7 +45,7 @@ export function routeTaskJudgment(
         recipientType: 'VERIFIER_TASK',
         recipientId: context.requestId,
       };
-    case 'HUMAN_SIGNOFF':
+    case 'EVIDENCE_JUDGMENT':
       return {
         kind,
         recipientType: 'ACCOUNT_OWNER',

@@ -137,7 +137,7 @@
           "role": "APPEND_OR_MONOTONIC_EVIDENCE_BOUND_REQUEST"
         },
         {
-          "storage": "task_executable_judgment_result + task_human_signoff + task.verdict",
+          "storage": "task_executable_judgment_result + task_judgment_request.decision + task.verdict",
           "role": "DECISION_FACTS"
         }
       ],

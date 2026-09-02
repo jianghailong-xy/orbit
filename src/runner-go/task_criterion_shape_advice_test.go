@@ -50,7 +50,7 @@ func TestCLITaskCreatePresentsCriterionAdviceAndForwardsTheOverride(t *testing.T
 	base := []string{
 		"create", "--title", "mechanical task",
 		"--acceptance-criteria", "spec 通过",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 		"--json",
 	}
 	var out bytes.Buffer
@@ -93,7 +93,7 @@ func TestMCPTaskCreatePresentsCriterionAdviceAndForwardsSingleAndBatchOverrides(
 
 	result := mcp.callTool("task_create", map[string]interface{}{
 		"title": "mechanical task", "acceptanceCriteria": "spec 通过",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	text := criterionAdviceText(t, result)
 	if result["isError"] != true || !strings.Contains(text, "advice: TASK_CRITERION_SHAPE_ADVICE") ||
@@ -104,7 +104,7 @@ func TestMCPTaskCreatePresentsCriterionAdviceAndForwardsSingleAndBatchOverrides(
 	reason := "a human must authorize the irreversible migration"
 	result = mcp.callTool("task_create", map[string]interface{}{
 		"title": "migration", "acceptanceCriteria": "spec 通过",
-		"completionCriterion": "HUMAN_SIGNOFF", "completionCriterionOverrideReason": reason,
+		"completionCriterion": "EVIDENCE_JUDGMENT", "completionCriterionOverrideReason": reason,
 	})
 	if result["isError"] == true || bodies[1]["completionCriterionOverrideReason"] != reason {
 		t.Fatalf("MCP override = %#v, body = %#v", result, bodies[1])
@@ -113,7 +113,7 @@ func TestMCPTaskCreatePresentsCriterionAdviceAndForwardsSingleAndBatchOverrides(
 	batchReason := "release authority belongs to a person"
 	result = mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{map[string]interface{}{
-			"title": "release", "completionCriterion": "HUMAN_SIGNOFF",
+			"title": "release", "completionCriterion": "EVIDENCE_JUDGMENT",
 			"completionCriterionOverrideReason": batchReason,
 		}},
 		"dryRun": true,

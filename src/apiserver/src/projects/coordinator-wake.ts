@@ -87,12 +87,12 @@ export const COORDINATOR_WAKE_EVENTS = [
   'EXECUTABLE_RESULT_RECORDED',
   /** An evidence-bound verifier recorded a new versioned verdict. */
   'VERIFICATION_VERDICT_RECORDED',
-  /** N11 created the human-owned question for one evidence fact. */
-  'HUMAN_SIGNOFF_REQUESTED',
-  /** A person decided the exact human-owned question and evidence digest. */
-  'HUMAN_SIGNOFF_DECIDED',
-  /** New evidence replaced an older open human-owned question. */
-  'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+  /** N11 created the judgment question for one evidence fact. */
+  'EVIDENCE_JUDGMENT_REQUESTED',
+  /** The exact question and evidence digest were decided. */
+  'EVIDENCE_JUDGMENT_DECIDED',
+  /** New evidence replaced an older open question. */
+  'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
   /** A terminal result is durable but the control plane has not committed its completion ACK. */
   'COMPLETION_ACK_STALE',
   /** A failed typed EXECUTABLE attempt left an ACTIVE diagnosis the agent must continue. */
@@ -100,6 +100,22 @@ export const COORDINATOR_WAKE_EVENTS = [
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
+
+/**
+ * Spellings the database still accepts and this unit no longer writes.
+ *
+ * `project_coordinator_wake` is an event log. When migration 0224 deleted the human step, the
+ * three judgment events lost the word "human" — but rows already written say `HUMAN_SIGNOFF_*`
+ * because that is what happened when they were written, and rewriting them would edit the log
+ * rather than continue it. So the CHECK accepts both, this list names the retired half, and
+ * `coordinator-wake.spec.ts` requires the union to equal the constraint exactly: an event added to
+ * the database without appearing in one of these two lists is still a failure.
+ */
+export const RETIRED_COORDINATOR_WAKE_EVENTS = [
+  'HUMAN_SIGNOFF_REQUESTED',
+  'HUMAN_SIGNOFF_DECIDED',
+  'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+] as const;
 
 /**
  * What the fact is about. `CRITERION` has no row of its own — an acceptance criterion is a line of

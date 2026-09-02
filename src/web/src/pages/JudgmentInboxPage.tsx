@@ -64,7 +64,7 @@ export function JudgmentInboxPage() {
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>任务级 HUMAN_SIGNOFF 与项目验收共用一个收件箱；Failure Continuation 只在 owner-only 决策时进入这里，普通工程故障由 coordinator 自动处理。</p>
+          <p>任务级 EVIDENCE_JUDGMENT 与项目验收共用一个收件箱；Failure Continuation 只在 owner-only 决策时进入这里，普通工程故障由 coordinator 自动处理。</p>
         </div>
         {hasAnyData
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>

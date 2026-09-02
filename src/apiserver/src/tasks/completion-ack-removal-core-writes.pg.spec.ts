@@ -121,14 +121,14 @@ suite('(d) ordinary task creation, update, subtasks, dependencies and supersede 
   assert.deepEqual(stored.dependsOn.map((edge) => edge.dependsOnTaskId), [prerequisite.id]);
 
   // UPDATE, including the completion criterion the dropped criterion guards used to police. A
-  // HUMAN_SIGNOFF task opened by an ordinary caller was always allowed; it must still be.
+  // EVIDENCE_JUDGMENT task opened by an ordinary caller was always allowed; it must still be.
   const renamed = await tasks.update(ownerId, child.id, {
     title: 'child renamed',
     description: 'still an ordinary task',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   });
   assert.equal(renamed.title, 'child renamed');
-  assert.equal(renamed.completionCriterion, 'HUMAN_SIGNOFF');
+  assert.equal(renamed.completionCriterion, 'EVIDENCE_JUDGMENT');
 
   // SUPERSEDE. `task_completion_ack_remediation_reactivation_guard` fired on every status UPDATE.
   await tasks.update(ownerId, prerequisite.id, { status: SharedTaskStatus.FAILED });

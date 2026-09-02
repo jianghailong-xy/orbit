@@ -438,7 +438,7 @@ test('EXECUTABLE is declared explicitly and follows the matching command exit co
         assert.match(error.message, /evaluated automatically.*cannot submit a fallback human verdict/);
         return true;
       },
-      'EXECUTABLE has no HUMAN_SIGNOFF fallback path',
+      'EXECUTABLE has no EVIDENCE_JUDGMENT fallback path',
     );
 
     await recordExecutableResult(db, target, source.id, 'npm test', 0, 7, 1);
@@ -486,7 +486,7 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
     const subject = await task(db, target, 'implementation under review');
     const verifier = await task(db, target, 'independent review', {
       verifiesTaskId: subject.id,
-      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+      completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
     });
     await declare(projects, target, {
       text: '独立复核确认实现符合意图',
@@ -519,14 +519,14 @@ test('VERIFICATION follows only the independent verifier Task verdict', { skip }
   }
 });
 
-test('HUMAN_SIGNOFF waits for the human criterion conclusion', { skip }, async () => {
+test('EVIDENCE_JUDGMENT waits for the human criterion conclusion', { skip }, async () => {
   const { db, acceptance, projects } = await connect();
   try {
     const target = await base(db, 'human');
     await declare(projects, target, {
       text: '由 owner 判断发布取舍是否值得',
       verificationMethod: 'Owner reviews the release tradeoff',
-      completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+      completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
     });
     assert.equal(
       await db.project.findUniqueOrThrow({ where: { id: target.projectId } }).then((p) => p.status),

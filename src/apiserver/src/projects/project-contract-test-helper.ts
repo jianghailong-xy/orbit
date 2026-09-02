@@ -39,7 +39,7 @@ async function establish(
        "id", "project_id", "ordinal", "text", "verification_method",
        "completion_criterion", "content_hash", "semantic_hash", "evaluation_plan_hash"
      )
-     SELECT gen_random_uuid(), $2::uuid, 1, $3, $4, 'HUMAN_SIGNOFF',
+     SELECT gen_random_uuid(), $2::uuid, 1, $3, $4, 'EVIDENCE_JUDGMENT',
             encode(digest('combined:' || $2::text || ':' || $3, 'sha256'), 'hex'),
             encode(digest('semantic:' || $2::text || ':' || $3, 'sha256'), 'hex'),
             encode(digest('evaluation:' || $2::text || ':' || $4, 'sha256'), 'hex')

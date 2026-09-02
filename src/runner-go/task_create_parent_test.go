@@ -26,7 +26,7 @@ func TestTaskCLICreateSendsParentTaskIDWithItsProject(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{
 		"create", "--title", "Step one",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 		"--project-id", "proj-1",
 		"--parent-task-id", "task-parent",
 		"--json",
@@ -59,7 +59,7 @@ func TestTaskCLICreateSendsParentTaskIDWithoutAProject(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	err := cmdTaskCLI([]string{"create", "--title", "Step one", "--completion-criterion", "HUMAN_SIGNOFF", "--parent-task-id", "task-parent", "--json"},
+	err := cmdTaskCLI([]string{"create", "--title", "Step one", "--completion-criterion", "EVIDENCE_JUDGMENT", "--parent-task-id", "task-parent", "--json"},
 		strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestTaskCLICreateOmitsParentTaskIDWhenNotAsked(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--project-id", "proj-1", "--json"},
+	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--project-id", "proj-1", "--json"},
 		strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestMCPTaskCreateSendsTheParentTaskIDToTheServer(t *testing.T) {
 		"title":               "Step one",
 		"projectId":           "proj-1",
 		"parentTaskId":        "task-parent",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] == true {
 		t.Fatalf("task_create returned an error: %#v", res["content"])
@@ -221,8 +221,8 @@ func TestMCPTaskCreateBatchSendsEveryItemsParentTaskID(t *testing.T) {
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{
-			map[string]interface{}{"title": "first", "projectId": "proj-1", "parentTaskId": "task-parent", "ref": "s0", "completionCriterion": "HUMAN_SIGNOFF"},
-			map[string]interface{}{"title": "second", "projectId": "proj-1", "parentTaskId": "task-parent", "dependsOnRefs": []interface{}{"s0"}, "completionCriterion": "HUMAN_SIGNOFF"},
+			map[string]interface{}{"title": "first", "projectId": "proj-1", "parentTaskId": "task-parent", "ref": "s0", "completionCriterion": "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "second", "projectId": "proj-1", "parentTaskId": "task-parent", "dependsOnRefs": []interface{}{"s0"}, "completionCriterion": "EVIDENCE_JUDGMENT"},
 		},
 	})
 	if res["isError"] == true {
@@ -279,8 +279,8 @@ func TestMCPTaskCreateBatchKeepsEachItemsOwnParent(t *testing.T) {
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{
-			map[string]interface{}{"title": "under A", "parentTaskId": "parent-a", "completionCriterion": "HUMAN_SIGNOFF"},
-			map[string]interface{}{"title": "top level", "completionCriterion": "HUMAN_SIGNOFF"},
+			map[string]interface{}{"title": "under A", "parentTaskId": "parent-a", "completionCriterion": "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "top level", "completionCriterion": "EVIDENCE_JUDGMENT"},
 		},
 	})
 	if res["isError"] == true {
@@ -317,7 +317,7 @@ func TestMCPTaskCreateReportsAParentInAnotherProject(t *testing.T) {
 		"title":               "Step one",
 		"projectId":           "proj-2",
 		"parentTaskId":        "task-in-proj-1",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] != true {
 		t.Fatalf("a cross-project parent isError = %#v", res["isError"])
@@ -346,7 +346,7 @@ func TestMCPTaskCreateReportsAnUnknownParent(t *testing.T) {
 	res := mcp.callTool("task_create", map[string]interface{}{
 		"title":               "Step one",
 		"parentTaskId":        "task-nobody-owns",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] != true {
 		t.Fatalf("an unknown parent isError = %#v", res["isError"])
@@ -368,7 +368,7 @@ func TestTaskCLICreateReportsARejectedParent(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	err := cmdTaskCLI([]string{"create", "--title", "Step one", "--completion-criterion", "HUMAN_SIGNOFF", "--parent-task-id", "task-parent", "--json"},
+	err := cmdTaskCLI([]string{"create", "--title", "Step one", "--completion-criterion", "EVIDENCE_JUDGMENT", "--parent-task-id", "task-parent", "--json"},
 		strings.NewReader(""), &out)
 	if err == nil {
 		t.Fatalf("a rejected parent exited zero, output = %q", out.String())

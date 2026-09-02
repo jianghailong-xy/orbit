@@ -73,7 +73,6 @@ function fixture(
     creatorSessionId: null,
     assignee: null,
     comments: [],
-    humanSignoffs: [],
     sessions: [],
     creatorSession: null,
     dependsOn: [],
@@ -146,19 +145,20 @@ function assertCriterionRefusal(
   assert.match(String(body.message), /cannot be written directly by a person, coordinator or execution session/);
 }
 
-test('a person cannot write DONE and is directed to the HUMAN_SIGNOFF criterion', async () => {
-  const f = fixture(THE_RUN_ITSELF, 'HUMAN_SIGNOFF');
+test('nobody can write DONE and every caller is directed to the EVIDENCE_JUDGMENT criterion',
+  async () => {
+    const f = fixture(THE_RUN_ITSELF, 'EVIDENCE_JUDGMENT');
 
-  const body = await refusalOf(() => f.write(TaskStatus.DONE));
+    const body = await refusalOf(() => f.write(TaskStatus.DONE));
 
-  assertCriterionRefusal(
-    body,
-    'HUMAN_SIGNOFF',
-    'CREATE_HUMAN_SIGNOFF_WITH_EVIDENCE',
-    /current HUMAN_SIGNOFF judgment request.*requestId.*evidenceDigest/,
-  );
-  assert.deepEqual(f.writes, []);
-});
+    assertCriterionRefusal(
+      body,
+      'EVIDENCE_JUDGMENT',
+      'DECIDE_THE_OPEN_EVIDENCE_JUDGMENT',
+      /current EVIDENCE_JUDGMENT request[\s\S]*requestId and evidenceDigest/,
+    );
+    assert.deepEqual(f.writes, []);
+  });
 
 test('a coordinator judgment cannot write DONE and is directed to VERIFICATION', async () => {
   const f = fixture(THE_COORDINATOR, 'VERIFICATION');
@@ -190,7 +190,7 @@ test('a task execution session cannot write DONE and is directed to EXECUTABLE',
 
 test('foreman, verifier and unrelated sessions have no direct-DONE exemption', async () => {
   for (const session of [THE_RUN_ITSELF, { ...THE_RUN_ITSELF, taskId: OTHER_TASK }]) {
-    const f = fixture(session, 'HUMAN_SIGNOFF');
+    const f = fixture(session, 'EVIDENCE_JUDGMENT');
     const body = await refusalOf(() => f.write(TaskStatus.DONE, SESSION));
     assert.equal(body.code, 'DIRECT_TASK_DONE_REFUSED');
     assert.deepEqual(f.writes, []);
@@ -198,14 +198,14 @@ test('foreman, verifier and unrelated sessions have no direct-DONE exemption', a
 });
 
 test('reasserting an existing DONE is still a forbidden direct write', async () => {
-  const f = fixture(THE_RUN_ITSELF, 'HUMAN_SIGNOFF', TaskStatus.DONE);
+  const f = fixture(THE_RUN_ITSELF, 'EVIDENCE_JUDGMENT', TaskStatus.DONE);
   const body = await refusalOf(() => f.write(TaskStatus.DONE));
   assert.equal(body.code, 'DIRECT_TASK_DONE_REFUSED');
   assert.deepEqual(f.writes, []);
 });
 
 test('the task execution session may still write FAILED as a conservative self-report', async () => {
-  const f = fixture(THE_RUN_ITSELF, 'HUMAN_SIGNOFF');
+  const f = fixture(THE_RUN_ITSELF, 'EVIDENCE_JUDGMENT');
 
   await f.write(TaskStatus.FAILED, SESSION);
 

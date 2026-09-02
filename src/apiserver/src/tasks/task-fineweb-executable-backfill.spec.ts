@@ -20,6 +20,7 @@ test('N19 is an explicit bounded declaration-only migration with four strict cla
   for (const taskClass of ['FINEWEB', 'WARC', 'MERGE', 'VERIFY']) {
     assert.match(migration, new RegExp(`RETURN QUERY SELECT '${taskClass}'::text`));
   }
+  // 0187 is frozen history and predates 0224's rename of this enum label.
   assert.match(migration, /无可判定的标题前缀且没有验收标准；保持 HUMAN_SIGNOFF。/);
   assert.match(migration, /标题不符合对应前缀的严格 dump\/shard 模板；未猜测命令。/);
   assert.match(migration, /task\."status" = 'OPEN'/);

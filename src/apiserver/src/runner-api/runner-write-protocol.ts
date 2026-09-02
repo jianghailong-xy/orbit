@@ -227,7 +227,7 @@ export function translateLegacyRunnerCompletionDeclaration<T extends CompletionD
     requiredAction: 'DECLARE_COMPLETION_CRITERION_EXPLICITLY',
     message:
       `${subject}.completionCriterion is required at the runner boundary; omission is never `
-      + 'translated to HUMAN_SIGNOFF.',
+      + 'translated to EVIDENCE_JUDGMENT.',
   });
 }
 

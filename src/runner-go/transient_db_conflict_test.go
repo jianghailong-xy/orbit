@@ -65,7 +65,7 @@ func TestCLIShowsTheServersAnswerToADatabaseConflict(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	err := cmdTaskCLI([]string{"create", "--title", "index the corpus", "--completion-criterion", "HUMAN_SIGNOFF"}, strings.NewReader(""), &out)
+	err := cmdTaskCLI([]string{"create", "--title", "index the corpus", "--completion-criterion", "EVIDENCE_JUDGMENT"}, strings.NewReader(""), &out)
 	if err == nil {
 		t.Fatal("task create reported success against a server that refused the write")
 	}

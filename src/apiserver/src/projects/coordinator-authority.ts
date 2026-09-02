@@ -93,13 +93,15 @@ export type CoordinatorAction = (typeof COORDINATOR_ACTIONS)[number];
 /**
  * §0's table. One tier per action, and the argument for each is the cost of being wrong.
  *
- * The three HUMAN_ONLY rows are the owner-review decisions. Project settlement is AUTOMATIC now:
- * no principal writes it, and the confirmed conjunction projects it when all peer criteria pass.
- * HUMAN_ONLY is retained as the stable policy/API label for "route this to owner review"; it does
- * not claim that the credentialed owner channel is cryptographic proof of human presence:
- * editing defines the exam, confirming says the complete exam expresses the goal, and a human
- * PASS settles the few criteria that cannot be mechanically decided. The evaluator, not any of
- * those actors, binds project DONE once their conjunction is true.
+ * The two HUMAN_ONLY rows are what is left of owner review, and they are both about the RULER:
+ * editing defines the exam, confirming says the complete exam expresses the goal. Reading the
+ * ruler is no longer one of them. `CONCLUDE_VERDICT_PASS` moved to COORDINATOR_BOUNDED in the
+ * same change that deleted `HUMAN_SIGNOFF`: a judgment session may now confirm a criterion as
+ * well as refute one, bounded by the evidence version its conclusion names and by the conjunction
+ * the evaluator still requires. Project settlement remains AUTOMATIC — no principal writes it.
+ *
+ * HUMAN_ONLY is the stable policy/API label for "route this to owner review"; it does not claim
+ * that the credentialed owner channel is cryptographic proof of human presence.
  */
 export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, AuthorityTier>> = {
   // Deterministic: prerequisites all DONE, an assignee, under the concurrency cap. No LLM decides
@@ -114,7 +116,10 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   OPEN_TASK: 'COORDINATOR_BOUNDED',
   EDIT_ACCEPTANCE_CRITERIA: 'HUMAN_ONLY',
   CONFIRM_ACCEPTANCE_CRITERIA: 'HUMAN_ONLY',
-  CONCLUDE_VERDICT_PASS: 'HUMAN_ONLY',
+  // Bounded, not free: the conclusion must name the immutable evidence version it was reached
+  // against, every stated criterion must be answered in the same call, and the project-level
+  // verdict is derived from that conjunction rather than supplied.
+  CONCLUDE_VERDICT_PASS: 'COORDINATOR_BOUNDED',
   SETTLE_PROJECT_DONE: 'AUTOMATIC',
 };
 
@@ -126,7 +131,6 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
 export const AUTHORITY_REFUSAL_CODES = [
   'ACCEPTANCE_CRITERIA_HUMAN_ONLY',
   'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY',
-  'VERDICT_PASS_HUMAN_ONLY',
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
@@ -183,8 +187,7 @@ export function authorityPrincipal(
 }
 
 const HUMAN_ONLY_REFUSALS: Readonly<
-  Record<'EDIT_ACCEPTANCE_CRITERIA' | 'CONFIRM_ACCEPTANCE_CRITERIA' |
-    'CONCLUDE_VERDICT_PASS',
+  Record<'EDIT_ACCEPTANCE_CRITERIA' | 'CONFIRM_ACCEPTANCE_CRITERIA',
     { code: AuthorityRefusalCode; message: string }>
 > = {
   EDIT_ACCEPTANCE_CRITERIA: {
@@ -205,18 +208,10 @@ const HUMAN_ONLY_REFUSALS: Readonly<
       'set expresses the goal. Use an owner channel or a headless runner path; Orbit records the ' +
       'credentialed actor, which is audit visibility and not proof that a human held it.',
   },
-  CONCLUDE_VERDICT_PASS: {
-    code: 'VERDICT_PASS_HUMAN_ONLY',
-    message:
-      'A judgment session cannot write PASS. A PASS completes work for every reader downstream and '
-      + 'nothing asks again, so it is not a coordinator’s to record. FAIL and INCONCLUSIVE are '
-      + 'allowed from here: a conservative conclusion releases nothing. Escalate the evidence for '
-      + 'an owner-channel decision; that attribution is an audit fact, not proof of human presence.',
-  },
 };
 
 /**
- * The three HUMAN_ONLY rows, as a refusal or null.
+ * The two HUMAN_ONLY rows, as a refusal or null.
  *
  * Total over the principal on purpose: a caller cannot express "check this only for coordinators",
  * because that phrasing is where a gate ends up guarded by the very condition it was meant to test.
@@ -239,7 +234,7 @@ export function refuseHumanOnlyAction(
 /** What `refuseTaskOpening` is decided over. Every field is server-read except the declared key. */
 export interface TaskOpeningFacts {
   /** The already-validated declaration on the Task this call would open. */
-  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF' | null;
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | null;
   /** The criterion the caller says this work serves — `CreateTaskDto.criterionKey`, verbatim. */
   declaredCriterionKey: string | null | undefined;
   /** The keys of the project's currently stated criteria (`ProjectAcceptanceService`'s `key`). */

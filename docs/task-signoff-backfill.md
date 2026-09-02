@@ -1,9 +1,9 @@
-# HUMAN_SIGNOFF stored-task rollout
+# EVIDENCE_JUDGMENT stored-task rollout
 
 Migration `0184_task_signoff_backfill` installs metadata and audit ledgers only. It does not scan
 `task`, read `task_comment`, create evidence or requests, or update lifecycle state. Migration
 `0179_task_completion_criterion` gives omitted/pre-existing criteria the PostgreSQL constant
-default `HUMAN_SIGNOFF` without an `UPDATE`.
+default `EVIDENCE_JUDGMENT` without an `UPDATE`.
 
 ## 1. Preflight and invariant counts
 
@@ -60,7 +60,7 @@ calls the import path.
 ## 3. Missing-request backfill
 
 Use a small batch after the scale estimate. The command selects only non-DONE/non-CANCELLED,
-non-retired HUMAN_SIGNOFF tasks that already have a latest evidence revision and lack its exact
+non-retired EVIDENCE_JUDGMENT tasks that already have a latest evidence revision and lack its exact
 request:
 
 ```text

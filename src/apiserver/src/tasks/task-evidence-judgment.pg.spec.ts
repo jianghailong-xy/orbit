@@ -1,15 +1,16 @@
 /**
- * N2's HUMAN_SIGNOFF boundary against real PostgreSQL.
+ * The EVIDENCE_JUDGMENT boundary against real PostgreSQL, after migration 0224 removed the human
+ * step from it.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable database accepted by the
- * coordinator PG safety guard, with migration 0180 applied.
+ * coordinator PG safety guard, with migration 0224 applied.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaClient, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import {
@@ -23,8 +24,8 @@ import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
-const ATOMIC_TRIGGER = 'n2_human_signoff_atomic_assert';
-const ATOMIC_FUNCTION = 'n2_human_signoff_atomic_assert_fn';
+const ATOMIC_TRIGGER = 'evidence_judgment_atomic_assert';
+const ATOMIC_FUNCTION = 'evidence_judgment_atomic_assert_fn';
 
 function tasksService(db: PrismaClient): TasksService {
   return new TasksService(
@@ -37,28 +38,35 @@ function tasksService(db: PrismaClient): TasksService {
   );
 }
 
-test('migration pins every signoff event to an open evidence-bound request', () => {
-  const n2 = readFileSync(join(
-    process.cwd(), 'prisma', 'migrations', '0180_task_human_signoff', 'migration.sql',
+test('the decision is the request row, bound to one evidence version and forced to say why', () => {
+  const removal = readFileSync(join(
+    process.cwd(), 'prisma', 'migrations',
+    '0224_evidence_judgment_removal_of_human_signoff', 'migration.sql',
   ), 'utf8');
   const n11 = readFileSync(join(
     process.cwd(), 'prisma', 'migrations', '0181_task_judgment_request', 'migration.sql',
   ), 'utf8');
-  assert.match(n2, /"signed_by_id" uuid NOT NULL/);
-  assert.match(n2, /"signed_at" TIMESTAMP\(3\) NOT NULL/);
-  assert.match(n2, /"evidence" text NOT NULL/);
-  assert.match(n2, /CHECK \(length\(btrim\("evidence"\)\) > 0\)/);
-  assert.match(n11, /ADD COLUMN "request_id" uuid/);
-  assert.match(n11, /ALTER COLUMN "request_id" SET NOT NULL/);
-  assert.match(n11, /ADD COLUMN "evidence_digest" char\(64\)/);
-  assert.match(n11, /ALTER COLUMN "evidence_digest" SET NOT NULL/);
-  assert.match(n11, /task_human_signoff_current_request_guard/);
-  assert.match(n11, /task_judgment_request_transition_guard/);
-  assert.match(n11, /CREATE VIEW "task_judgment_signal"/);
-  assert.match(n11, /CREATE VIEW "project_judgment_blocker"/);
+  // The separate human-authored event table is gone, and its prose moved onto the request first.
+  assert.match(removal, /SET "decision_note" = s\."evidence"/);
+  assert.match(removal, /DROP TABLE "task_human_signoff"/);
+  assert.match(removal, /DROP TRIGGER IF EXISTS "task_human_signoff_current_request_guard"/);
+  // The evidence binding it used to sit beside is untouched and still four columns wide.
+  assert.match(n11, /CONSTRAINT "task_judgment_request_evidence_fact_fkey"/);
+  assert.match(
+    n11,
+    /FOREIGN KEY \("evidence_id", "task_id", "criterion_revision", "evidence_digest"\)/,
+  );
+  assert.doesNotMatch(removal.replace(/^\s*--.*$/gm, ''),
+    /task_judgment_request_evidence_fact_fkey/,
+    'the removal migration must not restate, replace or weaken the evidence binding');
+  // What replaces the human-only decider rule: any attributed principal, and a stated finding.
+  assert.match(
+    removal,
+    /"kind" = 'EVIDENCE_JUDGMENT' AND "decided_by_type" IN \('USER', 'AGENT'\)\s*\n\s*AND length\(btrim\("decision_note"\)\) > 0/,
+  );
 });
 
-suite('human signoff atomically derives DONE and removes the open human-decision view',
+suite('an evidence judgment atomically derives DONE and removes the open decision view',
   { timeout: 180_000 }, async (t) => {
     assertCoordinatorPgUrlIsIsolated(URL);
     const sql = new Client({ connectionString: URL });
@@ -107,7 +115,7 @@ suite('human signoff atomically derives DONE and removes the open human-decision
         title: 'Needs a human judgment',
         creatorType: 'USER',
         creatorId: ownerId,
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         status: TaskStatus.OPEN,
       },
     });
@@ -133,7 +141,7 @@ suite('human signoff atomically derives DONE and removes the open human-decision
         actorId: ownerId,
         sourceSessionId,
         criterionRevision,
-        criterion: { completionCriterion: 'HUMAN_SIGNOFF' },
+        criterion: { completionCriterion: 'EVIDENCE_JUDGMENT' },
         evidence: { revision: 'old' },
         evidenceDigest: oldEvidenceDigest,
         revision: 1n,
@@ -148,7 +156,7 @@ suite('human signoff atomically derives DONE and removes the open human-decision
         evidenceId: oldEvidenceId,
         criterionRevision,
         evidenceDigest: oldEvidenceDigest,
-        kind: 'HUMAN_SIGNOFF',
+        kind: 'EVIDENCE_JUDGMENT',
         recipientType: 'ACCOUNT_OWNER',
         recipientId: ownerId,
         createdAt: oldCreatedAt,
@@ -163,7 +171,7 @@ suite('human signoff atomically derives DONE and removes the open human-decision
         actorId: ownerId,
         sourceSessionId,
         criterionRevision,
-        criterion: { completionCriterion: 'HUMAN_SIGNOFF' },
+        criterion: { completionCriterion: 'EVIDENCE_JUDGMENT' },
         evidence: { revision: 'current', command: 'npm test', exitCode: 0 },
         evidenceDigest,
         revision: 2n,
@@ -178,7 +186,7 @@ suite('human signoff atomically derives DONE and removes the open human-decision
         evidenceId,
         criterionRevision,
         evidenceDigest,
-        kind: 'HUMAN_SIGNOFF',
+        kind: 'EVIDENCE_JUDGMENT',
         recipientType: 'ACCOUNT_OWNER',
         recipientId: ownerId,
         createdAt: now,
@@ -220,9 +228,11 @@ suite('human signoff atomically derives DONE and removes the open human-decision
       },
     });
 
-    // Negative control: before the signature the criterion is unsatisfied and its signal is open.
+    // Negative control: before the decision the criterion is unsatisfied and its signal is open.
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: taskId } })).status, TaskStatus.OPEN);
-    assert.equal(await db.taskHumanSignoff.count({ where: { taskId } }), 0);
+    assert.equal(await db.taskJudgmentRequest.count({
+      where: { taskId, status: 'DECIDED' },
+    }), 0);
     assert.equal(await db.projectBlocker.count({
       where: { id: blocker.id, resolvedAt: null },
     }), 1);
@@ -237,36 +247,37 @@ suite('human signoff atomically derives DONE and removes the open human-decision
     )).rows[0].n, 1);
 
     const service = tasksService(db);
-    const signoff = {
+    const judgment = {
       requestId,
       evidenceDigest,
       evidence: 'Reviewed commit 0123456789abcdef and `npm test`; exit 0, 2670 tests.',
     };
+
+    // Negative: the finding is what replaced the signoff row, so a blank one is refused and
+    // consumes nothing. This is the evidence requirement, not a human requirement.
     await assert.rejects(
-      service.signoff(ownerId, taskId, signoff, randomUUID()),
+      service.judge(ownerId, taskId, { ...judgment, evidence: '   ' }),
       (error: unknown) => {
-        assert.ok(error instanceof ForbiddenException);
+        assert.ok(error instanceof BadRequestException);
         const body = error.getResponse() as Record<string, unknown>;
-        assert.equal(body.code, 'HUMAN_SIGNOFF_REQUIRES_USER');
-        assert.equal(body.criterion, 'HUMAN_SIGNOFF');
+        assert.equal(body.code, 'EVIDENCE_JUDGMENT_FINDING_REQUIRED');
+        assert.equal(body.criterion, 'EVIDENCE_JUDGMENT');
         return true;
       },
     );
-    assert.equal(await db.taskHumanSignoff.count({ where: { taskId } }), 0);
-    assert.equal(await db.projectBlocker.count({ where: { id: blocker.id, resolvedAt: null } }), 1);
     assert.equal(await db.taskJudgmentRequest.count({ where: { id: requestId, status: 'OPEN' } }), 1,
-      'authorization refusal does not consume the request fact');
+      'a refused judgment does not consume the request fact');
 
     await assert.rejects(
-      service.signoff(ownerId, taskId, {
+      service.judge(ownerId, taskId, {
         requestId: oldRequestId,
         evidenceDigest: oldEvidenceDigest,
-        evidence: 'trying to sign stale evidence',
+        evidence: 'trying to decide stale evidence',
       }),
       (error: unknown) => {
         assert.ok(error instanceof ConflictException);
         assert.equal((error.getResponse() as Record<string, unknown>).code,
-          'HUMAN_SIGNOFF_REQUEST_SUPERSEDED');
+          'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED');
         return true;
       },
     );
@@ -282,26 +293,17 @@ suite('human signoff atomically derives DONE and removes the open human-decision
            AND OLD."status" IS DISTINCT FROM 'DONE'::task_status
            AND NEW."status" = 'DONE'::task_status THEN
           IF NOT EXISTS (
-            SELECT 1 FROM "task_human_signoff" s
-             WHERE s."task_id" = NEW."id"
-               AND s."request_id" = '${requestId}'::uuid
-               AND s."evidence_digest" = '${evidenceDigest}'
-               AND s."signed_by_id" IS NOT NULL
-               AND s."signed_at" IS NOT NULL
-               AND length(btrim(s."evidence")) > 0
-          ) THEN
-            RAISE EXCEPTION 'N2_ATOMIC_ASSERT: signoff evidence absent at DONE transition';
-          END IF;
-          IF EXISTS (
             SELECT 1 FROM "task_judgment_request" r
              WHERE r."id" = '${requestId}'::uuid
-               AND (r."status" <> 'DECIDED' OR r."decision" <> 'PASS'
-                 OR r."decided_at" IS NULL OR r."decided_by_type" <> 'USER'
-                 OR r."decided_by_id" <> '${ownerId}')
-          ) OR NOT EXISTS (
-            SELECT 1 FROM "task_judgment_request" r WHERE r."id" = '${requestId}'::uuid
+               AND r."task_id" = NEW."id"
+               AND r."evidence_digest" = '${evidenceDigest}'
+               AND r."status" = 'DECIDED' AND r."decision" = 'PASS'
+               AND r."decided_at" IS NOT NULL
+               AND r."decided_by_type" IN ('USER', 'AGENT')
+               AND length(btrim(r."decided_by_id")) > 0
+               AND length(btrim(r."decision_note")) > 0
           ) THEN
-            RAISE EXCEPTION 'N11_ATOMIC_ASSERT: request decision absent at DONE transition';
+            RAISE EXCEPTION 'ATOMIC_ASSERT: decided finding absent at DONE transition';
           END IF;
           IF EXISTS (
             SELECT 1 FROM "task_judgment_signal" signal WHERE signal."task_id" = NEW."id"
@@ -329,11 +331,25 @@ suite('human signoff atomically derives DONE and removes the open human-decision
         FOR EACH ROW EXECUTE FUNCTION "${ATOMIC_FUNCTION}"()
     `);
 
-    // Two authorised handlers race on the same fact. The owner/task/request locks make the loser
-    // observe the committed event and replay it instead of creating another open request/event.
+    // Two authorised handlers race on the same fact, and one of them is an agent session — the
+    // call the removed HUMAN_SIGNOFF gate refused outright. The owner/task/request locks make the
+    // loser observe the committed decision and replay it instead of deciding twice.
+    const agentSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: agentSessionId,
+        ownerId,
+        creatorId: ownerId,
+        taskId,
+        title: 'judging run',
+        prompt: 'decide the open evidence judgment',
+        dispatchOrigin: 'PROJECT_COORDINATOR',
+        startsTaskWork: false,
+      },
+    });
     const [first, second] = await Promise.all([
-      service.signoff(ownerId, taskId, signoff),
-      service.signoff(ownerId, taskId, { ...signoff, evidence: 'concurrent duplicate review' }),
+      service.judge(ownerId, taskId, judgment, agentSessionId),
+      service.judge(ownerId, taskId, { ...judgment, evidence: 'concurrent duplicate review' }),
     ]);
     const results = [first, second];
     const result = results.find((candidate) => candidate.transitioned)!;
@@ -342,30 +358,25 @@ suite('human signoff atomically derives DONE and removes the open human-decision
     assert.equal(result.transitioned, true);
     assert.equal(results.filter((candidate) => candidate.transitioned).length, 1);
     assert.equal(result.blockersResolved, 1);
-    assert.equal(result.signoff.taskId, taskId);
-    assert.equal(result.signoff.signedById, ownerId, 'who signed is durable and non-empty');
-    assert.ok(result.signoff.signedAt instanceof Date, 'when they signed is durable and non-empty');
-    assert.equal(second.signoff.id, result.signoff.id);
-    assert.ok([signoff.evidence, 'concurrent duplicate review'].includes(result.signoff.evidence));
-    assert.equal(result.signoff.requestId, requestId);
-    assert.equal(result.signoff.evidenceDigest, evidenceDigest);
+    assert.equal(result.judgment.taskId, taskId);
+    assert.ok(result.judgment.decidedById, 'who decided is durable and non-empty');
+    assert.ok(result.judgment.decidedAt instanceof Date, 'when they decided is durable');
+    assert.equal(second.judgment.requestId, result.judgment.requestId);
+    assert.ok([judgment.evidence, 'concurrent duplicate review'].includes(result.judgment.evidence));
+    assert.equal(result.judgment.requestId, requestId);
+    assert.equal(result.judgment.evidenceDigest, evidenceDigest);
 
-    const [storedTask, storedSignoff, storedBlocker, storedRequest] = await Promise.all([
+    const [storedTask, storedBlocker, storedRequest] = await Promise.all([
       db.task.findUniqueOrThrow({ where: { id: taskId } }),
-      db.taskHumanSignoff.findUniqueOrThrow({ where: { taskId } }),
       db.projectBlocker.findUniqueOrThrow({ where: { id: blocker.id } }),
       db.taskJudgmentRequest.findUniqueOrThrow({ where: { id: requestId } }),
     ]);
     assert.equal(storedTask.status, TaskStatus.DONE);
-    assert.equal(storedSignoff.signedById, ownerId);
-    assert.ok(storedSignoff.signedAt);
-    assert.ok(storedSignoff.evidence.trim().length > 0);
-    assert.equal(storedSignoff.requestId, requestId);
-    assert.equal(storedSignoff.evidenceDigest, evidenceDigest);
     assert.equal(storedRequest.status, 'DECIDED');
     assert.equal(storedRequest.decision, 'PASS');
-    assert.equal(storedRequest.decidedByType, 'USER');
-    assert.equal(storedRequest.decidedById, ownerId);
+    assert.ok(['USER', 'AGENT'].includes(storedRequest.decidedByType!));
+    assert.ok((storedRequest.decisionNote ?? '').trim().length > 0,
+      'the finding is mandatory and is what the deleted signoff row used to hold');
     assert.ok(storedRequest.decidedAt);
     assert.ok(storedBlocker.resolvedAt);
     assert.equal(storedBlocker.resolvedBy, 'AUTO');
@@ -389,12 +400,14 @@ suite('human signoff atomically derives DONE and removes the open human-decision
     assert.equal((await service.get(ownerId, dependentId) as { dependencyState: string }).dependencyState,
       'READY', 'the derived DONE releases the dependent');
 
-    // A transport retry returns the original event; it does not rewrite who/when/evidence.
-    const replay = await service.signoff(ownerId, taskId, {
-      ...signoff,
+    // A transport retry returns the original decision; it does not rewrite who/when/finding.
+    const replay = await service.judge(ownerId, taskId, {
+      ...judgment,
       evidence: 'different retry payload',
     });
-    assert.equal(replay.signoff.id, storedSignoff.id);
-    assert.equal(replay.signoff.evidence, storedSignoff.evidence);
-    assert.equal(await db.taskHumanSignoff.count({ where: { taskId } }), 1);
+    assert.equal(replay.judgment.requestId, storedRequest.id);
+    assert.equal(replay.judgment.evidence, storedRequest.decisionNote);
+    assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({ where: { id: requestId } }))
+      .decidedAt?.getTime(), storedRequest.decidedAt?.getTime(),
+      'append-only: a replay never restamps the committed decision');
   });

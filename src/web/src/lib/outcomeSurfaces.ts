@@ -1,6 +1,6 @@
 import type { CanonicalFailureCoordination } from './failureCoordination';
 
-export type OutcomeDecisionType = 'HUMAN_SIGNOFF'
+export type OutcomeDecisionType = 'EVIDENCE_JUDGMENT'
   | 'GOAL_DECISION' | 'RISK_ACCEPTANCE' | 'NEW_AUTHORIZATION' | 'EXTERNAL_IDENTITY';
 
 export interface HumanDecisionProtocol {

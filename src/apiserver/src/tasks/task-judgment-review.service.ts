@@ -15,7 +15,6 @@ const inboxInclude = {
   request: {
     include: {
       evidence: true,
-      humanSignoff: { include: { signedBy: { select: { id: true, name: true } } } },
     },
   },
   task: {
@@ -48,9 +47,6 @@ type InboxRow = Prisma.TaskJudgmentInboxItemGetPayload<{ include: typeof inboxIn
 const historyInclude = {
   judgmentRequests: {
     orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
-    include: {
-      humanSignoff: { include: { signedBy: { select: { id: true, name: true } } } },
-    },
   },
 } satisfies Prisma.TaskCompletionEvidenceInclude;
 
@@ -128,15 +124,6 @@ function requestView(request: HistoryRow['judgmentRequests'][number]) {
     decisionNote: request.decisionNote,
     supersededAt: request.supersededAt,
     supersededById: request.supersededById,
-    signoff: request.humanSignoff
-      ? {
-          id: request.humanSignoff.id,
-          signedById: request.humanSignoff.signedById,
-          signedByName: request.humanSignoff.signedBy.name,
-          signedAt: request.humanSignoff.signedAt,
-          evidence: request.humanSignoff.evidence,
-        }
-      : null,
   };
 }
 
@@ -183,7 +170,7 @@ export class TaskJudgmentReviewService {
       // delivery snapshot for audit and must not leave a moved request on the old project page.
       ...(query.projectId ? { task: { projectId: query.projectId } } : {}),
       request: {
-        kind: 'HUMAN_SIGNOFF' as const,
+        kind: 'EVIDENCE_JUDGMENT' as const,
         ...(status === 'ALL' ? {} : { status: status as 'OPEN' | 'DECIDED' | 'SUPERSEDED' }),
       },
     } satisfies Prisma.TaskJudgmentInboxItemWhereInput;
@@ -338,12 +325,12 @@ export class TaskJudgmentReviewService {
         requestId: currentRequest?.id ?? null,
       },
       // This is the only approval preview the web may render. It is authored here from the
-      // HUMAN_SIGNOFF write contract and bound to the exact still-open/current request fact. The
+      // EVIDENCE_JUDGMENT write contract and bound to the exact still-open/current request fact. The
       // dependency graph is deliberately absent: dependent readiness is re-read after the commit,
       // never predicted before it.
       approvalImpact: requestedRequest.status === 'OPEN'
         && requestedEvidence.id === currentEvidence.id
-        && inbox.task.completionCriterion === 'HUMAN_SIGNOFF'
+        && inbox.task.completionCriterion === 'EVIDENCE_JUDGMENT'
         ? {
             authority: 'SERVER' as const,
             action: 'PASS' as const,
@@ -356,7 +343,7 @@ export class TaskJudgmentReviewService {
             task: {
               id: inbox.task.id,
               resultingStatus: 'DONE' as const,
-              basis: 'HUMAN_SIGNOFF' as const,
+              basis: 'EVIDENCE_JUDGMENT' as const,
             },
             request: {
               id: requestedRequest.id,
@@ -395,19 +382,19 @@ export class TaskJudgmentReviewService {
   async decide(ownerId: string, requestId: string, input: DecideTaskJudgmentDto) {
     if (input.requestId !== requestId) {
       throw new ConflictException({
-        code: 'HUMAN_SIGNOFF_REQUEST_ROUTE_MISMATCH',
+        code: 'EVIDENCE_JUDGMENT_REQUEST_ROUTE_MISMATCH',
         requiredAction: 'SUBMIT_THE_REQUEST_CURRENTLY_OPEN_IN_THIS_REVIEW',
         message: 'The decision payload requestId does not match this review.',
       });
     }
     const request = await this.prisma.taskJudgmentRequest.findFirst({
-      where: { id: requestId, ownerId, kind: 'HUMAN_SIGNOFF', recipientId: ownerId },
+      where: { id: requestId, ownerId, kind: 'EVIDENCE_JUDGMENT', recipientId: ownerId },
       select: { taskId: true },
     });
     if (!request) throw new NotFoundException('judgment request not found');
 
     if (input.action === 'PASS') {
-      await this.tasks.signoff(ownerId, request.taskId, {
+      await this.tasks.judge(ownerId, request.taskId, {
         requestId,
         evidenceDigest: input.evidenceDigest,
         evidence: input.note,

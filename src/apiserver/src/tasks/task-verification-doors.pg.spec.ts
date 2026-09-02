@@ -229,7 +229,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       title: 'human check',
       projectId: w.projectId,
       verifiesTaskId: subject.id,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     })), /must use VERIFICATION/);
 
     const rawCancellation = await tasks.create(w.ownerId, {
@@ -331,7 +331,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         actorId: w.ownerId,
         sourceSessionId: randomUUID(),
         criterionRevision: 'a'.repeat(64),
-        criterion: { completionCriterion: 'HUMAN_SIGNOFF' },
+        criterion: { completionCriterion: 'EVIDENCE_JUDGMENT' },
         evidence: { artifact: 'already-reviewed.txt' },
         evidenceDigest: 'b'.repeat(64),
         revision: 1n,
@@ -657,13 +657,13 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       title: 'leaf',
       projectId: w.projectId,
       completionPolicy: TaskCompletionPolicy.ALL_CHILDREN_DONE,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     });
     assert.equal(await statusOf(db, leaf.id), TaskStatus.OPEN);
     // ...and the inert aggregate policy does not create a back door around its own criterion.
     assert.match(
       await message(() => tasks.update(w.ownerId, leaf.id, { status: TaskStatus.DONE })),
-      /derived from the declared HUMAN_SIGNOFF criterion/,
+      /derived from the declared EVIDENCE_JUDGMENT criterion/,
     );
     assert.equal(await statusOf(db, leaf.id), TaskStatus.OPEN);
 
@@ -672,7 +672,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     const parent = await tasks.create(w.ownerId, {
       title: 'manual',
       projectId: w.projectId,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     });
     const child = await tasks.create(w.ownerId, {
       title: 'child',
@@ -687,7 +687,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     assert.equal(await statusOf(db, parent.id), TaskStatus.OPEN, 'MANUAL never completes itself');
     assert.match(
       await message(() => tasks.update(w.ownerId, parent.id, { status: TaskStatus.DONE })),
-      /derived from the declared HUMAN_SIGNOFF criterion/,
+      /derived from the declared EVIDENCE_JUDGMENT criterion/,
     );
     await revokeVerifierPass(tasks, w.ownerId, childVerifierId);
     assert.equal(await statusOf(db, parent.id), TaskStatus.OPEN, 'a child reopening is still inert');

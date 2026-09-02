@@ -294,7 +294,7 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	for _, name := range []string{"project_create", "project_update"} {
 		description := mcpToolDescription(tools, name)
-		for _, want := range []string{"user/JWT API", "not an agent fallback", "HUMAN_SIGNOFF", "completionCriterion"} {
+		for _, want := range []string{"user/JWT API", "not an agent fallback", "EVIDENCE_JUDGMENT", "completionCriterion"} {
 			if !strings.Contains(description, want) {
 				t.Fatalf("%s does not explain legacy criteria compatibility (%q): %q", name, want, description)
 			}
@@ -439,8 +439,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 	createItems := []interface{}{
-		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "HUMAN_SIGNOFF"},
-		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "HUMAN_SIGNOFF"},
+		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "EVIDENCE_JUDGMENT"},
+		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "EVIDENCE_JUDGMENT"},
 	}
 	if res := mcp.callTool("project_create", map[string]interface{}{
 		"title": "LFS", "acceptanceCriteriaItems": createItems,
@@ -448,8 +448,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 		t.Fatalf("structured project_create returned an error: %#v", res["content"])
 	}
 	updateItems := []interface{}{
-		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "HUMAN_SIGNOFF"},
-		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "HUMAN_SIGNOFF"},
+		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "EVIDENCE_JUDGMENT"},
+		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "EVIDENCE_JUDGMENT"},
 	}
 	if res := mcp.callTool("project_update", map[string]interface{}{
 		"projectId": "proj-1", "acceptanceCriteriaItems": updateItems,
@@ -492,7 +492,7 @@ func TestMCPProjectWritesRejectLegacyAcceptanceBeforeHTTP(t *testing.T) {
 			t.Fatalf("%s accepted legacy acceptanceCriteria: %#v", call.name, res)
 		}
 		content, _ := res["content"].([]map[string]interface{})
-		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "HUMAN_SIGNOFF") ||
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "EVIDENCE_JUDGMENT") ||
 			!strings.Contains(content[0]["text"].(string), "completionCriterion") {
 			t.Fatalf("%s legacy refusal = %#v", call.name, res)
 		}

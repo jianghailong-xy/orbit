@@ -33,7 +33,6 @@ import {
   statedCriteriaFrom,
 } from './project-acceptance';
 import {
-  AuthorityPrincipal,
   authorityPrincipal,
   refuseHumanOnlyAction,
 } from './coordinator-authority';
@@ -747,7 +746,7 @@ export class ProjectAcceptanceService {
     evidenceTaskId: string | null;
     evidenceSessionId: string | null;
   } | null> {
-    if (criterion.completionCriterion === TaskCompletionCriterion.HUMAN_SIGNOFF) return null;
+    if (criterion.completionCriterion === TaskCompletionCriterion.EVIDENCE_JUDGMENT) return null;
 
     if (criterion.completionCriterion === TaskCompletionCriterion.EXECUTABLE) {
       const attempt = await ProjectAcceptanceService.canonicalExecutableAttempt(
@@ -1048,16 +1047,6 @@ export class ProjectAcceptanceService {
    * to it. `decidedBy = USER` records credential/channel provenance; it is not a human-presence
    * attestation (see `docs/human-only-authority.md`).
    */
-  private static assertMayConcludePass(actor: {
-    decidedBy: 'USER' | 'COORDINATOR_AGENT';
-  }): void {
-    const principal: AuthorityPrincipal = actor.decidedBy === 'USER'
-      ? 'NON_JUDGMENT'
-      : 'JUDGMENT';
-    const refusal = refuseHumanOnlyAction(principal, 'CONCLUDE_VERDICT_PASS');
-    if (refusal) throw new ForbiddenException(refusal);
-  }
-
   private async conclusionActor(
     ownerId: string,
     actingSessionId: string | undefined,
@@ -1116,13 +1105,14 @@ export class ProjectAcceptanceService {
     if (!Array.isArray(outcomes) || outcomes.length === 0) {
       throw new BadRequestException('a verdict must state a conclusion for every criterion');
     }
-    // Unit T6: `CONCLUDE_VERDICT_PASS` is HUMAN_ONLY, and this is the door where a project's own
-    // acceptance is concluded. A judgment session may open a run and may answer FAIL or
-    // INCONCLUSIVE on every criterion — reporting that the goal is not met is exactly what a
-    // coordinator is for — but a PASS here is what `assertDoneAllowed` binds a project's DONE to,
-    // so the judgment role cannot record it. Refused before the transaction: nothing written, no
-    // lock taken, and the run stays open for an owner-authenticated channel. That channel produces
-    // an attributable audit actor; it does not prove a human held the credential.
+    // This is the door where a project's own acceptance is concluded, and until migration 0224 a
+    // judgment session was refused at it: it could answer FAIL or INCONCLUSIVE on every criterion
+    // but never PASS, so every project ended at a person. `CONCLUDE_VERDICT_PASS` is now
+    // COORDINATOR_BOUNDED and the refusal is gone. What bounds the conclusion instead is what
+    // always did the real work here and is untouched below: the run names the immutable evidence
+    // version it judged, every stated criterion must be answered in this one call, and the
+    // project-level verdict is DERIVED from that conjunction rather than supplied. Attribution
+    // remains mandatory and per event — `decidedBy` says which evaluator produced it.
     const eventSchema = ProjectAcceptanceService.conclusionDelegate(
       this.prisma as unknown as Prisma.TransactionClient,
     ) !== null;
@@ -1130,7 +1120,6 @@ export class ProjectAcceptanceService {
     const eventActor = eventSchema || containsPass
       ? await this.conclusionActor(ownerId, actingSessionId, fallbackMachineId)
       : null;
-    if (containsPass && eventActor) ProjectAcceptanceService.assertMayConcludePass(eventActor);
     // Retried whole: the verdict is computed inside the closure from facts read under the project
     // lock, so a re-run recomputes rather than replaying a verdict from a discarded snapshot.
     const finalized = await withTransactionRetry(this.prisma, async (tx) => {
@@ -1160,7 +1149,7 @@ export class ProjectAcceptanceService {
       );
       const humanCriteria = run.criteria.filter(
         (criterion) =>
-          criterion.completionCriterion === TaskCompletionCriterion.HUMAN_SIGNOFF,
+          criterion.completionCriterion === TaskCompletionCriterion.EVIDENCE_JUDGMENT,
       );
       const answered = new Map<number, AcceptanceCriterionOutcomeInput>();
       for (const outcome of outcomes) {
@@ -1184,7 +1173,7 @@ export class ProjectAcceptanceService {
             `no criterion ${outcome.ordinal ?? outcome.criterionKey ?? outcome.criterionId} in this run's snapshot`,
           );
         }
-        if (criterion.completionCriterion !== TaskCompletionCriterion.HUMAN_SIGNOFF) {
+        if (criterion.completionCriterion !== TaskCompletionCriterion.EVIDENCE_JUDGMENT) {
           throw new BadRequestException(
             `criterion ${criterion.ordinal} is ${criterion.completionCriterion} and is evaluated ` +
             'automatically; a caller cannot submit a fallback human verdict for it',
@@ -1732,7 +1721,7 @@ export class ProjectAcceptanceService {
             : undefined)
           ?? snapshotMethods.get(`ordinal:${c.ordinal}`)
           ?? null,
-        completionCriterion: c.completionCriterion ?? TaskCompletionCriterion.HUMAN_SIGNOFF,
+        completionCriterion: c.completionCriterion ?? TaskCompletionCriterion.EVIDENCE_JUDGMENT,
         acceptanceCommand: c.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: c.acceptanceExpectedExitCode ?? null,
         verdict: c.verdict,
@@ -1793,10 +1782,10 @@ export class ProjectAcceptanceService {
                r."started_at" AS "startedAt",
                count(c."id")::int AS "criterionCount",
                count(c."id") FILTER (
-                 WHERE c."completion_criterion" = 'HUMAN_SIGNOFF'::"task_completion_criterion"
+                 WHERE c."completion_criterion" = 'EVIDENCE_JUDGMENT'::"task_completion_criterion"
                )::int AS "humanCriterionCount",
                count(c."id") FILTER (
-                 WHERE c."completion_criterion" = 'HUMAN_SIGNOFF'::"task_completion_criterion"
+                 WHERE c."completion_criterion" = 'EVIDENCE_JUDGMENT'::"task_completion_criterion"
                    AND c."verdict" IS NULL
                    AND NOT EXISTS (
                    SELECT 1
@@ -2162,7 +2151,7 @@ export class ProjectAcceptanceService {
           decidedAt: criterion.decidedAt,
           evidenceTaskId: criterion.evidenceTaskId,
           completionCriterion:
-            criterion.completionCriterion ?? TaskCompletionCriterion.HUMAN_SIGNOFF,
+            criterion.completionCriterion ?? TaskCompletionCriterion.EVIDENCE_JUDGMENT,
         })),
       };
     }

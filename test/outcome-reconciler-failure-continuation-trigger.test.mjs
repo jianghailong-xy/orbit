@@ -389,7 +389,7 @@ async function ownerDecisionCounts(projectId, taskId) {
       (SELECT CASE WHEN to_regclass('public.outcome_coordinator_owner_decision_request') IS NULL
                    THEN 0 ELSE 1 END) outcome_owner,
       (SELECT count(*)::integer FROM task_judgment_request
-        WHERE task_id = $2::uuid AND kind = 'HUMAN_SIGNOFF') human_signoff
+        WHERE task_id = $2::uuid AND kind = 'EVIDENCE_JUDGMENT') human_signoff
   `, [projectId, taskId])).rows[0];
 }
 

@@ -43,7 +43,7 @@ export interface JudgmentRequestView {
   evidenceId: string;
   criterionRevision: string;
   evidenceDigest: string;
-  kind: 'HUMAN_SIGNOFF';
+  kind: 'EVIDENCE_JUDGMENT';
   recipientType: 'ACCOUNT_OWNER';
   recipientId: string;
   status: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
@@ -55,13 +55,6 @@ export interface JudgmentRequestView {
   decisionNote: string | null;
   supersededAt: string | null;
   supersededById: string | null;
-  signoff: {
-    id: string;
-    signedById: string;
-    signedByName: string;
-    signedAt: string;
-    evidence: string;
-  } | null;
 }
 
 export interface JudgmentReview {
@@ -129,7 +122,7 @@ export interface JudgmentReview {
     task: {
       id: string;
       resultingStatus: 'DONE';
-      basis: 'HUMAN_SIGNOFF';
+      basis: 'EVIDENCE_JUDGMENT';
     };
     request: {
       id: string;

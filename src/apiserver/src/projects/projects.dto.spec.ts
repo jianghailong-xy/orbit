@@ -32,7 +32,7 @@ test('structured acceptance input requires a verification method and criterion o
       acceptanceCriteriaItems: [{
         text: 'the suite passes',
         verificationMethod: 'Run npm test and require exit code 0',
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
       }],
     });
     assert.deepEqual(valid, []);

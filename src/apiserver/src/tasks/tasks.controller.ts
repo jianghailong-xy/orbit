@@ -24,7 +24,7 @@ import {
   CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
-  SignoffTaskDto,
+  JudgeTaskDto,
   UpdateTaskDto,
 } from './dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
@@ -178,13 +178,13 @@ export class TasksController {
     return this.tasks.update(user.userId, id, dto);
   }
 
-  @Post(':id/signoff')
-  signoff(
+  @Post(':id/judgment')
+  judge(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: SignoffTaskDto,
+    @Body() dto: JudgeTaskDto,
   ) {
-    return this.tasks.signoff(user.userId, id, dto);
+    return this.tasks.judge(user.userId, id, dto);
   }
 
   @Delete(':id')

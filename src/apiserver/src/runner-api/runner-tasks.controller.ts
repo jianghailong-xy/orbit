@@ -22,7 +22,7 @@ import {
   CreateTasksBatchDto,
   ProposeDagDto,
   RunTaskDto,
-  SignoffTaskDto,
+  JudgeTaskDto,
   UpdateTaskDto,
 } from '../tasks/dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
@@ -74,7 +74,7 @@ export class RunnerTasksController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateTaskDto,
   ) {
-    RunnerTasksController.refuseImplicitHumanSignoff(dto);
+    RunnerTasksController.refuseImplicitEvidenceJudgment(dto);
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
@@ -94,7 +94,7 @@ export class RunnerTasksController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateTasksBatchDto,
   ) {
-    RunnerTasksController.refuseImplicitHumanSignoffBatch(dto);
+    RunnerTasksController.refuseImplicitEvidenceJudgmentBatch(dto);
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return dto.dryRun
       ? this.tasks.previewPlan(runner.ownerId, dto, creator, sessionId)
@@ -237,18 +237,18 @@ export class RunnerTasksController {
   }
 
   /**
-   * Headless `orbit task signoff` is the owner's CLI door. An in-session MCP call carries the
-   * acting Session header and is refused by TasksService: an agent cannot turn itself into the
-   * human named by a HUMAN_SIGNOFF event merely by calling the human endpoint.
+   * Decide the task's open EVIDENCE_JUDGMENT request, from `orbit task judge` or from an in-session
+   * MCP call. The acting Session header is still forwarded — not to refuse the call, which
+   * migration 0224 stopped doing, but because it is what the decision is attributed to.
    */
-  @Post('tasks/:id/signoff')
-  signoffTask(
+  @Post('tasks/:id/judgment')
+  judgeTask(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
-    @Body() dto: SignoffTaskDto,
+    @Body() dto: JudgeTaskDto,
   ) {
-    return this.tasks.signoff(runner.ownerId, id, dto, sessionId);
+    return this.tasks.judge(runner.ownerId, id, dto, sessionId);
   }
 
   @Delete('tasks/:id')
@@ -361,21 +361,21 @@ export class RunnerTasksController {
    */
   @Post('tasks/batch-preview')
   previewBatch(@CurrentRunner() runner: Runner, @Body() dto: CreateTasksBatchDto) {
-    RunnerTasksController.refuseImplicitHumanSignoffBatch(dto);
+    RunnerTasksController.refuseImplicitEvidenceJudgmentBatch(dto);
     return this.tasks.previewCreateMany(runner.ownerId, dto);
   }
 
   /**
-   * The canonical task DTO keeps omission as the legacy HUMAN_SIGNOFF spelling so old JWT/user
+   * The canonical task DTO keeps omission as the legacy EVIDENCE_JUDGMENT spelling so old JWT/user
    * clients and stored callers remain compatible. That is unsafe at the runner boundary: a stale
    * agent client that forgets one field would silently manufacture a human obligation.
    *
    * Do not infer the criterion from another field here. Apart from making the contract harder to
-   * audit, that exception lets a retry collide with an older same-turn HUMAN_SIGNOFF winner whose
-   * frozen idempotency key predates those fields. HUMAN_SIGNOFF remains available, but an agent
+   * audit, that exception lets a retry collide with an older same-turn EVIDENCE_JUDGMENT winner whose
+   * frozen idempotency key predates those fields. EVIDENCE_JUDGMENT remains available, but an agent
    * has to say it explicitly, just like either non-human peer.
    */
-  private static refuseImplicitHumanSignoff(dto: {
+  private static refuseImplicitEvidenceJudgment(dto: {
     completionCriterion?: string | null;
     acceptanceCommand?: string | null;
     acceptanceExpectedExitCode?: number | null;
@@ -385,8 +385,8 @@ export class RunnerTasksController {
     translateLegacyRunnerCompletionDeclaration(dto, itemIndex);
   }
 
-  private static refuseImplicitHumanSignoffBatch(dto: CreateTasksBatchDto): void {
-    dto.tasks.forEach((item, index) => RunnerTasksController.refuseImplicitHumanSignoff(item, index));
+  private static refuseImplicitEvidenceJudgmentBatch(dto: CreateTasksBatchDto): void {
+    dto.tasks.forEach((item, index) => RunnerTasksController.refuseImplicitEvidenceJudgment(item, index));
   }
 
   /**

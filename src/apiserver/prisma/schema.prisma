@@ -219,13 +219,15 @@ enum TaskVerdict {
 
 /// The one fact that is allowed to settle a task's own work.
 ///
-/// These are peers, not a fallback chain. HUMAN_SIGNOFF is the ordinary compatibility default for
+/// These are peers, not a fallback chain. EVIDENCE_JUDGMENT is the ordinary compatibility default for
 /// tasks created before this distinction existed; it does not mean that executable or verification
-/// acceptance failed and escalated to a person.
+/// acceptance failed and escalated. Migration 0224 renamed it from HUMAN_SIGNOFF: the criterion
+/// still requires one decision bound to one immutable evidence version, and no longer requires
+/// that the account owner be the one who makes it.
 enum TaskCompletionCriterion {
   EXECUTABLE
   VERIFICATION
-  HUMAN_SIGNOFF
+  EVIDENCE_JUDGMENT
 
   @@map("task_completion_criterion")
 }
@@ -403,9 +405,6 @@ model User {
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
 
-  /// Human completion judgments authored by this person. The event carries its own signer rather
-  /// than borrowing Task.ownerId so the audit answers who actually signed.
-  taskHumanSignoffs TaskHumanSignoff[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   judgmentBackfillBatches TaskJudgmentBackfillBatch[]
 
@@ -2882,7 +2881,7 @@ model ProjectAcceptanceCriterion {
   definitionId       String? @map("definition_id") @db.Uuid
   definitionRevision Int?    @map("definition_revision")
 
-  /// Frozen declaration shape. Historical rows are migrated honestly to HUMAN_SIGNOFF; current
+  /// Frozen declaration shape. Historical rows are migrated honestly to EVIDENCE_JUDGMENT; current
   /// rows copy the definition so the review page never guesses a criterion from mutable state.
   completionCriterion TaskCompletionCriterion @map("completion_criterion")
   acceptanceCommand          String? @map("acceptance_command")
@@ -3306,9 +3305,9 @@ model Task {
   /// command list, expression language, or separate acceptance entity behind them.
   acceptanceCommand          String? @map("acceptance_command")
   acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
-  /// The declared completion fact for this task. HUMAN_SIGNOFF is a first-class criterion and the
+  /// The declared completion fact for this task. EVIDENCE_JUDGMENT is a first-class criterion and the
   /// compatibility value for every row that predates this column, never an exceptional fallback.
-  completionCriterion TaskCompletionCriterion @default(HUMAN_SIGNOFF) @map("completion_criterion")
+  completionCriterion TaskCompletionCriterion @default(EVIDENCE_JUDGMENT) @map("completion_criterion")
   /// Present only for the negotiated protocol. NULL preserves the N-1 fixed-120-second plan.
   acceptanceTimeoutSeconds              Int?    @map("acceptance_timeout_seconds")
   acceptanceOwnerTimeoutCeilingSeconds  Int?    @map("acceptance_owner_timeout_ceiling_seconds")
@@ -3496,9 +3495,6 @@ model Task {
   judgmentRequests TaskJudgmentRequest[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   judgmentInboxItems TaskJudgmentInboxItem[]
-  /// The durable HUMAN_SIGNOFF criterion event. Unique by task today: one signature satisfies the
-  /// criterion, and retries return that same event rather than minting a second judgment.
-  humanSignoffs TaskHumanSignoff[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3707,26 +3703,6 @@ model TaskJudgmentBackfillBatch {
   @@map("task_judgment_backfill_batch")
 }
 
-/// A person's explicit judgment that the task's HUMAN_SIGNOFF criterion is satisfied.
-///
-/// This is an event, not a disguised status edit: signer, server timestamp and evidence are all
-/// non-null, and the service derives Task.status from its existence in the same transaction.
-model TaskHumanSignoff {
-  id         String   @id @default(uuid(7)) @db.Uuid
-  taskId     String   @unique @map("task_id") @db.Uuid
-  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  requestId  String   @unique @map("request_id") @db.Uuid
-  request    TaskJudgmentRequest @relation(fields: [requestId, taskId, evidenceDigest], references: [id, taskId, evidenceDigest], onDelete: Restrict, map: "task_human_signoff_request_fact_fkey")
-  signedById String   @map("signed_by_id") @db.Uuid
-  signedBy   User     @relation(fields: [signedById], references: [id])
-  evidenceDigest String @map("evidence_digest") @db.Char(64)
-  evidence   String
-  signedAt   DateTime @default(now()) @map("signed_at")
-
-  @@unique([requestId, taskId, evidenceDigest], map: "task_human_signoff_request_fact_key")
-  @@index([signedById, signedAt(sort: Desc)])
-  @@map("task_human_signoff")
-}
 
 /// The durable question created for exactly one criterion snapshot and evidence digest.
 ///
@@ -3758,9 +3734,10 @@ model TaskJudgmentRequest {
   decidedByType String? @map("decided_by_type")
   decidedById String? @map("decided_by_id")
   decision    TaskJudgmentDecision?
-  /// Human-readable audit for a human request conclusion. PASS keeps its richer review text on
-  /// TaskHumanSignoff; INCONCLUSIVE requires this field and means "wait for a new evidence
-  /// revision", never "change Task.status".
+  /// The finding this conclusion rests on, and the whole of it: migration 0224 deleted the second
+  /// row that used to hold a PASS review text, so EVIDENCE_JUDGMENT decisions of every verdict
+  /// state their reasoning here. INCONCLUSIVE still means "wait for a new evidence revision",
+  /// never "change Task.status".
   decisionNote String? @map("decision_note")
   supersededAt DateTime? @map("superseded_at")
   supersededById String? @map("superseded_by_id") @db.Uuid
@@ -3774,7 +3751,6 @@ model TaskJudgmentRequest {
   supersededSourceSessionId String? @map("superseded_source_session_id") @db.Uuid
 
   executableResult TaskExecutableJudgmentResult?
-  humanSignoff TaskHumanSignoff?
   inboxItems TaskJudgmentInboxItem[]
 
   @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
@@ -3786,7 +3762,7 @@ model TaskJudgmentRequest {
   @@map("task_judgment_request")
 }
 
-/// The reliable, in-app delivery of one HUMAN_SIGNOFF request to one concrete person.
+/// The reliable, in-app delivery of one EVIDENCE_JUDGMENT request to one concrete person.
 ///
 /// Migration 0182 files this row from an AFTER INSERT trigger on `TaskJudgmentRequest`, in the
 /// request's own transaction. `deliveredAt` is therefore the receipt for the reliable primary

@@ -176,7 +176,7 @@ suite('VERIFICATION evidence creates one independent verifier whose PASS decides
     await assert.rejects(
       tasks.update(ownerId, verifier.id, {
         verifiesTaskId: null,
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         completionPolicy: 'MANUAL',
       }),
       (error: any) => {

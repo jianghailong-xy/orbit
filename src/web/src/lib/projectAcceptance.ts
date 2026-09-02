@@ -1,7 +1,7 @@
 import { encodeId } from './idCodec';
 
 export type ProjectAcceptanceVerdict = 'PASS' | 'FAIL' | 'INCONCLUSIVE';
-export type ProjectCompletionCriterion = 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+export type ProjectCompletionCriterion = 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
 
 export interface ProjectAcceptanceInboxItem {
   runId: string;

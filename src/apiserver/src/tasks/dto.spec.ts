@@ -14,7 +14,7 @@ import {
   DecideTaskJudgmentDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
-  SignoffTaskDto,
+  JudgeTaskDto,
   SubmitRunnerTaskCompletionEvidenceDto,
   SubmitTaskCompletionEvidenceDto,
   TASK_BATCH_CREATE_MAX,
@@ -49,15 +49,15 @@ test('completion evidence DTOs require a structured object and REST requires its
 });
 
 test('human signoff DTO binds the current request and exact evidence digest', async () => {
-  const valid = Object.assign(new SignoffTaskDto(), {
+  const valid = Object.assign(new JudgeTaskDto(), {
     requestId: TASK_A,
     evidenceDigest: 'a'.repeat(64),
     evidence: 'I reviewed this exact evidence revision.',
   });
-  const missingRequest = Object.assign(new SignoffTaskDto(), {
+  const missingRequest = Object.assign(new JudgeTaskDto(), {
     evidenceDigest: 'a'.repeat(64), evidence: 'reviewed',
   });
-  const commitShaInsteadOfDigest = Object.assign(new SignoffTaskDto(), {
+  const commitShaInsteadOfDigest = Object.assign(new JudgeTaskDto(), {
     requestId: TASK_A, evidenceDigest: 'a'.repeat(40), evidence: 'reviewed',
   });
 
@@ -115,7 +115,7 @@ test('task creation and single-edge DTOs reject non-UUID dependency ids', async 
 });
 
 test('REST task create exposes the three completion criteria as peer enum values', async () => {
-  for (const completionCriterion of ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF']) {
+  for (const completionCriterion of ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT']) {
     const dto = plainToInstance(CreateTaskDto, { title: completionCriterion, completionCriterion });
     assert.equal((await validate(dto)).length, 0, completionCriterion);
   }

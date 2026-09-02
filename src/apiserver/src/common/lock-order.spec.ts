@@ -93,7 +93,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
-    method: 'signoff',
+    method: 'judge',
     statements: ['task.update'],
     holds: [
       'await lockOwnerTaskGraph(tx, ownerId);',
@@ -102,7 +102,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     ],
     note:
       'Rank 10 serializes graph/project moves; rank 40 locks the task\'s project when present; ' +
-      'rank 50 locks the task before the rank-60 signoff/blocker children. The final status write ' +
+      'rank 50 locks the task before the rank-60 request/blocker children. The final status write ' +
       'targets that already-held row and only advances its rank-70 dispatch epoch, so event, ' +
       'blocker resolution and derived DONE commit as one descending unit.',
   },

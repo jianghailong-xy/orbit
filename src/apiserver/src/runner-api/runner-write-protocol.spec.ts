@@ -75,7 +75,7 @@ test('legacy completion shapes translate only when their intent is unambiguous',
   assert.equal(verification.completionCriterion, 'VERIFICATION');
 });
 
-test('an omitted completion criterion can never fall back to HUMAN_SIGNOFF', () => {
+test('an omitted completion criterion can never fall back to EVIDENCE_JUDGMENT', () => {
   assert.throws(
     () => translateLegacyRunnerCompletionDeclaration({}),
     (error: unknown) => {
@@ -84,7 +84,7 @@ test('an omitted completion criterion can never fall back to HUMAN_SIGNOFF', () 
       assert.equal(body.code, 'RUNNER_COMPLETION_CRITERION_REQUIRED');
       assert.equal(body.kind, 'REFUSAL');
       assert.equal(body.requiredAction, 'DECLARE_COMPLETION_CRITERION_EXPLICITLY');
-      assert.match(String(body.message), /never.*HUMAN_SIGNOFF/i);
+      assert.match(String(body.message), /never.*EVIDENCE_JUDGMENT/i);
       return true;
     },
   );

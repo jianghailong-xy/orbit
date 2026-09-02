@@ -113,7 +113,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	}
 	for _, capability := range doc.Capabilities {
 		if capability.ID == "task_signoff" {
-			t.Fatal("an in-session capability document must not offer the human signoff door")
+			t.Fatal("the human signoff door was removed by migration 0224")
 		}
 		if capability.Description == "" || capability.MCPInputSchema == nil {
 			t.Fatalf("capability did not reuse MCP description/schema: %#v", capability)
@@ -227,7 +227,7 @@ func TestTaskCLICreateAttributesToAgentInSession(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{
 		"create", "--title", "Ship CLI", "--description", "Implement it",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 		"--depends-on", "dep-1,dep-2", "--depends-on", "dep-2,dep-3",
 		"--auto-run-when-ready=false", "--json",
 	}, strings.NewReader(""), &out)
@@ -276,8 +276,8 @@ func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
 	t.Setenv("ORBIT_SESSION_ID", "session-1")
 
-	stdin := strings.NewReader(`[{"title":"Build","ref":"build","completionCriterion":"HUMAN_SIGNOFF"},
-	  {"title":"Deploy","dependsOnRefs":["build"],"assigneeId":null,"completionCriterion":"HUMAN_SIGNOFF"}]`)
+	stdin := strings.NewReader(`[{"title":"Build","ref":"build","completionCriterion":"EVIDENCE_JUDGMENT"},
+	  {"title":"Deploy","dependsOnRefs":["build"],"assigneeId":null,"completionCriterion":"EVIDENCE_JUDGMENT"}]`)
 	var out bytes.Buffer
 	if err := cmdTaskCLI([]string{"create-batch", "--tasks-file", "-", "--json"}, stdin, &out); err != nil {
 		t.Fatal(err)
@@ -324,7 +324,7 @@ func TestTaskCLICreateBatchRejectsBadPayloadsBeforeCallingTheServer(t *testing.T
 		}
 	}
 	// The request shape {"tasks": [...]} is accepted too, so a caller can paste the API body.
-	if _, err := parseTaskBatchItems(`{"tasks":[{"title":"a","completionCriterion":"HUMAN_SIGNOFF"}]}`); err != nil {
+	if _, err := parseTaskBatchItems(`{"tasks":[{"title":"a","completionCriterion":"EVIDENCE_JUDGMENT"}]}`); err != nil {
 		t.Fatalf("wrapped payload rejected: %v", err)
 	}
 }

@@ -214,11 +214,11 @@ func TestMCPTaskCreateBatchSendsEachItemsParentRef(t *testing.T) {
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{
-			map[string]interface{}{"title": "epic", "projectId": "proj-1", "ref": "epic", "completionCriterion": "HUMAN_SIGNOFF"},
-			map[string]interface{}{"title": "parse", "projectId": "proj-1", "ref": "parse", "parentRef": "epic", "completionCriterion": "HUMAN_SIGNOFF"},
+			map[string]interface{}{"title": "epic", "projectId": "proj-1", "ref": "epic", "completionCriterion": "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "parse", "projectId": "proj-1", "ref": "parse", "parentRef": "epic", "completionCriterion": "EVIDENCE_JUDGMENT"},
 			map[string]interface{}{
 				"title": "backfill", "projectId": "proj-1", "parentRef": "epic",
-				"dependsOnRefs": []interface{}{"parse"}, "completionCriterion": "HUMAN_SIGNOFF",
+				"dependsOnRefs": []interface{}{"parse"}, "completionCriterion": "EVIDENCE_JUDGMENT",
 			},
 		},
 	})

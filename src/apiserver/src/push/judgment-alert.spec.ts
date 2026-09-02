@@ -19,11 +19,11 @@ test('judgment push names project, task, required action and direct link without
   const alert = judgmentAlert(input);
   assert.match(alert.title, /Orbit 0\.2 launch/);
   assert.match(alert.body, /Release the signed macOS client/);
-  assert.match(alert.body, /needs your human sign-off/);
+  assert.match(alert.body, /has an open evidence judgment/);
   assert.match(alert.body, new RegExp(input.deepLink.replace(/[?]/g, '\\?')));
   assert.doesNotMatch(alert.body, /has been signed|was signed|approved|notification delivered/i);
 
-  assert.equal(alert.payload.kind, 'human-signoff-required');
+  assert.equal(alert.payload.kind, 'evidence-judgment-open');
   assert.equal(alert.payload.requiredAction, 'REVIEW_EVIDENCE_AND_SIGN_OFF');
   assert.equal(alert.payload.deepLink, input.deepLink);
   assert.equal(alert.payload.judgmentRequestID, input.requestId);
@@ -36,7 +36,7 @@ test('a burst may collapse into one summary without erasing any request identity
   const summary = judgmentAlert({ ...input, requestId: 'another-request', openCount: 4 });
 
   assert.equal(single.collapseId, summary.collapseId, 'one recipient gets one replaceable APNs thread');
-  assert.match(summary.body, /and 3 more need your human sign-off/);
+  assert.match(summary.body, /and 3 more have open evidence judgments/);
   assert.equal(summary.payload.judgmentRequestID, 'another-request');
   assert.equal(summary.payload.openJudgmentCount, 4);
 });

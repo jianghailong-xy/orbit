@@ -6,7 +6,7 @@ import test from 'node:test';
 import {
   completionEvidenceRevisedFact,
   executableResultRecordedFact,
-  humanSignoffRequestedFact,
+  evidenceJudgmentRequestedFact,
   verificationVerdictRecordedFact,
 } from './completion-input';
 import { wakeIdempotencyKey } from './coordinator-wake';
@@ -23,7 +23,7 @@ test('criterion input keys move only with their immutable fact version', () => {
     criterionRevision: 'a'.repeat(64),
     evidenceDigest: 'b'.repeat(64),
     requestId: REQUEST,
-    requestKind: 'HUMAN_SIGNOFF',
+    requestKind: 'EVIDENCE_JUDGMENT',
   });
   const same = { ...first, detail: { displayOnly: 'changed' } };
   const next = completionEvidenceRevisedFact({
@@ -33,7 +33,7 @@ test('criterion input keys move only with their immutable fact version', () => {
     criterionRevision: 'a'.repeat(64),
     evidenceDigest: 'c'.repeat(64),
     requestId: '10000000-0000-4000-8000-000000000004',
-    requestKind: 'HUMAN_SIGNOFF',
+    requestKind: 'EVIDENCE_JUDGMENT',
   });
   assert.equal(wakeIdempotencyKey(first), wakeIdempotencyKey(same));
   assert.notEqual(wakeIdempotencyKey(first), wakeIdempotencyKey(next));
@@ -58,7 +58,7 @@ test('each criterion input has its own event, subject and version', () => {
     evidenceDigest: 'e'.repeat(64),
     verdict: 'PASS',
   });
-  const human = humanSignoffRequestedFact({
+  const human = evidenceJudgmentRequestedFact({
     projectId: PROJECT,
     taskId: TASK,
     requestId: REQUEST,
@@ -71,7 +71,7 @@ test('each criterion input has its own event, subject and version', () => {
     [
       ['EXECUTABLE_RESULT_RECORDED', 'JUDGMENT_REQUEST', REQUEST],
       ['VERIFICATION_VERDICT_RECORDED', 'JUDGMENT_REQUEST', REQUEST],
-      ['HUMAN_SIGNOFF_REQUESTED', 'JUDGMENT_REQUEST', REQUEST],
+      ['EVIDENCE_JUDGMENT_REQUESTED', 'JUDGMENT_REQUEST', REQUEST],
     ],
   );
   assert.equal(new Set([executable, verification, human].map(wakeIdempotencyKey)).size, 3);

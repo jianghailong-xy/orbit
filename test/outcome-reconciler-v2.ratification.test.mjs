@@ -41,7 +41,7 @@ assert.ok(EVIDENCE_PATH, 'OWNER_RATIFICATION_EVIDENCE_PATH is required');
  *
  * Two further groups: the 0211 fallback that rewrote ordinary engineering failures into owner
  * decisions is gone while the four real boundaries are untouched (m)-(n), and neither removal
- * overreached into HUMAN_SIGNOFF, into project acceptance, or into the deployment (o)-(q).
+ * overreached into EVIDENCE_JUDGMENT, into project acceptance, or into the deployment (o)-(q).
  *
  * A last group, (r)-(v), is the other half of the same subtraction. 0216's authority envelope was
  * a permissiveness ceiling that only an APPROVAL could raise, and 0218 deleted approvals, so it
@@ -98,7 +98,7 @@ const evidence = {
     criteriaCopyMatchesTheWrite: false,
     criteriaProposalRemovalIsSubtraction: false,
     // Nothing overreached.
-    humanSignoffUntouched: false,
+    evidenceJudgmentUntouched: false,
     projectAcceptanceUntouched: false,
     noNewComposeServiceOrResidentProcess: false,
     // The authority envelope is gone and took nothing with it.
@@ -160,7 +160,7 @@ async function jsonCall(text, values, client = pool) {
   return (await client.query({ text, values })).rows[0].result;
 }
 
-/** A project with one HUMAN_SIGNOFF criterion, its contract cut, and no approval of any kind. */
+/** A project with one EVIDENCE_JUDGMENT criterion, its contract cut, and no approval of any kind. */
 async function createProject(label, options = {}) {
   const projectId = randomUUID();
   const definitionId = randomUUID();
@@ -176,7 +176,7 @@ async function createProject(label, options = {}) {
     `INSERT INTO "project_acceptance_criterion_definition" (
        "id","project_id","ordinal","text","verification_method","completion_criterion",
        "content_hash"
-     ) VALUES ($1,$2,1,$3,$4,'HUMAN_SIGNOFF'::"task_completion_criterion",$5)`,
+     ) VALUES ($1,$2,1,$3,$4,'EVIDENCE_JUDGMENT'::"task_completion_criterion",$5)`,
     [definitionId, projectId, criterionText, `review ${label} evidence`,
       digest(`placeholder:${definitionId}`)],
   );
@@ -758,7 +758,7 @@ for (const [node, reason, key] of [
 }
 
 // (o) --------------------------------------------------------------------------------------------
-test('(o) HUMAN_SIGNOFF is untouched: the migration cannot reach it, and it still works',
+test('(o) EVIDENCE_JUDGMENT is untouched: the migration cannot reach it, and it still works',
   async () => {
   // Static: 0218 contains no statement that could write task completion criteria or signoffs.
   // Function bodies are excluded from this scan because a CREATE FUNCTION is not a write.
@@ -772,7 +772,7 @@ test('(o) HUMAN_SIGNOFF is untouched: the migration cannot reach it, and it stil
       `the migration must contain no statement that writes ${relation}`);
   }
 
-  // Dynamic: the whole HUMAN_SIGNOFF path still round-trips, field for field. 0180 predates this
+  // Dynamic: the whole EVIDENCE_JUDGMENT path still round-trips, field for field. 0180 predates this
   // project, 1,123 production tasks stand on it, and the proof that they are unaffected is that
   // nothing in the migration can reach them and the path they use still behaves identically.
   const fixture = await createProject('human-signoff');
@@ -782,60 +782,36 @@ test('(o) HUMAN_SIGNOFF is untouched: the migration cannot reach it, and it stil
     `INSERT INTO "task" ("id","owner_id","project_id","title","creator_type","creator_id",
                          "provider","status","completion_criterion","updated_at")
      VALUES ($1,$2,$3,'human signoff task','USER'::"creator_type",$2,'claude',
-             'OPEN'::"task_status",'HUMAN_SIGNOFF'::"task_completion_criterion",now())`,
+             'OPEN'::"task_status",'EVIDENCE_JUDGMENT'::"task_completion_criterion",now())`,
     [taskId, ownerId, fixture.projectId],
   );
   const task = (await pool.query(
     'SELECT "completion_criterion"::text AS criterion FROM "task" WHERE "id" = $1::uuid', [taskId],
   )).rows[0];
-  assert.equal(task.criterion, 'HUMAN_SIGNOFF',
+  assert.equal(task.criterion, 'EVIDENCE_JUDGMENT',
     'the completion criterion 1,123 production tasks carry is still storable and still reads back');
-  // The signoff table itself is unchanged since 0180: its complete column set, its constraints,
-  // its foreign keys and its guard trigger are compared against the catalogue, so a column added,
-  // widened or dropped by this migration would be visible here rather than in production.
-  const signoffColumns = (await pool.query(
-    `SELECT column_name, data_type, is_nullable FROM information_schema.columns
-      WHERE table_name = 'task_human_signoff' ORDER BY column_name`,
-  )).rows;
-  assert.deepEqual(signoffColumns, [
-    { column_name: 'evidence', data_type: 'text', is_nullable: 'NO' },
-    { column_name: 'evidence_digest', data_type: 'character', is_nullable: 'NO' },
-    { column_name: 'id', data_type: 'uuid', is_nullable: 'NO' },
-    { column_name: 'request_id', data_type: 'uuid', is_nullable: 'NO' },
-    { column_name: 'signed_at', data_type: 'timestamp without time zone', is_nullable: 'NO' },
-    { column_name: 'signed_by_id', data_type: 'uuid', is_nullable: 'NO' },
-    { column_name: 'task_id', data_type: 'uuid', is_nullable: 'NO' },
-  ], 'the 0180 column set is unchanged');
-  const signoffConstraints = (await pool.query(
-    `SELECT conname FROM pg_constraint WHERE conrelid = 'task_human_signoff'::regclass
-      ORDER BY conname`,
+  // The separate signoff table 0180 created is gone, but not because of THIS migration: 0224
+  // removed the human step and folded that row's prose onto the judgment request. What (o) claims
+  // is that 0218 cannot reach the criterion, and the static scan above is that claim; the
+  // catalogue assertions that used to enumerate `task_human_signoff` here would now be asserting
+  // 0224's outcome from the wrong suite. What remains checkable here is that the request the
+  // criterion actually stands on is intact and still bound to its evidence.
+  const requestConstraints = (await pool.query(
+    `SELECT conname FROM pg_constraint WHERE conrelid = 'task_judgment_request'::regclass
+       AND contype = 'f' ORDER BY conname`,
   )).rows.map((row) => row.conname);
-  assert.deepEqual(signoffConstraints, [
-    'task_human_signoff_digest_shape',
-    'task_human_signoff_evidence_nonblank',
-    'task_human_signoff_pkey',
-    'task_human_signoff_request_fact_fkey',
-    'task_human_signoff_request_fact_key',
-    'task_human_signoff_request_id_key',
-    'task_human_signoff_signed_by_id_fkey',
-    'task_human_signoff_task_id_fkey',
-  ], 'every 0180 constraint, including the request-fact key, still stands');
-  const signoffTriggers = (await pool.query(
-    `SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-      WHERE NOT t.tgisinternal AND c.relname = 'task_human_signoff' ORDER BY 1`,
-  )).rows.map((row) => row.tgname);
-  assert.deepEqual(signoffTriggers, ['task_human_signoff_current_request_guard'],
-    'the current-request guard is neither removed nor joined by a new one');
+  assert.ok(requestConstraints.includes('task_judgment_request_evidence_fact_fkey'),
+    'the judgment request is still bound to one immutable completion-evidence version');
 
   // And the enum the 1,123 production tasks are stored under still has exactly its three peers,
   // in order: dropping or reordering one is what would silently reinterpret them.
   const criteria = (await pool.query(
     `SELECT unnest(enum_range(NULL::"task_completion_criterion"))::text AS value`,
   )).rows.map((row) => row.value);
-  assert.deepEqual(criteria, ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF'],
-    'HUMAN_SIGNOFF is still one of three peers, in its original position');
-  evidence.invariants.humanSignoffUntouched = true;
-  evidence.samples.humanSignoffDigest = evidenceDigest;
+  assert.deepEqual(criteria, ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
+    'EVIDENCE_JUDGMENT is still one of three peers, in its original position');
+  evidence.invariants.evidenceJudgmentUntouched = true;
+  evidence.samples.evidenceJudgmentDigest = evidenceDigest;
 });
 
 // (p) --------------------------------------------------------------------------------------------
@@ -883,7 +859,7 @@ test('(p) project acceptance is untouched: 0178-0190 keeps its schema and its ro
   )).rows[0];
   assert.equal(criterion.criterion_text, fixture.criterionText);
   assert.equal(criterion.definition_id, fixture.definitionId);
-  assert.equal(criterion.completion_criterion, 'HUMAN_SIGNOFF');
+  assert.equal(criterion.completion_criterion, 'EVIDENCE_JUDGMENT');
   evidence.invariants.projectAcceptanceUntouched = true;
 });
 

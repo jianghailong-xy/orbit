@@ -70,7 +70,7 @@ test('APNs acceptance is a delivery receipt; zero accepted devices remains retry
   assert.deepEqual(repaired.outcome, 'DELIVERED');
   if (repaired.outcome === 'DELIVERED') assert.equal(repaired.devices, 1);
   assert.equal(calls[0].collapseId, calls[1].collapseId, 'a retry replaces instead of stacking');
-  assert.equal(JSON.parse(calls[1].body).kind, 'human-signoff-required');
+  assert.equal(JSON.parse(calls[1].body).kind, 'evidence-judgment-open');
 });
 
 test('a thrown APNs transport failure is returned to the durable ledger as retryable', async () => {
@@ -88,5 +88,5 @@ test('a thrown APNs transport failure is returned to the durable ledger as retry
   assert.equal(failed.outcome, 'RETRY');
   assert.equal(failed.code, 'PUSH_FAILED');
   assert.match(failed.error, /simulated APNs outage/);
-  assert.equal(failed.payload.kind, 'human-signoff-required');
+  assert.equal(failed.payload.kind, 'evidence-judgment-open');
 });

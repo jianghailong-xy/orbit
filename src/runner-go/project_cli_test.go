@@ -452,7 +452,7 @@ func TestProjectCreateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
 	} {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
-		if err == nil || !strings.Contains(err.Error(), "HUMAN_SIGNOFF") ||
+		if err == nil || !strings.Contains(err.Error(), "EVIDENCE_JUDGMENT") ||
 			!strings.Contains(err.Error(), "completionCriterion") {
 			t.Fatalf("legacy project create = %v", err)
 		}
@@ -496,7 +496,7 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"create", "--title", "LFS", "--acceptance-criteria-items",
-		`[{"text":" Build succeeds ","verificationMethod":" Run npm test ","completionCriterion":"HUMAN_SIGNOFF"},{"text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"HUMAN_SIGNOFF"}]`, "--json",
+		`[{"text":" Build succeeds ","verificationMethod":" Run npm test ","completionCriterion":"EVIDENCE_JUDGMENT"},{"text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"EVIDENCE_JUDGMENT"}]`, "--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatalf("structured project create: %v", err)
@@ -504,10 +504,10 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["text"] != "Build succeeds" ||
 		items[0].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
-		items[0].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" ||
+		items[0].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" ||
 		items[1].(map[string]interface{})["text"] != "Image boots" ||
 		items[1].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
-		items[1].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" {
+		items[1].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" {
 		t.Fatalf("structured project create body = %#v", body)
 	}
 	if _, legacy := body["acceptanceCriteria"]; legacy {
@@ -695,7 +695,7 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"update", "proj-1", "--acceptance-criteria-items",
-		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"HUMAN_SIGNOFF"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test","completionCriterion":"HUMAN_SIGNOFF"}]`,
+		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"EVIDENCE_JUDGMENT"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test","completionCriterion":"EVIDENCE_JUDGMENT"}]`,
 		"--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
@@ -704,10 +704,10 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["id"] != "criterion-2" ||
 		items[0].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
-		items[0].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" ||
+		items[0].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" ||
 		items[1].(map[string]interface{})["id"] != "criterion-1" ||
 		items[1].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
-		items[1].(map[string]interface{})["completionCriterion"] != "HUMAN_SIGNOFF" {
+		items[1].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" {
 		t.Fatalf("structured project update body = %#v", body)
 	}
 	if len(body) != 1 {
@@ -728,7 +728,7 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 }
 
 // --clear-<field> removes ordinary prose as JSON null. Acceptance criteria use the structured []
-// spelling tested above, because a legacy null is still the implicit-HUMAN_SIGNOFF authoring shape.
+// spelling tested above, because a legacy null is still the implicit-EVIDENCE_JUDGMENT authoring shape.
 func TestProjectUpdateClearsOrdinaryProseWithAnExplicitNull(t *testing.T) {
 	var raw string
 	var body map[string]interface{}
@@ -776,7 +776,7 @@ func TestProjectUpdateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
 	} {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
-		if err == nil || !strings.Contains(err.Error(), "HUMAN_SIGNOFF") ||
+		if err == nil || !strings.Contains(err.Error(), "EVIDENCE_JUDGMENT") ||
 			!strings.Contains(err.Error(), "use [] to clear") {
 			t.Fatalf("legacy project update = %v", err)
 		}
@@ -1066,7 +1066,7 @@ func TestProjectWriteHelpTreatsLegacyCriteriaAsUserCompatibilityNotAgentFallback
 			t.Fatalf("project %s --help: %v", action, err)
 		}
 		text := out.String()
-		for _, want := range []string{"user/JWT API", "not an agent authoring fallback", "HUMAN_SIGNOFF", "completionCriterion"} {
+		for _, want := range []string{"user/JWT API", "not an agent authoring fallback", "EVIDENCE_JUDGMENT", "completionCriterion"} {
 			if !strings.Contains(text, want) {
 				t.Fatalf("project %s help does not explain legacy compatibility (%q):\n%s", action, want, text)
 			}
@@ -1080,7 +1080,7 @@ func TestProjectWriteHelpTreatsLegacyCriteriaAsUserCompatibilityNotAgentFallback
 		if strings.Contains(strings.Join(command.Arguments, " "), "--acceptance-criteria <") {
 			t.Fatalf("%s capability still advertises the refused legacy write: %#v", command.Tool, command.Arguments)
 		}
-		for _, want := range []string{"user/JWT API", "not an agent fallback", "HUMAN_SIGNOFF", "completionCriterion"} {
+		for _, want := range []string{"user/JWT API", "not an agent fallback", "EVIDENCE_JUDGMENT", "completionCriterion"} {
 			if !strings.Contains(command.Description, want) {
 				t.Fatalf("%s capability does not explain legacy compatibility (%q): %q", command.Tool, want, command.Description)
 			}

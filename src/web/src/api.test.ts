@@ -189,7 +189,7 @@ describe('a completion-criterion shape advisory answered by the server', () => {
       kind: 'ADVISORY',
       advisory: true,
       message: 'Use EXECUTABLE or explain the override.',
-      declaredCriterion: 'HUMAN_SIGNOFF',
+      declaredCriterion: 'EVIDENCE_JUDGMENT',
       suggestedCriterion: 'EXECUTABLE',
       reason: 'The acceptance prose matched “spec 通过”.',
     };
