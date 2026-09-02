@@ -30,10 +30,6 @@ test('reaper terminalization retires the generation then records leased CURRENT_
       },
       findFirst: async () => null,
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),

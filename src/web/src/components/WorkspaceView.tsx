@@ -259,9 +259,9 @@ export interface QueuedTurn {
   turnId: string;
   content: string;
   shell?: boolean;
-  /** Server receipt only: startup/current-turn/next-turn are never inferred from local status. */
-  placement: Extract<SessionTurnPlacement, 'startup' | 'steer' | 'queued'>;
-  /** For startup fragments, the executable whose durable user event replaces this bubble. */
+  /** Server receipt only: current-turn/next-turn is never inferred from local status. */
+  placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
+  /** For a steer, the executable turn it was written into. */
   targetTurnId?: string;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
@@ -1019,7 +1019,7 @@ export function QueuedTurnMeta({
   deliveryReason,
   onCancel,
 }: {
-  placement: Extract<SessionTurnPlacement, 'startup' | 'steer' | 'queued'>;
+  placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
   delivery?: 'failed' | 'unconfirmed';
   deliveryReason?: string;
   onCancel: () => void;
@@ -1028,8 +1028,6 @@ export function QueuedTurnMeta({
     ? 'Not delivered'
     : delivery === 'unconfirmed'
       ? 'Delivery could not be confirmed'
-    : placement === 'startup'
-    ? 'Added to starting turn'
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
@@ -2782,10 +2780,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           // an older queue request may have snapshotted this row just before the lease and could
           // otherwise arrive afterwards and resurrect it; the generation fence drops that reply.
           if (ev.turnId) {
-            setQueued((q) => q.filter((x) =>
-              x.turnId !== ev.turnId
-              && !(x.placement === 'startup' && x.targetTurnId === ev.turnId),
-            ));
+            setQueued((q) => q.filter((x) => x.turnId !== ev.turnId));
           }
           refreshQueued();
         }

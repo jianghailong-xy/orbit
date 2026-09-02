@@ -94,30 +94,26 @@ test('the immutable route-bound EXITED 1 attempt remains the only superseded fai
     'TARGET_OR_PLAN_CHANGE_INVALIDATES_ALL_CHECKPOINTS_AND_THE_EVIDENCE_CUT');
 });
 
-test('the repair models both raw-query forms and both exact terminal receipt delegates', () => {
+test('the repair models both raw-query forms and the exact terminal receipt delegate', () => {
   const helper = read('src/apiserver/src/test-support/prisma-transaction-double.ts');
   assert.match(helper, /Array\.isArray\(statement\)/u);
   assert.match(helper, /shape: 'tagged-template'/u);
   assert.match(helper, /Array\.isArray\(sql\.strings\).*Array\.isArray\(sql\.values\)/su);
   assert.match(helper, /shape: 'prisma-sql'/u);
   assert.match(helper, /conversationTurn:\s*\{[\s\S]*findMany:[\s\S]*updateMany:/u);
-  assert.match(helper,
-    /conversationTurnStartupFragment:\s*\{[\s\S]*findMany:[\s\S]*updateMany:/u);
 
   const delivery = read('src/apiserver/src/sessions/current-work-delivery.spec.ts');
   for (const title of [
     'the raw-query double renders a tagged-template call with its separate bindings',
     'the raw-query double renders a composed Prisma.Sql object with embedded bindings',
-    'zero CURRENT_WORK candidates perform both reads and no receipt writes',
-    'steer and startup candidates receive their exact terminal receipts together',
+    'zero CURRENT_WORK candidates perform the read and no receipt writes',
+    'a steer candidate receives its exact terminal receipt',
   ]) assert.ok(delivery.includes(title));
   assert.match(delivery, /assert\.deepEqual\(double\.calls\.steerWrites, \[\]\)/u);
-  assert.match(delivery, /assert\.deepEqual\(double\.calls\.startupWrites, \[\]\)/u);
   assert.match(delivery, /deliveryFailureCode: CURRENT_WORK_INTERRUPTED/u);
-  assert.match(delivery, /failureCode: CURRENT_WORK_INTERRUPTED/u);
 
   const production = read('src/apiserver/src/sessions/current-work-delivery.ts');
-  assert.doesNotMatch(production, /conversationTurn\?\.|conversationTurnStartupFragment\?\./u);
+  assert.doesNotMatch(production, /conversationTurn\?\./u);
   // Per line, not over the whole file: an honest `if (candidates.length > 0)` far above an honest
   // `tx.conversationTurn.findMany` is not a guard, and a dot-all scan cannot tell them apart.
   for (const line of production.split('\n')) {
@@ -125,7 +121,6 @@ test('the repair models both raw-query forms and both exact terminal receipt del
     assert.doesNotMatch(line, /typeof\s+[^;]*\.(?:findMany|updateMany)/u, line);
   }
   assert.match(production, /tx\.conversationTurn\.findMany/u);
-  assert.match(production, /tx\.conversationTurnStartupFragment\.findMany/u);
 });
 
 test('all transaction doubles that can cross current-work terminalization are complete', () => {
@@ -144,10 +139,8 @@ test('all transaction doubles that can cross current-work terminalization are co
   for (const relative of directTerminalizationDoubles) {
     const source = read(relative);
     const usesCompleteHelper = source.includes('currentWorkTerminalizationDouble');
-    const modelsBothDelegates = source.includes('conversationTurnStartupFragment')
-      && source.includes('conversationTurn');
-    assert.ok(usesCompleteHelper || modelsBothDelegates,
-      `${relative} omits explicit current-work delegates`);
+    assert.ok(usesCompleteHelper || source.includes('conversationTurn'),
+      `${relative} omits the explicit current-work delegate`);
   }
 
   for (const relative of [

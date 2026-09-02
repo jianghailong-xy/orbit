@@ -198,11 +198,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'sourceId',
   'tagId',
   'turnId',
-  // CURRENT_WORK receipts name both the exact executable they were aimed at and, for an
-  // attachment, the append-only startup-fragment row that owns its audit trail. Both are row
-  // addresses (not delivery fences), so they must use the same public spelling as turnId.
+  // A CURRENT_WORK receipt names the exact executable it was aimed at. That is a row address
+  // (not a delivery fence), so it must use the same public spelling as turnId.
   'targetTurnId',
-  'startupFragmentId',
   'approvalId',
   'projectActionId',
   'decisionId',

@@ -63,7 +63,6 @@ function makeController(
               coordinatorContextKey,
           },
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
     session: {
       findUniqueOrThrow: async () => ({
         status: session.status,

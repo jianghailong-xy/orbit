@@ -61,8 +61,6 @@ function makeService(
       targetTurnId?: string | null;
       deliveryStatus?: string | null;
     }>;
-    /** Append-only startup context keyed by its seeded executable turn. */
-    startupFragments?: Record<string, Array<{ id: string; content: string }>>;
     /** What the commit-race branch re-reads for this session AFTER a refused resume. */
     raceReadRow?: {
       terminalReason: string | null; supersededByTaskId: string | null;
@@ -223,7 +221,6 @@ function makeService(
               targetTurnId,
               deliveryStatus: metadata.deliveryStatus ?? null,
               content,
-              startupFragments: opts.startupFragments?.[id] ?? [],
               targetTurn: targetTurnId && targetTurnId in (opts.turnContents ?? {})
                 ? {
                     id: targetTurnId,
@@ -231,7 +228,6 @@ function makeService(
                     sendIntent: targetMetadata.sendIntent ?? null,
                     deliveryStatus: targetMetadata.deliveryStatus ?? null,
                     content: opts.turnContents?.[targetTurnId] ?? null,
-                    startupFragments: opts.startupFragments?.[targetTurnId] ?? [],
                   }
                 : null,
             };
@@ -239,25 +235,14 @@ function makeService(
       findUnique: async () => (opts.seedTurnId ? {
         id: opts.seedTurnId,
         content: 'opening prompt',
-        startupFragments: opts.startupFragments?.[opts.seedTurnId] ?? [],
       } : null),
     },
     attachment: {
       // The turn scope is the whole question — "which images went with THIS message" — so the
       // fake answers it rather than handing back everything the session ever carried.
-      findMany: async (args: {
-        where: {
-          sessionId: string;
-          turnId?: string;
-          OR?: Array<{ turnId?: string; startupFragmentId?: { in: string[] } }>;
-        };
-      }) => attachments.filter((a) => {
-        if (a.sessionId !== args.where.sessionId) return false;
-        if (args.where.turnId) return a.turnId === args.where.turnId;
-        return (args.where.OR ?? []).some((clause) =>
-          (clause.turnId != null && a.turnId === clause.turnId)
-          || (clause.startupFragmentId?.in.includes(a.startupFragmentId as string) ?? false));
-      }),
+      findMany: async (args: { where: { sessionId: string; turnId?: string } }) =>
+        attachments.filter((a) =>
+          a.sessionId === args.where.sessionId && a.turnId === args.where.turnId),
       create: async (args: { data: Record<string, unknown> }) => {
         const copy = { id: `copy-${++copied}`, turnId: null, ...args.data };
         attachments.push(copy);
@@ -680,33 +665,6 @@ test('carries the opening prompt uploads on a first-run retry', async () => {
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'opening prompt' }]);
   assert.deepEqual(resumedAttachments, [['copy-1']]);
   assert.equal(attachments.find((a) => a.id === 'copy-1')!.fileName, 'shot.png');
-});
-
-test('retries startup fragments and their attachments as one durable authored envelope', async () => {
-  const { service, resumed, resumedAttachments, attachments } = makeService([row()], {
-    events: [{ type: 'user', payload: { text: 'opening prompt' }, turnId: 'turn-9' }],
-    turnContents: { 'turn-9': 'opening prompt' },
-    startupFragments: {
-      'turn-9': [{ id: 'fragment-1', content: 'also verify the migration' }],
-    },
-    attachments: [
-      image({ id: 'att-base', turnId: 'turn-9' }),
-      image({ id: 'att-fragment', turnId: null, startupFragmentId: 'fragment-1' }),
-    ],
-  });
-
-  await service.sweep(NOW);
-
-  assert.deepEqual(resumed, [{
-    id: 'session-1',
-    content: 'opening prompt\n\n[Context added while this turn was starting]\nalso verify the migration',
-  }]);
-  assert.equal(resumedAttachments[0].length, 2);
-  assert.deepEqual(
-    resumedAttachments[0].map((id) =>
-      attachments.find((attachment) => attachment.id === id)?.fileName),
-    ['shot.png', 'shot.png'],
-  );
 });
 
 test('loses the claim to a user message that lands first', async () => {

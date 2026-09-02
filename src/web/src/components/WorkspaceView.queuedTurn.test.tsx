@@ -3,14 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { QueuedTurnMeta, queuedTurnFromActiveSnapshot } from './WorkspaceView';
 
 describe('the server-placement labels in the pending tail', () => {
-  const render = (placement: 'startup' | 'steer' | 'queued') =>
+  const render = (placement: 'steer' | 'queued') =>
     renderToStaticMarkup(<QueuedTurnMeta placement={placement} onCancel={() => {}} />);
-
-  it('shows startup binding and never offers Cancel', () => {
-    const html = render('startup');
-    expect(html).toContain('Added to starting turn');
-    expect(html).not.toContain('Cancel');
-  });
 
   it('shows a live steer as sending and never offers Cancel', () => {
     const html = render('steer');

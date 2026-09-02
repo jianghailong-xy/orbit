@@ -97,10 +97,6 @@ function harness(options: {
         return { count: 1 };
       },
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
     runEvent: {
       findFirst: async () => options.started ? { id: 'event-1' } : null,
     },

@@ -63,9 +63,6 @@ function makeService(
         return { ...session };
       },
     },
-    conversationTurnStartupFragment: {
-      findUnique: async () => null,
-    },
     conversationTurn: {
       findUnique: async () => (opts.existing ? turn : null),
       findFirst: async () => ({ seq: 1 }),
@@ -216,7 +213,7 @@ for (const boundary of [
       content: 'follow up',
       intent: 'NEXT_TURN',
     }, {
-      participateCurrentWorkTransaction: async () => { charges++; },
+      participateSendTransaction: async () => { charges++; },
     });
 
     assert.equal(result.turnId, '33333333-3333-4333-8333-333333333333');

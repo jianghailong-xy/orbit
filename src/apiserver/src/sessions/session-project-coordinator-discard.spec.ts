@@ -40,7 +40,6 @@ function fixture(adopted: boolean) {
       },
     },
     conversationTurn: currentWork.conversationTurn,
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const realtime: any = {
     notifyInbox: () => undefined,
@@ -83,15 +82,13 @@ test('discarding an unbound candidate asks both CURRENT_WORK ledgers and writes 
 
   await f.service.discardProjectCoordinatorCandidate(OWNER, SESSION);
 
-  // Both reads happen even though the answer is empty: the delegate has to exist for real, and
+  // The read happens even though the answer is empty: the delegate has to exist for real, and
   // the historical drift was a double that only owned `updateMany` and so never proved the read.
   assert.equal(f.currentWork.calls.steerFinds.length, 1);
-  assert.equal(f.currentWork.calls.startupFinds.length, 1);
   // Ending the Session still answers its open turns — that write is not a delivery receipt. With
-  // no candidate to settle, no terminal CURRENT_WORK receipt may be written on either ledger.
+  // no candidate to settle, no terminal CURRENT_WORK receipt may be written.
   const receipts = f.currentWork.calls.steerWrites.filter(
     (write) => 'deliveryStatus' in (write.data as Record<string, unknown>),
   );
   assert.deepEqual(receipts, []);
-  assert.deepEqual(f.currentWork.calls.startupWrites, []);
 });

@@ -42,10 +42,6 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
       updateMany: async () => ({ count: 1 }),
       count: async () => 0,
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
     session: {
       findUniqueOrThrow: async () => ({
         status: RunStatus.RUNNING,

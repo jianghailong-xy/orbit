@@ -2362,7 +2362,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_send",
-				"description": "Add a CURRENT_WORK message to a session's exact current executable (e.g. correct a sub-agent that's going off track). Success is `startup_context` bound to the not-yet-started opening turn or `steer` bound to the live turn; it gets no independent reply and cannot be withdrawn. If there is no eligible current work, the lease boundary was missed, or the runtime/runner cannot prove exact acknowledged delivery, the call fails explicitly and never queues the message for a later turn. Reuse clientTurnId after an uncertain response.",
+				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. Reuse clientTurnId after an uncertain response.",
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"message":      str,

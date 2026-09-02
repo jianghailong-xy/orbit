@@ -330,8 +330,7 @@ export const createInteractiveSession = (body: {
  *  message sent while a turn is running becomes a `steer` — written into that turn instead of
  *  queued behind it — and a steer is neither withdrawable nor waiting. See lib/steerDelivery.
  *  `placement` is the server's row-locked answer to whether this specific turn was accepted as
- *  the next executable, bound to startup, queued behind an earlier one, or steered into the
- *  running one. New Web is deployed only after every API replica supports this required receipt;
+ *  the next executable, queued behind an earlier one, or steered into the running one. New Web is deployed only after every API replica supports this required receipt;
  *  silently guessing across version skew would reintroduce the race. */
 export const sendTurn = (
   sessionId: string,
@@ -431,7 +430,7 @@ export interface ActiveSessionTurn {
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
  *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
  *  its PENDING-only response for older native clients. Placement distinguishes the accepted head,
- *  queued successors, startup fragments and steers. Placement is the server-owned fact. */
+ *  queued successors and steers. Placement is the server-owned fact. */
 export const listQueuedTurns = (sessionId: string) =>
   api<ActiveSessionTurn[]>(`/sessions/${sessionId}/turns?view=active`);
 

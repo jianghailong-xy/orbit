@@ -263,7 +263,6 @@ const body = {
     prismaSqlQueryRaw: true,
     zeroCandidateNoWrites: true,
     steerExactTerminalReceipt: true,
-    startupFragmentExactTerminalReceipt: true,
     evidenceSpec: delivery.entry.path,
     tests: delivery.receipt.summary.tests,
   },

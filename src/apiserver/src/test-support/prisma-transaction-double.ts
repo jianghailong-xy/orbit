@@ -1,7 +1,4 @@
-import type {
-  CurrentWorkStartupTransaction,
-  CurrentWorkSteerTransaction,
-} from '../sessions/current-work-delivery';
+import type { CurrentWorkSteerTransaction } from '../sessions/current-work-delivery';
 
 type RawQueryShape = 'tagged-template' | 'prisma-sql';
 
@@ -161,40 +158,28 @@ export interface CurrentWorkSteerCandidate extends Record<string, unknown> {
   status: 'PENDING' | 'IN_FLIGHT';
 }
 
-export interface CurrentWorkStartupCandidate extends Record<string, unknown> {
-  id: string;
-  targetTurnId: string;
-  deliveredAt: Date | null;
-  targetTurn: { status: 'PENDING' | 'IN_FLIGHT' };
-}
-
 interface CurrentWorkDoubleOptions {
   steers?: readonly CurrentWorkSteerCandidate[];
-  startupFragments?: readonly CurrentWorkStartupCandidate[];
   onConversationTurnUpdateMany?: UpdateHook;
-  onStartupFragmentUpdateMany?: UpdateHook;
 }
 
 /**
  * Complete test delegates for a transaction that may enter
- * `terminalizeUndeliveredCurrentWork`. Empty arrays model the no-candidate path explicitly; rows
- * model the receipt-writing path. Both update delegates always exist even when an empty read means
- * production correctly never calls them.
+ * `terminalizePendingCurrentWorkSteers`. An empty array models the no-candidate path explicitly;
+ * rows model the receipt-writing path. The update delegate always exists even when an empty read
+ * means production correctly never calls it.
  *
- * The two delegates are typed as the surfaces production declares, not as free object literals, so
- * the compiler — not a half-hour acceptance — is what reports a method this double stopped
- * supplying. Widening either surface in `current-work-delivery.ts` fails to compile here until the
- * same member is added below, which is the whole invariant this helper exists to hold.
+ * The delegate is typed as the surface production declares, not as a free object literal, so the
+ * compiler — not a half-hour acceptance — is what reports a method this double stopped supplying.
+ * Widening the surface in `current-work-delivery.ts` fails to compile here until the same member is
+ * added below, which is the whole invariant this helper exists to hold.
  */
 export function currentWorkTerminalizationDouble(
   options: CurrentWorkDoubleOptions = {},
 ) {
   const steerFinds: Record<string, unknown>[] = [];
   const steerWrites: Record<string, unknown>[] = [];
-  const startupFinds: Record<string, unknown>[] = [];
-  const startupWrites: Record<string, unknown>[] = [];
   const steers = [...(options.steers ?? [])];
-  const startupFragments = [...(options.startupFragments ?? [])];
   const recorded = (args: unknown) => (args ?? {}) as Record<string, unknown>;
 
   const conversationTurn: CurrentWorkSteerTransaction['conversationTurn'] = {
@@ -211,32 +196,11 @@ export function currentWorkTerminalizationDouble(
     }),
   };
 
-  const conversationTurnStartupFragment:
-  CurrentWorkStartupTransaction['conversationTurnStartupFragment'] = {
-    findMany: delegateMethod((args) => {
-      startupFinds.push(recorded(args));
-      return startupFragments.map((row) => ({
-        ...row,
-        targetTurn: { ...row.targetTurn },
-      }));
-    }),
-    updateMany: delegateMethod((args) => {
-      const seen = recorded(args);
-      startupWrites.push(seen);
-      return options.onStartupFragmentUpdateMany
-        ? options.onStartupFragmentUpdateMany(seen)
-        : { count: startupFragments.length };
-    }),
-  };
-
   return {
     conversationTurn,
-    conversationTurnStartupFragment,
     calls: {
       steerFinds,
       steerWrites,
-      startupFinds,
-      startupWrites,
     },
   };
 }

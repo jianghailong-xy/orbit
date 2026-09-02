@@ -41,7 +41,6 @@ test('complete atomically persists live end intent and completedAt before side e
       findFirst: async () => ({ seq: 2 }),
       create: async ({ data }: { data: Record<string, unknown> }) => data,
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => {
@@ -130,7 +129,6 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
       ...currentWork.conversationTurn,
       findFirst: async () => null,
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
@@ -338,7 +336,6 @@ test('complete emits no side effects when the atomic end transaction fails', asy
         throw new Error('turn insert failed');
       },
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),

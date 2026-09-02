@@ -155,13 +155,7 @@ describe('an accepted user turn before its transcript event arrives', () => {
     ).toEqual([]);
   });
 
-  it('matches startup by target but a steer only by its own authored turn id', () => {
-    const startup = {
-      turnId: 'fragment-startup',
-      targetTurnId: 'turn-running',
-      content: 'startup note',
-      placement: 'startup' as const,
-    };
+  it('matches a steer only by its own authored turn id, never by its target', () => {
     const steer = {
       turnId: 'turn-steer',
       targetTurnId: 'turn-running',
@@ -175,7 +169,7 @@ describe('an accepted user turn before its transcript event arrives', () => {
       payload: { text: 'opening' },
     };
 
-    expect(queuedTurnsOutsideTranscript([startup, steer], [targetEvent])).toEqual([steer]);
+    expect(queuedTurnsOutsideTranscript([steer], [targetEvent])).toEqual([steer]);
     expect(
       queuedTurnsOutsideTranscript([steer], [
         {

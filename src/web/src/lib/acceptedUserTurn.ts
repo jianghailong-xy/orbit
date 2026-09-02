@@ -21,8 +21,8 @@ export interface UserTurnEvent {
 
 interface QueuedTurnLike {
   turnId: string;
-  placement: 'startup' | 'steer' | 'queued';
-  /** A startup fragment is represented in the transcript by its target executable event. */
+  placement: 'steer' | 'queued';
+  /** For a steer, the executable turn it was written into. */
   targetTurnId?: string;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
@@ -196,19 +196,14 @@ export function queuedTurnsOutsideTranscript<T extends QueuedTurnLike>(
     return turnId ? [turnId] : [];
   }));
   return queued.filter((turn) => {
-    // Startup context is rendered as part of its target's opening user event. A live steer has
-    // its own authored USER event and must never disappear merely because the target event was
-    // already in the transcript before it was sent.
+    // A live steer has its own authored USER event and must never disappear merely because the
+    // target event was already in the transcript before it was sent.
     // A durable terminal receipt sharing a USER's turnId is merged into that existing bubble by
     // transcriptEventsWithDurableDeliveryReceipts. Never paint a second copy at the tail. With no
     // USER at all the receipt remains the one fallback bubble.
     if (turn.delivery != null) {
       return !renderedTerminalDeliveryIds.has(turn.turnId)
         && !renderedTurnIds.has(turn.turnId);
-    }
-    if (turn.placement === 'startup') {
-      return !renderedTurnIds.has(turn.turnId)
-        && !renderedTurnIds.has(turn.targetTurnId ?? turn.turnId);
     }
     return !renderedTurnIds.has(turn.turnId);
   });

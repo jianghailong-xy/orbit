@@ -71,9 +71,6 @@ function makeService(
     // createTurn checks BOTH durable receipt tables for the client turn id while holding the
     // Session lock. No resume in this file replays a settled key, so the startup ledger answers
     // "never used" — but it has to answer, because production reads it unconditionally.
-    conversationTurnStartupFragment: {
-      findUnique: async () => null,
-    },
     // The steer routing decision reads the assigned runner's declared capabilities. This runner
     // declares none, which is what keeps every case here on the queued placement they are about:
     // a runner that announced mid-turn steer would be answering a different question.

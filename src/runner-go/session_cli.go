@@ -115,18 +115,18 @@ Usage:
 Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
 long-lived session has finished the turn it was given.
 `,
-	"send": `orbit session send — add a message to a session's current work
+	"send": `orbit session send — add a message to a session
 
 Usage:
   orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
 
 --message-file accepts only '-' (stdin), so the CLI never opens an arbitrary path.
 
-This is CURRENT_WORK only. Success is "startup_context" bound to the not-yet-started opening
-turn or "steer" bound to the exact live turn; it has no independent reply and cannot be
-withdrawn. If there is no eligible current work, the boundary was missed, or the runtime cannot
-prove acknowledged delivery, the command fails and never queues the message for a later turn.
---client-turn-id makes an uncertain-response retry idempotent for the same payload.
+The server decides where the message lands and says so in "placement": "steer" writes it into
+the turn that session is already running (no independent reply, and it cannot be withdrawn),
+while "accepted"/"queued" file it as the next turn — which is how a session that is waiting for
+a reply is reached. --client-turn-id makes an uncertain-response retry idempotent for the same
+payload.
 `,
 	"interrupt": `orbit session interrupt — interrupt a session's current turn
 
@@ -297,7 +297,7 @@ var sessionActionScope = map[string]string{
 var headlessActionDescription = map[string]string{
 	"list":   "List the sessions this runner hosts. Sessions on other runners are not listed; a token pinned to an agent sees only that agent's.",
 	"get":    "Get one session's status, numTurns, lastTurnAt and latest output — enough for a headless poller to tell whether a long-lived session finished its turn. Limited to sessions this runner hosts.",
-	"send":   "Add CURRENT_WORK to the exact starting or live turn of a session this runner hosts. Unsupported or missed boundaries fail explicitly and never queue a later turn. It neither spawns nor ends a session.",
+	"send":   "Send a message to a session this runner hosts. The server decides where it lands and reports it in \"placement\": into the turn already running, or as that session's next turn. It neither spawns nor ends a session.",
 	"create": "Start a session for the agent this service token is pinned to, on this runner. Requires a minted token with the session:create scope; the runner credential alone cannot spawn.",
 }
 

@@ -35,8 +35,8 @@ function makeController(refuse?: { guard: 'end' | 'steer'; code: string }) {
       serviceCalls.push(prop);
       if (prop === 'createTurn') {
         const callback = (args[3] as {
-          participateCurrentWorkTransaction?: (tx: unknown) => Promise<void>;
-        } | undefined)?.participateCurrentWorkTransaction;
+          participateSendTransaction?: (tx: unknown) => Promise<void>;
+        } | undefined)?.participateSendTransaction;
         await callback?.({});
       }
       if (prop === 'interrupt') {

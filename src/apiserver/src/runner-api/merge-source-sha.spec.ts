@@ -333,10 +333,6 @@ function turnHarness(branchSha?: string) {
       count: async () => 0,
       findFirst: async () => null,
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
     session: {
       findUniqueOrThrow: async () => ({
         status: RunStatus.RUNNING,

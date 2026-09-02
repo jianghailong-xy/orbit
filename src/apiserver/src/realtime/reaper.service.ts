@@ -21,7 +21,7 @@ import { RealtimeService } from './realtime.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   CURRENT_WORK_SESSION_REAPED,
-  terminalizeUndeliveredCurrentWork,
+  terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -314,7 +314,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       });
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
       await retireSessionInboxGeneration(tx, sessionId);
-      const currentWork = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+      const currentWork = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
         includeInFlight: true,
         inFlightOutcome: 'UNCONFIRMED',
         code: CURRENT_WORK_SESSION_REAPED,
@@ -322,9 +322,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           `Delivery could not be confirmed because the runner disappeared before acknowledgement; `
           + `the session was reaped as ${status}.`,
       });
-      const currentWorkTerminalized =
-        currentWork.steers.terminalizedTurnIds.length
-        + currentWork.startup.terminalizedTurnIds.length;
+      const currentWorkTerminalized = currentWork.terminalizedTurnIds.length;
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
