@@ -29,6 +29,7 @@
     "test:outcome-reconciler:work-overview-readiness": "bash scripts/outcome-reconciler-work-overview-readiness.sh",
     "test:outcome-reconciler:canary": "bash scripts/outcome-reconciler-canary.sh",
     "test:outcome-reconciler:authoritative-target": "bash scripts/outcome-reconciler-authoritative-target.sh",
+    "test:outcome-reconciler:fast-gate": "bash scripts/outcome-reconciler-fast-gate.sh",
     "test:outcome-reconciler:full-api": "bash scripts/outcome-reconciler-full-api.sh",
     "test:outcome-reconciler:full-clients": "bash scripts/outcome-reconciler-full-clients.sh",
     "test:outcome-reconciler:release-frontier": "npm run test:outcome-reconciler:release-dag",

@@ -15,6 +15,10 @@ IMAGE="${OUTCOME_RELEASE_API_PG_IMAGE:-postgres:16-alpine}"
 JOBS="${OUTCOME_RELEASE_API_JOBS:-4}"
 TAP="$BUILD/outcome-reconciler-full-api.tap"
 MANIFEST="$BUILD/outcome-reconciler-full-api-manifest.json"
+# The running list of what has failed so far, appended by each case as it ends. It outlives the
+# case directory on purpose: that is deleted when the run exits, and this is the one place a
+# failure can be read WHILE the run is still going.
+FAILURES="$BUILD/outcome-reconciler-full-api-failures.log"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CASE_DIR=''
 
@@ -141,6 +145,9 @@ export OUTCOME_API_CASE_TOTAL="${#SPECS[@]}"
 # isolation cannot quietly borrow the shared one.
 export OUTCOME_API_CASE_TEMPLATE="$DATABASE"
 export OUTCOME_API_CASE_PREFIX="$PREFIX"
+: > "$FAILURES"
+export OUTCOME_API_CASE_FAILURE_LOG="$FAILURES"
+echo "==> full-api: failures are appended to $FAILURES as they happen; the run does not stop at the first one"
 
 PARALLEL_INPUT=()
 SERIAL_INPUT=()
@@ -193,7 +200,16 @@ for ((INDEX = 1; INDEX <= ${#SPECS[@]}; INDEX += 1)); do
     fi
   fi
 done
-[ "$TEST_RC" = 0 ] || { echo 'full API acceptance failed' >&2; exit "$TEST_RC"; }
+if [ "$TEST_RC" != 0 ]; then
+  # Every case ran; this is the whole list, in the order the failures happened, so a reader does
+  # not have to reconstruct it from twenty minutes of interleaved parallel output.
+  if [ -s "$FAILURES" ]; then
+    echo "==> full-api: $(wc -l < "$FAILURES" | tr -d '[:space:]') case(s) failed, in the order they failed:" >&2
+    sed 's/^/    /' "$FAILURES" >&2
+  fi
+  echo 'full API acceptance failed' >&2
+  exit "$TEST_RC"
+fi
 if [ -n "${OUTCOME_RELEASE_API_SPEC_REGEX:-}" ]; then
   echo '==> full-api: selected diagnostic specs passed'
   exit 0
