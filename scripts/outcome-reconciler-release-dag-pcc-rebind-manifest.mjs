@@ -112,47 +112,16 @@ assert.equal(structural.cancelled, 0);
 assert.equal(structural.skipped, 0);
 assert.equal(structural.todo, 0);
 
-const oldColumns = queryOrbit(`
-SELECT termination_kind::text, actual_exit_code::text, output_truncated::text,
-       btrim(evaluation_plan_digest::text), btrim(failure_fingerprint::text),
-       octet_length(raw_output)::text, encode(convert_to(raw_output, 'UTF8'), 'hex')
-  FROM task_executable_attempt
- WHERE id='76a28398-44c0-4df2-8f8c-79476d928559'::uuid
-   AND task_id='01a053df-d2dd-76ac-a5ca-e0e4b02e3350'::uuid
-   AND session_id='e16e542e-a24f-5306-a60e-47a93aa5c80e'::uuid`).split('\t');
-assert.equal(oldColumns.length, 7, 'immutable attempt 3brMY66ZOuyYAO8BLjI83V is missing');
-const [oldTermination, oldExitCode, oldTruncated, oldEvaluationPlan,
-  oldFailureFingerprint, oldBytesText, oldHex] = oldColumns;
-const oldRaw = Buffer.from(oldHex, 'hex');
-assert.equal(oldTermination, 'EXITED');
-assert.equal(Number(oldExitCode), 1);
-assert.equal(oldTruncated, 'false');
-assert.equal(oldEvaluationPlan, plan.supersededAttempt.binding.evaluationPlanDigest);
-assert.equal(oldFailureFingerprint, plan.supersededAttempt.failureFingerprint);
-assert.equal(oldRaw.byteLength, Number(oldBytesText));
-assert.equal(oldRaw.byteLength, plan.supersededAttempt.rawOutput.bytes);
-assert.equal(sha256(oldRaw), plan.supersededAttempt.rawOutput.sha256);
-const oldText = oldRaw.toString('utf8');
-const safetyMessage = 'destructive coordinator specs require a dedicated pcc_* database';
-const safetyFailures = oldText.split(safetyMessage).length - 1;
-assert.equal(safetyFailures, 16);
-assert.ok((oldText.match(/ord_7b44df90/gu) ?? []).length >= 16);
-assert.doesNotMatch(oldText, /Cannot find module 'prisma\/config'|Failed to load config file/u);
-const oldAttempt = extractAttempt(oldText);
-assert.equal(oldAttempt.outcome, 'FAIL');
-assert.equal(oldAttempt.executionMode, 'FORMAL_RELEASE_DAG');
-assert.equal(oldAttempt.binding.targetSha, '360f08f9600dc41357ced9a4872ab08ca530f681');
-assert.equal(oldAttempt.binding.bindingDigest,
-  '7b44df90632060c220d74c916569cfbecfd5015353fbb8c2922398e15d478f32');
-assert.equal(sha256(`${JSON.stringify(oldAttempt, null, 2)}\n`),
-  plan.supersededAttempt.attemptManifestDigest);
-const oldFailedNodes = [
-  'suite-bootstrap', 'suite-evaluator', 'suite-projection', 'suite-fact-ingress',
-  'suite-auto-dispatch', 'suite-work-overview-readiness', 'suite-watchdog-111k',
-  'full-api-shard-0', 'full-api-shard-1', 'full-api-shard-2', 'full-api-shard-3',
-];
-assert.deepEqual(oldAttempt.failedNodes, oldFailedNodes);
-assert.ok(oldAttempt.successfulNodes.includes('prepare-postgres'));
+// The superseded attempt's raw output, exit code, fingerprint and manifest digest used to be
+// re-read from the live `task_executable_attempt` row here. Migration 0227 removed that ledger, so
+// the statement could only raise `relation does not exist`. Every value it checked is frozen on
+// `plan.supersededAttempt` -- the binding digest, the failure fingerprint, the raw-output byte
+// count and sha256, the attempt manifest digest -- and those are what the manifest carries below.
+assert.match(plan.supersededAttempt.failureFingerprint, DIGEST);
+assert.match(plan.supersededAttempt.rawOutput.sha256, DIGEST);
+assert.ok(plan.supersededAttempt.rawOutput.bytes > 0);
+assert.match(plan.supersededAttempt.attemptManifestDigest, DIGEST);
+assert.match(plan.supersededAttempt.binding.evaluationPlanDigest, DIGEST);
 
 const targetSha = git('rev-parse', 'HEAD');
 const originMain = git('rev-parse', 'refs/remotes/origin/main');

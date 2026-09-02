@@ -101,8 +101,11 @@ const DROPPED_SCHEMA = 'outcome_projection';
  * twelve triggers and seven CHECK constraints on protected tables to gain nothing.
  */
 const RETAINED_HELPERS: ReadonlyArray<readonly [string, string]> = [
-  ['outcome_append_only_guard', 'task_executable_attempt'],
-  ['outcome_sha256_json', 'project_acceptance_run_derive_conclusion'],
+  // Both dependents named here originally — `task_executable_attempt` and
+  // `project_acceptance_run_derive_conclusion` — were removed by 0227 with the EXECUTABLE
+  // acceptance runtime. Each helper still has other dependents, which is what this checks.
+  ['outcome_append_only_guard', 'executable_runtime_heartbeat'],
+  ['outcome_sha256_json', 'project_completion_contract_snapshot'],
   ['outcome_canonical_json', 'outcome_sha256_json'],
   ['outcome_canonical_number', 'outcome_canonical_json'],
   ['outcome_valid_digest', 'executable_runtime_expectation'],

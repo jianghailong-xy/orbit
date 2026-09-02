@@ -349,21 +349,15 @@ suite('(l)-(n) the acceptance standard set itself is untouched and still conclud
       assert.ok((await columns('project_acceptance_conclusion')).includes(field), field);
     }
 
-    // (n) one stated criterion still reaches a PASS conclusion through the derivation the run
-    // closure owns, with the canonical gate no longer folded into it.
+    // (n) one stated criterion still projects PASS with the canonical gate no longer folded into
+    // it. 0215's run-conclusion derivation used to be read here as well; 0227 removed it, so the
+    // per-criterion projection beside it is the whole of what this checks.
     const seeded = await seedAcceptedProject(client, 'standing');
     const standing = await client.query(
       'SELECT * FROM project_acceptance_standing($1::uuid, 1::bigint)', [seeded.projectId]);
     assert.equal(standing.rows.length, 1);
     assert.equal(standing.rows[0].verdict, 'PASS');
-    const derived = (await client.query(
-      'SELECT project_acceptance_run_derive_conclusion($1::uuid) AS result', [seeded.runId],
-    )).rows[0].result;
-    assert.equal(derived.verdict, 'PASS');
-    assert.equal(derived.concludable, true);
-    assert.equal(derived.doneGate, undefined,
-      'the run conclusion no longer folds a canonical gate into its digest');
-    assert.match(derived.conclusionDigest, /^[0-9a-f]{64}$/);
+    assert.equal(seeded.runId.length > 0, true);
   });
 
 // (o)(p)(q)(r) --------------------------------------------------------------------------------------
@@ -371,12 +365,10 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
   const client = await connect();
   t.after(async () => { await client.end(); });
 
-  // (o) the EXECUTABLE admission/attempt ledger.
-  for (const table of ['task_executable_admission', 'task_executable_attempt',
-    'task_executable_diagnosis']) {
-    assert.equal((await client.query(
-      `SELECT to_regclass($1)::text AS name`, [table])).rows[0].name, table);
-  }
+  // (o) stood here: the EXECUTABLE admission/attempt/diagnosis ledger, which this removal was
+  // told not to touch and did not. Migration 0227 removed it — a different, later decision about
+  // the acceptance runtime — so there is no relation left to look up. What 0222 does to it is
+  // still asserted where it belongs, in `canonical-done-gate-removal.spec.ts`, over 0222's text.
   // (p) stood here: the failure continuation and successor tables, which this removal was told not
   // to touch and did not. Migration 0226 removed them — a different, later decision about the
   // failure router — so there is no relation left to count. What 0222 does to them is still
@@ -427,16 +419,14 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
       JOIN pg_proc p ON p.oid = t.tgfoid
      WHERE NOT t.tgisinternal AND p.proname = 'outcome_append_only_guard'
      ORDER BY 1`);
-  // Six after migration 0226 took the failure family's six with it: the two on
-  // `task_executable_*` and the four on the `executable_runtime_*` / dead-man liveness wall. The
-  // point of the assertion is unchanged — 0222 kept 0194's shared guard because subsystems it may
-  // not touch fire it — so it is named exactly rather than counted loosely.
+  // Four after 0226 took the failure family's six and 0227 took the two on `task_executable_*`:
+  // what is left is the `executable_runtime_*` / dead-man liveness wall. The point of the
+  // assertion is unchanged — 0222 kept 0194's shared guard because subsystems it may not touch
+  // fire it — so it is named exactly rather than counted loosely.
   assert.deepEqual(guarded.rows.map((row) => row.name), [
     'executable_dead_man_event.executable_dead_man_event_append_only',
     'executable_runtime_expectation.executable_runtime_expectation_append_only',
     'executable_runtime_expectation_event.executable_runtime_expectation_event_append_only',
     'executable_runtime_heartbeat.executable_runtime_heartbeat_append_only',
-    'task_executable_attempt.task_executable_attempt_no_delete',
-    'task_executable_diagnosis.task_executable_diagnosis_append_only',
-  ], 'the shared append-only guard is what task_executable_* and executable_runtime_* rely on');
+  ], 'the shared append-only guard is what executable_runtime_* relies on');
 });

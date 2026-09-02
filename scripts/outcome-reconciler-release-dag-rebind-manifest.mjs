@@ -237,38 +237,30 @@ assert.ok(isAncestor(plan.integrationCandidate.tip, targetSha));
 
 const taskUuids = failureTaskIds.map(base62ToUuid);
 const sessionUuids = deliveries.map((delivery) => base62ToUuid(delivery.successfulSessionId));
+// The four delivered tasks and their sessions used to be re-read here together with the typed
+// attempt that settled each one. Migration 0227 removed `task_executable_attempt`, so the join
+// could only raise `relation does not exist`. What it was evidence FOR -- that each delivery's
+// task is DONE and its session SUCCEEDED -- is read from the two relations that remain.
 const taskSessionSql = `
-SELECT t.id::text, t.status::text, s.id::text, s.status::text,
-       a.termination_kind::text, COALESCE(a.actual_exit_code::text, ''),
-       btrim(a.evaluation_plan_digest::text), a.output_truncated::text
+SELECT t.id::text, t.status::text, s.id::text, s.status::text
   FROM task t
   JOIN session s ON s.task_id = t.id
-  JOIN task_executable_attempt a ON a.task_id = t.id AND a.session_id = s.id
  WHERE t.id IN (${taskUuids.map((id) => `'${id}'::uuid`).join(',')})
    AND s.id IN (${sessionUuids.map((id) => `'${id}'::uuid`).join(',')})
  ORDER BY t.created_at`;
 const durableRows = queryOrbit(taskSessionSql).split('\n').filter(Boolean).map((line) => {
-  const [taskId, taskStatus, sessionId, runStatus, terminationKind, actualExitCode,
-    evaluationPlanDigest, outputTruncated] = line.split('\t');
+  const [taskId, taskStatus, sessionId, runStatus] = line.split('\t');
   return {
     taskDatabaseId: taskId,
     taskStatus,
     sessionDatabaseId: sessionId,
     runStatus,
-    terminationKind,
-    actualExitCode: Number(actualExitCode),
-    evaluationPlanDigest,
-    outputTruncated: outputTruncated === 'true',
   };
 });
 assert.equal(durableRows.length, 4);
 for (const row of durableRows) {
   assert.equal(row.taskStatus, 'DONE');
   assert.equal(row.runStatus, 'SUCCEEDED');
-  assert.equal(row.terminationKind, 'EXITED');
-  assert.equal(row.actualExitCode, 0);
-  assert.match(row.evaluationPlanDigest, DIGEST);
-  assert.equal(row.outputTruncated, false);
 }
 
 assert.equal(authoritative.taskId, plan.builder.taskId);

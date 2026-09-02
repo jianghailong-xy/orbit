@@ -71,76 +71,20 @@ function terminalTapSummary(raw) {
   };
 }
 
-// The failed task, typed attempt, append-only receipt, raw output and route are audit history.
-const attemptRow = psql(`
-SELECT termination_kind::text, actual_exit_code::text, output_truncated::text,
-       btrim(failure_fingerprint::text), btrim(evaluation_plan_digest::text),
-       octet_length(raw_output)::text,
-       encode(digest(convert_to(raw_output,'UTF8'),'sha256'),'hex')
-  FROM task_executable_attempt
- WHERE id='096973d5-dff8-41f4-afce-f3a2b835ee46'::uuid`).split('\t');
-assert.deepEqual(attemptRow, [
-  'EXITED',
-  '1',
-  'false',
-  old.failureFingerprint,
-  old.binding.evaluationPlanDigest,
-  String(old.rawOutput.bytes),
-  old.rawOutput.sha256,
-]);
+// The failed task and its supersession link are audit history and still read. The typed attempt
+// beside them -- its raw output markers, exit code, fingerprint, continuation and diagnosis -- was
+// re-read here too; migration 0227 removed `task_executable_attempt`, `_continuation` and
+// `_diagnosis`, so those statements could only raise `relation does not exist`. What they were
+// evidence FOR survives as frozen data on `plan.supersededAttempt` and is carried into this
+// manifest's output below, exactly as 0226 did for the route and handoff rows it removed.
 assert.deepEqual(psql(`SELECT status::text, terminal_reason::text,
   superseded_by_task_id::text FROM task
   WHERE id='01a05616-b60b-73e9-b696-535f278d9df5'::uuid`).split('\t'), [
   'FAILED', 'SUPERSEDED', '01a05650-3ee0-72dc-addb-439a55e0931a',
 ]);
-
-const rawMarkers = [
-  'full-api-shard-0',
-  'full-api-shard-1',
-  'full-api-shard-2',
-  'full-api-shard-3',
-  'interrupt-scheduling.spec.js',
-  'reload-provider-env.spec.js',
-  'run-finalize-lock.spec.js',
-  'coordinator-context-dequeue.spec.js',
-  'tx.conversationTurn.findMany is not a function',
-  'args[0].join is not a function',
-  old.preservedTip,
-];
-const markerSql = rawMarkers.map((marker) => (
-  `(position('${marker.replaceAll("'", "''")}' in raw_output)>0)::text`
-)).join(',');
-assert.deepEqual(psql(`SELECT ${markerSql} FROM task_executable_attempt
-  WHERE id='096973d5-dff8-41f4-afce-f3a2b835ee46'::uuid`).split('\t'),
-Array(rawMarkers.length).fill('true'));
-
-assert.deepEqual(psql(`
-SELECT id::text, kind::text, reason_code, goal_actionable::text, status
-  FROM task_executable_continuation
- WHERE id='77307d1c-03c5-415d-b17f-8709d954b3d1'::uuid`).split('\t'), [
-  '77307d1c-03c5-415d-b17f-8709d954b3d1',
-  'DIAGNOSIS',
-  'UNEXPECTED_EXIT_OBSERVED',
-  'true',
-  'RESOLVED',
-]);
-assert.deepEqual(psql(`
-SELECT id::text, kind, source, btrim(evidence_digest::text)
-  FROM task_executable_diagnosis
- WHERE id='d25a7abe-dead-44f3-9bac-ff8211f08081'::uuid`).split('\t'), [
-  'd25a7abe-dead-44f3-9bac-ff8211f08081',
-  'UNEXPECTED_EXIT',
-  'TYPED_ATTEMPT',
-  'fe6015abb1a5dcd0b11c03d434e832acda26dee61651ea427152e7843296571f',
-]);
-// The four reads that stood here asked the live database to re-confirm this superseded attempt's
-// route decision, its immutable attempt receipt, its successor handoff and its current binding.
-// Migration 0226 removed the failure router and every one of those relations, so the rows are gone
-// and the statements could only raise `relation does not exist`. What they were evidence FOR is
-// unchanged and still checked: the attempt row above (its raw output, exit code and fingerprint),
-// its continuation and its diagnosis are all `task_executable_*` and all still read. The route and
-// handoff values themselves survive as frozen data on `plan.supersededAttempt` and are still
-// carried into this manifest's output below.
+assert.equal(old.rawOutput.bytes > 0, true);
+assert.match(old.rawOutput.sha256, /^[0-9a-f]{64}$/u);
+assert.match(old.failureFingerprint, /^[0-9a-f]{64}$/u);
 
 const oldWorktree = '/root/.orbit/worktrees/c1360bed-d18f-58b3-b39e-187bfdabb9b6';
 const oldRunRoot = path.join(oldWorktree, 'build', 'outcome-reconciler-release-dag',

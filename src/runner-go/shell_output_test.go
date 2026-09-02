@@ -164,12 +164,11 @@ func TestForegroundShellSnapshotsDoNotSplitMultibyteUTF8(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			text := strings.Repeat(tc.unit, foregroundShellOutputCap) + tc.suffix
 			var ordinary shellOutputBuffer
-			var acceptance executableOutputBuffer
 			_, _ = ordinary.Write([]byte(text))
-			_, _ = acceptance.Write([]byte(text))
+			// 0227 removed the acceptance runtime's own capped buffer with the typed-termination
+			// protocol it streamed for; the foreground shell buffer is the only one left.
 			for name, got := range map[string]string{
-				"ordinary":   ordinary.snapshot(foregroundShellOutputCap),
-				"acceptance": acceptance.snapshot(foregroundShellOutputCap),
+				"ordinary": ordinary.snapshot(foregroundShellOutputCap),
 			} {
 				if len(got) > foregroundShellOutputCap {
 					t.Fatalf("%s snapshot = %d bytes, exceeds cap", name, len(got))

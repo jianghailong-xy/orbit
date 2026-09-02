@@ -90,7 +90,7 @@ const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
     'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
   project_acceptance_run:
-    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb, conclusion_basis:project_acceptance_run_conclusion_basis, conclusion_digest:character(64), conclusion_window_seconds:integer!',
+    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb',
 };
 
 function publishes(): RealtimeService {
@@ -210,7 +210,10 @@ suite('(a) the installed database has none of the relations, functions or types 
        ORDER BY 1`)).rows.map((row) => row.name);
     assert.deepEqual(callers, [], `installed functions still reach for a dropped one: ${callers}`);
 
-    // And the two columns, with the CHECK that constrained one of them.
+    // And the two columns, with the CHECK that constrained one of them. Both lived on
+    // `task_executable_attempt`, which migration 0227 removed whole by a later decision -- so the
+    // column read is written against the catalog rather than a regclass cast that would raise on
+    // the missing relation, and it answers "absent" either way.
     const columns = (await client.query<{ name: string }>(
       `SELECT column_name AS name FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'task_executable_attempt'
@@ -218,9 +221,9 @@ suite('(a) the installed database has none of the relations, functions or types 
       .rows.map((row) => row.name);
     assert.deepEqual(columns, []);
     const check = await client.query(
-      `SELECT 1 FROM pg_constraint
-        WHERE conrelid = 'task_executable_attempt'::regclass
-          AND conname = 'task_executable_attempt_failure_site_digest_check'`);
+      `SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = 'task_executable_attempt'
+          AND c.conname = 'task_executable_attempt_failure_site_digest_check'`);
     assert.equal(check.rowCount, 0);
   });
 
@@ -413,7 +416,7 @@ suite('(g)(h) ordinary task and session writes are unchanged', async (t) => {
 });
 
 // (i) ---------------------------------------------------------------------------------------------
-suite('(i) an EXECUTABLE task still runs admission -> attempt -> verdict, failure included',
+suite('(i) an EXECUTABLE task still runs command -> verdict, failure included',
   async (t) => {
     const sql = await connectSql();
     const { db, tasks, api } = connect();
@@ -427,8 +430,6 @@ suite('(i) an EXECUTABLE task still runs admission -> attempt -> verdict, failur
       acceptanceCriteria: 'The declared shell command exits with the expected code.',
       acceptanceCommand: 'test -f package.json',
       acceptanceExpectedExitCode: 0,
-      acceptanceTimeoutSeconds: 1_200,
-      acceptanceOwnerTimeoutCeilingSeconds: 1_200,
     } as never);
     const sessionId = randomUUID();
     const messageTurnId = randomUUID();
@@ -456,60 +457,31 @@ suite('(i) an EXECUTABLE task still runs admission -> attempt -> verdict, failur
       dequeueTurn: (
         sessionId: string, runnerId: string, leaseGeneration: string | null, acceptsSteer: boolean,
         declaredCapabilities: readonly string[],
-        executableCapability: {
-          schemaRevision: number; capabilityRevision: number; hardMaxSeconds: number;
-          runnerSha: string;
-        } | null,
-      ) => Promise<{ turnId: string; acceptancePlan?: { admissionId: string } } | null>;
-    }).dequeueTurn(sessionId, runnerId, null, false, [], {
-      schemaRevision: 2, capabilityRevision: 2, hardMaxSeconds: 1_200, runnerSha: 'a'.repeat(40),
-    });
-    assert.ok(delivered?.acceptancePlan, 'the typed poller must be admitted');
-    const admission = await db.taskExecutableAdmission.findFirstOrThrow({
-      where: { taskId: declared.id },
-    });
-    assert.equal(admission.decision, 'ADMITTED');
+      ) => Promise<{ turnId: string; taskAcceptance?: boolean } | null>;
+    }).dequeueTurn(sessionId, runnerId, null, false, []);
+    assert.equal(delivered?.taskAcceptance, true, 'the acceptance command must be delivered');
 
-    const started = await api.startExecutableAcceptanceAttempt(
-      { id: runnerId } as never, sessionId, admission.id,
-    ) as { attemptId: string };
-    const attempt = await db.taskExecutableAttempt.findUniqueOrThrow({
-      where: { id: started.attemptId },
-    });
-    assert.equal(attempt.admissionId, admission.id);
-
-    // A FAILING termination: the exact write the two 0210 triggers fired on. It must still record
-    // its own fingerprint and its own continuation, and it must write no receipt, obligation or
-    // outbox — because there is nowhere left to write one.
+    // A FAILING result: the exact write the two 0210 triggers fired on, delivered through the
+    // lane 0227 left in place. It must write no receipt, obligation or outbox — because there is
+    // nowhere left to write one.
     const settled = await api.turnComplete({ id: runnerId } as never, sessionId, {
-      turnId: delivered.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'shell',
+      turnId: delivered!.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'shell',
+      shellExitCode: 1,
       shellOutput: 'no such file',
-      acceptanceAdmissionId: admission.id,
-      acceptanceAttemptId: started.attemptId,
-      acceptanceTerminationKind: 'EXITED',
-      acceptanceActualExitCode: 1,
     } as never);
     assert.equal((settled as { ok: boolean }).ok, true);
-    const closed = await db.taskExecutableAttempt.findUniqueOrThrow({
-      where: { id: started.attemptId },
-    });
-    assert.equal(closed.terminationKind, 'EXITED');
-    assert.equal(closed.actualExitCode, 1);
-    assert.match(closed.failureFingerprint ?? '', /^[0-9a-f]{64}$/,
-      'the four-input fingerprint 0200 shipped is still written');
-    assert.equal(await db.taskExecutableContinuation.count({ where: { taskId: declared.id } }), 1,
-      'the continuation is the completion-decision mechanism that stays');
     assert.equal(
       (await db.task.findUniqueOrThrow({ where: { id: declared.id } })).status,
       TaskStatus.OPEN,
       'and a failed command routes the task nowhere: since 2026-09-02 nothing derives a status '
       + 'from an exit code at all, so the conservative FAILED is gone with the optimistic DONE',
     );
-
-    // The dead-man sweep 0213 also rewrote: it still runs, and it still writes the same column.
-    const swept = await sql.query<{ marked: number }>(
-      'SELECT executable_acceptance_mark_stale_attempts(now(), 8) AS marked');
-    assert.equal(Number(swept.rows[0].marked), 0, 'no attempt is stale, and the scan still answers');
+    const request = await db.taskJudgmentRequest.findFirstOrThrow({
+      where: { taskId: declared.id },
+      include: { executableResult: true },
+    });
+    assert.equal(request.decision, 'FAIL');
+    assert.equal(request.executableResult?.actualExitCode, 1);
   });
 
 // (j) ---------------------------------------------------------------------------------------------

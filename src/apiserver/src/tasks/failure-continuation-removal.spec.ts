@@ -360,18 +360,15 @@ test('(c) the schema declares none of the removed models, columns or enums', () 
   ]) {
     assert.equal(schema.includes(model), false, `schema.prisma still declares ${model}`);
   }
-  // And the wall it stands next to is untouched. Read inside the model rather than anywhere in the
-  // file: `failureFingerprint` is 0200's column, three other models declare one of their own, and
-  // a whole-file `includes` would have gone green on a TaskExecutableAttempt that had lost it.
-  const model = schema.slice(schema.indexOf('model TaskExecutableAttempt {'));
-  const attempt = model.slice(0, model.indexOf('\n}\n'));
-  assert.ok(attempt.length > 0 && attempt.length < 4_000, 'the attempt model was not located');
-  for (const kept of ['failureFingerprint', 'terminationKind', 'actualExitCode', 'rawOutput']) {
-    assert.ok(attempt.includes(kept), `TaskExecutableAttempt lost ${kept}`);
+  // The wall it stood next to was `model TaskExecutableAttempt`, read for the two 0213 columns
+  // and the 0200 fingerprint this removal had to leave on it. Migration 0227 removed that model
+  // whole with the EXECUTABLE acceptance runtime -- a later and separate decision -- so what is
+  // checked now is that neither of 0213's spellings came back anywhere in the schema.
+  for (const column of ['failureSiteSource', 'failureSiteDigest', 'ExecutableFailureSiteSource']) {
+    assert.equal(schema.includes(column), false, `schema.prisma still declares ${column}`);
   }
-  for (const gone of ['failureSiteSource', 'failureSiteDigest']) {
-    assert.equal(attempt.includes(gone), false, `TaskExecutableAttempt still declares ${gone}`);
-  }
+  assert.equal(schema.includes('model TaskExecutableAttempt {'), false,
+    '0227 removed the attempt model; nothing may have put it back');
 });
 
 // (i) ---------------------------------------------------------------------------------------------
@@ -407,12 +404,15 @@ test('(i) 0200\'s three replaced functions are restored to 0200\'s own text', ()
   const zero200 = readFileSync(
     path.join(MIGRATIONS, '0200_executable_acceptance_runtime_contract/migration.sql'), 'utf8');
   for (const name of RESTORED_FUNCTIONS) {
-    const standing = lastVerdict(
+    // What 0226 did is frozen in its own text: it re-creates each one and drops none of them.
+    // (Two of the three were later dropped outright by 0227 with the acceptance runtime, which is
+    // that migration's decision to defend, not this one's — so this reads 0226, not the frontier.)
+    assert.match(REMOVAL_SQL,
       new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${name}\\s*\\(`, 'i'),
+      `${name} must be re-created by the removal`);
+    assert.doesNotMatch(REMOVAL_SQL,
       new RegExp(`DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${name}\\s*\\(`, 'i'),
-    );
-    assert.deepEqual(standing, { dir: REMOVAL_DIR, verdict: 'CREATED' },
-      `${name} must be re-created by the removal, never dropped by it`);
+      `${name} must never be dropped by the removal`);
     // Byte-for-byte against 0200's body, whitespace-insensitively: an object belongs to the
     // migration that created it, and "restore" has to mean the text that was there.
     const body = (source: string) => {
@@ -425,11 +425,14 @@ test('(i) 0200\'s three replaced functions are restored to 0200\'s own text', ()
     assert.equal(body(REMOVAL_SQL), body(zero200),
       `${name}'s restored body is not 0200's — a third variant is not a restoration`);
   }
-  // The site input leaves the fingerprint with it, on both sides of the same value.
-  const runtime = read('src/apiserver/src/tasks/executable-acceptance-runtime.ts');
-  assert.equal(runtime.includes('failureSiteDigest'), false);
-  assert.equal(runtime.includes('executable-failure-fingerprint:v2'), false);
-  assert.match(runtime, /`evaluationPlanDigest=\$\{input\.evaluationPlanDigest\}`/);
+  // The site input left the fingerprint with it, on both sides of the same value. The
+  // TypeScript side of that pair was `tasks/executable-acceptance-runtime.ts`, which 0227
+  // removed outright; there is no module left to carry either spelling.
+  assert.equal(
+    existsSync(path.join(API, 'src/tasks/executable-acceptance-runtime.ts')),
+    false,
+    'the acceptance runtime module is gone, so neither fingerprint spelling can survive in it',
+  );
 });
 
 // (j) ---------------------------------------------------------------------------------------------

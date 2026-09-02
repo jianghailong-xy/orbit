@@ -59,8 +59,10 @@ suite('(j) task_executable_* and project_acceptance_* are both still installed',
   const client = await connect();
   t.after(async () => { await client.end(); });
 
+  // 0227 removed 0200's admission/attempt/continuation/diagnosis and 0187's two backfill
+  // relations from this family; `task_executable_judgment_result` (0181) is what is left of it.
   for (const [prefix, tables, triggers] of [
-    ['task_executable_', 6, 1],
+    ['task_executable_', 1, 1],
     ['project_acceptance_', 5, 1],
   ] as const) {
     const { relations, triggers: installed } = await census(client, prefix);
@@ -72,12 +74,9 @@ suite('(j) task_executable_* and project_acceptance_* are both still installed',
 
   // The named walls the task called out one by one, so a reader sees the exact list.
   for (const table of [
-    'task_executable_admission',
-    'task_executable_attempt',
-    'task_executable_continuation',
-    'task_executable_diagnosis',
-    // `task_executable_judgment_result` stood here until 2026-09-02, when the judgment machinery
-    // it belonged to was removed. The rest of `task_executable_*` is still a preserved wall.
+    // The four 0200 relations that used to be named here went out with 0227, by a later and
+    // separate account-owner decision. 0220 still issued no statement against any of them.
+    'task_executable_judgment_result',
     'project_acceptance_run',
     'project_acceptance_criterion',
     'project_acceptance_conclusion',

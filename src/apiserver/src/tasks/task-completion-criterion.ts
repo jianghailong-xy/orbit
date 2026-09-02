@@ -1,13 +1,12 @@
 import type { TaskCompletionPolicyValue, TaskVerdictValue } from '../projects/task-aggregation';
 
 /**
- * The three peer ways a task may declare how its work is proved complete.
+ * The three peer ways a task may prove its own work complete.
  *
- * Since 2026-09-02 only VERIFICATION has an implementation. EXECUTABLE and EVIDENCE_JUDGMENT are
- * still legal declarations, still stored, and still carry their data — 0177's `acceptanceCommand`
- * / `acceptanceExpectedExitCode` pair for the first, completion evidence for the second — but the
- * machinery that used to satisfy them was removed at the account owner's direction, to be rebuilt.
- * `evaluateTaskCompletion` is where that state is expressed.
+ * EVIDENCE_JUDGMENT is the former HUMAN_SIGNOFF, renamed for what actually settles it. The fact is
+ * unchanged — one decision, bound by foreign key to one immutable completion-evidence version and
+ * its digest — but the decision no longer has to come from the account owner. Any credentialed
+ * principal, an agent included, may make it, and must state the finding it is making.
  */
 export const TASK_COMPLETION_CRITERIA = [
   'EXECUTABLE',
@@ -24,8 +23,6 @@ export interface TaskCompletionDeclaration {
   completionCriterion?: TaskCompletionCriterionValue | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
-  acceptanceTimeoutSeconds?: number | null;
-  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   completionPolicy?: TaskCompletionPolicyValue | null;
   /** A verifier task points at another task; it cannot simultaneously own executable acceptance. */
   verifiesTaskId?: string | null;
@@ -67,14 +64,6 @@ export function taskCompletionDeclarationError(
   }
   if (command != null && command.trim() === '') {
     return 'acceptanceCommand must not be blank';
-  }
-  const timeout = declaration.acceptanceTimeoutSeconds ?? null;
-  const ownerCeiling = declaration.acceptanceOwnerTimeoutCeilingSeconds ?? null;
-  if (timeout == null && ownerCeiling != null) {
-    return 'acceptanceOwnerTimeoutCeilingSeconds requires acceptanceTimeoutSeconds';
-  }
-  if (timeout != null && command == null) {
-    return 'acceptanceTimeoutSeconds requires executable acceptance';
   }
 
   const criterion = resolveTaskCompletionCriterion(declaration);
@@ -120,12 +109,16 @@ export function taskCompletionDeclarationError(
 export interface TaskCompletionFacts {
   /** Null is accepted at this pure boundary solely for rolling/migration compatibility. */
   completionCriterion?: TaskCompletionCriterionValue | null;
+  acceptanceExpectedExitCode?: number | null;
+  executableExitCode?: number | null;
   /** The subject-facing result of an independent verifier. Only PASS settles the subject. */
   verificationVerdict?: TaskVerdictValue | null;
   /** Non-null identifies this task as the verifier carrier rather than the verified subject. */
   verifiesTaskId?: string | null;
   /** A verifier's own result. Any conclusion settles the carrier activity. */
   ownVerdict?: TaskVerdictValue | null;
+  /** The task's current judgment request, bound to its current evidence, was decided PASS. */
+  evidenceJudgment?: boolean;
 }
 
 export interface TaskCompletionEvaluation {
@@ -146,37 +139,37 @@ export type DerivedTaskCompletionStatus = 'DONE' | null;
 export type TaskLifecycleStatusValue =
   | 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED' | 'FAILED';
 
-/**
- * Evaluate one declared criterion. It observes facts only and never writes Task.status.
- *
- * EXECUTABLE and EVIDENCE_JUDGMENT are DECLARED BUT UNIMPLEMENTED. On 2026-09-02 the account
- * owner had the judgment machinery and the exit-code decision deleted, to be rebuilt later. What
- * was deleted is the machine: the request/result/inbox/delivery tables, their triggers, and the
- * two branches that used to read them. What was deliberately kept is the declaration — the
- * criterion labels, `acceptanceCommand`, `acceptanceExpectedExitCode` and every row carrying
- * them — so the rebuilt implementation finds its inputs exactly where it left them.
- *
- * They therefore return UNSATISFIED rather than throwing or falling through to a default: a task
- * may still declare either one, and nothing will ever satisfy it on its own. Naming both cases
- * explicitly is what keeps the exhaustiveness check honest — a fourth criterion added later
- * cannot silently inherit somebody else's answer.
- */
+/** Evaluate one declared criterion. It observes facts only and never writes Task.status. */
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
 ): TaskCompletionEvaluation {
   const criterion = facts.completionCriterion ?? 'EVIDENCE_JUDGMENT';
   let state: TaskCompletionEvaluation['state'];
   switch (criterion) {
-    case 'EXECUTABLE':
-      state = 'UNSATISFIED';
+    case 'EXECUTABLE': {
+      // The sentinel -1 is a shell turn that produced no comparable result at all -- it never
+      // identified timeout vs cancel vs signal, and after 0227 removed the typed-termination
+      // runtime nothing else does either. It stays ACTIONABLE rather than becoming a wrong answer.
+      if (
+        facts.executableExitCode === -1
+        || facts.executableExitCode == null
+        || facts.acceptanceExpectedExitCode == null
+      ) {
+        state = 'ACTIONABLE';
+        break;
+      }
+      state = facts.executableExitCode === facts.acceptanceExpectedExitCode
+        ? 'SATISFIED'
+        : 'UNSATISFIED';
       break;
+    }
     case 'VERIFICATION':
       state = (facts.verifiesTaskId != null
         ? facts.ownVerdict != null
         : facts.verificationVerdict === 'PASS') ? 'SATISFIED' : 'UNSATISFIED';
       break;
     case 'EVIDENCE_JUDGMENT':
-      state = 'UNSATISFIED';
+      state = facts.evidenceJudgment === true ? 'SATISFIED' : 'UNSATISFIED';
       break;
   }
   return { criterion, state, satisfied: state === 'SATISFIED' };
@@ -256,12 +249,10 @@ export function taskCompletionRequiredAction(
   switch (criterion) {
     case 'EXECUTABLE':
       return {
-        requiredAction: 'AWAIT_EXECUTABLE_IMPLEMENTATION',
+        requiredAction: 'RUN_EXECUTABLE_CRITERION',
         instruction:
-          'nothing can satisfy EXECUTABLE right now: its implementation was removed on ' +
-          '2026-09-02 and is to be rebuilt. The declaration is intact — acceptanceCommand and ' +
-          'acceptanceExpectedExitCode are still stored and still editable — so redeclare this ' +
-          'task as VERIFICATION if it has to be completable today',
+          'finish the task run and let Orbit run its declared acceptanceCommand; the recorded ' +
+          'exit code must equal acceptanceExpectedExitCode',
       };
     case 'VERIFICATION':
       if (role.verifiesTaskId != null) {
@@ -280,12 +271,11 @@ export function taskCompletionRequiredAction(
       };
     case 'EVIDENCE_JUDGMENT':
       return {
-        requiredAction: 'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
+        requiredAction: 'DECIDE_THE_OPEN_EVIDENCE_JUDGMENT',
         instruction:
-          'nothing can satisfy EVIDENCE_JUDGMENT right now: its implementation — the request ' +
-          'ledger and the decision door — was removed on 2026-09-02 and is to be rebuilt. ' +
-          'Completion evidence is still submittable and still stored; redeclare this task as ' +
-          'VERIFICATION if it has to be completable today',
+          'decide the current EVIDENCE_JUDGMENT request against the evidence version it is bound ' +
+          'to, binding task_judge / POST /tasks/:id/judgment to that requestId and evidenceDigest ' +
+          'and stating the finding that settles it',
       };
   }
 }

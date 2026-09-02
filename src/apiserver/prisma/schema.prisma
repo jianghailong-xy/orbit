@@ -232,38 +232,36 @@ enum TaskCompletionCriterion {
   @@map("task_completion_criterion")
 }
 
-/// Admission and process termination are independent axes. A rejected plan never has an attempt;
-/// a process termination exists only after an admitted runner crossed the spawn boundary.
-enum ExecutableAcceptanceAdmissionDecision {
-  ADMITTED
-  REJECTED
+/// Lifecycle of one evidence-bound request for a criterion decision. It is monotonic: OPEN may
+/// become DECIDED or SUPERSEDED, and neither terminal fact is rewritten or reopened.
+enum TaskJudgmentRequestStatus {
+  OPEN
+  DECIDED
+  SUPERSEDED
 
-  @@map("executable_acceptance_admission_decision")
+  @@map("task_judgment_request_status")
 }
 
-enum ExecutableAcceptanceTerminationKind {
-  EXITED
-  TIMED_OUT
-  CANCELLED
-  SIGNALED
-  START_FAILED
-  INFRASTRUCTURE_LOST
+/// Why an OPEN judgment request stopped being actionable without being decided. Evidence
+/// revisions point at their successor; TASK_ALREADY_DONE and VERIFIER_ROLE are terminal rules
+/// with no successor. VERIFIER_ROLE closes a legacy check-of-check request after the task's own
+/// verdict is established as the verifier carrier's completion fact.
+enum TaskJudgmentSupersessionRule {
+  EVIDENCE_REVISED
+  TASK_ALREADY_DONE
+  VERIFIER_ROLE
 
-  @@map("executable_acceptance_termination_kind")
+  @@map("task_judgment_supersession_rule")
 }
 
-enum ExecutableAcceptanceLegacyTermination {
-  UNTYPED
+/// How a request entered the durable judgment ledger. BACKFILL is never a migration side effect:
+/// it always names the separately invoked, bounded batch row that selected it.
+enum TaskJudgmentRequestOrigin {
+  LIVE_EVIDENCE
+  LEGACY_IMPORT
+  BACKFILL
 
-  @@map("executable_acceptance_legacy_termination")
-}
-
-enum ExecutableAcceptanceContinuationKind {
-  RETRY
-  DIAGNOSIS
-  SUCCESSOR
-
-  @@map("executable_acceptance_continuation_kind")
+  @@map("task_judgment_request_origin")
 }
 
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
@@ -273,6 +271,41 @@ enum TaskJudgmentDevicePolicy {
   IN_APP_ONLY
 
   @@map("task_judgment_device_policy")
+}
+
+/// The concrete principal that owns the next decision. These are peers selected from the task's
+/// declared criterion; no row moves from one recipient type to another as a fallback.
+enum TaskJudgmentRecipientType {
+  SYSTEM_EXECUTABLE_EVALUATOR
+  VERIFIER_TASK
+  ACCOUNT_OWNER
+
+  @@map("task_judgment_recipient_type")
+}
+
+/// A request conclusion. PASS is the only optimistic conclusion; the other two remain durable
+/// evidence without manufacturing Task.status DONE.
+enum TaskJudgmentDecision {
+  PASS
+  FAIL
+  INCONCLUSIVE
+
+  @@map("task_judgment_decision")
+}
+
+/// What happened to the retryable device projection of one durable in-app judgment item.
+/// PENDING/BLOCKED may be retried, DELIVERING is leased, and the remaining three values are
+/// terminal receipts. CANCELLED means the request was decided or superseded before delivery; it
+/// is deliberately different from DEAD, which means the delivery budget itself was exhausted.
+enum TaskJudgmentPushDeliveryStatus {
+  PENDING
+  DELIVERING
+  DELIVERED
+  BLOCKED
+  DEAD
+  CANCELLED
+
+  @@map("task_judgment_push_delivery_status")
 }
 
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
@@ -328,6 +361,7 @@ model User {
   handoffApprovals ProjectHandoffApproval[]
 
   legacyEvidenceImports TaskLegacyEvidenceImport[]
+  judgmentBackfillBatches TaskJudgmentBackfillBatch[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -440,13 +474,6 @@ model Runner {
   // for an empty requirement set, but can never prove a non-empty requirement.
   capabilities           String[]  @default([])
   capabilitiesReportedAt DateTime? @map("capabilities_reported_at")
-  // EXECUTABLE v2 is advertised separately from the open-ended capability tokens because its
-  // numeric hard maximum participates in admission. All four fields move in one heartbeat write;
-  // NULL is an N-1 runner and can never prove a v2-bound plan.
-  acceptanceRuntimeSchemaRevision     Int?      @map("acceptance_runtime_schema_revision")
-  acceptanceRuntimeCapabilityRevision Int?      @map("acceptance_runtime_capability_revision")
-  acceptanceRuntimeHardMaxSeconds      Int?      @map("acceptance_runtime_hard_max_seconds")
-  acceptanceRuntimeReportedAt          DateTime? @map("acceptance_runtime_reported_at")
   // Effective default reported by each built-in runtime on this machine. Heartbeat-owned cache,
   // kept separate from modelCatalog because availability and selected-default are independent.
   // Shape: { "claude": "claude-opus-5", "codex": "gpt-5.6-sol", ... }.
@@ -481,7 +508,6 @@ model Runner {
   repoCleanupMessage String?     @map("repo_cleanup_message")
   repoCleanupAt      DateTime?   @map("repo_cleanup_at")
 
-  executableAcceptanceAdmissions TaskExecutableAdmission[]
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
@@ -1210,9 +1236,6 @@ model Session {
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
-  executableAcceptanceAdmissions TaskExecutableAdmission[]
-  executableAcceptanceAttempts   TaskExecutableAttempt[]
-  executableAcceptanceDiagnoses  TaskExecutableDiagnosis[]
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -2448,35 +2471,6 @@ enum ProjectAcceptanceVerdict {
   @@map("project_acceptance_verdict")
 }
 
-/// The three states an acceptance run can be read in (migration 0215). Declared here because the
-/// database renders them from this type: "still evaluating", "concluded" and "superseded by the next
-/// evidence set" are three different things, and being pushed out is not a verdict. No column stores
-/// the state — `project_acceptance_run_state_value()` derives it from the row.
-enum ProjectAcceptanceRunState {
-  EVALUATING
-  CONCLUDED
-  SUPERSEDED
-
-  @@map("project_acceptance_run_state")
-}
-
-/// What a run that never closed owes (migration 0215). One label: a run left evaluating past its
-/// declared window is a typed obligation rather than a silence.
-enum ProjectAcceptanceRunObligationKind {
-  ACCEPTANCE_RUN_STALLED
-
-  @@map("project_acceptance_run_obligation_kind")
-}
-
-/// The one basis a run conclusion may have (migration 0215). A single label on purpose: a run
-/// concludes by mechanical derivation from its criterion projection and the canonical DONE gate, or
-/// it does not conclude. A second label here would be a second way to decide an acceptance.
-enum ProjectAcceptanceRunConclusionBasis {
-  CRITERION_PROJECTION_AND_DONE_GATE
-
-  @@map("project_acceptance_run_conclusion_basis")
-}
-
 /// One immutable version of the project-level acceptance evidence set.
 ///
 /// The historical API/table name is retained for compatibility. Since migration 0179 this is not a
@@ -2519,22 +2513,10 @@ model ProjectAcceptanceRun {
   /// Legacy pre-0179 terminal projection. New conclusions live only in the event table.
   resultDigest String? @map("result_digest") @db.Char(64)
 
-  /// The run's own conclusion (migration 0215). Written by `project_acceptance_run_conclude` and by
-  /// no other path, together with `completedAt`, `conclusionBasis` and `conclusionDigest`. Before
-  /// 0215 the only thing that could ever happen to a run was being superseded by the next evidence
-  /// set, which left this null forever while the real judging happened in the criterion projection.
+  /// A run is superseded by the next evidence set; no path writes it a conclusion. 0215 added one
+  /// and 0227 removed it with the EXECUTABLE acceptance runtime it derived from, so this is null
+  /// on every run again and the judging lives in the criterion projection beside it.
   verdict ProjectAcceptanceVerdict?
-
-  /// Non-null exactly when this run concluded, and the reason a conclusion cannot be confused with a
-  /// supersession: the two transitions are written by different paths and are mutually exclusive per
-  /// row. There is no column, and no function parameter, through which free text becomes a verdict.
-  conclusionBasis ProjectAcceptanceRunConclusionBasis? @map("conclusion_basis")
-  /// sha256 of the derivation — criterion projection plus the canonical DONE gate's decision — so
-  /// re-deriving over an unchanged world reproduces the same conclusion, digest included.
-  conclusionDigest String? @map("conclusion_digest") @db.Char(64)
-  /// The window this run was given to conclude in. Past it the run is stalled and owes a typed
-  /// ACCEPTANCE_RUN_STALLED obligation rather than hanging silently.
-  conclusionWindowSeconds Int @default(172800) @map("conclusion_window_seconds")
 
   /// Who caused this evidence version to be materialized. Conclusion authorship is recorded on
   /// every ProjectAcceptanceConclusion event instead.
@@ -3061,16 +3043,6 @@ model Task {
   /// The declared completion fact for this task. EVIDENCE_JUDGMENT is a first-class criterion and the
   /// compatibility value for every row that predates this column, never an exceptional fallback.
   completionCriterion TaskCompletionCriterion @default(EVIDENCE_JUDGMENT) @map("completion_criterion")
-  /// Present only for the negotiated protocol. NULL preserves the N-1 fixed-120-second plan.
-  acceptanceTimeoutSeconds              Int?    @map("acceptance_timeout_seconds")
-  acceptanceOwnerTimeoutCeilingSeconds  Int?    @map("acceptance_owner_timeout_ceiling_seconds")
-  acceptancePolicyTimeoutCeilingSeconds Int?    @map("acceptance_policy_timeout_ceiling_seconds")
-  acceptanceSchemaRevision               Int?    @map("acceptance_schema_revision")
-  acceptanceCapabilityRevision           Int?    @map("acceptance_capability_revision")
-  acceptanceCommandDigest                String? @map("acceptance_command_digest") @db.Char(64)
-  acceptanceEvaluationPlanDigest         String? @map("acceptance_evaluation_plan_digest") @db.Char(64)
-  /// Incremented only by the admitted start handshake, never by admission itself.
-  executionAttemptCount                  Int     @default(0) @map("execution_attempt_count")
   /// Revision of the database-owned canonical DONE fence. Current task creation writes 1
   /// explicitly and the database default protects rows inserted by an N-1 server too.
   completionFenceRevision Int @default(1) @map("completion_fence_revision")
@@ -3245,7 +3217,9 @@ model Task {
 
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
+  judgmentRequests TaskJudgmentRequest[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
+  judgmentInboxItems TaskJudgmentInboxItem[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3272,10 +3246,6 @@ model Task {
   convergenceDecisions    TaskConvergenceDecision[]
   /// `[K3]`: every attempt spent on this task — one row per Session that ran it (migration 0139).
   attempts                TaskAttempt[]
-  executableAcceptanceAdmissions TaskExecutableAdmission[]
-  executableAcceptanceAttempts   TaskExecutableAttempt[]
-  executableAcceptanceContinuations TaskExecutableContinuation[]
-  executableAcceptanceDiagnoses  TaskExecutableDiagnosis[]
   /// `[K5]`: §6's findings ABOUT this task, and the ones whose one effect IS this task.
   verificationFindings    TaskVerificationFinding[] @relation("FindingSubject")
   filedByFinding          TaskVerificationFinding[] @relation("FindingEffectTask")
@@ -3362,6 +3332,7 @@ model TaskCompletionEvidence {
   revision          BigInt
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
+  judgmentRequests TaskJudgmentRequest[]
   legacyImport TaskLegacyEvidenceImport?
 
   @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
@@ -3424,117 +3395,185 @@ model TaskLegacyEvidenceImport {
   @@map("task_legacy_evidence_import")
 }
 
-/// The pre-spawn budget/capability decision for one v2 shell turn. It is immutable: a later
-/// runner capability report produces another admission, never a rewrite of what this dispatch saw.
-model TaskExecutableAdmission {
-  id        String @id @default(uuid(7)) @db.Uuid
-  taskId    String @map("task_id") @db.Uuid
-  task      Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  sessionId String @map("session_id") @db.Uuid
-  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  turnId    String @unique @map("turn_id") @db.Uuid
-  runnerId  String @map("runner_id") @db.Uuid
-  runner    Runner @relation(fields: [runnerId], references: [id], onDelete: Restrict)
-
-  evaluationPlanDigest String @map("evaluation_plan_digest") @db.Char(64)
-  commandDigest        String @map("command_digest") @db.Char(64)
-  expectedExitCode     Int    @map("expected_exit_code")
-  requestedTimeoutSeconds     Int @map("requested_timeout_seconds")
-  ownerTimeoutCeilingSeconds  Int @map("owner_timeout_ceiling_seconds")
-  policyTimeoutCeilingSeconds Int @map("policy_timeout_ceiling_seconds")
-  requiredSchemaRevision      Int @map("required_schema_revision")
-  requiredCapabilityRevision  Int @map("required_capability_revision")
-  runnerSchemaRevision        Int? @map("runner_schema_revision")
-  runnerCapabilityRevision    Int? @map("runner_capability_revision")
-  runnerHardMaxSeconds         Int? @map("runner_hard_max_seconds")
-  runnerSha                    String? @map("runner_sha")
-  decision      ExecutableAcceptanceAdmissionDecision
-  rejectionCode String? @map("rejection_code")
-  effectiveTimeoutSeconds Int? @map("effective_timeout_seconds")
-  effectiveDeadline       DateTime? @map("effective_deadline")
-  /// Zero at admission; incremented only by the runner's idempotent start handshake.
-  spawnCount Int @default(0) @map("spawn_count")
-  decidedAt DateTime @default(now()) @map("decided_at")
-
-  attempt TaskExecutableAttempt?
-
-  @@index([taskId, decidedAt(sort: Desc)], map: "task_executable_admission_task_idx")
-  @@index([decision, decidedAt(sort: Desc)], map: "task_executable_admission_decision_idx")
-  @@map("task_executable_admission")
-}
-
-/// One process invocation. New typed rows require an ADMITTED parent; imported history instead
-/// keeps terminationKind NULL and legacyTermination=UNTYPED, so migration cannot invent a signal.
-model TaskExecutableAttempt {
-  id          String @id @default(uuid(7)) @db.Uuid
-  admissionId String? @unique @map("admission_id") @db.Uuid
-  admission   TaskExecutableAdmission? @relation(fields: [admissionId], references: [id], onDelete: Restrict)
-  taskId      String @map("task_id") @db.Uuid
-  task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  sessionId   String @map("session_id") @db.Uuid
-  session     Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  turnId      String? @map("turn_id") @db.Uuid
-  attemptNumber Int @default(0) @map("attempt_number")
-  evaluationPlanDigest String? @map("evaluation_plan_digest") @db.Char(64)
-  expectedExitCode Int? @map("expected_exit_code")
-  deadlineAt DateTime? @map("deadline_at")
+/// One bounded operator invocation of the request backfill. The selection and push allowlist are
+/// immutable input facts; all counters are filled in the same transaction as its request rows.
+model TaskJudgmentBackfillBatch {
+  id      String @id @default(uuid(7)) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  actorType CreatorType @map("actor_type")
+  actorId String @map("actor_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  inputDigest String @map("input_digest") @db.Char(64)
+  batchSize Int @map("batch_size")
+  pushTaskIds String[] @default([]) @map("push_task_ids") @db.Uuid
+  selection Json
   startedAt DateTime @default(now()) @map("started_at")
-  terminatedAt DateTime? @map("terminated_at")
-  terminationKind ExecutableAcceptanceTerminationKind? @map("termination_kind")
-  actualExitCode Int? @map("actual_exit_code")
-  signal String?
-  rawOutput String? @map("raw_output")
-  outputTruncated Boolean @default(false) @map("output_truncated")
-  failureFingerprint String? @map("failure_fingerprint") @db.Char(64)
-  legacyTermination ExecutableAcceptanceLegacyTermination? @map("legacy_termination")
-  legacyExitCode Int? @map("legacy_exit_code")
+  finishedAt DateTime? @map("finished_at")
+  scannedCount Int? @map("scanned_count")
+  requestCount Int? @map("request_count")
+  inboxCount Int? @map("inbox_count")
+  pushSelectedCount Int? @map("push_selected_count")
+  pushSuppressedCount Int? @map("push_suppressed_count")
+  durationMs BigInt? @map("duration_ms")
 
-  continuation TaskExecutableContinuation?
+  requests TaskJudgmentRequest[]
 
-  @@unique([taskId, attemptNumber], map: "task_executable_attempt_number_key")
-  @@index([terminatedAt, deadlineAt], map: "task_executable_attempt_stale_idx")
-  @@index([sessionId, startedAt(sort: Desc)], map: "task_executable_attempt_session_idx")
-  @@map("task_executable_attempt")
+  @@unique([ownerId, idempotencyKey], map: "task_judgment_backfill_batch_owner_key")
+  @@index([ownerId, startedAt(sort: Desc)], map: "task_judgment_backfill_batch_owner_started_idx")
+  @@map("task_judgment_backfill_batch")
 }
 
-/// The bounded next obligation caused by an attempt-ending fact. It is not a Task status and does
-/// not conclude the goal; retry/diagnosis/successor remain actionable until separately resolved.
-model TaskExecutableContinuation {
-  id        String @id @default(uuid(7)) @db.Uuid
-  taskId    String @map("task_id") @db.Uuid
-  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  attemptId String @unique @map("attempt_id") @db.Uuid
-  attempt   TaskExecutableAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  kind      ExecutableAcceptanceContinuationKind
-  reasonCode String @map("reason_code")
-  goalActionable Boolean @default(true) @map("goal_actionable")
-  status String @default("ACTIVE")
-  createdAt DateTime @default(now()) @map("created_at")
-  resolvedAt DateTime? @map("resolved_at")
 
-  @@index([taskId, status, createdAt(sort: Desc)], map: "task_executable_continuation_active_idx")
-  @@map("task_executable_continuation")
+/// The durable question created for exactly one criterion snapshot and evidence digest.
+///
+/// `recipientId` is deliberately text: an account owner, Session and verifier Task are UUIDs
+/// today, but the discriminator is the authority boundary and callers must never infer one kind
+/// from another merely because their identifiers share a representation.
+model TaskJudgmentRequest {
+  id       String @id @default(uuid(7)) @db.Uuid
+  taskId   String @map("task_id") @db.Uuid
+  ownerId  String @map("owner_id") @db.Uuid
+  task     Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_judgment_request_task_fkey")
+
+  evidenceId       String @map("evidence_id") @db.Uuid
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  evidence           TaskCompletionEvidence @relation(fields: [evidenceId, taskId, criterionRevision, evidenceDigest], references: [id, taskId, criterionRevision, evidenceDigest], onDelete: Restrict, map: "task_judgment_request_evidence_fact_fkey")
+
+  kind          TaskCompletionCriterion
+  recipientType TaskJudgmentRecipientType @map("recipient_type")
+  recipientId   String @map("recipient_id")
+  status        TaskJudgmentRequestStatus @default(OPEN)
+  origin        TaskJudgmentRequestOrigin @default(LIVE_EVIDENCE)
+  devicePolicy  TaskJudgmentDevicePolicy @default(IMMEDIATE) @map("device_policy")
+  backfillBatchId String? @map("backfill_batch_id") @db.Uuid
+  backfillBatch TaskJudgmentBackfillBatch? @relation(fields: [backfillBatchId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedByType String? @map("decided_by_type")
+  decidedById String? @map("decided_by_id")
+  decision    TaskJudgmentDecision?
+  /// The finding this conclusion rests on, and the whole of it: migration 0224 deleted the second
+  /// row that used to hold a PASS review text, so EVIDENCE_JUDGMENT decisions of every verdict
+  /// state their reasoning here. INCONCLUSIVE still means "wait for a new evidence revision",
+  /// never "change Task.status".
+  decisionNote String? @map("decision_note")
+  supersededAt DateTime? @map("superseded_at")
+  supersededById String? @map("superseded_by_id") @db.Uuid
+  supersededBy TaskJudgmentRequest? @relation("JudgmentRequestSupersession", fields: [supersededById], references: [id], onDelete: NoAction)
+  supersedes TaskJudgmentRequest[] @relation("JudgmentRequestSupersession")
+  /// Audit snapshots for the transition itself. `supersededById` names a successor request;
+  /// these fields name the principal and Session that caused the transition and the rule applied.
+  supersessionRule TaskJudgmentSupersessionRule? @map("supersession_rule")
+  supersededActorType CreatorType? @map("superseded_actor_type")
+  supersededActorId String? @map("superseded_actor_id") @db.Uuid
+  supersededSourceSessionId String? @map("superseded_source_session_id") @db.Uuid
+
+  executableResult TaskExecutableJudgmentResult?
+  inboxItems TaskJudgmentInboxItem[]
+
+  @@unique([id, taskId, evidenceDigest], map: "task_judgment_request_id_task_digest_key")
+  @@unique([taskId, criterionRevision, evidenceDigest, kind], map: "task_judgment_request_fact_key")
+  @@index([taskId, status, createdAt(sort: Desc)], map: "task_judgment_request_task_status_idx")
+  @@index([ownerId, recipientType, recipientId, status], map: "task_judgment_request_recipient_idx")
+  @@index([supersededById], map: "task_judgment_request_superseded_by_idx")
+  @@index([backfillBatchId], map: "task_judgment_request_backfill_batch_idx")
+  @@map("task_judgment_request")
 }
 
-/// Evidence-backed diagnosis is deliberately separate from termination. In particular, a legacy
-/// exit=-1 can support TIMEOUT here while its attempt remains UNTYPED forever.
-model TaskExecutableDiagnosis {
-  id        String @id @default(uuid(7)) @db.Uuid
-  taskId    String @map("task_id") @db.Uuid
-  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  sessionId String @map("session_id") @db.Uuid
-  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  attemptId String? @map("attempt_id") @db.Uuid
-  kind      String
-  source    String
-  evidence  Json
-  evidenceDigest String @map("evidence_digest") @db.Char(64)
-  idempotencyKey String @unique @map("idempotency_key")
-  createdAt DateTime @default(now()) @map("created_at")
+/// The reliable, in-app delivery of one EVIDENCE_JUDGMENT request to one concrete person.
+///
+/// Migration 0182 files this row from an AFTER INSERT trigger on `TaskJudgmentRequest`, in the
+/// request's own transaction. `deliveredAt` is therefore the receipt for the reliable primary
+/// channel: if the request commits, this row has already committed; if either insert fails, both
+/// roll back. Titles, action and deep link are snapshots so the inbox remains an audit of what was
+/// put in front of the recipient even if the task/project is renamed later.
+model TaskJudgmentInboxItem {
+  id             String @id @default(uuid(7)) @db.Uuid
+  requestId      String @map("request_id") @db.Uuid
+  requestVersion Int    @default(1) @map("request_version")
+  request        TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  taskId         String @map("task_id") @db.Uuid
+  ownerId        String @map("owner_id") @db.Uuid
+  task           Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  recipientId    String @map("recipient_id") @db.Uuid
 
-  @@index([taskId, createdAt(sort: Desc)], map: "task_executable_diagnosis_task_idx")
-  @@index([sessionId], map: "task_executable_diagnosis_session_idx")
-  @@map("task_executable_diagnosis")
+  projectId     String? @map("project_id") @db.Uuid
+  projectTitle  String? @map("project_title")
+  taskTitle     String  @map("task_title")
+  requiredAction String @map("required_action")
+  deepLink       String @map("deep_link")
+  createdAt      DateTime @default(now()) @map("created_at")
+  deliveredAt    DateTime @default(now()) @map("delivered_at")
+
+  pushDelivery TaskJudgmentPushDelivery?
+
+  @@unique([requestId, requestVersion], map: "task_judgment_inbox_request_version_key")
+  @@unique([id, requestId, requestVersion], map: "task_judgment_inbox_delivery_fkey")
+  @@index([recipientId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_recipient_idx")
+  @@index([taskId, deliveredAt(sort: Desc)], map: "task_judgment_inbox_task_idx")
+  @@map("task_judgment_inbox_item")
+}
+
+/// The retryable APNs projection of one in-app item.
+///
+/// There is one logical notification key per request/version. A worker lease prevents concurrent
+/// sends; a stable APNs collapse id makes the unavoidable "APNs accepted, process died before the
+/// receipt" replay replace the earlier banner rather than build a notification storm. `attempts`
+/// counts every transport pass, while `failures` alone spends the DEAD budget: no device or an
+/// unconfigured sender remains BLOCKED and can recover years later without losing the request.
+model TaskJudgmentPushDelivery {
+  id             String @id @default(uuid(7)) @db.Uuid
+  inboxItemId    String @unique @map("inbox_item_id") @db.Uuid
+  requestId      String @map("request_id") @db.Uuid
+  requestVersion Int    @map("request_version")
+  inboxItem      TaskJudgmentInboxItem @relation(fields: [inboxItemId, requestId, requestVersion], references: [id, requestId, requestVersion], onDelete: Cascade, map: "task_judgment_push_inbox_fkey")
+
+  logicalNotificationKey String @unique @map("logical_notification_key")
+  collapseId             String @map("collapse_id")
+  status                  TaskJudgmentPushDeliveryStatus @default(PENDING)
+  attempts                Int @default(0)
+  failures                Int @default(0)
+  /// Consecutive expired DELIVERING leases. Reset whenever a worker records an outcome.
+  claims                  Int @default(0)
+  nextAttemptAt           DateTime? @default(now()) @map("next_attempt_at")
+  leaseHolder             String? @map("lease_holder")
+  leaseExpiresAt          DateTime? @map("lease_expires_at")
+  lastAttemptAt           DateTime? @map("last_attempt_at")
+  errorCode               String? @map("error_code")
+  requiredAction          String? @map("required_action")
+  lastError               String? @map("last_error")
+  lastPayload             Json? @map("last_payload")
+  deliveredDevices        Int? @map("delivered_devices")
+  deliveredAt             DateTime? @map("delivered_at")
+  stoppedAt               DateTime? @map("stopped_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([nextAttemptAt, createdAt], map: "task_judgment_push_due_idx")
+  @@index([status, updatedAt], map: "task_judgment_push_status_idx")
+  @@unique([inboxItemId, requestId, requestVersion], map: "task_judgment_push_inbox_request_version_key")
+  @@unique([requestId, requestVersion], map: "task_judgment_push_request_version_key")
+  @@map("task_judgment_push_delivery")
+}
+
+/// The command observation that decides an EXECUTABLE request. A comment may render it, but this
+/// row—not prose—is the fact consumed by completion derivation.
+model TaskExecutableJudgmentResult {
+  id               String @id @default(uuid(7)) @db.Uuid
+  requestId        String @unique @map("request_id") @db.Uuid
+  request          TaskJudgmentRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  command          String
+  expectedExitCode Int @map("expected_exit_code")
+  actualExitCode   Int @map("actual_exit_code")
+  rawOutput        String @map("raw_output")
+  recordedById     String @map("recorded_by_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  @@index([recordedAt(sort: Desc)], map: "task_executable_judgment_result_recorded_idx")
+  @@map("task_executable_judgment_result")
 }
 
 /// Append-only liveness pulse. The digest chains previousDigest + sourceSha + deadline + payload,
