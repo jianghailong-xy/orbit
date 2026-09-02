@@ -69,7 +69,6 @@ function makeController(current: LockedSnapshot) {
       ...currentWork.conversationTurn,
       findFirst: async () => null,
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
     task: {
       updateMany: async ({ where }: { where: { id: string } }) => {
         taskUpdateIds.push(where.id);

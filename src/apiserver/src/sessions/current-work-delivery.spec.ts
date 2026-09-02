@@ -4,12 +4,8 @@ import { Prisma, RunStatus } from '@prisma/client';
 import {
   acknowledgedRuntimeTurnIds,
   CURRENT_WORK_INTERRUPTED,
-  CurrentWorkStartupTransaction,
   CurrentWorkSteerTransaction,
-  CurrentWorkTransaction,
-  terminalizeUndeliveredCurrentWork,
   terminalizePendingCurrentWorkSteers,
-  terminalizePendingStartupContexts,
 } from './current-work-delivery';
 import {
   currentWorkTerminalizationDouble,
@@ -22,7 +18,6 @@ const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 const TARGET_ID = '33333333-3333-4333-8333-333333333333';
 const STEER_ID = '44444444-4444-4444-8444-444444444444';
-const FRAGMENT_ID = '55555555-5555-4555-8555-555555555555';
 
 test('the raw-query double renders a tagged-template call with its separate bindings', () => {
   const renderTag = (strings: TemplateStringsArray, ...values: unknown[]) =>
@@ -80,30 +75,21 @@ test('a composed statement nested inside a tagged template is spliced, not bound
   assert.deepEqual(real.values, [...rendered.values]);
 });
 
-test('zero CURRENT_WORK candidates perform both reads and no receipt writes', async () => {
+test('zero CURRENT_WORK candidates perform the read and no receipt writes', async () => {
   const double = currentWorkTerminalizationDouble();
-  const tx: CurrentWorkTransaction = {
-    conversationTurn: double.conversationTurn,
-    conversationTurnStartupFragment: double.conversationTurnStartupFragment,
-  };
+  const tx: CurrentWorkSteerTransaction = { conversationTurn: double.conversationTurn };
 
-  const result = await terminalizeUndeliveredCurrentWork(tx, SESSION_ID, {
+  const result = await terminalizePendingCurrentWorkSteers(tx, SESSION_ID, {
     code: CURRENT_WORK_INTERRUPTED,
     reason: 'interrupted before runtime acknowledgement',
   });
 
-  assert.deepEqual(result, {
-    steers: { terminalizedTurnIds: [], targetTurnIds: [] },
-    startup: { terminalizedTurnIds: [], targetTurnIds: [] },
-    targetTurnIds: [],
-  });
+  assert.deepEqual(result, { terminalizedTurnIds: [], targetTurnIds: [] });
   assert.equal(double.calls.steerFinds.length, 1);
-  assert.equal(double.calls.startupFinds.length, 1);
   assert.deepEqual(double.calls.steerWrites, []);
-  assert.deepEqual(double.calls.startupWrites, []);
 });
 
-test('steer and startup candidates receive their exact terminal receipts together', async () => {
+test('a steer candidate receives its exact terminal receipt', async () => {
   const reason = 'interrupted before runtime acknowledgement';
   const double = currentWorkTerminalizationDouble({
     steers: [{
@@ -111,28 +97,15 @@ test('steer and startup candidates receive their exact terminal receipts togethe
       targetTurnId: TARGET_ID,
       status: 'PENDING',
     }],
-    startupFragments: [{
-      id: FRAGMENT_ID,
-      targetTurnId: TARGET_ID,
-      deliveredAt: null,
-      targetTurn: { status: 'PENDING' },
-    }],
   });
-  const tx: CurrentWorkTransaction = {
-    conversationTurn: double.conversationTurn,
-    conversationTurnStartupFragment: double.conversationTurnStartupFragment,
-  };
+  const tx: CurrentWorkSteerTransaction = { conversationTurn: double.conversationTurn };
 
-  const result = await terminalizeUndeliveredCurrentWork(tx, SESSION_ID, {
+  const result = await terminalizePendingCurrentWorkSteers(tx, SESSION_ID, {
     code: CURRENT_WORK_INTERRUPTED,
     reason,
   });
 
-  assert.deepEqual(result, {
-    steers: { terminalizedTurnIds: [STEER_ID], targetTurnIds: [TARGET_ID] },
-    startup: { terminalizedTurnIds: [FRAGMENT_ID], targetTurnIds: [TARGET_ID] },
-    targetTurnIds: [TARGET_ID],
-  });
+  assert.deepEqual(result, { terminalizedTurnIds: [STEER_ID], targetTurnIds: [TARGET_ID] });
   assert.equal(double.calls.steerWrites.length, 1);
   const steer = double.calls.steerWrites[0] as {
     where: Record<string, unknown>;
@@ -155,24 +128,6 @@ test('steer and startup candidates receive their exact terminal receipts togethe
     deliveryFailureCode: CURRENT_WORK_INTERRUPTED,
     deliveryFailureReason: reason,
     deliveryTerminalAt: steer.data.answeredAt,
-  });
-
-  assert.equal(double.calls.startupWrites.length, 1);
-  const startup = double.calls.startupWrites[0] as {
-    where: Record<string, unknown>;
-    data: Record<string, unknown>;
-  };
-  assert.deepEqual(startup.where, {
-    sessionId: SESSION_ID,
-    id: { in: [FRAGMENT_ID] },
-    deliveryStatus: null,
-  });
-  assert.ok(startup.data.failedAt instanceof Date);
-  assert.deepEqual(startup.data, {
-    deliveryStatus: 'FAILED',
-    failedAt: startup.data.failedAt,
-    failureCode: CURRENT_WORK_INTERRUPTED,
-    failureReason: reason,
   });
 });
 
@@ -227,44 +182,9 @@ test('pending and leased CURRENT_WORK steer terminalize in the authored receipt 
   assert.equal('runEvent' in (tx as unknown as object), false);
 });
 
-test('undelivered startup context terminalizes in place with mutually-exclusive failure proof', async () => {
-  const writes: Array<Record<string, unknown>> = [];
-  const tx = transactionDouble<CurrentWorkStartupTransaction>({
-    conversationTurnStartupFragment: {
-      findMany: async (args) => {
-        assert.equal((args?.where as Record<string, unknown>).deliveryStatus, null);
-        return [{
-          id: FRAGMENT_ID,
-          targetTurnId: TARGET_ID,
-          deliveredAt: null,
-          targetTurn: { status: 'PENDING' },
-        }];
-      },
-      updateMany: async (write) => {
-        writes.push(write as unknown as Record<string, unknown>);
-        return { count: 1 };
-      },
-    },
-  });
-
-  const result = await terminalizePendingStartupContexts(tx, SESSION_ID, {
-    code: CURRENT_WORK_INTERRUPTED,
-    reason: 'interrupted before runtime acknowledgement',
-  });
-
-  assert.deepEqual(result, { terminalizedTurnIds: [FRAGMENT_ID], targetTurnIds: [TARGET_ID] });
-  const data = writes[0].data as Record<string, unknown>;
-  assert.equal(data.deliveryStatus, 'FAILED');
-  assert.ok(data.failedAt instanceof Date);
-  assert.equal(data.failureCode, CURRENT_WORK_INTERRUPTED);
-  assert.equal(data.failureReason, 'interrupted before runtime acknowledgement');
-  assert.equal('acknowledgedAt' in data, false);
-});
-
 test('runner loss records leased CURRENT_WORK as UNCONFIRMED rather than a false non-delivery', async () => {
   const steerWrites: Array<Record<string, unknown>> = [];
-  const startupWrites: Array<Record<string, unknown>> = [];
-  const tx = transactionDouble<CurrentWorkTransaction>({
+  const tx = transactionDouble<CurrentWorkSteerTransaction>({
     conversationTurn: {
       findMany: async () => [{ id: STEER_ID, targetTurnId: TARGET_ID, status: 'IN_FLIGHT' }],
       updateMany: async (write) => {
@@ -272,31 +192,16 @@ test('runner loss records leased CURRENT_WORK as UNCONFIRMED rather than a false
         return { count: 1 };
       },
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [{
-        id: FRAGMENT_ID,
-        targetTurnId: TARGET_ID,
-        deliveredAt: new Date(),
-        targetTurn: { status: 'IN_FLIGHT' },
-      }],
-      updateMany: async (write) => {
-        startupWrites.push(write as unknown as Record<string, unknown>);
-        return { count: 1 };
-      },
-    },
   });
 
-  const options = {
+  await terminalizePendingCurrentWorkSteers(tx, SESSION_ID, {
     includeInFlight: true,
     inFlightOutcome: 'UNCONFIRMED' as const,
     code: 'CURRENT_WORK_SESSION_REAPED',
     reason: 'Delivery could not be confirmed after runner loss.',
-  };
-  await terminalizePendingCurrentWorkSteers(tx, SESSION_ID, options);
-  await terminalizePendingStartupContexts(tx, SESSION_ID, options);
+  });
 
   assert.equal((steerWrites[0].data as Record<string, unknown>).deliveryStatus, 'UNCONFIRMED');
-  assert.equal((startupWrites[0].data as Record<string, unknown>).deliveryStatus, 'UNCONFIRMED');
   assert.match(
     String((steerWrites[0].data as Record<string, unknown>).deliveryFailureReason),
     /could not be confirmed/,
@@ -342,10 +247,6 @@ test('interrupt terminalizes only pending CURRENT_WORK receipts and never alloca
         return { count: 1 };
       },
       count: async () => 1,
-    },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
     },
     attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
   };

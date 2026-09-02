@@ -238,18 +238,20 @@ export class RunnerSessionsController {
     // turn it already filed back, instead of a second copy of the message. Minting one here
     // when none is given keeps the historical behaviour for callers that don't care.
     const clientTurnId = dto.clientTurnId?.trim() || randomUUID();
+    // Deliberately NO explicit `intent`: this endpoint sends the same unqualified message every
+    // other client sends, and the server decides from the live turn whether it joins the turn now
+    // running or queues as the next one. Naming CURRENT_WORK here made the verb useless against
+    // the sessions it most needs to reach — a session that is AWAITING_INPUT has no current work,
+    // and while the routing protocol was rollout-gated the request was refused outright.
     return this.sessions.createTurn(runner.ownerId, id, {
       clientTurnId,
       content: dto.message,
-      // This endpoint is the orchestration "steer" verb (and is budgeted as one above), not the
-      // generic client send. It must fail if the named live attempt cannot receive the message.
-      intent: 'CURRENT_WORK',
     }, {
-      // AU3/TH3, but only for a NEW receipt that has already passed target/runtime checks. The
+      // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
       // receipt. This is the idempotency boundary, not a preflight guess in the controller.
-      participateCurrentWorkTransaction: (tx) =>
+      participateSendTransaction: (tx) =>
         this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
     });
   }

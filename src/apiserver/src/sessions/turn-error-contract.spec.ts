@@ -55,11 +55,6 @@ function makeService(opts: {
       count: async () => opts.executable ?? 1,
       create: async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', seq: 2, ...data }),
     },
-    conversationTurnStartupFragment: {
-      findUnique: async () => null,
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
     attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     modelProvider: { findFirst: async () => null },
   };

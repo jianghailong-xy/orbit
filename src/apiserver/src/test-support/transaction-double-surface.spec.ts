@@ -3,10 +3,10 @@
  * cover everything production reaches on a transaction, and a shortfall must surface while
  * building rather than half an hour into an acceptance as `X is not a function`.
  *
- * Five separate drifts of exactly that shape were paid for in full Release DAG rounds:
- * `args[0].join is not a function`, `conversationTurn.findMany`,
- * `conversationTurnStartupFragment.findMany`, `task.findMany` and `runner.findUnique`. Each is a
- * fixture below, and each is asserted to fail now at compile or static-check time.
+ * Four separate drifts of exactly that shape were paid for in full Release DAG rounds:
+ * `args[0].join is not a function`, `conversationTurn.findMany`, `task.findMany` and
+ * `runner.findUnique`. Each is a fixture below, and each is asserted to fail now at compile or
+ * static-check time.
  *
  * The negative controls matter as much as the positives. A checker that passed everything would
  * satisfy every "no missing members" assertion here, so each rule is also handed an input it must
@@ -260,13 +260,9 @@ const SURFACE = path.join(SRC, 'common', 'prisma-transaction-surface').replaceAl
 
 /** A double that supplies every declared member, so the fixture harness is proved to accept one. */
 const COMPLETE_CURRENT_WORK = `
-import type { CurrentWorkTransaction } from '${CURRENT_WORK}';
-const tx: CurrentWorkTransaction = {
+import type { CurrentWorkSteerTransaction } from '${CURRENT_WORK}';
+const tx: CurrentWorkSteerTransaction = {
   conversationTurn: {
-    findMany: (() => []) as never,
-    updateMany: (() => ({ count: 0 })) as never,
-  },
-  conversationTurnStartupFragment: {
     findMany: (() => []) as never,
     updateMany: (() => ({ count: 0 })) as never,
   },
@@ -280,7 +276,7 @@ test('the drift harness accepts a double that supplies every declared member', (
 });
 
 /**
- * The four member-shaped drifts, each reintroduced against the real shipped surface.
+ * The three member-shaped drifts, each reintroduced against the real shipped surface.
  *
  * `task.findMany` and `runner.findUnique` are declared through the shared surface helper here
  * rather than through their own modules, because importing a Nest controller would pull half the
@@ -295,17 +291,6 @@ const MEMBER_DRIFTS = [
 import type { CurrentWorkSteerTransaction } from '${CURRENT_WORK}';
 const tx: CurrentWorkSteerTransaction = {
   conversationTurn: { updateMany: (() => ({ count: 0 })) as never },
-};
-void tx;
-`,
-  },
-  {
-    name: 'conversationTurnStartupFragment.findMany',
-    expect: /Property 'findMany' is missing[\s\S]*ConversationTurnStartupFragmentDelegate/,
-    fixture: `
-import type { CurrentWorkStartupTransaction } from '${CURRENT_WORK}';
-const tx: CurrentWorkStartupTransaction = {
-  conversationTurnStartupFragment: { updateMany: (() => ({ count: 0 })) as never },
 };
 void tx;
 `,

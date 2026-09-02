@@ -64,13 +64,12 @@ const RUNNER = { ownerId: OWNER_ID } as never;
 // not what is under test here.
 const CALLER = 'caller-session';
 
-test('explicit CURRENT_WORK arrives at one service from either door with the same semantics', async () => {
+test('one message arrives at one service from either door with the same semantics', async () => {
   const d = doors();
 
   await d.browser.turn({ userId: OWNER_ID } as never, SESSION_ID, {
     clientTurnId: CLIENT_TURN_ID,
     content: 'do the thing',
-    intent: 'CURRENT_WORK',
   });
   await d.runner.sendMessage(RUNNER, undefined, CALLER, 'tok', SESSION_ID, {
     message: 'do the thing',
@@ -85,7 +84,20 @@ test('explicit CURRENT_WORK arrives at one service from either door with the sam
   );
   assert.equal(fromRunner.dto.content, 'do the thing');
   assert.equal(fromRunner.dto.clientTurnId, CLIENT_TURN_ID);
-  assert.equal(fromRunner.dto.intent, 'CURRENT_WORK');
+  // 0225: the orchestration door no longer hard-codes CURRENT_WORK. It was the one door that
+  // asked for an intent, and asking for it is what made it unable to reach a session that was
+  // waiting for a reply — there is no current work in one, so the send was refused outright.
+  assert.equal(fromRunner.dto.intent, undefined);
+});
+
+test('an explicit intent from the public API still travels to the service verbatim', async () => {
+  const d = doors();
+  await d.browser.turn({ userId: OWNER_ID } as never, SESSION_ID, {
+    clientTurnId: CLIENT_TURN_ID,
+    content: 'join the turn that is running',
+    intent: 'CURRENT_WORK',
+  });
+  assert.equal(d.turns[0].dto.intent, 'CURRENT_WORK');
 });
 
 test('the public API preserves omission for legacy server-side auto-routing compatibility', async () => {
@@ -145,9 +157,9 @@ test('no door lets a caller claim the persisted steer kind', async () => {
   });
 
   // The browser DTO carries whatever was sent, but createTurn only honours 'shell'. The runner
-  // asks for CURRENT_WORK intent but still cannot choose its storage kind or target.
+  // door names neither a kind nor an intent, so it cannot choose its storage kind or target.
   assert.equal((d.turns[1].dto as { kind?: string }).kind, undefined);
-  assert.equal(d.turns[1].dto.intent, 'CURRENT_WORK');
+  assert.equal(d.turns[1].dto.intent, undefined);
 });
 
 test('the answer says what the server filed the message as, from either door', async () => {

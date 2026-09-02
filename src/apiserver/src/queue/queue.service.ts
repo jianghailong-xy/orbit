@@ -268,7 +268,7 @@ export class QueueService {
         select: { id: true },
       });
       await tx.attachment.updateMany({
-        where: { sessionId: session.id, turnId: null, startupFragmentId: null },
+        where: { sessionId: session.id, turnId: null },
         data: { turnId: turn.id },
       });
     }, loggedRetry(this.logger, 'queue.buildSession'));

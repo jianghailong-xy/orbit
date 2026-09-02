@@ -45,7 +45,6 @@ import {
   SessionState,
   type SessionSearchHit,
   supportsMidTurnSteer,
-  supportsSessionCurrentWorkRouting,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
 } from '@orbit/shared';
@@ -126,11 +125,10 @@ import {
 } from '../projects/task-aggregation';
 import { truncatePayload } from './truncate-payload';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
-import { appendStartupTurnFragments } from '../runner-api/resume-continuation';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
-  terminalizeUndeliveredCurrentWork,
+  terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
@@ -144,12 +142,6 @@ import {
 // at worst, never indefinitely.
 const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 
-// A startup envelope is one executable input even though its authored additions remain separate
-// audit rows. Bound the aggregate, not merely each fragment, so a burst during cold start cannot
-// manufacture an unbounded first request or attachment fan-out.
-const MAX_STARTUP_CONTEXT_FRAGMENTS = 32;
-const MAX_STARTUP_CONTEXT_ATTACHMENTS = 20;
-const MAX_STARTUP_CONTEXT_ATTACHMENT_BYTES = 4 * MAX_UPLOAD_BYTES;
 // A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
 // insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
 const CURRENT_WORK_LEASE_SAFETY_MS = 1_000;
@@ -191,31 +183,13 @@ interface ListedActiveTurn extends ListedQueuedTurn {
 }
 
 const CURRENT_WORK_UNAVAILABLE = 'CURRENT_WORK_UNAVAILABLE';
-const SESSION_TURN_PROTOCOL_DISABLED = 'SESSION_TURN_PROTOCOL_DISABLED';
-
-function assertSessionTurnProtocolEnabled(intent: SessionTurnIntent | undefined): void {
-  // Omission is the N-1 protocol, including its server-side auto-steer decision. In particular,
-  // the rollout gate must not turn one installed client's request into NEXT_TURN on a new replica
-  // while an old replica would steer the same request.
-  if (intent === undefined) return;
-  if (process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED === '1') return;
-  throw new HttpException(
-    {
-      code: SESSION_TURN_PROTOCOL_DISABLED,
-      message:
-        'explicit session turn routing is disabled until every API replica is on this protocol',
-    },
-    HttpStatus.SERVICE_UNAVAILABLE,
-  );
-}
 
 function currentWorkUnavailable(
   reason:
     | 'NO_CURRENT_WORK'
     | 'TARGET_LEASE_EXPIRED'
     | 'STEER_UNSUPPORTED'
-    | 'STARTUP_UNSUPPORTED'
-    | 'STARTUP_ENVELOPE_LIMIT',
+    | 'SHELL_UNSUPPORTED',
   message: string,
 ): ConflictException {
   return new ConflictException({ code: CURRENT_WORK_UNAVAILABLE, reason, message });
@@ -3170,7 +3144,6 @@ export class SessionsService {
       where: {
         sessionId: session.id,
         turnId: null,
-        startupFragmentId: null,
         ...(excludedAttachmentIds.length > 0 ? { id: { notIn: [...excludedAttachmentIds] } } : {}),
       },
       data: { turnId: turn.id },
@@ -3310,28 +3283,6 @@ export class SessionsService {
     return supportsMidTurnSteer(await sessionExecRuntime(tx, session), runner?.capabilities);
   }
 
-  /** Startup context needs an acknowledged opening-envelope receipt. Claude's replay ledger and
-   * Codex's concrete turn-start event supply that engine-read signal; other runtimes are rejected. */
-  private async runtimeTakesStartupCurrentWork(
-    tx: Prisma.TransactionClient,
-    session: {
-      provider: string;
-      providerBuiltin: boolean;
-      ownerId: string;
-      assignedRunnerId: string | null;
-    },
-  ): Promise<boolean> {
-    const runner = session.assignedRunnerId
-      ? await tx.runner.findUnique({
-          where: { id: session.assignedRunnerId },
-          select: { capabilities: true },
-        })
-      : null;
-    const runtime = await sessionExecRuntime(tx, session);
-    return supportsSessionCurrentWorkRouting(runner?.capabilities)
-      && (runtime === AgentProvider.CLAUDE || runtime === AgentProvider.CODEX);
-  }
-
   private async insertTurnLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
@@ -3399,7 +3350,7 @@ export class SessionsService {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId, turnId: null, startupFragmentId: null },
+      where: { id: { in: ids }, ownerId, sessionId, turnId: null },
       select: { id: true },
     });
     if (found.length !== ids.length) {
@@ -3439,24 +3390,8 @@ export class SessionsService {
   ): Promise<void> {
     if (attachmentIds.length === 0) return;
     await tx.attachment.updateMany({
-      where: { id: { in: attachmentIds }, turnId: null, startupFragmentId: null },
+      where: { id: { in: attachmentIds }, turnId: null },
       data: { turnId },
-    });
-  }
-
-  private async linkStartupFragmentAttachments(
-    startupFragmentId: string,
-    attachmentIds: string[],
-    tx: Prisma.TransactionClient,
-  ): Promise<void> {
-    if (attachmentIds.length === 0) return;
-    await tx.attachment.updateMany({
-      where: {
-        id: { in: attachmentIds },
-        turnId: null,
-        startupFragmentId: null,
-      },
-      data: { startupFragmentId },
     });
   }
 
@@ -3477,9 +3412,9 @@ export class SessionsService {
        * actually take unfenced: a delivery whose lease was taken over would still commit the turn.
        */
       fence?: TaskRunEffectFence;
-      /** Orchestration's attempt charge. Invoked only for a NEW, placeable CURRENT_WORK receipt,
-       * inside this transaction after idempotency/target checks and before the receipt is written. */
-      participateCurrentWorkTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /** Orchestration's attempt charge. Invoked exactly once for a NEW, placeable turn, inside
+       * this transaction after idempotency/target checks and before the turn is written. */
+      participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
     },
@@ -3521,47 +3456,9 @@ export class SessionsService {
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
       // A committed operation owns its key even after its Session later ends or moves to Trash.
-      // Check both durable receipt tables while holding the Session lock before any lifecycle,
-      // protocol-gate, attachment or budget decision. Hard purge remains a 404 because there is
-      // no owner-scoped Session row (and its cascading receipts no longer exist).
-      const existingFragment = await tx.conversationTurnStartupFragment.findUnique({
-        where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
-        include: {
-          targetTurn: { select: { seq: true } },
-          attachments: { select: { id: true } },
-        },
-      });
-      if (existingFragment) {
-        if (intent !== 'CURRENT_WORK') {
-          throw new ConflictException('clientTurnId was already used with CURRENT_WORK');
-        }
-        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
-        const storedAttachments = (existingFragment.attachments ?? [])
-          .map((attachment) => attachment.id)
-          .sort();
-        if (
-          dto.kind === 'shell'
-          || existingFragment.content !== dto.content
-          || expectedAttachments.length !== storedAttachments.length
-          || expectedAttachments.some((attachmentId, index) => attachmentId !== storedAttachments[index])
-        ) {
-          throw new ConflictException(
-            'clientTurnId was already used with a different CURRENT_WORK payload',
-          );
-        }
-        return {
-          turn: {
-            id: existingFragment.id,
-            seq: existingFragment.targetTurn.seq,
-            kind: 'startup_context',
-            targetTurnId: existingFragment.targetTurnId,
-          },
-          placement: 'startup' as const,
-          wakeQueue: false,
-          wakeInbox: false,
-          idempotent: true,
-        };
-      }
+      // Check the durable receipt while holding the Session lock before any lifecycle, attachment
+      // or budget decision. Hard purge remains a 404 because there is no owner-scoped Session row
+      // (and its cascading receipts no longer exist).
       const existing = await tx.conversationTurn.findUnique({
         where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
         include: { attachments: { select: { id: true } } },
@@ -3607,10 +3504,9 @@ export class SessionsService {
           idempotent: true,
         };
       }
-      // Only a genuinely new logical operation is subject to the rollout gate and the Session's
-      // current lifecycle. A response-lost retry must replay its committed receipt, not become a
-      // new refusal because the turn completed or the user filed the Session in the meantime.
-      assertSessionTurnProtocolEnabled(intent);
+      // Only a genuinely new logical operation is subject to the Session's current lifecycle. A
+      // response-lost retry must replay its committed receipt, not become a new refusal because
+      // the turn completed or the user filed the Session in the meantime.
       if (session.deletedAt) {
         throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
       }
@@ -3655,101 +3551,10 @@ export class SessionsService {
       if (intent === 'CURRENT_WORK') {
         if (dto.kind === 'shell') {
           throw currentWorkUnavailable(
-            'STARTUP_UNSUPPORTED',
+            'SHELL_UNSUPPORTED',
             'CURRENT_WORK is only available for a message; shell commands must use NEXT_TURN',
           );
         }
-        const starting = await tx.conversationTurn.findUnique({
-          where: {
-            sessionId_clientTurnId: {
-              sessionId: id,
-              clientTurnId: SessionsService.initialTurnClientId(id),
-            },
-          },
-          select: { id: true, seq: true, kind: true, status: true, deliveredAt: true, content: true },
-        });
-        if (starting?.kind === 'message' && starting.status === 'PENDING' && !starting.deliveredAt) {
-          if (!(await this.runtimeTakesStartupCurrentWork(tx, session))) {
-            throw currentWorkUnavailable(
-              'STARTUP_UNSUPPORTED',
-              'this runtime or runner cannot acknowledge CURRENT_WORK in the starting envelope',
-            );
-          }
-          const existingFragments = await tx.conversationTurnStartupFragment.findMany({
-            where: { sessionId: id, targetTurnId: starting.id },
-            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-            select: { content: true },
-          });
-          if (existingFragments.length + 1 > MAX_STARTUP_CONTEXT_FRAGMENTS) {
-            throw currentWorkUnavailable(
-              'STARTUP_ENVELOPE_LIMIT',
-              `the starting turn already has ${MAX_STARTUP_CONTEXT_FRAGMENTS} context fragments`,
-            );
-          }
-          const envelope = appendStartupTurnFragments(
-            // The initial message is always textual, but keep the helper's optional contract.
-            starting.content ?? undefined,
-            [...existingFragments, { content: dto.content }],
-          ) ?? '';
-          if (envelope.length > MAX_PROMPT_CHARS) {
-            throw currentWorkUnavailable(
-              'STARTUP_ENVELOPE_LIMIT',
-              `the starting-turn envelope would exceed ${MAX_PROMPT_CHARS} characters`,
-            );
-          }
-          const attachmentEnvelope = await tx.attachment.aggregate({
-            where: {
-              sessionId: id,
-              OR: [
-                { turnId: starting.id },
-                { startupFragment: { targetTurnId: starting.id } },
-                ...(attachmentIds.length > 0 ? [{ id: { in: attachmentIds } }] : []),
-              ],
-            },
-            _count: { _all: true },
-            _sum: { sizeBytes: true },
-          });
-          if (
-            attachmentEnvelope._count._all > MAX_STARTUP_CONTEXT_ATTACHMENTS
-            || (attachmentEnvelope._sum.sizeBytes ?? 0) > MAX_STARTUP_CONTEXT_ATTACHMENT_BYTES
-          ) {
-            throw currentWorkUnavailable(
-              'STARTUP_ENVELOPE_LIMIT',
-              `the starting-turn envelope exceeds ${MAX_STARTUP_CONTEXT_ATTACHMENTS} attachments or ${MAX_STARTUP_CONTEXT_ATTACHMENT_BYTES} bytes`,
-            );
-          }
-          await opts?.participateCurrentWorkTransaction?.(tx);
-          const fragment = await tx.conversationTurnStartupFragment.create({
-            data: {
-              sessionId: id,
-              targetTurnId: starting.id,
-              clientTurnId: dto.clientTurnId,
-              content: dto.content,
-            },
-          });
-          await this.linkStartupFragmentAttachments(fragment.id, attachmentIds, tx);
-          await tx.session.update({
-            where: { id },
-            data: {
-              lastTurnAt: new Date(),
-              ...(dto.content ? { lastUserText: dto.content } : {}),
-              retryAt: null,
-            },
-          });
-          return {
-            turn: {
-              id: fragment.id,
-              seq: starting.seq,
-              kind: 'startup_context',
-              targetTurnId: starting.id,
-            },
-            placement: 'startup' as const,
-            wakeQueue: session.status === RunStatus.PENDING,
-            wakeInbox: session.status === RunStatus.RUNNING,
-            idempotent: false,
-          };
-        }
-
         const liveTarget = await this.liveEngineTurn(tx, id);
         if (!liveTarget) {
           // liveEngineTurn already made the acceptance decision with PostgreSQL's clock and the
@@ -3766,7 +3571,7 @@ export class SessionsService {
             unusableLeaseTarget > 0 ? 'TARGET_LEASE_EXPIRED' : 'NO_CURRENT_WORK',
             unusableLeaseTarget > 0
               ? 'the current turn lease expired before this message could enter it'
-              : 'there is no starting or live message turn to receive CURRENT_WORK',
+              : 'there is no live message turn to receive CURRENT_WORK',
           );
         }
         if (!(await this.runtimeTakesSteer(tx, session))) {
@@ -3783,7 +3588,7 @@ export class SessionsService {
             'the current turn lease expired before this message could enter it',
           );
         }
-        await opts?.participateCurrentWorkTransaction?.(tx);
+        await opts?.participateSendTransaction?.(tx);
         // The atomic orchestration charge above may itself wait on a task-attempt row. Its write
         // is part of this transaction, so reject after one last database-clock check and roll the
         // charge back if the target stopped being usable while that lock was acquired.
@@ -3795,18 +3600,24 @@ export class SessionsService {
         }
         kind = 'steer';
         targetTurnId = liveTarget.id;
-      } else if (intent === 'NEXT_TURN') {
-        kind = dto.kind === 'shell' ? 'shell' : 'message';
       } else {
-        // This is the exact N-1 rule. It remains inside the Session serialization boundary, but
-        // intentionally has no target address or routing-v1 receipt: old clients sent one
-        // unqualified message and the old server chose steer vs queue from the live turn.
-        kind = dto.kind === 'shell'
-          ? 'shell'
-          : (await this.liveEngineTurn(tx, id))
-              && (await this.runtimeTakesLegacySteer(tx, session))
-            ? 'steer'
-            : 'message';
+        if (intent === 'NEXT_TURN') {
+          kind = dto.kind === 'shell' ? 'shell' : 'message';
+        } else {
+          // This is the exact N-1 rule. It remains inside the Session serialization boundary, but
+          // intentionally has no target address or routing-v1 receipt: old clients sent one
+          // unqualified message and the old server chose steer vs queue from the live turn.
+          kind = dto.kind === 'shell'
+            ? 'shell'
+            : (await this.liveEngineTurn(tx, id))
+                && (await this.runtimeTakesLegacySteer(tx, session))
+              ? 'steer'
+              : 'message';
+        }
+        // The orchestration verb is budgeted whichever way its message lands. Charged on exactly
+        // one of the two paths, after the placement decision and before the row, so a refusal
+        // rolls the charge back with the turn it was for.
+        await opts?.participateSendTransaction?.(tx);
       }
       // This is the authoritative queue placement: it is read before this row exists and while
       // the Session lock prevents dequeue/complete from changing its predecessors underneath it.
@@ -4018,16 +3829,15 @@ export class SessionsService {
         : [];
       if (followUp) await opts?.participateFollowUpTransaction?.(tx);
       // Explicit CURRENT_WORK is durable authored input, not a disposable queue row. Settle it
-      // with a visible failed-delivery receipt before removing ordinary queued work. Startup
-      // fragments keep the same append-only audit guarantee.
-      const terminalized = await terminalizeUndeliveredCurrentWork(tx, id, {
+      // with a visible failed-delivery receipt before removing ordinary queued work.
+      const terminalized = await terminalizePendingCurrentWorkSteers(tx, id, {
         code: CURRENT_WORK_INTERRUPTED,
         reason: 'CURRENT_WORK was not delivered because the session was interrupted.',
       });
       const protectedTargetIds = terminalized.targetTurnIds;
       if (protectedTargetIds.length > 0) {
         // Target FKs intentionally prevent individual deletion. Retire an undelivered seed in
-        // place so its fragments, attachments and clientTurnId receipt remain auditable.
+        // place so its attachments and clientTurnId receipt remain auditable.
         await tx.conversationTurn.updateMany({
           where: { sessionId: id, id: { in: protectedTargetIds }, status: 'PENDING' },
           data: { status: 'ANSWERED', answeredAt: new Date() },
@@ -4183,32 +3993,6 @@ export class SessionsService {
         attachments: { select: { id: true, mimeType: true } },
       },
     });
-    const startupFragments = view === 'active'
-      ? await this.prisma.conversationTurnStartupFragment.findMany({
-          where: {
-            sessionId: id,
-            OR: [
-              {
-                failedAt: null,
-                targetTurn: { kind: 'message', status: { in: ['PENDING', 'IN_FLIGHT'] } },
-              },
-              { failedAt: { not: null } },
-            ],
-          },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          select: {
-            id: true,
-            targetTurnId: true,
-            content: true,
-            createdAt: true,
-            failedAt: true,
-            deliveryStatus: true,
-            failureCode: true,
-            failureReason: true,
-            attachments: { select: { id: true, mimeType: true } },
-          },
-        })
-      : [];
     const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
     const classified = turns
@@ -4239,11 +4023,7 @@ export class SessionsService {
     // one that commits after this query is the live event that replaces the short-lived fallback.
     // Do this only after placement is computed over ALL active turns. Filtering the announced head
     // first would promote its genuinely queued successor to `accepted`.
-    const announcedTargetIds = [
-      ...turns.map((turn) => turn.id),
-      ...startupFragments.map((fragment) => fragment.targetTurnId),
-      ...startupFragments.map((fragment) => fragment.id),
-    ];
+    const announcedTargetIds = turns.map((turn) => turn.id);
     const transcriptReceipts = announcedTargetIds.length === 0
       ? []
       : await this.prisma.runEvent.findMany({
@@ -4305,36 +4085,10 @@ export class SessionsService {
           mimeType: attachment.mimeType,
         })),
       }));
-    const activeStartup: ListedActiveTurn[] = startupFragments
-      .filter((fragment) => fragment.failedAt
-        ? true
-        : !announcedTurnIds.has(fragment.targetTurnId) && !announcedTurnIds.has(fragment.id))
-      .map((fragment) => ({
-        turnId: fragment.id,
-        targetTurnId: fragment.targetTurnId,
-        kind: 'startup_context',
-        placement: 'startup',
-        ...(fragment.failedAt
-          ? {
-              delivery: (fragment.deliveryStatus === 'UNCONFIRMED'
-                ? 'unconfirmed'
-                : 'failed') as 'failed' | 'unconfirmed',
-              ...(fragment.failureCode ? { deliveryCode: fragment.failureCode } : {}),
-              ...(fragment.failureReason ? { deliveryReason: fragment.failureReason } : {}),
-            }
-          : {}),
-        content: fragment.content,
-        createdAt: fragment.createdAt.toISOString(),
-        attachments: fragment.attachments.map((attachment) => ({
-          id: attachment.id,
-          mimeType: attachment.mimeType,
-        })),
-      }));
-    // ES sort is stable: equal timestamps preserve the turn query's seq order and the fragment
-    // query's (createdAt,id) order. Breaking a tie by unrelated UUID would reorder the executable
-    // head behind its queued successor in a recovered snapshot.
-    return [...activeTurns, ...activeStartup].sort((a, b) =>
-      a.createdAt.localeCompare(b.createdAt));
+    // ES sort is stable: equal timestamps preserve the turn query's seq order. Breaking a tie by
+    // unrelated UUID would reorder the executable head behind its queued successor in a recovered
+    // snapshot.
+    return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   /** Withdraw a queued user message or `!cmd` shell turn. Only a still-PENDING one can be
@@ -4841,7 +4595,7 @@ export class SessionsService {
           projectBound: false,
         };
       }
-      await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+      await terminalizePendingCurrentWorkSteers(tx, sessionId, {
         code: CURRENT_WORK_SESSION_ENDED,
         reason: 'CURRENT_WORK was not delivered because the session ended.',
       });

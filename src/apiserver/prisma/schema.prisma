@@ -1261,7 +1261,6 @@ model Session {
 
   events                RunEvent[]
   turns                 ConversationTurn[]
-  startupTurnFragments  ConversationTurnStartupFragment[]
   toolCalls             ToolCall[]
   llmUsage              LlmUsage[]
   approvals             Approval[]
@@ -1598,8 +1597,7 @@ model ConversationTurn {
   kind            String    @default("message")
   /// Explicit sender routing. Null is the legacy server-side auto-steer/queue protocol.
   sendIntent      String?   @map("send_intent")
-  /// The exact executable turn a CURRENT_WORK steer joins. Startup context uses its own
-  /// append-only row rather than overloading this executable queue.
+  /// The exact executable turn a CURRENT_WORK steer joins.
   targetTurnId    String?   @map("target_turn_id") @db.Uuid
   targetTurn      ConversationTurn?  @relation("ConversationTurnTarget", fields: [sessionId, targetTurnId], references: [sessionId, id], onDelete: NoAction, map: "conversation_turn_target_turn_id_fkey")
   targetedTurns   ConversationTurn[] @relation("ConversationTurnTarget")
@@ -1627,7 +1625,6 @@ model ConversationTurn {
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
   // the inbox hands their refs to the runner. Cascade so withdrawing/ending drops them.
   attachments Attachment[]
-  startupFragments ConversationTurnStartupFragment[]
 
   @@unique([sessionId, clientTurnId])
   @@unique([sessionId, seq])
@@ -1635,34 +1632,6 @@ model ConversationTurn {
   @@index([sessionId, status])
   @@index([targetTurnId], map: "conversation_turn_target_turn_id_idx")
   @@map("conversation_turn")
-}
-
-// Append-only authored input accepted while the seeded first executable is still waiting for
-// dequeue. It is delivered in that executable's prompt envelope and retained as a distinct
-// receipt for idempotency, audit, attachments, retries, and terminal delivery state.
-model ConversationTurnStartupFragment {
-  id            String           @id @default(uuid(7)) @db.Uuid
-  sessionId     String           @map("session_id") @db.Uuid
-  session       Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  targetTurnId  String           @map("target_turn_id") @db.Uuid
-  targetTurn    ConversationTurn @relation(fields: [sessionId, targetTurnId], references: [sessionId, id], onDelete: NoAction, map: "conversation_turn_startup_fragment_target_turn_id_fkey")
-  clientTurnId  String           @map("client_turn_id")
-  content       String
-  createdAt     DateTime         @default(now()) @map("created_at")
-  deliveredAt   DateTime?        @map("delivered_at")
-  /// Null while unresolved; ACKNOWLEDGED, FAILED, or UNCONFIRMED once the runtime boundary
-  /// supplies a durable outcome. UNCONFIRMED is deliberately not rollback-safe proof.
-  deliveryStatus String?          @map("delivery_status")
-  /// Runtime-authored USER acknowledgement for the combined opening envelope.
-  acknowledgedAt DateTime?       @map("acknowledged_at")
-  failedAt      DateTime?        @map("failed_at")
-  failureCode   String?          @map("failure_code")
-  failureReason String?          @map("failure_reason")
-  attachments   Attachment[]
-
-  @@unique([sessionId, clientTurnId], map: "conversation_turn_startup_session_client_key")
-  @@index([targetTurnId, createdAt, id], map: "conversation_turn_startup_target_created_idx")
-  @@map("conversation_turn_startup_fragment")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.
@@ -1684,10 +1653,6 @@ model Attachment {
   // cascades with the turn (withdrawing a queued turn or ending the session drops it).
   turnId    String?           @map("turn_id") @db.Uuid
   turn      ConversationTurn? @relation(fields: [turnId], references: [id], onDelete: Cascade)
-  // Startup context owns attachments without manufacturing an executable turn. Exactly one of
-  // turnId/startupFragmentId may be populated (enforced by migration 0210).
-  startupFragmentId String?                          @map("startup_fragment_id") @db.Uuid
-  startupFragment   ConversationTurnStartupFragment? @relation(fields: [startupFragmentId], references: [id], onDelete: Cascade)
   mimeType  String            @map("mime_type")
   sizeBytes Int               @map("size_bytes")
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
@@ -1699,7 +1664,6 @@ model Attachment {
   @@index([ownerId])
   @@index([sessionId])
   @@index([turnId])
-  @@index([startupFragmentId])
   @@map("attachment")
 }
 

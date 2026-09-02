@@ -54,7 +54,6 @@ function makeService(
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }) },
-    conversationTurnStartupFragment: { findMany: async () => [] },
     conversationTurn: {
       findMany: async ({
         where,

@@ -1,21 +1,14 @@
-import { Prisma } from '@prisma/client';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
 
 /**
- * Exactly the members these three functions reach, and therefore exactly what a double for them
- * has to supply. `conversationTurn.findMany` and `conversationTurnStartupFragment.findMany` were
- * each, on separate days, missing from a hand-written double and cost a full acceptance round to
- * find; naming them here is what makes the next omission a compile error instead.
+ * Exactly the members this function reaches, and therefore exactly what a double for it has to
+ * supply. `conversationTurn.findMany` was, on one day, missing from a hand-written double and cost
+ * a full acceptance round to find; naming it here is what makes the next omission a compile error
+ * instead.
  */
 export type CurrentWorkSteerTransaction = TransactionSurface<{
   conversationTurn: ['findMany', 'updateMany'];
 }>;
-
-export type CurrentWorkStartupTransaction = TransactionSurface<{
-  conversationTurnStartupFragment: ['findMany', 'updateMany'];
-}>;
-
-export type CurrentWorkTransaction = CurrentWorkSteerTransaction & CurrentWorkStartupTransaction;
 
 export const CURRENT_WORK_TARGET_COMPLETED = 'CURRENT_WORK_TARGET_COMPLETED';
 export const CURRENT_WORK_INTERRUPTED = 'CURRENT_WORK_INTERRUPTED';
@@ -23,7 +16,6 @@ export const CURRENT_WORK_SESSION_ENDED = 'CURRENT_WORK_SESSION_ENDED';
 export const CURRENT_WORK_SESSION_FINALIZED = 'CURRENT_WORK_SESSION_FINALIZED';
 export const CURRENT_WORK_SESSION_REAPED = 'CURRENT_WORK_SESSION_REAPED';
 export const CURRENT_WORK_RUNTIME_REJECTED = 'CURRENT_WORK_RUNTIME_REJECTED';
-export const CURRENT_WORK_RUNTIME_CAPABILITY_LOST = 'CURRENT_WORK_RUNTIME_CAPABILITY_LOST';
 
 interface TerminalizeOptions {
   targetTurnIds?: readonly string[];
@@ -134,82 +126,5 @@ export async function terminalizePendingCurrentWorkSteers(
   return {
     terminalizedTurnIds: candidates.map((row) => row.id),
     targetTurnIds: [...new Set(candidates.map((row) => row.targetTurnId))],
-  };
-}
-
-/**
- * Settle startup context whose seeded executable ended before event ingest persisted the runtime's
- * USER acknowledgement. `delivered_at` alone is deliberately insufficient: dequeue may commit and
- * lose its HTTP response before the runtime receives a byte.
- */
-export async function terminalizePendingStartupContexts(
-  tx: CurrentWorkStartupTransaction,
-  sessionId: string,
-  options: TerminalizeOptions,
-): Promise<CurrentWorkTerminalization> {
-  const rows = await tx.conversationTurnStartupFragment.findMany({
-    where: {
-      sessionId,
-      deliveryStatus: null,
-      ...(!options.includeInFlight ? { targetTurn: { status: 'PENDING' } } : {}),
-      ...(options.targetTurnIds ? { targetTurnId: { in: [...options.targetTurnIds] } } : {}),
-    },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: {
-      id: true,
-      targetTurnId: true,
-      deliveredAt: true,
-      targetTurn: { select: { status: true } },
-    },
-  });
-  if (rows.length > 0) {
-    const now = new Date();
-    for (const outcome of ['FAILED', 'UNCONFIRMED'] as const) {
-      const ids = rows
-        .filter((row) => {
-          const leased = row.deliveredAt != null || row.targetTurn.status === 'IN_FLIGHT';
-          return leased
-            ? (options.inFlightOutcome ?? 'FAILED') === outcome
-            : outcome === 'FAILED';
-        })
-        .map((row) => row.id);
-      if (ids.length === 0) continue;
-      await tx.conversationTurnStartupFragment.updateMany({
-        where: {
-          sessionId,
-          id: { in: ids },
-          deliveryStatus: null,
-        },
-        data: {
-          deliveryStatus: outcome,
-          failedAt: now,
-          failureCode: options.code,
-          failureReason: options.reason,
-        },
-      });
-    }
-  }
-  return {
-    terminalizedTurnIds: rows.map((row) => row.id),
-    targetTurnIds: [...new Set(rows.map((row) => row.targetTurnId))],
-  };
-}
-
-/** One teardown participant for target-complete/finalize/reaper and pending-only user control. */
-export async function terminalizeUndeliveredCurrentWork(
-  tx: CurrentWorkTransaction,
-  sessionId: string,
-  options: TerminalizeOptions,
-): Promise<{
-  steers: CurrentWorkTerminalization;
-  startup: CurrentWorkTerminalization;
-  targetTurnIds: string[];
-}> {
-  const steers = await terminalizePendingCurrentWorkSteers(tx, sessionId, options);
-  const startup = await terminalizePendingStartupContexts(tx, sessionId, options);
-  return {
-    steers,
-    startup,
-    targetTurnIds: [...new Set([...steers.targetTurnIds, ...startup.targetTurnIds])],
   };
 }

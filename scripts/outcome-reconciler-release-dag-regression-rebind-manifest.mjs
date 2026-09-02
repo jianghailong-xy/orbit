@@ -351,7 +351,6 @@ assert.deepEqual(focused.terminalization, {
   prismaSqlQueryRaw: true,
   zeroCandidateNoWrites: true,
   steerExactTerminalReceipt: true,
-  startupFragmentExactTerminalReceipt: true,
 });
 assert.deepEqual(focused.isolation, {
   maxConcurrentCases: 4,

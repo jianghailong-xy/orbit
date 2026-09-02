@@ -28,7 +28,6 @@ function makeService(executableAfterDelete: number) {
         return { id: '44444444-4444-4444-8444-444444444444', seq: 4 };
       },
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }) },

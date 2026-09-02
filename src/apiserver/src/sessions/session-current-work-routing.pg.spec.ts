@@ -5,7 +5,6 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { SessionsService } from './sessions.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import {
-  RunEventType,
   SESSION_CODEX_STEER_V1,
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
@@ -13,23 +12,18 @@ import {
 /**
  * The CURRENT_WORK create/dequeue/ACK race, run against the real application schema.
  *
- * steer-dequeue.pg.spec.ts beside this one builds the three tables its predicate touches into
+ * steer-dequeue.pg.spec.ts beside this one builds the two tables its predicate touches into
  * a scratch schema, so it asks for an empty database through ORBIT_TEST_PG_URL. This file is
  * the opposite: it drives the real SessionsService and RunnerApiController through Prisma, so
- * "user", "runner", "session", "conversation_turn" and the startup-fragment table all have to
- * exist before its first statement. It therefore reads COORDINATOR_PG_URL, the migrated
- * per-case database, which is what every other .pg.spec in this tree reads.
+ * "user", "runner", "session" and "conversation_turn" all have to exist before its first
+ * statement. It therefore reads COORDINATOR_PG_URL, the migrated per-case database, which is
+ * what every other .pg.spec in this tree reads.
  *
  * Reading the empty database instead is how this file failed its before hook with 42P01
  * relation "session" does not exist.
  */
 const PG_URL = process.env.COORDINATOR_PG_URL;
 
-// The protocol is rollout-gated: sessions.service rejects an explicit intent with 503 unless this
-// is set. scripts/session-current-work-routing.sh exports it, but the full-API matrix runs every
-// compiled spec under one fixed environment and cannot know which flag a given case needs, so the
-// spec that exercises the protocol turns it on itself — the same way steer-kind.spec.ts does.
-process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED = '1';
 const OWNER_ID = '71111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '72222222-2222-4222-8222-222222222222';
 const SESSION_ID = '73333333-3333-4333-8333-333333333333';
@@ -40,7 +34,6 @@ const MALFORMED_LEGACY_ID = '77777777-7777-4777-8777-777777777777';
 const MISSING_TARGET_ID = '78888888-8888-4888-8888-888888888888';
 const FK_STEER_ID = '79999999-9999-4999-8999-999999999999';
 const UNCONFIRMED_STEER_ID = '70000000-0000-4000-8000-000000000007';
-const CROSS_SESSION_FRAGMENT_ID = '70000000-0000-4000-8000-000000000008';
 const OTHER_SESSION_ID = '70000000-0000-4000-8000-000000000001';
 const OTHER_TURN_ID = '70000000-0000-4000-8000-000000000002';
 const FIRST_GENERATION = '70000000-0000-4000-8000-000000000003';
@@ -155,156 +148,6 @@ async function waitForBlockedSessionLocker(minimum: number): Promise<void> {
 const pgTest = (name: string, body: () => Promise<void>) =>
   test(name, { skip: PG_URL ? false : 'set COORDINATOR_PG_URL to run the routing race' }, body);
 
-pgTest('Codex create/dequeue/ACK startup race atomically binds CURRENT_WORK to one executable', async () => {
-  await seedStartingWindow();
-  const sessions = new SessionsService(
-    prisma as never,
-    { notifySessionQueued: () => undefined } as never,
-    {
-      notifyInbox: () => undefined,
-      publishQueuedTurnsChanged: () => undefined,
-    } as never,
-  );
-  const runnerApi = new RunnerApiController(
-    prisma as never,
-    { notifySessionQueued: () => undefined } as never,
-    {
-      notifyInbox: () => undefined,
-      publish: () => undefined,
-      publishSessionUpdated: () => undefined,
-      publishQueuedTurnsChanged: () => undefined,
-    } as never,
-    {} as never,
-    {} as never,
-    { expand: async (_ownerId: string, content?: string) => content } as never,
-    { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
-  );
-  const dequeue = (runnerApi as unknown as {
-    dequeueTurn: (
-      sessionId: string,
-      runnerId: string,
-      leaseGeneration: null,
-      acceptsSteer: boolean,
-      declaredCapabilities: readonly string[],
-    ) => Promise<{ turnId: string; content?: string } | null>;
-  }).dequeueTurn.bind(runnerApi);
-
-  let atReceiptBoundary!: () => void;
-  let releaseReceiptBoundary!: () => void;
-  const receiptBoundary = new Promise<void>((resolve) => { atReceiptBoundary = resolve; });
-  const receiptRelease = new Promise<void>((resolve) => { releaseReceiptBoundary = resolve; });
-  const createPromise = sessions.createTurn(OWNER_ID, SESSION_ID, {
-    clientTurnId: CLIENT_TURN_ID,
-    content: 'also verify the migration',
-    intent: 'CURRENT_WORK',
-  }, {
-    // This hook runs after idempotency, startup placement and envelope validation, while the
-    // Session row is still locked, immediately before the durable fragment is inserted.
-    participateCurrentWorkTransaction: async () => {
-      atReceiptBoundary();
-      await receiptRelease;
-    },
-  });
-  await receiptBoundary;
-  const dequeuePromise = dequeue(
-    SESSION_ID,
-    RUNNER_ID,
-    null,
-    true,
-    [SESSION_CURRENT_WORK_ROUTING_V1],
-  );
-  try {
-    // Prove this is a database interleaving: dequeue has reached the same Session lock and is
-    // waiting behind createTurn. No wall-clock sleep or RUNNING-state polling is involved.
-    await waitForBlockedSessionLocker(1);
-  } catch (error) {
-    releaseReceiptBoundary();
-    await Promise.allSettled([createPromise, dequeuePromise]);
-    throw error;
-  }
-  releaseReceiptBoundary();
-
-  const [receipt, delivered] = await Promise.all([createPromise, dequeuePromise]);
-  assert.equal(receipt.placement, 'startup');
-  assert.equal(receipt.targetTurnId, TURN_ID);
-  assert.equal(delivered?.turnId, TURN_ID);
-  assert.match(delivered?.content ?? '', /opening prompt/);
-  assert.match(delivered?.content ?? '', /also verify the migration/);
-
-  const executable = await admin.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM "conversation_turn"
-      WHERE session_id = $1::uuid AND kind IN ('message', 'shell')`,
-    [SESSION_ID],
-  );
-  assert.equal(executable.rows[0].n, '1');
-  const fragment = await admin.query<{ deliveredAt: Date | null }>(
-    `SELECT delivered_at AS "deliveredAt"
-       FROM "conversation_turn_startup_fragment"
-      WHERE session_id = $1::uuid AND client_turn_id = $2`,
-    [SESSION_ID, CLIENT_TURN_ID],
-  );
-  assert.ok(fragment.rows[0].deliveredAt instanceof Date);
-
-  // This is the Codex engine-read proof emitted only after turn/started (app-server) or the
-  // first concrete turn event (legacy exec). USER(enqueued/written) is intentionally not enough.
-  await runnerApi.events({ id: RUNNER_ID }, SESSION_ID, {
-    events: [{
-      seq: 1,
-      type: RunEventType.USER_DELIVERY,
-      turnId: TURN_ID,
-      ts: '2026-08-30T12:00:00.000Z',
-      payload: { turnId: TURN_ID, delivery: 'acknowledged' },
-    }],
-  });
-  const acknowledged = await admin.query<{ acknowledgedAt: Date | null }>(
-    `SELECT acknowledged_at AS "acknowledgedAt"
-       FROM "conversation_turn_startup_fragment"
-      WHERE session_id = $1::uuid AND client_turn_id = $2`,
-    [SESSION_ID, CLIENT_TURN_ID],
-  );
-  assert.ok(acknowledged.rows[0].acknowledgedAt instanceof Date);
-
-  // ACK with no assistant/tool output followed by a runner crash is a continuation, not a replay
-  // of the combined envelope. The provider already consumed the fragment and its side effects
-  // must not be emphasized a second time in the replacement prompt.
-  await admin.query(
-    `UPDATE "conversation_turn"
-        SET lease_deadline_at = clock_timestamp() - interval '1 minute'
-      WHERE id = $1::uuid`,
-    [TURN_ID],
-  );
-  const resumed = await dequeue(
-    SESSION_ID,
-    RUNNER_ID,
-    null,
-    true,
-    [SESSION_CURRENT_WORK_ROUTING_V1],
-  );
-  assert.equal(resumed?.turnId, TURN_ID);
-  assert.match(resumed?.content ?? '', /runner 重启/);
-  assert.match(resumed?.content ?? '', /opening prompt/);
-  assert.doesNotMatch(resumed?.content ?? '', /also verify the migration/);
-
-  await runnerApi.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
-    turnId: TURN_ID,
-    status: 'SUCCEEDED',
-    subtype: 'completed',
-    numTurns: 1,
-    costUsd: 0,
-  } as never);
-  const afterComplete = await admin.query<{
-    acknowledgedAt: Date | null;
-    failedAt: Date | null;
-  }>(
-    `SELECT acknowledged_at AS "acknowledgedAt", failed_at AS "failedAt"
-       FROM "conversation_turn_startup_fragment"
-      WHERE session_id = $1::uuid AND client_turn_id = $2`,
-    [SESSION_ID, CLIENT_TURN_ID],
-  );
-  assert.ok(afterComplete.rows[0].acknowledgedAt instanceof Date);
-  assert.equal(afterComplete.rows[0].failedAt, null, 'flushed ACK must win over target completion');
-});
-
 pgTest('steer dequeue commit with a lost response reaches a visible terminal receipt at target completion', async () => {
   await seedStartingWindow();
   await admin.query(
@@ -396,206 +239,7 @@ pgTest('steer dequeue commit with a lost response reaches a visible terminal rec
   });
 });
 
-pgTest('new heartbeat admission followed by an old poller terminalizes startup and releases the seed', async () => {
-  await seedStartingWindow();
-  await admin.query(
-    `UPDATE "runner" SET capabilities = $2::text[], capabilities_reported_at = clock_timestamp()
-      WHERE id = $1::uuid`,
-    [RUNNER_ID, [SESSION_CURRENT_WORK_ROUTING_V1]],
-  );
-  const sessions = new SessionsService(
-    prisma as never,
-    { notifySessionQueued: () => undefined } as never,
-    { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined } as never,
-  );
-  const receipt = await sessions.createTurn(OWNER_ID, SESSION_ID, {
-    clientTurnId: CLIENT_TURN_ID,
-    content: 'must not be lost or claimed delivered',
-    intent: 'CURRENT_WORK',
-  });
-  assert.equal(receipt.placement, 'startup');
-
-  const runnerApi = new RunnerApiController(
-    prisma as never,
-    { notifySessionQueued: () => undefined } as never,
-    {
-      publishQueuedTurnsChanged: () => undefined,
-      drainInterrupts: async () => [],
-      drainMergeRequests: async () => [],
-      drainCommitRequests: async () => [],
-      drainArtifactRequests: async () => [],
-    } as never,
-    {} as never,
-    {} as never,
-    { expand: async (_ownerId: string, content?: string) => content } as never,
-    { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
-  );
-
-  // An omitted header is a heartbeat from an N-1/downgraded process and must clear the newer
-  // process's durable snapshot. The inbox request itself repeats that capability claim.
-  await runnerApi.heartbeat(
-    { id: RUNNER_ID, version: null },
-    { status: 'ONLINE' } as never,
-    undefined,
-  );
-  const capability = await admin.query<{ capabilities: string[] }>(
-    `SELECT capabilities FROM "runner" WHERE id = $1::uuid`,
-    [RUNNER_ID],
-  );
-  assert.deepEqual(capability.rows[0].capabilities, []);
-
-  const delivered = await (runnerApi as unknown as {
-    dequeueTurn: (
-      sessionId: string,
-      runnerId: string,
-      leaseGeneration: null,
-      acceptsSteer: boolean,
-      declaredCapabilities: readonly string[],
-    ) => Promise<{ turnId: string; content?: string } | null>;
-  }).dequeueTurn(SESSION_ID, RUNNER_ID, null, true, []);
-  assert.equal(delivered?.turnId, TURN_ID);
-  assert.equal(delivered?.content, 'opening prompt');
-
-  const fragment = await admin.query<{
-    failedAt: Date | null;
-    failureCode: string | null;
-    acknowledgedAt: Date | null;
-  }>(
-    `SELECT failed_at AS "failedAt", failure_code AS "failureCode",
-            acknowledged_at AS "acknowledgedAt"
-       FROM "conversation_turn_startup_fragment"
-      WHERE session_id = $1::uuid AND client_turn_id = $2`,
-    [SESSION_ID, CLIENT_TURN_ID],
-  );
-  assert.ok(fragment.rows[0].failedAt instanceof Date);
-  assert.equal(fragment.rows[0].failureCode, 'CURRENT_WORK_RUNTIME_CAPABILITY_LOST');
-  assert.equal(fragment.rows[0].acknowledgedAt, null);
-});
-
-pgTest('old poller takeover retires expired lost-response startup and re-leases only the seed', async () => {
-  await seedStartingWindow();
-  await admin.query(
-    `UPDATE "runner" SET capabilities = $2::text[], capabilities_reported_at = clock_timestamp()
-      WHERE id = $1::uuid`,
-    [RUNNER_ID, [SESSION_CURRENT_WORK_ROUTING_V1]],
-  );
-  await admin.query(
-    `INSERT INTO "inbox_lease_generation"(generation, session_id, lease_owner)
-     VALUES ($1::uuid, $2::uuid, $3::uuid)`,
-    [FIRST_GENERATION, SESSION_ID, FIRST_LEASE_OWNER],
-  );
-  await admin.query(
-    `UPDATE "session"
-        SET inbox_lease_generation = $2::uuid, inbox_lease_owner = $3::uuid
-      WHERE id = $1::uuid`,
-    [SESSION_ID, FIRST_GENERATION, FIRST_LEASE_OWNER],
-  );
-
-  const sessions = new SessionsService(
-    prisma as never,
-    { notifySessionQueued: () => undefined } as never,
-    { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined } as never,
-  );
-  const receipt = await sessions.createTurn(OWNER_ID, SESSION_ID, {
-    clientTurnId: CLIENT_TURN_ID,
-    content: 'context accepted by the first generation',
-    intent: 'CURRENT_WORK',
-  });
-  assert.equal(receipt.placement, 'startup');
-
-  const runnerApi = new RunnerApiController(
-    prisma as never,
-    { notifySessionQueued: () => undefined } as never,
-    {
-      notifyInbox: () => undefined,
-      publish: () => undefined,
-      publishSessionUpdated: () => undefined,
-      publishQueuedTurnsChanged: () => undefined,
-    } as never,
-    {} as never,
-    {} as never,
-    { expand: async (_ownerId: string, content?: string) => content } as never,
-    { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
-  );
-  const dequeue = (runnerApi as unknown as {
-    dequeueTurn: (
-      sessionId: string,
-      runnerId: string,
-      leaseGeneration: string,
-      acceptsSteer: boolean,
-      declaredCapabilities: readonly string[],
-    ) => Promise<{ turnId: string; content?: string } | null>;
-  }).dequeueTurn.bind(runnerApi);
-
-  // The DB commit succeeds, but model the HTTP response being lost before this generation can
-  // persist an engine-read ACK. The seed and receipt are both still durable.
-  const lost = await dequeue(
-    SESSION_ID,
-    RUNNER_ID,
-    FIRST_GENERATION,
-    true,
-    [SESSION_CURRENT_WORK_ROUTING_V1],
-  );
-  assert.equal(lost?.turnId, TURN_ID);
-  assert.match(lost?.content ?? '', /context accepted by the first generation/);
-  await admin.query(
-    `UPDATE "conversation_turn"
-        SET lease_deadline_at = clock_timestamp() - interval '1 minute'
-      WHERE id = $1::uuid`,
-    [TURN_ID],
-  );
-
-  // A new generation is now the one validated under the Session lock. The old generation's
-  // expired lease proves its unacknowledged envelope can no longer be completed by a live owner.
-  await admin.query(
-    `UPDATE "inbox_lease_generation" SET retired_at = clock_timestamp()
-      WHERE generation = $1::uuid`,
-    [FIRST_GENERATION],
-  );
-  await admin.query(
-    `INSERT INTO "inbox_lease_generation"(generation, session_id, lease_owner)
-     VALUES ($1::uuid, $2::uuid, $3::uuid)`,
-    [SECOND_GENERATION, SESSION_ID, SECOND_LEASE_OWNER],
-  );
-  await admin.query(
-    `UPDATE "session"
-        SET inbox_lease_generation = $2::uuid, inbox_lease_owner = $3::uuid
-      WHERE id = $1::uuid`,
-    [SESSION_ID, SECOND_GENERATION, SECOND_LEASE_OWNER],
-  );
-
-  const redelivered = await dequeue(SESSION_ID, RUNNER_ID, SECOND_GENERATION, true, []);
-  assert.equal(redelivered?.turnId, TURN_ID);
-  assert.equal(redelivered?.content, 'opening prompt');
-
-  const fragment = await admin.query<{
-    n: string;
-    deliveryStatus: string | null;
-    failedAt: Date | null;
-    failureCode: string | null;
-    acknowledgedAt: Date | null;
-  }>(
-    `SELECT count(*) OVER ()::text AS n, delivery_status AS "deliveryStatus",
-            failed_at AS "failedAt",
-            failure_code AS "failureCode", acknowledged_at AS "acknowledgedAt"
-       FROM "conversation_turn_startup_fragment"
-      WHERE session_id = $1::uuid AND client_turn_id = $2`,
-    [SESSION_ID, CLIENT_TURN_ID],
-  );
-  assert.equal(fragment.rows[0].n, '1', 'takeover never creates a replacement fragment');
-  assert.equal(fragment.rows[0].deliveryStatus, 'UNCONFIRMED');
-  assert.ok(fragment.rows[0].failedAt instanceof Date);
-  assert.equal(fragment.rows[0].failureCode, 'CURRENT_WORK_RUNTIME_CAPABILITY_LOST');
-  assert.equal(fragment.rows[0].acknowledgedAt, null);
-  const seed = await admin.query<{ status: string; leaseGeneration: string | null }>(
-    `SELECT status, lease_generation AS "leaseGeneration"
-       FROM "conversation_turn" WHERE id = $1::uuid`,
-    [TURN_ID],
-  );
-  assert.deepEqual(seed.rows[0], { status: 'IN_FLIGHT', leaseGeneration: SECOND_GENERATION });
-});
-
-pgTest('database constraints reject malformed intent/target rows and preserve startup audit', async () => {
+pgTest('database constraints reject malformed intent/target rows', async () => {
   await seedStartingWindow();
   await assert.rejects(
     admin.query(
@@ -652,20 +296,6 @@ pgTest('database constraints reject malformed intent/target rows and preserve st
     ),
     /conversation_turn_delivery_terminal_check/,
   );
-  await assert.rejects(
-    admin.query(
-      `INSERT INTO "conversation_turn_startup_fragment"(
-         id, session_id, target_turn_id, client_turn_id, content,
-         acknowledged_at, failed_at, failure_code, failure_reason
-       ) VALUES (
-         $1::uuid, $2::uuid, $3::uuid, 'contradictory-startup', 'bad',
-         clock_timestamp(), clock_timestamp(), 'FAILED_AFTER_ACK', 'contradictory proof'
-       )`,
-      [MISSING_TARGET_ID, SESSION_ID, TURN_ID],
-    ),
-    /conversation_turn_startup_fragment_terminal_check/,
-  );
-
   await admin.query(
     `INSERT INTO "conversation_turn"(
        id, session_id, seq, client_turn_id, kind, content, status, send_intent, target_turn_id,
@@ -706,27 +336,6 @@ pgTest('database constraints reject malformed intent/target rows and preserve st
   );
   assert.deepEqual(resolved.rows[0], { status: 'ACKNOWLEDGED', failureCode: null });
   await admin.query(`DELETE FROM "conversation_turn" WHERE id = $1::uuid`, [UNCONFIRMED_STEER_ID]);
-
-  await admin.query(
-    `INSERT INTO "conversation_turn_startup_fragment"(
-       id, session_id, target_turn_id, client_turn_id, content
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'audit-fragment', 'keep this')`,
-    [CLIENT_TURN_ID, SESSION_ID, TURN_ID],
-  );
-  await admin.query('BEGIN');
-  await admin.query(`DELETE FROM "conversation_turn" WHERE id = $1::uuid`, [TURN_ID]);
-  await assert.rejects(
-    admin.query('COMMIT'),
-    /conversation_turn_startup_fragment_target_turn_id_fkey/,
-  );
-  await admin.query('ROLLBACK').catch(() => undefined);
-
-  const retained = await admin.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM "conversation_turn_startup_fragment"
-      WHERE id = $1::uuid`,
-    [CLIENT_TURN_ID],
-  );
-  assert.equal(retained.rows[0].n, '1');
 });
 
 pgTest(
@@ -746,21 +355,3 @@ pgTest(
   },
 );
 
-pgTest(
-  'same-session FK rejects a startup fragment targeting an existing turn in another session',
-  async () => {
-    await seedCrossSessionTarget();
-    await admin.query('BEGIN');
-    await admin.query(
-      `INSERT INTO "conversation_turn_startup_fragment"(
-         id, session_id, target_turn_id, client_turn_id, content
-       ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'cross-session-startup', 'bad')`,
-      [CROSS_SESSION_FRAGMENT_ID, SESSION_ID, OTHER_TURN_ID],
-    );
-    await assert.rejects(
-      admin.query('COMMIT'),
-      /conversation_turn_startup_fragment_target_turn_id_fkey/,
-    );
-    await admin.query('ROLLBACK').catch(() => undefined);
-  },
-);

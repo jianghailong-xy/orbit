@@ -89,7 +89,6 @@ import {
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
-  supportsSessionCurrentWorkRouting,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   TURN_COMPLETE_STEER_REQUEUE,
@@ -125,13 +124,10 @@ import { PushService } from '../push/push.service';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   CURRENT_WORK_RUNTIME_REJECTED,
-  CURRENT_WORK_RUNTIME_CAPABILITY_LOST,
   CURRENT_WORK_SESSION_FINALIZED,
   CURRENT_WORK_TARGET_COMPLETED,
   acknowledgedRuntimeTurnIds,
   terminalizePendingCurrentWorkSteers,
-  terminalizePendingStartupContexts,
-  terminalizeUndeliveredCurrentWork,
 } from '../sessions/current-work-delivery';
 import {
   postExecutableAcceptanceComment,
@@ -144,7 +140,6 @@ import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
   RUNTIME_STARTED_EVENT_TYPES,
   RUNTIME_STARTED_SYSTEM_SUBTYPE,
-  appendStartupTurnFragments,
   buildResumeContinuation,
 } from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
@@ -2508,53 +2503,6 @@ export class RunnerApiController {
       // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime it
       // borrows rather than by its slug.
       const execRuntime = await sessionExecRuntime(tx, owned[0]);
-      const currentWorkRouting = supportsSessionCurrentWorkRouting(declaredCapabilities);
-      let capabilityLossTerminalized = 0;
-      if (!currentWorkRouting) {
-        // A newer process may have admitted startup context and then been replaced by an old
-        // poller. Do not leave the seed permanently withheld. Under the same Session lock, make
-        // every still-unacknowledged fragment visibly terminal; the original seed can then run
-        // without silently claiming that rejected context entered its envelope.
-        //
-        // PENDING is unambiguously undelivered. IN_FLIGHT is included only after two durable
-        // fences agree the former owner is gone: its database lease expired and its generation
-        // differs from the currently validated poller's generation. This closes dequeue-commit /
-        // lost-response / crash without letting a downgraded heartbeat kill a live engine whose
-        // acknowledgement is merely waiting in the runner's event batch.
-        const unsupportedTargets = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          SELECT DISTINCT target.id
-          FROM "conversation_turn" target
-          JOIN "conversation_turn_startup_fragment" fragment
-            ON fragment."session_id" = target."session_id"
-           AND fragment."target_turn_id" = target.id
-          WHERE target."session_id" = ${sessionId}::uuid
-            AND target.kind = 'message'
-            AND fragment."acknowledged_at" IS NULL
-            AND fragment."failed_at" IS NULL
-            AND (
-              target.status = 'PENDING'
-              OR (
-                target.status = 'IN_FLIGHT'
-                AND target."lease_deadline_at" < clock_timestamp()
-                AND target."lease_generation" IS DISTINCT FROM ${leaseGeneration}::uuid
-              )
-            )
-          ORDER BY target.id
-        `);
-        if (unsupportedTargets.length > 0) {
-          const failed = await terminalizePendingStartupContexts(tx, sessionId, {
-            targetTurnIds: unsupportedTargets.map((target) => target.id),
-            // The raw candidate query above, not this broad flag, proves which leased targets are
-            // abandoned. terminalizePendingStartupContexts repeats the receipt-state guards.
-            includeInFlight: true,
-            inFlightOutcome: 'UNCONFIRMED',
-            code: CURRENT_WORK_RUNTIME_CAPABILITY_LOST,
-            reason:
-              'Delivery could not be confirmed after the capable runner lease expired; the active runner no longer supports the acknowledged-delivery protocol.',
-          });
-          capabilityLossTerminalized = failed.terminalizedTurnIds.length;
-        }
-      }
       // Legacy steer predates routing-v1 and retains its provider-specific behaviour. Explicit
       // CURRENT_WORK is narrower: only an exact-target primitive may dequeue it, otherwise a
       // Claude stdin frame could cross the target result boundary and become the next turn.
@@ -2643,17 +2591,6 @@ export class RunnerApiController {
               -- to RUNNING. An AWAITING_INPUT process may remain warm, but its inbox cannot
               -- bypass maxConcurrent merely because it is already resident.
               OR (turn."kind" IN ('message', 'shell')
-                AND (
-                  ${currentWorkRouting}::boolean
-                  OR NOT EXISTS (
-                    SELECT 1
-                    FROM "conversation_turn_startup_fragment" startup
-                    WHERE startup."session_id" = ${sessionId}::uuid
-                      AND startup."target_turn_id" = turn.id
-                      AND startup."acknowledged_at" IS NULL
-                      AND startup."failed_at" IS NULL
-                  )
-                )
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid
@@ -2806,21 +2743,6 @@ export class RunnerApiController {
       let attachments: TurnAttachment[] | undefined;
       let content = t.content ?? undefined;
       if (t.kind === 'message' || t.kind === 'steer') {
-        const startupFragments = t.kind === 'message'
-          ? await tx.conversationTurnStartupFragment.findMany({
-            where: { sessionId, targetTurnId: t.id, failedAt: null },
-              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-              select: {
-                id: true,
-                content: true,
-                acknowledgedAt: true,
-                attachments: {
-                  select: { id: true, mimeType: true, fileName: true, createdAt: true },
-                  orderBy: { createdAt: 'asc' },
-                },
-              },
-            })
-          : [];
         // Context derived from the Session is expanded at delivery, never written over the text
         // the person sent. Besides giving #references their tenant, this is where an existing
         // conversation promoted by project_create acquires the same user-level coordinator
@@ -2856,43 +2778,20 @@ export class RunnerApiController {
           },
           select: { id: true },
         }));
-        const startupAcknowledged = startupFragments.some(
-          (fragment) => fragment.acknowledgedAt != null,
-        );
-        if (runtimeStarted || startupAcknowledged) {
-          // A durable startup ACK means the full combined envelope is already in the provider's
-          // conversation even if it crashed before producing assistant/tool output. Do not put
-          // acknowledged fragments (or their attachments) into the replacement prompt again;
-          // the original executable text alone is enough to orient the continuation nudge.
+        if (runtimeStarted) {
           content = buildResumeContinuation(t.content);
         } else {
-          content = appendStartupTurnFragments(content, startupFragments);
           const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
             select: { id: true, mimeType: true, fileName: true },
             orderBy: { createdAt: 'asc' },
           });
-          const allAttachments = [
-            ...atts,
-            ...startupFragments.flatMap((fragment) => fragment.attachments),
-          ];
-          if (allAttachments.length > 0) {
-            attachments = allAttachments.map((a) => ({
+          if (atts.length > 0) {
+            attachments = atts.map((a) => ({
               id: a.id,
               mimeType: a.mimeType,
               fileName: a.fileName ?? undefined,
             }));
-          }
-          if (startupFragments.length > 0) {
-            await tx.conversationTurnStartupFragment.updateMany({
-              where: {
-                id: { in: startupFragments.map((fragment) => fragment.id) },
-                acknowledgedAt: null,
-                deliveredAt: null,
-                failedAt: null,
-              },
-              data: { deliveredAt: new Date() },
-            });
           }
           // `#`-references become context here, at delivery, rather than when the message was
           // stored: the transcript keeps what the person typed, and the summary is computed at
@@ -2942,7 +2841,6 @@ export class RunnerApiController {
               // the replacement engine must receive the standing context again.
               const openingAlreadyPresent =
                 !runtimeStarted
-                && !startupAcknowledged
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
                 && hasCoordinatorOpening(sessionContext.prompt, projectId);
@@ -2988,18 +2886,9 @@ export class RunnerApiController {
             ? true
             : undefined,
         acceptancePlan,
-        ...(capabilityLossTerminalized > 0
-          ? { __currentWorkTerminalized: capabilityLossTerminalized }
-          : {}),
       };
     }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
-    if (!outcome) return null;
-    const {
-      __currentWorkTerminalized: terminalized = 0,
-      ...turn
-    } = outcome as typeof outcome & { __currentWorkTerminalized?: number };
-    if (terminalized > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
-    return turn;
+    return outcome ?? null;
   }
 
   /**
@@ -3890,7 +3779,7 @@ export class RunnerApiController {
       // row still audits the refused landing and, crucially, no ordinary message is manufactured.
       let currentWorkTerminalized = 0;
       if (completedTurn) {
-        const terminalized = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+        const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
           targetTurnIds: [completedTurn.id],
           // Dequeue commit is not a runtime ACK. If its HTTP response was lost, the row is
           // IN_FLIGHT forever unless the exact target-complete boundary settles it here.
@@ -3898,9 +3787,7 @@ export class RunnerApiController {
           code: CURRENT_WORK_TARGET_COMPLETED,
           reason: 'The target turn completed before CURRENT_WORK could be delivered.',
         });
-        currentWorkTerminalized =
-          terminalized.steers.terminalizedTurnIds.length
-          + terminalized.startup.terminalizedTurnIds.length;
+        currentWorkTerminalized = terminalized.terminalizedTurnIds.length;
       }
       // Rolling legacy steers keep their historical recovery: rows with no explicit intent become
       // an ordinary message. New clients never create this shape, and NEXT_TURN is born a message.
@@ -4036,14 +3923,12 @@ export class RunnerApiController {
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
       }
       if (failSession) {
-        const terminalized = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+        const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
           includeInFlight: true,
           code: CURRENT_WORK_SESSION_FINALIZED,
           reason: 'CURRENT_WORK was not delivered before its session turn failed.',
         });
-        currentWorkTerminalized +=
-          terminalized.steers.terminalizedTurnIds.length
-          + terminalized.startup.terminalizedTurnIds.length;
+        currentWorkTerminalized += terminalized.terminalizedTurnIds.length;
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4382,48 +4267,28 @@ export class RunnerApiController {
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
         const acknowledgedAt = new Date();
-        const [steers, startup] = await Promise.all([
-          tx.conversationTurn.updateMany({
-            where: {
-              sessionId,
-              id: { in: acknowledgedTurnIds },
-              kind: 'steer',
-              sendIntent: 'CURRENT_WORK',
-              OR: [
-                { deliveryStatus: null },
-                { deliveryStatus: 'UNCONFIRMED' },
-              ],
-            },
-            data: {
-              deliveryStatus: 'ACKNOWLEDGED',
-              deliveryAcknowledgedAt: acknowledgedAt,
-              // A strict engine-read ACK may arrive after a runner-loss boundary. Resolve the
-              // ambiguity rather than preserving contradictory ACK+UNCONFIRMED fields.
-              deliveryFailureCode: null,
-              deliveryFailureReason: null,
-              deliveryTerminalAt: null,
-            },
-          }),
-          tx.conversationTurnStartupFragment.updateMany({
-            where: {
-              sessionId,
-              targetTurnId: { in: acknowledgedTurnIds },
-              acknowledgedAt: null,
-              OR: [
-                { deliveryStatus: null },
-                { deliveryStatus: 'UNCONFIRMED' },
-              ],
-            },
-            data: {
-              deliveryStatus: 'ACKNOWLEDGED',
-              acknowledgedAt,
-              failedAt: null,
-              failureCode: null,
-              failureReason: null,
-            },
-          }),
-        ]);
-        currentWorkAcknowledged = steers.count + startup.count;
+        const steers = await tx.conversationTurn.updateMany({
+          where: {
+            sessionId,
+            id: { in: acknowledgedTurnIds },
+            kind: 'steer',
+            sendIntent: 'CURRENT_WORK',
+            OR: [
+              { deliveryStatus: null },
+              { deliveryStatus: 'UNCONFIRMED' },
+            ],
+          },
+          data: {
+            deliveryStatus: 'ACKNOWLEDGED',
+            deliveryAcknowledgedAt: acknowledgedAt,
+            // A strict engine-read ACK may arrive after a runner-loss boundary. Resolve the
+            // ambiguity rather than preserving contradictory ACK+UNCONFIRMED fields.
+            deliveryFailureCode: null,
+            deliveryFailureReason: null,
+            deliveryTerminalAt: null,
+          },
+        });
+        currentWorkAcknowledged = steers.count;
       }
       const userTurns = userTurnIds.length > 0
         ? await tx.conversationTurn.findMany({
@@ -4805,16 +4670,14 @@ export class RunnerApiController {
           },
         });
       }
-      const currentWork = await terminalizeUndeliveredCurrentWork(tx, sessionId, {
+      const currentWork = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
         includeInFlight: true,
         inFlightOutcome: 'UNCONFIRMED',
         code: CURRENT_WORK_SESSION_FINALIZED,
         reason:
           `Delivery could not be confirmed before the runner finalized the session as ${effectiveStatus}.`,
       });
-      const currentWorkTerminalized =
-        currentWork.steers.terminalizedTurnIds.length
-        + currentWork.startup.terminalizedTurnIds.length;
+      const currentWorkTerminalized = currentWork.terminalizedTurnIds.length;
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },

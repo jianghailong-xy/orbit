@@ -86,10 +86,6 @@ function makeService(opts?: {
         return row;
       },
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
     attachment: {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.filter((id) => (opts?.attachments ?? []).includes(id)).map((id) => ({ id })),

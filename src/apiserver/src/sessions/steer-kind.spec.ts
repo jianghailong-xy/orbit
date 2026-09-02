@@ -10,8 +10,6 @@ const RUNNER_ID = '33333333-3333-4333-8333-333333333333';
 const CLIENT_ID = '44444444-4444-4444-8444-444444444444';
 const TARGET_ID = '55555555-5555-4555-8555-555555555555';
 
-process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED = '1';
-
 interface HarnessOptions {
   status?: RunStatus;
   numTurns?: number;
@@ -21,16 +19,11 @@ interface HarnessOptions {
   capabilities?: string[];
   earlierExecutable?: boolean;
   existingTurn?: Record<string, unknown> | null;
-  existingFragment?: Record<string, unknown> | null;
   startingTurn?: Record<string, unknown> | null;
-  startupFragmentContents?: string[];
-  startupAttachmentCount?: number;
-  startupAttachmentBytes?: number;
 }
 
 function harness(options: HarnessOptions = {}) {
   const created: Record<string, unknown>[] = [];
-  const fragments: Record<string, unknown>[] = [];
   const queueChanges: string[] = [];
   const liveLeaseChecks = [...(options.liveLeaseChecks ?? [true, true, true])];
   let rawCall = 0;
@@ -64,14 +57,6 @@ function harness(options: HarnessOptions = {}) {
       findUniqueOrThrow: async () => ({ ...session }),
       update: async () => ({ ...session }),
     },
-    conversationTurnStartupFragment: {
-      findUnique: async () => options.existingFragment ?? null,
-      findMany: async () => (options.startupFragmentContents ?? []).map((content) => ({ content })),
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        fragments.push(data);
-        return { id: 'fragment-new', ...data };
-      },
-    },
     conversationTurn: {
       findUnique: async ({ where }: { where: { sessionId_clientTurnId?: { clientTurnId: string } } }) => {
         const key = where.sessionId_clientTurnId?.clientTurnId;
@@ -93,10 +78,6 @@ function harness(options: HarnessOptions = {}) {
     },
     attachment: {
       findMany: async () => [],
-      aggregate: async () => ({
-        _count: { _all: options.startupAttachmentCount ?? 0 },
-        _sum: { sizeBytes: options.startupAttachmentBytes ?? null },
-      }),
       updateMany: async () => ({ count: 0 }),
     },
     modelProvider: { findFirst: async () => null },
@@ -118,19 +99,19 @@ function harness(options: HarnessOptions = {}) {
       publishQueuedTurnsChanged: (id: string) => queueChanges.push(id),
     } as never,
   );
-  return { service, created, fragments, queueChanges };
+  return { service, created, queueChanges };
 }
 
 const send = (
   h: ReturnType<typeof harness>,
   intent?: 'CURRENT_WORK' | 'NEXT_TURN',
   clientTurnId = CLIENT_ID,
-  participateCurrentWorkTransaction?: (tx: Prisma.TransactionClient) => Promise<void>,
+  participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>,
 ) => h.service.createTurn(OWNER_ID, SESSION_ID, {
   clientTurnId,
   content: 'actually, call it gadget',
   ...(intent ? { intent } : {}),
-}, { participateCurrentWorkTransaction });
+}, { participateSendTransaction });
 
 test('legacy omission retains N-1 auto-routing and its nullable protocol row', async () => {
   const h = harness();
@@ -139,32 +120,6 @@ test('legacy omission retains N-1 auto-routing and its nullable protocol row', a
   assert.equal(result.placement, 'steer');
   assert.equal(h.created[0].sendIntent, undefined);
   assert.equal(h.created[0].targetTurnId, undefined);
-});
-
-test('gate-off rejects explicit routing without writes while legacy omission remains compatible', async () => {
-  const previous = process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED;
-  delete process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED;
-  try {
-    const legacy = harness();
-    const accepted = await send(legacy);
-    assert.equal(accepted.kind, 'steer', 'gate-off new API matches an N-1 API replica');
-    assert.equal(legacy.created[0].sendIntent, undefined);
-    assert.equal(legacy.created.length, 1);
-
-    for (const intent of ['CURRENT_WORK', 'NEXT_TURN'] as const) {
-      const explicit = harness();
-      await assert.rejects(
-        send(explicit, intent),
-        (error: unknown) =>
-          (error as { response?: { code?: string } }).response?.code
-            === 'SESSION_TURN_PROTOCOL_DISABLED',
-      );
-      assert.equal(explicit.created.length, 0);
-    }
-  } finally {
-    if (previous === undefined) delete process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED;
-    else process.env.ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED = previous;
-  }
 });
 
 test('explicit NEXT_TURN is accepted when it is the first executable', async () => {
@@ -234,58 +189,6 @@ test('a lease expiring during the atomic charge rolls back before the receipt in
   );
   assert.equal(chargeAttempted, 1, 'the final assertion is after the transactional charge');
   assert.equal(h.created.length, 0, 'no durable CURRENT_WORK receipt was inserted');
-});
-
-test('startup CURRENT_WORK binds an append-only fragment to the seeded executable', async () => {
-  const h = harness({
-    status: RunStatus.PENDING,
-    numTurns: 0,
-    startingTurn: {
-      id: TARGET_ID,
-      seq: 1,
-      kind: 'message',
-      status: 'PENDING',
-      deliveredAt: null,
-      content: 'opening prompt',
-    },
-  });
-  const result = await send(h, 'CURRENT_WORK');
-  assert.equal(result.kind, 'startup_context');
-  assert.equal(result.placement, 'startup');
-  assert.equal(result.targetTurnId, TARGET_ID);
-  assert.equal(h.fragments.length, 1);
-  assert.equal(h.fragments[0].targetTurnId, TARGET_ID);
-  assert.equal(h.created.length, 0, 'startup context created a second executable turn');
-});
-
-test('startup envelope aggregate limits are enforced under the Session lock', async () => {
-  const startingTurn = {
-    id: TARGET_ID,
-    seq: 1,
-    kind: 'message',
-    status: 'PENDING',
-    deliveredAt: null,
-    content: 'opening prompt',
-  };
-  const fragments = harness({
-    status: RunStatus.PENDING,
-    numTurns: 0,
-    startingTurn,
-    startupFragmentContents: Array.from({ length: 32 }, (_, i) => `context ${i}`),
-  });
-  await assert.rejects(send(fragments, 'CURRENT_WORK'), (error: unknown) =>
-    (error as { response?: { reason?: string } }).response?.reason === 'STARTUP_ENVELOPE_LIMIT');
-  assert.equal(fragments.fragments.length, 0);
-
-  const attachments = harness({
-    status: RunStatus.PENDING,
-    numTurns: 0,
-    startingTurn,
-    startupAttachmentCount: 21,
-  });
-  await assert.rejects(send(attachments, 'CURRENT_WORK'), (error: unknown) =>
-    (error as { response?: { reason?: string } }).response?.reason === 'STARTUP_ENVELOPE_LIMIT');
-  assert.equal(attachments.fragments.length, 0);
 });
 
 test('clientTurnId intent matching is bidirectional while legacy null remains NEXT compatible', async () => {

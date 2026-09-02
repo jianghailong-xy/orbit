@@ -90,13 +90,6 @@ function harness(options: HarnessOptions = {}) {
       count: async () => 0,
       findFirst: async () => null,
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => {
-        writes.push('startup-fragment-update');
-        return { count: 1 };
-      },
-    },
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => {

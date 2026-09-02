@@ -314,16 +314,15 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 	}
 }
 
-// session_send is CURRENT_WORK-only. The server decides atomically whether success bound to the
-// starting envelope or the exact live turn; a later queued message is not a successful outcome.
-// Both headless doors hand that authoritative receipt back untouched.
-func TestSessionSendCurrentWorkHandsBackTheServerPlacementUntouched(t *testing.T) {
+// The server decides atomically where a send lands — into the turn already running, or as the
+// session's next turn. Both headless doors hand that authoritative receipt back untouched.
+func TestSessionSendHandsBackTheServerPlacementUntouched(t *testing.T) {
 	for _, answer := range []struct {
 		name string
 		body string
 	}{
 		{"live steer", `{"ok":true,"turnId":"turn-1","targetTurnId":"target-1","seq":7,"kind":"steer","placement":"steer"}`},
-		{"starting envelope", `{"ok":true,"turnId":"fragment-1","targetTurnId":"target-1","seq":1,"kind":"startup_context","placement":"startup"}`},
+		{"next turn", `{"ok":true,"turnId":"turn-2","seq":8,"kind":"message","placement":"accepted"}`},
 	} {
 		t.Run(answer.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

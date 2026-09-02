@@ -48,8 +48,6 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Codex `turn/steer` contract](codex-turn-steer-contract.md) — the frozen wire format, failure taxonomy,
   capability gating, and mixed-version rollout rules for steering a running Codex turn, with the
   [engine evidence](evidence/codex-turn-steer-0.149.0/transcript.md) behind them.
-- [CURRENT_WORK routing rollout](session-current-work-routing-rollout.md) — required API/Web rollout
-  order and the durable startup-context drain gate before rollback.
 - [The database write audit](db-write-audit.md) — every write in the API server with its lock order,
   identity, replayability, effects and retry decision, the trigger set derived from the migrations,
   and the static tests that fail when any of it stops being true.

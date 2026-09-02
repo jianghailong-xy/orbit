@@ -71,10 +71,6 @@ function harness({
       },
       count: async () => 0,
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
     session: {
       findUniqueOrThrow: async () => ({
         status,

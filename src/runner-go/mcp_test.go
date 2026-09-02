@@ -61,7 +61,11 @@ func TestMCPOrchestrationToolsGated(t *testing.T) {
 	}
 }
 
-func TestSessionSendCurrentWorkDescriptionNeverPromisesANextTurnQueue(t *testing.T) {
+// session_send no longer hard-codes CURRENT_WORK (0225): the server decides between joining the
+// running turn and filing the next one, and a description that still promised an explicit refusal
+// would send a caller looking for an error it can no longer get — the very reason a coordinator
+// could not reach a session that was waiting for it.
+func TestSessionSendDescriptionDoesNotPromiseACurrentWorkOnlyRefusal(t *testing.T) {
 	var description string
 	for _, tool := range toolDescriptors(false, true) {
 		if tool["name"] == "session_send" {
@@ -74,14 +78,17 @@ func TestSessionSendCurrentWorkDescriptionNeverPromisesANextTurnQueue(t *testing
 		"CLI help": sessionActionHelp["send"],
 		"headless": headlessActionDescription["send"],
 	} {
-		if !strings.Contains(text, "CURRENT_WORK") {
-			t.Errorf("%s session_send description omits CURRENT_WORK: %q", name, text)
+		if strings.Contains(text, "CURRENT_WORK") {
+			t.Errorf("%s session_send description still names the removed intent: %q", name, text)
 		}
-		if !strings.Contains(text, "never queue") {
-			t.Errorf("%s session_send description does not promise explicit refusal: %q", name, text)
+		if strings.Contains(text, "never queue") {
+			t.Errorf("%s session_send description still promises no queue: %q", name, text)
 		}
-		if strings.Contains(text, "queued behind") || strings.Contains(text, "runs next") {
-			t.Errorf("%s session_send description still promises NEXT_TURN fallback: %q", name, text)
+		if !strings.Contains(text, "placement") {
+			t.Errorf("%s session_send description does not name the server's placement: %q", name, text)
+		}
+		if !strings.Contains(text, "next turn") {
+			t.Errorf("%s session_send description omits the next-turn landing: %q", name, text)
 		}
 	}
 }

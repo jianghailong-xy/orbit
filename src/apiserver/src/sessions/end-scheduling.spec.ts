@@ -47,7 +47,6 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
       ...currentWork.conversationTurn,
       findFirst: async () => null,
     },
-    conversationTurnStartupFragment: currentWork.conversationTurnStartupFragment,
   };
   const prisma = {
     session: { findFirst: async () => fastRead },

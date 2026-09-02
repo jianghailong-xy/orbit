@@ -56,7 +56,6 @@ before(async () => {
   // Only the columns the predicate reads. Deliberately not the application schema: this is a
   // test of one WHERE clause, and pulling in migrations would make it a test of those too.
   await client.query(`
-    DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn_startup_fragment";
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
     CREATE TABLE steer_dequeue_test."session" (
@@ -86,12 +85,6 @@ before(async () => {
       target_turn_id uuid,
       coordinator_context_key text
     );
-    CREATE TABLE steer_dequeue_test."conversation_turn_startup_fragment" (
-      session_id uuid NOT NULL,
-      target_turn_id uuid NOT NULL,
-      acknowledged_at timestamptz,
-      failed_at timestamptz
-    );
   `);
 });
 
@@ -105,7 +98,7 @@ after(async () => {
 beforeEach(async () => {
   if (!PG_URL) return;
   await client.query(`
-    TRUNCATE "conversation_turn_startup_fragment", "conversation_turn";
+    TRUNCATE "conversation_turn";
     DELETE FROM "session";
   `);
   await session(AgentProvider.CLAUDE);
@@ -140,12 +133,6 @@ function pgTx() {
     runEvent: { findFirst: async () => null },
     attachment: { findMany: async () => [] },
     session: { findUnique: async () => null },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
-    // This deliberately minimal schema has no startup-fragment table. Its rows model only the
-    // legacy/steer predicate below, so the v1 stale-poller audit has no unresolved startup target.
     conversationTurn: {
       findMany: async () => [],
       updateMany: async () => ({ count: 1 }),

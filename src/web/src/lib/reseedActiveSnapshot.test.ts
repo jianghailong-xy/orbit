@@ -17,11 +17,11 @@ describe('reseedWithActiveSnapshot', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('successful resync replaces an optimistic startup bubble with its durable failure', async () => {
+  it('successful resync replaces an optimistic steer bubble with its durable failure', async () => {
     const optimistic = {
-      turnId: 'startup-own-id',
-      targetTurnId: 'opening-target-id',
-      placement: 'startup' as const,
+      turnId: 'steer-own-id',
+      targetTurnId: 'running-target-id',
+      placement: 'steer' as const,
     };
     const failed = { ...optimistic, delivery: 'failed' as const };
     let rows = [optimistic];
@@ -33,11 +33,11 @@ describe('reseedWithActiveSnapshot', () => {
     expect(rows).toEqual([failed]);
   });
 
-  it('failed tail resync still prunes a startup receipt that landed while disconnected', async () => {
+  it('failed tail resync still prunes a steer receipt that landed while disconnected', async () => {
     const optimistic = {
-      turnId: 'startup-own-id',
-      targetTurnId: 'opening-target-id',
-      placement: 'startup' as const,
+      turnId: 'steer-own-id',
+      targetTurnId: 'running-target-id',
+      placement: 'steer' as const,
     };
     let rows = [optimistic];
 

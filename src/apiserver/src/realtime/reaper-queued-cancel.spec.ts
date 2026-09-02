@@ -39,10 +39,6 @@ function sweepWithCancelledSession(status: RunStatus, taskId: string | null) {
       findFirst: async () => null,
       findMany: async () => [],
     },
-    conversationTurnStartupFragment: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 0 }),
-    },
   };
   const prisma = {
     session: {
