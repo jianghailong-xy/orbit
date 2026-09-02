@@ -131,8 +131,8 @@ suite('the three project_acceptance_* tables still take, keep and return rows', 
   await client.query(
     `INSERT INTO "project_acceptance_run"
        (id, project_id, attempt, criteria_snapshot, criteria_revision, input_digest, decided_by,
-        started_at, created_at, digest_version, acceptance_epoch, conclusion_window_seconds)
-     VALUES ($1, $2, 1, 'snapshot', $3, $4, 'USER', now(), now(), 1, 0, 3600)`,
+        started_at, created_at, digest_version, acceptance_epoch)
+     VALUES ($1, $2, 1, 'snapshot', $3, $4, 'USER', now(), now(), 1, 0)`,
     [runId, PROJECT, 'd'.repeat(64), 'e'.repeat(64)],
   );
   await client.query(

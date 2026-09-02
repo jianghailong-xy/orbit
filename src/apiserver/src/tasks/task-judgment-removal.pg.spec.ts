@@ -209,8 +209,9 @@ suite('(m)(q)(w) VERIFICATION, the 0150/0172 gate and the core task triggers are
       `SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
         WHERE NOT t.tgisinternal AND c.relname = 'task' ORDER BY t.tgname`,
     )).rows.map((row) => row.tgname);
-    // Measured on origin/main at 24e94a2e: 28 triggers on `task`, of which this change removes 3.
-    assert.equal(taskTriggers.length, 25,
+    // Measured on the merged base (origin/main a6c02b35, ledger through 0227): 27 triggers on
+    // `task`, of which this change removes exactly the three below.
+    assert.equal(taskTriggers.length, 24,
       `task carries ${taskTriggers.length} triggers: ${taskTriggers.join(', ')}`);
     for (const removed of DROPPED_CORE_TASK_TRIGGERS) {
       assert.ok(!taskTriggers.includes(removed));

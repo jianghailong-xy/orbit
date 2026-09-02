@@ -60,23 +60,23 @@ suite('(j) task_executable_* and project_acceptance_* are both still installed',
   t.after(async () => { await client.end(); });
 
   // 0227 removed 0200's admission/attempt/continuation/diagnosis and 0187's two backfill
-  // relations from this family; `task_executable_judgment_result` (0181) is what is left of it.
-  for (const [prefix, tables, triggers] of [
-    ['task_executable_', 1, 1],
-    ['project_acceptance_', 5, 1],
-  ] as const) {
-    const { relations, triggers: installed } = await census(client, prefix);
-    assert.ok(relations.length >= tables,
-      `${prefix}* has only ${relations.length} relations: ${relations.map((r) => r.name).join(', ')}`);
-    assert.ok(installed.length >= triggers,
-      `${prefix}* lost its guards: ${installed.join(', ')}`);
-  }
+  // relations from this family, and 0228 took `task_executable_judgment_result` (0181) with the
+  // rest of the judgment machinery. What is left of the family is nothing.
+  const executable = await census(client, 'task_executable_');
+  assert.deepEqual(executable.relations, [],
+    `task_executable_* should be empty: ${executable.relations.map((r) => r.name).join(', ')}`);
+  const acceptance = await census(client, 'project_acceptance_');
+  assert.ok(acceptance.relations.length >= 5,
+    `project_acceptance_* has only ${acceptance.relations.length} relations: `
+    + acceptance.relations.map((r) => r.name).join(', '));
+  assert.ok(acceptance.triggers.length >= 1,
+    `project_acceptance_* lost its guards: ${acceptance.triggers.join(', ')}`);
 
   // The named walls the task called out one by one, so a reader sees the exact list.
   for (const table of [
-    // The four 0200 relations that used to be named here went out with 0227, by a later and
-    // separate account-owner decision. 0220 still issued no statement against any of them.
-    'task_executable_judgment_result',
+    // The four 0200 relations that used to be named here went out with 0227, and
+    // `task_executable_judgment_result` with 0228 — each by a later and separate account-owner
+    // decision. 0220 still issued no statement against any of them.
     'project_acceptance_run',
     'project_acceptance_criterion',
     'project_acceptance_conclusion',

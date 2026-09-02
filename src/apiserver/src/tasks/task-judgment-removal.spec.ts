@@ -91,6 +91,9 @@ const EVIDENCE = new Set([
   'src/apiserver/src/tasks/task-judgment-removal.pg.spec.ts',
   'src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts',
   'src/apiserver/src/tasks/task-executable-acceptance.pg.spec.ts',
+  'src/apiserver/src/tasks/executable-acceptance-runtime-removal.spec.ts',
+  'src/apiserver/src/tasks/executable-acceptance-runtime-removal.pg.spec.ts',
+  'src/apiserver/src/outcome-reconciler/watchdog-coordinator-removal.pg.spec.ts',
   'src/apiserver/src/tasks/task-verifier-role-migration.pg.spec.ts',
   'src/apiserver/src/tasks/task-done-writer-fence.pg.spec.ts',
   'src/apiserver/src/tasks/task-verification-sole-implementation.spec.ts',
@@ -181,12 +184,11 @@ test('(c) the runner callback no longer derives DONE, or FAILED, from an exit co
   assert.doesNotMatch(controller, /postExecutableAcceptanceComment/u,
     'the comment that announced a derived status has no derivation left to announce');
 
-  // The typed attempt lane is 0200's and was not this change to remove; it terminates an attempt
-  // and says so, and it writes no Task status.
-  assert.match(controller, /taskExecutableAttempt\.update/u);
-  const typed = controller.slice(controller.indexOf('const typedTermination'));
-  assert.doesNotMatch(typed.slice(0, typed.indexOf('acceptanceTaskChanged = true;')),
-    /tx\.task\.update/u, 'the surviving typed lane may not write a task status');
+  // 0227 took 0200's typed attempt an hour before this change; between them the controller has
+  // no criterion evaluation left at all.
+  assert.doesNotMatch(controller, /taskExecutableAttempt/u);
+  assert.doesNotMatch(controller, /acceptanceTaskChanged = true/u,
+    'nothing can set the flag that said a criterion moved the task');
 });
 
 // (d) --------------------------------------------------------------------------------------------
@@ -257,10 +259,9 @@ test('(s) the project acceptance gate lost its judgment-result reader and gained
   const branch = executable.slice(0, executable.indexOf('const verifier ='));
   const reads = [...branch.matchAll(/(?:tx|this\.prisma)\.([A-Za-z]+)\./gu)].map((m) => m[1]);
   assert.deepEqual([...new Set(reads)], [],
-    'the EXECUTABLE branch reads nothing directly; canonicalExecutableAttempt is its one source');
-  assert.match(branch, /canonicalExecutableAttempt/u);
+    'the EXECUTABLE branch reads nothing at all: 0227 took the attempt and 0228 the result');
   assert.match(branch, /No matching recorded command result exists yet/u,
-    'with no attempt the criterion is INCONCLUSIVE and says so, rather than reaching elsewhere');
+    'with no evidence source the criterion is INCONCLUSIVE and says so');
 
   // The gate itself, and its data, are outside this change.
   assert.match(service, /project_acceptance_criterion_definition|projectAcceptanceCriterionDefinition/u);

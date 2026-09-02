@@ -14,8 +14,9 @@
 --     trigger that reads them — including the two 0192 guards installed on the core `task` table
 --     and the 0192 carrier-state assertion, whose whole body is a join against
 --     `task_judgment_request` and which is therefore vacuous the moment that table is gone.
---   * The judgment lane of 0193's `task_done_canonical_writer_fence`. Every other lane is carried
---     over byte for byte from the last definition (0200).
+--   * The judgment lane of 0193's `task_done_canonical_writer_fence` — which, after 0227 removed
+--     0200's typed-attempt lane the same day, is the last lane an EXECUTABLE task had. Every
+--     other lane is carried over byte for byte from 0227's definition.
 --
 -- Deliberately NOT removed — this is the point of the change, not an omission
 --   * `task.acceptance_command` and `task.acceptance_expected_exit_code` (0177), the
@@ -58,15 +59,18 @@ DROP TRIGGER "task_judgment_verifier_terminal_guard" ON "task";
 DROP TRIGGER "task_open_verification_request_carrier_guard" ON "task";
 
 -- ---------------------------------------------------------------------------------------------
--- 2 · The DONE writer fence loses its judgment lane and keeps the other four.
+-- 2 · The DONE writer fence loses its judgment lane, and with it the last lane an EXECUTABLE
+--     task had.
 --
---     Carried over from 0200 unchanged: the fence-revision downgrade refusal, the early return,
---     the verifier-carrier lane, the EXECUTABLE typed-attempt lane (0200's own, and not this
---     change's to remove), ALL_CHILDREN_DONE and VERIFICATION_PASSED. Only the
---     `task_judgment_request ... DECIDED / PASS` lane is dropped, because its table is.
+--     0227 removed 0200's typed-attempt lane an hour before this migration was written, and its
+--     comment says the DECIDED PASS `task_judgment_request` lane is "the lane an EXECUTABLE task
+--     now takes". That lane is what the account owner asked for next, so it goes here. Carried
+--     over from 0227's text unchanged: the fence-revision downgrade refusal, the early return, the
+--     verifier-carrier lane, ALL_CHILDREN_DONE and VERIFICATION_PASSED. Three lanes remain, and
+--     all three are VERIFICATION or an aggregate of it.
 --
---     The HINT changes with it: it named a "human signoff event" that 0224 already deleted and a
---     judgment decision this migration deletes.
+--     The HINT changes with them: it named an executable result this change deletes and a "human
+--     signoff event" 0224 already did.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION "task_done_canonical_writer_fence"() RETURNS trigger AS $$
@@ -85,31 +89,6 @@ BEGIN
   END IF;
 
   IF NEW."verifies_task_id" IS NOT NULL AND NEW."verdict" IS NOT NULL THEN
-    canonical := true;
-  END IF;
-
-  IF NOT canonical
-     AND NEW."completion_criterion" = 'EXECUTABLE'
-     AND NEW."acceptance_evaluation_plan_digest" IS NOT NULL
-     AND NEW."acceptance_command_digest" IS NOT NULL
-     AND NEW."acceptance_expected_exit_code" IS NOT NULL
-     AND EXISTS (
-       SELECT 1
-         FROM "task_executable_attempt" attempt
-         JOIN "task_executable_admission" admission
-           ON admission."id" = attempt."admission_id"
-        WHERE attempt."task_id" = NEW."id"
-          AND attempt."evaluation_plan_digest" = NEW."acceptance_evaluation_plan_digest"
-          AND attempt."expected_exit_code" = NEW."acceptance_expected_exit_code"
-          AND attempt."termination_kind" = 'EXITED'
-          AND attempt."actual_exit_code" = NEW."acceptance_expected_exit_code"
-          AND attempt."terminated_at" IS NOT NULL
-          AND attempt."legacy_termination" IS NULL
-          AND admission."decision" = 'ADMITTED'
-          AND admission."evaluation_plan_digest" = NEW."acceptance_evaluation_plan_digest"
-          AND admission."command_digest" = NEW."acceptance_command_digest"
-          AND admission."expected_exit_code" = NEW."acceptance_expected_exit_code"
-     ) THEN
     canonical := true;
   END IF;
 

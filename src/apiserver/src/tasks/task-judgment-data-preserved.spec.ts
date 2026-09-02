@@ -114,8 +114,7 @@ test('the 0150/0172 gate triggers and 0141 verdict functions are not touched by 
   assert.deepEqual(replaced, ['task_done_canonical_writer_fence']);
   const fence = STATEMENTS.slice(STATEMENTS.indexOf('CREATE OR REPLACE FUNCTION'));
   assert.doesNotMatch(fence.slice(0, fence.indexOf('$$ LANGUAGE plpgsql;')), /task_judgment_request/u);
-  for (const lane of ['verifies_task_id', 'task_executable_attempt', 'ALL_CHILDREN_DONE',
-    'VERIFICATION_PASSED']) {
+  for (const lane of ['verifies_task_id', 'ALL_CHILDREN_DONE', 'VERIFICATION_PASSED']) {
     assert.ok(fence.includes(lane), `the fence lost its ${lane} lane`);
   }
 });

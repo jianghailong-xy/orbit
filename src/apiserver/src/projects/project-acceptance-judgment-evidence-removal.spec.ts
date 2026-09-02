@@ -33,9 +33,9 @@ test('the removed read path is gone and was not repointed at another evidence so
   );
   assert.ok(start > 0, 'the EXECUTABLE branch must still exist to be checked');
   const branch = SERVICE.slice(start, SERVICE.indexOf('const verifier =', start));
-  // One evidence source, named once.
-  assert.equal((branch.match(/canonicalExecutableAttempt/gu) ?? []).length, 1);
-  // And no second one smuggled in: no other model accessor, no raw SQL, no service call.
+  // Zero evidence sources: 0227 removed the typed attempt and 0228 the recorded result.
+  assert.doesNotMatch(branch, /canonicalExecutableAttempt/u);
+  // And no replacement smuggled in: no model accessor, no raw SQL, no service call.
   assert.doesNotMatch(branch, /\$queryRaw|\$executeRaw|Unsafe/u);
   assert.doesNotMatch(branch, /(?:tx|this\.prisma)\.[a-z]/u);
   assert.match(branch, /ProjectAcceptanceVerdict\.INCONCLUSIVE/u);

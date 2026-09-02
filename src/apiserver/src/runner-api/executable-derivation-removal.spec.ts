@@ -53,11 +53,6 @@ test('what survives is the declaration-driven turn, the typed attempt and the hu
   assert.match(CONTROLLER, /acceptanceCommand/u);
   assert.match(CONTROLLER, /taskAcceptance/u);
 
-  // 0200's typed attempt lane belongs to the executable runtime, not to this change. It records a
-  // termination and reconciles project acceptance; it derives no status.
-  assert.match(CONTROLLER, /taskExecutableAttempt\.update/u);
-  assert.match(CONTROLLER, /acceptanceAttemptTerminatedId/u);
-
   // And the honest signal when a reserved turn produces nothing comparable, which predates the
   // derivation and is now what every acceptance turn reaches.
   assert.match(CONTROLLER, /postExecutableAcceptanceUnavailableComment/u);

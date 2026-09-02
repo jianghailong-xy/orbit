@@ -361,11 +361,11 @@ test('(b) every module and harness that only served this runtime is gone', () =>
 });
 
 // (c) ---------------------------------------------------------------------------------------------
-test('(c) the completionCriterion vocabulary is untouched and each value keeps an implementation',
-  () => {
-    // The enum is not this removal's to change: EXECUTABLE still decides by exit code (0177 +
-    // 0181 + the pure evaluator below), VERIFICATION by an independent verdict, EVIDENCE_JUDGMENT
-    // by a decided judgment request. Its disposal belongs to the task that removes those.
+test('(c) the completionCriterion vocabulary is untouched by this removal', () => {
+    // The enum is not this removal's to change, and it is still not changed: all three labels are
+    // declared. What DID change, one migration later, is that 0228 removed the implementations
+    // behind two of them at the account owner's direction — which is why this asserts the
+    // vocabulary rather than that each value can be satisfied.
     // Statements only: the header prose says why the enum is out of scope.
     assert.doesNotMatch(statementsOf(REMOVAL_SQL), /task_completion_criterion/,
       'this removal must not issue a statement against the criterion enum');
@@ -382,54 +382,41 @@ test('(c) the completionCriterion vocabulary is untouched and each value keeps a
     assert.match(criterion, /export function deriveTaskCompletionStatus\(/);
   });
 
-test('(c)(w) the pure evaluator still answers the four exit-code shapes exactly as before', () => {
-  // Table-driven, and deliberately the same four rows the acceptance criteria name: matching exit,
-  // non-matching exit, absent exit, absent expectation. The v2-only fields this removal deleted
-  // (`executableTerminationKind`, `executableLegacyTermination`) were null on every one of these,
-  // so removing them cannot have moved any of these answers.
-  const cases: Array<[string, Parameters<typeof evaluateTaskCompletion>[0], string, string | null]> = [
-    ['exit code matches', {
-      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: 0,
-    }, 'SATISFIED', 'DONE'],
-    ['exit code differs', {
-      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: 7,
-    }, 'UNSATISFIED', null],
-    ['exit code absent', {
-      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: null,
-    }, 'ACTIONABLE', null],
-    ['expectation absent', {
-      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: null, executableExitCode: 0,
-    }, 'ACTIONABLE', null],
-    // The one shape that is neither: -1 is the runner's "no comparable result" sentinel and was
-    // never an exit code. It stayed ACTIONABLE before and must stay ACTIONABLE now.
-    ['legacy -1 sentinel', {
-      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: -1, executableExitCode: -1,
-    }, 'ACTIONABLE', null],
-  ];
-  for (const [what, facts, state, status] of cases) {
+// The five-row table that stood here asked the pure evaluator for the four exit-code shapes plus
+// the legacy -1 sentinel. 0228 removed the comparison one migration later, at the account owner's
+// direction, so there is no exit code in `TaskCompletionFacts` to build those rows from. What can
+// still be asserted — and is the stronger statement — is that the criterion is answered by its own
+// arm, and that the arm answers UNSATISFIED for every fact anyone can present.
+test('(c)(w) the pure evaluator answers EXECUTABLE from its own arm, and never satisfies it', () => {
+  for (const facts of [
+    { completionCriterion: 'EXECUTABLE' as const },
+    { completionCriterion: 'EXECUTABLE' as const, verificationVerdict: 'PASS' as const },
+    { completionCriterion: 'EXECUTABLE' as const, ownVerdict: 'PASS' as const },
+    { completionCriterion: 'EXECUTABLE' as const, verifiesTaskId: 'not-a-verifier' },
+  ]) {
     const evaluation = evaluateTaskCompletion(facts);
-    assert.equal(evaluation.criterion, 'EXECUTABLE', what);
-    assert.equal(evaluation.state, state, what);
-    assert.equal(evaluation.satisfied, state === 'SATISFIED', what);
-    assert.equal(deriveTaskCompletionStatus(facts), status, what);
+    assert.equal(evaluation.criterion, 'EXECUTABLE');
+    assert.equal(evaluation.state, 'UNSATISFIED');
+    assert.equal(evaluation.satisfied, false);
+    assert.equal(deriveTaskCompletionStatus(facts), null);
   }
-  // And the other two criteria are answered by the same function, unchanged.
+  // EVIDENCE_JUDGMENT is the same shape, for the same reason.
+  assert.equal(deriveTaskCompletionStatus({ completionCriterion: 'EVIDENCE_JUDGMENT' }), null);
+  // VERIFICATION is answered by the same function, and is the one that still concludes.
   assert.equal(deriveTaskCompletionStatus({
     completionCriterion: 'VERIFICATION', verificationVerdict: 'PASS',
   }), 'DONE');
   assert.equal(deriveTaskCompletionStatus({
     completionCriterion: 'VERIFICATION', verificationVerdict: 'FAIL',
   }), null);
-  assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'EVIDENCE_JUDGMENT', evidenceJudgment: true,
-  }), 'DONE');
 });
 
 // (u)(v) -------------------------------------------------------------------------------------------
 test('(u)(v) 0177 and 0181 are not named by this removal at all', () => {
-  // No DDL against either, and no write. Reads are a different thing and are required: the DONE
-  // fence this removal restores still asks `task_judgment_request` whether a PASS was decided,
-  // which is exactly the lane an EXECUTABLE task takes now.
+  // No DDL against either, and no write. Reads are a different thing and were required here: the
+  // DONE fence this removal restored still asked `task_judgment_request` whether a PASS was
+  // decided. 0228 removed that lane and its table the same day, which is that migration's claim
+  // to make, not this one's — what THIS one has to show is that it issued no statement itself.
   const statements = statementsOf(REMOVAL_SQL);
   for (const kept of ['acceptance_command', 'acceptance_expected_exit_code',
     'task_executable_acceptance_pair', 'task_judgment_request', 'task_executable_judgment_result']) {
@@ -440,16 +427,25 @@ test('(u)(v) 0177 and 0181 are not named by this removal at all', () => {
     }
   }
   assert.match(statements, /FROM "task_judgment_request" request/,
-    'the restored DONE fence must still read the request that settles an EXECUTABLE task');
-  // Their ledger entries still stand: created, never dropped.
-  for (const [created, dropped] of [
-    [/ALTER TABLE "task"[\s\S]{0,200}ADD COLUMN "acceptance_command"/i, /DROP COLUMN "acceptance_command"/i],
-    [/CREATE\s+TABLE\s+"?task_judgment_request"?[\s(]/i, /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?task_judgment_request"?/i],
-    [/CREATE\s+TABLE\s+"?task_executable_judgment_result"?[\s(]/i, /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?task_executable_judgment_result"?/i],
-  ] as Array<[RegExp, RegExp]>) {
-    const standing = lastVerdict(created, dropped);
-    assert.ok(standing, `${created} is named by no migration`);
-    assert.equal(standing.verdict, 'CREATED', `dropped by ${standing.dir}`);
+    'the DONE fence this removal restored still read the request, in this migration');
+  // 0177's declaration still stands in the ledger: created, never dropped. That is the half the
+  // account owner kept through both removals.
+  const declaration = lastVerdict(
+    /ALTER TABLE "task"[\s\S]{0,200}ADD COLUMN "acceptance_command"/i,
+    /DROP COLUMN "acceptance_command"/i,
+  );
+  assert.ok(declaration);
+  assert.equal(declaration.verdict, 'CREATED', `dropped by ${declaration.dir}`);
+  // 0181's two relations do NOT: 0228 dropped them. Asserted here, in the suite that used to
+  // depend on them, so the dependency cannot quietly outlive the thing it depended on.
+  for (const relation of ['task_judgment_request', 'task_executable_judgment_result']) {
+    const standing = lastVerdict(
+      new RegExp(`CREATE\\s+TABLE\\s+"?${relation}"?[\\s(]`, 'i'),
+      new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${relation}"?`, 'i'),
+    );
+    assert.ok(standing);
+    assert.equal(standing.verdict, 'DROPPED', `${relation} should have been dropped by 0228`);
+    assert.equal(standing.dir, '0228_task_judgment_removal');
   }
 });
 
@@ -537,8 +533,11 @@ test('(t) what this retires is an order of magnitude more than what it spends', 
   // Filtered by words rather than by date, so a compatibility shim written for what is being
   // removed lands on this removal's bill and unrelated later work does not.
   const VOCABULARY = new RegExp([
-    'task_executable_',                          // 0187's and 0200's relations
-    'executable_acceptance_',                    // 0200's functions and enums
+    // 0187's and 0200's relations, but NOT 0181's `task_executable_judgment_result` or 0177's
+    // `task_executable_acceptance_pair`: both are out of this removal's scope by (u)(v) below, so
+    // a later migration that names one is a different removal's bill, not a shim for this one.
+    'task_executable_(?!judgment_result|acceptance_pair)',
+    'executable_acceptance_(?!pair)',            // 0200's functions and enums, not 0177's CHECK
     'project_acceptance_run_conclu',             // 0215's closing move
     'project-acceptance-executable-attempt',     // 0209's collector version string
     'n19_fineweb',                               // 0187's operator functions
