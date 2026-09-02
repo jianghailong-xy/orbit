@@ -185,7 +185,7 @@ test('(a) 0221 drops every table, view, function and trigger the four migrations
 });
 
 test('(a) the four migrations stay in the ledger and nothing replays them after the removal', () => {
-  const names = ledger();
+  const names = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name)).sort();
   assert.ok(names.includes(REMOVAL_DIR), 'the removal itself must remain in the ledger');
   // Later migrations are allowed — 0222 removed the obligation algebra after this — but none of
   // them may put back what this one took away. `CREATE OR REPLACE` in a later file is exactly the
@@ -198,7 +198,9 @@ test('(a) the four migrations stay in the ledger and nothing replays them after 
     }
     assert.doesNotMatch(sql, /CREATE\s+SCHEMA\s+outcome_watchdog/);
   }
-  for (const retired of INSTALLERS) {
+  for (const retired of ['0198_outcome_persistent_coordinator',
+    '0199_outcome_independent_watchdog_slo_security', '0206_watchdog_current_binding',
+    '0214_watchdog_goal_progress_channel']) {
     assert.ok(names.includes(retired), `${retired} must remain in the append-only ledger`);
   }
 });
