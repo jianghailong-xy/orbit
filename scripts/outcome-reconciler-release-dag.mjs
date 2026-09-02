@@ -804,6 +804,7 @@ async function executeNode(node, attemptDeadlineMs) {
     }
   }
   const log = fileDigest(logPath);
+  const logEvidence = { path: relativeToRepo(logPath), ...log };
   const state = timedOut ? 'TIMED_OUT' : exitCode === 0 ? 'SUCCESS' : 'FAILED';
   const receipt = {
     schemaVersion: 1,
@@ -858,8 +859,14 @@ async function executeNode(node, attemptDeadlineMs) {
     resourceLimits: plan.resourceLimits,
     hostResourceEnvelope: plan.hostResourceEnvelope,
     artifacts,
-    log: { path: relativeToRepo(logPath), ...log },
-    artifactDigest: sha256(canonical({ artifacts, log })),
+    log: logEvidence,
+    // Digest the log evidence exactly as the receipt stores it, path included. This used to seal
+    // the bare `log` digest while storing the path-bearing object beside it, so no freshly
+    // executed node's envelope digest could be recomputed from its own receipt.
+    // readmitCheckpoint() and the aggregate's validateReceipt() both already work on the stored
+    // shape, so this writer was the only one of the three that disagreed -- and manifest-aggregate,
+    // the only reader that checks it, had never been reached before this run.
+    artifactDigest: sha256(canonical({ artifacts, log: logEvidence })),
     validationError,
     reusable: state === 'SUCCESS' && node.cacheable === true
       && DIGEST.test(inputDigestOf(node.id) ?? ''),
