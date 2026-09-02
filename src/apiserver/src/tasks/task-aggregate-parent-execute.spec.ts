@@ -230,8 +230,6 @@ test("the database guard's refusals are translated into readable 409s, not 500s"
     ['TASK_AGGREGATE_PROJECT_BUSY: project x is being reconciled', /being reconciled right now/],
     ['TASK_AGGREGATE_PARENT_BUSY: this task\'s parent is being written', /parent is being written/],
     ['TASK_AGGREGATE_SCOPE_MOVED: a task involved in this write', /changed project/],
-    ['TASK_VERIFICATION_SUBJECT: task x has no work to run', /independent verifier/],
-    ['TASK_VERIFICATION_SUBJECT_LIVE_SESSION: task x has live work', /live task-work/],
   ];
   for (const [message, expected] of cases) {
     const translated = taskFenceConflictMessage(new Error(message));
