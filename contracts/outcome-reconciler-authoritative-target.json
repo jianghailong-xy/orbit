@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
-  "taskId": "34GlvYGNFrhA41IVx67o0",
-  "sourceBranch": "orbit/executable-acceptance-runtime-240s-relea-cf54c7",
+  "taskId": "34H5SHbLmdFIEgEj5jVzZ",
+  "sourceBranch": "orbit/45-release-dag-bbaa16",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
     "mode": "BUILDER_AGENT_MERGE_RECEIPT",
-    "rule": "declared target is the receipt source/target-after SHA for session 6doG8SSeOYgG08QVxYKLFM and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
+    "rule": "declared target is the receipt source/target-after SHA for session 2649roGMnQuFwLwHHH4oQ1 and must equal HEAD, freshly fetched origin/main and ls-remote; later main advance invalidates evaluation instead of retargeting"
   },
   "lineage": {
     "remoteMainObservedBeforeIntegration": "0791fa7d01ac3c5ad96b91265373440cdddd021e",
@@ -428,7 +428,7 @@
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/executable-acceptance-runtime-240s-relea-cf54c7",
+    "sourceBranch": "orbit/45-release-dag-bbaa16",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

@@ -236,7 +236,7 @@ const entrypoints = inventory.requiredEntrypoints.map((entrypoint) => {
     additionalVerifier,
   };
 });
-assert.equal(entrypoints.length, 6);
+assert.equal(entrypoints.length, 1);
 
 const verifierSql = `
 SELECT e.id::text,

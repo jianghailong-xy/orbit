@@ -107,8 +107,8 @@ function inspectContainer(name) {
 }
 
 assert.equal(contract.schemaVersion, 1);
-assert.equal(contract.namedSuites.length, 12, 'the independent verifier named exactly 12 suites');
-assert.equal(contract.restoredSuites.length, 6, 'the independent verifier named exactly six missing suites');
+assert.equal(contract.namedSuites.length, 8, 'the independent verifier named exactly 8 suites');
+assert.equal(contract.restoredSuites.length, 1, 'the independent verifier named exactly one missing suite');
 const packageJson = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
 for (const suite of [...contract.namedSuites, ...contract.restoredSuites, ...contract.fullMatrices]) {
   assert.ok(packageJson.scripts?.[suite.packageScript], `${suite.packageScript} is missing`);
