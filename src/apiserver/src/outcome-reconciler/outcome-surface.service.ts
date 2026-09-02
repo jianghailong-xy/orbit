@@ -1,17 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import {
-  FAILURE_COORDINATION_SURFACES,
-  failureCoordinationByProject,
-  readFailureCoordination,
-  type FailureCoordinationReadModel,
-  type FailureCoordinationSurface,
-} from '../common/failure-coordination-read';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import {
   OUTCOME_SURFACE_LIMITS,
   redactOutcomePayload,
@@ -30,99 +17,34 @@ function boundedRedacted<T>(value: T, maxBytes = OUTCOME_SURFACE_LIMITS.maxProje
 }
 
 /**
- * Transport-neutral facade for API, runner/CLI and Web over the Failure Continuation surfaces.
+ * The owner's decision inbox, and nothing else.
  *
- * The canonical obligation surfaces this class also served were removed with the obligation
- * algebra: there is no projection left to read, so `GET /outcomes/projects/:id/:surface` and the
- * runner's `project_obligations` are gone rather than answering with a manufactured empty queue.
- * Failure Continuations were never part of that machinery and are unchanged.
+ * Two families of item used to arrive here and both were deleted with the machinery that produced
+ * them: the canonical obligation projection went with the obligation algebra, and migration 0226
+ * took the Failure Continuation owner-only route with the router that classified it. The shape is
+ * unchanged and the route stays where the clients that poll it expect it; what it reports is
+ * whatever a producer writes, which today is nothing. No stand-in queue is manufactured to fill it.
  */
 @Injectable()
 export class OutcomeSurfaceService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  parseFailureSurface(value: string): FailureCoordinationSurface {
-    const surface = value.toUpperCase() as FailureCoordinationSurface;
-    if (!FAILURE_COORDINATION_SURFACES.includes(surface)) {
-      throw new BadRequestException(
-        `surface must be one of ${FAILURE_COORDINATION_SURFACES.join(', ')}`,
-      );
-    }
-    return surface;
-  }
-
-  /** Failure Continuations remain readable even when a project has no generic outcome stream. */
-  async readFailureProjectSurface(
-    tenantId: string,
-    projectId: string,
-    surface: FailureCoordinationSurface,
-  ): Promise<FailureCoordinationReadModel> {
-    await this.assertProjectTenant(tenantId, projectId);
-    return readFailureCoordination(this.prisma, {
-      tenantId,
-      projectIds: [projectId],
-      surface,
-    });
-  }
-
   /** A fail-closed, bounded human surface. */
-  async humanInbox(tenantId: string, limit = 100): Promise<Record<string, unknown>> {
+  async humanInbox(_tenantId: string, limit = 100): Promise<Record<string, unknown>> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be an integer between 1 and 100');
     }
-    const projects = await this.prisma.project.findMany({
-      where: { ownerId: tenantId },
-      select: { id: true, title: true },
-      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      take: limit,
-    });
-    const candidates: Array<Record<string, unknown>> = [];
-    const failureInbox = await readFailureCoordination(this.prisma, {
-      tenantId,
-      projectIds: projects.map((project) => project.id),
-      surface: 'OWNER_DECISION_INBOX',
-    });
-    const failuresByProject = failureCoordinationByProject(failureInbox);
-    for (const project of projects) {
-      for (const item of failuresByProject.get(project.id)?.items ?? []) {
-        candidates.push({
-          itemType: 'FAILURE_CONTINUATION_OWNER_DECISION',
-          decisionType: 'FAILURE_CONTINUATION_OWNER_DECISION',
-          projectTitle: project.title,
-          ...item,
-        });
-      }
-    }
-
-    const total = candidates.length;
-    const items: Array<Record<string, unknown>> = [];
-    for (const candidate of candidates.slice(0, Math.min(limit, OUTCOME_SURFACE_LIMITS.maxArrayItems))) {
-      const safe = boundedRedacted(candidate);
-      const prospective = { schemaVersion: 2, actor: 'OWNER', surface: 'HUMAN_DECISION_INBOX', items: [...items, safe] };
-      if (Buffer.byteLength(JSON.stringify(prospective), 'utf8') > OUTCOME_SURFACE_LIMITS.maxProjectionBytes) break;
-      items.push(safe);
-    }
+    // No producer writes into this surface any more, so the bounded, redacted assembly that used to
+    // page candidates into it has nothing to page. The envelope is deliberately unchanged: clients
+    // poll it for a count, and reporting an empty inbox is a different answer from 404 or 500.
     return boundedRedacted({
       schemaVersion: 2,
       actor: 'OWNER',
       surface: 'HUMAN_DECISION_INBOX',
-      total,
-      items,
-      truncated: items.length < total,
-      failureContinuationIndex: failureInbox.semanticIndex,
+      total: 0,
+      items: [] as Array<Record<string, unknown>>,
+      truncated: false,
       decisionTypeSeparation: {
         perItemJudgment: 'EVIDENCE_JUDGMENT',
       },
     });
   }
-
-  private async assertProjectTenant(tenantId: string, projectId: string): Promise<void> {
-    const owned = await this.prisma.project.findFirst({
-      where: { id: projectId, ownerId: tenantId },
-      select: { id: true },
-    });
-    // Deliberately the same response for an absent project and another tenant's project.
-    if (!owned) throw new NotFoundException('project not found');
-  }
-
 }

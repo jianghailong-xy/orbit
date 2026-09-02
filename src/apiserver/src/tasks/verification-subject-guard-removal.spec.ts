@@ -267,8 +267,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 29; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 40,
-    'these four tables carried 43 triggers before 0224 and carry 40 after it');
+  assert.equal(core.length, 39,
+    'these four tables carried 43 triggers before 0224, 40 after it, and 39 once 0226 removed '
+    + '`failure_successor_task_binding_immutable` from `task`');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -278,8 +279,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     'the 38 triggers on these tables that predate 0207 must all survive it');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
-    ['failure_successor_task_binding_immutable', 'run_event_ingestion_provenance_guard'],
-    'the only triggers here newer than 0207 are the two later migrations installed',
+    ['run_event_ingestion_provenance_guard'],
+    'the only trigger here newer than 0207 is the one a later migration installed and kept — '
+    + '0212\'s `failure_successor_task_binding_immutable` was the other, and 0226 removed it',
   );
   assert.ok(
     TRIGGER_WRITE_SOURCES.some((entry) => entry.trigger === 'task_verification_subject_guard'),

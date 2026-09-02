@@ -122,8 +122,10 @@ suite('(j) every protected family is still installed and still guarded', async (
 
   for (const [prefix, minimum] of [
     ['task_executable_', 6],
-    ['failure_continuation_', 5],
-    ['failure_successor_', 4],
+    // `failure_continuation_*` / `failure_successor_*` were here too. Migration 0226 removed that
+    // family on purpose — the failure router, not this protocol — so the catalog has no relation
+    // left to count. What 0220 does to it is still asserted, over 0220's own frozen text, by
+    // `PROTECTED_PREFIXES` in completion-ack-removal.spec.ts.
     ['project_acceptance_', 5],
     // 0221 removed the three-relation current-binding ledger 0206 added here, leaving the
     // expectation/heartbeat/dead-man tables and the two liveness views 0200 and 0202 created.

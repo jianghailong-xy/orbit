@@ -1,5 +1,3 @@
-import type { CanonicalFailureCoordination } from './failureCoordination';
-
 export type OutcomeDecisionType = 'EVIDENCE_JUDGMENT'
   | 'GOAL_DECISION' | 'RISK_ACCEPTANCE' | 'NEW_AUTHORIZATION' | 'EXTERNAL_IDENTITY';
 
@@ -45,25 +43,12 @@ export interface CanonicalOwnerInboxItem {
   ctaUnavailableReason: string | null;
 }
 
-export interface FailureOwnerInboxItem extends CanonicalFailureCoordination {
-  itemType: 'FAILURE_CONTINUATION_OWNER_DECISION';
-  decisionType: 'FAILURE_CONTINUATION_OWNER_DECISION';
-  projectTitle: string;
-}
-
 export interface OutcomeHumanInbox {
   schemaVersion: 2;
   surface: 'HUMAN_DECISION_INBOX';
   actor: 'OWNER';
   total: number;
-  items: Array<CanonicalOwnerInboxItem | FailureOwnerInboxItem>;
-  failureContinuationIndex?: Array<{
-    obligationId: string;
-    obligationRevision: string;
-    bindingDigest: string;
-    binding: Record<string, unknown>;
-    reason: Record<string, unknown>;
-  }>;
+  items: CanonicalOwnerInboxItem[];
 }
 
 /** Web may choose labels and CTA layout, but it must never reinterpret this tuple. */
@@ -81,8 +66,3 @@ export function outcomeSemanticTuple(item: { semantic: OutcomeSemanticObligation
 }
 
 export const outcomeInboxPath = (limit = 100) => `/outcomes/inbox?limit=${limit}`;
-export function isFailureOwnerInboxItem(
-  item: CanonicalOwnerInboxItem | FailureOwnerInboxItem,
-): item is FailureOwnerInboxItem {
-  return 'itemType' in item && item.itemType === 'FAILURE_CONTINUATION_OWNER_DECISION';
-}

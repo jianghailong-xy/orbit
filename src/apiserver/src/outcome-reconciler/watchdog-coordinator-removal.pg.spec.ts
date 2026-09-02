@@ -167,14 +167,10 @@ suite('(d)(e)(f)(g) every load-bearing wall beside the removal is still standing
     SELECT count(*)::int AS count FROM pg_proc
      WHERE proname = 'executable_acceptance_mark_stale_attempts'`)).rows[0].count, 1);
 
-  // (e) the failure continuation and successor decision.
-  const failureTables = await client.query(`
-    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'public' AND c.relkind = 'r'
-       AND (c.relname LIKE 'failure\\_continuation\\_%' OR c.relname LIKE 'failure\\_successor\\_%')
-     ORDER BY 1`);
-  assert.ok(failureTables.rows.length >= 2,
-    'the failure continuation and successor tables are a different decision and must remain');
+  // (e) stood here: the failure continuation and successor tables, which 0221 was told not to
+  // touch and did not. Migration 0226 removed them — a later decision about the failure router,
+  // not a delayed effect of this one — so there is no relation left to count. What 0221 does to
+  // them is still asserted where it belongs, over 0221's own frozen text.
 
   // (f) the obligation algebra and the canonical DONE gate were the sibling task's to keep or
   // remove, and it removed them in 0222. The assertion that used to stand here — that 0221 left

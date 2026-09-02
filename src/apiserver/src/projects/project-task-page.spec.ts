@@ -49,13 +49,11 @@ function serviceWith(opts: {
     parentWhere: any[];
     graph: any[];
     overlays: any[];
-    failureCoordination: any[];
   } = {
     findMany: [],
     parentWhere: [],
     graph: [],
     overlays: [],
-    failureCoordination: [],
   };
   const service = new ProjectsService({
     project: { findFirst: async () => ('project' in opts ? opts.project : { id: PROJECT_ID }) },
@@ -69,10 +67,6 @@ function serviceWith(opts: {
       if (rendered.includes('"unmetCount"')) {
         calls.graph.push(sql);
         return opts.graph ?? [];
-      }
-      if (rendered.includes('failure_continuation_obligation')) {
-        calls.failureCoordination.push(sql);
-        return [];
       }
       // taskPage also reads the canonical work-state overlay through the same Prisma raw-query
       // door. Keep that independent read visible without mislabelling it as a second graph walk.
@@ -500,11 +494,6 @@ test('every row carries all four dependency fields, and the graph is read once p
   // One pass for the page, not one per row — the whole reason the level is computed in SQL.
   assert.equal(calls.graph.length, 1);
   assert.equal(calls.overlays.length, 1, 'the separate work-state overlay is still read once');
-  assert.equal(
-    calls.failureCoordination.length,
-    1,
-    'the canonical failure overlay is read once for the whole page',
-  );
 });
 
 test('a page with no rows reads no graph at all', async () => {

@@ -42,24 +42,6 @@ function project(
   };
 }
 
-function failureNeedsYou(
-  count: number,
-  reason = 'COORDINATOR_SLA_UNCLAIMED',
-): NonNullable<AttentionProject['failureCoordination']> {
-  return {
-    total: count,
-    active: count,
-    automaticDiagnosis: 0,
-    automaticRepair: 0,
-    automaticRevalidation: 0,
-    externalWait: 0,
-    needsYou: count,
-    attentionRequired: count,
-    attentionSinceAt: at(HOUR),
-    byAttentionReason: { [reason]: count },
-  };
-}
-
 describe('attention classification', () => {
   it.each([
     ['coordinator', 1, 0],
@@ -224,12 +206,6 @@ describe('orderWithinSection', () => {
     const readyNewer = project({ title: 'Ready newer', buckets: { ready: 1 }, lastActivityAt: at(2 * QUIET_MS) });
     const readyOlder = project({ title: 'Ready older', buckets: { ready: 1 }, lastActivityAt: at(4 * QUIET_MS) });
     const zombie = project({ title: 'Zombie', buckets: { running: 1 }, lastActivityAt: at(3 * QUIET_MS) });
-    const failed = project({
-      title: 'Failed',
-      _count: { tasks: 2 },
-      buckets: { done: 1 },
-      failureCoordination: failureNeedsYou(1, 'CONVERGENCE_FAILED'),
-    });
     const needsUser = project({
       title: 'Needs user',
       attention: {
@@ -242,9 +218,8 @@ describe('orderWithinSection', () => {
       },
     });
 
-    expect(orderWithinSection('attention', [closing, readyNewer, failed, needsUser, zombie, readyOlder], NOW)).toEqual([
+    expect(orderWithinSection('attention', [closing, readyNewer, needsUser, zombie, readyOlder], NOW)).toEqual([
       needsUser,
-      failed,
       zombie,
       readyOlder,
       readyNewer,
@@ -367,19 +342,6 @@ describe('projectAttentionSections', () => {
 });
 
 describe('attentionChipOf', () => {
-  it('shows only canonical failure escalations with correct plurality and reason', () => {
-    const one = project({ failureCoordination: failureNeedsYou(1) });
-    const many = project({ failureCoordination: failureNeedsYou(3) });
-    expect(attentionChipOf(one, NOW)).toEqual({
-      tone: 'warning',
-      text: 'Needs you · 1 failure continuation · COORDINATOR_SLA_UNCLAIMED 1',
-    });
-    expect(attentionChipOf(many, NOW)).toEqual({
-      tone: 'warning',
-      text: 'Needs you · 3 failure continuations · COORDINATOR_SLA_UNCLAIMED 3',
-    });
-  });
-
   it('keeps automatic remediation explicit when a project also needs a human', () => {
     const row = project({
       attention: {

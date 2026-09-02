@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { ProjectStatus } from '@orbit/shared';
@@ -254,8 +253,6 @@ test('the index buckets every project in one aggregate, not one query per projec
     project: { findMany: async () => listed },
     $queryRaw: async (...args: unknown[]) => {
       rawQueries += 1;
-      const rendered = renderRawQuery(args).text;
-      if (rendered.includes('failure_continuation_obligation')) return [];
       if (rawQueries === 2) {
         return [{
           projectId: 'a1',
@@ -281,9 +278,9 @@ test('the index buckets every project in one aggregate, not one query per projec
 
   const rows: any[] = await service.list(OWNER_ID);
 
-  // Three page-wide overlays: task rollup, open blockers and canonical failure coordination.
-  // None grows with the number of projects.
-  assert.equal(rawQueries, 3);
+  // Two page-wide overlays: the task rollup and open blockers. Neither grows with the number of
+  // projects.
+  assert.equal(rawQueries, 2);
   assert.deepEqual(rows[0].buckets, {
     running: 1, ready: 2, blocked: 3, awaitingVerification: 0, done: 4, failed: 0, cancelled: 5,
   });
@@ -341,13 +338,13 @@ test('concurrent identical project indexes share one aggregate without caching i
   await Promise.all([first, second]);
   assert.equal(
     aggregateReads,
-    3,
-    'one task rollup, one blocker rollup and one failure overlay for both callers',
+    2,
+    'one task rollup and one blocker rollup for both callers',
   );
 
   await service.list(OWNER_ID, ProjectStatus.OPEN as never);
   assert.equal(projectReads, 2, 'settlement removes the promise; the next request reads fresh state');
-  assert.equal(aggregateReads, 6);
+  assert.equal(aggregateReads, 4);
 });
 
 test('the detail read reports progress without loading the project’s tasks', async () => {

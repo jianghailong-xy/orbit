@@ -130,9 +130,10 @@ export function sanitizeWatchdogPayload(
 
 /**
  * Transport bounds for the owner decision inbox, kept verbatim from the removed canonical surface
- * module. The canonical obligation inbox is gone; the same inbox still renders failure-continuation
- * decisions, and a decision payload that reaches API, CLI or Web must still be redacted and bounded
- * in one traversal so a secret cannot hide behind an unbounded object.
+ * module. Both producers that fed that inbox have since been removed — the canonical obligation
+ * projection with the obligation algebra, and the failure-continuation owner decision with
+ * migration 0226 — but any payload that reaches API, CLI or Web through it must still be redacted
+ * and bounded in one traversal so a secret cannot hide behind an unbounded object.
  */
 export const OUTCOME_SURFACE_LIMITS = Object.freeze({
   maxProjectionBytes: 256 * 1024,

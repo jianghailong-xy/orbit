@@ -95,8 +95,6 @@ export const COORDINATOR_WAKE_EVENTS = [
   'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
   /** A terminal result is durable but the control plane has not committed its completion ACK. */
   'COMPLETION_ACK_STALE',
-  /** A failed typed EXECUTABLE attempt left an ACTIVE diagnosis the agent must continue. */
-  'FAILURE_CONTINUATION_ACTIONABLE',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -107,14 +105,18 @@ export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
  * `project_coordinator_wake` is an event log. When migration 0224 deleted the human step, the
  * three judgment events lost the word "human" — but rows already written say `HUMAN_SIGNOFF_*`
  * because that is what happened when they were written, and rewriting them would edit the log
- * rather than continue it. So the CHECK accepts both, this list names the retired half, and
- * `coordinator-wake.spec.ts` requires the union to equal the constraint exactly: an event added to
- * the database without appearing in one of these two lists is still a failure.
+ * rather than continue it. Migration 0226 retired a fourth the same way: it deleted the failure
+ * continuation machinery outright, so nothing raises `FAILURE_CONTINUATION_ACTIONABLE` any more,
+ * but the wakes that were raised are still what happened. So the CHECK accepts all four, this list
+ * names the retired half, and `coordinator-wake.spec.ts` requires the union to equal the
+ * constraint exactly: an event added to the database without appearing in one of these two lists
+ * is still a failure.
  */
 export const RETIRED_COORDINATOR_WAKE_EVENTS = [
   'HUMAN_SIGNOFF_REQUESTED',
   'HUMAN_SIGNOFF_DECIDED',
   'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+  'FAILURE_CONTINUATION_ACTIONABLE',
 ] as const;
 
 /**
