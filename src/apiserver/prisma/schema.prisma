@@ -1862,7 +1862,6 @@ model Project {
   acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
   acceptanceConclusions ProjectAcceptanceConclusion[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
-  acceptanceCriteriaConfirmations ProjectAcceptanceCriteriaConfirmation[]
   acceptanceAudit ProjectAcceptanceAudit[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
@@ -1941,27 +1940,6 @@ model ProjectAcceptanceCriterionDefinition {
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
-}
-
-/// One confirmation that the complete standard set represented by `criteriaDigest` is a valid
-/// expression of the project's goal. It is append-only and set-scoped: there is no criterion id.
-/// A later definition edit advances the digest and therefore makes this row historical without
-/// rewriting it. Actor provenance is audit visibility, not proof a human held the credential.
-model ProjectAcceptanceCriteriaConfirmation {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  projectId String  @map("project_id") @db.Uuid
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  criteriaDigest  String @map("criteria_digest") @db.Char(64)
-  confirmedByType String @map("confirmed_by_type")
-  confirmedById   String @map("confirmed_by_id") @db.Uuid
-  actingSessionId String? @map("acting_session_id") @db.Uuid
-  confirmedAt     DateTime @default(now()) @map("confirmed_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  @@unique([projectId, criteriaDigest], map: "project_acceptance_confirmation_digest_key")
-  @@index([projectId, confirmedAt(sort: Desc)], map: "project_acceptance_confirmation_project_idx")
-  @@map("project_acceptance_criteria_confirmation")
 }
 
 /// Rebuildable current projection of the Project completion contract. The owner decision is the

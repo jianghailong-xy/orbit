@@ -69,8 +69,6 @@ const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
     'id:uuid!, project_id:uuid!, kind:text!, run_id:uuid, reason:text, detail:jsonb!, created_at:timestamp(3) without time zone!',
   project_acceptance_conclusion:
     'id:uuid!, project_id:uuid!, evidence_run_id:uuid!, evidence_version:bigint!, ordinal:integer!, criterion_key:text!, criterion_text:text!, definition_id:uuid, definition_revision:integer, verdict:project_acceptance_verdict!, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_by:text!, decided_by_id:uuid!, acting_session_id:uuid, decided_at:timestamp(3) without time zone!, created_at:timestamp(3) without time zone!',
-  project_acceptance_criteria_confirmation:
-    'id:uuid!, project_id:uuid!, criteria_digest:character(64)!, confirmed_by_type:text!, confirmed_by_id:uuid!, acting_session_id:uuid, confirmed_at:timestamp(3) without time zone!, created_at:timestamp(3) without time zone!',
   project_acceptance_criterion:
     'id:uuid!, run_id:uuid!, project_id:uuid!, ordinal:integer!, criterion_key:text!, criterion_text:text!, verdict:project_acceptance_verdict, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, definition_id:uuid, definition_revision:integer, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer',
   project_acceptance_criterion_definition:
@@ -233,7 +231,7 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'the acceptance wall must come through this removal with every column it went in with',
   );
 
-  // Its own tables' guards too, all eleven of them. The `project_acceptance_*`-named triggers that
+  // Its own tables' guards too, all ten of them. The `project_acceptance_*`-named triggers that
   // sit on `project` rather than on this family are deliberately outside the assertion: they are
   // the project DONE gate, a sibling removal is entitled to change them, and failing this suite for
   // that would be the same mistake as measuring subtraction against `main...HEAD`.
@@ -249,7 +247,6 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'project_acceptance_conclusion|project_acceptance_conclusion_immutable',
     'project_acceptance_conclusion|project_acceptance_conclusion_reconcile',
     'project_acceptance_conclusion|project_acceptance_conclusion_validate',
-    'project_acceptance_criteria_confirmation|project_acceptance_confirmation_immutable',
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
     'project_acceptance_criterion|project_acceptance_criterion_immutable_guard',

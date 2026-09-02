@@ -183,7 +183,6 @@ test('the load-bearing acceptance relations were not taken down with it', () => 
     'project_acceptance_criterion_definition',
     'project_acceptance_conclusion',
     'project_acceptance_audit',
-    'project_acceptance_criteria_confirmation',
   ];
   for (const table of standing) {
     const create = new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${table}"?[\\s(]`, 'i');

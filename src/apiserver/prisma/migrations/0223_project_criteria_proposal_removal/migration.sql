@@ -19,10 +19,13 @@
 -- added later that quietly reinstates an equivalent protection under another name.
 --
 -- What is deliberately NOT touched: `project_acceptance_criterion_definition`,
--- `project_acceptance_criterion`, `project_acceptance_criteria_confirmation` and every other
--- `project_acceptance_*` relation. This migration names none of them in any statement, so no
--- criterion's `text` or `verification_method` can move by one byte. `project_criteria_proposal`
--- held zero rows: the channel landed on 2026-09-01 and was never used.
+-- `project_acceptance_criterion` and every other `project_acceptance_*` relation. This migration
+-- names none of them in any statement, so no criterion's `text` or `verification_method` can move
+-- by one byte. `project_criteria_proposal` held zero rows: the channel landed on 2026-09-01 and
+-- was never used.
+-- (2026-09-02: `project_acceptance_criteria_confirmation` was one of the relations this migration
+-- left standing. 0226_project_criteria_confirmation_removal has since dropped it as an orphan --
+-- zero writers, zero readers. Nothing above changed; the sentence is annotated, not rewritten.)
 BEGIN;
 
 -- The two doors, the applier, the card renderer and the readers underneath them. Dropped before

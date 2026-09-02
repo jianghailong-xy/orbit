@@ -60,7 +60,6 @@ const PROPOSAL_FUNCTIONS = [
 const ACCEPTANCE_TABLES = [
   'project_acceptance_audit',
   'project_acceptance_conclusion',
-  'project_acceptance_criteria_confirmation',
   'project_acceptance_criterion',
   'project_acceptance_criterion_definition',
   'project_acceptance_run',
@@ -275,7 +274,8 @@ test('the apiserver propose and decide paths are gone from both doors', () => {
 test('the acceptance-criteria capability set carries no propose and no confirm', () => {
   // `project_criteria_confirm` was the 0189-era one-shot confirmation tool and it is not declared
   // anywhere; asserted so a later change cannot reintroduce a confirmation step under the old
-  // name. `project_update` is the whole surface acceptance criteria are written through.
+  // name. 0226 then dropped the relation it wrote, so there is no storage to come back to either.
+  // `project_update` is the whole surface acceptance criteria are written through.
   for (const relative of ['src/runner-go/mcp.go', 'src/runner-go/project_cli.go']) {
     const source = read(relative);
     assert.doesNotMatch(source, /project_criteria_(?:confirm|propose)/,

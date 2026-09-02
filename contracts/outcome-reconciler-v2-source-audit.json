@@ -442,8 +442,8 @@
           "role": "STRUCTURED_CRITERIA_REVISION"
         },
         {
-          "storage": "project.acceptance_criteria_digest + project_acceptance_criteria_confirmation",
-          "role": "STANDARD_SET_DIGEST_AND_RATIFICATION"
+          "storage": "project.acceptance_criteria_digest",
+          "role": "STANDARD_SET_DIGEST"
         },
         {
           "storage": "project_acceptance_run.criteria_revision + input_digest + acceptance_epoch",
@@ -456,11 +456,6 @@
         "acceptedRunId"
       ],
       "writers": [
-        {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "confirmCriteria",
-          "authority": "OWNER_OR_ALLOWED_CONFIRMATION_WRITER"
-        },
         {
           "path": "src/apiserver/src/projects/project-acceptance.service.ts",
           "symbol": "criteriaSemanticRevision",
@@ -480,8 +475,8 @@
         },
         {
           "path": "src/runner-go/project_cli.go",
-          "symbol": "revision-bearing digest",
-          "purpose": "CLI_CONFIRM_AND_READ"
+          "symbol": "revision-bearing standard-set digest",
+          "purpose": "CLI_READ"
         },
         {
           "path": "src/apiserver/src/projects/project-attribution.service.ts",
