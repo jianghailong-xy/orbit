@@ -77,9 +77,10 @@ test('the digest names the project and its own version', () => {
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
   // match a new reading of the same world. Schema 0179 treats this digest as an evidence-version
-  // identity, not a freshness gate: conclusions are evaluated across versions. It moved to 6
-  // when current-plan typed attempt terminations became acceptance facts.
-  assert.equal(ACCEPTANCE_DIGEST_VERSION, 6);
+  // identity, not a freshness gate: conclusions are evaluated across versions. It moved to 6 when
+  // current-plan typed attempt terminations became acceptance facts, and to 7 when migration 0227
+  // removed the attempt and that tuple left the input shape again.
+  assert.equal(ACCEPTANCE_DIGEST_VERSION, 7);
 });
 
 test('the result digest is about the conclusions, not the world', () => {

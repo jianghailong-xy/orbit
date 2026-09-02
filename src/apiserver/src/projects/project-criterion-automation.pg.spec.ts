@@ -184,11 +184,14 @@ async function declare(
   } as never);
 }
 
-// 0227 removed the typed attempt this used to record; the four criteria are now backed by the
-// recorded command result of each evidence task, which was already the collector beside it. What
-// is being checked is unchanged: one immutable evidence version per later fact, criteria digest
-// untouched by result facts, version-0 INCONCLUSIVE events retained, and four PASSes reaching DONE.
-test('late executable results advance the evidence version and back all four wired criteria',
+// 0227 removed the typed attempt this used to record. The four criteria are now backed by the
+// recorded command result of each evidence task, which was already the collector beside it — and
+// that collector was never part of the acceptance input digest, so a later result no longer mints
+// a new evidence version. It accumulates conclusions on the one live version instead, which is
+// exactly the shape this project had before 0209 wired the attempt in. What is still checked: the
+// criteria digest is untouched by result facts, the version-0 INCONCLUSIVE events stay in the
+// append-only ledger, and four PASSes reach DONE.
+test('late executable results back all four wired criteria on the one live evidence version',
   { skip }, async () => {
     const { db, acceptance, projects } = await connect();
     try {
@@ -241,7 +244,8 @@ test('late executable results advance the evidence version and back all four wir
         await db.task.update({ where: { id: source.id }, data: { status: TaskStatus.DONE } });
         await acceptance.reconcileForEvidenceTask(source.id);
         overview = await acceptance.overview(target.ownerId, target.projectId);
-        assert.equal(overview.runs[0]?.evidenceVersion, String(index + 1));
+        assert.equal(overview.runs[0]?.evidenceVersion, '0',
+          'a recorded command result is not part of the acceptance input digest');
         assert.equal(overview.runs[0]?.criteriaRevision, criteriaRevision);
         assert.equal(
           overview.runs[0]?.criteria.filter(
@@ -264,8 +268,8 @@ test('late executable results advance the evidence version and back all four wir
         results.map((result) => ['EXECUTABLE_RESULT', result.id]),
       );
       assert.equal(overview.criteriaDigest, criteriaDigest, 'result facts do not rewrite criteria');
-      assert.equal(overview.runs.length, 5, 'version 0 plus one immutable version per later fact');
-      assert.ok(overview.runs.slice(1).every((run) => run.supersededAt instanceof Date));
+      assert.equal(overview.runs.length, 1, 'the one live evidence version, never superseded');
+      assert.equal(overview.runs[0]?.supersededAt, null);
       assert.ok(
         [...initialConclusionIds].every((id) => latest.conclusions.some((event) => event.id === id)),
         'the version-0 INCONCLUSIVE events remain in the append-only ledger',

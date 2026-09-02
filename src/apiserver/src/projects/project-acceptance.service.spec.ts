@@ -55,7 +55,7 @@ test('acceptance facts omit task state while retaining an empty mechanical-evide
   assert.deepEqual(result, {
     criteriaRevision: criteriaSemanticRevision(definitions),
     mergeEvidence: [['release-artifact', 'main', 'a'.repeat(64), '2']],
-    executableAttempts: [],
+    // `executableAttempts: []` stood here until 0227 removed the typed attempt this collected.
   });
 });
 

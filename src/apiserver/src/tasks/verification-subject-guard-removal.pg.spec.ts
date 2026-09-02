@@ -203,9 +203,10 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 39,
-    'these four tables carried 43 triggers before 0224, 40 after it, and 39 once 0226 removed '
-    + '`failure_successor_task_binding_immutable` from `task`');
+  assert.equal(installed.rowCount, 38,
+    'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
+    + '`failure_successor_task_binding_immutable` from `task`, and 38 once 0227 removed '
+    + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
@@ -250,7 +251,9 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
     'project_acceptance_criterion|project_acceptance_criterion_immutable_guard',
-    'project_acceptance_run|project_acceptance_run_closure_guard',
+    // `project_acceptance_run|project_acceptance_run_closure_guard` stood here until 0227 removed
+    // 0215's closing move with the rest of the EXECUTABLE acceptance runtime — a later and
+    // separate decision, and the only trigger this family has lost since.
     'project_acceptance_run|project_acceptance_run_epoch_guard',
     'project_acceptance_run|project_acceptance_run_immutable_guard',
   ]);

@@ -205,8 +205,11 @@ suite('(c) the guards on the acceptance family and on `project` are untouched', 
   const client = await connect();
   t.after(async () => { await client.end(); });
 
-  // Ten, not eleven: `project_acceptance_criteria_confirmation|..._confirmation_immutable` is the
-  // one this removal takes, and it is the only one.
+  // Nine. Ten when this file was written, minus
+  // `project_acceptance_criteria_confirmation|..._confirmation_immutable` (the one this removal
+  // takes, and the only one it takes) and minus
+  // `project_acceptance_run|project_acceptance_run_closure_guard`, which 0227 removed with 0215's
+  // closing move — a later and separate decision about the EXECUTABLE acceptance runtime.
   const family = await client.query(`
     SELECT c.relname || '|' || t.tgname AS name
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
@@ -222,7 +225,6 @@ suite('(c) the guards on the acceptance family and on `project` are untouched', 
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
     'project_acceptance_criterion|project_acceptance_criterion_immutable_guard',
-    'project_acceptance_run|project_acceptance_run_closure_guard',
     'project_acceptance_run|project_acceptance_run_epoch_guard',
     'project_acceptance_run|project_acceptance_run_immutable_guard',
   ]);

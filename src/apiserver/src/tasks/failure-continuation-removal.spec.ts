@@ -360,18 +360,15 @@ test('(c) the schema declares none of the removed models, columns or enums', () 
   ]) {
     assert.equal(schema.includes(model), false, `schema.prisma still declares ${model}`);
   }
-  // And the wall it stands next to is untouched. Read inside the model rather than anywhere in the
-  // file: `failureFingerprint` is 0200's column, three other models declare one of their own, and
-  // a whole-file `includes` would have gone green on a TaskExecutableAttempt that had lost it.
-  const model = schema.slice(schema.indexOf('model TaskExecutableAttempt {'));
-  const attempt = model.slice(0, model.indexOf('\n}\n'));
-  assert.ok(attempt.length > 0 && attempt.length < 4_000, 'the attempt model was not located');
-  for (const kept of ['failureFingerprint', 'terminationKind', 'actualExitCode', 'rawOutput']) {
-    assert.ok(attempt.includes(kept), `TaskExecutableAttempt lost ${kept}`);
+  // The wall it stood next to was `model TaskExecutableAttempt`, read for the two 0213 columns
+  // and the 0200 fingerprint this removal had to leave on it. Migration 0227 removed that model
+  // whole with the EXECUTABLE acceptance runtime -- a later and separate decision -- so what is
+  // checked now is that neither of 0213's spellings came back anywhere in the schema.
+  for (const column of ['failureSiteSource', 'failureSiteDigest', 'ExecutableFailureSiteSource']) {
+    assert.equal(schema.includes(column), false, `schema.prisma still declares ${column}`);
   }
-  for (const gone of ['failureSiteSource', 'failureSiteDigest']) {
-    assert.equal(attempt.includes(gone), false, `TaskExecutableAttempt still declares ${gone}`);
-  }
+  assert.equal(schema.includes('model TaskExecutableAttempt {'), false,
+    '0227 removed the attempt model; nothing may have put it back');
 });
 
 // (i) ---------------------------------------------------------------------------------------------

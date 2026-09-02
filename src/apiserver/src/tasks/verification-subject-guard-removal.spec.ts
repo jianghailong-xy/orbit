@@ -267,16 +267,17 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 29; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 39,
-    'these four tables carried 43 triggers before 0224, 40 after it, and 39 once 0226 removed '
-    + '`failure_successor_task_binding_immutable` from `task`');
+  assert.equal(core.length, 38,
+    'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
+    + '`failure_successor_task_binding_immutable` from `task`, and 38 once 0227 removed '
+    + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
   // `since`, so it cannot be satisfied by editing a number.
   const olderThan0207 = core.filter((entry) => Number(entry.since.slice(0, 4)) < 207);
-  assert.equal(olderThan0207.length, 38,
-    'the 38 triggers on these tables that predate 0207 must all survive it');
+  assert.equal(olderThan0207.length, 37,
+    'the 37 triggers on these tables that predate 0207 must all survive it');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
     ['run_event_ingestion_provenance_guard'],
