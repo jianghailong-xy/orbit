@@ -102,11 +102,6 @@ import {
   UpdateTaskDto,
 } from './dto';
 import {
-  DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS,
-  EXECUTABLE_ACCEPTANCE_CAPABILITY_REVISION,
-  EXECUTABLE_ACCEPTANCE_SCHEMA_REVISION,
-} from './executable-acceptance-runtime';
-import {
   TASK_SUPERSEDABLE_STATUSES,
   TASK_SUPERSESSION_MAX_HOPS,
   successorChain,
@@ -337,8 +332,6 @@ type IdempotentTaskWrite = {
   // winner so two same-title creates in one turn cannot silently disagree about what runs.
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
-  acceptanceTimeoutSeconds?: number | null;
-  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   completionCriterion?: TaskCompletionCriterionValue | null;
   completionCriterionOverrideReason?: string | null;
 };
@@ -607,48 +600,6 @@ export const TASK_LIST_SELECT = {
   acceptanceCriteria: true,
   acceptanceCommand: true,
   acceptanceExpectedExitCode: true,
-  acceptanceTimeoutSeconds: true,
-  acceptanceOwnerTimeoutCeilingSeconds: true,
-  acceptancePolicyTimeoutCeilingSeconds: true,
-  acceptanceSchemaRevision: true,
-  acceptanceCapabilityRevision: true,
-  acceptanceCommandDigest: true,
-  acceptanceEvaluationPlanDigest: true,
-  executionAttemptCount: true,
-  executableAcceptanceAdmissions: {
-    orderBy: [{ decidedAt: 'desc' as const }, { id: 'desc' as const }],
-    take: 1,
-    select: {
-      id: true,
-      decision: true,
-      rejectionCode: true,
-      requestedTimeoutSeconds: true,
-      effectiveTimeoutSeconds: true,
-      effectiveDeadline: true,
-      runnerSchemaRevision: true,
-      runnerCapabilityRevision: true,
-      runnerHardMaxSeconds: true,
-      runnerSha: true,
-      spawnCount: true,
-      decidedAt: true,
-    },
-  },
-  executableAcceptanceAttempts: {
-    orderBy: [{ startedAt: 'desc' as const }, { id: 'desc' as const }],
-    take: 1,
-    select: {
-      id: true,
-      attemptNumber: true,
-      terminationKind: true,
-      actualExitCode: true,
-      legacyTermination: true,
-      legacyExitCode: true,
-      deadlineAt: true,
-      startedAt: true,
-      terminatedAt: true,
-      outputTruncated: true,
-    },
-  },
   completionCriterion: true,
   completionCriterionOverrideReason: true,
   labels: true,
@@ -2549,8 +2500,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             description: dto.description,
             acceptanceCommand: dto.acceptanceCommand,
             acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
-            acceptanceTimeoutSeconds: dto.acceptanceTimeoutSeconds,
-            acceptanceOwnerTimeoutCeilingSeconds: dto.acceptanceOwnerTimeoutCeilingSeconds,
             completionCriterion: dto.completionCriterion,
             completionCriterionOverrideReason: dto.completionCriterionOverrideReason,
           }
@@ -2932,19 +2881,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       acceptanceCriteria: dto.acceptanceCriteria,
       acceptanceCommand: dto.acceptanceCommand,
       acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
-      acceptanceTimeoutSeconds: dto.acceptanceTimeoutSeconds,
-      acceptanceOwnerTimeoutCeilingSeconds: dto.acceptanceTimeoutSeconds == null
-        ? undefined
-        : (dto.acceptanceOwnerTimeoutCeilingSeconds ?? dto.acceptanceTimeoutSeconds),
-      acceptancePolicyTimeoutCeilingSeconds: dto.acceptanceTimeoutSeconds == null
-        ? undefined
-        : DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS,
-      acceptanceSchemaRevision: dto.acceptanceTimeoutSeconds == null
-        ? undefined
-        : EXECUTABLE_ACCEPTANCE_SCHEMA_REVISION,
-      acceptanceCapabilityRevision: dto.acceptanceTimeoutSeconds == null
-        ? undefined
-        : EXECUTABLE_ACCEPTANCE_CAPABILITY_REVISION,
       // Re-resolve at the shared write builder so the single and batch paths stay total when N18
       // removes the legacy default. Both paths already ran this deterministic check before any
       // ownership or transaction work; this cheap repeat protects future internal call sites too.
@@ -3358,8 +3294,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             description: item.description,
             acceptanceCommand: item.acceptanceCommand,
             acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
-            acceptanceTimeoutSeconds: item.acceptanceTimeoutSeconds,
-            acceptanceOwnerTimeoutCeilingSeconds: item.acceptanceOwnerTimeoutCeilingSeconds,
             completionCriterion: item.completionCriterion,
             completionCriterionOverrideReason: item.completionCriterionOverrideReason,
           }
@@ -4121,9 +4055,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         acceptanceCriteria: item.acceptanceCriteria ?? null,
         acceptanceCommand: item.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
-        acceptanceTimeoutSeconds: item.acceptanceTimeoutSeconds ?? null,
-        acceptanceOwnerTimeoutCeilingSeconds:
-          item.acceptanceOwnerTimeoutCeilingSeconds ?? null,
         completionCriterion: item.completionCriterion ?? null,
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
@@ -4819,15 +4750,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       !== (write.acceptanceExpectedExitCode ?? null)
     ) {
       mismatch('different expected exit code');
-    }
-    if ((existing.acceptanceTimeoutSeconds ?? null) !== (write.acceptanceTimeoutSeconds ?? null)) {
-      mismatch('different acceptance timeout');
-    }
-    const requestedOwnerCeiling = write.acceptanceTimeoutSeconds == null
-      ? null
-      : (write.acceptanceOwnerTimeoutCeilingSeconds ?? write.acceptanceTimeoutSeconds);
-    if ((existing.acceptanceOwnerTimeoutCeilingSeconds ?? null) !== requestedOwnerCeiling) {
-      mismatch('different acceptance owner ceiling');
     }
     // Optional on purpose: pre-N1 callers never declared this field, so their replay remains
     // compatible. Once a caller does declare it, handing back a row with another criterion would
@@ -6531,25 +6453,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, title: true, status: true, terminalReason: true, supersededAt: true },
           orderBy: [{ supersededAt: 'asc' }, { id: 'asc' }],
         },
-        executableAcceptanceAdmissions: {
-          orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
-          take: 20,
-          include: { attempt: true },
-        },
-        executableAcceptanceAttempts: {
-          orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-          take: 20,
-          include: { continuation: true },
-        },
-        executableAcceptanceContinuations: {
-          where: { status: 'ACTIVE' },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: 20,
-        },
-        executableAcceptanceDiagnoses: {
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: 20,
-        },
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -7143,24 +7046,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const acceptanceExpectedExitCode = dto.acceptanceExpectedExitCode === undefined
       ? before.acceptanceExpectedExitCode
       : (dto.acceptanceExpectedExitCode ?? null);
-    let acceptanceTimeoutSeconds = dto.acceptanceTimeoutSeconds === undefined
-      ? before.acceptanceTimeoutSeconds
-      : (dto.acceptanceTimeoutSeconds ?? null);
-    let acceptanceOwnerTimeoutCeilingSeconds =
-      dto.acceptanceOwnerTimeoutCeilingSeconds === undefined
-        ? before.acceptanceOwnerTimeoutCeilingSeconds
-        : (dto.acceptanceOwnerTimeoutCeilingSeconds ?? null);
-    // Clearing the executable pair necessarily clears its v2 plan. Starting or replacing a
-    // requested timeout without an explicit owner ceiling binds the owner to exactly that request;
-    // an intentionally lower ceiling is retained so admission can reject it before spawn.
-    if (acceptanceCommand == null) {
-      acceptanceTimeoutSeconds = null;
-      acceptanceOwnerTimeoutCeilingSeconds = null;
-    } else if (dto.acceptanceTimeoutSeconds !== undefined) {
-      acceptanceOwnerTimeoutCeilingSeconds = acceptanceTimeoutSeconds == null
-        ? null
-        : (dto.acceptanceOwnerTimeoutCeilingSeconds ?? acceptanceTimeoutSeconds);
-    }
     const verifiesTaskIdAfter =
       dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
     const attachesVerifier = before.verifiesTaskId == null && verifiesTaskIdAfter != null;
@@ -7172,8 +7057,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionCriterion = dto.completionCriterion;
     } else if (
       dto.acceptanceCommand !== undefined || dto.acceptanceExpectedExitCode !== undefined
-      || dto.acceptanceTimeoutSeconds !== undefined
-      || dto.acceptanceOwnerTimeoutCeilingSeconds !== undefined
     ) {
       completionCriterion = acceptanceCommand != null
         ? 'EXECUTABLE'
@@ -7202,8 +7085,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const touchesCompletionDeclaration = dto.completionCriterion !== undefined
       || dto.acceptanceCommand !== undefined
       || dto.acceptanceExpectedExitCode !== undefined
-      || dto.acceptanceTimeoutSeconds !== undefined
-      || dto.acceptanceOwnerTimeoutCeilingSeconds !== undefined
       || dto.completionPolicy !== undefined
       || dto.verifiesTaskId !== undefined;
     if (touchesCompletionDeclaration) {
@@ -7211,8 +7092,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion,
         acceptanceCommand,
         acceptanceExpectedExitCode,
-        acceptanceTimeoutSeconds,
-        acceptanceOwnerTimeoutCeilingSeconds,
         completionPolicy,
         verifiesTaskId: verifiesTaskIdAfter,
       });
@@ -7290,25 +7169,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dto.acceptanceExpectedExitCode === undefined
           ? undefined
           : (dto.acceptanceExpectedExitCode ?? null),
-      // Command clearing must clear the plan in the same statement. For any other declaration
-      // edit, write the complete frozen tuple so the database trigger derives both SHA bindings.
-      acceptanceTimeoutSeconds: touchesCompletionDeclaration
-        ? acceptanceTimeoutSeconds
-        : undefined,
-      acceptanceOwnerTimeoutCeilingSeconds: touchesCompletionDeclaration
-        ? acceptanceOwnerTimeoutCeilingSeconds
-        : undefined,
-      acceptancePolicyTimeoutCeilingSeconds: touchesCompletionDeclaration
-        ? (acceptanceTimeoutSeconds == null
-            ? null
-            : DEFAULT_EXECUTABLE_ACCEPTANCE_POLICY_CEILING_SECONDS)
-        : undefined,
-      acceptanceSchemaRevision: touchesCompletionDeclaration
-        ? (acceptanceTimeoutSeconds == null ? null : EXECUTABLE_ACCEPTANCE_SCHEMA_REVISION)
-        : undefined,
-      acceptanceCapabilityRevision: touchesCompletionDeclaration
-        ? (acceptanceTimeoutSeconds == null ? null : EXECUTABLE_ACCEPTANCE_CAPABILITY_REVISION)
-        : undefined,
       completionCriterion: touchesCompletionDeclaration ? completionCriterion : undefined,
       autoRunWhenReady: dto.autoRunWhenReady,
       completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,

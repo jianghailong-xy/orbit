@@ -83,9 +83,6 @@ import {
   TakeoverTurnLeasesResponse,
   TurnAttachment,
   TurnCompleteRequest,
-  type ExecutableAcceptanceCapability,
-  type ExecutableAcceptanceDispatchPlan,
-  type ExecutableAttemptStartResponse,
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
@@ -157,17 +154,6 @@ import {
   normalizeCompletionEvidence,
   type CompletionCriterionSnapshotInput,
 } from '../tasks/task-completion-evidence.service';
-import {
-  ATTEMPT_TERMINATION_KINDS,
-  continuationAfterExecutableAttempt,
-  evaluateExecutableAttempt,
-  executableEvaluationPlan,
-  executableFailureFingerprint,
-  negotiateExecutableAcceptance,
-  type AttemptTerminationKind,
-  type RunnerExecutableAcceptanceCapability,
-} from '../tasks/executable-acceptance-runtime';
-import { TASK_SUPERSESSION_MAX_HOPS } from '../tasks/task-supersession';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -247,8 +233,6 @@ const ANSWERS_USER_TURN: ReadonlySet<RunEventType> = new Set([
   RunEventType.RESULT,
 ]);
 const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
-export const EXECUTABLE_ACCEPTANCE_CAPABILITY_HEADER =
-  'x-orbit-executable-acceptance-capability';
 // Distinct from the named-capability header above: this one advertises which built-in
 // runtimes the runner binary can actually drive (runner 0.1.82+).
 const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
@@ -285,7 +269,6 @@ function supportsSparseCoordinatorContext(
 // marks provenance and binds the expected exit code: one successful message mints one shell turn,
 // and its unique key makes a lost /turn-complete response unable to enqueue the command twice.
 const TASK_ACCEPTANCE_CLIENT_TURN_PREFIX = 'system:task-acceptance:v1:';
-const TASK_ACCEPTANCE_CLIENT_TURN_V2_PREFIX = 'system:task-acceptance:v2:';
 
 // A normal task starts OPEN and stays there while its run does the work. IN_PROGRESS exists only
 // for the retry of a prior FAILED run. Neither is an assertion about completion, so both are valid
@@ -308,31 +291,6 @@ function taskAcceptanceClientTurnId(
   return `${TASK_ACCEPTANCE_CLIENT_TURN_PREFIX}${completedTurnId}:${expectedExitCode}`;
 }
 
-function taskAcceptanceClientTurnIdV2(
-  completedTurnId: string,
-  evaluationPlanDigest: string,
-): string {
-  return `${TASK_ACCEPTANCE_CLIENT_TURN_V2_PREFIX}${completedTurnId}:${evaluationPlanDigest}`;
-}
-
-type TaskAcceptanceTurnIdentity =
-  | { version: 1; expectedExitCode: number }
-  | { version: 2; evaluationPlanDigest: string };
-
-function taskAcceptanceTurnIdentity(
-  clientTurnId: string | null | undefined,
-): TaskAcceptanceTurnIdentity | null {
-  if (clientTurnId?.startsWith(TASK_ACCEPTANCE_CLIENT_TURN_V2_PREFIX)) {
-    const identity = clientTurnId.slice(TASK_ACCEPTANCE_CLIENT_TURN_V2_PREFIX.length);
-    const separator = identity.lastIndexOf(':');
-    const digest = separator > 0 ? identity.slice(separator + 1) : '';
-    if (/^[0-9a-f]{64}$/.test(digest)) return { version: 2, evaluationPlanDigest: digest };
-    return null;
-  }
-  const legacy = taskAcceptanceExpectedExitCode(clientTurnId);
-  return legacy == null ? null : { version: 1, expectedExitCode: legacy };
-}
-
 function taskAcceptanceExpectedExitCode(
   clientTurnId: string | null | undefined,
 ): number | null {
@@ -347,7 +305,7 @@ function taskAcceptanceExpectedExitCode(
 }
 
 function isTaskAcceptanceClientTurnId(clientTurnId: string | null | undefined): boolean {
-  return taskAcceptanceTurnIdentity(clientTurnId) != null;
+  return taskAcceptanceExpectedExitCode(clientTurnId) != null;
 }
 
 interface LegacyExecutableBridgeTask extends CompletionCriterionSnapshotInput {
@@ -561,94 +519,6 @@ async function ensureLegacyExecutableJudgmentRequest(
     },
     include: { executableResult: true },
   });
-}
-
-/**
- * How many times this exact failure has already been observed on the way to this attempt.
- *
- * The scope is the supersession lineage, not one Task. The failure loop this budget exists to
- * bound retires the failed Task and files a fresh successor for every failure, so each Task ends
- * up carrying exactly one attempt: a count scoped to `taskId` is the constant 1, no repeat is ever
- * seen, and `continuationAfterExecutableAttempt` can never spend the budget. Walking
- * `superseded_by_task_id` backwards reads the predecessors that named this Task (transitively) as
- * the attempt that took their place -- the one relation both the coordinator's ordinary
- * supersession and migration 0212's managed handoff write, so it covers both ways a successor is
- * filed while excluding independent Tasks that merely fail alike.
- *
- * `terminal_reason = 'SUPERSEDED'` is required with it: the pair is what says the predecessor was
- * replaced rather than merely pointing at some later work. Nothing is written here, and no
- * predecessor row is re-read as anything other than what it already recorded.
- */
-async function supersessionLineageFingerprintCount(
-  tx: Prisma.TransactionClient,
-  taskId: string,
-  failureFingerprint: string,
-  attemptId: string,
-): Promise<number> {
-  // UNION, not UNION ALL: 0128's link check already refuses a cycle, and a reader that hangs on
-  // data it was told is impossible is worse than one that stops.
-  const [row] = await tx.$queryRaw<Array<{ repeats: number }>>`
-    WITH RECURSIVE lineage(id, hops) AS (
-      SELECT ${taskId}::uuid, 0
-      UNION
-      SELECT predecessor."id", lineage.hops + 1
-        FROM "task" predecessor
-        JOIN lineage ON predecessor."superseded_by_task_id" = lineage.id
-       WHERE predecessor."terminal_reason" = 'SUPERSEDED'
-         AND lineage.hops < ${TASK_SUPERSESSION_MAX_HOPS}
-    )
-    SELECT count(*)::int AS repeats
-      FROM "task_executable_attempt" attempt
-      JOIN lineage ON lineage.id = attempt."task_id"
-     WHERE attempt."failure_fingerprint" = ${failureFingerprint}
-       AND attempt."id" <> ${attemptId}::uuid
-  `;
-  return 1 + (row?.repeats ?? 0);
-}
-
-function executableAcceptanceCapability(
-  value: unknown,
-  field: string,
-): RunnerExecutableAcceptanceCapability | null {
-  if (value == null) return null;
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new BadRequestException(`${field} must be an object`);
-  }
-  const candidate = value as Partial<ExecutableAcceptanceCapability>;
-  if (
-    !Number.isSafeInteger(candidate.schemaRevision) || candidate.schemaRevision! <= 0
-    || !Number.isSafeInteger(candidate.capabilityRevision) || candidate.capabilityRevision! <= 0
-    || !Number.isSafeInteger(candidate.hardMaxSeconds) || candidate.hardMaxSeconds! <= 0
-    || candidate.hardMaxSeconds! > 86_400
-    || typeof candidate.runnerSha !== 'string'
-    || candidate.runnerSha.trim().length < 7
-    || candidate.runnerSha.length > 200
-  ) {
-    throw new BadRequestException(
-      `${field} requires positive integer schemaRevision/capabilityRevision/hardMaxSeconds `
-      + '(hardMaxSeconds <= 86400) and runnerSha of 7..200 characters',
-    );
-  }
-  return {
-    schemaRevision: candidate.schemaRevision!,
-    capabilityRevision: candidate.capabilityRevision!,
-    hardMaxSeconds: candidate.hardMaxSeconds!,
-    runnerSha: candidate.runnerSha.trim(),
-  };
-}
-
-export function parseExecutableAcceptanceCapabilityHeader(
-  header: string | string[] | undefined,
-): RunnerExecutableAcceptanceCapability | null {
-  if (header === undefined) return null;
-  const encoded = (Array.isArray(header) ? header[0] : header)?.trim() ?? '';
-  if (!encoded) return null;
-  try {
-    return executableAcceptanceCapability(JSON.parse(encoded), EXECUTABLE_ACCEPTANCE_CAPABILITY_HEADER);
-  } catch (error) {
-    if (error instanceof BadRequestException) throw error;
-    throw new BadRequestException(`${EXECUTABLE_ACCEPTANCE_CAPABILITY_HEADER} must be valid JSON`);
-  }
 }
 
 export function runnerSupportsCapability(
@@ -969,10 +839,6 @@ export class RunnerApiController {
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const reportedCapabilities = parseRunnerCapabilities(capabilities);
-    const executableCapability = executableAcceptanceCapability(
-      dto?.executableAcceptance,
-      'executableAcceptance',
-    );
     const supportsWorktreeOps = runnerSupportsCapability(capabilities, SESSION_WORKTREE_OPS_V1);
     if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
       throw new BadRequestException('too many supervised session IDs');
@@ -1018,21 +884,6 @@ export class RunnerApiController {
         // acknowledge. Inbox dequeue rechecks the request header as the second fence.
         capabilities: reportedCapabilities ?? [],
         capabilitiesReportedAt: new Date(),
-        // All-or-nothing typed snapshot. Omission is the deployed N-1 heartbeat and preserves the
-        // historical row for observability; dispatch still consults the current poller's header,
-        // so a downgraded process can never borrow this stale capability to gain admission.
-        acceptanceRuntimeSchemaRevision: dto?.executableAcceptance === undefined
-          ? undefined
-          : (executableCapability?.schemaRevision ?? null),
-        acceptanceRuntimeCapabilityRevision: dto?.executableAcceptance === undefined
-          ? undefined
-          : (executableCapability?.capabilityRevision ?? null),
-        acceptanceRuntimeHardMaxSeconds: dto?.executableAcceptance === undefined
-          ? undefined
-          : (executableCapability?.hardMaxSeconds ?? null),
-        acceptanceRuntimeReportedAt: dto?.executableAcceptance === undefined
-          ? undefined
-          : (executableCapability == null ? null : new Date()),
         // Per-engine health for the Providers page. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -2263,14 +2114,9 @@ export class RunnerApiController {
      *  is the process that will actually execute the turn, and it may have been downgraded
      *  since. */
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
-    @Headers(EXECUTABLE_ACCEPTANCE_CAPABILITY_HEADER)
-    executableCapabilityHeader?: string | string[],
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const declared = parseRunnerCapabilities(capabilities) ?? [];
-    const executableCapability = parseExecutableAcceptanceCapabilityHeader(
-      executableCapabilityHeader,
-    );
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
     for (;;) {
       const turn = await this.dequeueTurn(
@@ -2279,7 +2125,6 @@ export class RunnerApiController {
         generation,
         acceptsSteer === '1',
         declared,
-        executableCapability,
       );
       if (turn) return turn;
       const remaining = deadline - Date.now();
@@ -2362,56 +2207,6 @@ export class RunnerApiController {
   }
 
   /**
-   * The admitted process-start boundary. Calling this is what spends one execution attempt; the
-   * runner calls it immediately before cmd.Start. A rejected admission cannot reach the INSERT,
-   * and the database trigger independently enforces spawnCount=0 / unchanged task budget.
-   */
-  @UseGuards(RunnerAuthGuard)
-  @Post('sessions/:id/executable-acceptance/:admissionId/start')
-  @HttpCode(200)
-  async startExecutableAcceptanceAttempt(
-    @CurrentRunner() runner: { id: string },
-    @Param('id', PublicIdPipe) sessionId: string,
-    @Param('admissionId', PublicIdPipe) admissionId: string,
-  ): Promise<ExecutableAttemptStartResponse> {
-    const started = await withTransactionRetry(this.prisma, async (tx) => {
-      const admission = await tx.taskExecutableAdmission.findFirst({
-        where: { id: admissionId, sessionId, runnerId: runner.id },
-      });
-      if (!admission) throw new NotFoundException('executable acceptance admission not found');
-      if (admission.decision !== 'ADMITTED' || admission.effectiveDeadline == null) {
-        throw new ConflictException({
-          code: 'EXECUTABLE_ACCEPTANCE_NOT_ADMITTED',
-          kind: 'REFUSAL',
-          requiredAction: 'UPGRADE_RUNNER_OR_REDUCE_REQUESTED_TIMEOUT',
-          message: 'A rejected executable acceptance decision cannot start a process.',
-        });
-      }
-      const existing = await tx.taskExecutableAttempt.findUnique({
-        where: { admissionId },
-      });
-      if (existing) return existing;
-      return tx.taskExecutableAttempt.create({
-        data: {
-          id: randomUUID(),
-          admissionId,
-          taskId: admission.taskId,
-          sessionId,
-          turnId: admission.turnId,
-          evaluationPlanDigest: admission.evaluationPlanDigest,
-          expectedExitCode: admission.expectedExitCode,
-          deadlineAt: admission.effectiveDeadline,
-        },
-      });
-    }, loggedRetry(this.logger, 'runnerApi.startExecutableAcceptanceAttempt'));
-    return {
-      attemptId: started.id,
-      deadlineAt: started.deadlineAt!.toISOString(),
-      attemptNumber: started.attemptNumber,
-    };
-  }
-
-  /**
    * Atomically lease the next deliverable turn for a session: interrupt/end before
    * message, and PENDING or an expired IN_FLIGHT lease (at-least-once). Executable
    * messages are gated on the claim path having already set the Session to RUNNING.
@@ -2426,8 +2221,6 @@ export class RunnerApiController {
      *  THIS session's engine. Absent is a runner that declared nothing: claude steers as it
      *  always has, and every gated runtime withholds. */
     declaredCapabilities: readonly string[] = [],
-    /** Current poller's numeric limit; never borrowed from a previous heartbeat snapshot. */
-    executableCapability: RunnerExecutableAcceptanceCapability | null = null,
   ): Promise<RunInboxResponse | null> {
     // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
     // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
@@ -2614,128 +2407,6 @@ export class RunnerApiController {
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
-      let acceptancePlan: ExecutableAcceptanceDispatchPlan | undefined;
-      const acceptanceIdentity = taskAcceptanceTurnIdentity(t.clientTurnId);
-      if (t.kind === 'shell' && acceptanceIdentity?.version === 2) {
-        const bound = owned[0].taskId == null ? null : await tx.task.findUnique({
-          where: { id: owned[0].taskId },
-          select: {
-            id: true,
-            completionCriterion: true,
-            acceptanceCommand: true,
-            acceptanceExpectedExitCode: true,
-            acceptanceTimeoutSeconds: true,
-            acceptanceOwnerTimeoutCeilingSeconds: true,
-            acceptancePolicyTimeoutCeilingSeconds: true,
-            acceptanceSchemaRevision: true,
-            acceptanceCapabilityRevision: true,
-            acceptanceCommandDigest: true,
-            acceptanceEvaluationPlanDigest: true,
-          },
-        });
-        if (
-          bound == null
-          || bound.completionCriterion !== 'EXECUTABLE'
-          || bound.acceptanceCommand == null
-          || bound.acceptanceExpectedExitCode == null
-          || bound.acceptanceTimeoutSeconds == null
-          || bound.acceptanceOwnerTimeoutCeilingSeconds == null
-          || bound.acceptancePolicyTimeoutCeilingSeconds == null
-          || bound.acceptanceSchemaRevision == null
-          || bound.acceptanceCapabilityRevision == null
-          || bound.acceptanceCommandDigest == null
-          || bound.acceptanceEvaluationPlanDigest == null
-          || bound.acceptanceEvaluationPlanDigest !== acceptanceIdentity.evaluationPlanDigest
-          || t.content !== bound.acceptanceCommand
-        ) {
-          // The declaration moved after this v2 turn was queued. It cannot be rebound to the new
-          // command or expectation, and it is not a process attempt. Retire only this stale queue
-          // item; the current goal remains actionable and may mint a new plan from a later turn.
-          await tx.conversationTurn.update({
-            where: { id: t.id },
-            data: { status: 'ANSWERED', answeredAt: new Date() },
-          });
-          await tx.session.updateMany({
-            where: { id: sessionId, status: RunStatus.RUNNING },
-            data: { status: RunStatus.AWAITING_INPUT },
-          });
-          return null;
-        }
-        const plan = executableEvaluationPlan({
-          command: bound.acceptanceCommand,
-          expectedExitCode: bound.acceptanceExpectedExitCode,
-          requestedTimeoutSeconds: bound.acceptanceTimeoutSeconds,
-          ownerTimeoutCeilingSeconds: bound.acceptanceOwnerTimeoutCeilingSeconds,
-          policyTimeoutCeilingSeconds: bound.acceptancePolicyTimeoutCeilingSeconds,
-          requiredSchemaRevision: bound.acceptanceSchemaRevision,
-          requiredCapabilityRevision: bound.acceptanceCapabilityRevision,
-        });
-        // The DB trigger and this runtime implementation must agree on the same byte binding. A
-        // mismatch is a schema incompatibility and therefore rejects before the runner sees work.
-        if (
-          plan.commandDigest !== bound.acceptanceCommandDigest
-          || plan.evaluationPlanDigest !== bound.acceptanceEvaluationPlanDigest
-        ) {
-          throw new ConflictException('EXECUTABLE evaluation plan digest implementation mismatch');
-        }
-        let admission = await tx.taskExecutableAdmission.findUnique({ where: { turnId: t.id } });
-        if (admission == null) {
-          const negotiated = negotiateExecutableAcceptance(plan, executableCapability, new Date());
-          admission = await tx.taskExecutableAdmission.create({
-            data: {
-              id: randomUUID(),
-              taskId: bound.id,
-              sessionId,
-              turnId: t.id,
-              runnerId,
-              evaluationPlanDigest: plan.evaluationPlanDigest,
-              commandDigest: plan.commandDigest,
-              expectedExitCode: plan.expectedExitCode,
-              requestedTimeoutSeconds: negotiated.requestedTimeoutSeconds,
-              ownerTimeoutCeilingSeconds: negotiated.ownerTimeoutCeilingSeconds,
-              policyTimeoutCeilingSeconds: negotiated.policyTimeoutCeilingSeconds,
-              requiredSchemaRevision: plan.requiredSchemaRevision,
-              requiredCapabilityRevision: plan.requiredCapabilityRevision,
-              runnerSchemaRevision: negotiated.runnerSchemaRevision,
-              runnerCapabilityRevision: negotiated.runnerCapabilityRevision,
-              runnerHardMaxSeconds: negotiated.runnerHardMaxSeconds,
-              runnerSha: executableCapability?.runnerSha ?? null,
-              decision: negotiated.decision,
-              rejectionCode: negotiated.rejectionCode,
-              effectiveTimeoutSeconds: negotiated.effectiveTimeoutSeconds,
-              effectiveDeadline: negotiated.effectiveDeadline,
-            },
-          });
-        }
-        if (admission.decision === 'REJECTED') {
-          // This is the pre-spawn terminal of the dispatch decision: zero start handshake, zero
-          // attempt row and therefore no executionAttemptCount increment. Never silently clamp.
-          await tx.conversationTurn.update({
-            where: { id: t.id },
-            data: { status: 'ANSWERED', answeredAt: new Date() },
-          });
-          await tx.session.updateMany({
-            where: { id: sessionId, status: RunStatus.RUNNING },
-            data: { status: RunStatus.AWAITING_INPUT },
-          });
-          return null;
-        }
-        if (admission.effectiveTimeoutSeconds !== admission.requestedTimeoutSeconds
-          || admission.effectiveDeadline == null) {
-          throw new ConflictException('ADMITTED executable acceptance may not be clamped');
-        }
-        acceptancePlan = {
-          admissionId: admission.id,
-          evaluationPlanDigest: admission.evaluationPlanDigest.trim(),
-          commandDigest: admission.commandDigest.trim(),
-          expectedExitCode: admission.expectedExitCode,
-          requestedTimeoutSeconds: admission.requestedTimeoutSeconds,
-          effectiveTimeoutSeconds: admission.effectiveTimeoutSeconds,
-          effectiveDeadline: admission.effectiveDeadline.toISOString(),
-          requiredSchemaRevision: admission.requiredSchemaRevision,
-          requiredCapabilityRevision: admission.requiredCapabilityRevision,
-        };
-      }
       let attachments: TurnAttachment[] | undefined;
       let content = t.content ?? undefined;
       if (t.kind === 'message' || t.kind === 'steer') {
@@ -2881,7 +2552,6 @@ export class RunnerApiController {
           t.kind === 'shell' && isTaskAcceptanceClientTurnId(t.clientTurnId)
             ? true
             : undefined,
-        acceptancePlan,
       };
     }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
     return outcome ?? null;
@@ -3158,10 +2828,11 @@ export class RunnerApiController {
         && completedTurn.coordinatorContextKey === expectedCoordinatorContextKey
           ? completedTurn.coordinatorContextKey
           : null;
-      const queuedAcceptanceIdentity = taskAcceptanceTurnIdentity(completedTurn?.clientTurnId);
+      const queuedAcceptanceExpectedExitCode =
+        taskAcceptanceExpectedExitCode(completedTurn?.clientTurnId);
       const taskAcceptanceTurn =
         completedTurn?.kind === 'shell'
-        && queuedAcceptanceIdentity != null;
+        && queuedAcceptanceExpectedExitCode != null;
       let lockedAcceptanceTask: {
         id: string;
         ownerId: string;
@@ -3171,7 +2842,6 @@ export class RunnerApiController {
         acceptanceCriteria: string | null;
         acceptanceCommand: string | null;
         acceptanceExpectedExitCode: number | null;
-        acceptanceEvaluationPlanDigest: string | null;
         completionCriterion: TaskCompletionCriterionValue;
         completionPolicy: string;
         verifiesTaskId: string | null;
@@ -3200,7 +2870,6 @@ export class RunnerApiController {
           acceptanceCriteria: string | null;
           acceptanceCommand: string | null;
           acceptanceExpectedExitCode: number | null;
-          acceptanceEvaluationPlanDigest: string | null;
           completionCriterion: TaskCompletionCriterionValue;
           completionPolicy: string;
           verifiesTaskId: string | null;
@@ -3210,7 +2879,6 @@ export class RunnerApiController {
                  "acceptance_criteria" AS "acceptanceCriteria",
                  "acceptance_command" AS "acceptanceCommand",
                  "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
-                 "acceptance_evaluation_plan_digest" AS "acceptanceEvaluationPlanDigest",
                  "completion_criterion"::text AS "completionCriterion",
                  "completion_policy"::text AS "completionPolicy",
                  "verifies_task_id" AS "verifiesTaskId"
@@ -3395,207 +3063,51 @@ export class RunnerApiController {
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
-      let acceptanceAttemptTerminatedId: string | null = null;
       let acceptanceFailureReason: string | null = null;
-      const typedTermination = ATTEMPT_TERMINATION_KINDS.includes(
-        dto.acceptanceTerminationKind as AttemptTerminationKind,
-      ) ? dto.acceptanceTerminationKind as AttemptTerminationKind : null;
       if (
         taskAcceptanceTurn
-        && queuedAcceptanceIdentity?.version === 2
         && lockedAcceptanceTask != null
         && awaitsExecutableAcceptance(lockedAcceptanceTask.status)
         && lockedAcceptanceTask.completionCriterion === 'EXECUTABLE'
         && lockedAcceptanceTask.acceptanceCommand != null
         && lockedAcceptanceTask.acceptanceExpectedExitCode != null
-        && lockedAcceptanceTask.acceptanceEvaluationPlanDigest
-          === queuedAcceptanceIdentity.evaluationPlanDigest
+        && lockedAcceptanceTask.acceptanceExpectedExitCode === queuedAcceptanceExpectedExitCode
         && completedTurn?.content === lockedAcceptanceTask.acceptanceCommand
         && dto.status === RunStatus.SUCCEEDED
-        && typeof dto.shellOutput === 'string'
-        && typeof dto.acceptanceAdmissionId === 'string'
-        && typeof dto.acceptanceAttemptId === 'string'
-        && typedTermination != null
-        && (
-          (typedTermination === 'EXITED' && Number.isInteger(dto.acceptanceActualExitCode))
-          || (typedTermination !== 'EXITED' && dto.acceptanceActualExitCode == null)
-        )
-      ) {
-        const attempt = await tx.taskExecutableAttempt.findFirst({
-          where: {
-            id: dto.acceptanceAttemptId,
-            admissionId: dto.acceptanceAdmissionId,
-            taskId: lockedAcceptanceTask.id,
-            sessionId,
-            turnId: completedTurn.id,
-            evaluationPlanDigest: queuedAcceptanceIdentity.evaluationPlanDigest,
-          },
-          include: { admission: true },
-        });
-        if (
-          attempt != null
-          && attempt.admission?.decision === 'ADMITTED'
-          && attempt.terminationKind == null
-          && attempt.terminatedAt == null
-        ) {
-          const actualExitCode = typedTermination === 'EXITED'
-            ? dto.acceptanceActualExitCode!
-            : null;
-          const result = {
-            terminationKind: typedTermination,
-            expectedExitCode: lockedAcceptanceTask.acceptanceExpectedExitCode,
-            actualExitCode,
-          };
-          const criterion = evaluateExecutableAttempt(result);
-          const rawOutput = stripNul(dto.shellOutput);
-          const fingerprint = criterion.state === 'SATISFIED' ? null : executableFailureFingerprint({
-            evaluationPlanDigest: queuedAcceptanceIdentity.evaluationPlanDigest,
-            terminationKind: typedTermination,
-            actualExitCode,
-            signal: dto.acceptanceSignal ?? null,
-          });
-          const sameFingerprintCount = fingerprint == null ? 0 : await
-            supersessionLineageFingerprintCount(
-              tx, lockedAcceptanceTask.id, fingerprint, attempt.id,
-            );
-          const continuation = continuationAfterExecutableAttempt(
-            result,
-            attempt.attemptNumber,
-            sameFingerprintCount,
-          );
-          await tx.taskExecutableAttempt.update({
-            where: { id: attempt.id },
-            data: {
-              terminatedAt: new Date(),
-              terminationKind: typedTermination,
-              actualExitCode,
-              signal: dto.acceptanceSignal?.slice(0, 200) ?? null,
-              rawOutput,
-              outputTruncated: dto.acceptanceOutputTruncated === true,
-              failureFingerprint: fingerprint,
-            },
-          });
-          acceptanceAttemptTerminatedId = attempt.id;
-          if (continuation.kind !== 'NONE') {
-            await tx.taskExecutableContinuation.create({
-              data: {
-                id: randomUUID(),
-                taskId: lockedAcceptanceTask.id,
-                attemptId: attempt.id,
-                kind: continuation.kind,
-                reasonCode: continuation.reasonCode,
-                goalActionable: true,
-              },
-            });
-          }
-          if (continuation.kind === 'DIAGNOSIS') {
-            const evidence = {
-              evaluationPlanDigest: queuedAcceptanceIdentity.evaluationPlanDigest,
-              terminationKind: typedTermination,
-              actualExitCode,
-              signal: dto.acceptanceSignal ?? null,
-              attemptNumber: attempt.attemptNumber,
-              outputTruncated: dto.acceptanceOutputTruncated === true,
-              // What the budget was spent against, recorded where a reader of the diagnosis can
-              // see it. Without it the lineage count is a number that decided something and then
-              // disappeared, and "this failed the same way three times" stays unauditable.
-              sameFingerprintCount,
-              continuationReasonCode: continuation.reasonCode,
-            };
-            await tx.taskExecutableDiagnosis.create({
-              data: {
-                id: randomUUID(),
-                taskId: lockedAcceptanceTask.id,
-                sessionId,
-                attemptId: attempt.id,
-                kind: typedTermination === 'EXITED' ? 'UNEXPECTED_EXIT' : typedTermination,
-                source: 'TYPED_ATTEMPT',
-                evidence,
-                evidenceDigest: sha256(JSON.stringify(evidence)),
-                idempotencyKey: `typed-attempt:${attempt.id}:diagnosis`,
-              },
-            });
-          }
-          // This says the reserved evaluator turn was handled, not that Task.status changed. For
-          // every non-EXITED kind the task and its criterion remain actionable by construction.
-          acceptanceTaskChanged = true;
-        }
-      }
-      if (
-        taskAcceptanceTurn
-        && (
-          queuedAcceptanceIdentity?.version === 1
-          || (
-            queuedAcceptanceIdentity?.version === 2
-            && typedTermination === 'EXITED'
-            && acceptanceTaskChanged
-          )
-        )
-        && lockedAcceptanceTask != null
-        && awaitsExecutableAcceptance(lockedAcceptanceTask.status)
-        && lockedAcceptanceTask.completionCriterion === 'EXECUTABLE'
-        && lockedAcceptanceTask.acceptanceCommand != null
-        && lockedAcceptanceTask.acceptanceExpectedExitCode != null
-        && (
-          queuedAcceptanceIdentity?.version === 1
-            ? lockedAcceptanceTask.acceptanceExpectedExitCode
-              === queuedAcceptanceIdentity.expectedExitCode
-            : lockedAcceptanceTask.acceptanceEvaluationPlanDigest
-              === queuedAcceptanceIdentity?.evaluationPlanDigest
-        )
-        && completedTurn?.content === lockedAcceptanceTask.acceptanceCommand
-        && dto.status === RunStatus.SUCCEEDED
-        && (
-          queuedAcceptanceIdentity?.version === 1
-            ? Number.isInteger(dto.shellExitCode) && dto.shellExitCode !== -1
-            : Number.isInteger(dto.acceptanceActualExitCode)
-        )
+        // -1 is the runner's "no comparable result" sentinel, not an exit code. It is the one
+        // shell outcome this boundary refuses to judge; everything else is compared.
+        && Number.isInteger(dto.shellExitCode) && dto.shellExitCode !== -1
         && typeof dto.shellOutput === 'string'
       ) {
-        const actualExitCode = queuedAcceptanceIdentity.version === 1
-          ? dto.shellExitCode!
-          : dto.acceptanceActualExitCode!;
+        const actualExitCode = dto.shellExitCode!;
         const expectedExitCode = lockedAcceptanceTask.acceptanceExpectedExitCode;
         const completed = deriveTaskCompletionStatus({
           completionCriterion: lockedAcceptanceTask.completionCriterion,
           acceptanceExpectedExitCode: expectedExitCode,
           executableExitCode: actualExitCode,
-          executableTerminationKind: queuedAcceptanceIdentity.version === 2 ? 'EXITED' : null,
         });
         // FAILED remains the conservative L0 outcome when the declared command returns a
         // comparable non-matching exit code. Only the optimistic branch is criterion-derived.
         const derivedStatus = completed ?? TaskStatus.FAILED;
         const rawOutput = stripNul(dto.shellOutput);
-        // A v1 callback has no admission/request identity in its wire payload. Resolve it from the
-        // exact persisted turn and exact evidence digest before considering any request: taking
-        // "the latest OPEN executable request" would let a stale evidence version consume this
-        // callback. v2 already carries its plan identity and follows the standing typed request.
-        let request = queuedAcceptanceIdentity.version === 1
-          ? await ensureLegacyExecutableJudgmentRequest(tx, {
-            task: lockedAcceptanceTask,
-            sessionId,
-            creatorId: current.creatorId,
-            workspaceId: current.workspaceId,
-            assignedRunnerId: current.assignedRunnerId,
-            runnerId: runner.id,
-            turnId: completedTurn.id,
-            turnClientId: completedTurn.clientTurnId,
-            turnLeaseGeneration: completedTurn.leaseGeneration,
-            command: lockedAcceptanceTask.acceptanceCommand,
-            expectedExitCode,
-            actualExitCode,
-            rawOutput,
-          })
-          : await tx.taskJudgmentRequest.findFirst({
-            where: {
-              taskId: lockedAcceptanceTask.id,
-              kind: 'EXECUTABLE',
-              recipientType: 'SYSTEM_EXECUTABLE_EVALUATOR',
-              status: 'OPEN',
-            },
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            include: { executableResult: true },
-          });
+        // The callback carries no request identity in its wire payload. Resolve it from the exact
+        // persisted turn and exact evidence digest before considering any request: taking "the
+        // latest OPEN executable request" would let a stale evidence version consume this callback.
+        let request = await ensureLegacyExecutableJudgmentRequest(tx, {
+          task: lockedAcceptanceTask,
+          sessionId,
+          creatorId: current.creatorId,
+          workspaceId: current.workspaceId,
+          assignedRunnerId: current.assignedRunnerId,
+          runnerId: runner.id,
+          turnId: completedTurn.id,
+          turnClientId: completedTurn.clientTurnId,
+          turnLeaseGeneration: completedTurn.leaseGeneration,
+          command: lockedAcceptanceTask.acceptanceCommand,
+          expectedExitCode,
+          actualExitCode,
+          rawOutput,
+        });
         // The request names the source Session as the one system evaluator allowed to consume
         // this evidence version. Keep the no-request branch for rolling-upgrade/legacy L0 turns,
         // but once an OPEN request exists it is authoritative: a result from another Session may
@@ -3701,9 +3213,8 @@ export class RunnerApiController {
           current.taskId!,
           completedTurn?.content ?? lockedAcceptanceTask?.acceptanceCommand ?? '(unknown command)',
           lockedAcceptanceTask?.acceptanceExpectedExitCode
-            ?? (queuedAcceptanceIdentity?.version === 1
-              ? queuedAcceptanceIdentity.expectedExitCode
-              : 0),
+            ?? queuedAcceptanceExpectedExitCode
+            ?? 0,
           acceptanceFailureReason,
         );
       }
@@ -3722,8 +3233,6 @@ export class RunnerApiController {
             status: true,
             acceptanceCommand: true,
             acceptanceExpectedExitCode: true,
-            acceptanceTimeoutSeconds: true,
-            acceptanceEvaluationPlanDigest: true,
             completionCriterion: true,
           },
         });
@@ -3742,16 +3251,10 @@ export class RunnerApiController {
             data: {
               sessionId,
               seq: (last._max.seq ?? 0) + 1,
-              clientTurnId: executable.acceptanceTimeoutSeconds != null
-                && executable.acceptanceEvaluationPlanDigest != null
-                ? taskAcceptanceClientTurnIdV2(
-                    completedTurn.id,
-                    executable.acceptanceEvaluationPlanDigest,
-                  )
-                : taskAcceptanceClientTurnId(
-                    completedTurn.id,
-                    executable.acceptanceExpectedExitCode,
-                  ),
+              clientTurnId: taskAcceptanceClientTurnId(
+                completedTurn.id,
+                executable.acceptanceExpectedExitCode,
+              ),
               kind: 'shell',
               content: executable.acceptanceCommand,
               status: 'PENDING',
@@ -3944,7 +3447,6 @@ export class RunnerApiController {
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
         taskCompleted: acceptanceTaskCompleted,
-        acceptanceAttemptTerminatedId,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
     // This is the immediate completion edge for both the legacy rolling-v1 shell receipt and the
@@ -3964,24 +3466,6 @@ export class RunnerApiController {
         `successor dispatch after executable completion ${finalized.taskId} failed: `
         + `${error instanceof Error ? error.message : error}`,
       ));
-    }
-    // A v2 termination is itself the canonical executable fact, even when no legacy judgment
-    // request exists. Reconcile after commit so the Project lock is never taken beneath the
-    // Session/Task locks held by the runner ACK transaction. A failure loses latency, not the
-    // append-only attempt; the same evidence-task reconciliation is safe to replay during repair.
-    if (
-      'acceptanceAttemptTerminatedId' in finalized
-      && finalized.acceptanceAttemptTerminatedId
-      && finalized.taskId
-      && this.projectAcceptance
-    ) {
-      await this.projectAcceptance.reconcileForEvidenceTask(finalized.taskId).catch((error) =>
-        this.logger.warn(
-          `project acceptance reconciliation after typed attempt `
-          + `${finalized.acceptanceAttemptTerminatedId} failed: `
-          + `${error instanceof Error ? error.message : error}`,
-        ),
-      );
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound

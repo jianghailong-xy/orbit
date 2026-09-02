@@ -152,11 +152,7 @@ Options:
                               Why this task keeps a criterion after the server questions its shape
   --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
   --acceptance-expected-exit-code N
-                              Expected EXITED code; non-exit terminations remain actionable
-  --acceptance-timeout-seconds N
-                              Requested v2 wall-clock budget (admitted exactly; never clamped)
-  --acceptance-owner-timeout-ceiling-seconds N
-                              Owner ceiling; a lower ceiling is rejected before spawn
+                              Exit code that derives DONE; any other exit derives FAILED
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
@@ -217,11 +213,10 @@ task get; it is audit material, not completion evidence.
 
 For EXECUTABLE, --acceptance-command and --acceptance-expected-exit-code must be passed together.
 After the execution turn, that same task session runs the command once and records its untrimmed
-combined output and typed termination. Only EXITED supplies a comparable exit code; TIMED_OUT,
-CANCELLED, SIGNALED, START_FAILED and INFRASTRUCTURE_LOST keep the goal actionable. Passing
---acceptance-timeout-seconds opts into pre-spawn v2 admission, whose effective timeout must equal
-the requested value. If one command is not enough, split the task instead of encoding a workflow
-in the command fields. The exact cwd, environment, and PostgreSQL boundary are documented in
+combined output and exit code. That exit code is compared with the declared expectation: equal
+derives DONE, anything else derives FAILED. A run that never produced an exit code at all is not
+distinguishable from one that failed. If one command is not enough, split the task instead of
+encoding a workflow in the command fields. The exact cwd, environment, and PostgreSQL boundary are documented in
 docs/task-completion-criteria.md.
 `,
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
@@ -354,10 +349,6 @@ Options:
   --acceptance-command SHELL  Replace the one EXECUTABLE command
   --acceptance-expected-exit-code N
                               Replace the exit code that mechanically derives DONE
-  --acceptance-timeout-seconds N | --clear-acceptance-timeout
-                              Replace the v2 budget, or return to N-1 legacy acceptance
-  --acceptance-owner-timeout-ceiling-seconds N
-                              Replace the owner admission ceiling (never a clamp)
   --clear-executable-acceptance
                               Clear the command and expected exit code together
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable. Name the SUBJECT of the
@@ -1181,8 +1172,6 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
-	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "requested v2 EXECUTABLE timeout (seconds, exact; never clamped)")
-	acceptanceOwnerTimeoutCeilingSeconds := fs.Int("acceptance-owner-timeout-ceiling-seconds", 0, "owner ceiling checked before spawn")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -1212,20 +1201,6 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if commandSet && strings.TrimSpace(*acceptanceCommand) == "" {
 		return fmt.Errorf("--acceptance-command cannot be blank")
-	}
-	timeoutSet := flagWasSet(fs, "acceptance-timeout-seconds")
-	ownerCeilingSet := flagWasSet(fs, "acceptance-owner-timeout-ceiling-seconds")
-	if timeoutSet && !commandSet {
-		return fmt.Errorf("--acceptance-timeout-seconds requires the executable command/expected-exit pair")
-	}
-	if ownerCeilingSet && !timeoutSet {
-		return fmt.Errorf("--acceptance-owner-timeout-ceiling-seconds requires --acceptance-timeout-seconds")
-	}
-	if timeoutSet && (*acceptanceTimeoutSeconds < 1 || *acceptanceTimeoutSeconds > 86400) {
-		return fmt.Errorf("--acceptance-timeout-seconds must be between 1 and 86400")
-	}
-	if ownerCeilingSet && (*acceptanceOwnerTimeoutCeilingSeconds < 1 || *acceptanceOwnerTimeoutCeilingSeconds > 86400) {
-		return fmt.Errorf("--acceptance-owner-timeout-ceiling-seconds must be between 1 and 86400")
 	}
 	if flagWasSet(fs, "completion-criterion") {
 		if err := validateTaskCLICompletionCriterion(*completionCriterion); err != nil {
@@ -1332,12 +1307,6 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if commandSet {
 		body["acceptanceCommand"] = *acceptanceCommand
 		body["acceptanceExpectedExitCode"] = *acceptanceExpectedExitCode
-	}
-	if timeoutSet {
-		body["acceptanceTimeoutSeconds"] = *acceptanceTimeoutSeconds
-	}
-	if ownerCeilingSet {
-		body["acceptanceOwnerTimeoutCeilingSeconds"] = *acceptanceOwnerTimeoutCeilingSeconds
 	}
 	if flagWasSet(fs, "due-date") {
 		if strings.TrimSpace(*dueDate) == "" {
@@ -1536,9 +1505,6 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	acceptanceCommand := fs.String("acceptance-command", "", "replace the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
-	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "replace requested v2 timeout seconds")
-	acceptanceOwnerTimeoutCeilingSeconds := fs.Int("acceptance-owner-timeout-ceiling-seconds", 0, "replace owner timeout ceiling seconds")
-	clearAcceptanceTimeout := fs.Bool("clear-acceptance-timeout", false, "return this executable declaration to the N-1 legacy plan")
 	clearExecutableAcceptance := fs.Bool("clear-executable-acceptance", false, "clear the command and expected exit code together")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
@@ -1621,21 +1587,6 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearExecutableAcceptance && flagWasSet(fs, "acceptance-expected-exit-code") {
 		return fmt.Errorf("--clear-executable-acceptance and --acceptance-expected-exit-code cannot be used together")
-	}
-	if *clearAcceptanceTimeout && flagWasSet(fs, "acceptance-timeout-seconds") {
-		return fmt.Errorf("--clear-acceptance-timeout and --acceptance-timeout-seconds cannot be used together")
-	}
-	if *clearAcceptanceTimeout && flagWasSet(fs, "acceptance-owner-timeout-ceiling-seconds") {
-		return fmt.Errorf("--clear-acceptance-timeout and --acceptance-owner-timeout-ceiling-seconds cannot be used together")
-	}
-	if flagWasSet(fs, "acceptance-owner-timeout-ceiling-seconds") && !flagWasSet(fs, "acceptance-timeout-seconds") {
-		return fmt.Errorf("--acceptance-owner-timeout-ceiling-seconds requires --acceptance-timeout-seconds")
-	}
-	if flagWasSet(fs, "acceptance-timeout-seconds") && (*acceptanceTimeoutSeconds < 1 || *acceptanceTimeoutSeconds > 86400) {
-		return fmt.Errorf("--acceptance-timeout-seconds must be between 1 and 86400")
-	}
-	if flagWasSet(fs, "acceptance-owner-timeout-ceiling-seconds") && (*acceptanceOwnerTimeoutCeilingSeconds < 1 || *acceptanceOwnerTimeoutCeilingSeconds > 86400) {
-		return fmt.Errorf("--acceptance-owner-timeout-ceiling-seconds must be between 1 and 86400")
 	}
 	if flagWasSet(fs, "acceptance-command") && strings.TrimSpace(*acceptanceCommand) == "" {
 		return fmt.Errorf("--acceptance-command cannot be blank; use --clear-executable-acceptance")
@@ -1757,17 +1708,6 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 		}
 		if flagWasSet(fs, "acceptance-expected-exit-code") {
 			body["acceptanceExpectedExitCode"] = *acceptanceExpectedExitCode
-		}
-	}
-	if *clearAcceptanceTimeout {
-		body["acceptanceTimeoutSeconds"] = nil
-		body["acceptanceOwnerTimeoutCeilingSeconds"] = nil
-	} else {
-		if flagWasSet(fs, "acceptance-timeout-seconds") {
-			body["acceptanceTimeoutSeconds"] = *acceptanceTimeoutSeconds
-		}
-		if flagWasSet(fs, "acceptance-owner-timeout-ceiling-seconds") {
-			body["acceptanceOwnerTimeoutCeilingSeconds"] = *acceptanceOwnerTimeoutCeilingSeconds
 		}
 	}
 	if *clearDependencies {
@@ -2294,8 +2234,6 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
-				"--acceptance-timeout-seconds <n> (requested v2 timeout; admitted exactly or rejected before spawn)",
-				"--acceptance-owner-timeout-ceiling-seconds <n> (owner ceiling checked before spawn; requires --acceptance-timeout-seconds)",
 			)
 		case "task_update":
 			capabilities[i].Arguments = append(
@@ -2303,9 +2241,6 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
-				"--acceptance-timeout-seconds <n> (replace the requested v2 timeout; never silently clamped)",
-				"--acceptance-owner-timeout-ceiling-seconds <n> (replace the owner ceiling; requires --acceptance-timeout-seconds)",
-				"--clear-acceptance-timeout (return the executable declaration to the N-1 legacy plan)",
 				"--clear-executable-acceptance (clear both EXECUTABLE fields)",
 			)
 		}

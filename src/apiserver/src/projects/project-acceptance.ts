@@ -32,11 +32,12 @@ import { createHash } from 'node:crypto';
  * Version 6: a current-plan, typed EXECUTABLE attempt termination wired to a criterion is an
  * acceptance fact. Its stable identity and output digest advance the evidence version without
  * importing Task status or the rest of the task backlog into the definition of project DONE.
+ *
+ * Version 7: migration 0227 removed the typed attempt, so version 6's collector has no rows to
+ * read and the tuple leaves the input shape again. A criterion wired to an evidence task is
+ * concluded from that task's recorded command result, which was already the fallback beside it.
  */
-export const ACCEPTANCE_DIGEST_VERSION = 6;
-
-export const EXECUTABLE_ATTEMPT_COLLECTOR_VERSION =
-  'project-acceptance-executable-attempt-v1';
+export const ACCEPTANCE_DIGEST_VERSION = 7;
 
 /** The routing rule shared by DONE refusals and settled-project write refusals. */
 export const ACCEPTANCE_FINDING_ROUTING =
@@ -61,16 +62,6 @@ export interface AcceptanceFacts {
   criteriaRevision: string;
   /** (requirementId, targetBranch, contentHash, refGeneration) — §13.4 AE9's authoritative row. */
   mergeEvidence: Array<[string, string, string, string]>;
-  /**
-   * (collectorVersion, definitionId, definitionRevision, evidenceTaskId, attemptId, admissionId,
-   * evaluationPlanDigest, expectedExitCode, terminationKind, actualExitCode|null, outputDigest,
-   * outputTruncated, terminatedAt). The latest exact current-plan typed attempt per EXECUTABLE
-   * criterion is a bounded projection; the attempt rows themselves remain append-only history.
-   */
-  executableAttempts: Array<[
-    string, string, string, string, string, string, string,
-    string, string, string, string, string, string,
-  ]>;
 }
 
 export function sha256(value: string): string {
@@ -109,7 +100,6 @@ export function acceptanceDigest(projectId: string, facts: AcceptanceFacts): str
       projectId,
       criteriaRevision: facts.criteriaRevision,
       mergeEvidence: sortTuples(facts.mergeEvidence),
-      executableAttempts: sortTuples(facts.executableAttempts),
     }),
   );
 }

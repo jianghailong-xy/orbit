@@ -349,8 +349,6 @@ suite(
       acceptanceCriteria: 'The request-bound shell command exits zero.',
       acceptanceCommand: 'printf n9-executable',
       acceptanceExpectedExitCode: 0,
-      acceptanceTimeoutSeconds: 120,
-      acceptanceOwnerTimeoutCeilingSeconds: 120,
     });
     const verification = await tasks.create(ownerId, {
       title: 'N9 VERIFICATION',
@@ -588,46 +586,25 @@ suite(
         leaseGeneration: string | null,
         acceptsSteer: boolean,
         declaredCapabilities: string[],
-        executableCapability: {
-          schemaRevision: number;
-          capabilityRevision: number;
-          hardMaxSeconds: number;
-          runnerSha: string;
-        },
       ) => Promise<{
         turnId: string;
         kind: string;
         content?: string;
         taskAcceptance?: boolean;
-        acceptancePlan?: { admissionId: string };
       } | null>;
-    }).dequeueTurn(sourceSessions.executable, runnerId, null, false, [], {
-      schemaRevision: 2,
-      capabilityRevision: 2,
-      hardMaxSeconds: 600,
-      runnerSha: '9'.repeat(40),
-    });
+    }).dequeueTurn(sourceSessions.executable, runnerId, null, false, []);
     assert.ok(acceptanceTurn);
     assert.equal(acceptanceTurn.kind, 'shell');
     assert.equal(acceptanceTurn.taskAcceptance, true);
     assert.equal(acceptanceTurn.content, 'printf n9-executable');
-    assert.ok(acceptanceTurn.acceptancePlan);
-    const acceptanceAttempt = await api.startExecutableAcceptanceAttempt(
-      { id: runnerId },
-      sourceSessions.executable,
-      acceptanceTurn.acceptancePlan.admissionId,
-    );
     const rawOutput = 'n9-executable\nraw-output-is-preserved';
     assert.deepEqual(
       await api.turnComplete({ id: runnerId }, sourceSessions.executable, {
         turnId: acceptanceTurn.turnId,
         status: SharedRunStatus.SUCCEEDED,
         subtype: 'shell',
+        shellExitCode: 0,
         shellOutput: rawOutput,
-        acceptanceAdmissionId: acceptanceTurn.acceptancePlan.admissionId,
-        acceptanceAttemptId: acceptanceAttempt.attemptId,
-        acceptanceTerminationKind: 'EXITED',
-        acceptanceActualExitCode: 0,
       }),
       { ok: true, status: RunStatus.AWAITING_INPUT },
     );

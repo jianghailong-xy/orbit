@@ -178,7 +178,6 @@
       "prepare-dependencies": 15,
       "prepare-postgres": 75,
       "prepare-prisma": 163,
-      "suite-acceptance-runtime": 308,
       "suite-bootstrap": 64,
       "suite-canary": 23,
       "suite-contract": 6,
@@ -352,7 +351,7 @@
       "package.json": "aa866c8334d4ae3f439ce0507fb98fd258d2faafdad9eec658cd5a1b4b2a3c47",
       "package-lock.json": "879dd4ed96b1269b726b0c9e31bc4cef1cb433c3d17bc33f6011e33ceca8f629",
       "contracts/outcome-reconciler-authoritative-target.json": "5a45979e5bf2a9bde3bfffb8805e74f27c9e0afba23b1ab1c28518a7ceb9ed0b",
-      "contracts/outcome-reconciler-release-frontier.json": "6d24aa082b75ab897f7cc3090e161b46a65564648a2c052e569799995179de18",
+      "contracts/outcome-reconciler-release-frontier.json": "ec48c220dafaca5ff3d1a225e08d0aea88632d6f82752f311be7aab0147cc4b8",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
       "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "d23691e617d4d40322cbfb069252b684ece90b3a636bf469c269c0b10fb6d022",
       "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "3d2db478668a7f2dd66e1fd8029864c2fe6b2f901adf0faef77ad288615f9381",
@@ -376,7 +375,7 @@
       "scripts/outcome-reconciler-release-dag-target-check.mjs": "30579b87caa44edaad3fee2497cb40299aaf63283e64c231eaa350138ce59abc",
       "scripts/outcome-reconciler-release-dag.mjs": "79300e1a56ca17973f18e556f032e05e74bb2918fca28d12ae46ccf4c760fce3",
       "test/fixtures/release-dag-disposable-exit-path.mjs": "14328f8254aff4b852fd13e54da46c18d2ad2b6f6383662078261797a039465f",
-      "test/outcome-reconciler-release-dag-plan.test.mjs": "0ecef8830d7bf18f5bf0a7eb35e6018796e3e715021cee5bd6cbc015369c98e6",
+      "test/outcome-reconciler-release-dag-plan.test.mjs": "8c21bccc672de0021e390369c4ccb211061b164d049b10293a116934039b9a8f",
       "test/outcome-reconciler-release-dag-regression-rebind.test.mjs": "6f45433309bd0fa3f79bc53087791221e6f8a93a8f6ebb3f2a1476505295190a"
     }
   },
@@ -577,11 +576,6 @@
         "postgresRolePrefix": "pccrd",
         "destructiveCoordinatorSpecs": true
       },
-      "suite-acceptance-runtime": {
-        "postgresDatabasePrefix": "pccrd",
-        "postgresRolePrefix": "pccrd",
-        "destructiveCoordinatorSpecs": true
-      },
       "suite-ratification": {
         "postgresDatabasePrefix": "pccrd",
         "postgresRolePrefix": "pccrd",
@@ -664,11 +658,6 @@
       "name": "protocol",
       "packageScript": "test:outcome-reconciler:protocol",
       "nodeId": "suite-protocol"
-    },
-    {
-      "name": "acceptance-runtime",
-      "packageScript": "test:outcome-reconciler:acceptance-runtime",
-      "nodeId": "suite-acceptance-runtime"
     },
     {
       "name": "ratification",
@@ -984,44 +973,6 @@
       "usesSharedBuild": true
     },
     {
-      "id": "suite-acceptance-runtime",
-      "artifactBinding": "CONTENT_ONLY",
-      "inputs": {
-        "scopes": [
-          "apiserver-prisma",
-          "apiserver-src",
-          "dependency-manifest",
-          "go-src",
-          "shared-src",
-          "unclassified"
-        ]
-      },
-      "kind": "named-suite",
-      "dependsOn": [
-        "prepare-build",
-        "prepare-postgres"
-      ],
-      "command": [
-        "npm",
-        "run",
-        "test:outcome-reconciler:acceptance-runtime"
-      ],
-      "timeoutSeconds": 620,
-      "resources": {
-        "cpu": 2,
-        "memoryMiB": 1536,
-        "postgres": 1
-      },
-      "outputs": [
-        "build/executable-acceptance-runtime-evidence.json",
-        "build/executable-acceptance-runtime-manifest.json"
-      ],
-      "cacheable": true,
-      "testBearing": true,
-      "usesSharedBuild": true,
-      "usesSharedPostgres": true
-    },
-    {
       "id": "suite-ratification",
       "artifactBinding": "CONTENT_ONLY",
       "inputs": {
@@ -1109,7 +1060,7 @@
       },
       "kind": "restored-suite",
       "dependsOn": [
-        "suite-acceptance-runtime"
+        "prepare-build"
       ],
       "command": [
         "npm",
@@ -1546,7 +1497,7 @@
       },
       "kind": "client-matrix",
       "dependsOn": [
-        "suite-acceptance-runtime"
+        "suite-ratification"
       ],
       "command": [
         "bash",
@@ -1649,7 +1600,6 @@
         "suite-bootstrap",
         "suite-contract",
         "suite-protocol",
-        "suite-acceptance-runtime",
         "suite-ratification",
         "suite-work-overview-readiness",
         "suite-canary",

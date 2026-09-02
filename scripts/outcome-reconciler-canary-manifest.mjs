@@ -79,7 +79,7 @@ const summary = {
   cancelled: counter('cancelled'),
   todo: counter('todo'),
 };
-assert.ok(summary.tests >= 14, 'canary suite was truncated');
+assert.ok(summary.tests >= 12, 'canary suite was truncated');
 assert.equal(summary.passed, summary.tests, 'not every canary test passed');
 assert.equal(summary.failed, 0, 'canary test failures are forbidden');
 assert.equal(summary.skipped, 0, 'canary test skips are forbidden');
@@ -129,7 +129,7 @@ for (const [name, metric] of Object.entries(shadow.metrics)) {
 for (const name of [
   'falseClose', 'missedObligation', 'readModelDifference', 'reconciliationLag',
   'oldestObligation', 'expiredLease', 'retryCost', 'inboxAge', 'outboxFailure',
-  'checksumDrift', 'acceptanceRuntimeDeadline',
+  'checksumDrift',
 ]) assert.ok(shadow.metrics[name].diff.absolute < 0, `${name} has no measured V1/V2 delta`);
 
 const control = canary.replayCanaryControl(controlEvents.map((event) => ({
@@ -177,54 +177,17 @@ assert.equal(telemetryRaw.includes('tenant-canary-a'), false,
 assert.equal(telemetryRaw.includes('tenant-canary-b'), false,
   'a raw tenant identifier landed in telemetry');
 
-const matrixEvent = onlyEvent('ACCEPTANCE_CAPABILITY_MATRIX');
-const acceptanceMatrix = canary.acceptanceCapabilityMatrix(contract, targetSha);
-assert.deepEqual(matrixEvent.matrix, acceptanceMatrix);
-for (const row of acceptanceMatrix.filter(({ decision }) => decision === 'REJECTED')) {
-  assert.equal(row.spawnCount, 0);
-  assert.equal(row.effectiveTimeoutSeconds, null);
-}
-for (const row of acceptanceMatrix.filter(({ decision }) => decision === 'ADMITTED')) {
-  assert.equal(row.effectiveTimeoutSeconds, 1200);
-}
-const rejectedAdmission = onlyEvent('ADMISSION_REJECTED');
-assert.equal(rejectedAdmission.rejectionCode, 'RUNNER_HARD_MAX_INSUFFICIENT');
-assert.equal(rejectedAdmission.spawnCount, 0);
-assert.equal(rejectedAdmission.attemptCount, 0);
-
-const timeoutEvents = events.filter(({ kind }) => kind === 'TIMED_OUT_CONTINUATION');
-const expectedTimeoutTrace = canary.timeoutContinuationTrace(contract);
-assert.equal(timeoutEvents.length, expectedTimeoutTrace.length);
-assert.deepEqual(timeoutEvents.map(({ attempt, terminationKind, actualExitCode,
-  continuation, reasonCode }) => ({
-  attempt, terminationKind, actualExitCode, continuation, reasonCode,
-})), expectedTimeoutTrace);
-assert.deepEqual(timeoutEvents.map(({ continuation }) => continuation),
-  ['RETRY', 'DIAGNOSIS', 'SUCCESSOR']);
-assert.ok(timeoutEvents.every(({ goalActionable, actualExitCode }) => (
-  goalActionable === true && actualExitCode === null
-)));
-
 assert.ok(Array.isArray(upstreamEvidenceRows) && upstreamEvidenceRows.length > 0);
 assert.equal(upstream.taskId, '34Ex0SFCY6DpfvW2I4ydE');
 assert.equal(upstream.judgmentRequest.decision, 'PASS');
 const preflight = upstream.evidence.exactShaPreflight;
-const liveAdmission = upstreamTask.executableAcceptanceAdmissions.find(
-  ({ decision }) => decision === 'ADMITTED',
-);
-assert.ok(liveAdmission, 'upstream Watchdog ADMITTED record is missing');
-assert.equal(liveAdmission.requestedTimeoutSeconds, 1200);
-assert.equal(liveAdmission.effectiveTimeoutSeconds, 1200);
-assert.equal(liveAdmission.spawnCount, 1);
-assert.equal(liveAdmission.attempt.terminationKind, 'EXITED');
-assert.equal(liveAdmission.attempt.actualExitCode, 0);
 assert.equal(preflight.deadlineSeconds, 1200);
 assert.equal(preflight.watchdog.tests, 13);
 assert.equal(preflight.watchdog.passed, 13);
 assert.equal(preflight.watchdog.failed, 0);
 assert.equal(preflight.watchdog.skipped, 0);
-assert.ok(preflight.elapsedMilliseconds > contract.acceptanceRuntime.legacyCutoffSeconds * 1_000);
-assert.ok(preflight.elapsedMilliseconds < contract.acceptanceRuntime.requestedTimeoutSeconds * 1_000);
+assert.ok(preflight.elapsedMilliseconds > 120 * 1_000);
+assert.ok(preflight.elapsedMilliseconds < preflight.deadlineSeconds * 1_000);
 assert.deepEqual(upstream.evidence.typedRegression, {
   kind: 'TIMED_OUT', continuation: 'RETRY', factPersisted: true,
   actualExitCode: null, goalActionable: true,
@@ -233,18 +196,17 @@ const upstreamTrace = onlyEvent('UPSTREAM_WATCHDOG_ATTESTATION');
 assert.equal(upstreamTrace.rawEvidenceSha256, digest(upstreamEvidenceRaw));
 assert.equal(upstreamTrace.rawTaskSnapshotSha256, digest(upstreamTaskRaw));
 assert.equal(upstreamTrace.evidenceDigest, upstream.evidenceDigest);
-assert.equal(upstreamTrace.admissionId, liveAdmission.id);
-assert.equal(upstreamTrace.attemptId, liveAdmission.attempt.id);
 assert.equal(upstreamTrace.watchdog.tests, 13);
 assert.equal(upstreamTrace.watchdog.passed, 13);
 
+// 0227 removed the acceptance runtime, and with it the ADMISSION_REJECTED and
+// TIMED_OUT_RETRY_DIAGNOSIS_SUCCESSOR traces only its admission and typed continuation could
+// produce. The upstream attestation is what is left, and it is still required to be nonzero.
 const traceCounts = {
-  ADMISSION_REJECTED: events.filter(({ kind }) => kind === 'ADMISSION_REJECTED').length,
-  TIMED_OUT_RETRY_DIAGNOSIS_SUCCESSOR: timeoutEvents.length > 0 ? 1 : 0,
   WATCHDOG_13_OF_13: events.filter(({ kind }) => kind === 'UPSTREAM_WATCHDOG_ATTESTATION').length,
 };
-for (const kind of contract.acceptanceRuntime.requiredTraceKinds) {
-  assert.ok(traceCounts[kind] > 0, `${kind} trace is zero`);
+for (const [kind, count] of Object.entries(traceCounts)) {
+  assert.ok(count > 0, `${kind} trace is zero`);
 }
 assert.equal(events.some(({ actualExitCode }) => actualExitCode === -1), false,
   'generic exit -1 cannot satisfy the canary');
@@ -258,7 +220,6 @@ const sourceFiles = [
   'scripts/outcome-reconciler-canary-verify.mjs',
   'src/apiserver/src/outcome-reconciler/outcome-canary.ts',
   'src/apiserver/src/outcome-reconciler/outcome-payload-redaction.ts',
-  'src/apiserver/src/tasks/executable-acceptance-runtime.ts',
   'test/outcome-reconciler-v2.canary.test.mjs',
 ];
 const sourceDigests = Object.fromEntries(sourceFiles.map((relative) => [
@@ -347,41 +308,20 @@ const body = {
     finalMode: control.finalMode,
   },
   mixedClientMatrix,
-  acceptanceCapabilityMatrix: acceptanceMatrix,
   traces: {
     counts: traceCounts,
-    ADMISSION_REJECTED: {
-      requestedTimeoutSeconds: rejectedAdmission.requestedTimeoutSeconds,
-      runnerHardMaxSeconds: rejectedAdmission.runnerHardMaxSeconds,
-      rejectionCode: rejectedAdmission.rejectionCode,
-      spawnCount: rejectedAdmission.spawnCount,
-      attemptCount: rejectedAdmission.attemptCount,
-    },
-    TIMED_OUT_RETRY_DIAGNOSIS_SUCCESSOR: {
-      terminationKind: 'TIMED_OUT',
-      actualExitCode: null,
-      goalActionable: true,
-      path: timeoutEvents.map(({ continuation }) => continuation),
-      events: timeoutEvents.length,
-    },
     WATCHDOG_13_OF_13: {
       upstreamTaskId: upstream.taskId,
       upstreamEvidenceId: upstream.id,
       upstreamEvidenceDigest: upstream.evidenceDigest,
       judgmentDecision: upstream.judgmentRequest.decision,
-      admissionId: liveAdmission.id,
-      attemptId: liveAdmission.attempt.id,
-      requestedTimeoutSeconds: liveAdmission.requestedTimeoutSeconds,
-      effectiveTimeoutSeconds: liveAdmission.effectiveTimeoutSeconds,
-      runnerHardMaxSeconds: liveAdmission.runnerHardMaxSeconds,
-      spawnCount: liveAdmission.spawnCount,
+      requestedTimeoutSeconds: upstream.evidence.executableDeclaration.requestedTimeoutSeconds,
       deadlineSeconds: preflight.deadlineSeconds,
       elapsedMilliseconds: preflight.elapsedMilliseconds,
-      legacyCutoffSeconds: contract.acceptanceRuntime.legacyCutoffSeconds,
-      crossedLegacyCutoff: preflight.elapsedMilliseconds
-        > contract.acceptanceRuntime.legacyCutoffSeconds * 1_000,
-      terminationKind: liveAdmission.attempt.terminationKind,
-      actualExitCode: liveAdmission.attempt.actualExitCode,
+      legacyCutoffSeconds: 120,
+      crossedLegacyCutoff: preflight.elapsedMilliseconds > 120 * 1_000,
+      terminationKind: preflight.terminationKind,
+      actualExitCode: preflight.actualExitCode,
       tests: preflight.watchdog.tests,
       passed: preflight.watchdog.passed,
       failed: preflight.watchdog.failed,

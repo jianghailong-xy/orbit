@@ -146,7 +146,7 @@ test('(g) every repository .mjs entry point still parses', () => {
     execFileSync(process.execPath, ['--check', path.join(repo, entry)], { cwd: repo });
   }
   for (const entry of ['test/compose-topology.test.mjs', 'test/sidecar-removal-orphans.test.mjs',
-    'test/executable-acceptance-runtime.test.mjs']) {
+    'test/outcome-reconciler-v2.canary.test.mjs']) {
     execFileSync(process.execPath, ['--check', path.join(repo, entry)], { cwd: repo });
   }
 });

@@ -139,16 +139,6 @@
       "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
       "slo": { "maximum": 0 },
       "abortThreshold": { "maximum": 0 }
-    },
-    "acceptanceRuntimeDeadline": {
-      "unit": "RATIO",
-      "aggregation": "RATIO",
-      "numerator": "admitted executable acceptances clamped, stopped at the legacy cutoff, or completed after their negotiated deadline",
-      "denominator": "admitted executable acceptance traces with a version-bound requested and effective deadline",
-      "minSampleSize": 1,
-      "window": { "kind": "FIXED", "seconds": 3600, "logicalTicks": 60 },
-      "slo": { "maximum": 0 },
-      "abortThreshold": { "maximum": 0 }
     }
   },
   "control": {
@@ -176,21 +166,6 @@
       { "name": "legacy-projection-write", "protocol": "V1", "actor": "CLIENT", "operation": "WRITE_PROJECTION", "expectedDecision": "REJECT" },
       { "name": "unknown-revision", "protocol": "V0", "actor": "CLIENT", "operation": "CLAIM", "expectedDecision": "REJECT" },
       { "name": "reconciler-v2-projection-write", "protocol": "V2", "actor": "RECONCILER", "operation": "WRITE_PROJECTION", "expectedDecision": "ACCEPT" }
-    ]
-  },
-  "acceptanceRuntime": {
-    "schemaRevision": 2,
-    "capabilityRevision": 2,
-    "requestedTimeoutSeconds": 1200,
-    "ownerTimeoutCeilingSeconds": 1200,
-    "policyTimeoutCeilingSeconds": 3600,
-    "legacyCutoffSeconds": 120,
-    "maximumAttempts": 3,
-    "watchdogExpectedTests": 13,
-    "requiredTraceKinds": [
-      "ADMISSION_REJECTED",
-      "TIMED_OUT_RETRY_DIAGNOSIS_SUCCESSOR",
-      "WATCHDOG_13_OF_13"
     ]
   },
   "security": {

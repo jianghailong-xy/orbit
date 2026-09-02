@@ -261,3 +261,26 @@ func runShellTurnBackground(bg *bgTailer, execDir, scratchDir, command, turnID s
 			shellID, outputPath),
 	})
 }
+
+// runSynchronousShellTurn executes the server-generated EXECUTABLE acceptance command in the
+// foreground and reports its exit code and complete output. There is one protocol: the control
+// plane compares that exit code against the task's declared expectation. A process that never
+// exited (timeout, cancellation, signal, failed start) has no exit code to report and is reported
+// as a failed turn like any other -- 0227 removed the typed-termination protocol that used to
+// tell those apart, and nothing here may reintroduce it.
+func runSynchronousShellTurn(
+	ctx context.Context,
+	t *Transport,
+	job *ClaimedSession,
+	execDir string,
+	resp *RunInboxResponse,
+	emit emitFn,
+) (TurnCompleteRequest, error) {
+	out, exitCode := runShellTurn(
+		ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env,
+	)
+	return TurnCompleteRequest{
+		TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode),
+		ShellExitCode: &exitCode, ShellOutput: &out, Subtype: "shell",
+	}, nil
+}

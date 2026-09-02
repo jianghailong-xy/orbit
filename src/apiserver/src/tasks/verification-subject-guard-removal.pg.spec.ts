@@ -74,7 +74,7 @@ const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
     'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
   project_acceptance_run:
-    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb, conclusion_basis:project_acceptance_run_conclusion_basis, conclusion_digest:character(64), conclusion_window_seconds:integer!',
+    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb',
 };
 
 interface World {
@@ -203,9 +203,10 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 39,
-    'these four tables carried 43 triggers before 0224, 40 after it, and 39 once 0226 removed '
-    + '`failure_successor_task_binding_immutable` from `task`');
+  assert.equal(installed.rowCount, 38,
+    'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
+    + '`failure_successor_task_binding_immutable` from `task`, and 38 once 0227 removed '
+    + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
@@ -250,7 +251,9 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
     'project_acceptance_criterion|project_acceptance_criterion_immutable_guard',
-    'project_acceptance_run|project_acceptance_run_closure_guard',
+    // `project_acceptance_run|project_acceptance_run_closure_guard` stood here until 0227 removed
+    // 0215's closing move with the rest of the EXECUTABLE acceptance runtime — a later and
+    // separate decision, and the only trigger this family has lost since.
     'project_acceptance_run|project_acceptance_run_epoch_guard',
     'project_acceptance_run|project_acceptance_run_immutable_guard',
   ]);

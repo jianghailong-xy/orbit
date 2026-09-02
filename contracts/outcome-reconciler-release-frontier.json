@@ -52,7 +52,6 @@
     { "name": "bootstrap", "packageScript": "test:outcome-reconciler:bootstrap", "manifest": "build/outcome-reconciler-bootstrap-manifest.json" },
     { "name": "contract", "packageScript": "test:outcome-reconciler:contract", "manifest": "build/outcome-reconciler-v2-contract-manifest.json" },
     { "name": "protocol", "packageScript": "test:outcome-reconciler:protocol", "manifest": "build/outcome-reconciler-v2-protocol-manifest.json" },
-    { "name": "acceptance-runtime", "packageScript": "test:outcome-reconciler:acceptance-runtime", "manifest": "build/executable-acceptance-runtime-manifest.json" },
     { "name": "ratification", "packageScript": "test:outcome-reconciler:ratification", "manifest": "build/outcome-reconciler-v2-ratification-manifest.json" },
     { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "manifest": "build/work-overview-readiness-manifest.json" }
   ],

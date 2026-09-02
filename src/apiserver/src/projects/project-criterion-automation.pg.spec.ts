@@ -4,8 +4,6 @@ import { test } from 'node:test';
 
 import {
   CreatorType,
-  ExecutableAcceptanceAdmissionDecision,
-  ExecutableAcceptanceTerminationKind,
   PrismaClient,
   ProjectAcceptanceVerdict,
   ProjectStatus,
@@ -28,7 +26,6 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { EXECUTABLE_ATTEMPT_COLLECTOR_VERSION } from './project-acceptance';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -187,120 +184,18 @@ async function declare(
   } as never);
 }
 
-async function recordTypedExecutableSuccess(
-  db: PrismaClient,
-  target: { ownerId: string },
-  runnerId: string,
-  taskId: string,
-  sequence: number,
-) {
-  const executable = await db.task.findUniqueOrThrow({
-    where: { id: taskId },
-    select: {
-      acceptanceTimeoutSeconds: true,
-      acceptanceOwnerTimeoutCeilingSeconds: true,
-      acceptancePolicyTimeoutCeilingSeconds: true,
-      acceptanceSchemaRevision: true,
-      acceptanceCapabilityRevision: true,
-      acceptanceCommandDigest: true,
-      acceptanceEvaluationPlanDigest: true,
-      acceptanceExpectedExitCode: true,
-    },
-  });
-  assert.ok(executable.acceptanceTimeoutSeconds);
-  assert.ok(executable.acceptanceOwnerTimeoutCeilingSeconds);
-  assert.ok(executable.acceptancePolicyTimeoutCeilingSeconds);
-  assert.ok(executable.acceptanceSchemaRevision);
-  assert.ok(executable.acceptanceCapabilityRevision);
-  assert.ok(executable.acceptanceCommandDigest);
-  assert.ok(executable.acceptanceEvaluationPlanDigest);
-  assert.notEqual(executable.acceptanceExpectedExitCode, null);
-
-  const sessionId = randomUUID();
-  const turnId = randomUUID();
-  await db.session.create({
-    data: {
-      id: sessionId,
-      ownerId: target.ownerId,
-      creatorId: target.ownerId,
-      taskId,
-      assignedRunnerId: runnerId,
-      title: `late executable evidence ${sequence}`,
-      prompt: 'Record the declared acceptance command result.',
-      provider: 'codex',
-      status: RunStatus.AWAITING_INPUT,
-    },
-  });
-  const deadline = new Date(`2026-08-29T20:0${sequence}:00.000Z`);
-  const admission = await db.taskExecutableAdmission.create({
-    data: {
-      id: randomUUID(),
-      taskId,
-      sessionId,
-      turnId,
-      runnerId,
-      evaluationPlanDigest: executable.acceptanceEvaluationPlanDigest,
-      commandDigest: executable.acceptanceCommandDigest,
-      expectedExitCode: executable.acceptanceExpectedExitCode!,
-      requestedTimeoutSeconds: executable.acceptanceTimeoutSeconds,
-      ownerTimeoutCeilingSeconds: executable.acceptanceOwnerTimeoutCeilingSeconds,
-      policyTimeoutCeilingSeconds: executable.acceptancePolicyTimeoutCeilingSeconds,
-      requiredSchemaRevision: executable.acceptanceSchemaRevision,
-      requiredCapabilityRevision: executable.acceptanceCapabilityRevision,
-      runnerSchemaRevision: executable.acceptanceSchemaRevision,
-      runnerCapabilityRevision: executable.acceptanceCapabilityRevision,
-      runnerHardMaxSeconds: executable.acceptanceOwnerTimeoutCeilingSeconds,
-      runnerSha: sequence.toString(16).repeat(40).slice(0, 40),
-      decision: ExecutableAcceptanceAdmissionDecision.ADMITTED,
-      effectiveTimeoutSeconds: executable.acceptanceTimeoutSeconds,
-      effectiveDeadline: deadline,
-      decidedAt: new Date(`2026-08-29T19:0${sequence}:00.000Z`),
-    },
-  });
-  const attempt = await db.taskExecutableAttempt.create({
-    data: {
-      id: randomUUID(),
-      admissionId: admission.id,
-      taskId,
-      sessionId,
-      turnId,
-      evaluationPlanDigest: executable.acceptanceEvaluationPlanDigest,
-      expectedExitCode: executable.acceptanceExpectedExitCode,
-      deadlineAt: deadline,
-      startedAt: new Date(`2026-08-29T19:1${sequence}:00.000Z`),
-    },
-  });
-  const terminated = await db.taskExecutableAttempt.update({
-    where: { id: attempt.id },
-    data: {
-      terminatedAt: new Date(`2026-08-29T19:2${sequence}:00.000Z`),
-      terminationKind: ExecutableAcceptanceTerminationKind.EXITED,
-      actualExitCode: executable.acceptanceExpectedExitCode,
-      rawOutput: `typed attempt ${sequence}: all assertions passed`,
-    },
-  });
-  await db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
-  return terminated;
-}
-
-test('late typed attempts advance the evidence version and back all four wired EXECUTABLE criteria',
+// 0227 removed the typed attempt this used to record. The four criteria are now backed by the
+// recorded command result of each evidence task, which was already the collector beside it — and
+// that collector was never part of the acceptance input digest, so a later result no longer mints
+// a new evidence version. It accumulates conclusions on the one live version instead, which is
+// exactly the shape this project had before 0209 wired the attempt in. What is still checked: the
+// criteria digest is untouched by result facts, the version-0 INCONCLUSIVE events stay in the
+// append-only ledger, and four PASSes reach DONE.
+test('late executable results back all four wired criteria on the one live evidence version',
   { skip }, async () => {
     const { db, acceptance, projects } = await connect();
     try {
-      const target = await base(db, 'late-typed-attempts');
-      const runner = await db.runner.create({
-        data: {
-          id: randomUUID(),
-          ownerId: target.ownerId,
-          name: 'late-typed-attempts-runner',
-          tokenHash: randomUUID(),
-          status: RunnerStatus.ONLINE,
-          acceptanceRuntimeSchemaRevision: 2,
-          acceptanceRuntimeCapabilityRevision: 2,
-          acceptanceRuntimeHardMaxSeconds: 300,
-          acceptanceRuntimeReportedAt: new Date('2026-08-29T19:00:00.000Z'),
-        },
-      });
+      const target = await base(db, 'late-executable-results');
       const declarations = [
         ['npm test -w @orbit/shared', 0],
         ['npm test -w @orbit/apiserver', 0],
@@ -313,17 +208,12 @@ test('late typed attempts advance the evidence version and back all four wired E
           completionCriterion: TaskCompletionCriterion.EXECUTABLE,
           acceptanceCommand: command,
           acceptanceExpectedExitCode: expectedExitCode,
-          acceptanceTimeoutSeconds: 120,
-          acceptanceOwnerTimeoutCeilingSeconds: 300,
-          acceptancePolicyTimeoutCeilingSeconds: 300,
-          acceptanceSchemaRevision: 2,
-          acceptanceCapabilityRevision: 2,
         }));
       }
       await projects.update(target.ownerId, target.projectId, {
         acceptanceCriteriaItems: sources.map((source, index) => ({
           text: `Executable criterion ${index + 1} is satisfied`,
-          verificationMethod: 'Read the exact typed attempt termination and raw output.',
+          verificationMethod: 'Read the exact recorded command result and raw output.',
           completionCriterion: TaskCompletionCriterion.EXECUTABLE,
           acceptanceCommand: declarations[index]![0],
           acceptanceExpectedExitCode: declarations[index]![1],
@@ -346,21 +236,16 @@ test('late typed attempts advance the evidence version and back all four wired E
       const criteriaDigest = overview.criteriaDigest;
       const initialConclusionIds = new Set(overview.runs[0]!.conclusions.map((event) => event.id));
 
-      const attempts = [];
+      const results = [];
       for (const [index, source] of sources.entries()) {
-        attempts.push(await recordTypedExecutableSuccess(
-          db, target, runner.id, source.id, index + 1,
+        results.push(await recordExecutableResult(
+          db, target, source.id, declarations[index]![0], 0, 0, index + 1,
         ));
-        assert.equal(
-          await db.taskExecutableJudgmentResult.count({
-            where: { request: { taskId: source.id } },
-          }),
-          0,
-          'the typed attempt is canonical without manufacturing a legacy judgment result',
-        );
+        await db.task.update({ where: { id: source.id }, data: { status: TaskStatus.DONE } });
         await acceptance.reconcileForEvidenceTask(source.id);
         overview = await acceptance.overview(target.ownerId, target.projectId);
-        assert.equal(overview.runs[0]?.evidenceVersion, String(index + 1));
+        assert.equal(overview.runs[0]?.evidenceVersion, '0',
+          'a recorded command result is not part of the acceptance input digest');
         assert.equal(overview.runs[0]?.criteriaRevision, criteriaRevision);
         assert.equal(
           overview.runs[0]?.criteria.filter(
@@ -377,27 +262,20 @@ test('late typed attempts advance the evidence version and back all four wired E
       );
       assert.deepEqual(
         latest.criteria.map((criterion) => {
-          const evidence = criterion.evidence as {
-            kind?: string; collectorVersion?: string; attemptId?: string;
-          };
-          return [evidence.kind, evidence.collectorVersion, evidence.attemptId];
+          const evidence = criterion.evidence as { kind?: string; resultId?: string };
+          return [evidence.kind, evidence.resultId];
         }),
-        attempts.map((attempt) => [
-          'EXECUTABLE_ATTEMPT', EXECUTABLE_ATTEMPT_COLLECTOR_VERSION, attempt.id,
-        ]),
+        results.map((result) => ['EXECUTABLE_RESULT', result.id]),
       );
-      assert.equal(overview.criteriaDigest, criteriaDigest, 'attempt facts do not rewrite criteria');
-      assert.equal(overview.runs.length, 5, 'version 0 plus one immutable version per later fact');
-      assert.ok(overview.runs.slice(1).every((run) => run.supersededAt instanceof Date));
+      assert.equal(overview.criteriaDigest, criteriaDigest, 'result facts do not rewrite criteria');
+      assert.equal(overview.runs.length, 1, 'the one live evidence version, never superseded');
+      assert.equal(overview.runs[0]?.supersededAt, null);
       assert.ok(
         [...initialConclusionIds].every((id) => latest.conclusions.some((event) => event.id === id)),
         'the version-0 INCONCLUSIVE events remain in the append-only ledger',
       );
-      // 0197 additionally required a canonical evaluation cut here, so this project stayed OPEN
-      // with all four criteria PASS. 0222 removed that layer: the acceptance evidence is once more
-      // the whole of the DONE decision, and four evidence-backed PASSes are what it takes.
       assert.equal(overview.status, ProjectStatus.DONE,
-        'four typed EXECUTABLE attempts, all matching, are the acceptance evidence for DONE');
+        'four matching recorded command results are the acceptance evidence for DONE');
       assert.equal(overview.doneGate.allowed, true);
       assert.equal(overview.doneGate.refusalCode, null);
     } finally {
