@@ -245,10 +245,14 @@ test('the web entry point is gone: the card, its test and its mount point', () =
   assert.equal(exists('src/web/src/components/ProjectCriteriaProposalCard.test.tsx'), false);
   assert.doesNotMatch(read('src/web/src/components/WorkspaceView.tsx'), /CriteriaProposal/,
     'the web mount point is still there');
-  // The manifest that takes a digest of every surface file must have stopped naming the card, or
-  // the surfaces suite fails on a missing file rather than on anything a reader would recognise.
-  assert.doesNotMatch(read('scripts/outcome-reconciler-surfaces-manifest.mjs'),
-    /ProjectCriteriaProposalCard/, 'a manifest still digests a file that no longer exists');
+  // No manifest may still digest the card, or its suite fails on a missing file rather than on
+  // anything a reader would recognise. The surfaces manifest that named it has since been deleted
+  // upstream, so this scans every manifest instead of that one path, which would now throw ENOENT
+  // before it could assert anything.
+  for (const manifest of readdirSync(path.join(REPO, 'scripts')).filter((f) => f.endsWith('.mjs'))) {
+    assert.doesNotMatch(read(path.join('scripts', manifest)), /ProjectCriteriaProposalCard/,
+      `${manifest} still digests a file that no longer exists`);
+  }
 });
 
 test('the apiserver propose and decide paths are gone from both doors', () => {
