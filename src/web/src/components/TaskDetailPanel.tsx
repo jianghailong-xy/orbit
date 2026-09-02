@@ -43,7 +43,6 @@ import { MD } from './Transcript';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
-import { JudgmentRequestSummary } from './JudgmentRequestSummary';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -816,7 +815,6 @@ export function TaskDetailPanel({
         <div className="tdp-empty">Failed to load task details.</div>
       ) : (
         <div className="tdp-body">
-          <JudgmentRequestSummary taskId={taskId} heading="Open EVIDENCE_JUDGMENT request" />
           <section className="tdp-section">
             <div className="tdp-section-title">Details</div>
             <div className="tdp-field">

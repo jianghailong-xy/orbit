@@ -3,17 +3,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
+import { completionEvidenceRevisedFact } from './completion-input';
 import {
-  completionEvidenceRevisedFact,
-  executableResultRecordedFact,
-  evidenceJudgmentRequestedFact,
-  verificationVerdictRecordedFact,
-} from './completion-input';
-import { wakeIdempotencyKey } from './coordinator-wake';
+  COORDINATOR_WAKE_EVENTS,
+  RETIRED_COORDINATOR_WAKE_EVENTS,
+  wakeIdempotencyKey,
+} from './coordinator-wake';
 
 const PROJECT = '10000000-0000-4000-8000-000000000001';
 const TASK = '10000000-0000-4000-8000-000000000002';
-const REQUEST = '10000000-0000-4000-8000-000000000003';
 
 test('criterion input keys move only with their immutable fact version', () => {
   const first = completionEvidenceRevisedFact({
@@ -22,8 +20,6 @@ test('criterion input keys move only with their immutable fact version', () => {
     revision: '7',
     criterionRevision: 'a'.repeat(64),
     evidenceDigest: 'b'.repeat(64),
-    requestId: REQUEST,
-    requestKind: 'EVIDENCE_JUDGMENT',
   });
   const same = { ...first, detail: { displayOnly: 'changed' } };
   const next = completionEvidenceRevisedFact({
@@ -32,49 +28,47 @@ test('criterion input keys move only with their immutable fact version', () => {
     revision: '8',
     criterionRevision: 'a'.repeat(64),
     evidenceDigest: 'c'.repeat(64),
-    requestId: '10000000-0000-4000-8000-000000000004',
-    requestKind: 'EVIDENCE_JUDGMENT',
   });
   assert.equal(wakeIdempotencyKey(first), wakeIdempotencyKey(same));
   assert.notEqual(wakeIdempotencyKey(first), wakeIdempotencyKey(next));
   assert.doesNotMatch(wakeIdempotencyKey(first), new RegExp(PROJECT));
 });
 
-test('each criterion input has its own event, subject and version', () => {
-  const executable = executableResultRecordedFact({
-    projectId: PROJECT,
-    taskId: TASK,
-    requestId: REQUEST,
-    resultId: '10000000-0000-4000-8000-000000000005',
-    evidenceDigest: 'd'.repeat(64),
-    actualExitCode: 0,
-  });
-  const verification = verificationVerdictRecordedFact({
-    projectId: PROJECT,
-    taskId: TASK,
-    requestId: REQUEST,
-    verifierTaskId: '10000000-0000-4000-8000-000000000006',
-    verdictRevision: '3',
-    evidenceDigest: 'e'.repeat(64),
-    verdict: 'PASS',
-  });
-  const human = evidenceJudgmentRequestedFact({
-    projectId: PROJECT,
-    taskId: TASK,
-    requestId: REQUEST,
-    criterionRevision: 'f'.repeat(64),
-    evidenceDigest: '0'.repeat(64),
-    recipientId: '10000000-0000-4000-8000-000000000007',
-  });
-  assert.deepEqual(
-    [executable, verification, human].map((fact) => [fact.event, fact.subjectType, fact.subjectId]),
-    [
-      ['EXECUTABLE_RESULT_RECORDED', 'JUDGMENT_REQUEST', REQUEST],
-      ['VERIFICATION_VERDICT_RECORDED', 'JUDGMENT_REQUEST', REQUEST],
-      ['EVIDENCE_JUDGMENT_REQUESTED', 'JUDGMENT_REQUEST', REQUEST],
-    ],
+// The judgment machinery was removed on 2026-09-02. Four of the five completion inputs were facts
+// ABOUT a `task_judgment_request` — an exit-code result that decided one, a verdict that decided
+// one, and the two request lifecycle events — so their constructors went with the table. What is
+// asserted now is that they are RETIRED rather than merely deleted: `project_coordinator_wake`'s
+// CHECK still accepts every one of them because rows already carry them, and a spelling that
+// appeared in neither list would be a wake nothing in this tree could explain.
+test('the four judgment-request completion inputs are retired, not silently dropped', () => {
+  for (const event of [
+    'EXECUTABLE_RESULT_RECORDED',
+    'VERIFICATION_VERDICT_RECORDED',
+    'EVIDENCE_JUDGMENT_REQUESTED',
+    'EVIDENCE_JUDGMENT_DECIDED',
+    'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
+  ]) {
+    assert.ok(
+      (RETIRED_COORDINATOR_WAKE_EVENTS as readonly string[]).includes(event),
+      `${event} must be listed as retired, not removed from the vocabulary`,
+    );
+    assert.ok(
+      !(COORDINATOR_WAKE_EVENTS as readonly string[]).includes(event),
+      `${event} must no longer be a live event: nothing produces it`,
+    );
+  }
+  const source = readFileSync(
+    path.resolve(__dirname, '../../src/projects/completion-input.ts'), 'utf8',
   );
-  assert.equal(new Set([executable, verification, human].map(wakeIdempotencyKey)).size, 3);
+  for (const gone of [
+    'executableResultRecordedFact',
+    'verificationVerdictRecordedFact',
+    'evidenceJudgmentRequestedFact',
+    'evidenceJudgmentDecidedFact',
+    'evidenceJudgmentRequestSupersededFact',
+  ]) {
+    assert.doesNotMatch(source, new RegExp(gone), `${gone} must not have a producer left`);
+  }
 });
 
 test('production wiring has no parked-session or whole-task-set completion gate', () => {

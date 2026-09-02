@@ -69,7 +69,6 @@ function controller(db: PrismaClient): RunnerApiController {
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
     undefined,
-    new CompletionInputRouter(new CoordinatorWakeService(prisma)),
   );
 }
 
@@ -207,26 +206,21 @@ suite('(g) dispatch and verdict still run end to end for a passing command', asy
   assert.equal(acceptance.content, command);
 
   // VERDICT. The reported exit code equals the declared expectation, so the criterion derives
-  // DONE. The durable input is the recorded command result the same callback writes.
+  // The callback still commits, and it still settles nothing: the evaluator that compared its
+  // exit code to the declaration was removed on 2026-09-02 with the judgment machinery, so what
+  // the walls above have to keep letting through is the ACK, not a derived status.
   const settled = await api.turnComplete({ id: f.runnerId } as never, f.sessionId, {
     turnId: acceptance.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'shell',
     shellExitCode: 0,
     shellOutput: 'package.json is here',
   } as never);
   assert.equal((settled as { ok: boolean }).ok, true);
-  assert.equal(
-    (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.DONE,
-  );
-  const request = await db.taskJudgmentRequest.findFirstOrThrow({
-    where: { taskId: f.taskId },
-    include: { executableResult: true },
-  });
-  assert.equal(request.status, 'DECIDED');
-  assert.equal(request.decision, 'PASS');
-  assert.equal(request.executableResult?.expectedExitCode, 0);
-  assert.equal(request.executableResult?.actualExitCode, 0);
-  assert.equal(request.executableResult?.rawOutput, 'package.json is here');
+  const declaredAfter = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
+  assert.equal(declaredAfter.status, TaskStatus.OPEN,
+    'a matching exit code derives nothing: EXECUTABLE has no implementation');
+  assert.equal(declaredAfter.completionCriterion, 'EXECUTABLE');
+  assert.equal(declaredAfter.acceptanceExpectedExitCode, 0,
+    'and the declaration it was run from is untouched');
   assert.equal(
     await db.projectBlocker.count({ where: { projectId: f.projectId, resolvedAt: null } }),
     0,
@@ -257,17 +251,13 @@ suite('(g) a nonzero exit still derives FAILED through the same lane', async (t)
 
   assert.equal(
     (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.FAILED,
-    'the declared exit code is the whole of the verdict',
+    TaskStatus.OPEN,
+    'a mismatching exit code is not a conservative FAILED either: the comparison itself is gone',
   );
-  // Diagnosable after the fact: the exit code and the complete shell output of the failing run
-  // are still readable, which is the only place they live now that the typed attempt is gone.
-  const request = await db.taskJudgmentRequest.findFirstOrThrow({
-    where: { taskId: f.taskId },
-    include: { executableResult: true },
-  });
-  assert.equal(request.decision, 'FAIL');
-  assert.equal(request.executableResult?.actualExitCode, 1);
-  assert.equal(request.executableResult?.expectedExitCode, 0);
-  assert.equal(request.executableResult?.rawOutput, 'no such file');
+  // And the exit code and shell output are no longer stored anywhere. That is consequence 3 of
+  // the 2026-09-02 decision, accepted explicitly by the account owner: diagnosis moves to the
+  // session record. What the run gets instead is one human-facing comment saying so.
+  const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
+  assert.equal(comments.length, 1);
+  assert.match(comments[0].body, /需要人工介入：EXECUTABLE 验收未能判定/);
 });

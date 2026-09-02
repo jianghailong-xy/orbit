@@ -699,7 +699,7 @@ test('(o) EVIDENCE_JUDGMENT is untouched: the migration cannot reach it, and it 
     'src/apiserver/prisma/migrations/0218_owner_ratification_queue_removal/migration.sql',
   );
   const topLevel = migration.replace(/AS \$\$[\s\S]*?\$\$ LANGUAGE/g, 'AS $$ $$ LANGUAGE');
-  for (const relation of ['task_human_signoff', 'task_judgment_request', 'task']) {
+  for (const relation of ['task_completion_evidence', 'task']) {
     assert.doesNotMatch(topLevel,
       new RegExp(`(INSERT INTO|UPDATE|DELETE FROM|ALTER TABLE|DROP TABLE)\\s+"?${relation}"?(\\s|$)`, 'im'),
       `the migration must contain no statement that writes ${relation}`);
@@ -723,18 +723,20 @@ test('(o) EVIDENCE_JUDGMENT is untouched: the migration cannot reach it, and it 
   )).rows[0];
   assert.equal(task.criterion, 'EVIDENCE_JUDGMENT',
     'the completion criterion 1,123 production tasks carry is still storable and still reads back');
-  // The separate signoff table 0180 created is gone, but not because of THIS migration: 0224
-  // removed the human step and folded that row's prose onto the judgment request. What (o) claims
-  // is that 0218 cannot reach the criterion, and the static scan above is that claim; the
-  // catalogue assertions that used to enumerate `task_human_signoff` here would now be asserting
-  // 0224's outcome from the wrong suite. What remains checkable here is that the request the
-  // criterion actually stands on is intact and still bound to its evidence.
-  const requestConstraints = (await pool.query(
-    `SELECT conname FROM pg_constraint WHERE conrelid = 'task_judgment_request'::regclass
-       AND contype = 'f' ORDER BY conname`,
-  )).rows.map((row) => row.conname);
-  assert.ok(requestConstraints.includes('task_judgment_request_evidence_fact_fkey'),
-    'the judgment request is still bound to one immutable completion-evidence version');
+  // The signoff table 0180 created is gone, and so is the judgment request 0224 folded its prose
+  // onto — the second removed by 0227, at the account owner's direction. Neither happened here.
+  // What (o) claims is that 0218 cannot reach the criterion, and the static scan above is that
+  // claim; the catalogue assertions that used to enumerate those two tables would now be asserting
+  // some other migration's outcome from the wrong suite. What remains checkable here is that the
+  // criterion is still storable, still reads back, and still keeps its declaration.
+  const declaration = (await pool.query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'task'
+        AND column_name IN ('acceptance_command', 'acceptance_expected_exit_code')
+      ORDER BY column_name`,
+  )).rows.map((row) => row.column_name);
+  assert.deepEqual(declaration, ['acceptance_command', 'acceptance_expected_exit_code'],
+    'the executable declaration 0177 gave every task is still there');
 
   // And the enum the 1,123 production tasks are stored under still has exactly its three peers,
   // in order: dropping or reordering one is what would silently reinterpret them.

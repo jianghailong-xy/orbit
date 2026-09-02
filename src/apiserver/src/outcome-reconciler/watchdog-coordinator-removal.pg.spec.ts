@@ -153,12 +153,12 @@ suite('(d)(e)(f)(g) every load-bearing wall beside the removal is still standing
 
   // (d) the EXECUTABLE acceptance verdict mechanism. 0221 was told not to touch 0200's admission
   // and attempt ledger and did not; migration 0227 removed that ledger outright by a later and
-  // separate decision. What still decides an EXECUTABLE task is 0177's declared pair and 0181's
-  // recorded command result, so those are what this wall is checked against now.
+  // separate decision, and 0228 removed 0181's recorded command result by a third. What is left
+  // of an EXECUTABLE task is 0177's declared pair — the half the account owner kept through all
+  // three — so that is what this wall is checked against now.
   for (const [table, required] of [
     ['task', ['acceptance_command', 'acceptance_expected_exit_code']],
-    ['task_executable_judgment_result',
-      ['id', 'request_id', 'expected_exit_code', 'actual_exit_code', 'raw_output']],
+    ['task_completion_evidence', ['id', 'task_id', 'evidence', 'evidence_digest', 'revision']],
   ] as const) {
     const columns = await columnsOf(client, table);
     for (const column of required) {

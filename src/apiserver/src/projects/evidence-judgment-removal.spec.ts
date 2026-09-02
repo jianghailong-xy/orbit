@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { TASK_CRITERION_SHAPE_RULES } from '../tasks/task-criterion-shape-advice';
@@ -204,13 +204,16 @@ test('(q) no compose service, no resident process, and the human step is gone fr
     ['src/apiserver/src/tasks/tasks.controller.ts', /:id\/signoff/],
     ['src/apiserver/src/runner-api/runner-tasks.controller.ts', /tasks\/:id\/signoff/],
     ['src/runner-go/task_cli.go', /task_signoff/],
-    ['src/web/src/lib/judgments.ts', /signoff/],
+    // `src/web/src/lib/judgments.ts` stood here until 2026-09-02: the whole file went with the
+    // judgment machinery, which is a stronger form of the same claim. `existsSync` below keeps it.
     ['src/apiserver/src/tasks/task-criterion-shape-advice.ts', /取舍/],
     ['src/apiserver/src/projects/coordinator-authority.ts', /VERDICT_PASS_HUMAN_ONLY/],
   ];
   for (const [file, pattern] of gone) {
     assert.doesNotMatch(read(file), pattern, `${file} still carries the removed human step`);
   }
+  assert.equal(existsSync(path.join(repoRoot(), 'src/web/src/lib/judgments.ts')), false,
+    'the web judgment library must stay deleted');
 
   // A removal migration that adds schema is not a removal. 0224 drops a table and swaps three
   // CHECK definitions; it creates no table, no column, no type and no enum value.

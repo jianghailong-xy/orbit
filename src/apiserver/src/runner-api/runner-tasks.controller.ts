@@ -22,7 +22,6 @@ import {
   CreateTasksBatchDto,
   ProposeDagDto,
   RunTaskDto,
-  JudgeTaskDto,
   UpdateTaskDto,
 } from '../tasks/dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
@@ -234,21 +233,6 @@ export class RunnerTasksController {
     @Body() dto: UpdateTaskDto,
   ) {
     return this.tasks.update(runner.ownerId, id, dto, sessionId);
-  }
-
-  /**
-   * Decide the task's open EVIDENCE_JUDGMENT request, from `orbit task judge` or from an in-session
-   * MCP call. The acting Session header is still forwarded — not to refuse the call, which
-   * migration 0224 stopped doing, but because it is what the decision is attributed to.
-   */
-  @Post('tasks/:id/judgment')
-  judgeTask(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Headers('x-orbit-session-id') sessionId: string | undefined,
-    @Body() dto: JudgeTaskDto,
-  ) {
-    return this.tasks.judge(runner.ownerId, id, dto, sessionId);
   }
 
   @Delete('tasks/:id')

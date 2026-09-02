@@ -321,7 +321,9 @@ test('tenant authorization rejects cross-tenant telemetry and sanitization remov
 
 test('immutable upstream evidence proves the approved 1200-second Watchdog completed 13/13 beyond legacy 120 seconds', () => {
   assert.ok(Array.isArray(upstreamEvidenceRows) && upstreamEvidenceRows.length > 0);
-  assert.equal(upstream.judgmentRequest.decision, 'PASS');
+  // `judgmentRequest` was removed from the completion-evidence read shape on 2026-09-02 with the
+  // rest of the judgment machinery. The evidence row it hung off is what this test is about and is
+  // unchanged; the task's own DONE below is the fact the decision used to duplicate.
   assert.equal(upstreamTask.status, 'DONE');
   // The live admission/attempt snapshot used to be read from the task here. Migration 0227
   // removed that ledger, so the attestation stands on the immutable evidence row alone — which
@@ -353,7 +355,6 @@ test('immutable upstream evidence proves the approved 1200-second Watchdog compl
     evidenceDigest: upstream.evidenceDigest,
     rawEvidenceSha256: sha(upstreamEvidenceRaw),
     rawTaskSnapshotSha256: sha(upstreamTaskRaw),
-    judgmentDecision: upstream.judgmentRequest.decision,
     requestedTimeoutSeconds: upstream.evidence.executableDeclaration.requestedTimeoutSeconds,
     runnerHardMaxSeconds: upstream.evidence.liveReleaseFence.runner.hardMaxSeconds,
     deadlineSeconds: upstreamPreflight.deadlineSeconds,

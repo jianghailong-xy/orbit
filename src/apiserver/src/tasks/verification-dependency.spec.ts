@@ -68,58 +68,25 @@ test('a PASS with every fact behind it opens the epoch', () => {
   assert.equal(gate([check()]), null);
 });
 
-test('an OPEN N11 request is in flight even when its verifier has no worker run', () => {
-  assert.equal(gate([check({
-    status: TaskStatus.OPEN,
-    verdict: null,
-    verdictRevision: '0',
-    verdictApplied: false,
-    runs: [],
-    judgmentStatus: 'OPEN',
-    judgmentDecision: null,
-  })]), 'VERIFICATION_IN_FLIGHT');
-});
-
-test('a database-guarded N11 request decision is the verifier fact that opens the epoch', () => {
-  assert.equal(gate([check({
-    status: TaskStatus.OPEN,
-    verdictApplied: false,
-    runs: [],
-    judgmentStatus: 'DECIDED',
-    judgmentDecision: 'PASS',
-  })]), null);
-  assert.equal(gate([check({
-    status: TaskStatus.OPEN,
-    verdict: 'FAIL',
-    verdictApplied: false,
-    runs: [],
-    judgmentStatus: 'DECIDED',
-    judgmentDecision: 'FAIL',
-  })]), 'VERIFICATION_FAILED');
-});
-
-test('N11 request chronology, not UUIDv4 byte order, selects the current verifier', () => {
+// The three N11 tests that stood here asked what a `task_judgment_request` did to an epoch: an
+// OPEN one held it, a DECIDED one opened or closed it, and request chronology outranked UUIDv4
+// byte order when picking the current verifier. All three inputs went with the request table on
+// 2026-09-02, so the epoch is decided by the check's own task/run/action facts — which is what
+// every other test in this file already exercises. What replaces them is the assertion that the
+// removed inputs cannot come back in through the chronology tie-break.
+test('creation time, not byte order, still selects the current verifier', () => {
   const olderPass = check({
     id: 'z-older-but-bytewise-last',
-    judgmentStatus: 'DECIDED',
-    judgmentDecision: 'PASS',
-    judgmentCreatedAt: '2026-08-26T10:00:00.000Z',
+    createdAt: '2026-08-26T10:00:00.000Z',
   });
   const newerOpen = check({
     id: 'a-newer-but-bytewise-first',
     status: TaskStatus.OPEN,
     verdict: null,
     runs: [],
-    judgmentStatus: 'OPEN',
-    judgmentDecision: null,
-    judgmentCreatedAt: '2026-08-26T11:00:00.000Z',
+    createdAt: '2026-08-26T11:00:00.000Z',
   });
   assert.equal(gate([newerOpen, olderPass]), 'VERIFICATION_IN_FLIGHT');
-  assert.equal(gate([
-    newerOpen,
-    { ...olderPass, judgmentStatus: 'SUPERSEDED',
-      judgmentCreatedAt: '2026-08-26T12:00:00.000Z' },
-  ]), 'VERIFICATION_IN_FLIGHT');
 });
 
 // ---------------------------------------------------------------------------

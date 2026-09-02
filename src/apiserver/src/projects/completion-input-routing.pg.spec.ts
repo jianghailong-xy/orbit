@@ -18,8 +18,6 @@ import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence
 import { CompletionInputRouter } from './completion-input-router.service';
 import {
   completionEvidenceRevisedFact,
-  executableResultRecordedFact,
-  verificationVerdictRecordedFact,
 } from './completion-input';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -42,7 +40,6 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       await db.$disconnect();
       await sql.end();
     });
-
     const ownerId = randomUUID();
     const projectId = randomUUID();
     const taskId = randomUUID();
@@ -119,7 +116,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
 
     const prisma = db as unknown as PrismaService;
     const router = new CompletionInputRouter(new CoordinatorWakeService(prisma));
-    const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, undefined, router);
+    const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, router);
     const actor = { type: CreatorType.USER, id: ownerId };
     const first = await evidenceService.submit(ownerId, taskId, actor, {
       sourceSessionId,
@@ -138,10 +135,10 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
         orderBy: { createdAt: 'asc' },
         select: { event: true, status: true, consumerType: true },
       })).map((row) => [row.event, row.status, row.consumerType]),
-      [
-        ['COMPLETION_EVIDENCE_REVISED', 'CONSUMED', 'JUDGMENT_REQUEST_DERIVER'],
-        ['EVIDENCE_JUDGMENT_REQUESTED', 'CONSUMED', 'HUMAN_INBOX'],
-      ],
+      // One input per evidence revision since 2026-09-02. The second row here was
+      // EVIDENCE_JUDGMENT_REQUESTED — the judgment question this revision used to raise — and it
+      // went with the request ledger; the ledger itself, and this fact about it, did not.
+      [['COMPLETION_EVIDENCE_REVISED', 'CONSUMED', 'JUDGMENT_REQUEST_DERIVER']],
     );
 
     // Same stable fact: producer re-enters the router, but the database admits no new consume.
@@ -151,9 +148,10 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       evidence: { exitCode: 0, command: 'npm test', artifact: 'dist/server.js' },
     });
     assert.equal(replay.id, first.id);
-    assert.equal(await db.projectCoordinatorWake.count({ where: { projectId } }), 2);
+    assert.equal(await db.projectCoordinatorWake.count({ where: { projectId } }), 1);
 
-    // A new digest is a new revision, request and inbox delivery; it also retracts the old request.
+    // A new digest is a new revision and therefore one more input, and nothing else: no request,
+    // no inbox delivery, and no derived task status.
     const second = await evidenceService.submit(ownerId, taskId, actor, {
       sourceSessionId,
       idempotencyKey: 'n7-evidence-v2',
@@ -162,45 +160,16 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     assert.equal(second.revision, '2');
     assert.equal(
       await db.projectCoordinatorWake.count({ where: { projectId, status: 'CONSUMED' } }),
-      5,
+      2,
     );
     assert.equal(
-      await db.projectCoordinatorWake.count({
-        where: { projectId, event: 'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED', consumerType: 'HUMAN_INBOX' },
-      }),
-      1,
+      (await db.task.findUniqueOrThrow({ where: { id: taskId } })).status,
+      'IN_PROGRESS',
+      'submitting evidence settles nothing on its own: the task is exactly where it was, and no '
+      + 'criterion has an evaluator left to move it',
     );
 
-    const realtime = new Proxy({}, { get: () => () => undefined }) as never;
-    const tasks = new TasksService(prisma, {} as never, realtime, undefined, router);
-    const signed = await tasks.judge(ownerId, taskId, {
-      requestId: second.judgmentRequest!.id,
-      evidenceDigest: second.evidenceDigest,
-      evidence: 'A person reviewed the exact revision-2 artifact and test output.',
-    });
-    assert.equal(signed.status, TaskStatus.DONE);
-    assert.equal(
-      await db.projectCoordinatorWake.count({
-        where: {
-          projectId,
-          event: 'EVIDENCE_JUDGMENT_DECIDED',
-          status: 'CONSUMED',
-          consumerType: 'DERIVED_COMPLETION_EVALUATOR',
-        },
-      }),
-      1,
-    );
-    await tasks.judge(ownerId, taskId, {
-      requestId: second.judgmentRequest!.id,
-      evidenceDigest: second.evidenceDigest,
-      evidence: 'transport replay must return the original decision',
-    });
-    assert.equal(
-      await db.projectCoordinatorWake.count({ where: { projectId, event: 'EVIDENCE_JUDGMENT_DECIDED' } }),
-      1,
-    );
-
-    // Human routing neither opens an agent judgment nor steers the person's long-lived Session.
+    // Evidence routing neither opens an agent judgment nor steers the person's long-lived Session.
     assert.equal(await db.session.count({ where: { dispatchOrigin: 'PROJECT_COORDINATOR' } }), 0);
     const coordinator = await db.session.findUniqueOrThrow({ where: { id: coordinatorSessionId } });
     assert.equal(coordinator.status, RunStatus.AWAITING_INPUT);
@@ -243,41 +212,6 @@ suite('result/verdict inputs consume once; refusal releases the exact fact for r
     const router = new CompletionInputRouter(
       new CoordinatorWakeService(db as unknown as PrismaService),
     );
-    let executableEvaluations = 0;
-    const executable = executableResultRecordedFact({
-      projectId,
-      taskId,
-      requestId: randomUUID(),
-      resultId: randomUUID(),
-      evidenceDigest: 'a'.repeat(64),
-      actualExitCode: 0,
-    });
-    assert.equal((await router.route(executable, 'DERIVED_COMPLETION_EVALUATOR', () => {
-      executableEvaluations += 1;
-    })).outcome, 'CONSUMED');
-    assert.equal((await router.route(executable, 'DERIVED_COMPLETION_EVALUATOR', () => {
-      executableEvaluations += 1;
-    })).outcome, 'ALREADY_AWAKE');
-    assert.equal(executableEvaluations, 1);
-
-    let verificationEvaluations = 0;
-    const verification = verificationVerdictRecordedFact({
-      projectId,
-      taskId,
-      requestId: randomUUID(),
-      verifierTaskId: randomUUID(),
-      verdictRevision: '1',
-      evidenceDigest: 'b'.repeat(64),
-      verdict: 'PASS',
-    });
-    await router.route(verification, 'DERIVED_COMPLETION_EVALUATOR', () => {
-      verificationEvaluations += 1;
-    });
-    await router.route(verification, 'DERIVED_COMPLETION_EVALUATOR', () => {
-      verificationEvaluations += 1;
-    });
-    assert.equal(verificationEvaluations, 1);
-
     // The key is computed/claimed before authorization. REFUSED rows remain audit, but leave the
     // partial unique index so the repaired authorization can consume this same immutable fact.
     const retryable = completionEvidenceRevisedFact({
@@ -286,8 +220,6 @@ suite('result/verdict inputs consume once; refusal releases the exact fact for r
       revision: '99',
       criterionRevision: 'c'.repeat(64),
       evidenceDigest: 'd'.repeat(64),
-      requestId: randomUUID(),
-      requestKind: 'VERIFICATION',
     });
     let deliveries = 0;
     const refused = await router.route(
@@ -317,14 +249,18 @@ suite('result/verdict inputs consume once; refusal releases the exact fact for r
       { status: 'CONSUMED', refusalCode: null },
     ]);
 
-    // A genuinely new result/version is a new fact and therefore one new consumption.
-    await router.route(executableResultRecordedFact({
+    // A genuinely new version is a new fact and therefore one new consumption.
+    const laterRevision = completionEvidenceRevisedFact({
       projectId,
       taskId,
-      requestId: executable.subjectId,
-      resultId: randomUUID(),
-      evidenceDigest: 'e'.repeat(64),
-      actualExitCode: 1,
-    }), 'DERIVED_COMPLETION_EVALUATOR', () => { executableEvaluations += 1; });
-    assert.equal(executableEvaluations, 2);
+      revision: '100',
+      criterionRevision: 'c'.repeat(64),
+      evidenceDigest: 'f'.repeat(64),
+    });
+    assert.equal(
+      (await router.route(laterRevision, 'JUDGMENT_REQUEST_DERIVER', () => { deliveries += 1; }))
+        .outcome,
+      'CONSUMED',
+    );
+    assert.equal(deliveries, 2);
   });

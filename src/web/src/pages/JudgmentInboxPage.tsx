@@ -3,12 +3,6 @@ import { Alert, Button, Empty, Spin, Tag } from 'antd';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import {
-  judgmentInboxPath,
-  judgmentReviewPath,
-  shortDigest,
-  type JudgmentInboxPage,
-} from '../lib/judgments';
-import {
   projectAcceptanceInboxPath,
   projectAcceptanceReviewPath,
   type ProjectAcceptanceInboxPage,
@@ -16,40 +10,33 @@ import {
 
 const when = (value: string): string => new Date(value).toLocaleString();
 
+/**
+ * Everything still waiting on a person's decision.
+ *
+ * Until 2026-09-02 this was two inboxes in one list: task-level EVIDENCE_JUDGMENT requests and
+ * project acceptance. The judgment request ledger and its review face were removed with the rest
+ * of the judgment machinery, so what is left is the project half — which was never part of it.
+ */
 export function JudgmentInboxPage() {
-  const taskInbox = useQuery({
-    queryKey: ['judgments', 'open'],
-    queryFn: () => api<JudgmentInboxPage>(judgmentInboxPath({ status: 'OPEN', limit: 100 })),
-  });
   const projectInbox = useQuery({
     queryKey: ['project-acceptance', 'pending'],
     queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(100)),
   });
-  const total = (taskInbox.data?.total ?? 0) + (projectInbox.data?.total ?? 0);
-  const entries = [
-    ...(taskInbox.data?.items ?? []).map((item) => ({
-      kind: 'TASK' as const,
-      at: item.submittedAt,
-      item,
-    })),
-    ...(projectInbox.data?.items ?? []).map((item) => ({
-      kind: 'PROJECT' as const,
-      at: item.startedAt,
-      item,
-    })),
-  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  const hasAnyData = Boolean(taskInbox.data || projectInbox.data);
-  const loading = !hasAnyData && (taskInbox.isLoading || projectInbox.isLoading);
-  const failed = !hasAnyData && (taskInbox.isError || projectInbox.isError);
-  const error = taskInbox.error ?? projectInbox.error;
-  const fetching = taskInbox.isFetching || projectInbox.isFetching;
+  const total = projectInbox.data?.total ?? 0;
+  const entries = [...(projectInbox.data?.items ?? [])]
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  const hasAnyData = Boolean(projectInbox.data);
+  const loading = !hasAnyData && projectInbox.isLoading;
+  const failed = !hasAnyData && projectInbox.isError;
+  const error = projectInbox.error;
+  const fetching = projectInbox.isFetching;
 
   return (
     <div className="judgment-page judgment-inbox-page">
       <header className="judgment-page-head">
         <div>
           <h1 className="page-title">待我判定</h1>
-          <p>任务级 EVIDENCE_JUDGMENT 与项目验收共用一个收件箱。</p>
+          <p>项目验收的人工标准。任务级 EVIDENCE_JUDGMENT 的判定实现已于 2026-09-02 移除。</p>
         </div>
         {hasAnyData
           ? <span className="judgment-count" aria-label={`${total} open requests`}>{total}</span>
@@ -70,10 +57,7 @@ export function JudgmentInboxPage() {
               size="small"
               loading={fetching}
               disabled={fetching}
-              onClick={() => {
-                void taskInbox.refetch();
-                void projectInbox.refetch();
-              }}
+              onClick={() => { void projectInbox.refetch(); }}
             >
               Retry
             </Button>
@@ -83,40 +67,25 @@ export function JudgmentInboxPage() {
         <Empty description="没有待判定的证据" />
       ) : (
         <ul className="judgment-inbox-list" aria-label="Open human decisions">
-          {entries.map((entry) => entry.kind === 'TASK' ? (
-            <li key={`task:${entry.item.requestId}`} className="judgment-inbox-card">
-              <Link to={judgmentReviewPath(entry.item.requestId)}>
-                <Tag color="blue">任务级签字</Tag>
-                <div className="judgment-inbox-title">{entry.item.taskTitle}</div>
-                <div className="judgment-inbox-project">{entry.item.projectTitle ?? 'No project'}</div>
-                <dl className="judgment-inbox-facts">
-                  <div><dt>Evidence</dt><dd>r{entry.item.evidenceRevision} · {shortDigest(entry.item.evidenceDigest)}</dd></div>
-                  <div><dt>Submitted by</dt><dd>{entry.item.actorName ?? entry.item.actorType}</dd></div>
-                  <div><dt>Submitted</dt><dd>{when(entry.item.submittedAt)}</dd></div>
-                  <div><dt>Commit</dt><dd>{entry.item.commit ?? 'Not provided'}</dd></div>
-                </dl>
-                <span className="judgment-inbox-open">Review and decide →</span>
-              </Link>
-            </li>
-          ) : entry.kind === 'PROJECT' ? (
-            <li key={`project:${entry.item.runId}`} className="judgment-inbox-card project-acceptance-inbox-card">
-              <Link to={projectAcceptanceReviewPath(entry.item.projectId, entry.item.runId)}>
+          {entries.map((item) => (
+            <li key={`project:${item.runId}`} className="judgment-inbox-card project-acceptance-inbox-card">
+              <Link to={projectAcceptanceReviewPath(item.projectId, item.runId)}>
                 <Tag color="gold">
                   项目人工验收
                 </Tag>
-                <div className="judgment-inbox-title">{entry.item.projectTitle}</div>
-                <div className="judgment-inbox-project">Project {entry.item.projectStatus}</div>
+                <div className="judgment-inbox-title">{item.projectTitle}</div>
+                <div className="judgment-inbox-project">Project {item.projectStatus}</div>
                 <dl className="judgment-inbox-facts">
-                  <div><dt>Evidence version</dt><dd>attempt {entry.item.attempt}</dd></div>
-                  <div><dt>Current verdict</dt><dd>{entry.item.currentVerdict}</dd></div>
-                  <div><dt>标准集</dt><dd>{entry.item.criteriaDeclared ? '已声明' : '未声明'}</dd></div>
-                  <div><dt>人工标准</dt><dd>{entry.item.answeredCount}/{entry.item.humanCriterionCount} answered</dd></div>
-                  <div><dt>Opened</dt><dd>{when(entry.item.startedAt)}</dd></div>
+                  <div><dt>Evidence version</dt><dd>attempt {item.attempt}</dd></div>
+                  <div><dt>Current verdict</dt><dd>{item.currentVerdict}</dd></div>
+                  <div><dt>标准集</dt><dd>{item.criteriaDeclared ? '已声明' : '未声明'}</dd></div>
+                  <div><dt>人工标准</dt><dd>{item.answeredCount}/{item.humanCriterionCount} answered</dd></div>
+                  <div><dt>Opened</dt><dd>{when(item.startedAt)}</dd></div>
                 </dl>
                 <span className="judgment-inbox-open">处理人工标准 →</span>
               </Link>
             </li>
-          ) : null)}
+          ))}
         </ul>
       )}
     </div>

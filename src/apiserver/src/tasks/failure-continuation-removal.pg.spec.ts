@@ -122,7 +122,6 @@ function connect(): World {
       {} as never,
       { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
       undefined,
-      new CompletionInputRouter(new CoordinatorWakeService(prisma)),
     ),
   };
 }
@@ -473,15 +472,14 @@ suite('(i) an EXECUTABLE task still runs command -> verdict, failure included',
     assert.equal((settled as { ok: boolean }).ok, true);
     assert.equal(
       (await db.task.findUniqueOrThrow({ where: { id: declared.id } })).status,
-      TaskStatus.FAILED,
-      'and a failed command still fails its task rather than being routed somewhere',
+      TaskStatus.OPEN,
+      'and a failed command routes the task nowhere: since 2026-09-02 nothing derives a status '
+      + 'from an exit code at all, so the conservative FAILED is gone with the optimistic DONE',
     );
-    const request = await db.taskJudgmentRequest.findFirstOrThrow({
-      where: { taskId: declared.id },
-      include: { executableResult: true },
-    });
-    assert.equal(request.decision, 'FAIL');
-    assert.equal(request.executableResult?.actualExitCode, 1);
+    // The result row this used to read went with the judgment machinery in 0228. What the
+    // failure leaves is one human-facing comment, and no continuation, receipt or outbox — which
+    // is what this suite is actually about.
+    assert.equal(await db.taskComment.count({ where: { taskId: declared.id } }), 1);
   });
 
 // (j) ---------------------------------------------------------------------------------------------

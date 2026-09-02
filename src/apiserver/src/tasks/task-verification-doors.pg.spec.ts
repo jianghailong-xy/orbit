@@ -40,6 +40,7 @@ import {
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import { ProjectsService } from '../projects/projects.service';
+import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 import { TasksService } from './tasks.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -310,10 +311,36 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       formerlyDone.id,
       'ordinary task completed before becoming a check',
     );
+    // The refusal below is keyed on the task HAVING completion evidence, so the fixture states
+    // that fact rather than relying on the completion helper to leave one behind: since
+    // 2026-09-02 the helper completes through VERIFICATION and writes no evidence of its own.
+    await db.session.create({
+      data: {
+        id: randomUUID(),
+        ownerId: w.ownerId,
+        creatorId: w.ownerId,
+        taskId: formerlyDone.id,
+        title: 'evidence source',
+        prompt: 'record what this task produced',
+        status: 'AWAITING_INPUT',
+        startsTaskWork: true,
+      },
+    }).then(async (session) => {
+      await new TaskCompletionEvidenceService(db as unknown as PrismaService).submit(
+        w.ownerId,
+        formerlyDone.id,
+        { type: 'USER', id: w.ownerId },
+        {
+          sourceSessionId: session.id,
+          idempotencyKey: 'formerly-done-evidence',
+          evidence: { kind: 'PG_TEST', note: 'this task recorded what it produced' },
+        },
+      );
+    });
     await assert.rejects(
       tasks.update(w.ownerId, formerlyDone.id, { verifiesTaskId: subject.id }),
       /already has completion evidence.*File a new verification task instead/,
-      'a completed task cannot discard its judgment lifecycle by becoming a verifier',
+      'a task that recorded completion evidence cannot be reinterpreted as a verifier',
     );
     const attached = await db.task.findUniqueOrThrow({ where: { id: formerlyDone.id } });
     assert.equal(attached.status, TaskStatus.DONE);

@@ -370,35 +370,9 @@
 .judgment-history-entry code {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
-
-.judgment-copy-button.ant-btn {
-  min-height: 44px;
-  padding-inline: 8px;
-}
-
 .judgment-evidence-identity > .judgment-copy-button {
   margin-left: -8px;
 }
-
-.judgment-current-replacement {
-  display: flex;
-  flex-wrap: wrap;
-  min-height: 44px;
-  margin-top: 6px;
-  padding: 6px 8px;
-  align-items: center;
-  gap: 8px 12px;
-  color: var(--text-2);
-  background: var(--warning-bg);
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-}
-
-.judgment-current-replacement code {
-  flex: 1;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-
 .judgment-section-title-row {
   align-items: center;
 }
@@ -449,203 +423,6 @@
   font-size: 16px;
   line-height: 1.5;
 }
-
-.judgment-submitter-claim {
-  display: grid;
-  justify-items: end;
-  gap: 2px;
-  max-width: 190px;
-  text-align: right;
-}
-
-.judgment-submitter-claim span {
-  color: var(--text-3);
-  font-size: 11px;
-}
-
-.judgment-submitter-claim strong {
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-subtle);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.judgment-submitter-claim.is-pass strong {
-  color: var(--success);
-  background: var(--success-bg);
-  border-color: var(--success-border);
-}
-
-.judgment-criterion-finding {
-  margin: 14px 0 0;
-}
-
-.judgment-criterion-finding dt {
-  margin-bottom: 4px;
-  color: var(--text-3);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.judgment-criterion-finding dd {
-  margin: 0;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.judgment-criterion-evidence,
-.judgment-output-details {
-  margin-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.judgment-criterion-evidence > summary,
-.judgment-output-details > summary {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  color: var(--text-1);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.judgment-no-related {
-  margin: 12px 0 0;
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-.judgment-related-evidence {
-  display: grid;
-  gap: 10px;
-  padding-top: 4px;
-}
-
-.judgment-command-fact,
-.judgment-artifact-fact {
-  padding: 12px;
-  overflow: hidden;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-}
-
-.judgment-command-head {
-  color: var(--text-2);
-  font-size: 12px;
-}
-
-.judgment-command-fact > code {
-  display: block;
-  margin-top: 8px;
-  padding: 8px 10px;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  background: var(--fill-inset);
-  border-radius: 6px;
-  font: 12px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-
-.judgment-key-output {
-  margin-top: 10px;
-}
-
-.judgment-key-output > span {
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.judgment-key-output pre,
-.judgment-full-output {
-  width: 100%;
-  max-width: 100%;
-  margin: 5px 0 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: 12px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-
-.judgment-full-output {
-  max-height: 420px;
-  padding: 10px;
-  overflow: auto;
-  background: var(--fill-inset);
-  border-radius: 6px;
-}
-
-.judgment-artifact-fact dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  margin: 10px 0 0;
-}
-
-.judgment-compatibility-alert {
-  margin-top: 12px;
-}
-
-.judgment-compatibility-alert p {
-  margin: 0 0 10px;
-}
-
-.judgment-impact-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  margin-top: 14px;
-  overflow: hidden;
-  background: var(--border-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-}
-
-.judgment-impact-grid > div {
-  display: grid;
-  gap: 3px;
-  padding: 12px;
-  background: var(--bg-raised);
-}
-
-.judgment-impact-grid span {
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.judgment-impact-grid strong {
-  font-size: 13px;
-}
-
-.judgment-authority-note {
-  font-size: 12px;
-}
-
-.judgment-server-dependencies h3 {
-  margin: 16px 0 0;
-  font-size: 14px;
-}
-
-.judgment-dependencies {
-  margin-top: 6px;
-}
-
-.judgment-dependencies li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 0;
-  border-top: 1px solid var(--border);
-}
-
-.judgment-dependencies li span {
-  color: var(--text-2);
-  text-align: right;
-}
-
 .judgment-decision-title > span {
   color: var(--error);
   font-size: 12px;
@@ -728,54 +505,10 @@
   padding: 0 16px 16px;
   border-top: 1px solid var(--border-subtle);
 }
-
-.judgment-history-entry {
-  padding: 14px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.judgment-history-entry:first-child {
-  border-top: 0;
-}
-
-.judgment-history-entry > div:first-child {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-}
-
-.judgment-history-entry > div:first-child span {
-  color: var(--text-2);
-}
-
-.judgment-history-entry dl {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0 0;
-}
-
-.judgment-history-entry p {
-  margin: 10px 0 0;
-  white-space: pre-wrap;
-}
-
 .judgment-audit-content > p {
   margin: 14px 0;
   color: var(--text-2);
 }
-
-.judgment-raw-fact + .judgment-raw-fact {
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.judgment-raw-head h3 {
-  margin: 0;
-  font-size: 14px;
-}
-
 .judgment-json {
   width: 100%;
   max-width: 100%;
@@ -791,40 +524,6 @@
   background: var(--bg-subtle);
   font: 12px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
-
-.judgment-summary {
-  margin: 18px 0 22px;
-  padding: 16px;
-}
-
-.judgment-summary-loading,
-.judgment-summary-error {
-  margin: 12px 0;
-}
-
-.judgment-summary-list {
-  margin-top: 10px;
-}
-
-.judgment-summary-list li + li {
-  border-top: 1px solid var(--border);
-}
-
-.judgment-summary-link {
-  display: grid;
-  padding: 12px 2px;
-  color: inherit;
-  text-decoration: none;
-}
-
-.judgment-summary-task {
-  font-weight: 650;
-}
-
-.judgment-summary-action {
-  margin-top: 5px;
-}
-
 /* Project acceptance is the project-level peer in the same human-decision inbox. Its criterion
    cards reuse the evidence-review surface above, while the controls add one explicit answer and
    evidence bundle per immutable criterion snapshot. */

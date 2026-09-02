@@ -297,11 +297,11 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   );
   assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
   assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
-  assert.match(sql, /epoch_open_request\."status" = 'OPEN'/);
-  assert.match(
-    sql,
-    /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
-  );
+  // The two request clauses here — an OPEN request closing an older PASS, and a DECIDED PASS
+  // standing in for the check's own facts — went with `task_judgment_request` on 2026-09-02.
+  assert.doesNotMatch(sql, /task_judgment_request/);
+  assert.match(sql, /epoch_check\."verdict" = 'PASS'/);
+  assert.match(sql, /epoch_check\."verdict_revision" > 0/);
   assert.match(
     sql,
     /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,

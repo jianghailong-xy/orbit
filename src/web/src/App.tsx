@@ -22,7 +22,6 @@ import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 import { JudgmentInboxPage } from './pages/JudgmentInboxPage';
-import { JudgmentReviewPage } from './pages/JudgmentReviewPage';
 import { ProjectAcceptanceReviewPage } from './pages/ProjectAcceptanceReviewPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
@@ -119,14 +118,6 @@ export function App() {
               element={
                 <DocView>
                   <ProjectAcceptanceReviewPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="judgments/:id"
-              element={
-                <DocView>
-                  <JudgmentReviewPage />
                 </DocView>
               }
             />

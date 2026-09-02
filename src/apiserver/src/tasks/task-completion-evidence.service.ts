@@ -1,24 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { CreatorType, Prisma, TaskJudgmentRequestStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   ImportLegacyTaskCommentEvidenceDto,
   TaskCompletionEvidenceDto,
-  TaskJudgmentRequestDto,
   TaskLegacyEvidenceImportDto,
 } from './dto';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
-import { routeTaskJudgment } from './task-judgment-request';
 import { TasksService } from './tasks.service';
-import { JudgmentDeliveryService } from '../push/judgment-delivery.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
-import {
-  completionEvidenceRevisedFact,
-  evidenceJudgmentRequestedFact,
-  evidenceJudgmentRequestSupersededFact,
-} from '../projects/completion-input';
+import { completionEvidenceRevisedFact } from '../projects/completion-input';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -33,38 +26,6 @@ export interface SubmitCompletionEvidence {
   sourceSessionId: string;
   evidence: JsonObject;
   idempotencyKey?: string;
-}
-
-export interface TaskJudgmentBackfillInput {
-  idempotencyKey: string;
-  batchSize: number;
-  pushTaskIds?: string[];
-}
-
-export interface TaskJudgmentBackfillResult {
-  id: string;
-  ownerId: string;
-  actorType: CreatorType;
-  actorId: string;
-  idempotencyKey: string;
-  inputDigest: string;
-  batchSize: number;
-  pushTaskIds: string[];
-  selection: JsonObject;
-  startedAt: Date;
-  finishedAt: Date;
-  scannedCount: number;
-  requestCount: number;
-  inboxCount: number;
-  pushSelectedCount: number;
-  pushSuppressedCount: number;
-  durationMs: string;
-}
-
-interface RequestCreationOptions {
-  origin?: 'LIVE_EVIDENCE' | 'LEGACY_IMPORT' | 'BACKFILL';
-  devicePolicy?: 'IMMEDIATE' | 'IN_APP_ONLY';
-  backfillBatchId?: string;
 }
 
 export interface CompletionCriterionSnapshotInput {
@@ -149,80 +110,6 @@ const evidenceInclude = {
 
 type EvidenceRow = Prisma.TaskCompletionEvidenceGetPayload<{ include: typeof evidenceInclude }>;
 
-type JudgmentRequestRow = Prisma.TaskJudgmentRequestGetPayload<Record<string, never>>;
-type BackfillBatchRow = Prisma.TaskJudgmentBackfillBatchGetPayload<Record<string, never>>;
-
-interface RequestFactResult {
-  request: JudgmentRequestRow;
-  superseded: JudgmentRequestRow[];
-}
-
-interface SubmittedEvidenceFactResult {
-  request: JudgmentRequestRow | null;
-  superseded: JudgmentRequestRow[];
-}
-
-export interface ReconcileSatisfiedJudgmentRequestInput {
-  requestId: string;
-  sourceSessionId: string;
-}
-
-function backfillResponse(row: BackfillBatchRow): TaskJudgmentBackfillResult {
-  if (!row.finishedAt || row.scannedCount === null || row.requestCount === null
-    || row.inboxCount === null || row.pushSelectedCount === null
-    || row.pushSuppressedCount === null || row.durationMs === null) {
-    throw new ConflictException('judgment backfill batch has no committed result');
-  }
-  return {
-    id: row.id,
-    ownerId: row.ownerId,
-    actorType: row.actorType,
-    actorId: row.actorId,
-    idempotencyKey: row.idempotencyKey,
-    inputDigest: row.inputDigest,
-    batchSize: row.batchSize,
-    pushTaskIds: row.pushTaskIds,
-    selection: row.selection as JsonObject,
-    startedAt: row.startedAt,
-    finishedAt: row.finishedAt,
-    scannedCount: row.scannedCount,
-    requestCount: row.requestCount,
-    inboxCount: row.inboxCount,
-    pushSelectedCount: row.pushSelectedCount,
-    pushSuppressedCount: row.pushSuppressedCount,
-    durationMs: row.durationMs.toString(),
-  };
-}
-
-function requestResponse(row: JudgmentRequestRow): TaskJudgmentRequestDto {
-  return {
-    id: row.id,
-    taskId: row.taskId,
-    evidenceId: row.evidenceId,
-    criterionRevision: row.criterionRevision,
-    evidenceDigest: row.evidenceDigest,
-    kind: row.kind,
-    recipientType: row.recipientType,
-    recipientId: row.recipientId,
-    status: row.status,
-    origin: row.origin,
-    devicePolicy: row.devicePolicy,
-    backfillBatchId: row.backfillBatchId,
-    createdAt: row.createdAt,
-    decidedAt: row.decidedAt,
-    decidedByType: row.decidedByType,
-    decidedById: row.decidedById,
-    decision: row.decision,
-    decisionNote: row.decisionNote,
-    supersededAt: row.supersededAt,
-    supersededById: row.supersededById,
-    supersessionRule: row.supersessionRule,
-    supersededActorType: row.supersededActorType,
-    supersededActorId: row.supersededActorId,
-    supersededSourceSessionId: row.supersededSourceSessionId,
-  };
-}
-
 function legacyImportResponse(row: EvidenceRow['legacyImport']): TaskLegacyEvidenceImportDto | null {
   if (!row) return null;
   return {
@@ -242,22 +129,7 @@ function legacyImportResponse(row: EvidenceRow['legacyImport']): TaskLegacyEvide
   };
 }
 
-function factTimeVerifierSubjectTaskId(row: EvidenceRow): string | null {
-  const criterion = row.criterion as JsonObject;
-  return typeof criterion.verifiesTaskId === 'string'
-    ? criterion.verifiesTaskId
-    : null;
-}
-
-function response(
-  row: EvidenceRow,
-  request: JudgmentRequestRow | null,
-): TaskCompletionEvidenceDto {
-  const criterion = row.criterion as JsonObject;
-  const subjectTaskId = factTimeVerifierSubjectTaskId(row);
-  if (subjectTaskId == null && request == null) {
-    throw new ConflictException('completion evidence has no declared consumer');
-  }
+function response(row: EvidenceRow): TaskCompletionEvidenceDto {
   return {
     id: row.id,
     taskId: row.taskId,
@@ -267,39 +139,23 @@ function response(
     sourceSessionId: row.sourceSessionId,
     sourceAttemptId: row.sourceAttemptId,
     criterionRevision: row.criterionRevision,
-    criterion,
+    criterion: row.criterion as JsonObject,
     evidence: row.evidence as JsonObject,
     evidenceDigest: row.evidenceDigest,
     revision: row.revision.toString(),
     idempotencyKeys: row.idempotencyKeys.map(({ idempotencyKey }) => idempotencyKey),
     legacyImport: legacyImportResponse(row.legacyImport),
-    // The immutable criterion snapshot owns the response shape. A pre-0192 check-of-check
-    // request may still exist as terminal audit history, but it is not the consumer of a fact
-    // that was produced by a verifier. listRequests exposes that historical row explicitly.
-    judgmentRequest: subjectTaskId != null
-      ? null
-      : request ? requestResponse(request) : null,
-    consumption: subjectTaskId != null
-      ? {
-          kind: 'VERIFIER_VERDICT',
-          verifierTaskId: row.taskId,
-          subjectTaskId,
-        }
-      : {
-          kind: 'JUDGMENT_REQUEST',
-          judgmentRequestId: request!.id,
-          requestKind: request!.kind as TaskCompletionCriterionValue,
-        },
   };
 }
 
 /**
  * N10's append-only completion-evidence ledger.
  *
- * Its evidence/request transaction never writes the subject Task or source Session lifecycle.
- * Post-commit VERIFICATION delivery may create the current verifier carrier and retire a carrier
- * whose request the transaction just superseded; those carrier writes use TasksService's ordinary
- * lifecycle boundary and cannot suppress or reject the evidence fact itself.
+ * Since 2026-09-02 it is only a ledger. The judgment request each revision used to raise, the
+ * device delivery that request filed, and the decision that closed it were removed with the rest
+ * of the judgment machinery; nothing here derives a Task status or names a consumer. Submitting
+ * evidence is still how a run records what it produced, and the rows are still immutable and
+ * append-only, so a rebuilt implementation reads the same ledger.
  */
 @Injectable()
 export class TaskCompletionEvidenceService {
@@ -308,7 +164,6 @@ export class TaskCompletionEvidenceService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly tasks?: TasksService,
-    @Optional() private readonly deliveries?: JudgmentDeliveryService,
     @Optional() private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
@@ -371,17 +226,9 @@ export class TaskCompletionEvidenceService {
           if (!sameRequest) {
             throw new ConflictException('idempotencyKey is already bound to different completion evidence');
           }
-          const { request, superseded } = await this.requestForSubmittedEvidenceFact(
-            tx,
-            taskId,
-            replay.evidence,
-            task,
-          );
           return {
-            evidence: response(replay.evidence, request),
+            evidence: response(replay.evidence),
             evidenceRow: replay.evidence,
-            request,
-            superseded,
             projectId: task.projectId,
           };
         }
@@ -434,17 +281,9 @@ export class TaskCompletionEvidenceService {
           include: evidenceInclude,
         });
       }
-      const { request, superseded } = await this.requestForSubmittedEvidenceFact(
-        tx,
-        taskId,
-        evidence,
-        task,
-      );
       return {
-        evidence: response(evidence, request),
+        evidence: response(evidence),
         evidenceRow: evidence,
-        request,
-        superseded,
         projectId: task.projectId,
       };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
@@ -452,7 +291,7 @@ export class TaskCompletionEvidenceService {
     // The revision itself is the trigger. A source Session may still be RUNNING or
     // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
     // facts appears in this route or its key.
-    if (committed.projectId && committed.request && this.completionInputs) {
+    if (committed.projectId && this.completionInputs) {
       await this.completionInputs.route(
         completionEvidenceRevisedFact({
           projectId: committed.projectId,
@@ -460,110 +299,14 @@ export class TaskCompletionEvidenceService {
           revision: committed.evidenceRow.revision.toString(),
           criterionRevision: committed.evidenceRow.criterionRevision,
           evidenceDigest: committed.evidenceRow.evidenceDigest,
-          requestId: committed.request.id,
-          requestKind: committed.request.kind,
         }),
+        // The wake's stored consumer vocabulary, unchanged: the label is what these rows have
+        // always said and what the CHECK still accepts. Nothing derives a judgment request from
+        // this fact any more — see COMPLETION_INPUT_CONSUMERS.
         'JUDGMENT_REQUEST_DERIVER',
       );
-      // EVIDENCE_JUDGMENT is addressed to a person. These facts feed N12's inbox/delivery surface and
-      // deliberately never call CoordinatorJudgmentService or SessionsService.
-      if (committed.request.kind === 'EVIDENCE_JUDGMENT'
-        && committed.request.status === TaskJudgmentRequestStatus.OPEN) {
-        await this.completionInputs.route(
-          evidenceJudgmentRequestedFact({
-            projectId: committed.projectId,
-            taskId,
-            requestId: committed.request.id,
-            criterionRevision: committed.request.criterionRevision,
-            evidenceDigest: committed.request.evidenceDigest,
-            recipientId: committed.request.recipientId,
-          }),
-          'HUMAN_INBOX',
-        );
-      }
-      for (const request of committed.superseded) {
-        if (request.kind !== 'EVIDENCE_JUDGMENT'
-          || request.supersessionRule !== 'EVIDENCE_REVISED'
-          || !request.supersededById) continue;
-        await this.completionInputs.route(
-          evidenceJudgmentRequestSupersededFact({
-            projectId: committed.projectId,
-            taskId,
-            requestId: request.id,
-            evidenceDigest: request.evidenceDigest,
-            supersededById: committed.request.id,
-            replacementEvidenceDigest: committed.request.evidenceDigest,
-          }),
-          'HUMAN_INBOX',
-        );
-      }
     }
-
-    if (committed.request) await this.afterEvidenceCommit(ownerId, taskId, committed.request);
     return committed.evidence;
-  }
-
-  private async afterEvidenceCommit(
-    ownerId: string,
-    taskId: string,
-    request: JudgmentRequestRow,
-  ): Promise<void> {
-    // VERIFICATION owns a distinct task whose id is the request id. Filing/dispatch is after the
-    // evidence transaction so a runner failure cannot erase the request; a replay converges on the
-    // same deterministic task instead of minting another one.
-    if (request.kind === 'VERIFICATION' && this.tasks) {
-      if (request.status === TaskJudgmentRequestStatus.OPEN) {
-        await this.tasks.ensureJudgmentVerification(
-          ownerId,
-          taskId,
-          request.id,
-          request.evidenceDigest,
-        );
-      }
-      await this.tasks.retireSupersededJudgmentVerifications(ownerId, taskId);
-    }
-    if (request.kind === 'EVIDENCE_JUDGMENT'
-      && request.status === TaskJudgmentRequestStatus.OPEN
-      && request.devicePolicy === 'IMMEDIATE') {
-      // The trigger already committed the inbox/outbox rows. This is only the low-latency nudge;
-      // startup recovery and the persisted nextAttemptAt remain the guarantee if this process dies
-      // between COMMIT and this line.
-      this.deliveries?.kick();
-    }
-  }
-
-  /**
-   * Evidence produced while running a verifier documents how it reached its own verdict. The
-   * immutable criterion snapshot, rather than the Task's later role, identifies that fact-time
-   * consumer. Manufacturing a EVIDENCE_JUDGMENT or another VERIFICATION request would create a
-   * recursive check-of-check lifecycle.
-   *
-   * A pre-0192 fact can lack `criterion.verifiesTaskId` even though its Task is now a verifier. In
-   * that case its original (now-terminal) request remains the consumer; absence of both facts is
-   * intentionally surfaced by `response` instead of inventing a consumer during replay.
-   */
-  private async requestForSubmittedEvidenceFact(
-    tx: Prisma.TransactionClient,
-    taskId: string,
-    evidence: EvidenceRow,
-    task: LockedCriterionTask,
-    options: RequestCreationOptions = {},
-  ): Promise<SubmittedEvidenceFactResult> {
-    if (factTimeVerifierSubjectTaskId(evidence) != null) {
-      return { request: null, superseded: [] };
-    }
-    if (task.verifiesTaskId == null) {
-      return this.requestForEvidenceFact(tx, taskId, evidence, task, options);
-    }
-    const historical = await tx.taskJudgmentRequest.findFirst({
-      where: {
-        taskId,
-        criterionRevision: evidence.criterionRevision,
-        evidenceDigest: evidence.evidenceDigest,
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
-    return { request: historical, superseded: [] };
   }
 
   /**
@@ -689,16 +432,7 @@ export class TaskCompletionEvidenceService {
         if (!exactReplay) {
           throw new ConflictException('legacy source or idempotencyKey is already bound to a different import');
         }
-        const subjectTaskId = factTimeVerifierSubjectTaskId(existing.evidence);
-        const request = subjectTaskId == null
-          ? await tx.taskJudgmentRequest.findFirst({
-              where: { evidenceId: existing.evidenceId, origin: 'LEGACY_IMPORT' },
-            })
-          : null;
-        if (subjectTaskId == null && !request) {
-          throw new ConflictException('legacy evidence import has no judgment request');
-        }
-        return { evidence: response(existing.evidence, request), request };
+        return { evidence: response(existing.evidence) };
       }
 
       const occupiedKey = await tx.taskCompletionEvidenceIdempotency.findFirst({
@@ -772,421 +506,10 @@ export class TaskCompletionEvidenceService {
         where: { id: evidence.id },
         include: evidenceInclude,
       });
-      const { request } = await this.requestForSubmittedEvidenceFact(tx, taskId, evidence, task, {
-        origin: 'LEGACY_IMPORT',
-        devicePolicy,
-      });
-      return { evidence: response(evidence, request), request };
+      return { evidence: response(evidence) };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.importLegacyComment'));
 
-    if (committed.request) await this.afterEvidenceCommit(ownerId, taskId, committed.request);
     return committed.evidence;
-  }
-
-  /**
-   * File missing EVIDENCE_JUDGMENT requests for a bounded slice of tasks that already have evidence.
-   * It deliberately cannot create evidence, and DONE/CANCELLED/no-evidence rows cannot enter the
-   * candidate set. Every request gets a durable inbox row; device work is opt-in by task id.
-   */
-  async backfill(
-    ownerId: string,
-    actor: CompletionEvidenceActor,
-    input: TaskJudgmentBackfillInput,
-  ): Promise<TaskJudgmentBackfillResult> {
-    if (!UUID_RE.test(ownerId) || !UUID_RE.test(actor.id)
-      || !Object.values(CreatorType).includes(actor.type)) {
-      throw new BadRequestException('backfill actor is invalid');
-    }
-    const idempotencyKey = input.idempotencyKey?.trim().normalize('NFC');
-    if (!idempotencyKey || idempotencyKey.length > 200) {
-      throw new BadRequestException('idempotencyKey must contain 1 to 200 characters');
-    }
-    if (!Number.isInteger(input.batchSize) || input.batchSize < 1 || input.batchSize > 1_000) {
-      throw new BadRequestException('batchSize must be an integer from 1 to 1000');
-    }
-    const pushTaskIds = [...new Set(input.pushTaskIds ?? [])].sort();
-    if (pushTaskIds.some((id) => !UUID_RE.test(id))) {
-      throw new BadRequestException('pushTaskIds must contain UUIDs');
-    }
-    const selection = normalizeCompletionEvidence({
-      schemaVersion: 1,
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-      statusNotIn: ['DONE', 'CANCELLED'],
-      evidence: 'LATEST_REVISION',
-      terminalReason: null,
-      supersededByTaskId: null,
-      request: 'MISSING_EXACT_FACT',
-      order: 'TASK_ID_ASC',
-      concurrency: 'FOR_UPDATE_SKIP_LOCKED',
-    }) as JsonObject;
-    const inputDigest = completionDigest(normalizeCompletionEvidence({
-      ownerId,
-      actorType: actor.type,
-      actorId: actor.id,
-      batchSize: input.batchSize,
-      pushTaskIds,
-      selection,
-    }));
-    const batchId = randomUUID();
-    const startedAt = new Date();
-
-    const committed = await withTransactionRetry(this.prisma, async (tx) => {
-      const replay = await tx.taskJudgmentBackfillBatch.findUnique({
-        where: { ownerId_idempotencyKey: { ownerId, idempotencyKey } },
-      });
-      if (replay) {
-        if (replay.inputDigest !== inputDigest
-          || replay.actorType !== actor.type
-          || replay.actorId !== actor.id) {
-          throw new ConflictException('idempotencyKey is already bound to a different backfill');
-        }
-        return backfillResponse(replay);
-      }
-
-      const owner = await tx.user.findUnique({ where: { id: ownerId }, select: { id: true } });
-      if (!owner) throw new NotFoundException('owner not found');
-      if (actor.type === CreatorType.USER) {
-        if (actor.id !== ownerId) throw new BadRequestException('user backfill actor must be the account owner');
-      } else {
-        const workspace = await tx.workspace.findFirst({
-          where: { id: actor.id, ownerId },
-          select: { id: true },
-        });
-        if (!workspace) throw new BadRequestException('agent backfill actor must belong to the account owner');
-      }
-      if (pushTaskIds.length > 0) {
-        const ownedPushTasks = await tx.task.count({ where: { ownerId, id: { in: pushTaskIds } } });
-        if (ownedPushTasks !== pushTaskIds.length) {
-          throw new BadRequestException('pushTaskIds must identify tasks owned by this account');
-        }
-      }
-
-      await tx.taskJudgmentBackfillBatch.create({
-        data: {
-          id: batchId,
-          ownerId,
-          actorType: actor.type,
-          actorId: actor.id,
-          idempotencyKey,
-          inputDigest,
-          batchSize: input.batchSize,
-          pushTaskIds,
-          selection: selection as Prisma.InputJsonObject,
-          startedAt,
-        },
-      });
-
-      const candidates = await tx.$queryRaw<BackfillCandidate[]>(Prisma.sql`
-        SELECT task."id",
-               evidence."id" AS "evidenceId",
-               task."title",
-               task."project_id" AS "projectId",
-               task."status",
-               task."completion_criterion"::text AS "completionCriterion",
-               task."acceptance_criteria" AS "acceptanceCriteria",
-               task."acceptance_command" AS "acceptanceCommand",
-               task."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
-               task."completion_policy"::text AS "completionPolicy",
-               task."verifies_task_id" AS "verifiesTaskId"
-          FROM "task" task
-          JOIN LATERAL (
-            SELECT current_evidence."id", current_evidence."criterion_revision",
-                   current_evidence."evidence_digest"
-              FROM "task_completion_evidence" current_evidence
-             WHERE current_evidence."task_id" = task."id"
-             ORDER BY current_evidence."revision" DESC
-             LIMIT 1
-          ) evidence ON true
-         WHERE task."owner_id" = ${ownerId}::uuid
-           AND task."completion_criterion" = 'EVIDENCE_JUDGMENT'
-           AND task."status"::text NOT IN ('DONE', 'CANCELLED')
-           AND task."terminal_reason" IS NULL
-           AND task."superseded_by_task_id" IS NULL
-           AND NOT EXISTS (
-             SELECT 1
-               FROM "task_judgment_request" request
-              WHERE request."task_id" = task."id"
-                AND request."criterion_revision" = evidence."criterion_revision"
-                AND request."evidence_digest" = evidence."evidence_digest"
-                AND request."kind" = 'EVIDENCE_JUDGMENT'
-           )
-         ORDER BY task."id"
-         FOR UPDATE OF task SKIP LOCKED
-         LIMIT ${input.batchSize}
-      `);
-
-      const pushSet = new Set(pushTaskIds);
-      const requestIds: string[] = [];
-      for (const candidate of candidates) {
-        const evidence = await tx.taskCompletionEvidence.findUniqueOrThrow({
-          where: { id: candidate.evidenceId },
-          include: evidenceInclude,
-        });
-        const { request } = await this.requestForEvidenceFact(tx, candidate.id, evidence, candidate, {
-          origin: 'BACKFILL',
-          devicePolicy: pushSet.has(candidate.id) ? 'IMMEDIATE' : 'IN_APP_ONLY',
-          backfillBatchId: batchId,
-        });
-        requestIds.push(request.id);
-      }
-
-      const inboxCount = requestIds.length === 0 ? 0 : await tx.taskJudgmentInboxItem.count({
-        where: { requestId: { in: requestIds } },
-      });
-      const pushSelectedCount = requestIds.length === 0 ? 0 : await tx.taskJudgmentPushDelivery.count({
-        where: { requestId: { in: requestIds }, status: 'PENDING' },
-      });
-      const pushSuppressedCount = requestIds.length === 0 ? 0 : await tx.taskJudgmentPushDelivery.count({
-        where: {
-          requestId: { in: requestIds },
-          status: 'CANCELLED',
-          errorCode: 'POLICY_IN_APP_ONLY',
-        },
-      });
-      const finishedAt = new Date();
-      const durationMs = BigInt(Math.max(0, finishedAt.getTime() - startedAt.getTime()));
-      const batch = await tx.taskJudgmentBackfillBatch.update({
-        where: { id: batchId },
-        data: {
-          finishedAt,
-          scannedCount: candidates.length,
-          requestCount: requestIds.length,
-          inboxCount,
-          pushSelectedCount,
-          pushSuppressedCount,
-          durationMs,
-        },
-      });
-      return backfillResponse(batch);
-    }, loggedRetry(this.logger, 'taskCompletionEvidence.backfill'));
-
-    if (committed.pushSelectedCount > 0) this.deliveries?.kick();
-    return committed;
-  }
-
-  private async requestForEvidenceFact(
-    tx: Prisma.TransactionClient,
-    taskId: string,
-    evidence: EvidenceRow,
-    lockedTask?: LockedCriterionTask,
-    options: RequestCreationOptions = {},
-  ): Promise<RequestFactResult> {
-    const task = lockedTask ?? await tx.task.findUniqueOrThrow({
-      where: { id: taskId },
-      select: {
-        title: true,
-        projectId: true,
-        status: true,
-        completionCriterion: true,
-        acceptanceCriteria: true,
-        acceptanceCommand: true,
-        acceptanceExpectedExitCode: true,
-        completionPolicy: true,
-        verifiesTaskId: true,
-      },
-    });
-    const exact = await tx.taskJudgmentRequest.findFirst({
-      where: {
-        taskId,
-        criterionRevision: evidence.criterionRevision,
-        evidenceDigest: evidence.evidenceDigest,
-        kind: task.completionCriterion,
-      },
-    });
-    // Replaying an older fact returns its terminal request. It must never reopen it or supersede
-    // the current request merely because delivery order ran backwards. The one exception is an
-    // OPEN request whose Task is already DONE: replay converges that impossible state through the
-    // same audited terminal-rule helper used for a newly submitted evidence fact.
-    if (exact) {
-      if (task.status !== TaskStatus.DONE || exact.status !== TaskJudgmentRequestStatus.OPEN) {
-        return { request: exact, superseded: [] };
-      }
-      const superseded = await this.supersedeOpenRequests(tx, taskId, {
-        actorType: evidence.actorType,
-        actorId: evidence.actorId,
-        sourceSessionId: evidence.sourceSessionId,
-      }, 'TASK_ALREADY_DONE', new Date());
-      return {
-        request: superseded.find((request) => request.id === exact.id)
-          ?? await tx.taskJudgmentRequest.findUniqueOrThrow({ where: { id: exact.id } }),
-        superseded,
-      };
-    }
-
-    const requestId = randomUUID();
-    const route = routeTaskJudgment(task.completionCriterion as TaskCompletionCriterionValue, {
-      ownerId: evidence.ownerId,
-      sourceSessionId: evidence.sourceSessionId,
-      requestId,
-    });
-    const createdAt = new Date();
-    let request = await tx.taskJudgmentRequest.create({
-      data: {
-        id: requestId,
-        taskId,
-        ownerId: evidence.ownerId,
-        evidenceId: evidence.id,
-        criterionRevision: evidence.criterionRevision,
-        evidenceDigest: evidence.evidenceDigest,
-        kind: route.kind,
-        recipientType: route.recipientType,
-        recipientId: route.recipientId,
-        origin: options.origin ?? 'LIVE_EVIDENCE',
-        devicePolicy: options.devicePolicy ?? 'IMMEDIATE',
-        backfillBatchId: options.backfillBatchId,
-        createdAt,
-      },
-    });
-
-    const auditActor = {
-      actorType: evidence.actorType,
-      actorId: evidence.actorId,
-      sourceSessionId: evidence.sourceSessionId,
-    };
-    // DONE means the declared criterion has already been satisfied. Preserve the new request as
-    // an evidence-bound audit fact, but make neither it nor any older ghost request actionable.
-    // A non-DONE task follows the ordinary N10/N11 path: this request remains OPEN and replaces
-    // every older OPEN evidence version.
-    const superseded = task.status === TaskStatus.DONE
-      ? await this.supersedeOpenRequests(
-          tx,
-          taskId,
-          auditActor,
-          'TASK_ALREADY_DONE',
-          createdAt,
-        )
-      : await this.supersedeOpenRequests(
-          tx,
-          taskId,
-          auditActor,
-          'EVIDENCE_REVISED',
-          createdAt,
-          request.id,
-          [request.id],
-        );
-    if (task.status === TaskStatus.DONE) {
-      request = superseded.find((row) => row.id === request.id)
-        ?? await tx.taskJudgmentRequest.findUniqueOrThrow({ where: { id: request.id } });
-    }
-
-    // Compatibility only. New EVIDENCE_JUDGMENT blockers/signals are SQL views of this request and
-    // are therefore not inserted or independently maintained. Older rows raised by the parked-
-    // attempt producer stop being open now that a real judgment path exists.
-    if (task.projectId) {
-      await tx.projectBlocker.updateMany({
-        where: {
-          projectId: task.projectId,
-          kind: 'HUMAN_DECISION_REQUIRED',
-          subjectType: 'TASK',
-          subjectId: taskId,
-          resolvedAt: null,
-        },
-        data: { resolvedAt: createdAt, resolvedBy: 'AUTO', updatedAt: createdAt },
-      });
-    }
-    return { request, superseded };
-  }
-
-  private async supersedeOpenRequests(
-    tx: Prisma.TransactionClient,
-    taskId: string,
-    actor: { actorType: CreatorType; actorId: string; sourceSessionId: string },
-    rule: 'EVIDENCE_REVISED' | 'TASK_ALREADY_DONE',
-    supersededAt: Date,
-    successorRequestId?: string,
-    excludedRequestIds: string[] = [],
-    includedRequestIds?: string[],
-  ): Promise<JudgmentRequestRow[]> {
-    const candidates = await tx.taskJudgmentRequest.findMany({
-      where: {
-        taskId,
-        status: TaskJudgmentRequestStatus.OPEN,
-        ...(excludedRequestIds.length > 0 ? { id: { notIn: excludedRequestIds } } : {}),
-        ...(includedRequestIds ? { id: { in: includedRequestIds } } : {}),
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
-    if (candidates.length === 0) return [];
-    const candidateIds = candidates.map(({ id }) => id);
-    await tx.taskJudgmentRequest.updateMany({
-      where: { id: { in: candidateIds }, status: TaskJudgmentRequestStatus.OPEN },
-      data: {
-        status: TaskJudgmentRequestStatus.SUPERSEDED,
-        supersededAt,
-        supersededById: successorRequestId ?? null,
-        supersessionRule: rule,
-        supersededActorType: actor.actorType,
-        supersededActorId: actor.actorId,
-        supersededSourceSessionId: actor.sourceSessionId,
-      },
-    });
-    return tx.taskJudgmentRequest.findMany({
-      where: { id: { in: candidateIds } },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
-  }
-
-  /**
-   * Explicit operator repair for an OPEN request whose Task already reached DONE.
-   *
-   * This is intentionally narrower than a request-status patch: the Task mutex, DONE predicate,
-   * exact request identity and source Session are all re-read here, and the mutation is delegated
-   * to `supersedeOpenRequests`, the same helper used by ordinary evidence submission.
-   */
-  async reconcileSatisfiedJudgmentRequest(
-    ownerId: string,
-    taskId: string,
-    input: ReconcileSatisfiedJudgmentRequestInput,
-  ): Promise<TaskJudgmentRequestDto> {
-    if (!UUID_RE.test(ownerId) || !UUID_RE.test(taskId) || !UUID_RE.test(input.requestId)
-      || !UUID_RE.test(input.sourceSessionId)) {
-      throw new BadRequestException('repair owner, task, request and sourceSessionId must be UUIDs');
-    }
-    return withTransactionRetry(this.prisma, async (tx) => {
-      const [task] = await tx.$queryRaw<Array<{ id: string; status: TaskStatus }>>(Prisma.sql`
-        SELECT "id", "status"
-          FROM "task"
-         WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
-         FOR UPDATE
-      `);
-      if (!task) throw new NotFoundException('task not found');
-      if (task.status !== TaskStatus.DONE) {
-        throw new ConflictException({
-          code: 'TASK_JUDGMENT_REPAIR_REQUIRES_DONE',
-          requiredAction: 'DECIDE_THE_OPEN_REQUEST_NORMALLY',
-          message: 'Only a Task whose completion criterion is already satisfied at DONE may use this repair.',
-        });
-      }
-      const source = await tx.session.findFirst({
-        where: { id: input.sourceSessionId, ownerId },
-        select: { workspaceId: true },
-      });
-      if (!source?.workspaceId) {
-        throw new BadRequestException('repair source Session must identify an agent workspace');
-      }
-      const request = await tx.taskJudgmentRequest.findFirst({
-        where: { id: input.requestId, taskId, ownerId },
-      });
-      if (!request) throw new NotFoundException('judgment request not found');
-      if (request.status !== TaskJudgmentRequestStatus.OPEN) {
-        if (request.status === TaskJudgmentRequestStatus.SUPERSEDED
-          && request.supersessionRule === 'TASK_ALREADY_DONE') {
-          return requestResponse(request);
-        }
-        throw new ConflictException({
-          code: 'TASK_JUDGMENT_REPAIR_REQUEST_NOT_OPEN',
-          requiredAction: 'READ_THE_EXISTING_REQUEST_CONCLUSION',
-          message: 'The named judgment request already has a different terminal conclusion.',
-        });
-      }
-      const [resolved] = await this.supersedeOpenRequests(tx, taskId, {
-        actorType: CreatorType.AGENT,
-        actorId: source.workspaceId,
-        sourceSessionId: input.sourceSessionId,
-      }, 'TASK_ALREADY_DONE', new Date(), undefined, [], [request.id]);
-      if (!resolved) throw new ConflictException('judgment request changed before repair');
-      return requestResponse(resolved);
-    }, loggedRetry(this.logger, 'taskCompletionEvidence.reconcileSatisfiedJudgmentRequest'));
   }
 
   async list(ownerId: string, taskId: string) {
@@ -1197,27 +520,6 @@ export class TaskCompletionEvidenceService {
       orderBy: { revision: 'asc' },
       include: evidenceInclude,
     });
-    const requests = await this.prisma.taskJudgmentRequest.findMany({ where: { taskId } });
-    const byFact = new Map(requests.map((request) => [
-      `${request.criterionRevision}:${request.evidenceDigest}`,
-      request,
-    ]));
-    return rows.map((row) => response(
-      row,
-      byFact.get(`${row.criterionRevision}:${row.evidenceDigest}`) ?? null,
-    ));
-  }
-
-  async listRequests(ownerId: string, taskId: string): Promise<TaskJudgmentRequestDto[]> {
-    const task = await this.prisma.task.findFirst({
-      where: { id: taskId, ownerId },
-      select: { id: true },
-    });
-    if (!task) throw new NotFoundException('task not found');
-    const requests = await this.prisma.taskJudgmentRequest.findMany({
-      where: { taskId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
-    return requests.map(requestResponse);
+    return rows.map(response);
   }
 }

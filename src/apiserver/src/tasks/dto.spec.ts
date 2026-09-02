@@ -11,10 +11,8 @@ import {
   BatchDeleteDto,
   CreateTaskDto,
   CreateTasksBatchDto,
-  DecideTaskJudgmentDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
-  JudgeTaskDto,
   SubmitRunnerTaskCompletionEvidenceDto,
   SubmitTaskCompletionEvidenceDto,
   TASK_BATCH_CREATE_MAX,
@@ -48,41 +46,30 @@ test('completion evidence DTOs require a structured object and REST requires its
   assert.notEqual((await validate(oversizedKey)).length, 0);
 });
 
-test('human signoff DTO binds the current request and exact evidence digest', async () => {
-  const valid = Object.assign(new JudgeTaskDto(), {
-    requestId: TASK_A,
-    evidenceDigest: 'a'.repeat(64),
-    evidence: 'I reviewed this exact evidence revision.',
+// The two judgment DTOs — `JudgeTaskDto` and `DecideTaskJudgmentDto` — went with the request
+// ledger on 2026-09-02. The declaration DTOs they sat beside did not: an EXECUTABLE task still
+// carries its command and expected exit code through `CreateTaskDto` / `UpdateTaskDto`, which is
+// what the assertions above and below cover.
+test('the executable acceptance declaration still validates on both task DTOs', async () => {
+  const created = Object.assign(new CreateTaskDto(), {
+    title: 'declares an executable acceptance nothing will run',
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'npm test',
+    acceptanceExpectedExitCode: 0,
   });
-  const missingRequest = Object.assign(new JudgeTaskDto(), {
-    evidenceDigest: 'a'.repeat(64), evidence: 'reviewed',
-  });
-  const commitShaInsteadOfDigest = Object.assign(new JudgeTaskDto(), {
-    requestId: TASK_A, evidenceDigest: 'a'.repeat(40), evidence: 'reviewed',
-  });
+  assert.equal((await validate(created)).length, 0);
 
-  assert.equal((await validate(valid)).length, 0);
-  assert.notEqual((await validate(missingRequest)).length, 0);
-  assert.notEqual((await validate(commitShaInsteadOfDigest)).length, 0);
-});
-
-test('human judgment decisions bind request, digest, action and a non-blank audit note', async () => {
-  const valid = Object.assign(new DecideTaskJudgmentDto(), {
-    requestId: TASK_A,
-    evidenceDigest: 'b'.repeat(64),
-    action: 'REQUEST_MORE_EVIDENCE',
-    note: 'Include the mobile viewport run and its exit code.',
+  const updated = Object.assign(new UpdateTaskDto(), {
+    acceptanceCommand: 'npm run build',
+    acceptanceExpectedExitCode: 0,
   });
-  assert.equal((await validate(valid)).length, 0);
+  assert.equal((await validate(updated)).length, 0);
 
-  for (const invalid of [
-    { ...valid, requestId: 'not-a-request' },
-    { ...valid, evidenceDigest: 'b'.repeat(63) },
-    { ...valid, action: 'DONE' },
-    { ...valid, note: '' },
-  ]) {
-    assert.notEqual((await validate(Object.assign(new DecideTaskJudgmentDto(), invalid))).length, 0);
-  }
+  const cleared = Object.assign(new UpdateTaskDto(), {
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+  });
+  assert.equal((await validate(cleared)).length, 0);
 });
 
 async function dependencyErrors(value: unknown, present = true) {

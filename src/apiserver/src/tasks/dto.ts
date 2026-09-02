@@ -125,21 +125,6 @@ export class TaskLegacyEvidenceImportDto {
   devicePolicy!: 'IMMEDIATE' | 'IN_APP_ONLY';
 }
 
-export class TaskEvidenceJudgmentRequestConsumptionDto {
-  kind!: 'JUDGMENT_REQUEST';
-  @IsPublicId()
-  judgmentRequestId!: string;
-  requestKind!: TaskCompletionCriterionValue;
-}
-
-export class TaskEvidenceVerifierVerdictConsumptionDto {
-  kind!: 'VERIFIER_VERDICT';
-  @IsPublicId()
-  verifierTaskId!: string;
-  @IsPublicId()
-  subjectTaskId!: string;
-}
-
 /** The shared REST/runner/CLI/MCP read shape; every provenance and version field is required. */
 export class TaskCompletionEvidenceDto {
   @IsPublicId()
@@ -162,56 +147,6 @@ export class TaskCompletionEvidenceDto {
   revision!: string;
   idempotencyKeys!: string[];
   legacyImport!: TaskLegacyEvidenceImportDto | null;
-  /**
-   * Null when the immutable criterion snapshot says the fact was submitted by a verifier. An
-   * older fact submitted under an ordinary criterion retains its now-terminal request for audit,
-   * even if the Task later migrated to the verifier role.
-   */
-  judgmentRequest!: TaskJudgmentRequestDto | null;
-  /** The one fact-time lifecycle consumer; later Task-role changes never rewrite evidence history. */
-  consumption!: TaskEvidenceJudgmentRequestConsumptionDto | TaskEvidenceVerifierVerdictConsumptionDto;
-}
-
-/** One durable, evidence-bound request and the explicit principal responsible for deciding it. */
-export class TaskJudgmentRequestDto {
-  @IsPublicId()
-  id!: string;
-  @IsPublicId()
-  taskId!: string;
-  @IsPublicId()
-  evidenceId!: string;
-  criterionRevision!: string;
-  evidenceDigest!: string;
-  kind!: TaskCompletionCriterionValue;
-  recipientType!: 'SYSTEM_EXECUTABLE_EVALUATOR' | 'VERIFIER_TASK' | 'ACCOUNT_OWNER';
-  @IsPublicId()
-  recipientId!: string;
-  status!: 'OPEN' | 'DECIDED' | 'SUPERSEDED';
-  origin!: 'LIVE_EVIDENCE' | 'LEGACY_IMPORT' | 'BACKFILL';
-  devicePolicy!: 'IMMEDIATE' | 'IN_APP_ONLY';
-  @IsOptional()
-  @IsPublicId()
-  backfillBatchId!: string | null;
-  createdAt!: Date;
-  decidedAt!: Date | null;
-  decidedByType!: string | null;
-  @IsOptional()
-  @IsPublicId()
-  decidedById!: string | null;
-  decision!: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
-  decisionNote!: string | null;
-  supersededAt!: Date | null;
-  @IsOptional()
-  @IsPublicId()
-  supersededById!: string | null;
-  supersessionRule!: 'EVIDENCE_REVISED' | 'TASK_ALREADY_DONE' | 'VERIFIER_ROLE' | null;
-  supersededActorType!: CreatorType | null;
-  @IsOptional()
-  @IsPublicId()
-  supersededActorId!: string | null;
-  @IsOptional()
-  @IsPublicId()
-  supersededSourceSessionId!: string | null;
 }
 
 /**
@@ -549,42 +484,6 @@ export class UpdateTaskDto {
   @IsString({ each: true })
   @MaxLength(TASK_LABEL_MAX_LENGTH, { each: true })
   labels?: string[];
-}
-
-/** The finding a judgment rests on, with decider and timestamp supplied by the server. */
-export class JudgeTaskDto {
-  @IsPublicId()
-  requestId!: string;
-
-  @IsString()
-  @MinLength(64)
-  @MaxLength(64)
-  @Matches(/^[0-9a-fA-F]{64}$/)
-  evidenceDigest!: string;
-
-  @IsString()
-  @MinLength(1)
-  evidence!: string;
-}
-
-/** One decision on the exact EVIDENCE_JUDGMENT request/evidence fact currently reviewed. */
-export class DecideTaskJudgmentDto {
-  @IsPublicId()
-  requestId!: string;
-
-  @IsString()
-  @MinLength(64)
-  @MaxLength(64)
-  @Matches(/^[0-9a-fA-F]{64}$/)
-  evidenceDigest!: string;
-
-  @IsIn(['PASS', 'REQUEST_MORE_EVIDENCE'])
-  action!: 'PASS' | 'REQUEST_MORE_EVIDENCE';
-
-  @IsString()
-  @MinLength(1)
-  @MaxLength(4_000)
-  note!: string;
 }
 
 export class AddDependencyDto {

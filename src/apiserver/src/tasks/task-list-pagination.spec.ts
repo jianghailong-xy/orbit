@@ -155,11 +155,13 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     // A DONE tail releases only inside the current verification epoch and scope.
     assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
     assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
-    assert.match(sql, /epoch_open_request\."status" = 'OPEN'/);
-    assert.match(
-      sql,
-      /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
-    );
+    // The two request clauses here — an OPEN request closing an older PASS, and a DECIDED PASS
+    // standing in for the check's own facts — went with `task_judgment_request` on 2026-09-02.
+    // A check's own status, verdict, settled run and applied ledger action are the whole predicate
+    // now, which is what the surviving clauses below assert.
+    assert.doesNotMatch(sql, /task_judgment_request/);
+    assert.match(sql, /epoch_check\."verdict" = 'PASS'/);
+    assert.match(sql, /epoch_check\."verdict_revision" > 0/);
     // Legacy PASS remains fail-closed on live/successful run evidence and application in-project.
     assert.match(
       sql,

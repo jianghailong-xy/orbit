@@ -171,17 +171,6 @@ export interface VerificationEpochCheckFact {
    * is about to succeed.
    */
   verdictApplyExhausted?: boolean;
-  /**
-   * N11's evidence-bound request, when this check is the recipient of one.
-   *
-   * Optional keeps the legacy verification path byte-for-byte meaningful: a check without a
-   * request is still judged from its task/run/action facts below. A request-bearing check is
-   * judged from the request decision instead; the request transition is database-guarded by the
-   * matching verifier verdict and is therefore the durable fact that closes this epoch.
-   */
-  judgmentStatus?: 'OPEN' | 'DECIDED' | 'SUPERSEDED' | null;
-  judgmentDecision?: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
-  judgmentCreatedAt?: Date | string | null;
   runs: readonly VerificationRunFact[];
 }
 
@@ -193,9 +182,7 @@ export interface VerificationEpochSubjectFact {
 
 /** A check counts toward the epoch unless it was retired or cancelled (§13.2 V8-d, same rule). */
 export function verificationCountsTowardEpoch(check: VerificationEpochCheckFact): boolean {
-  return !check.retired
-    && check.status !== 'CANCELLED'
-    && check.judgmentStatus !== 'SUPERSEDED';
+  return !check.retired && check.status !== 'CANCELLED';
 }
 
 /**
@@ -231,8 +218,8 @@ export function newestLiveCheck(
 ): VerificationEpochCheckFact | null {
   const live = checks.filter(verificationCountsTowardEpoch)
     .sort((a, b) => {
-      const aTime = a.judgmentCreatedAt ?? a.createdAt;
-      const bTime = b.judgmentCreatedAt ?? b.createdAt;
+      const aTime = a.createdAt;
+      const bTime = b.createdAt;
       if (aTime != null && bTime != null) {
         const chronology = new Date(aTime).getTime() - new Date(bTime).getTime();
         if (chronology !== 0 && Number.isFinite(chronology)) return chronology;
@@ -258,19 +245,6 @@ export function verificationEpochGate(
 ): VerificationEpochGate | null {
   const newest = newestLiveCheck(checks);
   if (!newest) return 'NO_LIVE_VERIFICATION';
-  // N11 is a parallel route, not a fallback into the legacy verification lifecycle. The request
-  // transition can only commit after the matching verifier task carries this exact verdict (0181's
-  // transition guard), so its decision is already the settled domain fact. Requiring that carrier
-  // to manufacture a natural worker run and project-action ledger entry as well would leave an
-  // independently supplied verdict permanently unable to release the subject it just decided.
-  if (newest.judgmentStatus === 'OPEN') return 'VERIFICATION_IN_FLIGHT';
-  if (newest.judgmentStatus === 'DECIDED') {
-    if (!newest.judgmentDecision) return 'VERDICT_ABSENT';
-    if (newest.judgmentDecision === 'FAIL') return 'VERIFICATION_FAILED';
-    if (newest.judgmentDecision !== 'PASS') return 'VERIFICATION_INCONCLUSIVE';
-    if (subject.status !== 'DONE') return 'SUBJECT_NOT_DONE';
-    return null;
-  }
   if (newest.status !== 'DONE') return 'VERIFICATION_IN_FLIGHT';
   if (!newest.verdict) return 'VERDICT_ABSENT';
   if (newest.verdict === 'FAIL') return 'VERIFICATION_FAILED';
@@ -339,23 +313,6 @@ export function verificationEpochOpenSql(alias = 't', dependent?: string): strin
         JOIN "task" epoch_any_subject ON epoch_any_subject."id" = ${subject}
        WHERE epoch_any."verifies_task_id" = ${subject}
          AND ${verificationCheckSameScopeSql('epoch_any', 'epoch_any_subject')}
-         AND NOT EXISTS (
-               SELECT 1 FROM "task_judgment_request" epoch_any_request
-                WHERE epoch_any_request."id" = epoch_any."id"
-                  AND epoch_any_request."task_id" = epoch_any_subject."id"
-                  AND epoch_any_request."kind" = 'VERIFICATION'
-                  AND epoch_any_request."recipient_type" = 'VERIFIER_TASK'
-                  AND epoch_any_request."recipient_id" = epoch_any."id"::text
-                  AND epoch_any_request."status" = 'SUPERSEDED'
-             )
-    ) AND NOT EXISTS (
-      -- The request is the first durable fact and is committed before its deterministic verifier
-      -- Task is filed. During that small post-commit window it must still close an older PASS.
-      SELECT 1 FROM "task_judgment_request" epoch_open_request
-       WHERE epoch_open_request."task_id" = ${subject}
-         AND epoch_open_request."kind" = 'VERIFICATION'
-         AND epoch_open_request."recipient_type" = 'VERIFIER_TASK'
-         AND epoch_open_request."status" = 'OPEN'
     ))${selfReferential}
     OR EXISTS (
       -- The same exemption verificationEpochGates makes: work that was REPLACED takes its checks
@@ -394,19 +351,11 @@ export function verificationCheckSameScopeSql(check: string, subject: string): s
  */
 export function latestLiveVerificationCheckIdSql(subject: string): string {
   return `SELECT newest_check."id" FROM "task" newest_check
-      LEFT JOIN "task_judgment_request" newest_request
-        ON newest_request."id" = newest_check."id"
-       AND newest_request."task_id" = ${subject}."id"
-       AND newest_request."kind" = 'VERIFICATION'
-       AND newest_request."recipient_type" = 'VERIFIER_TASK'
-       AND newest_request."recipient_id" = newest_check."id"::text
      WHERE newest_check."verifies_task_id" = ${subject}."id"
        AND ${verificationCheckSameScopeSql('newest_check', subject)}
        AND newest_check."status" <> 'CANCELLED'
        AND ${taskNotRetiredSql('newest_check')}
-       AND newest_request."status" IS DISTINCT FROM 'SUPERSEDED'
-     ORDER BY COALESCE(newest_request."created_at", newest_check."created_at") DESC,
-              newest_check."id" DESC
+     ORDER BY newest_check."created_at" DESC, newest_check."id" DESC
      LIMIT 1`;
 }
 
@@ -421,24 +370,8 @@ export function latestLiveVerificationCheckIdSql(subject: string): string {
 export function verificationCheckPassedSql(check: string, subject: string): string {
   const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   return `(
-    EXISTS (
-      SELECT 1 FROM "task_judgment_request" passed_request
-       WHERE passed_request."id" = ${check}."id"
-         AND passed_request."task_id" = ${subject}."id"
-         AND passed_request."kind" = 'VERIFICATION'
-         AND passed_request."recipient_type" = 'VERIFIER_TASK'
-         AND passed_request."recipient_id" = ${check}."id"::text
-         AND passed_request."status" = 'DECIDED'
-         AND passed_request."decision" = 'PASS'
-    )
-    OR (
-      NOT EXISTS (
-        SELECT 1 FROM "task_judgment_request" passed_legacy_request
-         WHERE passed_legacy_request."id" = ${check}."id"
-           AND passed_legacy_request."kind" = 'VERIFICATION'
-           AND passed_legacy_request."recipient_type" = 'VERIFIER_TASK'
-      )
-      AND ${check}."status" = 'DONE'
+    (
+      ${check}."status" = 'DONE'
       AND ${check}."verdict" = 'PASS'
       AND ${check}."verdict_revision" > 0
       AND NOT EXISTS (
@@ -511,10 +444,6 @@ export interface VerificationEpochTaskRow {
   verdictApplied: boolean | null;
   /** See `VerificationEpochCheckFact.verdictApplyExhausted`. Absent reads as false. */
   verdictApplyExhausted?: boolean;
-  /** N11 evidence-bound verifier request projected onto its recipient task. */
-  judgmentStatus?: 'OPEN' | 'DECIDED' | 'SUPERSEDED' | null;
-  judgmentDecision?: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
-  judgmentCreatedAt?: Date | string | null;
   /** §13.6 SU1: `taskRetirement(row) != null`. */
   retired: boolean;
 }
@@ -580,9 +509,6 @@ export function verificationEpochGates(
       retired: task.retired,
       verdictApplied: task.verdictApplied,
       verdictApplyExhausted: task.verdictApplyExhausted === true,
-      judgmentStatus: task.judgmentStatus,
-      judgmentDecision: task.judgmentDecision,
-      judgmentCreatedAt: task.judgmentCreatedAt,
       runs: runsByTaskId.get(task.id) ?? [],
     };
     const list = checksBySubject.get(task.verifiesTaskId);

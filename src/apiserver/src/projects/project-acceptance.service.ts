@@ -615,65 +615,22 @@ export class ProjectAcceptanceService {
     if (criterion.completionCriterion === TaskCompletionCriterion.EVIDENCE_JUDGMENT) return null;
 
     if (criterion.completionCriterion === TaskCompletionCriterion.EXECUTABLE) {
-      // The recorded command result of the criterion's evidence task. 0227 removed the typed
-      // attempt that used to be read in front of this, so this is again the one collector.
-      const result = criterion.evidenceTaskId
-        ? await tx.taskExecutableJudgmentResult.findFirst({
-            where: {
-              command: criterion.acceptanceCommand ?? undefined,
-              expectedExitCode: criterion.acceptanceExpectedExitCode ?? undefined,
-              request: {
-                taskId: criterion.evidenceTaskId,
-                kind: TaskCompletionCriterion.EXECUTABLE,
-                task: { projectId },
-              },
-            },
-            orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }],
-            select: {
-              id: true,
-              command: true,
-              expectedExitCode: true,
-              actualExitCode: true,
-              rawOutput: true,
-              recordedById: true,
-              recordedAt: true,
-              request: { select: { recipientId: true } },
-            },
-          })
-        : null;
-      if (!result) {
-        return {
-          verdict: ProjectAcceptanceVerdict.INCONCLUSIVE,
-          summary: 'No matching recorded command result exists yet',
-          evidence: {
-            kind: 'EXECUTABLE_RESULT',
-            command: criterion.acceptanceCommand,
-            expectedExitCode: criterion.acceptanceExpectedExitCode,
-            resultId: null,
-          },
-          evidenceTaskId: criterion.evidenceTaskId,
-          evidenceSessionId: null,
-        };
-      }
-      const verdict = result.actualExitCode === result.expectedExitCode
-        ? ProjectAcceptanceVerdict.PASS
-        : ProjectAcceptanceVerdict.FAIL;
+      // 0227 removed the typed attempt that used to be read in front of this collector, and 0228
+      // removed the collector: `task_executable_judgment_result` was the row the judgment
+      // machinery wrote from a shell exit code, and it went with the rest of it at the account
+      // owner's direction. Nothing replaces it — an EXECUTABLE criterion has no evidence source
+      // left, and says so rather than reaching for another one.
       return {
-        verdict,
-        summary:
-          `Command exited ${result.actualExitCode}; expected ${result.expectedExitCode}`,
+        verdict: ProjectAcceptanceVerdict.INCONCLUSIVE,
+        summary: 'No matching recorded command result exists yet',
         evidence: {
           kind: 'EXECUTABLE_RESULT',
-          resultId: result.id,
-          command: result.command,
-          expectedExitCode: result.expectedExitCode,
-          actualExitCode: result.actualExitCode,
-          rawOutput: result.rawOutput,
-          recordedById: result.recordedById,
-          recordedAt: result.recordedAt.toISOString(),
+          command: criterion.acceptanceCommand,
+          expectedExitCode: criterion.acceptanceExpectedExitCode,
+          resultId: null,
         },
         evidenceTaskId: criterion.evidenceTaskId,
-        evidenceSessionId: result.request.recipientId,
+        evidenceSessionId: null,
       };
     }
 
@@ -1308,14 +1265,10 @@ export class ProjectAcceptanceService {
     // project_blocker rows. Count both sources at the gate so the read model cannot be bypassed
     // merely because there is intentionally no blocker row for somebody to close by hand.
     const [{ count: openBlockers }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-      SELECT (
-        (SELECT count(*) FROM "project_blocker" blocker
-          WHERE blocker."project_id" = ${projectId}::uuid
-            AND blocker."resolved_at" IS NULL)
-        +
-        (SELECT count(*) FROM "project_judgment_blocker" judgment
-          WHERE judgment."project_id" = ${projectId}::uuid)
-      )::int AS "count"
+      SELECT count(*)::int AS "count"
+        FROM "project_blocker" blocker
+       WHERE blocker."project_id" = ${projectId}::uuid
+         AND blocker."resolved_at" IS NULL
     `);
     // §13.6 SU6: a failure whose verifier or whose subject was REPLACED is a record, not a request
     // — nothing will ever run either of them again, so the later PASS that is the only thing which

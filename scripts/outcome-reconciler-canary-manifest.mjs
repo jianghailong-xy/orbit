@@ -179,7 +179,8 @@ assert.equal(telemetryRaw.includes('tenant-canary-b'), false,
 
 assert.ok(Array.isArray(upstreamEvidenceRows) && upstreamEvidenceRows.length > 0);
 assert.equal(upstream.taskId, '34Ex0SFCY6DpfvW2I4ydE');
-assert.equal(upstream.judgmentRequest.decision, 'PASS');
+// `judgmentRequest` left the completion-evidence read shape on 2026-09-02 with the judgment
+// machinery (0228). `upstreamTask.status === 'DONE'` below is the fact it duplicated.
 const preflight = upstream.evidence.exactShaPreflight;
 assert.equal(preflight.deadlineSeconds, 1200);
 assert.equal(preflight.watchdog.tests, 13);
@@ -314,7 +315,6 @@ const body = {
       upstreamTaskId: upstream.taskId,
       upstreamEvidenceId: upstream.id,
       upstreamEvidenceDigest: upstream.evidenceDigest,
-      judgmentDecision: upstream.judgmentRequest.decision,
       requestedTimeoutSeconds: upstream.evidence.executableDeclaration.requestedTimeoutSeconds,
       deadlineSeconds: preflight.deadlineSeconds,
       elapsedMilliseconds: preflight.elapsedMilliseconds,
@@ -364,7 +364,6 @@ const body = {
     evidenceDigest: upstream.evidenceDigest,
     evidenceFileSha256: digest(upstreamEvidenceRaw),
     taskSnapshotSha256: digest(upstreamTaskRaw),
-    judgmentDecision: upstream.judgmentRequest.decision,
   },
   sources: sourceDigests,
   sourceDigest: canary.canaryDigest(sourceDigests),

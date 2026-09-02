@@ -26,6 +26,8 @@ test('0193 installs the canonical DONE writer fence', () => {
   ), 'utf8');
   assert.match(sql, /completion_fence_revision/);
   assert.match(sql, /TASK_DONE_CANONICAL_FACT_REQUIRED/);
+  // 0193's file is immutable, and this reads the file. Its judgment lane was removed from the
+  // INSTALLED function by 0227; `task-judgment-removal.pg.spec.ts` asserts that end of it.
   assert.match(sql, /task_judgment_request/);
   assert.match(sql, /BEFORE UPDATE OF "status", "completion_fence_revision"/);
 });

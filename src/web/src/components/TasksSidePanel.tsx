@@ -39,7 +39,6 @@ import {
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
-import { judgmentInboxPath, type JudgmentInboxPage } from '../lib/judgments';
 import {
   projectAcceptanceInboxPath,
   type ProjectAcceptanceInboxPage,
@@ -226,11 +225,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
-  const judgments = useQuery({
-    queryKey: ['judgments', 'open', 'nav-count'],
-    queryFn: () => api<JudgmentInboxPage>(judgmentInboxPath({ status: 'OPEN', limit: 1 })),
-    refetchInterval: 15_000,
-  });
   const projectAcceptance = useQuery({
     queryKey: ['project-acceptance', 'pending', 'nav-count'],
     queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(1)),
@@ -241,8 +235,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
     refetchInterval: 15_000,
   });
-  const openJudgmentCount = (judgments.data?.total ?? 0)
-    + (projectAcceptance.data?.total ?? 0)
+  const openJudgmentCount = (projectAcceptance.data?.total ?? 0)
     + (outcomeDecisions.data?.items ?? []).length;
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.

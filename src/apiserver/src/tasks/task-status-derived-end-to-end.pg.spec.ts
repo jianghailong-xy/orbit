@@ -1,108 +1,67 @@
 /**
- * N9: one real-PostgreSQL replay of the complete fact-driven completion protocol.
+ * The completion protocol against real PostgreSQL, after the 2026-09-02 judgment removal.
  *
- * The three source sessions deliberately begin and end AWAITING_INPUT. Ordinary comments are
- * written before any evidence and are never imported. Every optimistic Task status transition is
- * observed by a test-only database trigger which refuses the transition unless its declared
- * criterion fact is already visible in that same transaction.
+ * This file used to replay all three criteria end to end: an exit code that derived DONE, a
+ * judgment request that a person decided, and an independent verifier's verdict. The account
+ * owner had the first two implementations deleted — the machine, explicitly not the declaration —
+ * so what is replayed here now is the state that leaves behind:
+ *
+ *   * VERIFICATION is the ONE criterion that still completes anything. An independent verifier's
+ *     PASS still settles its subject, a FAIL or INCONCLUSIVE still does not, and both go through
+ *     the real service against the real triggers.
+ *   * EXECUTABLE and EVIDENCE_JUDGMENT are declared-but-unimplemented: still creatable, still
+ *     carrying their data, refused a direct DONE with a remedy that says so, and settled by
+ *     nothing.
+ *   * The ordinary writes around them — comments, dependencies, run events, merge receipts,
+ *     sessions — are untouched.
+ *
+ * Every optimistic DONE transition is observed by a test-only trigger that refuses it unless one
+ * of the two surviving derivations is already visible in the same transaction. That is what stops
+ * a service method returning DONE from standing in for the database effect it claims.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must identify the disposable database accepted by
- * the coordinator PG safety guard, with migrations through 0184 applied.
+ * the coordinator PG safety guard, with migrations through 0227 applied.
  */
 
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { ConfigService } from '@nestjs/config';
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAcceptanceVerdict,
-  ProjectStatus,
   RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { CompletionInputRouter } from '../projects/completion-input-router.service';
-import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
-import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
-import { ProjectsService } from '../projects/projects.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
-import { JudgmentDeliveryService } from '../push/judgment-delivery.service';
-import { PushService } from '../push/push.service';
-import { QueueService } from '../queue/queue.service';
-import { RealtimeService } from '../realtime/realtime.service';
-import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
-import { TaskJudgmentReviewService } from './task-judgment-review.service';
+import { VERIFICATION_RUN_END_REASON } from './verification-dependency';
 import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
-const FACT_TRIGGER = 'n9_task_done_requires_current_fact';
-const FACT_FUNCTION = 'n9_task_done_requires_current_fact_fn';
-const FACT_AUDIT = 'n9_task_done_derivation_audit';
+const FACT_TRIGGER = 'jr_task_done_requires_current_fact';
+const FACT_FUNCTION = 'jr_task_done_requires_current_fact_fn';
+const FACT_AUDIT = 'jr_task_done_derivation_audit';
 
-function completionRouter(db: PrismaClient): CompletionInputRouter {
-  return new CompletionInputRouter(
-    new CoordinatorWakeService(db as unknown as PrismaService),
-  );
-}
-
-function taskService(db: PrismaClient, completionInputs: CompletionInputRouter): TasksService {
+function taskService(db: PrismaClient): TasksService {
   return new TasksService(
     db as unknown as PrismaService,
-    { create: () => { throw new Error('the N9 fixture creates sessions explicitly'); } } as never,
+    { create: () => { throw new Error('this fixture never dispatches through SessionsService'); } } as never,
     {
       publishForUser: () => undefined,
       publishTaskChanged: () => undefined,
-    } as unknown as RealtimeService,
-    undefined,
-    completionInputs,
+      publishSessionUpdated: () => undefined,
+      publishQueuedTurnsChanged: () => undefined,
+    } as never,
   );
-}
-
-function runnerController(
-  db: PrismaClient,
-  completionInputs: CompletionInputRouter,
-): RunnerApiController {
-  const realtime = {
-    publishSessionUpdated: () => undefined,
-    publishTaskChanged: () => undefined,
-    publishQueuedTurnsChanged: () => undefined,
-    publish: () => undefined,
-    notifyInbox: () => undefined,
-    waitForInbox: async () => undefined,
-  } as unknown as RealtimeService;
-  return new RunnerApiController(
-    db as unknown as PrismaService,
-    { notifySessionQueued: () => undefined } as unknown as QueueService,
-    realtime,
-    {} as never,
-    {} as never,
-    {} as never,
-    { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
-    undefined,
-    completionInputs,
-  );
-}
-
-function enabledPushConfig(): ConfigService {
-  const values: Record<string, string> = {
-    APNS_KEY_ID: 'n9-key',
-    APNS_TEAM_ID: 'n9-team',
-    APNS_KEY: Buffer.from('n9-test-key').toString('base64'),
-  };
-  return { get: (key: string) => values[key] } as ConfigService;
 }
 
 async function resetDatabase(sql: Client): Promise<void> {
@@ -117,9 +76,11 @@ async function resetDatabase(sql: Client): Promise<void> {
 }
 
 /**
- * Observe the exact database boundary, rather than trusting that the service method which returned
- * DONE took the intended branch. The carrier verifier is special: its verdict and derived terminal
- * status are one UPDATE, while its request decision is the next statement in the same transaction.
+ * Two derivations survive, and this refuses every other route to DONE.
+ *
+ * `VERIFIER_VERDICT` is the carrier's own conclusion; `VERIFICATION_PASS` is its subject's. There
+ * is deliberately no arm for EXECUTABLE or EVIDENCE_JUDGMENT: a transition on either of those is
+ * exactly the thing this change removed, and it must raise rather than be quietly recorded.
  */
 async function installDerivedDoneGuard(sql: Client): Promise<void> {
   await sql.query(`
@@ -137,75 +98,24 @@ async function installDerivedDoneGuard(sql: Client): Promise<void> {
     BEGIN
       IF OLD."status" IS DISTINCT FROM NEW."status"
          AND NEW."status" = 'DONE'::task_status THEN
-        IF NEW."verifies_task_id" IS NOT NULL AND NEW."verdict" = 'PASS'::task_verdict THEN
-          IF NOT EXISTS (
-            SELECT 1
-              FROM "task_judgment_request" request
-             WHERE request."id" = NEW."id"
-               AND request."task_id" = NEW."verifies_task_id"
-               AND request."kind" = 'VERIFICATION'
-               AND request."status" IN ('OPEN', 'DECIDED')
-          ) THEN
-            RAISE EXCEPTION 'N9_DIRECT_DONE: verifier carrier has no evidence-bound request';
-          END IF;
+        IF NEW."verifies_task_id" IS NOT NULL AND NEW."verdict" IS NOT NULL THEN
           derivation := 'VERIFIER_VERDICT';
-        ELSIF NEW."completion_criterion" = 'EXECUTABLE'::task_completion_criterion THEN
-          IF NOT EXISTS (
-            SELECT 1
-              FROM "task_judgment_request" request
-              JOIN "task_executable_judgment_result" result
-                ON result."request_id" = request."id"
-             WHERE request."task_id" = NEW."id"
-               AND request."kind" = 'EXECUTABLE'
-               AND request."status" = 'DECIDED'
-               AND request."decision" = 'PASS'
-               AND result."actual_exit_code" = result."expected_exit_code"
-          ) THEN
-            RAISE EXCEPTION 'N9_DIRECT_DONE: EXECUTABLE has no passing command-result fact';
-          END IF;
-          derivation := 'EXECUTABLE_RESULT';
         ELSIF NEW."completion_criterion" = 'VERIFICATION'::task_completion_criterion THEN
           IF NOT EXISTS (
             SELECT 1
               FROM "task" verifier
-              JOIN "task_judgment_request" request ON request."id" = verifier."id"
              WHERE verifier."verifies_task_id" = NEW."id"
                AND verifier."status" = 'DONE'::task_status
                AND verifier."verdict" = 'PASS'::task_verdict
-               AND request."task_id" = NEW."id"
-               AND request."status" = 'DECIDED'
-               AND request."decision" = 'PASS'
+               AND verifier."terminal_reason" IS NULL
+               AND verifier."superseded_by_task_id" IS NULL
           ) THEN
-            RAISE EXCEPTION 'N9_DIRECT_DONE: VERIFICATION has no independent passing verdict fact';
+            RAISE EXCEPTION 'JR_DIRECT_DONE: VERIFICATION has no independent passing verdict fact';
           END IF;
           derivation := 'VERIFICATION_PASS';
-        ELSIF NEW."completion_criterion" = 'EVIDENCE_JUDGMENT'::task_completion_criterion THEN
-          IF NOT EXISTS (
-            SELECT 1
-              FROM "task_judgment_request" request
-             WHERE request."task_id" = NEW."id"
-               AND request."kind" = 'EVIDENCE_JUDGMENT'::task_completion_criterion
-               AND request."status" = 'DECIDED'
-               AND request."decision" = 'PASS'
-               AND request."decided_by_type" IN ('USER', 'AGENT')
-               AND length(btrim(request."decided_by_id")) > 0
-               AND request."decided_at" IS NOT NULL
-               AND length(btrim(request."decision_note")) > 0
-          ) THEN
-            RAISE EXCEPTION 'N9_DIRECT_DONE: EVIDENCE_JUDGMENT has no decided current-request fact';
-          END IF;
-          IF EXISTS (
-            SELECT 1 FROM "task_judgment_signal" signal
-             WHERE signal."task_id" = NEW."id"
-          ) OR EXISTS (
-            SELECT 1 FROM "project_judgment_blocker" blocker
-             WHERE blocker."task_id" = NEW."id"
-          ) THEN
-            RAISE EXCEPTION 'N9_ATOMIC_CLOSE: request signal or blocker is still open';
-          END IF;
-          derivation := 'EVIDENCE_JUDGMENT';
         ELSE
-          RAISE EXCEPTION 'N9_DIRECT_DONE: no declared completion fact owns this transition';
+          RAISE EXCEPTION 'JR_DIRECT_DONE: % has no implementation that could derive DONE',
+            NEW."completion_criterion";
         END IF;
 
         INSERT INTO "${FACT_AUDIT}" ("task_id", "derivation", "old_status", "new_status")
@@ -227,6 +137,7 @@ async function assertDirectDoneRefused(
   ownerId: string,
   taskId: string,
   actor: string,
+  expectedRequiredAction: string,
   actingSessionId?: string,
 ): Promise<void> {
   const before = await db.task.findUniqueOrThrow({
@@ -239,7 +150,8 @@ async function assertDirectDoneRefused(
       assert.ok(error instanceof ForbiddenException, `${actor} received ${String(error)}`);
       const body = error.getResponse() as Record<string, unknown>;
       assert.equal(body.code, 'DIRECT_TASK_DONE_REFUSED', actor);
-      assert.ok(body.requiredAction, `${actor} gets the criterion's usable route`);
+      assert.equal(body.requiredAction, expectedRequiredAction,
+        `${actor} is told which fact could actually complete this task`);
       return true;
     },
   );
@@ -254,21 +166,15 @@ async function dependencyState(tasks: TasksService, ownerId: string, taskId: str
   return (await tasks.get(ownerId, taskId) as { dependencyState: string }).dependencyState;
 }
 
-function n9Digest(label: string): string {
-  return createHash('sha256').update(label).digest('hex');
-}
-
 suite(
-  'N9 replays AWAITING_INPUT evidence through all three judgments and an acceptance-only doneGate without a direct DONE write',
+  'VERIFICATION still completes work end to end; the other two criteria are declared and inert',
   { timeout: 300_000 },
   async (t) => {
     assertCoordinatorPgUrlIsIsolated(URL);
     const sql = new Client({ connectionString: URL });
     await sql.connect();
     const db = prismaClientFor(URL!);
-    let deliveryWorker: JudgmentDeliveryService | undefined;
     t.after(async () => {
-      deliveryWorker?.onModuleDestroy();
       await sql.query(`DROP TRIGGER IF EXISTS "${FACT_TRIGGER}" ON "task"`);
       await sql.query(`DROP FUNCTION IF EXISTS "${FACT_FUNCTION}"()`);
       await sql.query(`DROP TABLE IF EXISTS "${FACT_AUDIT}"`);
@@ -283,353 +189,102 @@ suite(
     await db.user.create({
       data: {
         id: ownerId,
-        email: `n9-${ownerId}@status-derived.invalid`,
-        name: 'N9 human reviewer',
+        email: `jr-${ownerId}@status-derived.invalid`,
+        name: 'judgment removal owner',
         passwordHash: 'x',
       },
     });
     await db.runner.create({
       data: {
-        id: runnerId,
-        ownerId,
-        name: 'N9 disposable runner',
-        tokenHash: 'x',
+        id: runnerId, ownerId, name: 'disposable runner', tokenHash: 'x',
         status: RunnerStatus.ONLINE,
       },
     });
     await db.workspace.create({
-      data: {
-        id: workspaceId,
-        ownerId,
-        runnerId,
-        name: 'N9 evidence agent',
-        enabled: true,
-      },
+      data: { id: workspaceId, ownerId, runnerId, name: 'disposable workspace', enabled: true },
     });
-
-    const prisma = db as unknown as PrismaService;
-    const acceptance = new ProjectAcceptanceService(prisma);
-    const projects = new ProjectsService(prisma, acceptance);
-    const router = completionRouter(db);
-    const tasks = taskService(db, router);
-    const project = await projects.create(ownerId, {
-      title: 'N9 structured completion replay',
-      goal: 'Completion is a projection of explicit evidence and judgment facts.',
-      acceptanceCriteriaItems: [
-        {
-          text: 'The executable declaration has a recorded matching exit code',
-          verificationMethod: 'Inspect the request-bound raw command result and require exit code 0',
-          completionCriterion: 'EVIDENCE_JUDGMENT',
-        },
-        {
-          text: 'An independent verifier concludes PASS on the submitted revision',
-          verificationMethod: 'Inspect the verifier task, its independent session, verdict and request audit',
-          completionCriterion: 'EVIDENCE_JUDGMENT',
-        },
-        {
-          text: 'A person signs the current evidence revision after reliable delivery',
-          verificationMethod: 'Open the current inbox revision and inspect the human signature and delivery ledger',
-          completionCriterion: 'EVIDENCE_JUDGMENT',
-        },
-      ],
+    const project = await db.project.create({
+      data: { id: randomUUID(), ownerId, title: 'judgment removal replay' },
     });
-    const definitions = await db.projectAcceptanceCriterionDefinition.findMany({
-      where: { projectId: project.id },
-      orderBy: { ordinal: 'asc' },
-    });
-    assert.equal(project.acceptanceCriteriaFormat, 'STRUCTURED');
-    assert.equal(definitions.length, 3);
-    assert.ok(definitions.every((criterion) => criterion.verificationMethod.trim().length > 0));
-
-    const executable = await tasks.create(ownerId, {
-      title: 'N9 EXECUTABLE',
-      projectId: project.id,
-      assigneeId: workspaceId,
-      completionCriterion: 'EXECUTABLE',
-      acceptanceCriteria: 'The request-bound shell command exits zero.',
-      acceptanceCommand: 'printf n9-executable',
-      acceptanceExpectedExitCode: 0,
-    });
-    const verification = await tasks.create(ownerId, {
-      title: 'N9 VERIFICATION',
-      projectId: project.id,
-      completionCriterion: 'VERIFICATION',
-      completionPolicy: 'VERIFICATION_PASSED',
-      acceptanceCriteria: 'A different session checks the submitted artifact and records PASS.',
-    });
-    const human = await tasks.create(ownerId, {
-      title: 'N9 EVIDENCE_JUDGMENT',
-      projectId: project.id,
-      assigneeId: workspaceId,
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-      acceptanceCriteria: 'The account owner reviews and signs the current evidence revision.',
-    });
-    const downstream = await tasks.create(ownerId, {
-      title: 'N9 downstream release',
-      projectId: project.id,
-      dependsOnTaskIds: [executable.id, verification.id, human.id],
-      autoRunWhenReady: false,
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-    });
-    assert.deepEqual(
-      [executable, verification, human].map((task) => task.completionCriterion),
-      ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
-    );
-
-    // Fixture precondition only: the replay starts after work began. From this point forward every
-    // optimistic transition is guarded and audited by installDerivedDoneGuard.
-    await db.task.updateMany({
-      where: { id: { in: [executable.id, verification.id, human.id] } },
-      data: { status: TaskStatus.IN_PROGRESS },
-    });
-
-    const sourceSessions = {
-      executable: randomUUID(),
-      verification: randomUUID(),
-      human: randomUUID(),
-    };
-    await db.session.createMany({
-      data: [
-        { id: sourceSessions.executable, taskId: executable.id, title: 'N9 executable evidence', startsTaskWork: true },
-        { id: sourceSessions.verification, taskId: verification.id, title: 'N9 verification evidence', startsTaskWork: false },
-        { id: sourceSessions.human, taskId: human.id, title: 'N9 human evidence', startsTaskWork: true },
-      ].map((source) => ({
-        id: source.id,
-        ownerId,
-        creatorId: ownerId,
-        taskId: source.taskId,
-        workspaceId,
-        assignedRunnerId: runnerId,
-        title: source.title,
-        prompt: 'Submit explicit structured evidence, then wait.',
-        provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
-        dispatchOrigin: SessionDispatchOrigin.USER,
-        // A VERIFICATION subject accepts evidence but has no task-start work of its own. Its
-        // independently created carrier below is the runnable task. The source row remains a
-        // provenance-bearing evidence session without crossing the 0207 dispatch fence.
-        startsTaskWork: source.startsTaskWork,
-      })),
-    });
-    const coordinatorSessionId = randomUUID();
-    await db.session.create({
-      data: {
-        id: coordinatorSessionId,
-        ownerId,
-        creatorId: ownerId,
-        workspaceId,
-        assignedRunnerId: runnerId,
-        title: 'N9 notification/coordinator negative control',
-        prompt: 'This principal cannot declare a task complete.',
-        provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
-        dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
-        startsTaskWork: false,
-      },
+    await db.projectRuntime.upsert({
+      where: { projectId: project.id }, create: { projectId: project.id }, update: {},
     });
     await installDerivedDoneGuard(sql);
 
-    // N8: every public actor receives the same refusal before a database write is attempted.
-    await assertDirectDoneRefused(tasks, db, ownerId, human.id, 'person/front end');
+    const tasks = taskService(db);
+
+    // ---------------------------------------------------------------------------------------
+    // The two declarations that no longer have an implementation.
+    // ---------------------------------------------------------------------------------------
+    const executable = await tasks.create(ownerId, {
+      title: 'declares EXECUTABLE acceptance',
+      projectId: project.id,
+      assigneeId: workspaceId,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCriteria: 'The declared shell command exits zero.',
+      acceptanceCommand: 'printf jr-executable',
+      acceptanceExpectedExitCode: 0,
+    });
+    assert.equal(executable.status, TaskStatus.OPEN);
+    assert.equal(executable.completionCriterion, 'EXECUTABLE');
+    assert.equal(executable.acceptanceCommand, 'printf jr-executable');
+    assert.equal(executable.acceptanceExpectedExitCode, 0);
+
+    const evidenceJudgment = await tasks.create(ownerId, {
+      title: 'declares EVIDENCE_JUDGMENT',
+      projectId: project.id,
+      assigneeId: workspaceId,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      acceptanceCriteria: 'Somebody decides the submitted evidence.',
+    });
+    assert.equal(evidenceJudgment.status, TaskStatus.OPEN);
+
+    // The refusal is the same one it always was, and it now names the state rather than a door
+    // that no longer exists.
     await assertDirectDoneRefused(
-      tasks, db, ownerId, executable.id, 'task execution agent', sourceSessions.executable,
+      tasks, db, ownerId, executable.id, 'owner on EXECUTABLE',
+      'AWAIT_EXECUTABLE_IMPLEMENTATION',
     );
     await assertDirectDoneRefused(
-      tasks, db, ownerId, verification.id, 'coordinator judgment', coordinatorSessionId,
+      tasks, db, ownerId, evidenceJudgment.id, 'owner on EVIDENCE_JUDGMENT',
+      'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
+    );
+    // And raw SQL cannot reach DONE either: the test guard refuses it, and so does 0193's own
+    // canonical writer fence, which lost its judgment lane in 0227.
+    await assert.rejects(
+      sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [executable.id]),
+      /JR_DIRECT_DONE|TASK_DONE_CANONICAL_FACT_REQUIRED/,
     );
 
-    // N10 negative control: emphatic completion prose is still just timeline prose.
-    const commentMarker = 'N9_COMMENT_MUST_NOT_BECOME_EVIDENCE: complete, PASS, DONE';
-    await db.taskComment.createMany({
-      data: [executable.id, verification.id, human.id].map((taskId) => ({
-        taskId,
-        authorType: CreatorType.AGENT,
-        authorId: workspaceId,
-        body: commentMarker,
-      })),
+    // ---------------------------------------------------------------------------------------
+    // VERIFICATION, the one criterion with an implementation.
+    // ---------------------------------------------------------------------------------------
+    const subject = await tasks.create(ownerId, {
+      title: 'settled by an independent check',
+      assigneeId: workspaceId,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      acceptanceCriteria: 'A different session checks the artifact and records PASS.',
     });
-    assert.equal(await db.taskCompletionEvidence.count({
-      where: { taskId: { in: [executable.id, verification.id, human.id] } },
-    }), 0);
-    assert.equal(await db.taskJudgmentRequest.count({
-      where: { taskId: { in: [executable.id, verification.id, human.id] } },
-    }), 0);
-    assert.equal(await db.taskLegacyEvidenceImport.count(), 0);
-    assert.equal(await db.projectCoordinatorWake.count({
-      where: { projectId: project.id, event: 'COMPLETION_EVIDENCE_REVISED' },
-    }), 0);
-
-    const evidence = new TaskCompletionEvidenceService(prisma, tasks, undefined, router);
-    const executableEvidence = await evidence.submit(
-      ownerId,
-      executable.id,
-      { type: CreatorType.AGENT, id: workspaceId },
-      {
-        sourceSessionId: sourceSessions.executable,
-        idempotencyKey: 'n9-executable-revision-1',
-        evidence: {
-          commit: '1111111111111111',
-          command: 'printf n9-executable',
-          expectedExitCode: 0,
-          artifact: 'build/n9-executable.txt',
-        },
-      },
-    );
-    const verificationEvidence = await evidence.submit(
-      ownerId,
-      verification.id,
-      { type: CreatorType.AGENT, id: workspaceId },
-      {
-        sourceSessionId: sourceSessions.verification,
-        idempotencyKey: 'n9-verification-revision-1',
-        evidence: {
-          commit: '2222222222222222',
-          command: 'sha256sum build/n9-verification.txt',
-          exitCode: 0,
-          sha256: '2'.repeat(64),
-        },
-      },
-    );
-    const firstHumanEvidence = await evidence.submit(
-      ownerId,
-      human.id,
-      { type: CreatorType.AGENT, id: workspaceId },
-      {
-        sourceSessionId: sourceSessions.human,
-        idempotencyKey: 'n9-human-revision-1',
-        evidence: {
-          commit: '3333333333333333',
-          testSummary: { command: 'npm test -w @orbit/web', exitCode: 0, passed: 1199 },
-          artifact: 'build/n9-review-v1.json',
-        },
-      },
-    );
-
-    assert.deepEqual(
-      [
-        executableEvidence.judgmentRequest!.kind,
-        verificationEvidence.judgmentRequest!.kind,
-        firstHumanEvidence.judgmentRequest!.kind,
-      ],
-      ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
-    );
-    assert.deepEqual(
-      [
-        executableEvidence.judgmentRequest!.recipientType,
-        verificationEvidence.judgmentRequest!.recipientType,
-        firstHumanEvidence.judgmentRequest!.recipientType,
-      ],
-      ['SYSTEM_EXECUTABLE_EVALUATOR', 'VERIFIER_TASK', 'ACCOUNT_OWNER'],
-    );
-    assert.equal(executableEvidence.judgmentRequest!.recipientId, sourceSessions.executable);
-    assert.equal(
-      verificationEvidence.judgmentRequest!.recipientId,
-      verificationEvidence.judgmentRequest!.id,
-    );
-    assert.equal(firstHumanEvidence.judgmentRequest!.recipientId, ownerId);
-    assert.equal(await db.taskJudgmentRequest.count({
-      where: {
-        taskId: { in: [executable.id, verification.id, human.id] },
-        status: 'OPEN',
-      },
-    }), 3);
-    assert.ok((await db.task.findMany({
-      where: { id: { in: [executable.id, verification.id, human.id] } },
-      select: { status: true },
-    })).every((task) => task.status === TaskStatus.IN_PROGRESS));
-    assert.ok((await db.session.findMany({
-      where: { id: { in: Object.values(sourceSessions) } },
-      select: { status: true },
-    })).every((session) => session.status === RunStatus.AWAITING_INPUT));
-    assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
-    assert.equal((await sql.query(
-      `SELECT count(*)::int AS n FROM "task_judgment_signal"
-        WHERE "task_id" = ANY($1::uuid[])`,
-      [[executable.id, verification.id, human.id]],
-    )).rows[0].n, 3);
-    assert.equal((await sql.query(
-      `SELECT count(*)::int AS n FROM "project_judgment_blocker"
-        WHERE "task_id" = $1::uuid`,
-      [human.id],
-    )).rows[0].n, 1);
-
-    // N1/N11 EXECUTABLE: the source was allowed to park before the explicit evidence arrived. It
-    // resumes only to run the request-bound command, records raw output, then parks again.
-    const messageTurnId = randomUUID();
-    await db.session.update({
-      where: { id: sourceSessions.executable },
-      data: { status: RunStatus.RUNNING },
+    const downstream = await tasks.create(ownerId, {
+      title: 'waits on the verified subject',
+      dependsOnTaskIds: [subject.id],
+      autoRunWhenReady: false,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
     });
-    await db.conversationTurn.create({
-      data: {
-        id: messageTurnId,
-        sessionId: sourceSessions.executable,
-        seq: 1,
-        clientTurnId: `message:${messageTurnId}`,
-        kind: 'message',
-        content: 'The structured evidence is submitted; run the declared command.',
-        status: 'IN_FLIGHT',
-      },
-    });
-    const api = runnerController(db, router);
-    assert.deepEqual(
-      await api.turnComplete({ id: runnerId }, sourceSessions.executable, {
-        turnId: messageTurnId,
-        status: SharedRunStatus.SUCCEEDED,
-      }),
-      { ok: true, status: RunStatus.RUNNING },
-    );
-    const acceptanceTurn = await (api as unknown as {
-      dequeueTurn: (
-        sessionId: string,
-        runnerId: string,
-        leaseGeneration: string | null,
-        acceptsSteer: boolean,
-        declaredCapabilities: string[],
-      ) => Promise<{
-        turnId: string;
-        kind: string;
-        content?: string;
-        taskAcceptance?: boolean;
-      } | null>;
-    }).dequeueTurn(sourceSessions.executable, runnerId, null, false, []);
-    assert.ok(acceptanceTurn);
-    assert.equal(acceptanceTurn.kind, 'shell');
-    assert.equal(acceptanceTurn.taskAcceptance, true);
-    assert.equal(acceptanceTurn.content, 'printf n9-executable');
-    const rawOutput = 'n9-executable\nraw-output-is-preserved';
-    assert.deepEqual(
-      await api.turnComplete({ id: runnerId }, sourceSessions.executable, {
-        turnId: acceptanceTurn.turnId,
-        status: SharedRunStatus.SUCCEEDED,
-        subtype: 'shell',
-        shellExitCode: 0,
-        shellOutput: rawOutput,
-      }),
-      { ok: true, status: RunStatus.AWAITING_INPUT },
-    );
-    const executableResult = await db.taskExecutableJudgmentResult.findUniqueOrThrow({
-      where: { requestId: executableEvidence.judgmentRequest!.id },
-    });
-    assert.equal(executableResult.command, 'printf n9-executable');
-    assert.equal(executableResult.expectedExitCode, 0);
-    assert.equal(executableResult.actualExitCode, 0);
-    assert.equal(executableResult.rawOutput, rawOutput);
-    assert.equal(executableResult.recordedById, runnerId);
-    assert.equal((await db.task.findUniqueOrThrow({ where: { id: executable.id } })).status,
-      TaskStatus.DONE);
-    assert.equal((await db.taskJudgmentRequest.findUniqueOrThrow({
-      where: { id: executableEvidence.judgmentRequest!.id },
-    })).decision, 'PASS');
     assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
 
-    // N11 VERIFICATION: the evidence transaction created one deterministic carrier. A different
-    // task-bound session supplies its verdict; neither source session nor subject may self-PASS.
-    const verifier = await db.task.findUniqueOrThrow({
-      where: { id: verificationEvidence.judgmentRequest!.id },
+    const verifier = await tasks.create(ownerId, {
+      title: '[VERIFY] settled by an independent check',
+      assigneeId: workspaceId,
+      verifiesTaskId: subject.id,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'MANUAL',
     });
-    assert.equal(verifier.verifiesTaskId, verification.id);
-    assert.equal(await db.task.count({ where: { verifiesTaskId: verification.id } }), 1);
+    assert.equal(verifier.verifiesTaskId, subject.id);
+    assert.equal(await db.task.count({ where: { verifiesTaskId: subject.id } }), 1);
+
     const verifierSessionId = randomUUID();
     await db.session.create({
       data: {
@@ -639,349 +294,214 @@ suite(
         taskId: verifier.id,
         workspaceId,
         assignedRunnerId: runnerId,
-        title: 'N9 independent verifier',
-        prompt: 'Independently inspect the evidence revision and record a verdict.',
+        title: 'independent verifier',
+        prompt: 'Independently inspect the artifact and record a verdict.',
         provider: 'codex',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
     });
+    // Even the verifier cannot write its subject DONE by hand; it records a verdict.
     await assertDirectDoneRefused(
-      tasks, db, ownerId, verification.id, 'independent verifier', verifierSessionId,
+      tasks, db, ownerId, subject.id, 'independent verifier',
+      'OBTAIN_INDEPENDENT_VERIFICATION_PASS', verifierSessionId,
     );
+
     await tasks.update(ownerId, verifier.id, { verdict: 'PASS' }, verifierSessionId);
-    const [verifiedSubject, decidedVerifier, verificationRequest] = await Promise.all([
-      db.task.findUniqueOrThrow({ where: { id: verification.id } }),
+    const [verifiedSubject, decidedVerifier] = await Promise.all([
+      db.task.findUniqueOrThrow({ where: { id: subject.id } }),
       db.task.findUniqueOrThrow({ where: { id: verifier.id } }),
-      db.taskJudgmentRequest.findUniqueOrThrow({
-        where: { id: verificationEvidence.judgmentRequest!.id },
-      }),
     ]);
-    assert.equal(verifiedSubject.status, TaskStatus.DONE);
-    assert.equal(decidedVerifier.status, TaskStatus.DONE);
     assert.equal(decidedVerifier.verdict, 'PASS');
-    assert.equal(verificationRequest.status, 'DECIDED');
-    assert.equal(verificationRequest.decision, 'PASS');
-    assert.equal(verificationRequest.decidedByType, 'AGENT');
-    assert.equal(verificationRequest.decidedById, workspaceId);
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: verifierSessionId } })).status,
-      RunStatus.AWAITING_INPUT);
-    assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
+    assert.equal(decidedVerifier.status, TaskStatus.DONE, 'the carrier concludes on its verdict');
+    assert.equal(verifiedSubject.status, TaskStatus.DONE,
+      'a PASS from an independent verifier still settles its subject');
+    assert.equal(
+      (await db.session.findUniqueOrThrow({ where: { id: verifierSessionId } })).status,
+      RunStatus.AWAITING_INPUT,
+      'the verifier session lifecycle is not what settled anything',
+    );
 
-    // N12: the first human request is already reachable in-app. Its one push row experiences an
-    // offline transport and later succeeds; retry changes the receipt, not the logical request.
-    const firstRequestId = firstHumanEvidence.judgmentRequest!.id;
-    const firstInbox = await db.taskJudgmentInboxItem.findUniqueOrThrow({
-      where: { requestId_requestVersion: { requestId: firstRequestId, requestVersion: 1 } },
-      include: { pushDelivery: true },
-    });
-    assert.ok(firstInbox.deliveredAt instanceof Date);
-    assert.equal(firstInbox.recipientId, ownerId);
-    assert.ok(firstInbox.pushDelivery);
-    await db.deviceToken.create({
+    // §13.3 DEP is a second, independent question: a DONE subject with a check outstanding is not
+    // yet a released prerequisite, because the check's own run has to have finished. That rule is
+    // older than this change and survives it — which is why the dependent is still BLOCKED here
+    // even though the subject is DONE.
+    assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
+    await db.session.update({
+      where: { id: verifierSessionId },
       data: {
-        userId: ownerId,
-        token: 'n9-offline-device',
-        environment: 'sandbox',
-        bundleId: 'io.orbitd.app',
+        status: RunStatus.SUCCEEDED,
+        endReason: VERIFICATION_RUN_END_REASON,
+        completedAt: new Date(),
       },
     });
-    const push = new PushService(prisma, enabledPushConfig());
-    (push as unknown as { authToken: () => string }).authToken = () => 'n9-auth';
-    let deviceOffline = true;
-    let transportCalls = 0;
-    (push as unknown as { deliver: () => Promise<number> }).deliver = async () => {
-      transportCalls += 1;
-      if (deviceOffline) throw new Error('simulated N9 device offline');
-      return 1;
-    };
-    deliveryWorker = new JudgmentDeliveryService(prisma, push);
-    const humanBeforeDelivery = await db.task.findUniqueOrThrow({
-      where: { id: human.id },
-      select: { status: true, updatedAt: true },
-    });
-    await deliveryWorker.deliverDue();
-    const offlineReceipt = await db.taskJudgmentPushDelivery.findUniqueOrThrow({
-      where: { id: firstInbox.pushDelivery!.id },
-    });
-    assert.equal(offlineReceipt.status, 'PENDING');
-    assert.equal(offlineReceipt.errorCode, 'PUSH_FAILED');
-    assert.match(offlineReceipt.lastError ?? '', /simulated N9 device offline/);
-    assert.equal(offlineReceipt.attempts, 1);
-    assert.equal(offlineReceipt.failures, 1);
-    assert.equal(await db.taskJudgmentRequest.count({ where: { id: firstRequestId } }), 1);
-    assert.equal(await db.taskJudgmentInboxItem.count({ where: { requestId: firstRequestId } }), 1);
+    assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'READY',
+      'with the check settled and the subject DONE, the epoch is open and the dependent releases');
 
-    deviceOffline = false;
-    await db.taskJudgmentPushDelivery.update({
-      where: { id: offlineReceipt.id },
-      data: { nextAttemptAt: new Date(0) },
-    });
-    await deliveryWorker.deliverDue();
-    const recoveredReceipt = await db.taskJudgmentPushDelivery.findUniqueOrThrow({
-      where: { id: offlineReceipt.id },
-    });
-    assert.equal(recoveredReceipt.id, offlineReceipt.id);
-    assert.equal(recoveredReceipt.status, 'DELIVERED');
-    assert.equal(recoveredReceipt.attempts, 2);
-    assert.equal(recoveredReceipt.deliveredDevices, 1);
-    assert.ok(recoveredReceipt.deliveredAt);
-    assert.equal(transportCalls, 2);
-    assert.equal(await db.taskJudgmentPushDelivery.count({ where: { requestId: firstRequestId } }), 1);
-    assert.equal(await db.taskJudgmentPushDelivery.count({
-      where: { logicalNotificationKey: `task-judgment:${firstRequestId}:v1` },
-    }), 1);
-    assert.deepEqual(await db.task.findUniqueOrThrow({
-      where: { id: human.id },
-      select: { status: true, updatedAt: true },
-    }), humanBeforeDelivery, 'the notification worker never writes Task status or any Task field');
-
-    // N10/N11/N13: a substantive second revision supersedes the old request. The inbox opens the
-    // current revision; an old click and an agent signature both fail before the human decision.
-    const currentHumanEvidence = await evidence.submit(
-      ownerId,
-      human.id,
-      { type: CreatorType.AGENT, id: workspaceId },
-      {
-        sourceSessionId: sourceSessions.human,
-        idempotencyKey: 'n9-human-revision-2',
-        evidence: {
-          commit: '4444444444444444',
-          testSummary: { command: 'npm test -w @orbit/web', exitCode: 0, passed: 1199 },
-          artifact: 'build/n9-review-v2.json',
-          sha256: '4'.repeat(64),
-        },
-      },
-    );
-    const currentRequestId = currentHumanEvidence.judgmentRequest!.id;
-    assert.equal(currentHumanEvidence.revision, '2');
-    assert.notEqual(currentRequestId, firstRequestId);
-    const staleRequest = await db.taskJudgmentRequest.findUniqueOrThrow({
-      where: { id: firstRequestId },
-    });
-    assert.equal(staleRequest.status, 'SUPERSEDED');
-    assert.equal(staleRequest.supersededById, currentRequestId);
-    assert.equal(await db.taskJudgmentRequest.count({
-      where: { taskId: human.id, status: 'OPEN' },
-    }), 1);
-    assert.equal(await db.taskJudgmentInboxItem.count({ where: { taskId: human.id } }), 2);
-    assert.equal(await db.taskJudgmentPushDelivery.count({
-      where: { requestId: { in: [firstRequestId, currentRequestId] } },
-    }), 2);
-
-    const reviews = new TaskJudgmentReviewService(prisma, tasks);
-    await assert.rejects(
-      reviews.decide(ownerId, firstRequestId, {
-        requestId: firstRequestId,
-        evidenceDigest: firstHumanEvidence.evidenceDigest,
-        action: 'PASS',
-        note: 'A stale inbox click must not sign the replacement revision.',
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof ConflictException);
-        assert.equal(
-          (error.getResponse() as Record<string, unknown>).code,
-          'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
-        );
-        return true;
-      },
-    );
-    // The blank finding is what is refused now — migration 0224 removed the refusal that used to
-    // stop an acting session here, and kept the one that stops an unexplained decision.
-    await assert.rejects(
-      tasks.judge(ownerId, human.id, {
-        requestId: currentRequestId,
-        evidenceDigest: currentHumanEvidence.evidenceDigest,
-        evidence: '   ',
-      }, sourceSessions.human),
-      (error: unknown) => {
-        assert.ok(error instanceof BadRequestException);
-        assert.equal(
-          (error.getResponse() as Record<string, unknown>).code,
-          'EVIDENCE_JUDGMENT_FINDING_REQUIRED',
-        );
-        return true;
-      },
-    );
-    const inbox = await reviews.list(ownerId, {
-      status: 'OPEN',
-      projectId: project.id,
-      taskId: human.id,
-    });
-    assert.equal(inbox.total, 1);
-    assert.equal(inbox.items[0].requestId, currentRequestId);
-    assert.equal(inbox.items[0].evidenceRevision, '2');
-    assert.equal(inbox.items[0].evidenceDigest, currentHumanEvidence.evidenceDigest);
-    const review = await reviews.get(ownerId, currentRequestId);
-    assert.equal(review.reviewState, 'ACTION_REQUIRED');
-    assert.equal(review.isCurrent, true);
-    assert.equal(review.evidence.revision, '2');
-    assert.equal(review.currentEvidence.id, currentHumanEvidence.id);
-    assert.equal(review.currentEvidence.requestId, currentRequestId);
-    assert.equal(review.history.length, 2);
-    assert.equal(JSON.stringify(review).includes(commentMarker), false,
-      'the review is built from evidence revisions and never parses task_comment prose');
-    assert.equal(review.derived.signalOpen, true);
-    assert.equal(review.derived.blockerOpen, true);
-    assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
-
-    const signatureNote =
-      'N9 human reviewed revision 2, commit 4444444444444444, raw test exit 0 and artifact SHA-256.';
-    const approved = await reviews.decide(ownerId, currentRequestId, {
-      requestId: currentRequestId,
-      evidenceDigest: currentHumanEvidence.evidenceDigest,
-      action: 'PASS',
-      note: signatureNote,
-    });
-    assert.equal(approved.reviewState, 'APPROVED');
-    assert.equal(approved.derived.taskStatus, TaskStatus.DONE);
-    assert.equal(approved.request.status, 'DECIDED');
-    assert.equal(approved.request.decision, 'PASS');
-    assert.equal(approved.derived.openRequestId, null);
-    assert.equal(approved.derived.signalOpen, false);
-    assert.equal(approved.derived.blockerOpen, false);
-    const storedHumanRequest = await db.taskJudgmentRequest.findUniqueOrThrow({
-      where: { id: currentRequestId },
-    });
-    assert.equal(storedHumanRequest.evidenceDigest, currentHumanEvidence.evidenceDigest);
-    assert.equal(storedHumanRequest.decisionNote, signatureNote);
-    assert.equal(storedHumanRequest.decidedByType, 'USER');
-    assert.equal(storedHumanRequest.decidedById, ownerId);
-    assert.ok(storedHumanRequest.decidedAt instanceof Date);
-    assert.equal(await db.task.count({ where: { verifiesTaskId: human.id } }), 0,
-      'EVIDENCE_JUDGMENT is a peer route and must not cascade into a legacy verifier');
-    assert.equal((await sql.query(
-      `SELECT count(*)::int AS n FROM "task_judgment_signal" WHERE "task_id" = $1::uuid`,
-      [human.id],
-    )).rows[0].n, 0);
-    assert.equal((await sql.query(
-      `SELECT count(*)::int AS n FROM "project_judgment_blocker" WHERE "task_id" = $1::uuid`,
-      [human.id],
-    )).rows[0].n, 0);
-    assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'READY');
-
-    const statusAudit = await db.$queryRaw<Array<{
-      taskId: string;
-      derivation: string;
-      oldStatus: string;
-      newStatus: string;
-    }>>`
-      SELECT "task_id" AS "taskId", "derivation",
-             "old_status" AS "oldStatus", "new_status" AS "newStatus"
-        FROM "n9_task_done_derivation_audit"
+    const statusAudit = await db.$queryRaw<Array<{ taskId: string; derivation: string }>>`
+      SELECT "task_id" AS "taskId", "derivation" FROM "jr_task_done_derivation_audit"
        ORDER BY "derivation", "task_id"`;
-    assert.equal(statusAudit.length, 4);
     assert.deepEqual(
       new Set(statusAudit.map((row) => row.derivation)),
-      new Set(['EXECUTABLE_RESULT', 'VERIFIER_VERDICT', 'VERIFICATION_PASS', 'EVIDENCE_JUDGMENT']),
+      new Set(['VERIFIER_VERDICT', 'VERIFICATION_PASS']),
     );
     assert.deepEqual(
       new Set(statusAudit.map((row) => row.taskId)),
-      new Set([executable.id, verifier.id, verification.id, human.id]),
+      new Set([verifier.id, subject.id]),
     );
-    assert.ok(statusAudit.every((row) => row.newStatus === 'DONE'));
 
-    // N3/N4/N5: structured criteria are concluded from the four durable facts. The source and
-    // verifier Sessions are still AWAITING_INPUT, and two ordinary project tasks remain OPEN.
-    const acceptanceRun = await acceptance.openRun(ownerId, project.id, { decidedBy: 'USER' });
-    const passedRun = await acceptance.finalizeRun(
-      ownerId,
-      project.id,
-      acceptanceRun.id,
-      [
-        {
-          ordinal: 1,
-          verdict: ProjectAcceptanceVerdict.PASS,
-          summary: 'The request-bound executable result matched exit code 0.',
-          evidence: {
-            requestId: executableEvidence.judgmentRequest!.id,
-            resultId: executableResult.id,
-            command: executableResult.command,
-            actualExitCode: executableResult.actualExitCode,
-            rawOutput: executableResult.rawOutput,
-          },
-          evidenceTaskId: executable.id,
-          evidenceSessionId: sourceSessions.executable,
+    // ---------------------------------------------------------------------------------------
+    // The negative half: a conclusion that is not PASS settles nothing.
+    // ---------------------------------------------------------------------------------------
+    for (const [verdict, label] of [['FAIL', 'fail'], ['INCONCLUSIVE', 'inconclusive']] as const) {
+      const held = await tasks.create(ownerId, {
+        title: `subject whose check answers ${verdict}`,
+        projectId: project.id,
+        assigneeId: workspaceId,
+        completionCriterion: 'VERIFICATION',
+        completionPolicy: 'VERIFICATION_PASSED',
+      });
+      const check = await tasks.create(ownerId, {
+        title: `[VERIFY] ${label}`,
+        projectId: project.id,
+        assigneeId: workspaceId,
+        verifiesTaskId: held.id,
+        completionCriterion: 'VERIFICATION',
+        completionPolicy: 'MANUAL',
+      });
+      const checkSessionId = randomUUID();
+      await db.session.create({
+        data: {
+          id: checkSessionId,
+          ownerId,
+          creatorId: ownerId,
+          taskId: check.id,
+          workspaceId,
+          assignedRunnerId: runnerId,
+          title: `independent verifier (${label})`,
+          prompt: 'Independently inspect the artifact and record a verdict.',
+          provider: 'codex',
+          status: RunStatus.AWAITING_INPUT,
+          dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true,
         },
-        {
-          ordinal: 2,
-          verdict: ProjectAcceptanceVerdict.PASS,
-          summary: 'The independent verifier session recorded PASS on the current evidence.',
-          evidence: {
-            requestId: verificationRequest.id,
-            verifierTaskId: verifier.id,
-            verdictRevision: decidedVerifier.verdictRevision.toString(),
-          },
-          evidenceTaskId: verification.id,
-          evidenceSessionId: verifierSessionId,
-        },
-        {
-          ordinal: 3,
-          verdict: ProjectAcceptanceVerdict.PASS,
-          summary: 'The owner signed the current inbox evidence after delivery recovery.',
-          evidence: {
-            requestId: currentRequestId,
-            evidenceRevision: currentHumanEvidence.revision,
-            decidedRequestId: storedHumanRequest.id,
-            deliveryId: recoveredReceipt.id,
-          },
-          evidenceTaskId: human.id,
-          evidenceSessionId: sourceSessions.human,
-        },
-      ],
-    );
-    assert.equal(passedRun.verdict, ProjectAcceptanceVerdict.PASS);
-    const conclusions = await db.projectAcceptanceConclusion.findMany({
-      where: { projectId: project.id, evidenceRunId: acceptanceRun.id },
-      orderBy: { ordinal: 'asc' },
-    });
-    assert.equal(conclusions.length, 3);
-    assert.ok(conclusions.every((row) => row.verdict === ProjectAcceptanceVerdict.PASS));
-    assert.ok(conclusions.every((row) => row.decidedBy === 'USER'));
-    assert.ok(conclusions.every((row) => row.decidedById === ownerId));
-    assert.ok(conclusions.every((row) => row.decidedAt instanceof Date));
-    assert.ok(conclusions.every(
-      (row) => row.evidenceVersion.toString() === acceptanceRun.attempt,
-    ));
-    const reconciled = await acceptance.reconcile(ownerId, project.id);
-    assert.equal(reconciled.done, true);
-    const gateBeforeOptional = await acceptance.evaluateGate(project.id);
-    assert.equal(gateBeforeOptional.allowed, true,
-      String(gateBeforeOptional.reason ?? 'doneGate refused'));
+      });
+      await tasks.update(ownerId, check.id, { verdict }, checkSessionId);
+      assert.equal(
+        (await db.task.findUniqueOrThrow({ where: { id: check.id } })).verdict,
+        verdict,
+      );
+      assert.notEqual(
+        (await db.task.findUniqueOrThrow({ where: { id: held.id } })).status,
+        TaskStatus.DONE,
+        `${verdict} must not settle the subject`,
+      );
+    }
 
-    const optional = await tasks.create(ownerId, {
-      title: 'N9 optional follow-up outside acceptance criteria',
+    // ---------------------------------------------------------------------------------------
+    // Ordinary writes around the removal, each one positively.
+    // ---------------------------------------------------------------------------------------
+    const plain = await tasks.create(ownerId, {
+      title: 'an ordinary task',
       projectId: project.id,
-      completionCriterion: 'EVIDENCE_JUDGMENT',
+      assigneeId: workspaceId,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+    });
+    const renamed = await tasks.update(ownerId, plain.id, { title: 'an ordinary task, renamed' });
+    assert.equal(renamed.title, 'an ordinary task, renamed');
+    // The edge goes on a THIRD task rather than on `plain`: `plain` gets a run below, and 0130's
+    // dispatch fence refuses a session on a task whose prerequisite tail is unresolved. That fence
+    // firing here would be the removal breaking an ordinary path, so the fixture respects it.
+    const dependent = await tasks.create(ownerId, {
+      title: 'waits on the ordinary task',
+      projectId: project.id,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
       autoRunWhenReady: false,
     });
-    assert.equal(optional.status, TaskStatus.OPEN);
-    const gateAfterOptional = await acceptance.evaluateGate(project.id);
-    assert.equal(gateAfterOptional.allowed, true,
-      String(gateAfterOptional.reason ?? 'an irrelevant OPEN task changed acceptance'));
-    assert.equal(await db.projectAcceptanceRun.count({ where: { projectId: project.id } }), 1,
-      'task creation does not mint or invalidate an acceptance evidence version');
-
-    const sourceStates = await db.session.findMany({
-      where: { id: { in: [...Object.values(sourceSessions), verifierSessionId] } },
-      select: { id: true, status: true, finishedAt: true },
+    await tasks.addDependency(ownerId, dependent.id, plain.id);
+    assert.equal(
+      await db.taskDependency.count({ where: { taskId: dependent.id, dependsOnTaskId: plain.id } }),
+      1,
+    );
+    assert.equal(await dependencyState(tasks, ownerId, dependent.id), 'BLOCKED');
+    const comment = await db.taskComment.create({
+      data: {
+        taskId: plain.id,
+        authorType: CreatorType.AGENT,
+        authorId: workspaceId,
+        body: 'an ordinary comment, still an ordinary write',
+      },
     });
-    assert.equal(sourceStates.length, 4);
-    assert.ok(sourceStates.every((session) => session.status === RunStatus.AWAITING_INPUT));
-    assert.ok(sourceStates.every((session) => session.finishedAt === null));
-    assert.equal(await db.task.count({
-      where: { projectId: project.id, status: TaskStatus.OPEN },
-    }), 2, 'downstream and optional work stay OPEN; all-tasks-terminal is not a doneGate input');
+    assert.ok(comment.id);
 
-    const storedProject = await db.project.findUniqueOrThrow({ where: { id: project.id } });
-    assert.equal(storedProject.status, ProjectStatus.DONE,
-      'the confirmed all-PASS conjunction automatically projects project DONE');
-    assert.equal(storedProject.acceptedRunId, acceptanceRun.id);
-    assert.equal(await db.taskComment.count({
-      where: { body: commentMarker },
-    }), 3, 'comments remain timeline facts and were neither consumed nor rewritten');
-    assert.equal(await db.taskLegacyEvidenceImport.count(), 0,
-      'no explicit legacy-import receipt means no comment became evidence');
+    const workSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: workSessionId,
+        ownerId,
+        creatorId: ownerId,
+        taskId: plain.id,
+        workspaceId,
+        assignedRunnerId: runnerId,
+        title: 'ordinary run',
+        prompt: 'do the ordinary work',
+        provider: 'claude',
+        status: RunStatus.RUNNING,
+        dispatchOrigin: SessionDispatchOrigin.USER,
+        startsTaskWork: true,
+      },
+    });
+    const event = await db.runEvent.create({
+      data: { id: randomUUID(), sessionId: workSessionId, seq: 1, type: 'STATUS', payload: {} },
+    });
+    assert.ok(event.id);
+    const receipt = await db.sessionMergeReceipt.create({
+      data: {
+        id: randomUUID(),
+        ownerId,
+        sessionId: workSessionId,
+        taskId: plain.id,
+        projectId: project.id,
+        result: 'MERGED',
+        sourceBranch: 'orbit/ordinary',
+        sourceSha: 'a'.repeat(40),
+        targetBranch: 'main',
+        targetShaBefore: 'b'.repeat(40),
+        targetShaAfter: 'c'.repeat(40),
+        recordedBy: 'RUNNER',
+        idempotencyKey: `jr-merge:${workSessionId}`,
+      },
+    });
+    assert.equal(receipt.result, 'MERGED');
+
+    // A supersede link is an ordinary lifecycle write too. On its own task, because `plain` now
+    // carries a live run and retiring a task under one is a different rule.
+    // MANUAL, because a `VERIFICATION_PASSED` row is only ever finished — or reopened — by the
+    // aggregation recompute (§13.1 AG6), which would put a hand-written FAILED straight back.
+    const attempt = await tasks.create(ownerId, {
+      title: 'an attempt that stopped',
+      projectId: project.id,
+      assigneeId: workspaceId,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+    });
+    await tasks.update(ownerId, attempt.id, { status: TaskStatus.FAILED } as never);
+    assert.equal(
+      (await db.task.findUniqueOrThrow({ where: { id: attempt.id } })).status,
+      TaskStatus.FAILED,
+      'FAILED is still a run\'s conservative self-report, on any criterion',
+    );
+    const successor = await tasks.create(ownerId, {
+      title: 'the replacement attempt',
+      projectId: project.id,
+      assigneeId: workspaceId,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      supersedesTaskId: attempt.id,
+    });
+    const superseded = await db.task.findUniqueOrThrow({ where: { id: attempt.id } });
+    assert.equal(superseded.supersededByTaskId, successor.id);
+    assert.equal(superseded.terminalReason, 'SUPERSEDED');
   },
 );

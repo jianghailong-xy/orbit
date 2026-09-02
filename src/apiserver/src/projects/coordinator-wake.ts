@@ -83,16 +83,6 @@ export const COORDINATOR_WAKE_EVENTS = [
   'CRITERION_READY',
   /** N10 appended a new immutable completion-evidence revision. */
   'COMPLETION_EVIDENCE_REVISED',
-  /** The system evaluator recorded the immutable result of an EXECUTABLE request. */
-  'EXECUTABLE_RESULT_RECORDED',
-  /** An evidence-bound verifier recorded a new versioned verdict. */
-  'VERIFICATION_VERDICT_RECORDED',
-  /** N11 created the judgment question for one evidence fact. */
-  'EVIDENCE_JUDGMENT_REQUESTED',
-  /** The exact question and evidence digest were decided. */
-  'EVIDENCE_JUDGMENT_DECIDED',
-  /** New evidence replaced an older open question. */
-  'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
   /** A terminal result is durable but the control plane has not committed its completion ACK. */
   'COMPLETION_ACK_STALE',
 ] as const;
@@ -117,6 +107,15 @@ export const RETIRED_COORDINATOR_WAKE_EVENTS = [
   'HUMAN_SIGNOFF_DECIDED',
   'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
   'FAILURE_CONTINUATION_ACTIONABLE',
+  // Retired the same way on 2026-09-02, when the judgment machinery was removed: each of these
+  // five was a fact ABOUT a `task_judgment_request`, or about the exit-code result that decided
+  // one, and neither the request nor the result exists any more. The wakes already raised are
+  // still what happened.
+  'EXECUTABLE_RESULT_RECORDED',
+  'VERIFICATION_VERDICT_RECORDED',
+  'EVIDENCE_JUDGMENT_REQUESTED',
+  'EVIDENCE_JUDGMENT_DECIDED',
+  'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
 ] as const;
 
 /**

@@ -7,7 +7,6 @@ import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
-import { judgmentAlert, type JudgmentAlertInput } from './judgment-alert';
 import { settleAlert } from './settle-alert';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
@@ -37,20 +36,6 @@ export interface AgentNotifyResult {
   /** Why nothing was sent. Present only when not delivered, and written to be read by an agent. */
   reason?: string;
 }
-
-export type JudgmentPushResult =
-  | {
-      outcome: 'DELIVERED';
-      devices: number;
-      payload: Record<string, unknown>;
-    }
-  | {
-      outcome: 'BLOCKED' | 'RETRY';
-      code: string;
-      requiredAction: string;
-      error: string;
-      payload: Record<string, unknown>;
-    };
 
 /**
  * Sends "needs your reply" pushes to a user's registered iOS devices via APNs, using token-based
@@ -365,79 +350,6 @@ export class PushService {
       const message = (err as Error).message;
       this.log.warn(`agent notify failed: ${message}`);
       return { delivered: false, reason: `push failed: ${message}` };
-    }
-  }
-
-  /**
-   * Attempt the retryable device projection of an already-delivered in-app judgment item.
-   *
-   * Unlike the fire-and-forget session pushes, every refusal is returned in a closed shape for the
-   * persistent delivery ledger. No preference switch can erase the underlying responsibility: a
-   * person may have no device or APNs may be unavailable, but their in-app item remains delivered
-   * and this projection remains retryable.
-   */
-  async deliverJudgmentRequest(input: JudgmentAlertInput): Promise<JudgmentPushResult> {
-    const alert = judgmentAlert(input);
-    if (!this.enabled) {
-      return {
-        outcome: 'BLOCKED',
-        code: 'PUSH_NOT_CONFIGURED',
-        requiredAction: 'CONFIGURE_APNS',
-        error: 'APNs is not configured on this server.',
-        payload: alert.payload,
-      };
-    }
-    try {
-      const tokens = await this.prisma.deviceToken.findMany({
-        where: { userId: input.recipientId },
-      });
-      if (tokens.length === 0) {
-        return {
-          outcome: 'BLOCKED',
-          code: 'NO_DEVICES',
-          requiredAction: 'REGISTER_DEVICE',
-          error: 'No device is registered for this account.',
-          payload: alert.payload,
-        };
-      }
-      const auth = this.authToken();
-      if (!auth) {
-        return {
-          outcome: 'BLOCKED',
-          code: 'PUSH_NOT_CONFIGURED',
-          requiredAction: 'CONFIGURE_APNS',
-          error: 'APNs is not configured on this server.',
-          payload: alert.payload,
-        };
-      }
-      const devices = await this.deliver(
-        tokens,
-        alert.encoded,
-        'alert',
-        '10',
-        auth,
-        alert.collapseId,
-      );
-      if (devices === 0) {
-        return {
-          outcome: 'RETRY',
-          code: 'PUSH_NOT_ACCEPTED',
-          requiredAction: 'RETRY_PUSH',
-          error: 'No registered device accepted the notification.',
-          payload: alert.payload,
-        };
-      }
-      return { outcome: 'DELIVERED', devices, payload: alert.payload };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.log.warn(`judgment push failed: ${message}`);
-      return {
-        outcome: 'RETRY',
-        code: 'PUSH_FAILED',
-        requiredAction: 'RETRY_PUSH',
-        error: message,
-        payload: alert.payload,
-      };
     }
   }
 

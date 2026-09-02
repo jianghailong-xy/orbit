@@ -409,16 +409,16 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
     /NOT EXISTS \(\s*SELECT 1 FROM task_dependency dep[\s\S]*AND NOT EXISTS \(\s*SELECT 1\s*FROM task chain_task[\s\S]*chain_task\.id = task_dependency_tail_id\(dep\.depends_on_task_id\)[\s\S]*chain_task\.status = 'DONE'/,
   );
   // DONE is not enough while a verification epoch is open. Scope equality prevents another
-  // tenant/project's check from inventing an epoch, and an OPEN request closes an older PASS.
+  // tenant/project's check from inventing an epoch. The third clause here read an OPEN
+  // `task_judgment_request` — the post-commit window in which a request existed but its verifier
+  // task did not — and went with that table on 2026-09-02; a check is now the only thing that can
+  // open an epoch, so there is no such window left.
   assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
   assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
-  assert.match(sql, /epoch_open_request\."status" = 'OPEN'/);
-  assert.match(
-    sql,
-    /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
-  );
-  // The legacy PASS route is fail-closed too: no occupying run, one successful task_done run, and
-  // (inside a project) an applied verdict action are all required before it releases the edge.
+  assert.doesNotMatch(sql, /task_judgment_request/);
+  assert.match(sql, /epoch_check\."verdict" = 'PASS'/);
+  // The PASS route — the only one left — is fail-closed: no occupying run, one successful
+  // task_done run, and (inside a project) an applied verdict action before it releases the edge.
   assert.match(
     sql,
     /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,

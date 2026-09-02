@@ -1182,23 +1182,6 @@ func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.Raw
 	return out, err
 }
 
-// judgeTask carries the acting session because that session is what the decision is ATTRIBUTED to.
-// Before migration 0224 the header existed so the server could refuse an agent; it no longer
-// refuses one, and a headless invocation without a session is attributed to the runner owner.
-func (t *Transport) judgeTask(sessionID, id, requestID, evidenceDigest, evidence string) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/judgment",
-		map[string]string{
-			"requestId":      requestID,
-			"evidenceDigest": evidenceDigest,
-			"evidence":       evidence,
-		}, &out, taskOpTimeout, sessionHeader(sessionID))
-	return out, err
-}
-
 func (t *Transport) deleteTask(id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

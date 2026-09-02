@@ -82,7 +82,6 @@ function buildStack(db: PrismaClient): Stack {
   );
   const attemptEnded = new AttemptEndedUnsettledProducer(prisma, judgments, convergence);
   const settled = new ProjectTasksSettledProducer(prisma, judgments, convergence);
-  const completionInputs = new CompletionInputRouter(new CoordinatorWakeService(prisma));
   const tasks = new TasksService(prisma, sessions, realtime);
   return {
     db,
@@ -101,7 +100,6 @@ function buildStack(db: PrismaClient): Stack {
       {} as never,
       undefined,
       undefined,
-      completionInputs,
     ),
   };
 }
@@ -232,13 +230,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       autoRunWhenReady: true,
       dependsOnTaskIds: [prerequisite.id],
     });
-    await completeHumanTaskForPgTest(
-      db,
-      ownerId,
-      prerequisite.id,
-      'T8-prerequisite',
-      stack.tasks,
-    );
+    await completeHumanTaskForPgTest(db, ownerId, prerequisite.id, 'T8-prerequisite');
     await (stack.tasks as unknown as { reconcileReadyTasks(): Promise<void> })
       .reconcileReadyTasks();
 

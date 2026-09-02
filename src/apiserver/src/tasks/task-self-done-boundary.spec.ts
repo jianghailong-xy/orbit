@@ -145,6 +145,10 @@ function assertCriterionRefusal(
   assert.match(String(body.message), /cannot be written directly by a person, coordinator or execution session/);
 }
 
+// The refusal is unchanged; what it POINTS AT changed on 2026-09-02. EVIDENCE_JUDGMENT and
+// EXECUTABLE lost their implementations, so the remedy names that state instead of a door that no
+// longer exists — which is the whole point of this boundary: every refusal has to tell the caller
+// what could actually complete this task, and "nothing, until it is rebuilt" is an answer.
 test('nobody can write DONE and every caller is directed to the EVIDENCE_JUDGMENT criterion',
   async () => {
     const f = fixture(THE_RUN_ITSELF, 'EVIDENCE_JUDGMENT');
@@ -154,8 +158,8 @@ test('nobody can write DONE and every caller is directed to the EVIDENCE_JUDGMEN
     assertCriterionRefusal(
       body,
       'EVIDENCE_JUDGMENT',
-      'DECIDE_THE_OPEN_EVIDENCE_JUDGMENT',
-      /current EVIDENCE_JUDGMENT request[\s\S]*requestId and evidenceDigest/,
+      'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
+      /implementation[\s\S]*removed on 2026-09-02[\s\S]*VERIFICATION/,
     );
     assert.deepEqual(f.writes, []);
   });
@@ -182,8 +186,8 @@ test('a task execution session cannot write DONE and is directed to EXECUTABLE',
   assertCriterionRefusal(
     body,
     'EXECUTABLE',
-    'RUN_EXECUTABLE_CRITERION',
-    /acceptanceCommand.*acceptanceExpectedExitCode/,
+    'AWAIT_EXECUTABLE_IMPLEMENTATION',
+    /acceptanceCommand and[\s\S]*acceptanceExpectedExitCode are still stored/,
   );
   assert.deepEqual(f.writes, []);
 });

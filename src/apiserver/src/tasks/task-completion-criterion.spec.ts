@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import {
+  TASK_COMPLETION_CRITERIA,
   deriveTaskCompletionStatus,
   evaluateTaskCompletion,
   projectVerifierCarrierStatus,
@@ -23,41 +26,61 @@ test('undeclared completion is the ordinary EVIDENCE_JUDGMENT criterion', () => 
   });
 });
 
-test('each completion criterion evaluates both satisfied and unsatisfied facts', () => {
-  const cases = [
-    [
-      'EXECUTABLE',
-      { completionCriterion: 'EXECUTABLE' as const, acceptanceExpectedExitCode: 0, executableExitCode: 0 },
-      { completionCriterion: 'EXECUTABLE' as const, acceptanceExpectedExitCode: 0, executableExitCode: 7 },
-    ],
-    [
-      'VERIFICATION',
-      { completionCriterion: 'VERIFICATION' as const, verificationVerdict: 'PASS' as const },
-      { completionCriterion: 'VERIFICATION' as const, verificationVerdict: 'INCONCLUSIVE' as const },
-    ],
-    [
-      'EVIDENCE_JUDGMENT',
-      { completionCriterion: 'EVIDENCE_JUDGMENT' as const, evidenceJudgment: true },
-      { completionCriterion: 'EVIDENCE_JUDGMENT' as const, evidenceJudgment: false },
-    ],
-  ] as const;
+// VERIFICATION is the only criterion with an implementation since 2026-09-02. The other two are
+// declared-but-unimplemented: legal to declare, impossible to satisfy, and — the point of naming
+// them here — evaluated by their OWN `case`, not by falling through to somebody else's answer or
+// to a default. `evaluateTaskCompletion`'s switch has no default arm, so the exhaustiveness check
+// is what makes that a compile-time fact rather than a comment.
+test('VERIFICATION evaluates both satisfied and unsatisfied facts', () => {
+  assert.deepEqual(
+    evaluateTaskCompletion({ completionCriterion: 'VERIFICATION', verificationVerdict: 'PASS' }),
+    { criterion: 'VERIFICATION', state: 'SATISFIED', satisfied: true },
+  );
+  assert.deepEqual(
+    evaluateTaskCompletion({
+      completionCriterion: 'VERIFICATION', verificationVerdict: 'INCONCLUSIVE',
+    }),
+    { criterion: 'VERIFICATION', state: 'UNSATISFIED', satisfied: false },
+  );
+});
 
-  for (const [criterion, satisfied, unsatisfied] of cases) {
-    assert.deepEqual(evaluateTaskCompletion(satisfied), {
-      criterion, state: 'SATISFIED', satisfied: true,
-    });
-    assert.deepEqual(evaluateTaskCompletion(unsatisfied), {
-      criterion, state: 'UNSATISFIED', satisfied: false,
-    });
+test('EXECUTABLE and EVIDENCE_JUDGMENT are declared but have no implementation', () => {
+  for (const criterion of ['EXECUTABLE', 'EVIDENCE_JUDGMENT'] as const) {
+    // Every shape a caller could present, including the ones that used to satisfy them.
+    for (const facts of [
+      { completionCriterion: criterion },
+      { completionCriterion: criterion, verifiesTaskId: 'not-a-verifier-criterion' },
+      { completionCriterion: criterion, verificationVerdict: 'PASS' as const },
+      { completionCriterion: criterion, ownVerdict: 'PASS' as const },
+    ]) {
+      assert.deepEqual(
+        evaluateTaskCompletion(facts),
+        { criterion, state: 'UNSATISFIED', satisfied: false },
+        `${criterion} must be UNSATISFIED, never satisfied by another criterion's fact`,
+      );
+      assert.equal(deriveTaskCompletionStatus(facts), null);
+    }
   }
 });
 
-test('a satisfied EXECUTABLE criterion evaluates task status to DONE', () => {
-  assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'EXECUTABLE',
-    acceptanceExpectedExitCode: 7,
-    executableExitCode: 7,
-  }), 'DONE');
+test('the removed criteria answer rather than throw, and stay out of the default arm', () => {
+  // Not an exception: an unimplemented criterion is a state, not an error, and a caller that
+  // evaluates one has asked a legitimate question about a legitimate declaration.
+  assert.doesNotThrow(() => evaluateTaskCompletion({ completionCriterion: 'EXECUTABLE' }));
+  assert.doesNotThrow(() => evaluateTaskCompletion({ completionCriterion: 'EVIDENCE_JUDGMENT' }));
+  const source = readFileSync(
+    path.resolve(__dirname, '../../src/tasks/task-completion-criterion.ts'), 'utf8',
+  );
+  const evaluator = source.slice(source.indexOf('export function evaluateTaskCompletion'));
+  assert.match(evaluator, /case 'EXECUTABLE':/u, 'EXECUTABLE keeps its own explicit arm');
+  assert.match(evaluator, /case 'EVIDENCE_JUDGMENT':/u);
+  assert.doesNotMatch(evaluator.slice(0, evaluator.indexOf('\n}')), /default:/u,
+    'no default arm: a fourth criterion must not inherit an answer');
+  // The three labels are still declarable. Deleting one would have been the other removal.
+  assert.deepEqual(
+    [...TASK_COMPLETION_CRITERIA],
+    ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
+  );
 });
 
 test('a satisfied VERIFICATION criterion evaluates task status to DONE', () => {
@@ -157,38 +180,31 @@ test('the verifier carrier projector derives DONE and removes it when its verdic
   }), 'DONE', 'clearing retirement reactivates the verdict-owned carrier lifecycle');
 });
 
-test('a satisfied EVIDENCE_JUDGMENT criterion evaluates task status to DONE', () => {
-  assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'EVIDENCE_JUDGMENT',
-    evidenceJudgment: true,
-  }), 'DONE');
-});
-
 test('an unsatisfied criterion cannot manufacture an optimistic status', () => {
   assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'EVIDENCE_JUDGMENT',
-    evidenceJudgment: false,
+    completionCriterion: 'VERIFICATION',
+    verificationVerdict: 'FAIL',
   }), null);
 });
 
 test('every direct-DONE refusal points at the declared criterion remedy', () => {
-  assert.deepEqual(taskCompletionRequiredAction('EXECUTABLE'), {
-    requiredAction: 'RUN_EXECUTABLE_CRITERION',
-    instruction:
-      'finish the task run and let Orbit run its declared acceptanceCommand; the recorded ' +
-      'exit code must equal acceptanceExpectedExitCode',
-  });
+  assert.equal(taskCompletionRequiredAction('EXECUTABLE').requiredAction,
+    'AWAIT_EXECUTABLE_IMPLEMENTATION');
+  assert.match(taskCompletionRequiredAction('EXECUTABLE').instruction,
+    /implementation was removed[\s\S]*declaration is intact/u);
   assert.match(
     taskCompletionRequiredAction('VERIFICATION').instruction,
     /independent verification task with verdict PASS/,
   );
-  assert.match(
-    taskCompletionRequiredAction('EVIDENCE_JUDGMENT').instruction,
-    /current EVIDENCE_JUDGMENT request[\s\S]*requestId and evidenceDigest/,
-  );
-  // The remedy names a door anybody credentialed can reach, not a person to go and find.
-  assert.equal(taskCompletionRequiredAction('EVIDENCE_JUDGMENT').requiredAction,
-    'DECIDE_THE_OPEN_EVIDENCE_JUDGMENT');
+  // The two remedies with no implementation behind them say so, and say what IS still possible,
+  // rather than naming a door (`task_judge`, the exit-code evaluator) that no longer exists.
+  for (const criterion of ['EXECUTABLE', 'EVIDENCE_JUDGMENT'] as const) {
+    const remedy = taskCompletionRequiredAction(criterion);
+    assert.match(remedy.requiredAction, /^AWAIT_/u);
+    assert.match(remedy.instruction, /implementation/u);
+    assert.match(remedy.instruction, /VERIFICATION/u);
+    assert.doesNotMatch(remedy.instruction, /task_judge/u);
+  }
 });
 
 test('the three peer declarations require only their own evidence shape', () => {

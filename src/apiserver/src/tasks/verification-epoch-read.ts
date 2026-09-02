@@ -17,8 +17,7 @@ import {
 import { VERDICT_APPLY_EXHAUSTED } from '../projects/task-verification-verdict';
 
 /** Just the model accessors this read needs, so a transaction client is equally acceptable. */
-type EpochPrismaClient = Pick<PrismaService, 'task' | 'session' | 'projectAction'>
-  & Partial<Pick<PrismaService, 'taskJudgmentRequest'>>;
+type EpochPrismaClient = Pick<PrismaService, 'task' | 'session' | 'projectAction'>;
 
 /**
  * §13.3 DEP for a set of candidate prerequisites: which of them have a PASS epoch, and what it says.
@@ -51,38 +50,17 @@ prerequisiteIds: string[],
 ): Promise<Map<string, VerificationEpochEntry>> {
   const unique = [...new Set(prerequisiteIds)];
   if (unique.length === 0) return new Map();
-  // Optional solely for unit/rolling compatibility with clients shaped before migration 0181.
-  // A real PrismaService generated from this schema always has the accessor.
-  const judgmentRequests = prisma.taskJudgmentRequest;
   // Both spellings of the edge in one read: a prerequisite that is a check resolves to what it
   // checks, and one that is a subject stands for itself — but only if something actually checks it.
-  const [anchors, requestAnchors] = await Promise.all([
-    prisma.task.findMany({
-      where: {
-        id: { in: unique },
-        ownerId,
-        OR: [{ verifiesTaskId: { not: null } }, { verifiedBy: { some: {} } }],
-      },
-      select: { id: true, verifiesTaskId: true },
-    }),
-    // The request commits before its deterministic verifier Task is filed. Read it as an anchor
-    // during that post-commit window, otherwise a previously open PASS could briefly release a
-    // dependent while the newer judgment question already exists.
-    judgmentRequests?.findMany({
-      where: {
-        ownerId,
-        kind: 'VERIFICATION',
-        recipientType: 'VERIFIER_TASK',
-        status: { in: ['OPEN', 'DECIDED'] },
-        OR: [{ taskId: { in: unique } }, { recipientId: { in: unique } }],
-      },
-      select: { taskId: true },
-    }) ?? Promise.resolve([]),
-  ]);
-  const subjectIds = [...new Set([
-    ...anchors.map((a) => a.verifiesTaskId ?? a.id),
-    ...requestAnchors.map((request) => request.taskId),
-  ])];
+  const anchors = await prisma.task.findMany({
+    where: {
+      id: { in: unique },
+      ownerId,
+      OR: [{ verifiesTaskId: { not: null } }, { verifiedBy: { some: {} } }],
+    },
+    select: { id: true, verifiesTaskId: true },
+  });
+  const subjectIds = [...new Set(anchors.map((a) => a.verifiesTaskId ?? a.id))];
   if (subjectIds.length === 0) return new Map();
   const loaded = await prisma.task.findMany({
     where: { ownerId, OR: [{ id: { in: subjectIds } }, { verifiesTaskId: { in: subjectIds } }] },
@@ -106,7 +84,7 @@ prerequisiteIds: string[],
         && subjectProject.get(row.verifiesTaskId) === (row.projectId ?? null);
   const rows = loaded.filter(inSubjectScope);
   const checkIds = rows.filter((row) => row.verifiesTaskId != null).map((row) => row.id);
-  const [sessions, applied, judgments] = await Promise.all([
+  const [sessions, applied] = await Promise.all([
     prisma.session.findMany({
       where: { taskId: { in: checkIds } },
       select: {
@@ -115,22 +93,6 @@ prerequisiteIds: string[],
       },
     }),
     verdictActionKeys(prisma, rows),
-    judgmentRequests?.findMany({
-      where: {
-        ownerId,
-        taskId: { in: subjectIds },
-        kind: 'VERIFICATION',
-        recipientType: 'VERIFIER_TASK',
-      },
-      select: {
-        id: true,
-        taskId: true,
-        recipientId: true,
-        status: true,
-        decision: true,
-        createdAt: true,
-      },
-    }) ?? Promise.resolve([]),
   ]);
   const runs = new Map<string, VerificationRunFact[]>();
   for (const session of sessions) {
@@ -145,16 +107,7 @@ prerequisiteIds: string[],
     if (list) list.push(fact);
     else runs.set(session.taskId, [fact]);
   }
-  const judgmentsByRecipient = new Map(judgments
-    // N11's route pins all three identities to one fact. Fail closed on a malformed historical row
-    // rather than letting a text recipient accidentally decorate another Task's epoch.
-    .filter((request) => request.id === request.recipientId)
-    .map((request) => [request.recipientId, request]));
   const epochRows = rows.map((row) => {
-    const judgment = row.verifiesTaskId == null
-      ? undefined
-      : judgmentsByRecipient.get(row.id);
-    const matchingJudgment = judgment?.taskId === row.verifiesTaskId ? judgment : undefined;
     return {
       id: row.id,
       createdAt: row.createdAt,
@@ -175,34 +128,9 @@ prerequisiteIds: string[],
         && applied.exhausted.has(verificationVerdictActionKeyOf(
           row.projectId, row.id, String(row.verdictRevision),
         )),
-      judgmentStatus: matchingJudgment?.status ?? null,
-      judgmentDecision: matchingJudgment?.decision ?? null,
-      judgmentCreatedAt: matchingJudgment?.createdAt ?? null,
       retired: taskRetirement(row) != null,
     };
   });
-  const loadedIds = new Set(rows.map((row) => row.id));
-  // A just-committed OPEN request may not have its verifier Task yet. Represent that request as an
-  // in-flight check so it closes an older PASS; a DECIDED request necessarily has a verifier Task
-  // because the transition trigger requires its verdict, so only OPEN can normally reach here.
-  for (const judgment of judgments) {
-    if (loadedIds.has(judgment.id) || judgment.id !== judgment.recipientId
-      || judgment.status === 'SUPERSEDED' || !subjectProject.has(judgment.taskId)) continue;
-    epochRows.push({
-      id: judgment.id,
-      createdAt: judgment.createdAt,
-      status: 'OPEN',
-      verifiesTaskId: judgment.taskId,
-      verdict: null,
-      verdictRevision: '0',
-      verdictApplied: null,
-      verdictApplyExhausted: false,
-      judgmentStatus: judgment.status,
-      judgmentDecision: judgment.decision,
-      judgmentCreatedAt: judgment.createdAt,
-      retired: false,
-    });
-  }
   return verificationEpochGates(epochRows, runs);
 }
 

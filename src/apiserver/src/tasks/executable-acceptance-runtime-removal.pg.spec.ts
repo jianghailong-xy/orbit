@@ -87,15 +87,25 @@ const DROPPED_TYPES = [
   'project_acceptance_run_state',
 ];
 
-/** 0141 and 0192's verification guards: ten triggers this removal may not touch. */
+/** 0141 and 0192's verification guards: the four triggers this removal may not touch. */
 const VERIFICATION_TRIGGERS = [
-  'task_judgment_verifier_delete_guard',
-  'task_judgment_verifier_terminal_guard',
-  'task_open_verification_request_carrier_guard',
   'task_verification_carrier_status_derive_insert',
   'task_verification_carrier_status_derive_update',
   'task_verification_verdict_atomic_insert',
   'task_verification_verdict_atomic_update',
+];
+
+/**
+ * 0192's other three guards used to be on this list. They went on 2026-09-02 with 0228, because
+ * each one reads `task_judgment_request`: `assert_verification_request_carrier_state` — which
+ * `task_open_verification_request_carrier_guard` on `task` does nothing but call — is four EXISTS
+ * clauses over that table. A guard that queries a dropped relation is not a guard, it is the next
+ * production error. Named here so this suite still fails if one of them comes back.
+ */
+const VERIFICATION_TRIGGERS_REMOVED_BY_0228 = [
+  'task_judgment_verifier_delete_guard',
+  'task_judgment_verifier_terminal_guard',
+  'task_open_verification_request_carrier_guard',
 ];
 
 /**
@@ -140,7 +150,6 @@ function controller(db: PrismaClient): RunnerApiController {
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
     undefined,
-    new CompletionInputRouter(new CoordinatorWakeService(prisma)),
   );
 }
 
@@ -268,9 +277,9 @@ suite('(a) the installed database has none of the relations, functions or types 
         WHERE n.nspname = 'public' AND c.relkind IN ('r','v','m')
           AND c.relname LIKE 'task\\_executable\\_%'
         ORDER BY 1`)).rows.map((row) => row.name);
-    // 0181's recorded command result is the one member of this family that stays: it is what the
-    // surviving EXECUTABLE lane writes, and this removal may not touch it.
-    assert.deepEqual(relations, ['task_executable_judgment_result']);
+    // 0181's recorded command result was the one member of this family this removal left behind.
+    // 0228 took it the same day, with the rest of the judgment machinery, so the family is empty.
+    assert.deepEqual(relations, []);
     for (const name of DROPPED_RELATIONS) {
       const present = await client.query(
         `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -323,12 +332,14 @@ suite('(d)(e) 0141 and 0192 keep every verification guard', async (t) => {
   const client = await connectSql();
   t.after(async () => { await client.end(); });
 
-  const installed = (await client.query<{ name: string }>(
+  const named = async (names: readonly string[]) => (await client.query<{ name: string }>(
     `SELECT t.tgname AS name FROM pg_trigger t
       WHERE NOT t.tgisinternal AND t.tgname = ANY($1::text[]) ORDER BY 1`,
-    [VERIFICATION_TRIGGERS],
+    [names],
   )).rows.map((row) => row.name);
-  assert.deepEqual(installed, [...VERIFICATION_TRIGGERS].sort());
+
+  assert.deepEqual(await named(VERIFICATION_TRIGGERS), [...VERIFICATION_TRIGGERS].sort());
+  assert.deepEqual(await named(VERIFICATION_TRIGGERS_REMOVED_BY_0228), []);
 });
 
 suite('(f)(g) a VERIFICATION subject is still settled by a PASS and only by a PASS', async (t) => {
@@ -513,26 +524,28 @@ suite('(u)(v) 0177 and 0181 survive byte for byte and stay writable', async (t) 
     + "AND (completion_policy = 'MANUAL'::task_completion_policy) "
     + 'AND (verifies_task_id IS NULL))))');
 
-  // (v) the two 0181 relations, and a write through each of them.
-  for (const table of ['task_judgment_request', 'task_executable_judgment_result']) {
-    const present = await sql.query(`SELECT to_regclass($1)::text AS name`, [table]);
-    assert.equal(present.rows[0].name, table, `${table} must still exist`);
+  // (v) 0181's two relations were the evidence source this suite pointed at an hour before the
+  // account owner had them removed as well (0228). What survives is the half they were kept FOR:
+  // the declaration. A task still carries its command and expected exit code, and still refuses
+  // half a pair.
+  for (const gone of ['task_judgment_request', 'task_executable_judgment_result']) {
+    const present = await sql.query(`SELECT to_regclass($1)::text AS name`, [gone]);
+    assert.equal(present.rows[0].name, null, `${gone} was removed by 0228`);
   }
   const w = await owner(db, 'judgment-write');
   const result = await runAcceptance(
     db, w, 'writable', 'printf ok', 0, 0, 'ok',
   );
-  assert.equal(result.status, TaskStatus.DONE);
-  const request = await db.taskJudgmentRequest.findFirstOrThrow({
-    where: { taskId: result.taskId }, include: { executableResult: true },
-  });
-  assert.equal(request.kind, 'EXECUTABLE');
-  assert.equal(request.status, 'DECIDED');
-  assert.ok(request.executableResult, 'the recorded command result is written through 0181');
+  assert.equal(result.status, TaskStatus.OPEN,
+    'nothing derives a status from an exit code any more');
+  const declared = await db.task.findUniqueOrThrow({ where: { id: result.taskId } });
+  assert.equal(declared.acceptanceCommand, 'printf ok');
+  assert.equal(declared.acceptanceExpectedExitCode, 0);
+  assert.equal(declared.completionCriterion, 'EXECUTABLE');
 });
 
 // (x)(y) -------------------------------------------------------------------------------------------
-suite('(x)(y) an EXECUTABLE task still derives DONE on the declared exit code and FAILED on any other',
+suite('(x)(y) an EXECUTABLE task derives neither DONE nor FAILED, and keeps its declaration',
   async (t) => {
     const sql = await connectSql();
     const db = prismaClientFor(URL!);
@@ -540,32 +553,32 @@ suite('(x)(y) an EXECUTABLE task still derives DONE on the declared exit code an
     await empty(sql);
     const w = await owner(db, 'executable');
 
-    // (x) positive: the command ends with the expected code.
+    // 0228 removed the comparison this suite was written around, at the account owner's
+    // direction and one migration after this one. Both halves of it now answer the same way.
+
+    // (x) a matching exit code derives nothing.
     const passed = await runAcceptance(
       db, w, 'exec-pass', 'test -f package.json', 0, 0, 'package.json is here',
     );
-    assert.equal(passed.status, TaskStatus.DONE,
-      'a matching exit code must still derive DONE with the v2 attempt gone');
+    assert.equal(passed.status, TaskStatus.OPEN,
+      'exit 0 against expected 0 derives nothing: EXECUTABLE has no implementation');
 
-    // (x) negative: any other code is FAILED. Not ACTIONABLE, not retried — this removal is what
-    // makes a timeout look like this too, and that is the accepted cost.
+    // (x) and so does any other code — the conservative FAILED went with the optimistic DONE.
     const failed = await runAcceptance(
       db, w, 'exec-fail', 'test -f absent.json', 0, 1, 'no such file\nline two',
     );
-    assert.equal(failed.status, TaskStatus.FAILED);
+    assert.equal(failed.status, TaskStatus.OPEN);
 
-    // (y) and the failing run stays diagnosable: exit code and complete output, where the
-    // coordinating session now has to read them.
-    const request = await db.taskJudgmentRequest.findFirstOrThrow({
-      where: { taskId: failed.taskId }, include: { executableResult: true },
-    });
-    assert.equal(request.decision, 'FAIL');
-    assert.equal(request.executableResult?.expectedExitCode, 0);
-    assert.equal(request.executableResult?.actualExitCode, 1);
-    assert.equal(request.executableResult?.rawOutput, 'no such file\nline two');
+    // (y) and the failing run is no longer diagnosable from a durable row: this is consequence 3
+    // of the 2026-09-02 decision, accepted explicitly. One human-facing comment says so, and the
+    // declaration the command came from is untouched.
+    const declaration = await db.task.findUniqueOrThrow({ where: { id: failed.taskId } });
+    assert.equal(declaration.acceptanceCommand, 'test -f absent.json');
+    assert.equal(declaration.acceptanceExpectedExitCode, 0);
+    assert.equal(await db.taskComment.count({ where: { taskId: failed.taskId } }), 1);
 
-    // The DONE fence agrees from the database side: the request is the canonical fact now, and a
-    // task with no decided PASS still cannot be written DONE by hand.
+    // The DONE fence agrees from the database side: with the judgment lane gone too, a task with
+    // no verification fact cannot be written DONE by hand.
     await assert.rejects(
       sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [failed.taskId]),
       /TASK_DONE_CANONICAL_FACT_REQUIRED/,
@@ -668,19 +681,27 @@ suite('(q) the core tables keep every trigger that predates this project', async
   t.after(async () => { await client.end(); });
 
   // Measured on origin/main at the start of this task and then reduced by exactly the one trigger
-  // this removal takes off `task`. Only the tables this removal touched are counted: pinning a
-  // table it never wrote on would make a sibling removal's work show up as a failure here.
+  // this removal takes off `task` — and by the three 0228 takes off it the same day, which is why
+  // 27 became 24. Only the tables these removals touched are counted: pinning a table neither
+  // wrote on would make some third removal's work show up as a failure here.
   const counts = Object.fromEntries((await client.query<{ table: string; n: number }>(
     `SELECT c.relname AS table, count(*)::int AS n FROM pg_trigger t
        JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname IN ('task', 'session', 'run_event')
       GROUP BY 1 ORDER BY 1`)).rows.map((row) => [row.table, row.n]));
-  assert.deepEqual(counts, { run_event: 1, session: 10, task: 27 });
+  assert.deepEqual(counts, { run_event: 1, session: 10, task: 24 });
 
-  // And the one that went is named, so a reader can tell a removal from an accident.
-  const gone = await client.query(
-    `SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgname = 'task_executable_plan_bind'`);
-  assert.equal(gone.rowCount, 0);
+  // And every one that went is named, so a reader can tell a removal from an accident.
+  for (const trigger of [
+    'task_executable_plan_bind',                         // 0227, this removal
+    'task_judgment_verifier_delete_guard',               // 0228
+    'task_judgment_verifier_terminal_guard',             // 0228
+    'task_open_verification_request_carrier_guard',      // 0228
+  ]) {
+    const gone = await client.query(
+      `SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgname = $1`, [trigger]);
+    assert.equal(gone.rowCount, 0, `${trigger} is still installed`);
+  }
   // `session_dispatch_dependency_check` is 0200's too and stays: it is task dependency
   // resolution, not acceptance, and it gates every task-work session dispatch in the database.
   const kept = await client.query(

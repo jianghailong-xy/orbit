@@ -1,6 +1,15 @@
 import type { WakeFact } from './coordinator-wake';
 
-/** The durable consumer named by a completion-criterion input. */
+/**
+ * The durable consumer named by a completion-criterion input.
+ *
+ * All five are still spelled here because `project_coordinator_wake.consumer_type`'s CHECK
+ * accepts exactly these and rows already carry them; `coordinator-wake.spec.ts` holds the two
+ * spellings together. Only `JUDGMENT_REQUEST_DERIVER` is still written, and only by the evidence
+ * ledger below — the four evaluator/inbox consumers lost their producers with the judgment
+ * machinery on 2026-09-02 and are, like the retired wake events, a record of what happened rather
+ * than a promise about what will.
+ */
 export const COMPLETION_INPUT_CONSUMERS = [
   'JUDGMENT_REQUEST_DERIVER',
   'DERIVED_COMPLETION_EVALUATOR',
@@ -21,8 +30,6 @@ export function completionEvidenceRevisedFact(input: {
   revision: string;
   criterionRevision: string;
   evidenceDigest: string;
-  requestId: string;
-  requestKind: string;
 }): WakeFact {
   return {
     event: 'COMPLETION_EVIDENCE_REVISED',
@@ -34,123 +41,6 @@ export function completionEvidenceRevisedFact(input: {
       evidenceRevision: input.revision,
       criterionRevision: input.criterionRevision,
       evidenceDigest: input.evidenceDigest,
-      requestId: input.requestId,
-      requestKind: input.requestKind,
-    },
-  };
-}
-
-export function executableResultRecordedFact(input: {
-  projectId: string;
-  taskId: string;
-  requestId: string;
-  resultId: string;
-  evidenceDigest: string;
-  actualExitCode: number;
-}): WakeFact {
-  return {
-    event: 'EXECUTABLE_RESULT_RECORDED',
-    projectId: input.projectId,
-    subjectType: 'JUDGMENT_REQUEST',
-    subjectId: input.requestId,
-    subjectVersion: `${input.resultId}:${input.evidenceDigest}`,
-    detail: {
-      taskId: input.taskId,
-      resultId: input.resultId,
-      evidenceDigest: input.evidenceDigest,
-      actualExitCode: input.actualExitCode,
-    },
-  };
-}
-
-export function verificationVerdictRecordedFact(input: {
-  projectId: string;
-  taskId: string;
-  requestId: string;
-  verifierTaskId: string;
-  verdictRevision: string;
-  evidenceDigest: string;
-  verdict: string;
-}): WakeFact {
-  return {
-    event: 'VERIFICATION_VERDICT_RECORDED',
-    projectId: input.projectId,
-    subjectType: 'JUDGMENT_REQUEST',
-    subjectId: input.requestId,
-    subjectVersion: `${input.verdictRevision}:${input.evidenceDigest}:${input.verdict}`,
-    detail: {
-      taskId: input.taskId,
-      verifierTaskId: input.verifierTaskId,
-      evidenceDigest: input.evidenceDigest,
-      verdict: input.verdict,
-    },
-  };
-}
-
-export function evidenceJudgmentRequestedFact(input: {
-  projectId: string;
-  taskId: string;
-  requestId: string;
-  criterionRevision: string;
-  evidenceDigest: string;
-  recipientId: string;
-}): WakeFact {
-  return {
-    event: 'EVIDENCE_JUDGMENT_REQUESTED',
-    projectId: input.projectId,
-    subjectType: 'JUDGMENT_REQUEST',
-    subjectId: input.requestId,
-    subjectVersion: `${input.criterionRevision}:${input.evidenceDigest}`,
-    detail: {
-      taskId: input.taskId,
-      evidenceDigest: input.evidenceDigest,
-      recipientId: input.recipientId,
-    },
-  };
-}
-
-export function evidenceJudgmentDecidedFact(input: {
-  projectId: string;
-  taskId: string;
-  requestId: string;
-  evidenceDigest: string;
-  decision: string;
-}): WakeFact {
-  return {
-    event: 'EVIDENCE_JUDGMENT_DECIDED',
-    projectId: input.projectId,
-    subjectType: 'JUDGMENT_REQUEST',
-    subjectId: input.requestId,
-    // The decided request is the whole event since migration 0224; the second signoff row that
-    // used to name this version is gone, so the version is the request's own decided fact.
-    subjectVersion: `${input.requestId}:${input.evidenceDigest}:${input.decision}`,
-    detail: {
-      taskId: input.taskId,
-      evidenceDigest: input.evidenceDigest,
-      decision: input.decision,
-    },
-  };
-}
-
-export function evidenceJudgmentRequestSupersededFact(input: {
-  projectId: string;
-  taskId: string;
-  requestId: string;
-  evidenceDigest: string;
-  supersededById: string;
-  replacementEvidenceDigest: string;
-}): WakeFact {
-  return {
-    event: 'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
-    projectId: input.projectId,
-    subjectType: 'JUDGMENT_REQUEST',
-    subjectId: input.requestId,
-    subjectVersion: `${input.supersededById}:${input.replacementEvidenceDigest}`,
-    detail: {
-      taskId: input.taskId,
-      evidenceDigest: input.evidenceDigest,
-      supersededById: input.supersededById,
-      replacementEvidenceDigest: input.replacementEvidenceDigest,
     },
   };
 }

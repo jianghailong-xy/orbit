@@ -30,7 +30,10 @@ test('substantive evidence changes affect the digest while array order and white
 
 test('the evidence service is state-orthogonal and only the explicit legacy door reads a comment', () => {
   const source = readFileSync('src/tasks/task-completion-evidence.service.ts', 'utf8');
-  const liveSubmit = source.slice(source.indexOf('  async submit('), source.indexOf('  private async afterEvidenceCommit('));
+  const liveSubmit = source.slice(
+    source.indexOf('  async submit('),
+    source.indexOf('  async importLegacyComment('),
+  );
   assert.ok(liveSubmit.length > 1_000, 'the static check did not locate the live submission path');
   assert.doesNotMatch(liveSubmit, /taskComment|lastAssistant|finalReply/,
     'ordinary evidence submission must never infer a fact from prose');
@@ -45,6 +48,8 @@ test('the evidence service is state-orthogonal and only the explicit legacy door
   assert.doesNotMatch(source, /ATTEMPT_WAKE_SESSION_PARKED/);
   assert.match(source, /source session for task not found/);
   assert.match(source, /taskCompletionEvidence\.create/);
-  assert.match(source, /taskJudgmentRequest\.create/);
-  assert.match(source, /TaskJudgmentRequestStatus\.SUPERSEDED/);
+  // The ledger writes evidence and nothing else. Until 2026-09-02 the same transaction raised a
+  // judgment request and superseded the previous one; both went with the request table.
+  assert.doesNotMatch(source, /taskJudgmentRequest/);
+  assert.doesNotMatch(source, /TaskJudgmentRequestStatus/);
 });
