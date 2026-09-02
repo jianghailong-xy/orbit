@@ -1273,11 +1273,23 @@ test('successor watchdog task is atomically bound to 1200/current revision by mi
   // The index census used to be read from the watchdog SLO contract, which 0221 deleted along
   // with the collector that consumed it. The indexes it required are the EXECUTABLE runtime
   // ledger's own, so the requirement is stated here rather than dropped.
+  //
+  // Two of the four names were transcribed from schema.prisma rather than from the migration that
+  // actually creates them, so this census named objects that have never existed and the assertion
+  // could not pass -- it went unnoticed because the node was only ever reached behind a red
+  // dependency. Both objects are present under the names 0200 gives them: the dead-man index is
+  // `executable_dead_man_latest_idx` (schema.prisma:3835, on the table mapped to
+  // `executable_dead_man_event`), and the heartbeat uniqueness is the inline, unnamed
+  // `UNIQUE ("component", "instance_id", "sequence")` at 0200:475, which PostgreSQL names
+  // `executable_runtime_heartbeat_component_instance_id_sequence_key`. schema.prisma:3813 still
+  // declares `map: "executable_runtime_heartbeat_sequence_key"` for that same constraint; the
+  // names disagree, and renaming the live index to match would take a migration. The census
+  // asserts what the database actually has.
   const runtimeSchemaIndexes = [
-    'executable_dead_man_event_latest_idx',
+    'executable_dead_man_latest_idx',
     'executable_runtime_expectation_slot_idx',
+    'executable_runtime_heartbeat_component_instance_id_sequence_key',
     'executable_runtime_heartbeat_latest_idx',
-    'executable_runtime_heartbeat_sequence_key',
   ];
   const rows = await pool.query(`
     SELECT indexname FROM pg_indexes

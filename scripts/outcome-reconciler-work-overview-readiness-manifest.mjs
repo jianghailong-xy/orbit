@@ -64,7 +64,11 @@ const pgPass = Number(pgTap.match(/^# pass (\d+)$/m)?.[1] ?? 0);
 const pgSkipped = Number(pgTap.match(/^# skipped (\d+)$/m)?.[1] ?? -1);
 const webLeafTests = [...webTap.matchAll(/^\s{8}ok \d+ - /gm)].length;
 const webSkipped = [...webTap.matchAll(/# SKIP/g)].length;
-if (pgTests !== 16 || pgPass !== 16 || pgSkipped !== 0) {
+// 15, not 16: 4c640496 removed the nested subtest 'database admission also refuses task-work on a
+// verification subject' together with the 0207 triggers it exercised, which 0224 dropped. The
+// suite is 1 outer test plus 14 nested ones and every one of them passes; only this census stayed
+// behind. It is still an exact count, so a silently vanishing test is still a failure here.
+if (pgTests !== 15 || pgPass !== 15 || pgSkipped !== 0) {
   throw new Error(`PostgreSQL test tally is ${pgPass}/${pgTests}, skipped=${pgSkipped}`);
 }
 if (webLeafTests !== 6 || webSkipped !== 0) {
