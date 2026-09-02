@@ -150,23 +150,29 @@ test('new merge evidence advances the evidence version and keeps a derived PASS 
       }),
       /ACCEPTANCE_CONCLUSION_IMMUTABLE/,
     );
-    await assert.rejects(
-      db.projectAcceptanceConclusion.create({
-        data: {
-          projectId: target.projectId,
-          evidenceRunId: event.evidenceRunId,
-          evidenceVersion: event.evidenceVersion,
-          ordinal: event.ordinal,
-          criterionKey: event.criterionKey,
-          criterionText: event.criterionText,
-          definitionId: event.definitionId,
-          definitionRevision: event.definitionRevision,
-          verdict: ProjectAcceptanceVerdict.PASS,
-          decidedBy: 'COORDINATOR_AGENT',
-          decidedById: randomUUID(),
-        },
-      }),
-      /project_acceptance_conclusion_pass_authority_chk/,
+    // Migration 0224 removed the human step: a machine-attributed PASS is now APPENDED rather than
+    // refused. What did not change is that appending one leaves the earlier event exactly as it
+    // was — the assertion directly above is the half of this pair that still refuses.
+    const machinePass = await db.projectAcceptanceConclusion.create({
+      data: {
+        projectId: target.projectId,
+        evidenceRunId: event.evidenceRunId,
+        evidenceVersion: event.evidenceVersion,
+        ordinal: event.ordinal,
+        criterionKey: event.criterionKey,
+        criterionText: event.criterionText,
+        definitionId: event.definitionId,
+        definitionRevision: event.definitionRevision,
+        verdict: ProjectAcceptanceVerdict.PASS,
+        decidedBy: 'COORDINATOR_AGENT',
+        decidedById: randomUUID(),
+      },
+    });
+    assert.equal(machinePass.decidedBy, 'COORDINATOR_AGENT');
+    assert.deepEqual(
+      await db.projectAcceptanceConclusion.findUniqueOrThrow({ where: { id: event.id } }),
+      event,
+      'appending a machine conclusion never rewrites the one already on the record',
     );
 
     const columns = await db.$queryRaw<Array<{ columnName: string; nullable: string }>>(Prisma.sql`

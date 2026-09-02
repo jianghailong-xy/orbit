@@ -5109,7 +5109,7 @@ export class SessionsService {
     if (!facts) return null;
     if (startsTaskWork && taskStartOwnedByCompletion({
       completionPolicy: facts.completionPolicy as TaskCompletionPolicyValue,
-      completionCriterion: facts.completionCriterion as 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF',
+      completionCriterion: facts.completionCriterion as 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT',
       verifiesTaskId: facts.verifiesTaskId,
       hasDirectChildren: facts.hasDirectChildren,
     })) {

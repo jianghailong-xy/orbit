@@ -99,7 +99,7 @@ async function makeWorld(db: PrismaClient): Promise<World> {
         creatorId: ownerId,
         assigneeId: over.assigned === false ? null : workspaceId,
         status: over.status ?? TaskStatus.OPEN,
-        completionCriterion: over.completionCriterion ?? TaskCompletionCriterion.HUMAN_SIGNOFF,
+        completionCriterion: over.completionCriterion ?? TaskCompletionCriterion.EVIDENCE_JUDGMENT,
         completionPolicy: over.completionPolicy ?? TaskCompletionPolicy.MANUAL,
         verifiesTaskId: over.verifiesTaskId,
         parentTaskId: over.parentTaskId,

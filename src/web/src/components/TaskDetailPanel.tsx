@@ -820,7 +820,7 @@ export function TaskDetailPanel({
           {(q.data?.failureCoordination?.items ?? []).map((item: any) => (
             <FailureCoordinationCard key={item.obligationId} item={item} />
           ))}
-          <JudgmentRequestSummary taskId={taskId} heading="Open HUMAN_SIGNOFF request" />
+          <JudgmentRequestSummary taskId={taskId} heading="Open EVIDENCE_JUDGMENT request" />
           <section className="tdp-section">
             <div className="tdp-section-title">Details</div>
             <div className="tdp-field">

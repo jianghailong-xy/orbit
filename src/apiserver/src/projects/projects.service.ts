@@ -386,7 +386,7 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       ordinal: criterion.ordinal,
       text: criterion.text,
       verificationMethod: criterion.verificationMethod,
-      completionCriterion: criterion.completionCriterion ?? 'HUMAN_SIGNOFF',
+      completionCriterion: criterion.completionCriterion ?? 'EVIDENCE_JUDGMENT',
       acceptanceCommand: criterion.acceptanceCommand ?? null,
       acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode ?? null,
       evidenceTaskId: criterion.evidenceTaskId ?? null,
@@ -829,10 +829,10 @@ export class ProjectsService {
             );
           }
           break;
-        case 'HUMAN_SIGNOFF':
+        case 'EVIDENCE_JUDGMENT':
           if (acceptanceCommand !== null || acceptanceExpectedExitCode !== null || evidenceTaskId) {
             throw new BadRequestException(
-              `acceptance criterion ${index + 1}: HUMAN_SIGNOFF cannot declare a command or ` +
+              `acceptance criterion ${index + 1}: EVIDENCE_JUDGMENT cannot declare a command or ` +
               'evidenceTaskId',
             );
           }

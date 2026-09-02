@@ -48,7 +48,7 @@ func TestTaskCLICreateAndUpdateSendLabels(t *testing.T) {
 	var out bytes.Buffer
 	if err := cmdTaskCLI([]string{
 		"create", "--title", "ingest shard", "--label", "CC-MAIN-2017-34", "--label", "CC-MAIN-2017-34,shard-002", "--json",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 	}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}

@@ -24,7 +24,7 @@ const SESSION = '00000000-0000-4000-8000-000000000102';
 
 type TaskFacts = {
   completionPolicy: string;
-  completionCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  completionCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
   verifiesTaskId: string | null;
   hasDirectChildren: boolean;
 };
@@ -73,13 +73,13 @@ function serviceFor(
 
 const AGGREGATE: TaskFacts = {
   completionPolicy: 'ALL_CHILDREN_DONE',
-  completionCriterion: 'HUMAN_SIGNOFF',
+  completionCriterion: 'EVIDENCE_JUDGMENT',
   verifiesTaskId: null,
   hasDirectChildren: true,
 };
 const LEAF: TaskFacts = {
   completionPolicy: 'ALL_CHILDREN_DONE',
-  completionCriterion: 'HUMAN_SIGNOFF',
+  completionCriterion: 'EVIDENCE_JUDGMENT',
   verifiesTaskId: null,
   hasDirectChildren: false,
 };

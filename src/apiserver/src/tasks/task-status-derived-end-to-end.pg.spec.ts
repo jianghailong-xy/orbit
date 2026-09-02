@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { ConfigService } from '@nestjs/config';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
@@ -179,20 +179,20 @@ async function installDerivedDoneGuard(sql: Client): Promise<void> {
             RAISE EXCEPTION 'N9_DIRECT_DONE: VERIFICATION has no independent passing verdict fact';
           END IF;
           derivation := 'VERIFICATION_PASS';
-        ELSIF NEW."completion_criterion" = 'HUMAN_SIGNOFF'::task_completion_criterion THEN
+        ELSIF NEW."completion_criterion" = 'EVIDENCE_JUDGMENT'::task_completion_criterion THEN
           IF NOT EXISTS (
             SELECT 1
-              FROM "task_human_signoff" signoff
-              JOIN "task_judgment_request" request ON request."id" = signoff."request_id"
-             WHERE signoff."task_id" = NEW."id"
-               AND signoff."signed_by_id" IS NOT NULL
-               AND signoff."signed_at" IS NOT NULL
-               AND length(btrim(signoff."evidence")) > 0
+              FROM "task_judgment_request" request
+             WHERE request."task_id" = NEW."id"
+               AND request."kind" = 'EVIDENCE_JUDGMENT'::task_completion_criterion
                AND request."status" = 'DECIDED'
                AND request."decision" = 'PASS'
-               AND request."decided_by_type" = 'USER'
+               AND request."decided_by_type" IN ('USER', 'AGENT')
+               AND length(btrim(request."decided_by_id")) > 0
+               AND request."decided_at" IS NOT NULL
+               AND length(btrim(request."decision_note")) > 0
           ) THEN
-            RAISE EXCEPTION 'N9_DIRECT_DONE: HUMAN_SIGNOFF has no signed current-request fact';
+            RAISE EXCEPTION 'N9_DIRECT_DONE: EVIDENCE_JUDGMENT has no decided current-request fact';
           END IF;
           IF EXISTS (
             SELECT 1 FROM "task_judgment_signal" signal
@@ -203,7 +203,7 @@ async function installDerivedDoneGuard(sql: Client): Promise<void> {
           ) THEN
             RAISE EXCEPTION 'N9_ATOMIC_CLOSE: request signal or blocker is still open';
           END IF;
-          derivation := 'HUMAN_SIGNOFF';
+          derivation := 'EVIDENCE_JUDGMENT';
         ELSE
           RAISE EXCEPTION 'N9_DIRECT_DONE: no declared completion fact owns this transition';
         END IF;
@@ -319,17 +319,17 @@ suite(
         {
           text: 'The executable declaration has a recorded matching exit code',
           verificationMethod: 'Inspect the request-bound raw command result and require exit code 0',
-          completionCriterion: 'HUMAN_SIGNOFF',
+          completionCriterion: 'EVIDENCE_JUDGMENT',
         },
         {
           text: 'An independent verifier concludes PASS on the submitted revision',
           verificationMethod: 'Inspect the verifier task, its independent session, verdict and request audit',
-          completionCriterion: 'HUMAN_SIGNOFF',
+          completionCriterion: 'EVIDENCE_JUDGMENT',
         },
         {
           text: 'A person signs the current evidence revision after reliable delivery',
           verificationMethod: 'Open the current inbox revision and inspect the human signature and delivery ledger',
-          completionCriterion: 'HUMAN_SIGNOFF',
+          completionCriterion: 'EVIDENCE_JUDGMENT',
         },
       ],
     });
@@ -360,10 +360,10 @@ suite(
       acceptanceCriteria: 'A different session checks the submitted artifact and records PASS.',
     });
     const human = await tasks.create(ownerId, {
-      title: 'N9 HUMAN_SIGNOFF',
+      title: 'N9 EVIDENCE_JUDGMENT',
       projectId: project.id,
       assigneeId: workspaceId,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCriteria: 'The account owner reviews and signs the current evidence revision.',
     });
     const downstream = await tasks.create(ownerId, {
@@ -371,11 +371,11 @@ suite(
       projectId: project.id,
       dependsOnTaskIds: [executable.id, verification.id, human.id],
       autoRunWhenReady: false,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     });
     assert.deepEqual(
       [executable, verification, human].map((task) => task.completionCriterion),
-      ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF'],
+      ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
     );
 
     // Fixture precondition only: the replay starts after work began. From this point forward every
@@ -513,7 +513,7 @@ suite(
         verificationEvidence.judgmentRequest!.kind,
         firstHumanEvidence.judgmentRequest!.kind,
       ],
-      ['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF'],
+      ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
     );
     assert.deepEqual(
       [
@@ -805,22 +805,24 @@ suite(
         assert.ok(error instanceof ConflictException);
         assert.equal(
           (error.getResponse() as Record<string, unknown>).code,
-          'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+          'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
         );
         return true;
       },
     );
+    // The blank finding is what is refused now — migration 0224 removed the refusal that used to
+    // stop an acting session here, and kept the one that stops an unexplained decision.
     await assert.rejects(
-      tasks.signoff(ownerId, human.id, {
+      tasks.judge(ownerId, human.id, {
         requestId: currentRequestId,
         evidenceDigest: currentHumanEvidence.evidenceDigest,
-        evidence: 'An agent is not the human signer.',
+        evidence: '   ',
       }, sourceSessions.human),
       (error: unknown) => {
-        assert.ok(error instanceof ForbiddenException);
+        assert.ok(error instanceof BadRequestException);
         assert.equal(
           (error.getResponse() as Record<string, unknown>).code,
-          'HUMAN_SIGNOFF_REQUIRES_USER',
+          'EVIDENCE_JUDGMENT_FINDING_REQUIRED',
         );
         return true;
       },
@@ -862,20 +864,16 @@ suite(
     assert.equal(approved.derived.openRequestId, null);
     assert.equal(approved.derived.signalOpen, false);
     assert.equal(approved.derived.blockerOpen, false);
-    const [storedSignoff, storedHumanRequest] = await Promise.all([
-      db.taskHumanSignoff.findUniqueOrThrow({ where: { taskId: human.id } }),
-      db.taskJudgmentRequest.findUniqueOrThrow({ where: { id: currentRequestId } }),
-    ]);
-    assert.equal(storedSignoff.requestId, currentRequestId);
-    assert.equal(storedSignoff.evidenceDigest, currentHumanEvidence.evidenceDigest);
-    assert.equal(storedSignoff.signedById, ownerId);
-    assert.ok(storedSignoff.signedAt instanceof Date);
-    assert.equal(storedSignoff.evidence, signatureNote);
+    const storedHumanRequest = await db.taskJudgmentRequest.findUniqueOrThrow({
+      where: { id: currentRequestId },
+    });
+    assert.equal(storedHumanRequest.evidenceDigest, currentHumanEvidence.evidenceDigest);
+    assert.equal(storedHumanRequest.decisionNote, signatureNote);
     assert.equal(storedHumanRequest.decidedByType, 'USER');
     assert.equal(storedHumanRequest.decidedById, ownerId);
     assert.ok(storedHumanRequest.decidedAt instanceof Date);
     assert.equal(await db.task.count({ where: { verifiesTaskId: human.id } }), 0,
-      'HUMAN_SIGNOFF is a peer route and must not cascade into a legacy verifier');
+      'EVIDENCE_JUDGMENT is a peer route and must not cascade into a legacy verifier');
     assert.equal((await sql.query(
       `SELECT count(*)::int AS n FROM "task_judgment_signal" WHERE "task_id" = $1::uuid`,
       [human.id],
@@ -899,7 +897,7 @@ suite(
     assert.equal(statusAudit.length, 4);
     assert.deepEqual(
       new Set(statusAudit.map((row) => row.derivation)),
-      new Set(['EXECUTABLE_RESULT', 'VERIFIER_VERDICT', 'VERIFICATION_PASS', 'HUMAN_SIGNOFF']),
+      new Set(['EXECUTABLE_RESULT', 'VERIFIER_VERDICT', 'VERIFICATION_PASS', 'EVIDENCE_JUDGMENT']),
     );
     assert.deepEqual(
       new Set(statusAudit.map((row) => row.taskId)),
@@ -948,7 +946,7 @@ suite(
           evidence: {
             requestId: currentRequestId,
             evidenceRevision: currentHumanEvidence.revision,
-            signoffId: storedSignoff.id,
+            decidedRequestId: storedHumanRequest.id,
             deliveryId: recoveredReceipt.id,
           },
           evidenceTaskId: human.id,
@@ -978,7 +976,7 @@ suite(
     const optional = await tasks.create(ownerId, {
       title: 'N9 optional follow-up outside acceptance criteria',
       projectId: project.id,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       autoRunWhenReady: false,
     });
     assert.equal(optional.status, TaskStatus.OPEN);

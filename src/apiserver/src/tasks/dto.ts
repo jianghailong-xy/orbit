@@ -319,7 +319,7 @@ export class CreateTaskDto {
   acceptanceTimeoutSeconds?: number;
   @IsOptional() @IsInt() @Min(1) @Max(EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS)
   acceptanceOwnerTimeoutCeilingSeconds?: number;
-  // One ordinary completion criterion. Omission is the compatibility spelling of HUMAN_SIGNOFF;
+  // One ordinary completion criterion. Omission is the compatibility spelling of EVIDENCE_JUDGMENT;
   // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
   completionCriterion?: TaskCompletionCriterionValue;
@@ -531,7 +531,7 @@ export class UpdateTaskDto {
   acceptanceTimeoutSeconds?: number | null;
   @IsOptional() @IsInt() @Min(1) @Max(EXECUTABLE_ACCEPTANCE_MAX_TIMEOUT_SECONDS)
   acceptanceOwnerTimeoutCeilingSeconds?: number | null;
-  // Omit to preserve it. A criterion is never nullable: HUMAN_SIGNOFF is the explicit normal
+  // Omit to preserve it. A criterion is never nullable: EVIDENCE_JUDGMENT is the explicit normal
   // choice rather than clearing the field or escalating after another criterion failed.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
   completionCriterion?: TaskCompletionCriterionValue;
@@ -597,8 +597,8 @@ export class UpdateTaskDto {
   labels?: string[];
 }
 
-/** The evidence a person signs, with signer and timestamp supplied by the server. */
-export class SignoffTaskDto {
+/** The finding a judgment rests on, with decider and timestamp supplied by the server. */
+export class JudgeTaskDto {
   @IsPublicId()
   requestId!: string;
 
@@ -613,7 +613,7 @@ export class SignoffTaskDto {
   evidence!: string;
 }
 
-/** One person's decision on the exact HUMAN_SIGNOFF request/evidence fact currently reviewed. */
+/** One decision on the exact EVIDENCE_JUDGMENT request/evidence fact currently reviewed. */
 export class DecideTaskJudgmentDto {
   @IsPublicId()
   requestId!: string;

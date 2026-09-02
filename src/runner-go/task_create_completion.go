@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-const runnerTaskCompletionDeclarationError = "completionCriterion is required for runner task creation because omission would implicitly create HUMAN_SIGNOFF; set EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF explicitly (command, policy, and verifier fields do not replace that declaration)"
+const runnerTaskCompletionDeclarationError = "completionCriterion is required for runner task creation because omission would implicitly create EVIDENCE_JUDGMENT; set EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT explicitly (command, policy, and verifier fields do not replace that declaration)"
 
 // requireRunnerTaskCompletionDeclaration is the client-side copy of the runner HTTP boundary.
 // Keeping the rejection here means a stale/partial command fails before it can create a human

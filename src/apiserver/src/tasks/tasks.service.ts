@@ -90,7 +90,7 @@ import {
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
-  humanSignoffDecidedFact,
+  evidenceJudgmentDecidedFact,
   verificationVerdictRecordedFact,
 } from '../projects/completion-input';
 import {
@@ -111,7 +111,7 @@ import {
   DAG_PREVIEW_TITLES,
   type FailureSuccessorHandoffDto,
   MAX_DAG_OPS,
-  SignoffTaskDto,
+  JudgeTaskDto,
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
@@ -157,7 +157,6 @@ import type { ScopeProjectStatus } from '../projects/project-scope-contract';
 import {
   TASK_BUDGET_WINDOW_MS,
   authorityPrincipal,
-  refuseHumanOnlyAction,
   refuseTaskOpening,
 } from '../projects/coordinator-authority';
 import { statedCriteriaFrom } from '../projects/project-acceptance';
@@ -6773,10 +6772,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             },
           },
         },
-        humanSignoffs: {
-          orderBy: { signedAt: 'desc' },
-          include: { signedBy: { select: { id: true, name: true } } },
-        },
         sessions: {
           orderBy: { createdAt: 'desc' },
           select: {
@@ -6968,17 +6963,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Record the one human judgment that satisfies a HUMAN_SIGNOFF task.
+   * Record the one judgment that satisfies an EVIDENCE_JUDGMENT task.
    *
-   * Event creation, closure of the task's open HUMAN_DECISION_REQUIRED view and the derived DONE
-   * status are deliberately one retried PostgreSQL transaction. The status write is last: a
-   * trigger observing the transition already sees both the evidence row and no corresponding open
+   * Until migration 0224 this was `signoff`, refused to every acting session so that only the
+   * account owner could write it, and the decided fact lived in a second `task_human_signoff`
+   * row. Both are gone. What remains is what was ever load-bearing: the decision names the exact
+   * OPEN request, that request is bound by foreign key to one immutable evidence version and its
+   * digest, and the decision has to state the finding it reached. A coordinator, a verifier or an
+   * execution session may make it; the audit records which.
+   *
+   * Decision, closure of the task's open HUMAN_DECISION_REQUIRED view and the derived DONE status
+   * are deliberately one retried PostgreSQL transaction. The status write is last: a trigger
+   * observing the transition already sees both the decided request and no corresponding open
    * blocker, and another connection sees either the old three facts or the new three facts.
    */
-  async signoff(
+  async judge(
     ownerId: string,
     id: string,
-    input: SignoffTaskDto,
+    input: JudgeTaskDto,
     actingSessionId?: string,
   ) {
     if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
@@ -6987,53 +6989,46 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { completionCriterion: true, verifiesTaskId: true },
     });
     if (!declared) throw new NotFoundException('task not found');
-    if (declared.completionCriterion !== 'HUMAN_SIGNOFF') {
+    if (declared.completionCriterion !== 'EVIDENCE_JUDGMENT') {
       const criterion = declared.completionCriterion as TaskCompletionCriterionValue;
       const remedy = taskCompletionRequiredAction(criterion, {
         verifiesTaskId: declared.verifiesTaskId,
       });
       throw new BadRequestException({
-        code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
+        code: 'TASK_JUDGMENT_CRITERION_MISMATCH',
         criterion,
         requiredAction: remedy.requiredAction,
         message:
-          `task_signoff cannot satisfy this task because it declares ${criterion}; ` +
+          `task_judge cannot satisfy this task because it declares ${criterion}; ` +
           `${remedy.instruction}.`,
       });
     }
-    if (actingSessionId) {
-      throw new ForbiddenException({
-        code: 'HUMAN_SIGNOFF_REQUIRES_USER',
-        criterion: 'HUMAN_SIGNOFF',
-        requiredAction: 'ASK_A_PERSON_TO_SIGN_OFF_WITH_EVIDENCE',
-        message:
-          'A HUMAN_SIGNOFF must be authored by a person, not by a coordinator, verifier or task ' +
-          'execution session. Ask a person to use task_signoff with the evidence they judged.',
-      });
-    }
     if (!UUID_RE.test(input.requestId)) {
-      throw new BadRequestException('HUMAN_SIGNOFF requestId is invalid');
+      throw new BadRequestException('EVIDENCE_JUDGMENT requestId is invalid');
     }
     const evidenceDigest = input.evidenceDigest.trim().toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(evidenceDigest)) {
       throw new BadRequestException(
-        'HUMAN_SIGNOFF evidenceDigest must be 64 lowercase hex characters',
+        'EVIDENCE_JUDGMENT evidenceDigest must be 64 lowercase hex characters',
       );
     }
-    const evidence = input.evidence.trim();
-    if (!evidence) {
+    const finding = input.evidence.trim();
+    if (!finding) {
       throw new BadRequestException({
-        code: 'HUMAN_SIGNOFF_EVIDENCE_REQUIRED',
-        criterion: 'HUMAN_SIGNOFF',
-        requiredAction: 'PROVIDE_NON_BLANK_SIGNOFF_EVIDENCE',
-        message: 'HUMAN_SIGNOFF evidence must not be blank',
+        code: 'EVIDENCE_JUDGMENT_FINDING_REQUIRED',
+        criterion: 'EVIDENCE_JUDGMENT',
+        requiredAction: 'PROVIDE_NON_BLANK_JUDGMENT_FINDING',
+        message: 'EVIDENCE_JUDGMENT evidence must not be blank',
       });
     }
 
-    // These are the identity and event time of this request, so a database retry replays the same
-    // judgment instead of manufacturing a later one on every attempt.
-    const signoffId = randomUUID();
-    const signedAt = new Date();
+    // Who is on record as having decided. An acting session is an agent; its absence is the
+    // owner-authenticated door. Neither is a claim about human presence, and neither is refused.
+    const decidedByType = actingSessionId ? 'AGENT' : 'USER';
+    const decidedById = actingSessionId ?? ownerId;
+    // The event time of this judgment, so a database retry replays the same decision instead of
+    // manufacturing a later one on every attempt.
+    const decidedAt = new Date();
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // Rank 10: serializes project/tree moves before discovering which rank-40 project to lock.
       await lockOwnerTaskGraph(tx, ownerId);
@@ -7073,102 +7068,81 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const task = rows[0];
       if (!task) throw new NotFoundException('task not found');
       if (task.projectId !== located.projectId) {
-        throw new ConflictException('task moved projects while it was being signed; retry signoff');
+        throw new ConflictException('task moved projects while it was being judged; retry');
       }
-      if (task.completionCriterion !== 'HUMAN_SIGNOFF') {
+      if (task.completionCriterion !== 'EVIDENCE_JUDGMENT') {
         const remedy = taskCompletionRequiredAction(task.completionCriterion, {
           verifiesTaskId: task.verifiesTaskId,
         });
         throw new BadRequestException({
-          code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
+          code: 'TASK_JUDGMENT_CRITERION_MISMATCH',
           criterion: task.completionCriterion,
           requiredAction: remedy.requiredAction,
           message:
-            `task_signoff cannot satisfy this task because it now declares ` +
+            `task_judge cannot satisfy this task because it now declares ` +
             `${task.completionCriterion}; ${remedy.instruction}.`,
         });
       }
       if (task.status === TaskStatus.CANCELLED || task.terminalReason || task.supersededByTaskId) {
         throw new ConflictException({
-          code: 'TASK_SIGNOFF_RETIRED',
-          criterion: 'HUMAN_SIGNOFF',
-          requiredAction: 'REOPEN_OR_RESTORE_TASK_BEFORE_SIGNOFF',
+          code: 'TASK_JUDGMENT_RETIRED',
+          criterion: 'EVIDENCE_JUDGMENT',
+          requiredAction: 'REOPEN_OR_RESTORE_TASK_BEFORE_JUDGING',
           message:
-            'A cancelled, superseded or abandoned task must be restored before a human signoff ' +
-            'can complete it.',
+            'A cancelled, superseded or abandoned task must be restored before an evidence ' +
+            'judgment can complete it.',
         });
       }
 
       const request = await tx.taskJudgmentRequest.findUnique({
         where: { id: input.requestId },
       });
-      if (!request || request.taskId !== id || request.kind !== 'HUMAN_SIGNOFF'
+      if (!request || request.taskId !== id || request.kind !== 'EVIDENCE_JUDGMENT'
         || request.recipientType !== 'ACCOUNT_OWNER' || request.recipientId !== ownerId
         || request.evidenceDigest !== evidenceDigest) {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_REQUEST_MISMATCH',
-          criterion: 'HUMAN_SIGNOFF',
-          requiredAction: 'SIGN_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_MISMATCH',
+          criterion: 'EVIDENCE_JUDGMENT',
+          requiredAction: 'JUDGE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
           message:
-            'The signature must name the current HUMAN_SIGNOFF request, its account-owner ' +
-            'recipient and the exact evidence digest being reviewed.',
+            'The judgment must name the current EVIDENCE_JUDGMENT request, the account it is ' +
+            'filed under and the exact evidence digest being decided.',
         });
       }
       if (request.status === 'SUPERSEDED') {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
-          criterion: 'HUMAN_SIGNOFF',
-          requiredAction: 'SIGN_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
+          criterion: 'EVIDENCE_JUDGMENT',
+          requiredAction: 'JUDGE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
           message: 'This evidence version was superseded and cannot complete the current task.',
         });
       }
 
-      let signoff = await tx.taskHumanSignoff.findUnique({
-        where: { taskId: id },
-        include: { signedBy: { select: { id: true, name: true } } },
-      });
-      if (!signoff) {
-        if (request.status !== 'OPEN') {
-          throw new ConflictException({
-            code: 'HUMAN_SIGNOFF_REQUEST_NOT_OPEN',
-            criterion: 'HUMAN_SIGNOFF',
-            requiredAction: 'READ_THE_CURRENT_JUDGMENT_REQUEST',
-            message: 'This HUMAN_SIGNOFF request is already decided.',
-          });
-        }
-        signoff = await tx.taskHumanSignoff.create({
-          data: {
-            id: signoffId,
-            taskId: id,
-            requestId: request.id,
-            signedById: ownerId,
-            evidenceDigest,
-            evidence,
-            signedAt,
-          },
-          include: { signedBy: { select: { id: true, name: true } } },
-        });
-        await tx.taskJudgmentRequest.update({
+      // The decided request IS the event now, so replay reads it back rather than a second row.
+      let decided = request;
+      if (request.status === 'OPEN') {
+        decided = await tx.taskJudgmentRequest.update({
           where: { id: request.id },
           data: {
             status: 'DECIDED',
-            decidedAt: signedAt,
-            decidedByType: 'USER',
-            decidedById: ownerId,
+            decidedAt,
+            decidedByType,
+            decidedById,
             decision: 'PASS',
+            decisionNote: finding,
           },
         });
-      } else if (signoff.requestId !== request.id || signoff.evidenceDigest !== evidenceDigest) {
+      } else if (request.decision !== 'PASS') {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_ALREADY_BOUND',
-          criterion: 'HUMAN_SIGNOFF',
-          requiredAction: 'READ_THE_EXISTING_SIGNOFF',
-          message: 'This task already has a HUMAN_SIGNOFF bound to another request fact.',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_NOT_OPEN',
+          criterion: 'EVIDENCE_JUDGMENT',
+          requiredAction: 'READ_THE_CURRENT_JUDGMENT_REQUEST',
+          message: 'This EVIDENCE_JUDGMENT request was already decided.',
         });
       }
 
-      // Rank 60. The signal is a view of an unsatisfied criterion: once the signoff event exists,
-      // every open human-decision blocker about this exact task stops being open by definition.
+      // Rank 60. The signal is a view of an unsatisfied criterion: once the decision exists, every
+      // open human-decision blocker about this exact task stops being open by definition.
       const resolved = task.projectId
         ? await tx.projectBlocker.updateMany({
             where: {
@@ -7178,21 +7152,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               subjectId: id,
               resolvedAt: null,
             },
-            data: { resolvedAt: signedAt, resolvedBy: 'AUTO', updatedAt: signedAt },
+            data: { resolvedAt: decidedAt, resolvedBy: 'AUTO', updatedAt: decidedAt },
           })
         : { count: 0 };
 
       const status = deriveTaskCompletionStatus({
         completionCriterion: task.completionCriterion,
-        humanSignoff: true,
+        evidenceJudgment: true,
       });
       if (status !== TaskStatus.DONE) {
-        throw new Error('HUMAN_SIGNOFF event did not satisfy HUMAN_SIGNOFF criterion');
+        throw new Error('EVIDENCE_JUDGMENT decision did not satisfy EVIDENCE_JUDGMENT criterion');
       }
       const transitioned = task.status !== TaskStatus.DONE;
       if (transitioned) {
         // Last statement in the unit. Project acceptance and dispatch-epoch triggers therefore see
-        // the signoff and blocker resolution already present in this same transaction.
+        // the decision and blocker resolution already present in this same transaction.
         await tx.task.update({ where: { id }, data: { status } });
       }
       return {
@@ -7205,35 +7179,42 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         blockersResolved: resolved.count,
         requestId: request.id,
         evidenceDigest,
-        signoff,
+        judgment: {
+          requestId: decided.id,
+          taskId: id,
+          decidedById: decided.decidedById ?? decidedById,
+          decidedByType: decided.decidedByType ?? decidedByType,
+          evidenceDigest,
+          evidence: decided.decisionNote ?? finding,
+          decidedAt: decided.decidedAt ?? decidedAt,
+        },
       };
-    }, this.transientWriteRetry('tasks.signoff'));
+    }, this.transientWriteRetry('tasks.judge'));
 
     // Everything below observes committed facts and is best-effort, like update's existing
-    // dependency/aggregation fan-out. None of it is needed to make the signoff atomic.
+    // dependency/aggregation fan-out. None of it is needed to make the judgment atomic.
     if (committed.transitioned) {
       await this.dispatchDependentsAfterCompletion(ownerId, id).catch((e) =>
-        this.logger.warn(`triggerDependents failed for signed task ${id}: ${e?.message ?? e}`),
+        this.logger.warn(`triggerDependents failed for judged task ${id}: ${e?.message ?? e}`),
       );
-      // HUMAN_SIGNOFF is one of the three peer completion criteria, not the legacy manual-DONE
-      // door that `fileVerification` shadows. The signed current request is already the declared
+      // EVIDENCE_JUDGMENT is one of the three peer completion criteria, not the legacy manual-DONE
+      // door that `fileVerification` shadows. The decided current request is already the declared
       // judgment fact. Filing another verifier here silently changes the route to
-      // HUMAN_SIGNOFF-then-VERIFICATION and re-blocks dependencies after the person has decided —
-      // exactly the opposite of a criterion-derived terminal transition.
+      // EVIDENCE_JUDGMENT-then-VERIFICATION and re-blocks dependencies after the decision was
+      // made — exactly the opposite of a criterion-derived terminal transition.
     }
     await this.recomputeAggregates(
       ownerId,
       [id, committed.parentTaskId, committed.verifiesTaskId].filter(
         (taskId): taskId is string => !!taskId,
       ),
-    ).catch((e) => this.logger.warn(`aggregation after signoff of ${id} failed: ${e?.message ?? e}`));
+    ).catch((e) => this.logger.warn(`aggregation after judging ${id} failed: ${e?.message ?? e}`));
     if (committed.projectId && this.completionInputs) {
       await this.completionInputs.route(
-        humanSignoffDecidedFact({
+        evidenceJudgmentDecidedFact({
           projectId: committed.projectId,
           taskId: id,
           requestId: committed.requestId,
-          signoffId: committed.signoff.id,
           evidenceDigest: committed.evidenceDigest,
           decision: 'PASS',
         }),
@@ -7249,7 +7230,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Record that the current HUMAN_SIGNOFF request needs a NEW structured evidence revision.
+   * Record that the current EVIDENCE_JUDGMENT request needs a NEW structured evidence revision.
    *
    * This is deliberately not a conservative status edit. The terminal INCONCLUSIVE request is
    * the attributable audit (request/digest/person/server time/reason); Task.status is not present
@@ -7262,19 +7243,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ) {
     if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
     if (!UUID_RE.test(input.requestId)) {
-      throw new BadRequestException('HUMAN_SIGNOFF requestId is invalid');
+      throw new BadRequestException('EVIDENCE_JUDGMENT requestId is invalid');
     }
     const evidenceDigest = input.evidenceDigest.trim().toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(evidenceDigest)) {
       throw new BadRequestException(
-        'HUMAN_SIGNOFF evidenceDigest must be 64 lowercase hex characters',
+        'EVIDENCE_JUDGMENT evidenceDigest must be 64 lowercase hex characters',
       );
     }
     const note = input.note.trim();
     if (!note) {
       throw new BadRequestException({
         code: 'HUMAN_EVIDENCE_REQUEST_REASON_REQUIRED',
-        criterion: 'HUMAN_SIGNOFF',
+        criterion: 'EVIDENCE_JUDGMENT',
         requiredAction: 'EXPLAIN_WHAT_EVIDENCE_IS_MISSING',
         message: 'Explain what evidence is missing before requesting another revision.',
       });
@@ -7303,13 +7284,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          FOR UPDATE`;
       const task = tasks[0];
       if (!task) throw new NotFoundException('task not found');
-      if (task.completionCriterion !== 'HUMAN_SIGNOFF') {
+      if (task.completionCriterion !== 'EVIDENCE_JUDGMENT') {
         throw new BadRequestException({
           code: 'TASK_SIGNOFF_CRITERION_MISMATCH',
           criterion: task.completionCriterion,
           requiredAction: taskCompletionRequiredAction(task.completionCriterion).requiredAction,
           message:
-            `Evidence revision requests apply only to HUMAN_SIGNOFF tasks; this task now ` +
+            `Evidence revision requests apply only to EVIDENCE_JUDGMENT tasks; this task now ` +
             `declares ${task.completionCriterion}.`,
         });
       }
@@ -7320,8 +7301,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         task.supersededByTaskId
       ) {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_TASK_NOT_REVIEWABLE',
-          criterion: 'HUMAN_SIGNOFF',
+          code: 'EVIDENCE_JUDGMENT_TASK_NOT_REVIEWABLE',
+          criterion: 'EVIDENCE_JUDGMENT',
           requiredAction: 'REFRESH_THE_TASK_AND_CURRENT_REQUEST',
           message: 'This task is already completed, cancelled or superseded; refresh its review.',
         });
@@ -7339,17 +7320,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (
         !request ||
         request.taskId !== id ||
-        request.kind !== 'HUMAN_SIGNOFF' ||
+        request.kind !== 'EVIDENCE_JUDGMENT' ||
         request.recipientType !== 'ACCOUNT_OWNER' ||
         request.recipientId !== ownerId ||
         request.evidenceDigest !== evidenceDigest
       ) {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_REQUEST_MISMATCH',
-          criterion: 'HUMAN_SIGNOFF',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_MISMATCH',
+          criterion: 'EVIDENCE_JUDGMENT',
           requiredAction: 'DECIDE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
           message:
-            'The decision must name the current HUMAN_SIGNOFF request and exact evidence digest.',
+            'The decision must name the current EVIDENCE_JUDGMENT request and exact evidence digest.',
         });
       }
 
@@ -7370,8 +7351,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
       if (request.status === 'SUPERSEDED') {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
-          criterion: 'HUMAN_SIGNOFF',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
+          criterion: 'EVIDENCE_JUDGMENT',
           requiredAction: 'DECIDE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
           currentRequestId: current?.id ?? request.supersededById,
           currentEvidenceDigest: current?.evidenceDigest ?? null,
@@ -7380,20 +7361,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       if (request.status !== 'OPEN') {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_REQUEST_NOT_OPEN',
-          criterion: 'HUMAN_SIGNOFF',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_NOT_OPEN',
+          criterion: 'EVIDENCE_JUDGMENT',
           requiredAction: 'READ_THE_CURRENT_JUDGMENT_REQUEST',
-          message: 'This HUMAN_SIGNOFF request was already decided.',
+          message: 'This EVIDENCE_JUDGMENT request was already decided.',
         });
       }
       if (!current || current.id !== request.id) {
         throw new ConflictException({
-          code: 'HUMAN_SIGNOFF_REQUEST_NOT_CURRENT',
-          criterion: 'HUMAN_SIGNOFF',
+          code: 'EVIDENCE_JUDGMENT_REQUEST_NOT_CURRENT',
+          criterion: 'EVIDENCE_JUDGMENT',
           requiredAction: 'DECIDE_THE_CURRENT_REQUEST_AND_EVIDENCE_DIGEST',
           currentRequestId: current?.id ?? null,
           currentEvidenceDigest: current?.evidenceDigest ?? null,
-          message: 'A newer HUMAN_SIGNOFF request is current; refresh before deciding.',
+          message: 'A newer EVIDENCE_JUDGMENT request is current; refresh before deciding.',
         });
       }
 
@@ -7421,8 +7402,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * `actingSessionId` is the run this edit is being made FROM, when there is one — the runner
    * sends it on every task write an agent makes. It answers the two questions on this path that
    * turn on WHO is writing rather than on what is being written: §13.2's independence rule, and
-   * unit T6's `CONCLUDE_VERDICT_PASS`. Everything else about a task edit is authorised by the
-   * owner, not by which run happened to make it.
+   * the criterion-key bound on coordinator-opened work. Everything else about a task edit is
+   * authorised by the owner, not by which run happened to make it.
    */
   async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
     // Internal write planning must receive its own raw UUID-shaped object. A public GET response is
@@ -7436,7 +7417,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // judgment/coordinator Session, the task's own run, a verifier and any other Session.
     if (dto.status === TaskStatus.DONE) {
       const criterion = (
-        before.completionCriterion ?? 'HUMAN_SIGNOFF'
+        before.completionCriterion ?? 'EVIDENCE_JUDGMENT'
       ) as TaskCompletionCriterionValue;
       const remedy = taskCompletionRequiredAction(criterion, {
         verifiesTaskId: before.verifiesTaskId,
@@ -7480,7 +7461,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const attachesVerifier = before.verifiesTaskId == null && verifiesTaskIdAfter != null;
     let completionPolicy = dto.completionPolicy ?? before.completionPolicy;
     let completionCriterion = (
-      before.completionCriterion ?? 'HUMAN_SIGNOFF'
+      before.completionCriterion ?? 'EVIDENCE_JUDGMENT'
     ) as TaskCompletionCriterionValue;
     if (dto.completionCriterion !== undefined) {
       completionCriterion = dto.completionCriterion;
@@ -7491,11 +7472,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ) {
       completionCriterion = acceptanceCommand != null
         ? 'EXECUTABLE'
-        : completionPolicy === 'VERIFICATION_PASSED' ? 'VERIFICATION' : 'HUMAN_SIGNOFF';
+        : completionPolicy === 'VERIFICATION_PASSED' ? 'VERIFICATION' : 'EVIDENCE_JUDGMENT';
     } else if (dto.completionPolicy !== undefined) {
       completionCriterion = completionPolicy === 'VERIFICATION_PASSED'
         ? 'VERIFICATION'
-        : completionCriterion === 'VERIFICATION' ? 'HUMAN_SIGNOFF' : completionCriterion;
+        : completionCriterion === 'VERIFICATION' ? 'EVIDENCE_JUDGMENT' : completionCriterion;
     }
     // The relation is the verifier declaration. Attaching it without restating two more fields
     // produces the coherent role; explicit contradictions still reach the shared validator.
@@ -7627,7 +7608,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       autoRunWhenReady: dto.autoRunWhenReady,
       completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,
       // A role declaration is not a criterion exception.  In particular, attaching an old task
-      // must not preserve a HUMAN_SIGNOFF override reason that no longer describes the row.
+      // must not preserve a EVIDENCE_JUDGMENT override reason that no longer describes the row.
       completionCriterionOverrideReason:
         attachesVerifier ? null : undefined,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
@@ -8094,12 +8075,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   'A verification cannot be concluded from the session that ran the task it ' +
                     'verifies — the check has to be an independent run',
                 );
-              }
-              if (dto.verdict === 'PASS') {
-                const refusal = refuseHumanOnlyAction(
-                  authorityPrincipal(actingSession?.dispatchOrigin), 'CONCLUDE_VERDICT_PASS',
-                );
-                if (refusal) throw new ForbiddenException(refusal);
               }
             }
             if (judgmentRequest?.status === 'DECIDED'
@@ -9454,8 +9429,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // A foreman produces a diagnosis and may coordinate several unrelated repairs; no
             // single repository command or independent verifier truthfully settles that work.
             // Keep the existing owner-review contract, but state it instead of consuming the
-            // database's legacy HUMAN_SIGNOFF default invisibly.
-            completionCriterion: 'HUMAN_SIGNOFF',
+            // database's legacy EVIDENCE_JUDGMENT default invisibly.
+            completionCriterion: 'EVIDENCE_JUDGMENT',
             completionCriterionOverrideReason:
               'A stalled-list foreman produces a cross-task diagnosis for the owner to review.',
             // Nothing gates this run but the stall that caused it; it has no prerequisites, and

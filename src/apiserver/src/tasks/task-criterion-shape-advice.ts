@@ -10,20 +10,10 @@ export const TASK_CRITERION_OVERRIDE_REASON_FIELD =
 /** Audit prose is useful, but a task row is not an unbounded document store. */
 export const MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS = 2_000;
 
-export interface TaskCriterionShapePattern {
-  /** What a person sees in the advice and edits in the table. */
-  label: string;
-  /** RegExp source, kept as data so callers can clone and amend the table in tests or policy. */
-  source: string;
-  flags?: string;
-}
-
 export interface TaskCriterionShapeRule {
   criterion: TaskCompletionCriterionValue;
   /** Literal, case-insensitive substrings. No stemming, tokenisation or inferred synonyms. */
   keywords: readonly string[];
-  /** Narrow shapes that cannot be stated as one literal example, such as “迁移 109,872 行”. */
-  patterns?: readonly TaskCriterionShapePattern[];
   reason: string;
 }
 
@@ -33,6 +23,11 @@ export interface TaskCriterionShapeRule {
  * It is data rather than NLP. Adding a phrase changes only this table and its focused tests. The
  * evaluator advises only when exactly one criterion's row matches; mixed or unknown wording is
  * left alone, because a missed prompt is cheaper than confidently questioning an ambiguous one.
+ *
+ * There is deliberately no EVIDENCE_JUDGMENT row. Its former keywords — authorization,
+ * irreversibility, a value tradeoff — were shorthand for "stop and ask a person", and that step no
+ * longer exists: an agent decides an evidence judgment itself. Advising a caller towards it on
+ * those words would route work to a queue nobody is waiting at.
  */
 export const TASK_CRITERION_SHAPE_RULES: readonly TaskCriterionShapeRule[] = [
   {
@@ -44,12 +39,6 @@ export const TASK_CRITERION_SHAPE_RULES: readonly TaskCriterionShapeRule[] = [
     criterion: 'VERIFICATION',
     keywords: ['改对了吗', '符合意图', '是否覆盖', '是否合理', '独立复核'],
     reason: 'these phrases usually ask for independent judgment about correctness or intent',
-  },
-  {
-    criterion: 'HUMAN_SIGNOFF',
-    keywords: ['取舍', '值不值', '授权', '不可逆', '发布', '删除'],
-    patterns: [{ label: '迁移 N 行', source: '迁移\\s*[0-9０-９][0-9０-９,，._\\s]*\\s*行' }],
-    reason: 'these phrases usually describe authorization, irreversibility, or a value tradeoff',
   },
 ];
 
@@ -70,13 +59,9 @@ export interface TaskCriterionShapeAdvice {
 
 function matchesFor(text: string, rule: TaskCriterionShapeRule): string[] {
   const normalised = text.normalize('NFKC').toLocaleLowerCase('en-US');
-  const literals = rule.keywords.filter((keyword) =>
+  return [...new Set(rule.keywords.filter((keyword) =>
     normalised.includes(keyword.normalize('NFKC').toLocaleLowerCase('en-US')),
-  );
-  const patterns = (rule.patterns ?? [])
-    .filter((pattern) => new RegExp(pattern.source, pattern.flags ?? 'iu').test(text))
-    .map((pattern) => pattern.label);
-  return [...new Set([...literals, ...patterns])];
+  ))];
 }
 
 /**

@@ -30,7 +30,7 @@ Usage:
   orbit task create --title TITLE [options]
   orbit task create-batch (--tasks JSON | --tasks-file -) [--dry-run] [--json]
   orbit task update [task-id] [options]
-  orbit task signoff [task-id] --request-id ID --evidence-digest SHA256 (--evidence TEXT | --evidence-file -) [--json]
+  orbit task judge [task-id] --request-id ID --evidence-digest SHA256 (--evidence TEXT | --evidence-file -) [--json]
   orbit task delete [task-id] [--json]
   orbit task start [task-id] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
@@ -150,8 +150,8 @@ Options:
   --criterion-key KEY         Which of the PROJECT's acceptance criteria this work serves — a
                               key from project_get. Required of a project's judgment session,
                               optional for everybody else
-  --completion-criterion EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF
-				              Required for every runner-created task; HUMAN_SIGNOFF must be explicit
+  --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT
+				              Required for every runner-created task; EVIDENCE_JUDGMENT must be explicit
   --completion-criterion-override-reason TEXT
                               Why this task keeps a criterion after the server questions its shape
   --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
@@ -215,8 +215,8 @@ but passing one field inline and the other on stdin is fine.
 
 --completion-criterion declares one of three peer outcomes, never an escalation order:
 EXECUTABLE compares one command's exit code, VERIFICATION reads the verdict of an independent
-verification task (with --completion-policy VERIFICATION_PASSED), and HUMAN_SIGNOFF waits for one
-human signoff. Runner task creation never infers HUMAN_SIGNOFF: every task must pass the flag.
+verification task (with --completion-policy VERIFICATION_PASSED), and EVIDENCE_JUDGMENT waits for one
+an evidence judgment. Runner task creation never infers EVIDENCE_JUDGMENT: every task must pass the flag.
 Related verifier, executable, and completion-policy flags do not replace that declaration.
 
 Orbit conservatively compares acceptance-criteria wording with that choice. A mismatch returns
@@ -246,7 +246,7 @@ completionCriterionOverrideReason, acceptanceCommand,
 acceptanceExpectedExitCode, dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady,
 completionPolicy. Nothing is written unless every item is valid.
 
-Every item must set "completionCriterion" explicitly. HUMAN_SIGNOFF remains available when it is
+Every item must set "completionCriterion" explicitly. EVIDENCE_JUDGMENT remains available when it is
 intended, but omission never selects it on a runner write. Related verifier, executable, and
 completion-policy fields do not replace that declaration.
 
@@ -359,7 +359,7 @@ Options:
   --acceptance-criteria-file -
                               Read the replacement criteria from stdin; paths are rejected
   --clear-acceptance-criteria Leave the task with no acceptance criteria
-  --completion-criterion EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF
+  --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT
                               Replace the task's one normal completion criterion
   --acceptance-command SHELL  Replace the one EXECUTABLE command
   --acceptance-expected-exit-code N
@@ -410,13 +410,13 @@ be combined with either form. The server accepts up to 4,000 characters.
 --description-file reads the same stdin, the two file flags cannot be used together, but passing
 one field inline and the other on stdin is fine.
 
-The completion criterion is one of EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF. They are peer
-choices: HUMAN_SIGNOFF is not what happens when either other criterion fails. Omitting
+The completion criterion is one of EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT. They are peer
+choices: EVIDENCE_JUDGMENT is not what happens when either other criterion fails. Omitting
 --completion-criterion preserves the stored choice; it cannot be cleared.
 
 No caller may write --status DONE. The refusal names the task's declared path: run the
-EXECUTABLE command, obtain an independent VERIFICATION PASS, or use ` + "`orbit task signoff`" + `
-with non-empty evidence for HUMAN_SIGNOFF. FAILED remains writable by a run as its conservative
+EXECUTABLE command, obtain an independent VERIFICATION PASS, or use ` + "`orbit task judge`" + `
+with non-empty evidence for EVIDENCE_JUDGMENT. FAILED remains writable by a run as its conservative
 self-report.
 
 The executable acceptance is exactly two fields: --acceptance-command and
@@ -434,17 +434,20 @@ they differ), and a task can be neither its own parent nor a subtask of one of i
 both close a loop and are rejected. It says what this task is PART OF and nothing about when it
 runs — that is --depends-on.
 `,
-	"signoff": `orbit task signoff — sign a HUMAN_SIGNOFF task
+	"judge": `orbit task judge — decide an EVIDENCE_JUDGMENT task
 
 Usage:
-  orbit task signoff [task-id] --request-id ID --evidence-digest SHA256
+  orbit task judge [task-id] --request-id ID --evidence-digest SHA256
     (--evidence TEXT | --evidence-file -) [--json]
 
-This decides the current evidence-bound HUMAN_SIGNOFF judgment request and writes an attributable
-event: request id, evidence digest, the runner owner who signed, server time, and non-empty review
-evidence. In the same transaction the server derives task status DONE and closes the request and
-its derived signal/blocker. A superseded request or mismatched digest is refused. It is deliberately
-a human door: inside an agent session (ORBIT_SESSION_ID set), the server refuses the call.
+This decides the current evidence-bound EVIDENCE_JUDGMENT judgment request and writes an attributable
+event: request id, evidence digest, the principal that decided, server time, and the non-empty
+finding. In the same transaction the server derives task status DONE and closes the request and
+its derived signal/blocker. A superseded request or mismatched digest is refused.
+
+Inside a session the acting session is carried and recorded as the decider; headless, the decision
+is attributed to the runner owner. Neither is refused — migration 0224 removed the human step from
+this criterion and kept the evidence binding.
 
 --evidence-file accepts only '-' (stdin), so the CLI itself never opens an arbitrary path.
 task-id defaults to ORBIT_TASK_ID.
@@ -576,8 +579,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskCreateBatch(args[1:], in, out)
 	case "update":
 		return cliTaskUpdate(args[1:], in, out)
-	case "signoff":
-		return cliTaskSignoff(args[1:], in, out)
+	case "judge":
+		return cliTaskJudge(args[1:], in, out)
 	case "delete":
 		return cliTaskDelete(args[1:], out)
 	case "start":
@@ -818,10 +821,10 @@ func validateTaskCLICompletionPolicy(policy string) error {
 
 func validateTaskCLICompletionCriterion(criterion string) error {
 	switch criterion {
-	case "EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF":
+	case "EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT":
 		return nil
 	default:
-		return fmt.Errorf("completion-criterion must be one of EXECUTABLE, VERIFICATION, HUMAN_SIGNOFF")
+		return fmt.Errorf("completion-criterion must be one of EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT")
 	}
 }
 
@@ -1185,7 +1188,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
-	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF)")
+	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
@@ -1558,7 +1561,7 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
 	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
-	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF)")
+	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	acceptanceCommand := fs.String("acceptance-command", "", "replace the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
 	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "replace requested v2 timeout seconds")
@@ -1867,12 +1870,12 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliTaskSignoff(args []string, in io.Reader, out io.Writer) error {
+func cliTaskJudge(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
-	fs := newCLIFlagSet("orbit task signoff")
-	requestID := fs.String("request-id", "", "current open HUMAN_SIGNOFF judgment request id")
+	fs := newCLIFlagSet("orbit task judge")
+	requestID := fs.String("request-id", "", "current open EVIDENCE_JUDGMENT judgment request id")
 	evidenceDigest := fs.String("evidence-digest", "", "sha256 digest bound to the current request")
-	evidenceText := fs.String("evidence", "", "evidence the human signoff is based on")
+	evidenceText := fs.String("evidence", "", "the finding this judgment is based on")
 	evidenceFile := fs.String("evidence-file", "", "read evidence from stdin (-)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
@@ -1883,7 +1886,7 @@ func cliTaskSignoff(args []string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	if strings.TrimSpace(*requestID) == "" {
-		return fmt.Errorf("--request-id is required: sign the current open HUMAN_SIGNOFF judgment request")
+		return fmt.Errorf("--request-id is required: decide the current open EVIDENCE_JUDGMENT judgment request")
 	}
 	if !isSHA256Hex(*evidenceDigest) {
 		return fmt.Errorf("--evidence-digest must be the current request's 64-character sha256 digest")
@@ -1906,12 +1909,12 @@ func cliTaskSignoff(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// A headless invocation has no acting session and is the runner owner's human door. Carry a
-	// session when one exists so the server can refuse an agent trying to sign for that person.
+	// A headless invocation has no acting session and is attributed to the runner owner. Carry a
+	// session when one exists: that is who the server records as having decided.
 	_, sessionID := cliTaskAttribution()
-	raw, err := t.signoffTask(sessionID, id, *requestID, strings.ToLower(*evidenceDigest), evidence)
+	raw, err := t.judgeTask(sessionID, id, *requestID, strings.ToLower(*evidenceDigest), evidence)
 	if err != nil {
-		return fmt.Errorf("sign off task: %w", err)
+		return fmt.Errorf("judge task: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -2287,11 +2290,11 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_evidence_list", Argv: []string{"orbit", "task", "evidence-list"}, Usage: "orbit task evidence-list [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "List immutable structured completion-evidence revisions in task-local order. Reads no comments and depends on no Session lifecycle state."},
 	{Tool: "task_evidence_submit", Argv: []string{"orbit", "task", "evidence-submit"}, Usage: "orbit task evidence-submit [task-id] (--evidence JSON | --evidence-file -) [--source-session-id ID] [--idempotency-key KEY] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--evidence <JSON object> | --evidence-file - (required)", "--source-session-id <id> (defaults to ORBIT_SESSION_ID)", "--idempotency-key <key> (max 200 characters)", "--json"}, Description: "Submit an explicit structured completion-evidence fact from a task Session. It appends or replays a revision without changing Task or Session state and without adding a comment.", Mutates: true},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. Every runner task creation requires --completion-criterion explicitly; HUMAN_SIGNOFF remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. Every runner task creation requires --completion-criterion explicitly; EVIDENCE_JUDGMENT remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
 	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id, status and acceptance epoch: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the project acceptance criteria that CITE this task with the verdict each reached and whether that epoch is still the current one (an old PASS stays readable and stops counting), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. Every absent fact is null beside a reason, so \"no acceptance criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion)", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. Every item declares completionCriterion explicitly; HUMAN_SIGNOFF is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title, status and acceptance epoch), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
-	{Tool: "task_signoff", Argv: []string{"orbit", "task", "signoff"}, Usage: "orbit task signoff [task-id] --request-id ID --evidence-digest SHA256 (--evidence TEXT | --evidence-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--request-id <id> (current open HUMAN_SIGNOFF judgment request)", "--evidence-digest <sha256> (exact digest bound to the request)", "--evidence <text> | --evidence-file - (required, non-blank)", "--json"}, Description: "Human-sign the current evidence-bound HUMAN_SIGNOFF judgment request. Records the request, digest, runner owner, server timestamp, and non-empty review evidence; the same transaction derives DONE and closes the request and its derived signal/blocker. Superseded requests and agent-session invocations are refused.", Mutates: true, HeadlessOnly: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion)", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title, status and acceptance epoch), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
+	{Tool: "task_judge", Argv: []string{"orbit", "task", "judge"}, Usage: "orbit task judge [task-id] --request-id ID --evidence-digest SHA256 (--evidence TEXT | --evidence-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--request-id <id> (current open EVIDENCE_JUDGMENT judgment request)", "--evidence-digest <sha256> (exact digest bound to the request)", "--evidence <text> | --evidence-file - (required, non-blank)", "--json"}, Description: "Decide the current evidence-bound EVIDENCE_JUDGMENT judgment request. Records the request, digest, deciding principal, server timestamp, and the non-empty finding; the same transaction derives DONE and closes the request and its derived signal/blocker. Superseded requests are refused; an agent session is not.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
@@ -2317,7 +2320,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
 				"--failure-successor-handoff <JSON object> (exact obligation/route binding; requires --supersedes-task-id)",
-				"--completion-criterion <EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF> (required for every runner task creation; HUMAN_SIGNOFF is never inferred)",
+				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (required for every runner task creation; EVIDENCE_JUDGMENT is never inferred)",
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
@@ -2327,7 +2330,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_update":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
-				"--completion-criterion <EXECUTABLE|VERIFICATION|HUMAN_SIGNOFF> (replace the task's one normal completion criterion)",
+				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
 				"--acceptance-timeout-seconds <n> (replace the requested v2 timeout; never silently clamped)",

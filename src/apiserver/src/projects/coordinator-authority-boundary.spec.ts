@@ -265,18 +265,16 @@ function acceptanceFixture() {
   return new ProjectAcceptanceService(prisma as never);
 }
 
-test('dispatch_origin=judgment cannot conclude an acceptance criterion PASS', async () => {
-  const body = await refusalOf(() => acceptanceFixture().finalizeRun(
+// Migration 0224 removed the human step from acceptance. This is the same call the boundary used
+// to refuse, asserted from the other side: the judgment session reaches the write.
+test('dispatch_origin=judgment may now conclude an acceptance criterion PASS', async () => {
+  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
     OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }], SESSION,
   ));
-
-  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
-  assert.equal(body.action, 'CONCLUDE_VERDICT_PASS');
-  assert.equal(body.requiredAction, 'ASK_A_PERSON');
 });
 
 test('a headless runner keeps machine attribution when it omits the acting session header', async () => {
-  const body = await refusalOf(() => acceptanceFixture().finalizeRun(
+  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
     OWNER,
     PROJECT,
     'run-1',
@@ -284,19 +282,16 @@ test('a headless runner keeps machine attribution when it omits the acting sessi
     undefined,
     RUN,
   ));
-
-  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
-  assert.equal(body.action, 'CONCLUDE_VERDICT_PASS');
 });
 
-test('one PASS among failures is still a PASS being written', async () => {
-  const body = await refusalOf(() => acceptanceFixture().finalizeRun(
-    OWNER, PROJECT, 'run-1',
-    [{ ordinal: 1, verdict: 'FAIL' as never }, { ordinal: 2, verdict: 'PASS' as never }],
-    SESSION,
-  ));
-  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
-});
+test('a mixed checklist still reaches the write and derives its verdict from the conjunction',
+  async () => {
+    await reachesTheWrite(() => acceptanceFixture().finalizeRun(
+      OWNER, PROJECT, 'run-1',
+      [{ ordinal: 1, verdict: 'FAIL' as never }, { ordinal: 2, verdict: 'PASS' as never }],
+      SESSION,
+    ));
+  });
 
 test('a judgment session may report that acceptance did NOT pass', async () => {
   // The asymmetry this unit shares with the self-DONE boundary: the conservative conclusion
@@ -333,22 +328,23 @@ test('an agent-held runner credential with no acting session can edit explicit s
         acceptanceCriteriaItems: [{
           text: 'replacement exam',
           verificationMethod: 'A person reviews the replacement exam.',
-          completionCriterion: 'HUMAN_SIGNOFF',
+          completionCriterion: 'EVIDENCE_JUDGMENT',
         }],
       } as never,
     ));
   });
 
-test('an agent-held runner credential with no acting session cannot record acceptance PASS', async () => {
+test('an agent-held runner credential with no acting session records acceptance PASS', async () => {
+  // Deliberately the same credential as the test above, which still cannot touch the criteria in
+  // force. Reading the ruler is now a machine act; MOVING it is still not.
   const runner = await runnerFromAgentCredential();
-  const body = await refusalOf(() => runnerController().finalizeAcceptanceRun(
+  await reachesTheWrite(() => runnerController().finalizeAcceptanceRun(
     runner,
     PROJECT,
     'run-1',
     undefined,
     { criteria: [{ ordinal: 1, verdict: 'PASS' }] } as never,
   ));
-  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
 });
 
 test('an agent-held runner credential with no acting session cannot directly write project.status=DONE', async () => {
@@ -507,32 +503,18 @@ function taskUpdateFixture(
   };
 }
 
-test('a judgment session cannot conclude a verification PASS', async () => {
-  // A PASS here is not an opinion filed beside the work: `task-aggregation.ts` completes the
-  // subject on `status DONE && verdict PASS`, so this write finishes SUBJECT for everybody
-  // downstream of it.
+test('a judgment session may conclude a verification PASS', async () => {
+  // A PASS here still finishes the SUBJECT for everybody downstream — `task-aggregation.ts`
+  // completes it on `status DONE && verdict PASS`. What changed in 0224 is who may write it. The
+  // independence rule below is the bound that stayed: a verifier cannot be concluded from the run
+  // that performed the work it checks.
   const f = taskUpdateFixture(SessionDispatchOrigin.PROJECT_COORDINATOR);
 
-  const body = await refusalOf(() => f.conclude('PASS'));
+  await f.conclude('PASS');
 
-  assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
-  assert.equal(body.tier, 'HUMAN_ONLY');
-  assert.deepEqual(f.writes, [], 'a refusal that leaves the row moved has prevented nothing');
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.writes[0].verdict, 'PASS');
 });
-
-test('a judgment session cannot consume a same-value PASS stranded behind an OPEN request',
-  async () => {
-    const f = taskUpdateFixture(SessionDispatchOrigin.PROJECT_COORDINATOR, {
-      verdict: 'PASS',
-      openRequest: true,
-    });
-
-    const body = await refusalOf(() => f.conclude('PASS'));
-
-    assert.equal(body.code, 'VERDICT_PASS_HUMAN_ONLY');
-    assert.equal(body.action, 'CONCLUDE_VERDICT_PASS');
-    assert.deepEqual(f.writes, [], 'repairing a split state is still an authoritative conclusion');
-  });
 
 test('a judgment session may conclude FAIL or INCONCLUSIVE', async () => {
   for (const verdict of ['FAIL', 'INCONCLUSIVE']) {

@@ -87,7 +87,7 @@ export function verificationVerdictRecordedFact(input: {
   };
 }
 
-export function humanSignoffRequestedFact(input: {
+export function evidenceJudgmentRequestedFact(input: {
   projectId: string;
   taskId: string;
   requestId: string;
@@ -96,7 +96,7 @@ export function humanSignoffRequestedFact(input: {
   recipientId: string;
 }): WakeFact {
   return {
-    event: 'HUMAN_SIGNOFF_REQUESTED',
+    event: 'EVIDENCE_JUDGMENT_REQUESTED',
     projectId: input.projectId,
     subjectType: 'JUDGMENT_REQUEST',
     subjectId: input.requestId,
@@ -109,30 +109,30 @@ export function humanSignoffRequestedFact(input: {
   };
 }
 
-export function humanSignoffDecidedFact(input: {
+export function evidenceJudgmentDecidedFact(input: {
   projectId: string;
   taskId: string;
   requestId: string;
-  signoffId: string;
   evidenceDigest: string;
   decision: string;
 }): WakeFact {
   return {
-    event: 'HUMAN_SIGNOFF_DECIDED',
+    event: 'EVIDENCE_JUDGMENT_DECIDED',
     projectId: input.projectId,
     subjectType: 'JUDGMENT_REQUEST',
     subjectId: input.requestId,
-    subjectVersion: `${input.signoffId}:${input.evidenceDigest}:${input.decision}`,
+    // The decided request is the whole event since migration 0224; the second signoff row that
+    // used to name this version is gone, so the version is the request's own decided fact.
+    subjectVersion: `${input.requestId}:${input.evidenceDigest}:${input.decision}`,
     detail: {
       taskId: input.taskId,
-      signoffId: input.signoffId,
       evidenceDigest: input.evidenceDigest,
       decision: input.decision,
     },
   };
 }
 
-export function humanSignoffRequestSupersededFact(input: {
+export function evidenceJudgmentRequestSupersededFact(input: {
   projectId: string;
   taskId: string;
   requestId: string;
@@ -141,7 +141,7 @@ export function humanSignoffRequestSupersededFact(input: {
   replacementEvidenceDigest: string;
 }): WakeFact {
   return {
-    event: 'HUMAN_SIGNOFF_REQUEST_SUPERSEDED',
+    event: 'EVIDENCE_JUDGMENT_REQUEST_SUPERSEDED',
     projectId: input.projectId,
     subjectType: 'JUDGMENT_REQUEST',
     subjectId: input.requestId,

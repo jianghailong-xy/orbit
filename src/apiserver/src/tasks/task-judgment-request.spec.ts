@@ -23,17 +23,17 @@ test('the three completion criteria route to peer consumers with no fallback cha
     recipientType: 'VERIFIER_TASK',
     recipientId: REQUEST,
   });
-  assert.deepEqual(routeTaskJudgment('HUMAN_SIGNOFF', {
+  assert.deepEqual(routeTaskJudgment('EVIDENCE_JUDGMENT', {
     ownerId: OWNER, sourceSessionId: SESSION, requestId: REQUEST,
   }), {
-    kind: 'HUMAN_SIGNOFF',
+    kind: 'EVIDENCE_JUDGMENT',
     recipientType: 'ACCOUNT_OWNER',
     recipientId: OWNER,
   });
 
   const source = readFileSync('src/tasks/task-judgment-request.ts', 'utf8');
   assert.doesNotMatch(source, /default\s*:/, 'adding a default would hide a new unhandled criterion');
-  assert.doesNotMatch(source, /\[\s*['"]EXECUTABLE['"][\s\S]*['"]VERIFICATION['"][\s\S]*['"]HUMAN_SIGNOFF['"]\s*\]/,
+  assert.doesNotMatch(source, /\[\s*['"]EXECUTABLE['"][\s\S]*['"]VERIFICATION['"][\s\S]*['"]EVIDENCE_JUDGMENT['"]\s*\]/,
     'routing must not encode an ordered fallback list');
 });
 
@@ -52,7 +52,11 @@ test('each request kind reaches only its own judgment fact writer', () => {
   assert.match(runner,
     /const changed = requestBelongsToThisEvaluator[\s\S]*task\.updateMany/,
     'the legacy status path is fenced by that same recipient fact');
-  assert.match(tasks, /request\.kind !== 'HUMAN_SIGNOFF'[\s\S]*taskHumanSignoff\.create/);
+  // The EVIDENCE_JUDGMENT writer is the request row itself since migration 0224 dropped the
+  // second table: `judge` still refuses a request of any other kind, and what it writes is the
+  // decision on that request rather than a separate event.
+  assert.match(tasks,
+    /request\.kind !== 'EVIDENCE_JUDGMENT'[\s\S]*taskJudgmentRequest\.update\([\s\S]*decisionNote/);
 });
 
 function productionTypeScript(dir: string, out: string[] = []): string[] {
@@ -64,14 +68,20 @@ function productionTypeScript(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-test('only the human-signoff domain boundary can insert a HUMAN_SIGNOFF event', () => {
+test('exactly one domain boundary decides an EVIDENCE_JUDGMENT request', () => {
+  // Migration 0224 deleted the second table this used to look for; the decision is now the request
+  // row's own transition, so the writer is whoever performs THAT — and there is still exactly one.
   const writers = productionTypeScript('src')
-    .filter((path) => /taskHumanSignoff\.create\(/.test(readFileSync(path, 'utf8')))
+    .filter((path) => /decision: 'PASS',\n\s*decisionNote: finding,/.test(readFileSync(path, 'utf8')))
     .map((path) => path.replaceAll('\\', '/'));
   assert.deepEqual(writers, ['src/tasks/tasks.service.ts']);
 
   const boundary = readFileSync(writers[0], 'utf8');
-  assert.match(boundary, /if \(actingSessionId\)[\s\S]*HUMAN_SIGNOFF_REQUIRES_USER/);
+  // The acting-session refusal is gone on purpose. What is asserted here is what replaced it: the
+  // decision is attributed rather than refused, and it still cannot be recorded without a finding.
+  assert.doesNotMatch(boundary, /EVIDENCE_JUDGMENT_REQUIRES_USER/);
+  assert.match(boundary, /const decidedByType = actingSessionId \? 'AGENT' : 'USER';/);
+  assert.match(boundary, /EVIDENCE_JUDGMENT_FINDING_REQUIRED/);
   assert.match(boundary, /request\.recipientType !== 'ACCOUNT_OWNER'/);
-  assert.match(boundary, /deriveTaskCompletionStatus\([\s\S]*humanSignoff: true/);
+  assert.match(boundary, /deriveTaskCompletionStatus\([\s\S]*evidenceJudgment: true/);
 });

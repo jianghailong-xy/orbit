@@ -1,11 +1,18 @@
 import type { TaskCompletionPolicyValue, TaskVerdictValue } from '../projects/task-aggregation';
 import type { AttemptTerminationKind } from './executable-acceptance-runtime';
 
-/** The three peer ways a task may prove its own work complete. */
+/**
+ * The three peer ways a task may prove its own work complete.
+ *
+ * EVIDENCE_JUDGMENT is the former HUMAN_SIGNOFF, renamed for what actually settles it. The fact is
+ * unchanged — one decision, bound by foreign key to one immutable completion-evidence version and
+ * its digest — but the decision no longer has to come from the account owner. Any credentialed
+ * principal, an agent included, may make it, and must state the finding it is making.
+ */
 export const TASK_COMPLETION_CRITERIA = [
   'EXECUTABLE',
   'VERIFICATION',
-  'HUMAN_SIGNOFF',
+  'EVIDENCE_JUDGMENT',
 ] as const;
 
 export type TaskCompletionCriterionValue = (typeof TASK_COMPLETION_CRITERIA)[number];
@@ -28,7 +35,7 @@ export interface TaskCompletionDeclaration {
  * Compatibility resolution for callers that predate completionCriterion.
  *
  * A caller that sends the old executable pair or VERIFICATION_PASSED policy keeps the meaning it
- * explicitly requested. A completely undeclared task is HUMAN_SIGNOFF. This is not a runtime
+ * explicitly requested. A completely undeclared task is EVIDENCE_JUDGMENT. This is not a runtime
  * fallback: the function runs once while constructing the declaration.
  */
 export function resolveTaskCompletionCriterion(
@@ -43,7 +50,7 @@ export function resolveTaskCompletionCriterion(
     || declaration.acceptanceExpectedExitCode != null
   ) return 'EXECUTABLE';
   if (declaration.completionPolicy === 'VERIFICATION_PASSED') return 'VERIFICATION';
-  return 'HUMAN_SIGNOFF';
+  return 'EVIDENCE_JUDGMENT';
 }
 
 /**
@@ -96,12 +103,12 @@ export function taskCompletionDeclarationError(
         return 'A subject using VERIFICATION requires completionPolicy VERIFICATION_PASSED';
       }
       return null;
-    case 'HUMAN_SIGNOFF':
+    case 'EVIDENCE_JUDGMENT':
       if (command != null) {
-        return 'HUMAN_SIGNOFF cannot also declare executable acceptance';
+        return 'EVIDENCE_JUDGMENT cannot also declare executable acceptance';
       }
       if (policy === 'VERIFICATION_PASSED') {
-        return 'HUMAN_SIGNOFF cannot use completionPolicy VERIFICATION_PASSED';
+        return 'EVIDENCE_JUDGMENT cannot use completionPolicy VERIFICATION_PASSED';
       }
       if (declaration.verifiesTaskId != null) {
         return 'A verification task must use VERIFICATION completion';
@@ -125,7 +132,8 @@ export interface TaskCompletionFacts {
   verifiesTaskId?: string | null;
   /** A verifier's own result. Any conclusion settles the carrier activity. */
   ownVerdict?: TaskVerdictValue | null;
-  humanSignoff?: boolean;
+  /** The task's current judgment request, bound to its current evidence, was decided PASS. */
+  evidenceJudgment?: boolean;
 }
 
 export interface TaskCompletionEvaluation {
@@ -150,7 +158,7 @@ export type TaskLifecycleStatusValue =
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
 ): TaskCompletionEvaluation {
-  const criterion = facts.completionCriterion ?? 'HUMAN_SIGNOFF';
+  const criterion = facts.completionCriterion ?? 'EVIDENCE_JUDGMENT';
   let state: TaskCompletionEvaluation['state'];
   switch (criterion) {
     case 'EXECUTABLE': {
@@ -179,8 +187,8 @@ export function evaluateTaskCompletion(
         ? facts.ownVerdict != null
         : facts.verificationVerdict === 'PASS') ? 'SATISFIED' : 'UNSATISFIED';
       break;
-    case 'HUMAN_SIGNOFF':
-      state = facts.humanSignoff === true ? 'SATISFIED' : 'UNSATISFIED';
+    case 'EVIDENCE_JUDGMENT':
+      state = facts.evidenceJudgment === true ? 'SATISFIED' : 'UNSATISFIED';
       break;
   }
   return { criterion, state, satisfied: state === 'SATISFIED' };
@@ -280,12 +288,13 @@ export function taskCompletionRequiredAction(
           'complete an independent verification task with verdict PASS; Orbit derives the ' +
           'subject status from that verification fact',
       };
-    case 'HUMAN_SIGNOFF':
+    case 'EVIDENCE_JUDGMENT':
       return {
-        requiredAction: 'CREATE_HUMAN_SIGNOFF_WITH_EVIDENCE',
+        requiredAction: 'DECIDE_THE_OPEN_EVIDENCE_JUDGMENT',
         instruction:
-          'have the account owner decide the current HUMAN_SIGNOFF judgment request, binding ' +
-          'task_signoff / POST /tasks/:id/signoff to its requestId and evidenceDigest',
+          'decide the current EVIDENCE_JUDGMENT request against the evidence version it is bound ' +
+          'to, binding task_judge / POST /tasks/:id/judgment to that requestId and evidenceDigest ' +
+          'and stating the finding that settles it',
       };
   }
 }

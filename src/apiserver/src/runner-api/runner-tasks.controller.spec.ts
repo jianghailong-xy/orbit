@@ -148,7 +148,7 @@ test('createTasks batches through TasksService with the acting workspace as crea
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const dto = {
-    tasks: [{ title: 'S0', ref: 's0', completionCriterion: 'HUMAN_SIGNOFF' }],
+    tasks: [{ title: 'S0', ref: 's0', completionCriterion: 'EVIDENCE_JUDGMENT' }],
   } as never;
 
   const result = await controller.createTasks(RUNNER, 'workspace-1', undefined, 'session-1', dto);
@@ -161,7 +161,7 @@ test('createTasks batches through TasksService with the acting workspace as crea
   });
 });
 
-test('runner task create refuses an implicit HUMAN_SIGNOFF before resolving or writing', async () => {
+test('runner task create refuses an implicit EVIDENCE_JUDGMENT before resolving or writing', async () => {
   let serviceCalls = 0;
   const tasks = {
     resolveAgentCreator: async () => {
@@ -188,7 +188,7 @@ test('runner task create refuses an implicit HUMAN_SIGNOFF before resolving or w
       assert.match(error.message, /completionCriterion/);
       const body = error.getResponse() as Record<string, unknown>;
       assert.equal(body.code, 'RUNNER_COMPLETION_CRITERION_REQUIRED');
-      assert.match(error.message, /never.*HUMAN_SIGNOFF/i);
+      assert.match(error.message, /never.*EVIDENCE_JUDGMENT/i);
       return true;
     },
   );
@@ -206,7 +206,7 @@ test('runner task create permits explicit criteria and translates unambiguous N-
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const declarations = [
-    { completionCriterion: 'HUMAN_SIGNOFF' },
+    { completionCriterion: 'EVIDENCE_JUDGMENT' },
     { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 },
     { completionCriterion: 'VERIFICATION', completionPolicy: 'VERIFICATION_PASSED' },
   ];
@@ -244,7 +244,7 @@ test('runner task create permits explicit criteria and translates unambiguous N-
   );
 });
 
-test('runner batch create and both dry-run paths refuse every implicit HUMAN_SIGNOFF before service', async () => {
+test('runner batch create and both dry-run paths refuse every implicit EVIDENCE_JUDGMENT before service', async () => {
   let serviceCalls = 0;
   const tasks = {
     resolveAgentCreator: async () => {

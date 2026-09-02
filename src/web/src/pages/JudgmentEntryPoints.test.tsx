@@ -89,7 +89,7 @@ describe('human judgment entry points', () => {
       </QueryClientProvider>,
     );
     expect(html).toContain('待我判定');
-    expect(html).toContain('任务级 HUMAN_SIGNOFF 与项目验收共用一个收件箱');
+    expect(html).toContain('任务级 EVIDENCE_JUDGMENT 与项目验收共用一个收件箱');
     expect(html).toContain('Review this exact accessible build');
     expect(html).toContain('Evidence</dt><dd>r7');
     expect(html).toContain('Implementation workspace');

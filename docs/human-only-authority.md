@@ -3,11 +3,17 @@
 This document defines what Orbit's project-level `HUMAN_ONLY` actions guarantee:
 
 - edit project acceptance criteria;
-- confirm that the complete project acceptance standard set expresses the goal;
-- record a `PASS` conclusion;
+- confirm that the complete project acceptance standard set expresses the goal.
+
+Both remaining rows are about the RULER. Recording a `PASS` conclusion was the third, and N26
+removed it: `CONCLUDE_VERDICT_PASS` is `COORDINATOR_BOUNDED`, because reading a stated standard
+against a frozen evidence version is what an evaluator does, and the account owner accepted that a
+machine may do it. What bounds it is unchanged — the conclusion names the immutable evidence
+version it judged, every stated criterion must be answered in the same call, and the project-level
+verdict is derived from that conjunction rather than supplied.
 
 Project `DONE` is no longer a `HUMAN_ONLY` write in N22. It is an automatic projection of a
-confirmed standard set whose three peer criteria are all satisfied; every direct `status=DONE`
+confirmed standard set whose peer criteria are all satisfied; every direct `status=DONE`
 request is refused.
 
 It is deliberately limited to those actions. It does not redesign authentication.
@@ -39,11 +45,11 @@ requester identity.
 The distinction is intentionally about route and role, not biological identity. Current behavior
 must be read per authenticated door:
 
-| Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project HUMAN_SIGNOFF `PASS` | Project `DONE` |
+| Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project criterion `PASS` | Project `DONE` |
 | --- | --- | --- | --- | --- | --- | --- |
 | Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; owner credential is recorded | allowed | allowed | direct write refused; evaluator only |
-| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | allowed; runner credential is recorded | allowed | refused because that endpoint retains machine attribution | direct write refused; evaluator only |
-| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | refused | refused | direct write refused |
+| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | allowed; runner credential is recorded | allowed | allowed since N26, under machine attribution | direct write refused; evaluator only |
+| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | allowed since N26 | allowed since N26 | direct write refused |
 | Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed when it names its credentialed actor | allowed | allowed unless it explicitly supplies machine attribution | direct write refused; evaluator only |
 | Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | direct write refused; evaluator only |
 
@@ -59,17 +65,17 @@ There is currently no production cron job that writes these three facts. The no-
 default remains available for trusted internal/cron composition; adding such a writer must still
 document its authority and the traceability fields it persists.
 
-The PASS row also has two service surfaces. Project acceptance records criterion conclusions;
-task verification records a task verdict. Both refuse a known judgment Session. The project
-acceptance runner endpoint additionally supplies a fallback machine id when the acting Session
-header is absent, which is why a headless runner cannot record PASS there while it can still record
-`FAIL` or `INCONCLUSIVE`.
+The PASS row has two service surfaces. Project acceptance records criterion conclusions; task
+verification records a task verdict. Neither refuses a judgment Session any more. The project
+acceptance runner endpoint still supplies a fallback machine id when the acting Session header is
+absent — that is now attribution rather than a gate, so a headless runner records `PASS`, `FAIL`
+and `INCONCLUSIVE` alike, and each conclusion says which evaluator produced it.
 
 Tests lock this matrix in `coordinator-authority-boundary.spec.ts`:
 
 - `an agent-held runner credential with no acting session can edit explicit structured criteria`;
 - `an agent-held runner credential with no acting session can write task verdict=PASS`;
-- `an agent-held runner credential with no acting session cannot record acceptance PASS`;
+- `an agent-held runner credential with no acting session records acceptance PASS`;
 - `a no-acting-session runner edit changes the digest and immediately invalidates the prior set confirmation`;
 - `a PROJECT_COORDINATOR judgment session is refused when it tries to confirm the criteria set`;
 - `a headless runner can still record a conservative acceptance conclusion`;
@@ -103,9 +109,10 @@ with the shared signing secret can create the same signature.
 In a deployment where agents cannot obtain owner credentials, the rules are a useful least-
 privilege boundary. In the co-located/shared-secret deployment described above, they still provide:
 
-1. **Judgment-role separation.** The ordinary one-shot judgment Session cannot rewrite its exam,
-   declare PASS, or confirm the standard set through its attributed path. This prevents accidental
-   self-grading and makes the expected escalation explicit.
+1. **Judgment-role separation.** The ordinary one-shot judgment Session cannot rewrite its exam or
+   confirm the standard set through its attributed path. It MAY now read that exam and conclude
+   PASS: the separation that matters is between writing the standard and reading it, and only the
+   first is self-grading.
 2. **Action-specific traceability, not one uniform actor audit.** The current records are:
    - an acceptance-criteria edit freezes the resulting criteria, revision/digest, evidence version,
      and time in an acceptance run; that run says `decidedBy=USER` for this path but stores no

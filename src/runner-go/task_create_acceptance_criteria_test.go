@@ -39,7 +39,7 @@ func TestTaskCLICreateSendsAcceptanceCriteria(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{
 		"create", "--title", "Ship it",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 		"--description", "Rewrite the importer",
 		"--acceptance-criteria", "`go test ./...` passes and the importer handles an empty file",
 		"--json",
@@ -74,7 +74,7 @@ func TestTaskCLICreateReadsAcceptanceCriteriaFromStdinExactly(t *testing.T) {
 
 	criteria := "  1. `go vet ./...` is clean\n\n  2. The 404 page renders in Safari\n\t3. No new flags\n"
 	var out bytes.Buffer
-	err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--acceptance-criteria-file", "-", "--json"},
+	err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--acceptance-criteria-file", "-", "--json"},
 		strings.NewReader(criteria), &out)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestTaskCLICreateOmitsAcceptanceCriteriaWhenNotAsked(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--description", "Do the thing", "--json"},
+	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--description", "Do the thing", "--json"},
 		strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestTaskCLICreateSendsAnExplicitlyEmptyAcceptanceCriteria(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--acceptance-criteria", "", "--json"},
+	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--acceptance-criteria", "", "--json"},
 		strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestTaskCLICreateAllowsADirectDescriptionWithCriteriaOnStdin(t *testing.T) 
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{
 		"create", "--title", "Ship it",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 		"--description", "Fix the importer",
 		"--acceptance-criteria-file", "-",
 		"--json",
@@ -382,7 +382,7 @@ func TestMCPTaskCreateSendsAcceptanceCriteriaToTheServer(t *testing.T) {
 		"projectId":           "proj-1",
 		"parentTaskId":        "task-parent",
 		"acceptanceCriteria":  "`go test ./...` passes",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] == true {
 		t.Fatalf("task_create returned an error: %#v", res["content"])
@@ -432,12 +432,12 @@ func TestMCPTaskCreateBatchSendsEveryItemsAcceptanceCriteria(t *testing.T) {
 			map[string]interface{}{
 				"title": "Build", "ref": "s0",
 				"acceptanceCriteria":  "The binary builds on arm64",
-				"completionCriterion": "HUMAN_SIGNOFF",
+				"completionCriterion": "EVIDENCE_JUDGMENT",
 			},
 			map[string]interface{}{
 				"title": "Deploy", "dependsOnRefs": []interface{}{"s0"},
 				"acceptanceCriteria":  "/healthz answers 200 from the deployed host",
-				"completionCriterion": "HUMAN_SIGNOFF",
+				"completionCriterion": "EVIDENCE_JUDGMENT",
 			},
 		},
 	})
@@ -498,8 +498,8 @@ func TestMCPTaskCreateBatchLeavesAnItemWithoutCriteriaAlone(t *testing.T) {
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{
-			map[string]interface{}{"title": "Measured", "acceptanceCriteria": "p99 under 200ms", "completionCriterion": "HUMAN_SIGNOFF"},
-			map[string]interface{}{"title": "Just do it", "completionCriterion": "HUMAN_SIGNOFF"},
+			map[string]interface{}{"title": "Measured", "acceptanceCriteria": "p99 under 200ms", "completionCriterion": "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "Just do it", "completionCriterion": "EVIDENCE_JUDGMENT"},
 		},
 	})
 	if res["isError"] == true {
@@ -534,7 +534,7 @@ func TestMCPTaskCreateReportsOversizedAcceptanceCriteria(t *testing.T) {
 	res := mcp.callTool("task_create", map[string]interface{}{
 		"title":               "Ship it",
 		"acceptanceCriteria":  strings.Repeat("x", maxTaskAcceptanceCriteriaChars+1),
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] != true {
 		t.Fatalf("oversized criteria isError = %#v", res["isError"])
@@ -559,7 +559,7 @@ func TestTaskCLICreateReportsOversizedAcceptanceCriteria(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--acceptance-criteria-file", "-", "--json"},
+	err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--acceptance-criteria-file", "-", "--json"},
 		strings.NewReader(strings.Repeat("x", maxTaskAcceptanceCriteriaChars+1)), &out)
 	if err == nil {
 		t.Fatalf("an oversized criteria exited zero, output = %q", out.String())

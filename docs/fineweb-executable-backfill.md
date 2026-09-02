@@ -34,7 +34,7 @@ dump/shard so replay evaluates the same rows.
 
 `[校验]` is intentionally included. The only expected unclassified row in the production
 snapshot is the project root `_v+ project0`, which has neither a recognized prefix nor acceptance
-criteria and therefore remains `HUMAN_SIGNOFF` with no command.
+criteria and therefore remains `EVIDENCE_JUDGMENT` with no command.
 
 ## Preflight inventory and sample review
 
@@ -92,7 +92,7 @@ completion returns zero rows changed. Scope drift aborts instead of silently cla
 After the final batch, compare the saved before counts with both `pre_status_counts` and
 `post_status_counts`, then query the live tasks. `DONE` must be unchanged. Sample every class and
 compare the stored command to a fresh classifier result byte for byte. List every unclassified row
-and confirm it still has `HUMAN_SIGNOFF`, a null command, and a null expected exit code.
+and confirm it still has `EVIDENCE_JUDGMENT`, a null command, and a null expected exit code.
 
 Rollback is also one bounded transaction per call:
 

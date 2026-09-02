@@ -662,7 +662,7 @@ test('an evaluation-plan-only edit creates no owner work and does not rewrite th
     await pool.query(`
       INSERT INTO project_acceptance_criterion_definition (
         id, project_id, ordinal, text, verification_method, completion_criterion, content_hash
-      ) VALUES ($1::uuid,$2::uuid,1,$3,$4,'HUMAN_SIGNOFF'::task_completion_criterion,$5)
+      ) VALUES ($1::uuid,$2::uuid,1,$3,$4,'EVIDENCE_JUDGMENT'::task_completion_criterion,$5)
     `, [
       definitionId,
       project.projectId,

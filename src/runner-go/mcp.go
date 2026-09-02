@@ -279,6 +279,29 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_judge":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		requestID := strings.TrimSpace(getString(args, "requestId"))
+		if requestID == "" {
+			return toolResult("requestId is required: name the open EVIDENCE_JUDGMENT request", true)
+		}
+		digest := strings.ToLower(strings.TrimSpace(getString(args, "evidenceDigest")))
+		if !isSHA256Hex(digest) {
+			return toolResult("evidenceDigest must be the request's 64-character sha256 digest", true)
+		}
+		finding := getString(args, "evidence")
+		if strings.TrimSpace(finding) == "" {
+			return toolResult("evidence is required: state the finding this judgment rests on", true)
+		}
+		raw, err := s.t.judgeTask(s.sessionID, id, requestID, digest, finding)
+		if err != nil {
+			return toolResult("judge task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_get":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1298,7 +1321,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type": "string",
 		"enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "FAILED"},
 		"description": "Direct DONE is refused for every person, coordinator, and execution " +
-			"session; satisfy the task's declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF " +
+			"session; satisfy the task's declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT " +
 			"criterion instead. FAILED remains writable as a run's conservative self-report.",
 	}
 	providerProp := map[string]interface{}{
@@ -1452,10 +1475,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	}
 	projectCriterionKindProp := map[string]interface{}{
 		"type": "string",
-		"enum": []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
+		"enum": []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
 		"description": "Required peer criterion, using the same enum as Task. EXECUTABLE consumes " +
 			"the declared evidence Task's exact command exit code; VERIFICATION consumes an " +
-			"independent verifier Task verdict; HUMAN_SIGNOFF waits for a person. No fallback chain.",
+			"independent verifier Task verdict; EVIDENCE_JUDGMENT waits for a person. No fallback chain.",
 	}
 	projectCriterionProps := func(allowID bool) map[string]interface{} {
 		props := map[string]interface{}{
@@ -1503,8 +1526,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"criterionKey":       criterionKeyProp,
 			"completionCriterion": map[string]interface{}{
 				"type":        "string",
-				"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
-				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; HUMAN_SIGNOFF uses one human signoff. They are peer choices, not a fallback chain. Runner task creation always requires this explicit field; related command, policy, and verifier fields do not replace it.",
+				"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
+				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; EVIDENCE_JUDGMENT uses one decision on the task's own submitted evidence. They are peer choices, not a fallback chain. Runner task creation always requires this explicit field; related command, policy, and verifier fields do not replace it.",
 			},
 			"completionCriterionOverrideReason": criterionOverrideReasonProp,
 			"acceptanceCommand": map[string]interface{}{
@@ -1658,6 +1681,38 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "evidence"),
 		},
 		{
+			"name": "task_judge",
+			"description": "Decide the task's one OPEN EVIDENCE_JUDGMENT request against the exact " +
+				"evidence revision it is bound to. `requestId` and `evidenceDigest` must name that " +
+				"current request and its digest; a superseded evidence version is refused rather " +
+				"than silently redirected. `evidence` is the finding the decision rests on and may " +
+				"not be blank — it is the whole audit for this conclusion, so state what you " +
+				"checked and what it showed rather than that you approve. The same transaction " +
+				"derives task.status = DONE, closes the request and clears its derived signal and " +
+				"blocker; it writes no comment and sends no notification. This settles only a task " +
+				"whose declared completionCriterion is EVIDENCE_JUDGMENT: EXECUTABLE is settled by " +
+				"its command's exit code and VERIFICATION by an independent verifier's verdict.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"requestId": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"description": "The task's current OPEN EVIDENCE_JUDGMENT judgment request id.",
+				},
+				"evidenceDigest": map[string]interface{}{
+					"type":        "string",
+					"minLength":   64,
+					"maxLength":   64,
+					"description": "The 64-character sha256 digest that request is bound to.",
+				},
+				"evidence": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"description": "The finding this judgment rests on. Non-blank; recorded verbatim.",
+				},
+			}, "requestId", "evidenceDigest", "evidence"),
+		},
+		{
 			"name":        "task_attribution",
 			"description": "Read one task's attribution boundary — five answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id, status and acceptance epoch; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `acceptance`: the project's stated criteria that CITE this task, each with the verdict it reached, the epoch it was reached in, and whether that is still current — an old PASS stays readable and stops counting once the project is reopened. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"no criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
@@ -1800,12 +1855,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "project_acceptance_verdict",
-			"description": "Append evidence-backed conclusion events for the HUMAN_SIGNOFF criteria " +
+			"description": "Append evidence-backed conclusion events for the EVIDENCE_JUDGMENT criteria " +
 				"in a project acceptance version. EXECUTABLE and VERIFICATION are evaluated only from " +
 				"their declared durable inputs and reject a fallback human verdict. Address each human " +
 				"criterion by criterionId (its stable structured identity), " +
 				"ordinal (its position in the snapshot), or criterionKey (legacy content identity). " +
-				"Every HUMAN_SIGNOFF criterion must be answered: a missing one is " +
+				"Every EVIDENCE_JUDGMENT criterion must be answered: a missing one is " +
 				"refused, because a project-level PASS is the conjunction of them and one nobody " +
 				"checked is not a pass. The current verdict is DERIVED and cannot be " +
 				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
@@ -1826,7 +1881,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"criteria": map[string]interface{}{
 					"type": "array",
-					"description": "One entry per HUMAN_SIGNOFF criterion: {criterionId, ordinal or criterionKey, " +
+					"description": "One entry per EVIDENCE_JUDGMENT criterion: {criterionId, ordinal or criterionKey, " +
 						"verdict: PASS|FAIL|INCONCLUSIVE, summary, evidence, evidenceTaskId, " +
 						"evidenceSessionId}.",
 					"items": map[string]interface{}{"type": "object"},
@@ -1903,7 +1958,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"one from this same conversation is refused, and nothing is created. Existing " +
 				"legacy acceptanceCriteria text remains readable through project_get and writable " +
 				"through the old user/JWT API compatibility path. It is not an agent fallback: this " +
-				"runner tool refuses it because it would silently create HUMAN_SIGNOFF; every new " +
+				"runner tool refuses it because it would silently create EVIDENCE_JUDGMENT; every new " +
 				"item must declare its completionCriterion explicitly.",
 			"inputSchema": obj(map[string]interface{}{
 				"title": map[string]interface{}{
@@ -1933,7 +1988,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"Existing legacy acceptanceCriteria text remains readable through project_get and " +
 				"writable through the old user/JWT API compatibility path. It is not an agent " +
 				"fallback: this runner tool refuses it because it would silently create " +
-				"HUMAN_SIGNOFF; use acceptanceCriteriaItems with an explicit completionCriterion " +
+				"EVIDENCE_JUDGMENT; use acceptanceCriteriaItems with an explicit completionCriterion " +
 				"on every item, and [] to clear the set. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
@@ -2023,14 +2078,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; HUMAN_SIGNOFF is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
+			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
 			"inputSchema": func() map[string]interface{} {
 				return obj(taskCreateProps(), "title", "completionCriterion")
 			}(),
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Every item declares completionCriterion explicitly; HUMAN_SIGNOFF is available but never inferred from omission, and a verifier relation (including verifiesRef), executable pair, or completion policy does not replace that declaration. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, parentRef is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred from omission, and a verifier relation (including verifiesRef), executable pair, or completion policy does not replace that declaration. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, parentRef is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":     "array",
@@ -2049,7 +2104,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, or HUMAN_SIGNOFF path. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
@@ -2064,8 +2119,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"acceptanceCriteria": updateAcceptanceCriteriaProp,
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"},
-					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and HUMAN_SIGNOFF are peers, not an escalation order.",
+					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
+					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and EVIDENCE_JUDGMENT are peers, not an escalation order.",
 				},
 				"acceptanceCommand": map[string]interface{}{
 					"type":        []string{"string", "null"},

@@ -168,7 +168,7 @@ test('createProject refuses legacy acceptanceCriteria before either runner creat
         const message = error.message;
         assert.match(message, /acceptanceCriteriaItems/);
         assert.match(message, /completionCriterion/);
-        assert.match(message, /HUMAN_SIGNOFF/);
+        assert.match(message, /EVIDENCE_JUDGMENT/);
         return true;
       },
     );
@@ -450,7 +450,7 @@ test('updateProject refuses legacy acceptanceCriteria replacement and clear befo
         assert.ok(error instanceof BadRequestException);
         assert.match(error.message, /acceptanceCriteriaItems/);
         assert.match(error.message, /completionCriterion/);
-        assert.match(error.message, acceptanceCriteria === null ? /send \[\] to clear/i : /HUMAN_SIGNOFF/);
+        assert.match(error.message, acceptanceCriteria === null ? /send \[\] to clear/i : /EVIDENCE_JUDGMENT/);
         return true;
       },
     );

@@ -1203,15 +1203,15 @@ func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.Raw
 	return out, err
 }
 
-// signoffTask carries the acting session for the opposite reason to an ordinary attributed write:
-// the absence of a session is the runner owner's human door, while any agent session must be
-// refused rather than allowed to impersonate that person in a HUMAN_SIGNOFF event.
-func (t *Transport) signoffTask(sessionID, id, requestID, evidenceDigest, evidence string) (json.RawMessage, error) {
+// judgeTask carries the acting session because that session is what the decision is ATTRIBUTED to.
+// Before migration 0224 the header existed so the server could refuse an agent; it no longer
+// refuses one, and a headless invocation without a session is attributed to the runner owner.
+func (t *Transport) judgeTask(sessionID, id, requestID, evidenceDigest, evidence string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/signoff",
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/judgment",
 		map[string]string{
 			"requestId":      requestID,
 			"evidenceDigest": evidenceDigest,

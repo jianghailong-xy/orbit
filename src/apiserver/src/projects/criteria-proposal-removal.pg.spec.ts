@@ -109,7 +109,7 @@ function criterion(text: string) {
   return {
     text,
     verificationMethod: 'A person reads the delivered work against this assertion.',
-    completionCriterion: TaskCompletionCriterion.HUMAN_SIGNOFF,
+    completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
   };
 }
 

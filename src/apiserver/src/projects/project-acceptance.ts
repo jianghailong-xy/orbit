@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto';
  * Open blockers are deliberately outside the digest and are checked explicitly by the gate: they
  * mean "known unfinished fact", not "there are tasks left".
  *
- * Version 5: every criterion freezes the shared EXECUTABLE / VERIFICATION / HUMAN_SIGNOFF
+ * Version 5: every criterion freezes the shared EXECUTABLE / VERIFICATION / EVIDENCE_JUDGMENT
  * declaration. The criteria revision is the unordered set of stable definition id, monotone
  * revision, and semantic content hash, so an edit — including edit-then-revert — cannot continue
  * using a confirmation issued for the former standard set.
@@ -52,7 +52,7 @@ export type AcceptanceRefusalCode =
   | typeof ACCEPTANCE_MISSING
   | typeof ACCEPTANCE_BLOCKED;
 
-export type ProjectCriterionKind = 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+export type ProjectCriterionKind = 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
 
 /** The acceptance projections, already sorted and stringified. Tuples rather than objects because
  * a tuple has no key order to disagree about between two writers of this file. */
@@ -224,7 +224,7 @@ export function criteriaFromDefinitions(
           typeof definition.verificationMethod === 'string' && definition.verificationMethod.trim()
             ? definition.verificationMethod.trim()
             : null,
-        completionCriterion: definition.completionCriterion ?? 'HUMAN_SIGNOFF',
+        completionCriterion: definition.completionCriterion ?? 'EVIDENCE_JUDGMENT',
         acceptanceCommand: definition.acceptanceCommand?.trim() || null,
         acceptanceExpectedExitCode: definition.acceptanceExpectedExitCode ?? null,
         evidenceTaskId: definition.evidenceTaskId ?? null,
@@ -246,7 +246,7 @@ export function criteriaFromLegacy(
       definitionId: null,
       definitionRevision: null,
       verificationMethod: null,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCommand: null,
       acceptanceExpectedExitCode: null,
       evidenceTaskId: null,

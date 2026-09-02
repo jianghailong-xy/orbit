@@ -14,12 +14,12 @@ import {
 import { TasksService } from './tasks.service';
 
 // Verbatim task acceptance text filed in project 34Dn1kFVW8tKOQKcEfpDW on 2026-08-27. These are
-// evidence, not synthetic keyword examples: N18/N20 are the two mistaken HUMAN_SIGNOFF choices;
+// evidence, not synthetic keyword examples: N18/N20 are the two mistaken EVIDENCE_JUDGMENT choices;
 // N17/N19/N21 are the legitimate exceptions this heuristic must never make impossible.
 const TONIGHT = {
   N17: `1. pg spec：一个 \`EXECUTABLE\` 任务在执行会话完成工作回合后，验收命令**确实被执行**，命令、原始输出与实际退出码落库。
 2. pg spec：退出码等于期望值 → status 派生为 DONE；不等 → 派生为 FAILED（两条断言），全程无人写 status。
-3. pg spec（补上今天缺的那条）：L0 因任何原因无法执行时，**必须产生一个需要人的信号**，不得静默停在 OPEN——与 T11 给 HUMAN_SIGNOFF 补的出口同构。
+3. pg spec（补上今天缺的那条）：L0 因任何原因无法执行时，**必须产生一个需要人的信号**，不得静默停在 OPEN——与 T11 给 EVIDENCE_JUDGMENT 补的出口同构。
 4. 端到端复现今天的实测场景：重建一个 \`acceptanceCommand='true'\` 的任务并真跑一遍，贴出任务最终状态与落库的命令/输出/退出码原始记录。
 5. 派发 prompt 里那句「系统会自动运行 L0 验收命令」要么被实现兑现、要么改成与实现一致的措辞；spec 断言 prompt 文案与实际行为一致。
 6. apiserver 与 runner 全量测试相对各自开工基线不新增失败。`,
@@ -33,12 +33,12 @@ const TONIGHT = {
 2. 分类与命令模板成文，含每类的样本数与推导依据；3–5 个样本先人工核对通过再放量，贴出样本核对记录。
 3. 回填后按类抽样验证：抽样任务的 \`completionCriterion=EXECUTABLE\` 且 \`acceptanceCommand\` 与其验收标准文字一致；贴出抽样 SQL 与原始输出。
 4. **无任何任务被迁移写成 DONE**：贴出迁移前后各状态计数对比，DONE 数不变。
-5. 无法归类的任务清单及其原因已列出，且仍为 HUMAN_SIGNOFF。
+5. 无法归类的任务清单及其原因已列出，且仍为 EVIDENCE_JUDGMENT。
 6. 迁移单独一条迁移、分批执行，给出行数、批次与耗时；提供回滚方式。
 7. apiserver 全量测试相对开工基线不新增失败。`,
   N20: `1. 账号所有者能在 web 上完成一次完整的项目验收：逐条给出 verdict 并提交，\`POST /projects/:id/acceptance/runs/:runId/verdict\` 被真实调用；贴出网络请求与响应。
 2. 界面逐条展示断言文本、verificationMethod、当前 verdict 与支持它的证据引用（至少 evidenceTaskId / evidenceSessionId）。
-3. 服务端边界未被前端放宽：判断会话（dispatch_origin = judgment）进入该界面时提交 PASS 仍得 \`VERDICT_PASS_HUMAN_ONLY\`；spec 断言。
+3. 服务端边界未被前端放宽：判断会话（dispatch_origin = judgment）进入该界面时提交 PASS 仍得服务端裁决；spec 断言。
 4. 未答满全部 criteria 的提交被拒（服务端本就要求，前端要把这条表达清楚而不是静默丢弃）。
 5. 用真实数据走通一次：项目 34Cn4EO8NtCTVK3gZ8Cr7 的 run \`34ELDxu5yGxFQJgNvTEmy\` 可在 UI 上被判（若该 run 届时已被处理，另开一个等价 run 演示）。
 6. \`npm test -w @orbit/web\` 与 apiserver 全量相对各自开工基线不新增失败。`,
@@ -54,7 +54,7 @@ const TONIGHT = {
 test('a shape mismatch is an advisory question with a suggested criterion and reason', () => {
   const advice = taskCriterionShapeAdvice({
     acceptanceCriteria: '目标 spec 通过，且全量测试不新增失败。',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   });
   assert.ok(advice);
   assert.deepEqual(
@@ -68,11 +68,11 @@ test('a shape mismatch is an advisory question with a suggested criterion and re
   assert.equal(body.requiredAction, 'USE_SUGGESTED_CRITERION_OR_EXPLAIN_OVERRIDE');
 });
 
-test('tonight N18 and N20 HUMAN_SIGNOFF choices are questioned as executable-shaped', () => {
+test('tonight N18 and N20 EVIDENCE_JUDGMENT choices are questioned as executable-shaped', () => {
   for (const name of ['N18', 'N20'] as const) {
     const advice = taskCriterionShapeAdvice({
       acceptanceCriteria: TONIGHT[name],
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     });
     assert.ok(advice, `${name} should be questioned`);
     assert.equal(advice.suggestedCriterion, 'EXECUTABLE', name);
@@ -128,14 +128,14 @@ function serviceFixture() {
   return { service, rows };
 }
 
-test('N17, N19 and N21 may keep HUMAN_SIGNOFF with an override reason that is stored and read', async () => {
+test('N17, N19 and N21 may keep EVIDENCE_JUDGMENT with an override reason that is stored and read', async () => {
   const fixture = serviceFixture();
   for (const name of ['N17', 'N19', 'N21'] as const) {
-    const reason = `${name}: HUMAN_SIGNOFF is deliberate for this task's trust/authority boundary.`;
+    const reason = `${name}: EVIDENCE_JUDGMENT is deliberate for this task's trust/authority boundary.`;
     const created = await fixture.service.create('owner', {
       title: name,
       acceptanceCriteria: TONIGHT[name],
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       completionCriterionOverrideReason: `  ${reason}  `,
     });
     const read = await fixture.service.get('owner', created.id);
@@ -160,7 +160,7 @@ test('a questioned override without a non-blank reason creates nothing', async (
       fixture.service.create('owner', {
         title: 'N18 again',
         acceptanceCriteria: TONIGHT.N18,
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         completionCriterionOverrideReason,
       }),
       (error: unknown) => {
@@ -185,7 +185,7 @@ test('N18 declaration consistency is a hard refusal and cannot be swallowed by s
     await fixture.service.create('owner', {
       title: 'impossible declaration',
       acceptanceCriteria: TONIGHT.N18,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCommand: 'npm test',
       acceptanceExpectedExitCode: 0,
     });
@@ -197,7 +197,7 @@ test('N18 declaration consistency is a hard refusal and cannot be swallowed by s
     await fixture.service.create('owner', {
       title: 'plausible exception',
       acceptanceCriteria: TONIGHT.N18,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     });
   } catch (error) {
     assert.ok(error instanceof ConflictException);
@@ -218,27 +218,37 @@ test('the keyword table is readable, injectable, and unknown or mixed wording st
     [
       ['EXECUTABLE', ['spec 通过', '测试全绿', '退出码', '命令', '不新增失败', 'typecheck']],
       ['VERIFICATION', ['改对了吗', '符合意图', '是否覆盖', '是否合理', '独立复核']],
-      ['HUMAN_SIGNOFF', ['取舍', '值不值', '授权', '不可逆', '发布', '删除']],
     ],
+    'migration 0224 deleted the EVIDENCE_JUDGMENT row: its keywords meant "stop and ask a person", '
+    + 'and there is no longer a person to stop for',
+  );
+  // The proof that the row is gone rather than merely renamed: its most distinctive keyword now
+  // matches nothing at all, so the table cannot advise anybody towards EVIDENCE_JUDGMENT.
+  assert.equal(taskCriterionShapeAdvice({
+    acceptanceCriteria: '这一步是不可逆的，需要授权。',
+    completionCriterion: 'EXECUTABLE',
+  }), null);
+  assert.equal(
+    TASK_CRITERION_SHAPE_RULES.filter((rule) => rule.criterion === 'EVIDENCE_JUDGMENT').length,
+    0,
   );
   const amended: TaskCriterionShapeRule[] = TASK_CRITERION_SHAPE_RULES.map((rule) => ({
     ...rule,
     keywords: rule.criterion === 'EXECUTABLE'
       ? [...rule.keywords, 'artifact attests cleanly']
       : [...rule.keywords],
-    patterns: rule.patterns?.map((pattern) => ({ ...pattern })),
   }));
   assert.equal(taskCriterionShapeAdvice({
     acceptanceCriteria: 'The artifact attests cleanly.',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   }), null, 'unknown wording must not be questioned by the default table');
   assert.equal(taskCriterionShapeAdvice({
     acceptanceCriteria: 'The artifact attests cleanly.',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   }, amended)?.suggestedCriterion, 'EXECUTABLE', 'an explicit table edit changes the advice');
   assert.equal(taskCriterionShapeAdvice({
-    acceptanceCriteria: 'spec 通过后仍须授权发布。',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    acceptanceCriteria: '这次改对了吗，spec 通过了吗',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   }), null, 'mixed shapes are deliberately left for the caller');
 });
 

@@ -65,16 +65,22 @@ test('the route and payload cannot name different judgment requests', async () =
     (error: unknown) => {
       assert.ok(error instanceof ConflictException);
       assert.equal((error.getResponse() as Record<string, unknown>).code,
-        'HUMAN_SIGNOFF_REQUEST_ROUTE_MISMATCH');
+        'EVIDENCE_JUDGMENT_REQUEST_ROUTE_MISMATCH');
       return true;
     },
   );
 });
 
-test('runner/coordinator REST has no judgment-decision route', () => {
+// Before migration 0224 this asserted the opposite: the runner door had no way to decide, because
+// deciding was a person's job. It now has exactly one, and still has no second one — a judgment is
+// decided on the task it belongs to, never through a generic "decision" endpoint.
+test('runner/coordinator REST has exactly one judgment-decision route', () => {
   const proto = RunnerTasksController.prototype as unknown as Record<string, unknown>;
   const paths = Object.getOwnPropertyNames(proto)
     .map((name) => Reflect.getMetadata(PATH_METADATA, proto[name] as object))
     .filter((path): path is string => typeof path === 'string');
-  assert.equal(paths.some((path) => path.includes('judgment') || path.includes('decision')), false);
+  assert.deepEqual(
+    paths.filter((path) => path.includes('judgment') || path.includes('decision')),
+    ['tasks/:id/judgment'],
+  );
 });

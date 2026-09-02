@@ -40,7 +40,7 @@ func TestTaskCLICreateSendsProjectID(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--project-id", "proj-1", "--json"},
+	err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--project-id", "proj-1", "--json"},
 		strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestTaskCLICreateCombinesProjectIDWithTheOtherFields(t *testing.T) {
 	err := cmdTaskCLI([]string{
 		"create",
 		"--title", "Ship it",
-		"--completion-criterion", "HUMAN_SIGNOFF",
+		"--completion-criterion", "EVIDENCE_JUDGMENT",
 		"--description", "Do the thing",
 		"--project-id", "proj-1",
 		"--list-id", "list-1",
@@ -106,7 +106,7 @@ func TestTaskCLICreateOmitsProjectIDWhenNotAsked(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "HUMAN_SIGNOFF", "--json"}, strings.NewReader(""), &out); err != nil {
+	if err := cmdTaskCLI([]string{"create", "--title", "Ship it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--json"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
 
@@ -192,7 +192,7 @@ func TestMCPTaskCreateSendsTheProjectIDToTheServer(t *testing.T) {
 		"title":               "Ship it",
 		"projectId":           "proj-1",
 		"listId":              "list-1",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] == true {
 		t.Fatalf("task_create returned an error: %#v", res["content"])
@@ -228,8 +228,8 @@ func TestMCPTaskCreateBatchSendsEveryItemsProjectID(t *testing.T) {
 	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("task_create_batch", map[string]interface{}{
 		"tasks": []interface{}{
-			map[string]interface{}{"title": "first", "projectId": "proj-1", "ref": "s0", "completionCriterion": "HUMAN_SIGNOFF"},
-			map[string]interface{}{"title": "second", "projectId": "proj-1", "dependsOnRefs": []interface{}{"s0"}, "completionCriterion": "HUMAN_SIGNOFF"},
+			map[string]interface{}{"title": "first", "projectId": "proj-1", "ref": "s0", "completionCriterion": "EVIDENCE_JUDGMENT"},
+			map[string]interface{}{"title": "second", "projectId": "proj-1", "dependsOnRefs": []interface{}{"s0"}, "completionCriterion": "EVIDENCE_JUDGMENT"},
 		},
 	})
 	if res["isError"] == true {
@@ -273,7 +273,7 @@ func TestMCPTaskCreateReportsARejectedProjectID(t *testing.T) {
 	res := mcp.callTool("task_create", map[string]interface{}{
 		"title":               "Ship it",
 		"projectId":           "proj-nobody-owns",
-		"completionCriterion": "HUMAN_SIGNOFF",
+		"completionCriterion": "EVIDENCE_JUDGMENT",
 	})
 	if res["isError"] != true {
 		t.Fatalf("a rejected project isError = %#v", res["isError"])

@@ -38,7 +38,7 @@ const request: JudgmentReview['request'] = {
   evidenceId: EVIDENCE,
   criterionRevision: 'c'.repeat(64),
   evidenceDigest: DIGEST,
-  kind: 'HUMAN_SIGNOFF',
+  kind: 'EVIDENCE_JUDGMENT',
   recipientType: 'ACCOUNT_OWNER',
   recipientId: ACTOR,
   status: 'OPEN',
@@ -50,7 +50,6 @@ const request: JudgmentReview['request'] = {
   decisionNote: null,
   supersededAt: null,
   supersededById: null,
-  signoff: null,
 };
 
 const structuredEvidence = {
@@ -120,17 +119,17 @@ const baseReview: JudgmentReview = {
   task: {
     id: TASK,
     title: '把人工审批页改为判据驱动界面',
-    objective: 'A person can complete the normal HUMAN_SIGNOFF criterion without searching.',
+    objective: 'A person can complete the normal EVIDENCE_JUDGMENT criterion without searching.',
     status: 'OPEN',
     projectId: PROJECT,
     projectTitle: 'N15 review',
     acceptanceCriteria: '1. prose must not be parsed\n2. this stays raw context',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   },
   criterion: {
     schemaVersion: 1,
     marker: CRITERION_RAW_MARKER,
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCriteria: 'The server criterion snapshot remains an indivisible JSON fact.',
   },
   evidence: {
@@ -162,7 +161,7 @@ const baseReview: JudgmentReview = {
       requestStatus: 'OPEN',
       evidenceIsCurrent: true,
     },
-    task: { id: TASK, resultingStatus: 'DONE', basis: 'HUMAN_SIGNOFF' },
+    task: { id: TASK, resultingStatus: 'DONE', basis: 'EVIDENCE_JUDGMENT' },
     request: { id: REQUEST, resultingStatus: 'DECIDED', decision: 'PASS' },
     signal: { resultingOpen: false },
     blocker: { resultingOpen: false },
@@ -175,7 +174,7 @@ const baseReview: JudgmentReview = {
     actorType: 'AGENT',
     actorId: ACTOR,
     actorName: 'N15 implementer',
-    criterion: { completionCriterion: 'HUMAN_SIGNOFF', marker: CRITERION_RAW_MARKER },
+    criterion: { completionCriterion: 'EVIDENCE_JUDGMENT', marker: CRITERION_RAW_MARKER },
     structured: structuredEvidence,
     commit: structuredEvidence.commit,
     testSummary: { marker: TEST_SUMMARY_MARKER, exitCode: 0 },
@@ -207,13 +206,6 @@ function approvedReview(): JudgmentReview {
     decidedById: ACTOR,
     decision: 'PASS',
     decisionNote: 'Reviewed the exact revision and both viewport results.',
-    signoff: {
-      id: encodeId('019fcda0-d021-72a2-a914-2f4de38f4811'),
-      signedById: ACTOR,
-      signedByName: 'Human owner',
-      signedAt: '2026-08-26T08:10:00.000Z',
-      evidence: 'Reviewed the exact revision and both viewport results.',
-    },
   };
   return {
     ...baseReview,
@@ -428,7 +420,7 @@ describe('criterion-driven human evidence review', { timeout: 8_000 }, () => {
 
     expect(page.textContent).toContain('审阅完成证据');
     expect(page.textContent).toContain(baseReview.task.title);
-    expect(page.textContent).toContain('人工签字（HUMAN_SIGNOFF）');
+    expect(page.textContent).toContain('人工签字（EVIDENCE_JUDGMENT）');
     expect(page.textContent).toContain('当前版本 · 待审批');
     expect(page.textContent).toContain('证据 r3');
     expect(page.textContent).toContain('current r3');

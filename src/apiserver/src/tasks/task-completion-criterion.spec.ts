@@ -16,10 +16,10 @@ const ACTIVE_VERIFIER_RETIREMENT = {
   nextSupersededByTaskId: null,
 };
 
-test('undeclared completion is the ordinary HUMAN_SIGNOFF criterion', () => {
-  assert.equal(resolveTaskCompletionCriterion({}), 'HUMAN_SIGNOFF');
+test('undeclared completion is the ordinary EVIDENCE_JUDGMENT criterion', () => {
+  assert.equal(resolveTaskCompletionCriterion({}), 'EVIDENCE_JUDGMENT');
   assert.deepEqual(evaluateTaskCompletion({ completionCriterion: null }), {
-    criterion: 'HUMAN_SIGNOFF', state: 'UNSATISFIED', satisfied: false,
+    criterion: 'EVIDENCE_JUDGMENT', state: 'UNSATISFIED', satisfied: false,
   });
 });
 
@@ -36,9 +36,9 @@ test('each completion criterion evaluates both satisfied and unsatisfied facts',
       { completionCriterion: 'VERIFICATION' as const, verificationVerdict: 'INCONCLUSIVE' as const },
     ],
     [
-      'HUMAN_SIGNOFF',
-      { completionCriterion: 'HUMAN_SIGNOFF' as const, humanSignoff: true },
-      { completionCriterion: 'HUMAN_SIGNOFF' as const, humanSignoff: false },
+      'EVIDENCE_JUDGMENT',
+      { completionCriterion: 'EVIDENCE_JUDGMENT' as const, evidenceJudgment: true },
+      { completionCriterion: 'EVIDENCE_JUDGMENT' as const, evidenceJudgment: false },
     ],
   ] as const;
 
@@ -157,17 +157,17 @@ test('the verifier carrier projector derives DONE and removes it when its verdic
   }), 'DONE', 'clearing retirement reactivates the verdict-owned carrier lifecycle');
 });
 
-test('a satisfied HUMAN_SIGNOFF criterion evaluates task status to DONE', () => {
+test('a satisfied EVIDENCE_JUDGMENT criterion evaluates task status to DONE', () => {
   assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'HUMAN_SIGNOFF',
-    humanSignoff: true,
+    completionCriterion: 'EVIDENCE_JUDGMENT',
+    evidenceJudgment: true,
   }), 'DONE');
 });
 
 test('an unsatisfied criterion cannot manufacture an optimistic status', () => {
   assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'HUMAN_SIGNOFF',
-    humanSignoff: false,
+    completionCriterion: 'EVIDENCE_JUDGMENT',
+    evidenceJudgment: false,
   }), null);
 });
 
@@ -183,9 +183,12 @@ test('every direct-DONE refusal points at the declared criterion remedy', () => 
     /independent verification task with verdict PASS/,
   );
   assert.match(
-    taskCompletionRequiredAction('HUMAN_SIGNOFF').instruction,
-    /current HUMAN_SIGNOFF judgment request.*requestId.*evidenceDigest/,
+    taskCompletionRequiredAction('EVIDENCE_JUDGMENT').instruction,
+    /current EVIDENCE_JUDGMENT request[\s\S]*requestId and evidenceDigest/,
   );
+  // The remedy names a door anybody credentialed can reach, not a person to go and find.
+  assert.equal(taskCompletionRequiredAction('EVIDENCE_JUDGMENT').requiredAction,
+    'DECIDE_THE_OPEN_EVIDENCE_JUDGMENT');
 });
 
 test('the three peer declarations require only their own evidence shape', () => {
@@ -204,7 +207,7 @@ test('the three peer declarations require only their own evidence shape', () => 
     verifiesTaskId: 'subject',
   }), null);
   assert.equal(taskCompletionDeclarationError({
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
   }), null);
 
   assert.match(taskCompletionDeclarationError({ completionCriterion: 'EXECUTABLE' })!, /requires/);
@@ -212,10 +215,10 @@ test('the three peer declarations require only their own evidence shape', () => 
     completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL',
   })!, /VERIFICATION_PASSED/);
   assert.match(taskCompletionDeclarationError({
-    completionCriterion: 'HUMAN_SIGNOFF', verifiesTaskId: 'subject',
+    completionCriterion: 'EVIDENCE_JUDGMENT', verifiesTaskId: 'subject',
   })!, /must use VERIFICATION/);
   assert.match(taskCompletionDeclarationError({
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
   })!, /cannot also/);
 });

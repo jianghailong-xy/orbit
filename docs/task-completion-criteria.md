@@ -7,7 +7,9 @@ priority order or an escalation chain:
   `acceptanceExpectedExitCode`.
 - `VERIFICATION` is satisfied only by `PASS` from an independent verification task. The subject
   uses `completionPolicy: VERIFICATION_PASSED`; the verifier points to it with `verifiesTaskId`.
-- `HUMAN_SIGNOFF` is satisfied by one human signoff. It is also the compatibility value for a task
+- `EVIDENCE_JUDGMENT` is satisfied by one decision on the task's own submitted evidence, made by any
+  credentialed principal and bound to the exact evidence version it names. It is also the
+  compatibility value for a task
   that predates the field or whose legacy user/JWT creator omitted it. It does not mean another
   criterion failed.
 
@@ -29,7 +31,7 @@ not a validator and not NLP:
 - correctness, intent, coverage, reasonableness, or independent-review wording tends toward
   `VERIFICATION`;
 - authorization, irreversibility, release/deletion, or value-tradeoff wording tends toward
-  `HUMAN_SIGNOFF`.
+  `EVIDENCE_JUDGMENT`.
 
 Only one unambiguous category produces a question. Unknown wording and wording that matches more
 than one category produce no advice. When the suggested criterion differs from the declaration,
@@ -50,19 +52,21 @@ criterion and a criterion-specific `requiredAction`:
 
 - finish the run so Orbit records and compares the `EXECUTABLE` exit code;
 - record an independent verification `PASS` for `VERIFICATION`; or
-- have a person use `orbit task signoff … --evidence …` (or `POST /tasks/:id/signoff`) for
-  `HUMAN_SIGNOFF`.
+- decide the open judgment request with `orbit task judge … --evidence …`, the `task_judge` MCP
+  tool, or `POST /tasks/:id/judgment` for `EVIDENCE_JUDGMENT`.
 
 The refusal deliberately remains at the task boundary rather than removing `DONE` from the generic
 status enum: that is how it can name the task's actual route instead of saying only “not allowed.”
 `FAILED` is unchanged. An execution session may still write it as a conservative self-report; it
 does not release downstream work.
 
-`HUMAN_SIGNOFF` is a durable event with a non-null signer, server timestamp, and non-blank evidence.
+`EVIDENCE_JUDGMENT` is a durable event with a non-null deciding principal, server timestamp, and a
+non-blank finding, carried on the judgment request row itself (migration 0224 removed the separate
+`task_human_signoff` table and folded its prose into `decision_note`).
 Creating that event, resolving the corresponding open `HUMAN_DECISION_REQUIRED` blocker, and
 deriving task status `DONE` are one PostgreSQL transaction. Thus the blocker/signal is not cleaned
 up later: it is the open view of the criterion being unsatisfied and ceases to be open at the same
-commit that satisfies it. Retries return the original event rather than changing who/when/evidence.
+commit that satisfies it. Retries return the original decision rather than changing who/when/finding.
 
 ## `EXECUTABLE` environment contract
 

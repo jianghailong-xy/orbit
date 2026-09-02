@@ -78,7 +78,7 @@ async function fixture(db: PrismaClient, suffix = 'one') {
       creatorId: ownerId,
       assigneeId: workspaceId,
       status: TaskStatus.IN_PROGRESS,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCriteria: 'A person reviews the evidence and signs off.',
     },
   });
@@ -194,7 +194,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
         actorId: f.ownerId,
         sourceSessionId: f.sessionId,
         criterionRevision: results[0].criterionRevision,
-        criterion: { completionCriterion: 'HUMAN_SIGNOFF' },
+        criterion: { completionCriterion: 'EVIDENCE_JUDGMENT' },
         evidence: { rollback: true },
         evidenceDigest: rollbackDigest,
         revision: 2n,
@@ -209,7 +209,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
           evidenceId: rollbackEvidenceId,
           criterionRevision: results[0].criterionRevision,
           evidenceDigest: rollbackDigest,
-          kind: 'HUMAN_SIGNOFF',
+          kind: 'EVIDENCE_JUDGMENT',
           recipientType: 'ACCOUNT_OWNER',
           recipientId: f.ownerId,
         },
@@ -242,7 +242,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
         actorId: f.ownerId,
         sourceSessionId: f.sessionId,
         criterionRevision: results[0].criterionRevision,
-        criterion: { completionCriterion: 'HUMAN_SIGNOFF' },
+        criterion: { completionCriterion: 'EVIDENCE_JUDGMENT' },
         evidence: { blankRecipient: true },
         evidenceDigest: blankDigest,
         revision: 3n,
@@ -256,7 +256,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
         evidenceId: blankEvidenceId,
         criterionRevision: results[0].criterionRevision,
         evidenceDigest: blankDigest,
-        kind: 'HUMAN_SIGNOFF',
+        kind: 'EVIDENCE_JUDGMENT',
         recipientType: 'ACCOUNT_OWNER',
         recipientId: ' ',
       },
@@ -335,7 +335,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     assert.equal(repaired.deliveredDevices, 1);
     assert.ok(repaired.deliveredAt);
     assert.equal(repaired.requestId, requestId);
-    assert.match(JSON.stringify(repaired.lastPayload), /human-signoff-required/);
+    assert.match(JSON.stringify(repaired.lastPayload), /evidence-judgment-open/);
 
     // A separate request that repeatedly reaches APNs but is never accepted exhausts into a DEAD
     // receipt. The human responsibility and its primary inbox delivery remain independent facts.
@@ -453,15 +453,6 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
     assert.ok(delivered.deliveredAt);
 
     await db.$transaction(async (tx) => {
-      await tx.taskHumanSignoff.create({
-        data: {
-          taskId: f.taskId,
-          requestId: secondRequestId,
-          signedById: f.ownerId,
-          evidenceDigest: secondEvidence.evidenceDigest,
-          evidence: 'Reviewed the exact evidence digest and signed this request.',
-        },
-      });
       await tx.taskJudgmentRequest.update({
         where: { id: secondRequestId },
         data: {
@@ -470,6 +461,7 @@ suite('N12 reliable human judgment delivery', { timeout: 180_000 }, async (t) =>
           decidedByType: 'USER',
           decidedById: f.ownerId,
           decision: 'PASS',
+          decisionNote: 'Reviewed the exact evidence digest bound to this request.',
         },
       });
     });

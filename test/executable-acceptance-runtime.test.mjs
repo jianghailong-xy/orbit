@@ -856,7 +856,7 @@ test('legacy bootstrap import preserves UNTYPED/-1 and appends only an evidence 
 async function dependencyChain(label, withProject) {
   const base = await foundation(label, withProject);
   const service = tasks();
-  const common = { completionCriterion: 'HUMAN_SIGNOFF', ...(withProject ? { projectId: base.projectId } : {}) };
+  const common = { completionCriterion: 'EVIDENCE_JUDGMENT', ...(withProject ? { projectId: base.projectId } : {}) };
   const old = await service.create(base.ownerId, { title: `${label}-W`, ...common });
   const successor = await service.create(base.ownerId, { title: `${label}-S`, ...common });
   await db.task.update({ where: { id: old.id }, data: { status: TaskStatus.FAILED } });
@@ -942,8 +942,8 @@ test('broken and cyclic supersession chains fail closed', async () => {
 
   const base = await foundation('cycle');
   const service = tasks();
-  const left = await service.create(base.ownerId, { title: 'cycle-left', completionCriterion: 'HUMAN_SIGNOFF' });
-  const right = await service.create(base.ownerId, { title: 'cycle-right', completionCriterion: 'HUMAN_SIGNOFF' });
+  const left = await service.create(base.ownerId, { title: 'cycle-left', completionCriterion: 'EVIDENCE_JUDGMENT' });
+  const right = await service.create(base.ownerId, { title: 'cycle-right', completionCriterion: 'EVIDENCE_JUDGMENT' });
   await db.task.updateMany({ where: { id: { in: [left.id, right.id] } }, data: { status: TaskStatus.FAILED } });
   const client = await pool.connect();
   try {

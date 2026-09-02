@@ -34,7 +34,7 @@ type Row = {
   id: string;
   title: string;
   completionPolicy: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'VERIFICATION_PASSED';
-  completionCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  completionCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
   verifiesTaskId: string | null;
   children: Array<{ id: string }>;
   isForeman?: boolean;
@@ -57,7 +57,7 @@ function row(overrides: Partial<Row> & Pick<Row, 'id'>): Record<string, unknown>
     supersededByTaskId: null,
     terminalReason: null,
     completionPolicy: 'MANUAL',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     children: [],
     verifies: null,
     list: null,

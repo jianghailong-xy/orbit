@@ -60,7 +60,7 @@ suite('an old direct status writer cannot complete a revision-1 task', { timeout
       creatorType: 'USER',
       creatorId: ownerId,
       title: 'canonical status writer only',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
     },
   });

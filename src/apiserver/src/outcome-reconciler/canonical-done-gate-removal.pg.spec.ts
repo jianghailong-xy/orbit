@@ -90,8 +90,8 @@ async function seedAcceptedProject(client: Client, label: string, run: {
     `INSERT INTO "project_acceptance_criterion_definition"
        ("id","project_id","ordinal","text","verification_method","completion_criterion",
         "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
-     VALUES ($1,$2,1,'The gate still decides','a human reads the gate',
-             'HUMAN_SIGNOFF'::"task_completion_criterion",$3,$4,$5,now(),now())`,
+     VALUES ($1,$2,1,'The gate still decides','a judgment reads the gate',
+             'EVIDENCE_JUDGMENT'::"task_completion_criterion",$3,$4,$5,now(),now())`,
     [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
   );
   // `project_acceptance_definition_digest` is the digest the 0172 trigger writes to

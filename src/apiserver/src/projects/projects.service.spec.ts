@@ -96,13 +96,13 @@ test('create stores explicit assertions and required methods with a legacy proje
       {
         text: '  the image boots  ',
         verificationMethod: ' Run the image smoke test ',
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         completionCriterionOverrideReason: 'A person judges the visible product behaviour',
       },
       {
         text: 'the full suite passes',
         verificationMethod: 'Run npm test; require exit code 0',
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         completionCriterionOverrideReason: 'This fixture exercises structured persistence',
       },
     ],
@@ -115,7 +115,7 @@ test('create stores explicit assertions and required methods with a legacy proje
       ordinal: 1,
       text: 'the image boots',
       verificationMethod: 'Run the image smoke test',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCommand: null,
       acceptanceExpectedExitCode: null,
       evidenceTaskId: null,
@@ -126,7 +126,7 @@ test('create stores explicit assertions and required methods with a legacy proje
       ordinal: 2,
       text: 'the full suite passes',
       verificationMethod: 'Run npm test; require exit code 0',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCommand: null,
       acceptanceExpectedExitCode: null,
       evidenceTaskId: null,
@@ -429,7 +429,7 @@ test('the detail item projects its current status from acceptance instead of sto
     ordinal: 1,
     text: 'the suite passes',
     verificationMethod: 'Run npm test and require exit code 0',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCommand: null,
     acceptanceExpectedExitCode: null,
     evidenceTaskId: null,
@@ -519,14 +519,14 @@ test('a structured update preserves ids and revisions across reorder, and increm
   const finalDefinitions = [
     {
       id: CRITERION_B_ID, ordinal: 1, text: 'Image boots', verificationMethod: 'Smoke the image',
-      completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+      completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCommand: null,
       acceptanceExpectedExitCode: null, evidenceTaskId: null,
       completionCriterionOverrideReason: 'A person judges the visible product behaviour',
       revision: 1, contentHash: 'b'.repeat(64),
     },
     {
       id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', verificationMethod: 'Run npm test',
-      completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+      completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCommand: null,
       acceptanceExpectedExitCode: null, evidenceTaskId: null,
       completionCriterionOverrideReason: 'This fixture exercises structured persistence',
       revision: 3, contentHash: 'a'.repeat(64),
@@ -558,14 +558,14 @@ test('a structured update preserves ids and revisions across reorder, and increm
       findMany: async () => [
         {
           id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'Run npm test',
-          completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+          completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCommand: null,
           acceptanceExpectedExitCode: null, evidenceTaskId: null,
           completionCriterionOverrideReason: 'This fixture exercises structured persistence',
           revision: 2,
         },
         {
           id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image',
-          completionCriterion: 'HUMAN_SIGNOFF', acceptanceCommand: null,
+          completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCommand: null,
           acceptanceExpectedExitCode: null, evidenceTaskId: null,
           completionCriterionOverrideReason: 'A person judges the visible product behaviour',
           revision: 1,
@@ -591,12 +591,12 @@ test('a structured update preserves ids and revisions across reorder, and increm
     acceptanceCriteriaItems: [
       {
         id: CRITERION_B_ID, text: 'Image boots', verificationMethod: 'Smoke the image',
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         completionCriterionOverrideReason: 'A person judges the visible product behaviour',
       },
       {
         id: CRITERION_A_ID, text: 'Build with docs', verificationMethod: 'Run npm test',
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         completionCriterionOverrideReason: 'This fixture exercises structured persistence',
       },
     ],
@@ -611,7 +611,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     ordinal: 1,
     text: 'Image boots',
     verificationMethod: 'Smoke the image',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCommand: null,
     acceptanceExpectedExitCode: null,
     evidenceTaskId: null,
@@ -623,7 +623,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     ordinal: 2,
     text: 'Build with docs',
     verificationMethod: 'Run npm test',
-    completionCriterion: 'HUMAN_SIGNOFF',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCommand: null,
     acceptanceExpectedExitCode: null,
     evidenceTaskId: null,
@@ -676,7 +676,7 @@ test('a structured update refuses an id from another project before moving any d
     () => serviceWith(prisma).update(OWNER_ID, PROJECT_ID, {
       acceptanceCriteriaItems: [{
         id: CRITERION_B_ID, text: 'Not ours', verificationMethod: 'Run npm test',
-        completionCriterion: 'HUMAN_SIGNOFF',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
       }],
     } as never),
     /does not belong to this project's current definitions/,

@@ -425,7 +425,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // must not be able to end a retry.
           const aggregateNow = current != null && current.startsTaskWork && taskStartOwnedByCompletion({
             completionPolicy: current.completionPolicy as TaskCompletionPolicyValue,
-            completionCriterion: current.completionCriterion as 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF',
+            completionCriterion: current.completionCriterion as 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT',
             verifiesTaskId: current.verifiesTaskId,
             hasDirectChildren: current.hasDirectChildren,
           });

@@ -14,9 +14,11 @@ const SCHEMA = 'verifier_role_migration';
 const ENUM_MIGRATION = readFileSync(path.resolve(
   __dirname, '../../prisma/migrations/0191_verifier_role_supersession_rule/migration.sql',
 ), 'utf8');
+// 0192 predates migration 0224's rename of the HUMAN_SIGNOFF enum LABEL. Replaying it against a
+// synthetic schema that declares today's spelling substitutes the label and nothing else.
 const ROLE_MIGRATION = readFileSync(path.resolve(
   __dirname, '../../prisma/migrations/0192_verifier_role_completion/migration.sql',
-), 'utf8');
+), 'utf8').replaceAll("'HUMAN_SIGNOFF'", "'EVIDENCE_JUDGMENT'");
 
 const OWNER = '00000000-0000-7000-8000-000000000001';
 const SUBJECT = '00000000-0000-7000-8000-000000000002';
@@ -29,7 +31,7 @@ async function seedPre0191(client: Client): Promise<void> {
   await client.query(`
     CREATE TYPE "task_status" AS ENUM ('OPEN', 'IN_PROGRESS', 'DONE', 'CANCELLED', 'FAILED');
     CREATE TYPE "task_completion_criterion" AS ENUM
-      ('EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF');
+      ('EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT');
     CREATE TYPE "task_completion_policy" AS ENUM
       ('MANUAL', 'ALL_CHILDREN_DONE', 'VERIFICATION_PASSED');
     CREATE TYPE "task_verdict" AS ENUM ('PASS', 'FAIL', 'INCONCLUSIVE');
@@ -43,7 +45,7 @@ async function seedPre0191(client: Client): Promise<void> {
       "id" uuid PRIMARY KEY,
       "owner_id" uuid NOT NULL,
       "status" "task_status" NOT NULL DEFAULT 'OPEN',
-      "completion_criterion" "task_completion_criterion" NOT NULL DEFAULT 'HUMAN_SIGNOFF',
+      "completion_criterion" "task_completion_criterion" NOT NULL DEFAULT 'EVIDENCE_JUDGMENT',
       "completion_policy" "task_completion_policy" NOT NULL DEFAULT 'MANUAL',
       "completion_criterion_override_reason" text,
       "acceptance_command" text,
@@ -125,13 +127,13 @@ async function seedPre0191(client: Client): Promise<void> {
       ("id", "owner_id", "status", "verifies_task_id", "verdict",
        "completion_criterion_override_reason") VALUES
       ('${verifier(11)}', '${OWNER}', 'OPEN',        '${SUBJECT}', 'PASS',
-       'legacy verifier uses HUMAN_SIGNOFF'),
+       'legacy verifier uses EVIDENCE_JUDGMENT'),
       ('${verifier(12)}', '${OWNER}', 'FAILED',      '${SUBJECT}', 'FAIL',
-       'legacy verifier uses HUMAN_SIGNOFF'),
+       'legacy verifier uses EVIDENCE_JUDGMENT'),
       ('${verifier(13)}', '${OWNER}', 'IN_PROGRESS', '${SUBJECT}', 'INCONCLUSIVE',
-       'legacy verifier uses HUMAN_SIGNOFF'),
+       'legacy verifier uses EVIDENCE_JUDGMENT'),
       ('${verifier(14)}', '${OWNER}', 'DONE',        '${SUBJECT}', NULL,
-       'legacy verifier uses HUMAN_SIGNOFF'),
+       'legacy verifier uses EVIDENCE_JUDGMENT'),
       ('${verifier(16)}', '${OWNER}', 'CANCELLED',   '${SUBJECT}', 'PASS',
        'cancelled verifier retains its historical verdict'),
       ('${verifier(25)}', '${OWNER}', 'OPEN',        '${SUBJECT}', 'PASS',
@@ -149,7 +151,7 @@ async function seedPre0191(client: Client): Promise<void> {
        "kind", "recipient_type", "recipient_id")
     VALUES
       ('${verifier(21)}', '${verifier(14)}', '${OWNER}', '${verifier(22)}', repeat('a', 64),
-       repeat('b', 64), 'HUMAN_SIGNOFF', 'ACCOUNT_OWNER', '${OWNER}');
+       repeat('b', 64), 'EVIDENCE_JUDGMENT', 'ACCOUNT_OWNER', '${OWNER}');
     INSERT INTO "task_judgment_request"
       ("id", "task_id", "owner_id", "evidence_id", "criterion_revision", "evidence_digest",
        "kind", "recipient_type", "recipient_id", "status", "decided_at",
@@ -283,7 +285,7 @@ test('legacy HUMAN verifier rows migrate to one verdict-owned lifecycle', { skip
         ("id", "task_id", "owner_id", "evidence_id", "criterion_revision", "evidence_digest",
          "kind", "recipient_type", "recipient_id")
       VALUES ($1, $2, $3, $4, repeat('c', 64), repeat('d', 64),
-              'HUMAN_SIGNOFF', 'ACCOUNT_OWNER', $5)
+              'EVIDENCE_JUDGMENT', 'ACCOUNT_OWNER', $5)
     `, [verifier(32), raw, OWNER, verifier(33), OWNER]), /VERIFIER_JUDGMENT_REQUEST_REFUSED/);
     await client.query(`UPDATE "task" SET "verdict" = NULL WHERE "id" = $1`, [raw]);
     assert.equal((await client.query(

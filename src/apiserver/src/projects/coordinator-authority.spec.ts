@@ -60,7 +60,9 @@ test('the table separates the cheap acts from the irreversible ones', () => {
   assert.equal(COORDINATOR_AUTHORITY.OPEN_TASK, 'COORDINATOR_BOUNDED');
   assert.equal(COORDINATOR_AUTHORITY.EDIT_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY');
   assert.equal(COORDINATOR_AUTHORITY.CONFIRM_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY');
-  assert.equal(COORDINATOR_AUTHORITY.CONCLUDE_VERDICT_PASS, 'HUMAN_ONLY');
+  // Reading the ruler is bounded, not owner-only: a judgment session may confirm a criterion as
+  // well as refute one, inside the evidence version its conclusion names.
+  assert.equal(COORDINATOR_AUTHORITY.CONCLUDE_VERDICT_PASS, 'COORDINATOR_BOUNDED');
   assert.equal(COORDINATOR_AUTHORITY.SETTLE_PROJECT_DONE, 'AUTOMATIC');
 });
 
@@ -91,12 +93,11 @@ test('only a PROJECT_COORDINATOR session is the judgment principal', () => {
   assert.equal(authorityPrincipal(null), 'NON_JUDGMENT');
 });
 
-// ── The three HUMAN_ONLY rows ──────────────────────────────────────────────────────────────────
+// ── The two HUMAN_ONLY rows, both of them about the ruler ──────────────────────────────────────
 
 const HUMAN_ONLY = [
   ['EDIT_ACCEPTANCE_CRITERIA', 'ACCEPTANCE_CRITERIA_HUMAN_ONLY'],
   ['CONFIRM_ACCEPTANCE_CRITERIA', 'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY'],
-  ['CONCLUDE_VERDICT_PASS', 'VERDICT_PASS_HUMAN_ONLY'],
 ] as const;
 
 for (const [action, code] of HUMAN_ONLY) {
@@ -104,7 +105,7 @@ for (const [action, code] of HUMAN_ONLY) {
     const refusal = refuseHumanOnlyAction('JUDGMENT', action);
     assert.ok(refusal, 'a HUMAN_ONLY action must not be allowed to a judgment session');
     // Which boundary, not just that there was one: a caller told only "forbidden" has to guess
-    // which of the three it met, and the three have different answers.
+    // which of the two it met, and the two have different answers.
     assert.equal(refusal.code, code);
     assert.equal(refusal.action, action);
     assert.equal(refusal.tier, 'HUMAN_ONLY');
@@ -120,7 +121,7 @@ for (const [action, code] of HUMAN_ONLY) {
   });
 }
 
-test('the three boundaries do not share a code', () => {
+test('the two boundaries do not share a code', () => {
   const codes = HUMAN_ONLY.map(([action]) => refuseHumanOnlyAction('JUDGMENT', action)!.code);
   assert.equal(new Set(codes).size, codes.length);
 });

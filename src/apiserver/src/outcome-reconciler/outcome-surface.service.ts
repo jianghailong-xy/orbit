@@ -111,7 +111,7 @@ export class OutcomeSurfaceService {
       truncated: items.length < total,
       failureContinuationIndex: failureInbox.semanticIndex,
       decisionTypeSeparation: {
-        perItemSignoff: 'HUMAN_SIGNOFF',
+        perItemJudgment: 'EVIDENCE_JUDGMENT',
       },
     });
   }

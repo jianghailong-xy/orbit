@@ -72,7 +72,7 @@ const run: ProjectAcceptanceRun = {
       definitionRevision: 1,
       criterionText: '没有新增定时器',
       verificationMethod: '运行 grep 断言与对应 spec。',
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCommand: null,
       acceptanceExpectedExitCode: null,
       verdict: null,
@@ -237,7 +237,7 @@ describe('project acceptance review', { timeout: 12_000 }, () => {
     expect(page.querySelector('.project-acceptance-audit')?.hasAttribute('open')).toBe(false);
   });
 
-  it('requires only HUMAN_SIGNOFF and leaves automatic criteria read-only', async () => {
+  it('requires only EVIDENCE_JUDGMENT and leaves automatic criteria read-only', async () => {
     apiMock.mockResolvedValue(overview);
     await mount();
     const page = mountedContainer();
@@ -262,7 +262,7 @@ describe('project acceptance review', { timeout: 12_000 }, () => {
       ...run,
       verdict: 'INCONCLUSIVE',
       completedAt: '2026-08-27T08:10:00.000Z',
-      criteria: run.criteria.map((criterion) => criterion.completionCriterion === 'HUMAN_SIGNOFF'
+      criteria: run.criteria.map((criterion) => criterion.completionCriterion === 'EVIDENCE_JUDGMENT'
         ? {
             ...criterion,
             verdict: 'INCONCLUSIVE',

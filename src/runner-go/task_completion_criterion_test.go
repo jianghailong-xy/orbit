@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var completionCriteria = []string{"EXECUTABLE", "VERIFICATION", "HUMAN_SIGNOFF"}
+var completionCriteria = []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"}
 
 func stringEnum(t *testing.T, property map[string]interface{}) []string {
 	t.Helper()
@@ -126,7 +126,7 @@ func TestTaskCompletionCriterionStaysInHelpCapabilitiesCLIAndMCP(t *testing.T) {
 	}
 }
 
-func TestRunnerCLITaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) {
+func TestRunnerCLITaskCreateRefusesImplicitEvidenceJudgmentBeforeHTTP(t *testing.T) {
 	var requests int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
@@ -137,23 +137,23 @@ func TestRunnerCLITaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) 
 
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{"create", "--title", "ambiguous"}, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), "implicitly create HUMAN_SIGNOFF") ||
+	if err == nil || !strings.Contains(err.Error(), "implicitly create EVIDENCE_JUDGMENT") ||
 		!strings.Contains(err.Error(), "completionCriterion") {
 		t.Fatalf("implicit criterion error = %v", err)
 	}
 	if requests != 0 {
-		t.Fatalf("implicit HUMAN_SIGNOFF made %d HTTP requests", requests)
+		t.Fatalf("implicit EVIDENCE_JUDGMENT made %d HTTP requests", requests)
 	}
 
 	err = cmdTaskCLI([]string{
-		"create-batch", "--tasks", `[{"title":"explicit","completionCriterion":"HUMAN_SIGNOFF"},{"title":"ambiguous"}]`,
+		"create-batch", "--tasks", `[{"title":"explicit","completionCriterion":"EVIDENCE_JUDGMENT"},{"title":"ambiguous"}]`,
 	}, strings.NewReader(""), &out)
 	if err == nil || !strings.Contains(err.Error(), "tasks[1]") ||
-		!strings.Contains(err.Error(), "implicitly create HUMAN_SIGNOFF") {
+		!strings.Contains(err.Error(), "implicitly create EVIDENCE_JUDGMENT") {
 		t.Fatalf("implicit batch criterion error = %v", err)
 	}
 	if requests != 0 {
-		t.Fatalf("implicit batch HUMAN_SIGNOFF made %d HTTP requests", requests)
+		t.Fatalf("implicit batch EVIDENCE_JUDGMENT made %d HTTP requests", requests)
 	}
 
 	for _, args := range [][]string{
@@ -171,7 +171,7 @@ func TestRunnerCLITaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) 
 	}
 }
 
-func TestMCPTaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) {
+func TestMCPTaskCreateRefusesImplicitEvidenceJudgmentBeforeHTTP(t *testing.T) {
 	var requests int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
@@ -205,12 +205,12 @@ func TestMCPTaskCreateRefusesImplicitHumanSignoffBeforeHTTP(t *testing.T) {
 			continue
 		}
 		content, _ := result["content"].([]map[string]interface{})
-		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "implicitly create HUMAN_SIGNOFF") {
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "implicitly create EVIDENCE_JUDGMENT") {
 			t.Errorf("%s refusal = %#v", label, result)
 		}
 	}
 	if requests != 0 {
-		t.Fatalf("implicit MCP HUMAN_SIGNOFF made %d HTTP requests", requests)
+		t.Fatalf("implicit MCP EVIDENCE_JUDGMENT made %d HTTP requests", requests)
 	}
 }
 

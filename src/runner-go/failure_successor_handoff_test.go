@@ -58,11 +58,11 @@ func TestTaskCLIFailureSuccessorHandoffRequiresItsSourceAndValidJSON(t *testing.
 		want string
 	}{
 		"source": {
-			args: []string{"create", "--title", "successor", "--completion-criterion", "HUMAN_SIGNOFF", "--failure-successor-handoff", failureSuccessorHandoffFixture},
+			args: []string{"create", "--title", "successor", "--completion-criterion", "EVIDENCE_JUDGMENT", "--failure-successor-handoff", failureSuccessorHandoffFixture},
 			want: "requires --supersedes-task-id",
 		},
 		"json": {
-			args: []string{"create", "--title", "successor", "--completion-criterion", "HUMAN_SIGNOFF", "--supersedes-task-id", "source", "--failure-successor-handoff", "[]"},
+			args: []string{"create", "--title", "successor", "--completion-criterion", "EVIDENCE_JUDGMENT", "--supersedes-task-id", "source", "--failure-successor-handoff", "[]"},
 			want: "must be one JSON object",
 		},
 	} {
@@ -102,7 +102,7 @@ func TestFailureSuccessorHandoffIsSingleCreateOnlyAndPassedWhole(t *testing.T) {
 	}
 	res := mcp.callTool("task_create", map[string]interface{}{
 		"title":                   "continue failed work",
-		"completionCriterion":     "HUMAN_SIGNOFF",
+		"completionCriterion":     "EVIDENCE_JUDGMENT",
 		"supersedesTaskId":        "55555555-5555-4555-8555-555555555555",
 		"failureSuccessorHandoff": input,
 	})

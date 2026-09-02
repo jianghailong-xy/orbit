@@ -1087,7 +1087,7 @@ interface ProjectTask {
   /** The same three words the task list uses, with `NONE` collapsed onto `READY` by the endpoint —
    *  a task nothing holds back and a task with no prerequisites at all read identically here. */
   dependencyState: 'READY' | 'BLOCKED' | 'BLOCKED_FAILED';
-  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
   completionPolicy?: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'ANY_CHILD_DONE' | 'VERIFICATION_PASSED';
   verifiesTaskId?: string | null;
   /** Canonical task-start/completion lane supplied by the shared server classifier. */
@@ -1695,7 +1695,7 @@ export interface NewProjectTaskDraft {
   title: string;
   description?: string;
   acceptanceCriteria?: string;
-  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
   acceptanceCommand?: string;
   acceptanceExpectedExitCode?: number;
   /** Filled only after the server questions the selected criterion. */
@@ -1715,8 +1715,8 @@ export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
 export const TASK_CRITERION_SHAPE_ADVICE_CODE = 'TASK_CRITERION_SHAPE_ADVICE';
 
 export interface TaskCriterionShapeAdviceView {
-  declaredCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
-  suggestedCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'HUMAN_SIGNOFF';
+  declaredCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
+  suggestedCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
   reason: string;
 }
 
@@ -1731,7 +1731,7 @@ export function taskCriterionShapeAdviceFrom(
   const declaredCriterion = error.body.declaredCriterion;
   const suggestedCriterion = error.body.suggestedCriterion;
   const reason = error.body.reason;
-  const criteria = new Set(['EXECUTABLE', 'VERIFICATION', 'HUMAN_SIGNOFF']);
+  const criteria = new Set(['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT']);
   if (typeof declaredCriterion !== 'string'
     || typeof suggestedCriterion !== 'string'
     || typeof reason !== 'string'
@@ -1963,7 +1963,7 @@ export function NewProjectTaskForm({
           options={[
             { value: 'EXECUTABLE', label: 'EXECUTABLE — command / exit code' },
             { value: 'VERIFICATION', label: 'VERIFICATION — independent judgment' },
-            { value: 'HUMAN_SIGNOFF', label: 'HUMAN_SIGNOFF — authority / tradeoff' },
+            { value: 'EVIDENCE_JUDGMENT', label: 'EVIDENCE_JUDGMENT — authority / tradeoff' },
           ]}
           onChange={(completionCriterion) => onChange({
             ...draft,

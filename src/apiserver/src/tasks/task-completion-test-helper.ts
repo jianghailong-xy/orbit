@@ -13,8 +13,8 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 import { TasksService } from './tasks.service';
 
 /**
- * Close a HUMAN_SIGNOFF task in PostgreSQL integration fixtures through the same durable evidence,
- * request and signoff facts as production. This never disables the canonical DONE trigger.
+ * Close a EVIDENCE_JUDGMENT task in PostgreSQL integration fixtures through the same durable evidence,
+ * request and decision facts as production. This never disables the canonical DONE trigger.
  */
 export async function completeHumanTaskForPgTest(
   db: PrismaClient,
@@ -28,23 +28,26 @@ export async function completeHumanTaskForPgTest(
     select: { status: true, completionCriterion: true },
   });
   if (task.status === TaskStatus.DONE) return;
-  if (task.completionCriterion !== 'HUMAN_SIGNOFF') {
-    throw new Error(`${label} is ${task.completionCriterion}, not a HUMAN_SIGNOFF fixture task`);
+  if (task.completionCriterion !== 'EVIDENCE_JUDGMENT') {
+    throw new Error(`${label} is ${task.completionCriterion}, not a EVIDENCE_JUDGMENT fixture task`);
   }
 
-  // A Task has one immutable human signoff fact. If a fixture deliberately reopens the Task to
-  // exercise an ABA transition, completing it again must reuse that standing fact rather than
-  // forge a second signoff or weaken the unique production constraint.
-  const standingSignoff = await db.taskHumanSignoff.findUnique({ where: { taskId } });
-  if (standingSignoff) {
+  // A decided EVIDENCE_JUDGMENT request is the standing fact. If a fixture deliberately reopens the
+  // Task to exercise an ABA transition, completing it again replays that decision rather than
+  // forging a second one.
+  const standing = await db.taskJudgmentRequest.findFirst({
+    where: { taskId, kind: 'EVIDENCE_JUDGMENT', status: 'DECIDED', decision: 'PASS' },
+    orderBy: { decidedAt: 'desc' },
+  });
+  if (standing) {
     await (tasksService ?? new TasksService(
       db as unknown as PrismaService,
       {} as never,
       { publishForUser() {} } as never,
-    )).signoff(ownerId, taskId, {
-      requestId: standingSignoff.requestId,
-      evidenceDigest: standingSignoff.evidenceDigest,
-      evidence: standingSignoff.evidence,
+    )).judge(ownerId, taskId, {
+      requestId: standing.id,
+      evidenceDigest: standing.evidenceDigest,
+      evidence: standing.decisionNote ?? `Fixture decision for ${label}`,
     });
     return;
   }
@@ -80,15 +83,15 @@ export async function completeHumanTaskForPgTest(
     judgmentRequest: { id: string } | null;
   };
   const requestId = evidence.judgmentRequest?.id;
-  if (!requestId) throw new Error(`${label} produced no HUMAN_SIGNOFF request`);
+  if (!requestId) throw new Error(`${label} produced no EVIDENCE_JUDGMENT request`);
 
   await (tasksService ?? new TasksService(
     db as unknown as PrismaService,
     {} as never,
     { publishForUser() {} } as never,
-  )).signoff(ownerId, taskId, {
+  )).judge(ownerId, taskId, {
     requestId,
     evidenceDigest: evidence.evidenceDigest,
-    evidence: `Owner fixture decision for ${label}`,
+    evidence: `Fixture decision for ${label}`,
   });
 }

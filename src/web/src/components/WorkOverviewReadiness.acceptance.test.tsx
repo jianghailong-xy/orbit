@@ -53,7 +53,7 @@ const task = (over: Record<string, unknown>) => ({
   blocksCount: 0,
   topoLevel: 0,
   dependencyState: 'READY',
-  completionCriterion: 'HUMAN_SIGNOFF',
+  completionCriterion: 'EVIDENCE_JUDGMENT',
   completionPolicy: 'MANUAL',
   verdict: null,
   verifiesTaskId: null,

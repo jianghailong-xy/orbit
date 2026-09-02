@@ -16,8 +16,8 @@ import { JudgmentDeliveryService } from '../push/judgment-delivery.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import {
   completionEvidenceRevisedFact,
-  humanSignoffRequestedFact,
-  humanSignoffRequestSupersededFact,
+  evidenceJudgmentRequestedFact,
+  evidenceJudgmentRequestSupersededFact,
 } from '../projects/completion-input';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -465,12 +465,12 @@ export class TaskCompletionEvidenceService {
         }),
         'JUDGMENT_REQUEST_DERIVER',
       );
-      // HUMAN_SIGNOFF is addressed to a person. These facts feed N12's inbox/delivery surface and
+      // EVIDENCE_JUDGMENT is addressed to a person. These facts feed N12's inbox/delivery surface and
       // deliberately never call CoordinatorJudgmentService or SessionsService.
-      if (committed.request.kind === 'HUMAN_SIGNOFF'
+      if (committed.request.kind === 'EVIDENCE_JUDGMENT'
         && committed.request.status === TaskJudgmentRequestStatus.OPEN) {
         await this.completionInputs.route(
-          humanSignoffRequestedFact({
+          evidenceJudgmentRequestedFact({
             projectId: committed.projectId,
             taskId,
             requestId: committed.request.id,
@@ -482,11 +482,11 @@ export class TaskCompletionEvidenceService {
         );
       }
       for (const request of committed.superseded) {
-        if (request.kind !== 'HUMAN_SIGNOFF'
+        if (request.kind !== 'EVIDENCE_JUDGMENT'
           || request.supersessionRule !== 'EVIDENCE_REVISED'
           || !request.supersededById) continue;
         await this.completionInputs.route(
-          humanSignoffRequestSupersededFact({
+          evidenceJudgmentRequestSupersededFact({
             projectId: committed.projectId,
             taskId,
             requestId: request.id,
@@ -522,7 +522,7 @@ export class TaskCompletionEvidenceService {
       }
       await this.tasks.retireSupersededJudgmentVerifications(ownerId, taskId);
     }
-    if (request.kind === 'HUMAN_SIGNOFF'
+    if (request.kind === 'EVIDENCE_JUDGMENT'
       && request.status === TaskJudgmentRequestStatus.OPEN
       && request.devicePolicy === 'IMMEDIATE') {
       // The trigger already committed the inbox/outbox rows. This is only the low-latency nudge;
@@ -535,7 +535,7 @@ export class TaskCompletionEvidenceService {
   /**
    * Evidence produced while running a verifier documents how it reached its own verdict. The
    * immutable criterion snapshot, rather than the Task's later role, identifies that fact-time
-   * consumer. Manufacturing a HUMAN_SIGNOFF or another VERIFICATION request would create a
+   * consumer. Manufacturing a EVIDENCE_JUDGMENT or another VERIFICATION request would create a
    * recursive check-of-check lifecycle.
    *
    * A pre-0192 fact can lack `criterion.verifiesTaskId` even though its Task is now a verifier. In
@@ -784,7 +784,7 @@ export class TaskCompletionEvidenceService {
   }
 
   /**
-   * File missing HUMAN_SIGNOFF requests for a bounded slice of tasks that already have evidence.
+   * File missing EVIDENCE_JUDGMENT requests for a bounded slice of tasks that already have evidence.
    * It deliberately cannot create evidence, and DONE/CANCELLED/no-evidence rows cannot enter the
    * candidate set. Every request gets a durable inbox row; device work is opt-in by task id.
    */
@@ -810,7 +810,7 @@ export class TaskCompletionEvidenceService {
     }
     const selection = normalizeCompletionEvidence({
       schemaVersion: 1,
-      completionCriterion: 'HUMAN_SIGNOFF',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       statusNotIn: ['DONE', 'CANCELLED'],
       evidence: 'LATEST_REVISION',
       terminalReason: null,
@@ -898,7 +898,7 @@ export class TaskCompletionEvidenceService {
              LIMIT 1
           ) evidence ON true
          WHERE task."owner_id" = ${ownerId}::uuid
-           AND task."completion_criterion" = 'HUMAN_SIGNOFF'
+           AND task."completion_criterion" = 'EVIDENCE_JUDGMENT'
            AND task."status"::text NOT IN ('DONE', 'CANCELLED')
            AND task."terminal_reason" IS NULL
            AND task."superseded_by_task_id" IS NULL
@@ -908,7 +908,7 @@ export class TaskCompletionEvidenceService {
               WHERE request."task_id" = task."id"
                 AND request."criterion_revision" = evidence."criterion_revision"
                 AND request."evidence_digest" = evidence."evidence_digest"
-                AND request."kind" = 'HUMAN_SIGNOFF'
+                AND request."kind" = 'EVIDENCE_JUDGMENT'
            )
          ORDER BY task."id"
          FOR UPDATE OF task SKIP LOCKED
@@ -1069,7 +1069,7 @@ export class TaskCompletionEvidenceService {
         ?? await tx.taskJudgmentRequest.findUniqueOrThrow({ where: { id: request.id } });
     }
 
-    // Compatibility only. New HUMAN_SIGNOFF blockers/signals are SQL views of this request and
+    // Compatibility only. New EVIDENCE_JUDGMENT blockers/signals are SQL views of this request and
     // are therefore not inserted or independently maintained. Older rows raised by the parked-
     // attempt producer stop being open now that a real judgment path exists.
     if (task.projectId) {
