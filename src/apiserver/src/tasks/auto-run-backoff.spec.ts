@@ -416,12 +416,9 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
   assert.match(sql, /epoch_any\."owner_id" = epoch_any_subject\."owner_id"/);
   assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
   assert.doesNotMatch(sql, /task_judgment_request/);
-  assert.match(
-    sql,
-    /passed_request\."status" = 'DECIDED'[\s\S]*passed_request\."decision" = 'PASS'/,
-  );
-  // The legacy PASS route is fail-closed too: no occupying run, one successful task_done run, and
-  // (inside a project) an applied verdict action are all required before it releases the edge.
+  assert.match(sql, /epoch_check\."verdict" = 'PASS'/);
+  // The PASS route — the only one left — is fail-closed: no occupying run, one successful
+  // task_done run, and (inside a project) an applied verdict action before it releases the edge.
   assert.match(
     sql,
     /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
