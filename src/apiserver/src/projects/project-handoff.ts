@@ -94,8 +94,6 @@ export interface HandoffPlan {
   acceptanceCriteria?: string | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
-  acceptanceTimeoutSeconds?: number | null;
-  acceptanceOwnerTimeoutCeilingSeconds?: number | null;
   completionCriterion?: string | null;
   labels?: readonly string[] | null;
   /** WHO — the workspace that would execute it. */
@@ -165,12 +163,13 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
   // N1 criterion advances to v4 and binds that type; omission keeps the rolling-client identity.
   const executableAcceptance =
     plan.acceptanceCommand != null || plan.acceptanceExpectedExitCode != null;
-  const negotiatedAcceptance = plan.acceptanceTimeoutSeconds != null
-    || plan.acceptanceOwnerTimeoutCeilingSeconds != null;
   const typedCompletion = plan.completionCriterion != null;
+  // v5 is retired, not renumbered: 0227 removed the negotiated timeout pair that selected it, so
+  // no new plan can reach that shape. Rows that were keyed with it keep the digest they were
+  // written with, which is the whole point of an append-only idempotency preimage.
   return createHash('sha256')
     .update(canonicalJson({
-      v: negotiatedAcceptance ? 5 : typedCompletion ? 4 : executableAcceptance ? 3 : 2,
+      v: typedCompletion ? 4 : executableAcceptance ? 3 : 2,
       plan: {
         title: plan.title,
         description: plan.description ?? null,
@@ -179,11 +178,6 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
           ? {
               acceptanceCommand: plan.acceptanceCommand ?? null,
               acceptanceExpectedExitCode: plan.acceptanceExpectedExitCode ?? null,
-              ...(negotiatedAcceptance ? {
-                acceptanceTimeoutSeconds: plan.acceptanceTimeoutSeconds ?? null,
-                acceptanceOwnerTimeoutCeilingSeconds:
-                  plan.acceptanceOwnerTimeoutCeilingSeconds ?? null,
-              } : {}),
             }
           : {}),
         ...(typedCompletion ? { completionCriterion: plan.completionCriterion } : {}),

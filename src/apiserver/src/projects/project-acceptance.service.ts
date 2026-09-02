@@ -20,7 +20,6 @@ import {
   ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_FINDING_ROUTING,
   ACCEPTANCE_MISSING,
-  EXECUTABLE_ATTEMPT_COLLECTOR_VERSION,
   AcceptanceFacts,
   AcceptanceRefusalCode,
   StatedAcceptanceCriterion,
@@ -57,22 +56,6 @@ export interface AcceptanceCriterionOutcomeInput {
   evidence?: Record<string, unknown>;
   evidenceTaskId?: string | null;
   evidenceSessionId?: string | null;
-}
-
-interface CanonicalExecutableAttempt {
-  id: string;
-  admissionId: string | null;
-  taskId: string;
-  sessionId: string;
-  attemptNumber: number;
-  evaluationPlanDigest: string | null;
-  expectedExitCode: number | null;
-  terminatedAt: Date | null;
-  terminationKind: string | null;
-  actualExitCode: number | null;
-  signal: string | null;
-  rawOutput: string | null;
-  outputTruncated: boolean;
 }
 
 /** What a criterion the latest run has not concluded about reports instead of a verdict. A value
@@ -255,84 +238,6 @@ export class ProjectAcceptanceService {
   // ------------------------------------------------------------------------------------------
 
   /**
-   * The one typed attempt allowed to speak for this criterion right now.
-   *
-   * This repeats the database DONE fence's binding checks rather than trusting Task.status: the
-   * task must still belong to this project, its current command and expected code must be the
-   * criterion's exact declaration, and both admission and attempt must name the current evaluation
-   * plan. Legacy/untyped imports and rejected admissions remain unable to create project evidence.
-   */
-  private static async canonicalExecutableAttempt(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-    criterion: StatedAcceptanceCriterion,
-  ): Promise<CanonicalExecutableAttempt | null> {
-    if (
-      criterion.completionCriterion !== TaskCompletionCriterion.EXECUTABLE
-      || !criterion.evidenceTaskId
-      || !criterion.acceptanceCommand
-      || criterion.acceptanceExpectedExitCode === null
-    ) return null;
-
-    const task = await tx.task.findFirst({
-      where: {
-        id: criterion.evidenceTaskId,
-        projectId,
-        completionCriterion: TaskCompletionCriterion.EXECUTABLE,
-        acceptanceCommand: criterion.acceptanceCommand,
-        acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
-      },
-      select: {
-        id: true,
-        acceptanceCommandDigest: true,
-        acceptanceEvaluationPlanDigest: true,
-      },
-    });
-    const commandDigest = sha256(criterion.acceptanceCommand);
-    if (
-      !task?.acceptanceEvaluationPlanDigest
-      || task.acceptanceCommandDigest !== commandDigest
-    ) return null;
-
-    return tx.taskExecutableAttempt.findFirst({
-      where: {
-        taskId: task.id,
-        admissionId: { not: null },
-        evaluationPlanDigest: task.acceptanceEvaluationPlanDigest,
-        expectedExitCode: criterion.acceptanceExpectedExitCode,
-        legacyTermination: null,
-        terminatedAt: { not: null },
-        terminationKind: { not: null },
-        admission: {
-          is: {
-            taskId: task.id,
-            decision: 'ADMITTED',
-            evaluationPlanDigest: task.acceptanceEvaluationPlanDigest,
-            commandDigest,
-            expectedExitCode: criterion.acceptanceExpectedExitCode,
-          },
-        },
-      },
-      orderBy: [{ attemptNumber: 'desc' }, { id: 'desc' }],
-      select: {
-        id: true,
-        admissionId: true,
-        taskId: true,
-        sessionId: true,
-        attemptNumber: true,
-        evaluationPlanDigest: true,
-        expectedExitCode: true,
-        terminatedAt: true,
-        terminationKind: true,
-        actualExitCode: true,
-        signal: true,
-        rawOutput: true,
-        outputTruncated: true,
-      },
-    });
-  }
-
-  /**
    * The acceptance-only projections, read from the current rows.
    *
    * Deliberately takes a transaction client: every caller that matters has already taken the
@@ -363,35 +268,11 @@ export class ProjectAcceptanceService {
        ORDER BY m."requirement_id", m."target_branch", m."ref_generation" DESC
     `);
 
-    const executableAttempts: AcceptanceFacts['executableAttempts'] = [];
-    for (const criterion of criteria) {
-      const attempt = await ProjectAcceptanceService.canonicalExecutableAttempt(
-        tx, projectId, criterion,
-      );
-      if (!attempt?.admissionId || !attempt.evaluationPlanDigest || !attempt.terminatedAt) continue;
-      executableAttempts.push([
-        EXECUTABLE_ATTEMPT_COLLECTOR_VERSION,
-        criterion.definitionId ?? criterion.key,
-        String(criterion.definitionRevision ?? 0),
-        attempt.taskId,
-        attempt.id,
-        attempt.admissionId,
-        attempt.evaluationPlanDigest,
-        String(attempt.expectedExitCode),
-        String(attempt.terminationKind),
-        attempt.actualExitCode === null ? 'null' : String(attempt.actualExitCode),
-        sha256(attempt.rawOutput ?? ''),
-        String(attempt.outputTruncated),
-        attempt.terminatedAt.toISOString(),
-      ]);
-    }
-
     return {
       criteriaRevision: criteriaSemanticRevision(criteria),
       mergeEvidence: merges.map((m) => [
         m.requirementId, m.targetBranch, m.contentHash, String(m.refGeneration),
       ] as [string, string, string, string]),
-      executableAttempts,
     };
   }
 
@@ -548,21 +429,6 @@ export class ProjectAcceptanceService {
         decidedAt: event.decidedAt,
       };
     });
-  }
-
-  /** Close the current evidence version, when its criterion projection is complete enough to be
-   * closed. The conclusion is derived inside the database from that projection plus the canonical
-   * DONE gate (migration 0215): this call supplies nothing but the run id, so there is no entry here
-   * for a verdict somebody typed. A run that still has an unjudged criterion, or that was already
-   * superseded or concluded, is left exactly as it is — and in every case the project's own status
-   * is untouched, because concluding a run is not a way to reach DONE. */
-  private static async concludeRunTx(
-    tx: Prisma.TransactionClient,
-    runId: string,
-  ): Promise<void> {
-    await tx.$queryRaw<Array<{ result: Prisma.JsonValue }>>(
-      Prisma.sql`SELECT project_acceptance_run_conclude(${runId}::uuid) AS result`,
-    );
   }
 
   private static projectedVerdict(
@@ -749,41 +615,8 @@ export class ProjectAcceptanceService {
     if (criterion.completionCriterion === TaskCompletionCriterion.EVIDENCE_JUDGMENT) return null;
 
     if (criterion.completionCriterion === TaskCompletionCriterion.EXECUTABLE) {
-      const attempt = await ProjectAcceptanceService.canonicalExecutableAttempt(
-        tx, projectId, criterion,
-      );
-      if (attempt) {
-        const exited = attempt.terminationKind === 'EXITED';
-        const verdict = exited
-          ? attempt.actualExitCode === attempt.expectedExitCode
-            ? ProjectAcceptanceVerdict.PASS
-            : ProjectAcceptanceVerdict.FAIL
-          : ProjectAcceptanceVerdict.INCONCLUSIVE;
-        return {
-          verdict,
-          summary: exited
-            ? `Command exited ${attempt.actualExitCode}; expected ${attempt.expectedExitCode}`
-            : `Command attempt terminated ${attempt.terminationKind}; no comparable exit code exists`,
-          evidence: {
-            kind: 'EXECUTABLE_ATTEMPT',
-            collectorVersion: EXECUTABLE_ATTEMPT_COLLECTOR_VERSION,
-            attemptId: attempt.id,
-            admissionId: attempt.admissionId,
-            attemptNumber: attempt.attemptNumber,
-            evaluationPlanDigest: attempt.evaluationPlanDigest,
-            command: criterion.acceptanceCommand,
-            expectedExitCode: attempt.expectedExitCode,
-            terminationKind: attempt.terminationKind,
-            actualExitCode: attempt.actualExitCode,
-            signal: attempt.signal,
-            rawOutput: attempt.rawOutput,
-            outputTruncated: attempt.outputTruncated,
-            terminatedAt: attempt.terminatedAt?.toISOString() ?? null,
-          },
-          evidenceTaskId: attempt.taskId,
-          evidenceSessionId: attempt.sessionId,
-        };
-      }
+      // The recorded command result of the criterion's evidence task. 0227 removed the typed
+      // attempt that used to be read in front of this, so this is again the one collector.
       const result = criterion.evidenceTaskId
         ? await tx.taskExecutableJudgmentResult.findFirst({
             where: {
@@ -981,9 +814,8 @@ export class ProjectAcceptanceService {
             run.criteria,
             await ProjectAcceptanceService.conclusionEvents(tx, projectId, run.attempt),
           );
-      // Independent of what the gate decides below: once every stated criterion has a verdict, this
-      // evidence version has said what it has to say and stops being an open question.
-      await ProjectAcceptanceService.concludeRunTx(tx, run.id);
+      // A run has no closing move again: 0227 removed the one 0215 gave it. What settles this
+      // project is the criterion projection below plus the canonical DONE gate, exactly as before.
       try {
         const gate = await this.assertDoneAllowed(tx, projectId);
         // The gate is checked first so its typed routing reason is never hidden by an as-yet
@@ -1256,7 +1088,6 @@ export class ProjectAcceptanceService {
           },
           run.id,
         );
-        await ProjectAcceptanceService.concludeRunTx(tx, run.id);
         return this.readRun(tx, run.id);
       }
 

@@ -151,21 +151,20 @@ suite('(d)(e)(f)(g) every load-bearing wall beside the removal is still standing
   const client = await connect();
   t.after(async () => { await client.end(); });
 
-  // (d) the EXECUTABLE acceptance verdict mechanism.
+  // (d) the EXECUTABLE acceptance verdict mechanism. 0221 was told not to touch 0200's admission
+  // and attempt ledger and did not; migration 0227 removed that ledger outright by a later and
+  // separate decision. What still decides an EXECUTABLE task is 0177's declared pair and 0181's
+  // recorded command result, so those are what this wall is checked against now.
   for (const [table, required] of [
-    ['task_executable_admission', ['id', 'task_id', 'command_digest', 'decision']],
-    ['task_executable_attempt', ['id', 'task_id', 'termination_kind', 'actual_exit_code']],
+    ['task', ['acceptance_command', 'acceptance_expected_exit_code']],
+    ['task_executable_judgment_result',
+      ['id', 'request_id', 'expected_exit_code', 'actual_exit_code', 'raw_output']],
   ] as const) {
     const columns = await columnsOf(client, table);
     for (const column of required) {
       assert.ok(columns.includes(column), `${table}.${column} must survive the removal`);
     }
   }
-  // Its sweeper is a 0200 database function and still resolves, even though the process that
-  // called it on a timer went with the Compose services.
-  assert.equal((await client.query(`
-    SELECT count(*)::int AS count FROM pg_proc
-     WHERE proname = 'executable_acceptance_mark_stale_attempts'`)).rows[0].count, 1);
 
   // (e) stood here: the failure continuation and successor tables, which 0221 was told not to
   // touch and did not. Migration 0226 removed them — a later decision about the failure router,

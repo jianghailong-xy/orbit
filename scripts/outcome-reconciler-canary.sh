@@ -64,7 +64,6 @@ else
   echo '==> outcome-canary: compile production cohort, reducer, security and control-plane logic'
   "$TSC" \
     "$API/src/outcome-reconciler/outcome-canary.ts" \
-    "$API/src/tasks/executable-acceptance-runtime.ts" \
     "$API/src/outcome-reconciler/outcome-payload-redaction.ts" \
     --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
     --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"

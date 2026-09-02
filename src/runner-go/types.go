@@ -48,9 +48,6 @@ type HeartbeatRequest struct {
 	Status       string `json:"status"`
 	IdleCapacity int    `json:"idleCapacity"`
 	Version      string `json:"version,omitempty"`
-	// Nil is the deployed N-1 heartbeat. A v2 plan is dispatched only when the current process
-	// advertises this exact numeric capability and a hard maximum at least as large as requested.
-	ExecutableAcceptance *ExecutableAcceptanceCapability `json:"executableAcceptance,omitempty"`
 	// LeaseOwner identifies this exact runner process. SupervisedSessionIDs lets
 	// the control plane detach cold supervisors that no longer own their session;
 	// older runners omit both fields and retain the legacy heartbeat behavior.
@@ -99,13 +96,6 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
-}
-
-type ExecutableAcceptanceCapability struct {
-	SchemaRevision     int    `json:"schemaRevision"`
-	CapabilityRevision int    `json:"capabilityRevision"`
-	HardMaxSeconds     int    `json:"hardMaxSeconds"`
-	RunnerSha          string `json:"runnerSha"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is
@@ -634,27 +624,6 @@ type RunInboxResponse struct {
 	// TaskAcceptance marks the server-generated EXECUTABLE command. It always runs synchronously so the
 	// control plane receives one definitive exit code, even if its text ends in `&`.
 	TaskAcceptance bool `json:"taskAcceptance,omitempty"`
-	// Non-nil only after the control plane persisted ADMITTED. A rejected v2 turn is never handed
-	// to a process and therefore cannot cross the start handshake below.
-	AcceptancePlan *ExecutableAcceptanceDispatchPlan `json:"acceptancePlan,omitempty"`
-}
-
-type ExecutableAcceptanceDispatchPlan struct {
-	AdmissionID                string `json:"admissionId"`
-	EvaluationPlanDigest       string `json:"evaluationPlanDigest"`
-	CommandDigest              string `json:"commandDigest"`
-	ExpectedExitCode           int    `json:"expectedExitCode"`
-	RequestedTimeoutSeconds    int    `json:"requestedTimeoutSeconds"`
-	EffectiveTimeoutSeconds    int    `json:"effectiveTimeoutSeconds"`
-	EffectiveDeadline          string `json:"effectiveDeadline"`
-	RequiredSchemaRevision     int    `json:"requiredSchemaRevision"`
-	RequiredCapabilityRevision int    `json:"requiredCapabilityRevision"`
-}
-
-type ExecutableAttemptStartResponse struct {
-	AttemptID     string `json:"attemptId"`
-	DeadlineAt    string `json:"deadlineAt"`
-	AttemptNumber int    `json:"attemptNumber"`
 }
 
 // AbandonedSteer is a mid-turn message a dead runner process left leased, handed to the process
@@ -719,12 +688,6 @@ type TurnCompleteRequest struct {
 	// the difference between a real zero/empty result and an older runner that sent neither.
 	ShellExitCode             *int                   `json:"shellExitCode,omitempty"`
 	ShellOutput               *string                `json:"shellOutput,omitempty"`
-	AcceptanceAdmissionID     string                 `json:"acceptanceAdmissionId,omitempty"`
-	AcceptanceAttemptID       string                 `json:"acceptanceAttemptId,omitempty"`
-	AcceptanceTerminationKind string                 `json:"acceptanceTerminationKind,omitempty"`
-	AcceptanceActualExitCode  *int                   `json:"acceptanceActualExitCode,omitempty"`
-	AcceptanceSignal          string                 `json:"acceptanceSignal,omitempty"`
-	AcceptanceOutputTruncated bool                   `json:"acceptanceOutputTruncated,omitempty"`
 	Subtype                   string                 `json:"subtype,omitempty"`
 	NumTurns                  int                    `json:"numTurns"`
 	CostUsd                   float64                `json:"costUsd"`

@@ -304,9 +304,6 @@ export interface RunnerHeartbeatRequest {
    *  runtime processes do not consume this logical scheduling capacity. */
   idleCapacity: number;
   version?: string;
-  /** Version-bound process capability used only for EXECUTABLE v2 admission. Omission is the
-   *  deployed N-1 runner and can execute legacy plans, but must be rejected for a v2 plan. */
-  executableAcceptance?: ExecutableAcceptanceCapability;
   /** Stable identity of this runner process. Together with supervisedSessionIds,
    *  fences cold supervisors left behind by an overlapping old process. */
   leaseOwner?: string;
@@ -354,14 +351,6 @@ export interface RunnerHeartbeatRequest {
    *  and a machine with no reported root is not offered as a clone target at all, rather than
    *  having one guessed for it. */
   reposRoot?: string;
-}
-
-export interface ExecutableAcceptanceCapability {
-  schemaRevision: number;
-  capabilityRevision: number;
-  hardMaxSeconds: number;
-  /** Exact release/source identity of the process advertising the hard maximum. */
-  runnerSha: string;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
@@ -1047,34 +1036,6 @@ export interface RunInboxResponse {
    *  command. The runner must execute it synchronously even when the command ends in `&`, because
    *  only a completed process has an exit code the control plane can compare. */
   taskAcceptance?: boolean;
-  /** Present only after a v2 plan has been ADMITTED. A rejected plan is never delivered. */
-  acceptancePlan?: ExecutableAcceptanceDispatchPlan;
-}
-
-export interface ExecutableAcceptanceDispatchPlan {
-  admissionId: string;
-  evaluationPlanDigest: string;
-  commandDigest: string;
-  expectedExitCode: number;
-  requestedTimeoutSeconds: number;
-  effectiveTimeoutSeconds: number;
-  effectiveDeadline: string;
-  requiredSchemaRevision: number;
-  requiredCapabilityRevision: number;
-}
-
-export type ExecutableAttemptTerminationKind =
-  | 'EXITED'
-  | 'TIMED_OUT'
-  | 'CANCELLED'
-  | 'SIGNALED'
-  | 'START_FAILED'
-  | 'INFRASTRUCTURE_LOST';
-
-export interface ExecutableAttemptStartResponse {
-  attemptId: string;
-  deadlineAt: string;
-  attemptNumber: number;
 }
 
 /** Runner → control plane: expire only leases owned by one dead engine process.
@@ -1170,14 +1131,6 @@ export interface TurnCompleteRequest {
   /** The shell's combined stdout/stderr, untrimmed. An empty string is a real raw output and is
    *  therefore distinct from omission by older runners. */
   shellOutput?: string;
-  /** Typed v2 result. All fields are bound to the admission/start handshake; shellExitCode is
-   *  retained only for legacy/N-1 turns. */
-  acceptanceAdmissionId?: string;
-  acceptanceAttemptId?: string;
-  acceptanceTerminationKind?: ExecutableAttemptTerminationKind;
-  acceptanceActualExitCode?: number;
-  acceptanceSignal?: string;
-  acceptanceOutputTruncated?: boolean;
   /** The engine's own result subtype, except for the two the runner uses to say what KIND of
    *  completion this is: `steer` settles one mid-turn message, and TURN_COMPLETE_STEER_REQUEUE
    *  un-files one. */

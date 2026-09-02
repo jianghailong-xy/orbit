@@ -1,9 +1,4 @@
 import { createHash } from 'node:crypto';
-import {
-  continuationAfterExecutableAttempt,
-  executableEvaluationPlan,
-  negotiateExecutableAcceptance,
-} from '../tasks/executable-acceptance-runtime';
 import { sanitizeWatchdogPayload } from './outcome-payload-redaction';
 
 export const CANARY_METRICS = [
@@ -17,7 +12,6 @@ export const CANARY_METRICS = [
   'inboxAge',
   'outboxFailure',
   'checksumDrift',
-  'acceptanceRuntimeDeadline',
 ] as const;
 
 export type CanaryMetricName = (typeof CANARY_METRICS)[number];
@@ -88,17 +82,6 @@ export interface CanaryContract {
     currentProtocol: 'V2';
     acceptedLegacyProtocols: string[];
     requiredCases: MixedClientCase[];
-  };
-  acceptanceRuntime: {
-    schemaRevision: number;
-    capabilityRevision: number;
-    requestedTimeoutSeconds: number;
-    ownerTimeoutCeilingSeconds: number;
-    policyTimeoutCeilingSeconds: number;
-    legacyCutoffSeconds: number;
-    maximumAttempts: number;
-    watchdogExpectedTests: number;
-    requiredTraceKinds: string[];
   };
   security: {
     tenantAuthorization: string;
@@ -327,14 +310,6 @@ export function validateCanaryContract(value: unknown): asserts value is CanaryC
       || !contract.mixedClients.acceptedLegacyProtocols.includes('V1_HEADERLESS_N_MINUS_ONE')) {
     throw new Error('CANARY_MIXED_CLIENT_MATRIX_INCOMPLETE');
   }
-  if (contract.acceptanceRuntime.schemaRevision < 2
-      || contract.acceptanceRuntime.capabilityRevision < 2
-      || contract.acceptanceRuntime.requestedTimeoutSeconds !== 1200
-      || contract.acceptanceRuntime.legacyCutoffSeconds !== 120
-      || contract.acceptanceRuntime.watchdogExpectedTests !== 13
-      || contract.acceptanceRuntime.requiredTraceKinds.length !== 3) {
-    throw new Error('CANARY_ACCEPTANCE_CAPABILITY_INVALID');
-  }
   if (contract.security.rawTenantIdentifiers !== 'FORBIDDEN'
       || contract.security.redactionReplacement !== '[REDACTED]'
       || contract.capacity.tasks < 110_000
@@ -492,23 +467,6 @@ function addVersionObservation(
   accumulators.checksumDrift.denominator += observed.checksumSubjects;
 }
 
-function addAcceptanceObservation(
-  accumulator: MetricAccumulator,
-  event: CanaryTelemetryPayload,
-): void {
-  if (event.kind !== 'ACCEPTANCE_RUNTIME_OBSERVATION') return;
-  if (event.admitted !== true) return;
-  accumulator.denominator += 1;
-  const requested = Number(event.requestedTimeoutSeconds);
-  const effective = Number(event.effectiveTimeoutSeconds);
-  const elapsed = Number(event.elapsedSeconds);
-  const deadlineViolated = effective !== requested
-    || !Number.isFinite(elapsed)
-    || elapsed > effective
-    || event.silentlyStoppedAtLegacyCutoff === true;
-  accumulator.numerator += Number(deadlineViolated);
-}
-
 function metricValue(
   accumulator: MetricAccumulator,
   metric: CanaryMetricContract,
@@ -603,14 +561,6 @@ export function reduceCanaryWindow(
     taxonomyFor(observation, taxonomy);
   }
   if (authorizationViolations > 0) throw new Error('CANARY_TENANT_FORBIDDEN');
-
-  const acceptance = envelopes.map(({ event }) => event).filter(
-    (event) => event.windowId === windowId && event.kind === 'ACCEPTANCE_RUNTIME_OBSERVATION',
-  );
-  for (const event of acceptance) {
-    if (event.version === 'V1') addAcceptanceObservation(v1.acceptanceRuntimeDeadline, event);
-    if (event.version === 'V2') addAcceptanceObservation(v2.acceptanceRuntimeDeadline, event);
-  }
 
   const metrics = {} as Record<CanaryMetricName, CanaryMetricReport>;
   for (const name of CANARY_METRICS) {
@@ -707,91 +657,6 @@ export function evaluateMixedClientRequest(
     return { decision: 'REJECT', reason: 'PRIVILEGED_SHORTCUT_REFUSED' };
   }
   return { decision: 'REJECT', reason: 'V2_OPERATION_NOT_DECLARED' };
-}
-
-export interface AcceptanceCapabilityCase {
-  name: string;
-  schemaRevision: number;
-  capabilityRevision: number;
-  hardMaxSeconds: number;
-  decision: 'ADMITTED' | 'REJECTED';
-  rejectionCode: string | null;
-  effectiveTimeoutSeconds: number | null;
-  spawnCount: number;
-}
-
-export function acceptanceCapabilityMatrix(
-  contract: CanaryContract,
-  targetSha: string,
-): AcceptanceCapabilityCase[] {
-  validateCanaryContract(contract);
-  if (!FULL_SHA.test(targetSha)) throw new Error('CANARY_TARGET_SHA_INVALID');
-  const runtime = contract.acceptanceRuntime;
-  const plan = executableEvaluationPlan({
-    command: 'npm run test:outcome-reconciler:watchdog',
-    expectedExitCode: 0,
-    requestedTimeoutSeconds: runtime.requestedTimeoutSeconds,
-    ownerTimeoutCeilingSeconds: runtime.ownerTimeoutCeilingSeconds,
-    policyTimeoutCeilingSeconds: runtime.policyTimeoutCeilingSeconds,
-    requiredSchemaRevision: runtime.schemaRevision,
-    requiredCapabilityRevision: runtime.capabilityRevision,
-  });
-  const cases = [
-    { name: 'legacy-hard-max-120', schemaRevision: 2, capabilityRevision: 2, hardMaxSeconds: 120 },
-    { name: 'legacy-schema-revision', schemaRevision: 1, capabilityRevision: 2, hardMaxSeconds: 3600 },
-    { name: 'legacy-capability-revision', schemaRevision: 2, capabilityRevision: 1, hardMaxSeconds: 3600 },
-    { name: 'v2-exact-1200', schemaRevision: 2, capabilityRevision: 2, hardMaxSeconds: 1200 },
-    { name: 'v2-hard-max-3600', schemaRevision: 2, capabilityRevision: 2, hardMaxSeconds: 3600 },
-  ];
-  return cases.map((candidate) => {
-    const admission = negotiateExecutableAcceptance(plan, {
-      schemaRevision: candidate.schemaRevision,
-      capabilityRevision: candidate.capabilityRevision,
-      hardMaxSeconds: candidate.hardMaxSeconds,
-      runnerSha: targetSha,
-    }, new Date('2026-08-29T00:00:00.000Z'));
-    return {
-      ...candidate,
-      decision: admission.decision,
-      rejectionCode: admission.rejectionCode,
-      effectiveTimeoutSeconds: admission.effectiveTimeoutSeconds,
-      spawnCount: admission.spawnCount,
-    };
-  });
-}
-
-export function timeoutContinuationTrace(contract: CanaryContract): Array<{
-  attempt: number;
-  terminationKind: 'TIMED_OUT';
-  actualExitCode: null;
-  continuation: 'RETRY' | 'DIAGNOSIS' | 'SUCCESSOR';
-  reasonCode: string;
-}> {
-  validateCanaryContract(contract);
-  const result = { terminationKind: 'TIMED_OUT' as const, expectedExitCode: 0, actualExitCode: null };
-  const inputs = [
-    { attempt: 1, sameFingerprintCount: 1 },
-    { attempt: 2, sameFingerprintCount: 2 },
-    { attempt: contract.acceptanceRuntime.maximumAttempts, sameFingerprintCount: 3 },
-  ];
-  return inputs.map((input) => {
-    const continuation = continuationAfterExecutableAttempt(
-      result,
-      input.attempt,
-      input.sameFingerprintCount,
-      contract.acceptanceRuntime.maximumAttempts,
-    );
-    if (!['RETRY', 'DIAGNOSIS', 'SUCCESSOR'].includes(continuation.kind)) {
-      throw new Error('CANARY_TIMEOUT_CONTINUATION_INVALID');
-    }
-    return {
-      attempt: input.attempt,
-      terminationKind: 'TIMED_OUT',
-      actualExitCode: null,
-      continuation: continuation.kind as 'RETRY' | 'DIAGNOSIS' | 'SUCCESSOR',
-      reasonCode: continuation.reasonCode,
-    };
-  });
 }
 
 export type CanaryControlMode =

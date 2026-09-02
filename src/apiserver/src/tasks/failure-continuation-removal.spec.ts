@@ -407,12 +407,15 @@ test('(i) 0200\'s three replaced functions are restored to 0200\'s own text', ()
   const zero200 = readFileSync(
     path.join(MIGRATIONS, '0200_executable_acceptance_runtime_contract/migration.sql'), 'utf8');
   for (const name of RESTORED_FUNCTIONS) {
-    const standing = lastVerdict(
+    // What 0226 did is frozen in its own text: it re-creates each one and drops none of them.
+    // (Two of the three were later dropped outright by 0227 with the acceptance runtime, which is
+    // that migration's decision to defend, not this one's — so this reads 0226, not the frontier.)
+    assert.match(REMOVAL_SQL,
       new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${name}\\s*\\(`, 'i'),
+      `${name} must be re-created by the removal`);
+    assert.doesNotMatch(REMOVAL_SQL,
       new RegExp(`DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${name}\\s*\\(`, 'i'),
-    );
-    assert.deepEqual(standing, { dir: REMOVAL_DIR, verdict: 'CREATED' },
-      `${name} must be re-created by the removal, never dropped by it`);
+      `${name} must never be dropped by the removal`);
     // Byte-for-byte against 0200's body, whitespace-insensitively: an object belongs to the
     // migration that created it, and "restore" has to mean the text that was there.
     const body = (source: string) => {
@@ -425,11 +428,14 @@ test('(i) 0200\'s three replaced functions are restored to 0200\'s own text', ()
     assert.equal(body(REMOVAL_SQL), body(zero200),
       `${name}'s restored body is not 0200's — a third variant is not a restoration`);
   }
-  // The site input leaves the fingerprint with it, on both sides of the same value.
-  const runtime = read('src/apiserver/src/tasks/executable-acceptance-runtime.ts');
-  assert.equal(runtime.includes('failureSiteDigest'), false);
-  assert.equal(runtime.includes('executable-failure-fingerprint:v2'), false);
-  assert.match(runtime, /`evaluationPlanDigest=\$\{input\.evaluationPlanDigest\}`/);
+  // The site input left the fingerprint with it, on both sides of the same value. The
+  // TypeScript side of that pair was `tasks/executable-acceptance-runtime.ts`, which 0227
+  // removed outright; there is no module left to carry either spelling.
+  assert.equal(
+    existsSync(path.join(API, 'src/tasks/executable-acceptance-runtime.ts')),
+    false,
+    'the acceptance runtime module is gone, so neither fingerprint spelling can survive in it',
+  );
 });
 
 // (j) ---------------------------------------------------------------------------------------------

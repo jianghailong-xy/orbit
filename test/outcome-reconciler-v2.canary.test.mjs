@@ -29,9 +29,6 @@ const upstreamEvidenceRaw = readFileSync(UPSTREAM_EVIDENCE_PATH, 'utf8');
 const upstreamEvidenceRows = JSON.parse(upstreamEvidenceRaw);
 const upstreamTaskRaw = readFileSync(UPSTREAM_TASK_PATH, 'utf8');
 const upstreamTask = JSON.parse(upstreamTaskRaw);
-const upstreamAdmission = upstreamTask.executableAcceptanceAdmissions.find(
-  ({ decision }) => decision === 'ADMITTED',
-);
 const upstream = upstreamEvidenceRows[0];
 const upstreamPreflight = upstream?.evidence?.exactShaPreflight;
 const upstreamElapsedSeconds = Number(upstreamPreflight?.elapsedMilliseconds) / 1000;
@@ -109,29 +106,6 @@ function taskObservation(windowId, taskId, ordinal, mode, observedAt) {
   };
 }
 
-function addAcceptanceWindow(windowId, observedAt, v1Healthy) {
-  append('ACCEPTANCE_RUNTIME_OBSERVATION', observedAt, {
-    windowId,
-    version: 'V1',
-    source: v1Healthy ? 'ROLLBACK_COMPATIBILITY_RUNTIME' : 'SHADOW_LEGACY_MODEL',
-    admitted: true,
-    requestedTimeoutSeconds: 1200,
-    effectiveTimeoutSeconds: v1Healthy ? 1200 : 120,
-    elapsedSeconds: v1Healthy ? upstreamElapsedSeconds : 120,
-    silentlyStoppedAtLegacyCutoff: !v1Healthy,
-  });
-  append('ACCEPTANCE_RUNTIME_OBSERVATION', observedAt, {
-    windowId,
-    version: 'V2',
-    source: 'SYSTEM_EXECUTABLE_EVALUATOR',
-    admitted: true,
-    requestedTimeoutSeconds: 1200,
-    effectiveTimeoutSeconds: 1200,
-    elapsedSeconds: upstreamElapsedSeconds,
-    silentlyStoppedAtLegacyCutoff: false,
-  });
-}
-
 function addWindow(windowId, taskIds, mode, baseTime, v1RuntimeHealthy = mode !== 'BASELINE') {
   const base = Date.parse(baseTime);
   for (const [ordinal, taskId] of taskIds.entries()) {
@@ -141,7 +115,6 @@ function addWindow(windowId, taskIds, mode, baseTime, v1RuntimeHealthy = mode !=
       ...taskObservation(windowId, taskId, ordinal, mode, observedAt),
     });
   }
-  addAcceptanceWindow(windowId, new Date(base + 5_500).toISOString(), v1RuntimeHealthy);
   const report = canary.reduceCanaryWindow(canary.sealCanaryTelemetry(events), contract, windowId);
   reports.set(windowId, report);
   return report;
@@ -176,7 +149,6 @@ test('canary contract declares every requested dimension, denominator, sample, w
   }
   assert.equal(contract.collector.telemetrySchemaRevision, 2);
   assert.equal(contract.collector.capabilityRevision, 2);
-  assert.equal(contract.acceptanceRuntime.requestedTimeoutSeconds, 1200);
 });
 
 test('the immutable target-SHA cohort is deterministic and nonzero across the 111k capacity population', () => {
@@ -222,7 +194,7 @@ test('shadow telemetry derives bidirectional V1/V2 false-close, missed-obligatio
   assert.equal(report.tenantCount, 2);
 });
 
-test('all eleven metric reducers use nonzero versioned denominators and expose actual V1/V2 deltas', () => {
+test('all ten metric reducers use nonzero versioned denominators and expose actual V1/V2 deltas', () => {
   const report = reports.get('shadow-capacity');
   for (const name of canary.CANARY_METRICS) {
     const metric = report.metrics[name];
@@ -234,7 +206,7 @@ test('all eleven metric reducers use nonzero versioned denominators and expose a
   for (const name of [
     'falseClose', 'missedObligation', 'readModelDifference', 'reconciliationLag',
     'oldestObligation', 'expiredLease', 'retryCost', 'inboxAge', 'outboxFailure',
-    'checksumDrift', 'acceptanceRuntimeDeadline',
+    'checksumDrift',
   ]) assert.ok(report.metrics[name].diff.absolute < 0, `${name} did not improve in V2`);
   assert.deepEqual(report.abortReasonsV2, []);
 });
@@ -347,54 +319,13 @@ test('tenant authorization rejects cross-tenant telemetry and sanitization remov
   });
 });
 
-test('acceptance capability matrix rejects incompatible budgets before spawn and admits exact 1200 seconds without clamp', () => {
-  const matrix = canary.acceptanceCapabilityMatrix(contract, TARGET_SHA);
-  assert.deepEqual(matrix.map(({ name, decision, spawnCount }) => [name, decision, spawnCount]), [
-    ['legacy-hard-max-120', 'REJECTED', 0],
-    ['legacy-schema-revision', 'REJECTED', 0],
-    ['legacy-capability-revision', 'REJECTED', 0],
-    ['v2-exact-1200', 'ADMITTED', 0],
-    ['v2-hard-max-3600', 'ADMITTED', 0],
-  ]);
-  assert.equal(matrix.find(({ name }) => name === 'legacy-hard-max-120').rejectionCode,
-    'RUNNER_HARD_MAX_INSUFFICIENT');
-  for (const admitted of matrix.filter(({ decision }) => decision === 'ADMITTED')) {
-    assert.equal(admitted.effectiveTimeoutSeconds, 1200);
-  }
-  append('ACCEPTANCE_CAPABILITY_MATRIX', '2026-08-29T08:20:00.000Z', { matrix });
-  append('ADMISSION_REJECTED', '2026-08-29T08:20:01.000Z', {
-    traceId: 'legacy-hard-max-120',
-    requestedTimeoutSeconds: 1200,
-    runnerHardMaxSeconds: 120,
-    rejectionCode: 'RUNNER_HARD_MAX_INSUFFICIENT',
-    spawnCount: 0,
-    attemptCount: 0,
-  });
-});
-
-test('typed TIMED_OUT attempts retain the goal and deterministically progress through retry, diagnosis and successor', () => {
-  const trace = canary.timeoutContinuationTrace(contract);
-  assert.deepEqual(trace.map(({ continuation }) => continuation), ['RETRY', 'DIAGNOSIS', 'SUCCESSOR']);
-  assert.ok(trace.every(({ actualExitCode }) => actualExitCode === null));
-  for (const entry of trace) {
-    append('TIMED_OUT_CONTINUATION', `2026-08-29T08:30:0${entry.attempt}.000Z`, {
-      traceId: 'typed-timeout-convergence',
-      goalActionable: true,
-      ...entry,
-    });
-  }
-});
-
 test('immutable upstream evidence proves the approved 1200-second Watchdog completed 13/13 beyond legacy 120 seconds', () => {
   assert.ok(Array.isArray(upstreamEvidenceRows) && upstreamEvidenceRows.length > 0);
   assert.equal(upstream.judgmentRequest.decision, 'PASS');
   assert.equal(upstreamTask.status, 'DONE');
-  assert.equal(upstreamAdmission.decision, 'ADMITTED');
-  assert.equal(upstreamAdmission.requestedTimeoutSeconds, 1200);
-  assert.equal(upstreamAdmission.effectiveTimeoutSeconds, 1200);
-  assert.equal(upstreamAdmission.spawnCount, 1);
-  assert.equal(upstreamAdmission.attempt.terminationKind, 'EXITED');
-  assert.equal(upstreamAdmission.attempt.actualExitCode, 0);
+  // The live admission/attempt snapshot used to be read from the task here. Migration 0227
+  // removed that ledger, so the attestation stands on the immutable evidence row alone — which
+  // is what "immutable upstream evidence" meant in the first place.
   assert.equal(upstream.evidence.executableDeclaration.requestedTimeoutSeconds, 1200);
   assert.equal(upstream.evidence.liveReleaseFence.atomicTaskReadback.requestedTimeoutSeconds, 1200);
   assert.equal(upstream.evidence.liveReleaseFence.atomicTaskReadback.ownerTimeoutCeilingSeconds, 1200);
@@ -407,8 +338,9 @@ test('immutable upstream evidence proves the approved 1200-second Watchdog compl
   assert.equal(upstreamPreflight.watchdog.failed, 0);
   assert.equal(upstreamPreflight.watchdog.skipped, 0);
   assert.equal(upstreamPreflight.watchdog.cancelled, 0);
-  assert.ok(upstreamElapsedSeconds > contract.acceptanceRuntime.legacyCutoffSeconds);
-  assert.ok(upstreamElapsedSeconds < contract.acceptanceRuntime.requestedTimeoutSeconds);
+  assert.ok(upstreamElapsedSeconds > 120);
+  assert.ok(upstreamElapsedSeconds
+    < upstream.evidence.executableDeclaration.requestedTimeoutSeconds);
   assert.deepEqual(upstream.evidence.typedRegression, {
     kind: 'TIMED_OUT', continuation: 'RETRY', factPersisted: true,
     actualExitCode: null, goalActionable: true,
@@ -423,10 +355,7 @@ test('immutable upstream evidence proves the approved 1200-second Watchdog compl
     rawTaskSnapshotSha256: sha(upstreamTaskRaw),
     judgmentDecision: upstream.judgmentRequest.decision,
     requestedTimeoutSeconds: upstream.evidence.executableDeclaration.requestedTimeoutSeconds,
-    effectiveTimeoutSeconds: upstreamAdmission.effectiveTimeoutSeconds,
-    runnerHardMaxSeconds: upstreamAdmission.runnerHardMaxSeconds,
-    admissionId: upstreamAdmission.id,
-    attemptId: upstreamAdmission.attempt.id,
+    runnerHardMaxSeconds: upstream.evidence.liveReleaseFence.runner.hardMaxSeconds,
     deadlineSeconds: upstreamPreflight.deadlineSeconds,
     elapsedMilliseconds: upstreamPreflight.elapsedMilliseconds,
     terminationKind: upstreamPreflight.terminationKind,
@@ -457,8 +386,6 @@ test('the complete telemetry set is bounded, nonzero and contains every required
     result[event.kind] = (result[event.kind] ?? 0) + 1;
     return result;
   }, {});
-  assert.ok(counts.ADMISSION_REJECTED > 0);
-  assert.equal(counts.TIMED_OUT_CONTINUATION, 3);
   assert.ok(counts.UPSTREAM_WATCHDOG_ATTESTATION > 0);
   assert.equal(controlReplay.rollback.recoveredWithinSlo, true);
   assert.equal(controlReplay.rollforward.completed, true);

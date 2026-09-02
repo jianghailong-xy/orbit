@@ -21,7 +21,6 @@ import (
 
 const (
 	runnerCapabilitiesHeader             = "X-Orbit-Runner-Capabilities"
-	executableAcceptanceCapabilityHeader = "X-Orbit-Executable-Acceptance-Capability"
 	sessionOrchestrationCredentialV1     = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1             = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1                 = "session-worktree-ops-v1"
@@ -219,7 +218,6 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
-	req.Header.Set(executableAcceptanceCapabilityHeader, executableAcceptanceCapabilityHeaderValue())
 	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
@@ -505,25 +503,6 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 		status = stAwaitingInput
 	}
 	return status, nil
-}
-
-// startExecutableAcceptance is idempotent on admission id. A lost success is retried until the
-// server returns the same attempt row; no command is spawned while this handshake is unresolved.
-func (t *Transport) startExecutableAcceptance(
-	ctx context.Context,
-	sessionID string,
-	admissionID string,
-) (*ExecutableAttemptStartResponse, error) {
-	var response ExecutableAttemptStartResponse
-	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
-		response = ExecutableAttemptStartResponse{}
-		path := "/runner/sessions/" + sessionID + "/executable-acceptance/" + admissionID + "/start"
-		return t.do(attemptCtx, "POST", path, map[string]interface{}{}, &response, 15*time.Second)
-	}, isRetryableTransportError)
-	if err != nil {
-		return nil, err
-	}
-	return &response, nil
 }
 
 // releaseTurnLeases expires any inbox leases held by an engine that was

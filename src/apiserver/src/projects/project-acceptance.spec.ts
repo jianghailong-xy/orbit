@@ -25,7 +25,6 @@ function facts(overrides: Partial<AcceptanceFacts> = {}): AcceptanceFacts {
   return {
     criteriaRevision: sha256('every suite green\nmerged to main'),
     mergeEvidence: [['r1', 'main', 'a'.repeat(64), '3']],
-    executableAttempts: [],
     ...overrides,
   };
 }
@@ -42,7 +41,6 @@ test('the digest is stable under evidence reordering and changes with acceptance
     acceptanceDigest(PROJECT, {
       ...base,
       mergeEvidence: [...base.mergeEvidence].reverse(),
-      executableAttempts: [...base.executableAttempts].reverse(),
     }),
   );
 
@@ -54,23 +52,6 @@ test('the digest is stable under evidence reordering and changes with acceptance
     // AE9's whole point: identical content at a new generation is still a different observation,
     // because "changed and changed back" is real for squash and force-push.
     ['same content, new generation', facts({ mergeEvidence: [['r1', 'main', 'a'.repeat(64), '4']] })],
-    ['typed executable attempt recorded', facts({
-      executableAttempts: [[
-        'project-acceptance-executable-attempt-v1',
-        'criterion-1',
-        '1',
-        'task-1',
-        'attempt-1',
-        'admission-1',
-        'c'.repeat(64),
-        '0',
-        'EXITED',
-        '0',
-        'd'.repeat(64),
-        'false',
-        '2026-08-29T19:21:00.000Z',
-      ]],
-    })],
   ];
   for (const [what, changed] of moved) {
     assert.notEqual(acceptanceDigest(PROJECT, changed), acceptanceDigest(PROJECT, base), what);
@@ -80,6 +61,9 @@ test('the digest is stable under evidence reordering and changes with acceptance
     ...base,
     taskSet: [['nice-to-have', 'OPEN']],
     taskVerdicts: [['verification-task', 'FAIL']],
+    // 0227's retired v6 collector. A caller still presenting it is outside the input shape, the
+    // same way the two task projections above are.
+    executableAttempts: [['project-acceptance-executable-attempt-v1', 'criterion-1']],
   };
   assert.equal(
     acceptanceDigest(PROJECT, taskMetadata),
