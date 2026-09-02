@@ -420,7 +420,13 @@ test('virtual negotiation rejects hardMax=120 before spawn and admits hardMax=12
   assert.equal(admitted.decision, 'ADMITTED');
   assert.equal(admitted.effectiveTimeoutSeconds, 1200);
   assert.equal(admitted.effectiveDeadline.toISOString(), '2026-08-28T12:20:00.000Z');
-  evidence.negotiation = { rejected, admitted, planDigest: plan.evaluationPlanDigest };
+  // Merge rather than replace: the HTTP 200 contract test writes `httpSuccessStatus` into this
+  // same block, and ba1f1972 moved that test above this one, so a wholesale assignment silently
+  // dropped the key the manifest asserts. Every other writer of `evidence.negotiation` already
+  // merges.
+  Object.assign(evidence.negotiation, {
+    rejected, admitted, planDigest: plan.evaluationPlanDigest,
+  });
 });
 
 test('owner and policy ceilings reject before admission and every plan field is digest-bound', () => {

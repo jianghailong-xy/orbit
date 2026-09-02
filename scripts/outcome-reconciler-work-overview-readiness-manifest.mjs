@@ -122,7 +122,13 @@ if (evidencePhase === 'PREDEPLOY_EVALUATION') {
 
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 execFileSync('git', ['-C', repo, 'merge-base', '--is-ancestor', baseSha, targetSha]);
-const changedFiles = git('diff', '--name-only', baseSha, targetSha)
+// `--diff-filter=d` excludes deletions. Every path here is read back with `git show
+// <targetSha>:<path>` below to digest the repair surface as it exists at the target, and a file
+// deleted between the frozen base and the target has no content there -- `git show` exits 128 and
+// takes the whole node with it. That became reachable as soon as this round started deleting specs
+// under `src/apiserver/src/projects/`. A deleted file is legitimately not part of the surface being
+// digested; the surviving surface is still digested in full and the floor below still applies.
+const changedFiles = git('diff', '--name-only', '--diff-filter=d', baseSha, targetSha)
   .split('\n').filter(Boolean);
 const relevantFiles = changedFiles.filter((file) =>
   file === 'package.json'

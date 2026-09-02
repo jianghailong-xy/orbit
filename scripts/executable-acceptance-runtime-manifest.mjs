@@ -82,8 +82,11 @@ for (const key of ['rest', 'cli', 'mcp', 'sharedWire']) {
 assert.deepEqual(evidence.compatibility.rollingV1CanonicalBridge, {
   retryRollback: true, duplicateNoop: true, canonicalFacts: 1, typedAttempts: 0,
 });
-assert.equal(evidence.compatibility.rollingV1ExistingOpenRequest, true);
-assert.equal(evidence.compatibility.rollingV1ExistingResult, true);
+// `rollingV1ExistingOpenRequest` and `rollingV1ExistingResult` used to be written here by the
+// rolling-upgrade verifier. ba1f1972 removed the completion-ACK protocol they described, and
+// deleted the two lines that produced them without deleting the two that read them, so this
+// manifest has since asserted evidence that nothing writes. The rolling lane still proves what
+// survives an upgrade through `rollingV1CanonicalBridge` and `rollingV1StaleOpenIsolation`.
 assert.equal(evidence.compatibility.rollingV1StaleOpenIsolation, true);
 assert.equal(evidence.compatibility.nMinusOnePlan, 'v1');
 assert.equal(evidence.compatibility.legacyMinusOneActionable, true);
