@@ -118,6 +118,7 @@ Options:
                                    read the structured item array from stdin
   --instructions TEXT              how this project's work is to be done (max 10,000 characters)
   --instructions-file -            read the instructions from stdin
+  --workspace-id ID                open the coordinator in this workspace instead of here
   --json                           emit compact JSON
 
 The project is created under this runner's owner and starts OPEN. It holds no tasks yet —
@@ -126,9 +127,16 @@ file them with ` + "`orbit task create --project-id <id>`" + ` once it exists.
 Run inside a session, the project is bound to THAT session as its coordinator — and to the
 workspace it runs in — in the same write that creates the project, so opening the coordinator
 later comes back to this conversation instead of starting a new one. A session coordinates at
-most one project, so recording a second from the same session is refused and nothing is created.
+most one project: record a second from the same session and it gets a coordinator conversation
+of its own, in this same workspace, and the answer says so.
 Run headless there is no session to bind and no such binding: the coordinator is opened wherever
 the project's work turns out to run, or wherever you say.
+
+--workspace-id says the coordinator belongs somewhere other than here, and naming a workspace
+OPENS it there — a project that names a coordination workspace has a coordinator, and recording
+the workspace alone would make the project read back as a conversation that went to Trash. It
+needs orchestration enabled for this session, because it names a workspace rather than
+inheriting one, and headless it is refused for want of anything to check it against.
 
 Only one --*-file flag per invocation: they all read the same stdin, and the second read
 would silently come back empty.
@@ -204,7 +212,7 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
-	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
+	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and the server opens THAT project its own coordinator in the same workspace and says so — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one.", Mutates: true},
 	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; [] clears)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement that lands immediately: every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add, and use [] to clear. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
@@ -570,6 +578,7 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteriaItemsFile := fs.String("acceptance-criteria-items-file", "", "read structured acceptance criteria JSON from stdin (-)")
 	instructions := fs.String("instructions", "", "how this project's work is to be done")
 	instructionsFile := fs.String("instructions-file", "", "read the instructions from stdin (-)")
+	workspaceID := fs.String("workspace-id", "", "open this project's coordinator in this workspace instead of in the calling session")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -609,6 +618,9 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	if instructionsSet {
 		body["instructions"] = instructionsText
 	}
+	if id := strings.TrimSpace(*workspaceID); id != "" {
+		body["workspaceId"] = id
+	}
 	t, err := cliTransport()
 	if err != nil {
 		return err
@@ -619,7 +631,16 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	// straight away rather than only once one of its tasks has an assignee to borrow from.
 	// Headless (launchd/cron, no ORBIT_SESSION_ID) sends no header and gets no default, which is
 	// the honest answer: no session, no workspace to inherit.
-	raw, err := t.createProject(strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")), body)
+	//
+	// The orchestration credential travels beside it and is spent only by `--workspace-id`, which
+	// names a workspace instead of inheriting one — the server checks that choice against this
+	// session's grant. Headless it is empty, and naming a workspace is refused there rather than
+	// authorized by a machine credential alone.
+	raw, err := t.createProject(
+		strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
+		strings.TrimSpace(os.Getenv(envOrchestrationToken)),
+		body,
+	)
 	if err != nil {
 		return fmt.Errorf("create project: %w", err)
 	}

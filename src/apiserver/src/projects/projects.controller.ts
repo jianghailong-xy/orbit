@@ -44,14 +44,19 @@ export class ProjectsController {
     private readonly checkpoints: TaskCheckpointService,
   ) {}
 
+  /**
+   * Record a project, and — when `workspaceId` names one — open its coordinator there.
+   *
+   * The owner's own door, so the workspace is simply theirs to name: no session context is
+   * involved, and this is the same choice `POST :id/coordinator` has always taken. Without it the
+   * project is created exactly as before, coordinated by nothing.
+   */
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProjectDto) {
-    return this.projects.create(
-      user.userId,
-      dto,
-      undefined,
-      { type: 'OWNER', id: user.userId },
-    );
+    const principal = { type: 'OWNER', id: user.userId } as const;
+    return dto.workspaceId
+      ? this.projects.createInWorkspace(user.userId, dto, dto.workspaceId, principal)
+      : this.projects.create(user.userId, dto, undefined, principal);
   }
 
   /** The owner's projects, newest first. `?status=OPEN|DONE|CANCELLED` narrows; absent means all. */

@@ -1034,8 +1034,23 @@ func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interf
 // claim about which session is calling, which the server checks against the session it has. Empty
 // (headless) sends no header at all, and the project is created bound to nothing — see
 // sessionHeader.
-func (t *Transport) createProject(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+// createProject records a project.
+//
+// The session header is CONTEXT: it makes the calling conversation the new project's coordinator,
+// and it needs no credential because the session it names is the caller's own.
+//
+// A `workspaceId` in the body says the opposite — that this project's coordinator belongs to a
+// conversation somewhere else, opened for it — which is a choice the caller made rather than a
+// fact about where it is running. The server checks that choice against the calling session's
+// orchestration grant, so that body, and only that body, travels through doOrchestration: it
+// carries the session-bound credential and refreshes it once if it has expired. A create without
+// the field is byte-identical to what it always sent.
+func (t *Transport) createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
+	if _, named := body["workspaceId"]; named {
+		err := t.doOrchestration("POST", "/runner/projects", body, &out, sessionID, orchestrationToken)
+		return out, err
+	}
 	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

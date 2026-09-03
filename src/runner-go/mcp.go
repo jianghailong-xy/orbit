@@ -381,7 +381,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "goal", "instructions")
+		copyIfPresent(body, args, "goal", "instructions", "workspaceId")
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], false)
 			if err != nil {
@@ -392,7 +392,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
-		raw, err := s.t.createProject(s.sessionID, body)
+		raw, err := s.t.createProject(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create project failed: "+err.Error(), true)
 		}
@@ -1760,6 +1760,20 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"instructions": map[string]interface{}{
 					"type":        "string",
 					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters.",
+				},
+				"workspaceId": map[string]interface{}{
+					"type": "string",
+					"description": "Open this project's coordinator in THIS workspace, instead of making " +
+						"the conversation you are in its coordinator. Naming one opens it: a project " +
+						"that names a coordination workspace has a coordinator, and recording the " +
+						"workspace alone would make the project read back as a conversation that went " +
+						"to Trash. Send it when the project should be coordinated somewhere other than " +
+						"here — including when you are already coordinating another project, though " +
+						"that case needs nothing from you: the server opens the new project its own " +
+						"conversation in this same workspace and tells you it did. Omit it and the " +
+						"session you are in becomes the coordinator, which is what you want when you " +
+						"just planned this work here. Requires orchestration to be enabled for this " +
+						"session, because it names a workspace rather than inheriting one.",
 				},
 			}, "title"),
 		},

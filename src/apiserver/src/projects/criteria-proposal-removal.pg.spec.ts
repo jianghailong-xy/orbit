@@ -185,7 +185,7 @@ test('project_update writes acceptance criteria directly: one call, in force, no
       const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
       // The acceptance service is the real one and is handed to the controller, so a route that
       // still diverted criteria into a proposal would reach a function that no longer exists.
-      const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+      const controller = new RunnerProjectsController(projects, acceptance, {} as never, {} as never);
 
       await projects.update(target.ownerId, target.projectId, {
         acceptanceCriteriaItems: [criterion('The corpus is indexed end to end.')],
@@ -224,7 +224,7 @@ test('a second write replaces the set rather than appending to it', { skip }, as
   try {
     const target = await base(db, 'whole-collection');
     const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
-    const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+    const controller = new RunnerProjectsController(projects, acceptance, {} as never, {} as never);
 
     await controller.updateProject(runner, target.projectId, undefined, {
       acceptanceCriteriaItems: [criterion('First'), criterion('Second')],
@@ -249,7 +249,7 @@ test('an empty structured set clears the criteria instead of being refused', { s
   try {
     const target = await base(db, 'empty-clears');
     const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
-    const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+    const controller = new RunnerProjectsController(projects, acceptance, {} as never, {} as never);
 
     await controller.updateProject(runner, target.projectId, undefined, {
       acceptanceCriteriaItems: [criterion('Something to clear')],
@@ -275,7 +275,7 @@ test('the project read still reports the criteria set, and it is the one just wr
     try {
       const target = await base(db, 'overview-digest');
       const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
-      const controller = new RunnerProjectsController(projects, acceptance, {} as never);
+      const controller = new RunnerProjectsController(projects, acceptance, {} as never, {} as never);
 
       await controller.updateProject(runner, target.projectId, undefined, {
         acceptanceCriteriaItems: [criterion('The first standard')],

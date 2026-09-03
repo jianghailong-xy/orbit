@@ -137,6 +137,7 @@ function runnerController() {
     projectFixture() as never,
     acceptanceDouble(),
     {} as never,
+    {} as never,
   );
 }
 

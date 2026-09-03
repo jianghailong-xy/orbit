@@ -180,6 +180,21 @@ export class CreateProjectDto {
   @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
   @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
   @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
+  /**
+   * Where this project's coordinator conversation opens — and, because naming one OPENS it, the
+   * request that carries this field creates a project that already has a coordinator.
+   *
+   * It cannot mean anything narrower. A landing is only ever written beside the conversation that
+   * runs in it: `coordinator/rebind` refuses to record one on its own, because a project naming a
+   * workspace no coordinator has opened in is read back as a conversation that went to Trash. So
+   * "coordinated in W" and "has a coordinator" are one fact, and this field states it.
+   *
+   * Omitted is unchanged and still the common case: the project is coordinated by nothing, and the
+   * first `POST :id/coordinator` decides the landing — from this field's value, or from the
+   * workspace the project's own work is assigned to.
+   */
+  @IsOptional() @IsPublicId() workspaceId?: string;
+
   @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
   sessionBudgetPerDay?: number | null;
 }

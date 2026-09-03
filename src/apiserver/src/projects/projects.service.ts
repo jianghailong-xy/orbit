@@ -50,6 +50,7 @@ import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import {
   buildCoordinatorInstructions,
   buildCoordinatorOpening,
+  buildDelegatedCoordinatorNotice,
   coordinatorSessionTitle,
 } from './coordinator-opening';
 import { authorityPrincipal, refuseHumanOnlyAction } from './coordinator-authority';
@@ -549,14 +550,19 @@ export class ProjectsService {
 
   /**
    * The other half of the binding, refused. `coordinator_session_id` is UNIQUE, so a session
-   * coordinates at most one project; a second project recorded from the same conversation has to
-   * be told so rather than quietly landing unbound, because an unbound project reported as success
-   * is the defect this whole path exists to stop producing. Worded with the remedy in it: the
-   * caller is an agent deciding what to do next, not a person reading a log.
+   * coordinates at most one project; a second project recorded from the same conversation cannot
+   * be bound to it, and landing unbound while reporting success is the defect this whole path
+   * exists to stop producing.
+   *
+   * It no longer carries a remedy, because the remedy is no longer the caller's to carry out:
+   * `createInSession` catches this and gives the new project a conversation of its own in the same
+   * workspace. What is left is the rule, which is still true and is still what the code below
+   * switches on. A caller that sees this message reached it some other way, and telling it "record
+   * this from a session that coordinates nothing yet" would name a workaround that produced the
+   * coordinator-less projects this deployment had to repair by hand.
    */
   private static readonly ALREADY_COORDINATING =
-    'this session already coordinates another project, and a session coordinates at most one — ' +
-    'so this project was not created. Record it from a session that coordinates nothing yet.';
+    'this session already coordinates another project, and a session coordinates at most one';
 
   /**
    * `acceptance` carries its own default so that the several dozen existing constructions of this
@@ -1030,12 +1036,37 @@ export class ProjectsService {
     sessionId: string,
     dto: CreateProjectDto,
   ) {
-    const project = await this.create(
-      ownerId,
-      dto,
-      await this.coordinatorFromSession(ownerId, runnerId, sessionId),
-      { type: 'RUNNER', id: runnerId },
-    );
+    const seed = await this.coordinatorFromSession(ownerId, runnerId, sessionId);
+    const principal = { type: 'RUNNER', id: runnerId } as const;
+    let project: Awaited<ReturnType<ProjectsService['create']>>;
+    try {
+      project = await this.create(ownerId, dto, seed, principal);
+    } catch (e) {
+      if (!ProjectsService.isAlreadyCoordinating(e)) throw e;
+      // The acting session already coordinates a project, and the unique index on
+      // `coordinator_session_id` is what says a session coordinates at most one. That rule is
+      // sound and stays; what used to follow it was not. The caller was refused, and the only
+      // thing it could do about a refusal it had no other door for was to drop the session header
+      // and retry — which succeeds, and produces a project coordinated by nobody, in an account
+      // where nothing else produces one. This deployment has such a project and it took a manual
+      // write to make it openable.
+      //
+      // So the second project gets a conversation of its own, in the SAME workspace: the landing
+      // stays server-derived from where this request came from, exactly as the promotion's does,
+      // and only the session is new. Nothing here is caller-chosen, so this widens no authority —
+      // it spends a session, which is the thing a coordinator-less project costs anyway, only
+      // later and by hand.
+      const delegated = await this.createInWorkspace(ownerId, dto, seed.workspaceId, principal);
+      return {
+        coordinatorInstructions: buildDelegatedCoordinatorNotice(
+          delegated.title,
+          delegated.id,
+          // Non-null by construction: `createInWorkspace` returns only after the bind committed.
+          delegated.coordinatorSessionId as string,
+        ),
+        ...delegated,
+      };
+    }
     return {
       // `project_create` runs inside the turn that is being promoted. A prompt attached to a
       // later claim cannot reach backwards into that turn, while rewriting Session.prompt would
@@ -1048,6 +1079,53 @@ export class ProjectsService {
       // acceptance definitions, and the role change is what the currently-running turn must see.
       ...project,
     };
+  }
+
+  /**
+   * Record a project and open its coordinator in a NAMED workspace.
+   *
+   * The door for "this project is coordinated in W" — and it is one door rather than two because
+   * the two facts cannot be separated: `rebindCoordinator` refuses to record a landing beside a
+   * null session pointer, since `coordinatorStatus` folds that pair to `TRASHED` and would tell a
+   * project that never had a coordinator that one of its conversations had been deleted. Naming a
+   * workspace therefore OPENS the conversation, and both columns are written together by
+   * `coordinator`'s own compare-and-swap.
+   *
+   * TWO WRITES, in this order, and the order is the whole of the failure design. Creating the
+   * session first and the project second would leave a live conversation in a workspace no project
+   * points at when the second write fails — the leak `coordinator` keeps a whole discard path to
+   * avoid. This way a failed open leaves an ordinary coordinator-less project: visible, openable
+   * from the card's own workspace picker, and reported with the reason rather than silently
+   * half-built. Nothing here is swallowed.
+   *
+   * Re-read rather than folded from what was sent: binding the coordinator also seats the
+   * project's COORDINATOR membership (`project_coordinator_companions_bind`), so a response built
+   * from the create's own return would name a coordinator agent of `null` for a project that has
+   * one.
+   */
+  async createInWorkspace(
+    ownerId: string,
+    dto: CreateProjectDto,
+    workspaceId: string,
+    principal: ProjectCreatePrincipal = { type: 'SYSTEM', id: ownerId },
+  ) {
+    const project = await this.create(ownerId, dto, undefined, principal);
+    await this.coordinator(ownerId, project.id, workspaceId);
+    return this.get(ownerId, project.id);
+  }
+
+  /**
+   * The one refusal `create` raises that `createInSession` can answer by itself.
+   *
+   * Read off the machine `code` rather than the message: a 409 from this service is several
+   * different refusals, and only this one means "the acting session is already somebody's
+   * coordinator".
+   */
+  private static isAlreadyCoordinating(e: unknown): boolean {
+    if (!(e instanceof ConflictException)) return false;
+    const body = e.getResponse();
+    return typeof body === 'object' && body !== null
+      && (body as { code?: unknown }).code === 'ALREADY_COORDINATING';
   }
 
   /**

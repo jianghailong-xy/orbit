@@ -17,6 +17,8 @@ const OTHER_RUNNER_ID = '00000000-0000-7000-8000-0000000000b2';
 const SESSION_ID = '00000000-0000-7000-8000-0000000000c1';
 const WORKSPACE_ID = '00000000-0000-7000-8000-0000000000d1';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000e1';
+/** The conversation the fallback opens for a project the acting session may not coordinate. */
+const SECOND_SESSION_ID = '00000000-0000-7000-8000-0000000000c2';
 
 interface SessionRow {
   id: string;
@@ -189,8 +191,31 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
     sessionCreates,
     sessionUpdateSql,
     sessions: rows,
+    /**
+     * Record what the ALREADY_COORDINATING fallback delegates, instead of running it.
+     *
+     * `createInWorkspace` is a composition of three calls this fixture does not model — opening a
+     * coordinator takes a session, three lock reads and a compare-and-swap — and its own contract
+     * is asserted where those are modelled. What belongs HERE is the decision: that the fallback
+     * happens at all, and that the workspace it hands on is the acting session's own rather than
+     * anything a caller could have chosen.
+     */
+    delegateTo(calls: unknown[], project: Record<string, unknown>) {
+      (service as unknown as Record<string, unknown>).createInWorkspace = async (
+        ...args: unknown[]
+      ) => {
+        calls.push(args);
+        return project;
+      };
+    },
     inSession: (dto: CreateProjectDto, sessionId = SESSION_ID, runnerId = RUNNER_ID) =>
       service.createInSession(OWNER_ID, runnerId, sessionId, dto),
+    /** The seeded create on its own, which is where the unique violation is translated. */
+    seeded: (dto: CreateProjectDto) =>
+      service.create(OWNER_ID, dto, { sessionId: SESSION_ID, workspaceId: WORKSPACE_ID }, {
+        type: 'RUNNER',
+        id: RUNNER_ID,
+      }),
     headless: (dto: CreateProjectDto) => service.create(OWNER_ID, dto),
   };
 }
@@ -422,14 +447,53 @@ test('every refusal reads exactly the same', async () => {
 // ── One session coordinates at most one project ───────────────────────────────────────────────
 
 // `coordinator_session_id` is UNIQUE, so the SECOND project recorded from one conversation is a
-// unique violation rather than a second binding. Raised by the database, translated here: an
-// unhandled P2002 reaches the caller as a bare 500, which reads as "the server is broken" for
-// what is a rule the caller can act on.
-test('a second project from the same session is a 409, and writes nothing', async () => {
+// unique violation rather than a second binding. The rule stands; what follows it changed. Being
+// refused left the caller one move it could actually make — drop the session header and retry —
+// and that move records a project coordinated by NOBODY, which is the one thing this path exists
+// to stop producing. So the second project gets a conversation of its own instead.
+test('a second project from the same session gets its OWN coordinator, in the same workspace', async () => {
+  const f = makeService([LIVE], uniqueCoordinator());
+  const delegated: unknown[] = [];
+  f.delegateTo(delegated, { id: PROJECT_ID, title: 'Crawl again', coordinatorSessionId: SECOND_SESSION_ID });
+
+  const result = await f.inSession({ title: 'Crawl again' }) as { coordinatorInstructions: string };
+
+  // The landing is STILL server-derived — the acting session's own workspace, not anything the
+  // caller named. Only the conversation is new, so this widens no authority.
+  assert.equal(delegated.length, 1);
+  assert.deepEqual((delegated[0] as unknown[]).slice(0, 1), [OWNER_ID]);
+  assert.equal((delegated[0] as unknown[])[2], WORKSPACE_ID);
+  assert.deepEqual((delegated[0] as unknown[])[3], { type: 'RUNNER', id: RUNNER_ID });
+
+  // And the caller is told it was NOT promoted. Saying nothing would be read as the promotion,
+  // since that is what recording a project from a session has always meant.
+  assert.match(result.coordinatorInstructions, /协调会话不是你/);
+  assert.notEqual(
+    result.coordinatorInstructions,
+    buildCoordinatorInstructions('Crawl again', PROJECT_ID),
+  );
+
+  // The first attempt still wrote nothing. One statement is what makes half-written unreachable:
+  // the insert that would have carried the binding is the insert that raised, so there is no
+  // project row and no dangling pointer from it — the project that exists is the one the fallback
+  // created, and it is not this one.
+  assert.equal(f.creates.length, 1, 'exactly one seeded statement was attempted');
+  assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
+  assert.equal(f.sessions[0].title, 'Explore the corpus', 'the failed transaction rolls the rename back');
+  assert.equal(f.sessions[0].titleManagedByProject, false);
+});
+
+// The rule itself is still a 409 with a code, because `createInSession` is what answers it and it
+// answers it by reading that code. A translation that stopped happening would reach the fallback
+// as an unhandled P2002 — a bare 500 for a case that now has a working outcome.
+test('the unique violation is still translated into a code the fallback can switch on', async () => {
   const f = makeService([LIVE], uniqueCoordinator());
 
+  // Asserted at its SOURCE — the seeded create — rather than through `createInSession`, which no
+  // longer lets it out. An untranslated P2002 would reach the fallback as a bare Prisma error and
+  // be rethrown as a 500 for a case that now has a working outcome.
   await assert.rejects(
-    () => f.inSession({ title: 'Crawl again' }),
+    () => f.seeded({ title: 'Crawl again' }),
     (e: unknown) => {
       assert.ok(e instanceof ConflictException, `expected a 409, got ${String(e)}`);
       assert.deepEqual(e.getResponse(), {
@@ -437,21 +501,11 @@ test('a second project from the same session is a 409, and writes nothing', asyn
         error: 'Conflict',
         code: 'ALREADY_COORDINATING',
         message:
-          'this session already coordinates another project, and a session coordinates at most one — ' +
-          'so this project was not created. Record it from a session that coordinates nothing yet.',
+          'this session already coordinates another project, and a session coordinates at most one',
       });
       return true;
     },
   );
-
-  // Half-written is the outcome that must be unreachable, and one statement is what makes it so:
-  // the insert that would have carried the binding is the insert that raised, so there is no
-  // project row, no dangling pointer, and nothing for the caller to clean up before retrying
-  // somewhere else. A create-then-bind implementation fails this by leaving the project behind.
-  assert.equal(f.creates.length, 1, 'exactly one statement was attempted');
-  assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
-  assert.equal(f.sessions[0].title, 'Explore the corpus', 'the failed transaction rolls the rename back');
-  assert.equal(f.sessions[0].titleManagedByProject, false);
 });
 
 // Only the unique violation, and only where one can happen. A P2002 is translated because there

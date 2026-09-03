@@ -212,7 +212,9 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	if _, exposed := createProps["acceptanceCriteria"]; exposed {
 		t.Fatal("project_create exposes legacy acceptanceCriteria as an agent authoring fallback")
 	}
-	if len(createProps) != 4 {
+	// title, goal, instructions, acceptanceCriteriaItems, workspaceId — the fifth is where the
+	// coordinator opens, and it is counted here so a sixth cannot appear unremarked.
+	if len(createProps) != 5 {
 		t.Fatalf("project_create properties = %#v", createProps)
 	}
 	if got := mcpToolRequired(t, tools, "project_create"); len(got) != 1 || got[0] != "title" {
@@ -880,10 +882,26 @@ func TestMCPProjectCreateDescriptionStatesTheCoordinatorDefault(t *testing.T) {
 			t.Fatalf("project_create description does not mention %q: %q", want, description)
 		}
 	}
-	// And it must not promise an input that does not exist: the workspace comes from the session,
-	// so a model hunting for a workspace argument would be hunting for nothing.
+	// The workspace is nameable now, and the description has to say what naming one DOES — it
+	// opens the coordinator there, because a landing recorded without a conversation reads back as
+	// one that went to Trash. A model told only "you may pass a workspace" would expect the
+	// narrower thing.
 	props := mcpToolProps(tools, "project_create")
-	for _, name := range []string{"workspaceId", "coordinatorWorkspaceId", "sessionId"} {
+	workspace, ok := props["workspaceId"].(map[string]interface{})
+	if !ok {
+		t.Fatal("project_create no longer exposes a workspaceId input")
+	}
+	workspaceDoc, _ := workspace["description"].(string)
+	for _, want := range []string{"opens", "orchestration"} {
+		if !strings.Contains(strings.ToLower(workspaceDoc), want) {
+			t.Fatalf("workspaceId description does not mention %q: %q", want, workspaceDoc)
+		}
+	}
+
+	// The other two stay out. `sessionId` is the acting session, which is a header the server
+	// establishes rather than a claim the caller makes, and a project's coordinator SESSION is
+	// never chosen by the create — only the workspace its conversation opens in is.
+	for _, name := range []string{"coordinatorWorkspaceId", "sessionId"} {
 		if _, ok := props[name]; ok {
 			t.Fatalf("project_create exposes a %q input", name)
 		}

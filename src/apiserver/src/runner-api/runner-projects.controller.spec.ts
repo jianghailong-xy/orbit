@@ -17,6 +17,28 @@ function acceptanceDouble(): never {
   } as never;
 }
 
+/**
+ * The orchestration authorizer, which only the `workspaceId` path consults.
+ *
+ * It FAILS rather than passing when a scenario that should not need it reaches it: the gate is
+ * the whole of what naming a workspace costs, and a test that silently authorized would be
+ * asserting the routing while proving nothing about the authority.
+ */
+function orchestrationDouble(calls?: unknown[][]): never {
+  return {
+    assert: async (...args: unknown[]) => {
+      if (!calls) assert.fail('this scenario does not name a workspace, so nothing to authorize');
+      calls.push(args);
+      return args[1] as string;
+    },
+  } as never;
+}
+
+/** An authorizer that refuses, the way it does for a session without the grant. */
+function orchestrationRefuses(reason = 'orchestration is not enabled for this session'): never {
+  return { assert: async () => { throw new ForbiddenException(reason); } } as never;
+}
+
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 
@@ -44,7 +66,12 @@ test('getProject reads the project through ProjectsService, scoped to the runner
       return expected;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(
+    projects,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+  );
 
   const result = await controller.getProject(RUNNER, 'project-1');
 
@@ -60,7 +87,7 @@ test('a project belonging to another owner stays a 404 from the service', async 
       throw new Error('project not found');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
 
   await assert.rejects(() => controller.getProject(RUNNER, 'someone-elses-project'), /not found/);
 });
@@ -125,7 +152,12 @@ test('createProject writes into the runner owner, with the body untouched', asyn
       return created;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(
+    projects,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+  );
   const dto: CreateProjectDto = {
     title: 'Crawl',
     goal: 'Index the corpus',
@@ -136,7 +168,7 @@ test('createProject writes into the runner owner, with the body untouched', asyn
     instructions: 'Work shard by shard',
   };
 
-  const result = await controller.createProject(RUNNER, undefined, dto);
+  const result = await controller.createProject(RUNNER, undefined, undefined, dto);
 
   assert.equal(seen.ownerId, 'owner-1');
   // The same object, not a copy: a runner door that rebuilt the payload could drop a field the
@@ -158,7 +190,15 @@ function createSpy() {
       return { id: 'project-1' };
     },
   } as never;
-  return { calls, controller: new RunnerProjectsController(projects, acceptanceDouble(), {} as never) };
+  return {
+    calls,
+    controller: new RunnerProjectsController(
+      projects,
+      acceptanceDouble(),
+      {} as never,
+      orchestrationDouble(),
+    ),
+  };
 }
 
 // The whole point of the header: a project an agent records while working on it should be
@@ -169,7 +209,7 @@ test('a project created from inside a session is created in that session’s con
   const f = createSpy();
   const dto: CreateProjectDto = { title: 'Crawl', goal: 'Index the corpus' };
 
-  await f.controller.createProject(RUNNER, SESSION_ID, dto);
+  await f.controller.createProject(RUNNER, SESSION_ID, undefined, dto);
 
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].path, 'in-session');
@@ -190,7 +230,7 @@ for (const [label, header] of [
   test(`a headless create with an ${label} session header keeps the old behaviour`, async () => {
     const f = createSpy();
 
-    await f.controller.createProject(RUNNER, header, { title: 'Nightly sweep' });
+    await f.controller.createProject(RUNNER, header, undefined, { title: 'Nightly sweep' });
 
     assert.equal(f.calls.length, 1);
     assert.equal(f.calls[0].path, 'headless');
@@ -198,32 +238,38 @@ for (const [label, header] of [
   });
 }
 
-// The session is context, not content. A door that copied it into the body would be inventing a
-// caller-controlled workspace field — which is the thing CreateProjectDto deliberately does not
-// have, because a runner that could name any workspace could plant a coordinator in one.
+// The session is context, not content. `workspaceId` is a field and the session is not, and the
+// difference is what each one is: one is a choice the caller makes and pays an orchestration gate
+// for, the other is a fact about where the request came from that only the server can establish.
+// A door that copied the header into the body would blur them.
 test('the session never becomes part of the project body', async () => {
   const f = createSpy();
   const dto = { title: 'Crawl' } as CreateProjectDto;
 
-  await f.controller.createProject(RUNNER, SESSION_ID, dto);
+  await f.controller.createProject(RUNNER, SESSION_ID, undefined, dto);
 
   assert.deepEqual(Object.keys(dto), ['title']);
   assert.equal('workspaceId' in dto, false);
   assert.equal('coordinatorWorkspaceId' in dto, false);
 });
 
-// `workspaceId` is not on CreateProjectDto, so the global ValidationPipe strips it — but a
-// controller that read `dto.workspaceId` would still honour it on a direct call. This is the
-// assertion that the workspace comes from the session and from nowhere else.
-test('a workspaceId smuggled into the body is not what the project is created with', async () => {
-  const f = createSpy();
+// `workspaceId` used not to exist on CreateProjectDto, and this asserted that a body carrying one
+// anyway could not decide where the coordinator went. The field exists now — see "Naming the
+// workspace" below — and the half of that claim which survives is the half that matters: it is
+// not a body field the door simply honours. Without the credential that proves the caller may
+// name one, nothing is created at all, in any workspace.
+test('a workspaceId is never honoured on the strength of being in the body', async () => {
+  const f = workspaceSpy(orchestrationRefuses());
 
-  await f.controller.createProject(RUNNER, SESSION_ID, {
-    title: 'Crawl',
-    workspaceId: 'workspace-somebody-elses',
-  } as never);
+  await assert.rejects(
+    () => f.controller.createProject(RUNNER, SESSION_ID, undefined, {
+      title: 'Crawl',
+      workspaceId: 'workspace-somebody-elses',
+    }),
+    (e: unknown) => e instanceof ForbiddenException,
+  );
 
-  assert.deepEqual(f.calls[0].args.slice(0, 3), ['owner-1', 'runner-1', SESSION_ID]);
+  assert.deepEqual(f.calls, [], 'not created here, and not quietly created in the session’s own');
 });
 
 // A session that is not this runner's, or has no workspace left, is refused by the service. The
@@ -241,10 +287,15 @@ test('a session the service refuses is not quietly downgraded to a headless crea
       throw new ForbiddenException('no workspace');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(
+    projects,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+  );
 
   await assert.rejects(
-    () => controller.createProject(RUNNER, SESSION_ID, { title: 'Crawl' }),
+    () => controller.createProject(RUNNER, SESSION_ID, undefined, { title: 'Crawl' }),
     (e: unknown) => e instanceof ForbiddenException,
   );
   assert.deepEqual(calls, ['in-session']);
@@ -253,14 +304,17 @@ test('a session the service refuses is not quietly downgraded to a headless crea
 // The exact header, spelled the way `publicIdHeaders` normalizes and the way every shipped runner
 // sends it. A typo here is silent: the parameter is `undefined` on every request and every
 // in-session create quietly becomes headless again.
-test('createProject reads the session from x-orbit-session-id', () => {
+test('createProject reads exactly two headers: which session, and the proof it is that session', () => {
   const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'createProject') as
     | Record<string, { index: number; data?: unknown }>
     | undefined;
   const headers = Object.values(args ?? {}).filter((arg) => typeof arg.data === 'string' && arg.data.includes('-'));
+  // The pair, and nothing else. The id says which conversation this request came from; the token
+  // is what makes that claim worth anything when the body names a workspace, since a session id is
+  // discoverable and this door would otherwise let any live runner place a coordinator anywhere.
   assert.deepEqual(
-    headers.map((arg) => arg.data),
-    ['x-orbit-session-id'],
+    headers.map((arg) => arg.data).sort(),
+    ['x-orbit-session-id', 'x-orbit-session-token'],
   );
 });
 
@@ -308,7 +362,7 @@ test('updateProject writes into the runner owner, with the id and body untouched
       return updated;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
   const dto: UpdateProjectDto = { title: 'Crawl the archive', status: ProjectStatus.DONE };
 
   const result = await controller.updateProject(RUNNER, 'project-1', undefined, dto);
@@ -334,7 +388,7 @@ test('updateProject forwards an explicit structured clear rather than dropping i
       return {};
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
 
   await controller.updateProject(RUNNER, 'project-1', undefined, {
     goal: null,
@@ -353,7 +407,7 @@ test("updating another owner's project stays a 404 from the service", async () =
       throw new Error('project not found');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
 
   await assert.rejects(
     () => controller.updateProject(RUNNER, 'someone-elses-project', undefined, { status: ProjectStatus.DONE }),
@@ -371,7 +425,7 @@ test('removeProject deletes through ProjectsService in the runner owner scope', 
       return expected;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
 
   const result = await controller.removeProject(RUNNER, 'project-1');
 
@@ -385,7 +439,7 @@ test('removeProject preserves the service refusal for a non-empty project', asyn
       throw new Error('This project still holds 2 task(s) and cannot be deleted');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
 
   await assert.rejects(() => controller.removeProject(RUNNER, 'project-1'), /still holds 2 task/);
 });
@@ -443,4 +497,103 @@ test('the manual trigger is not reachable with a runner credential', () => {
       .some((name) => /trigger/i.test(name)),
     false,
   );
+});
+
+
+// ── Naming the workspace ──────────────────────────────────────────────────────────────────────
+
+/** A controller whose THREE create paths are told apart by which one was called. */
+function workspaceSpy(orchestration: never) {
+  const calls: Array<{ path: 'headless' | 'in-session' | 'in-workspace'; args: unknown[] }> = [];
+  const projects = {
+    create: async (...args: unknown[]) => {
+      calls.push({ path: 'headless', args });
+      return { id: 'project-1' };
+    },
+    createInSession: async (...args: unknown[]) => {
+      calls.push({ path: 'in-session', args });
+      return { id: 'project-1' };
+    },
+    createInWorkspace: async (...args: unknown[]) => {
+      calls.push({ path: 'in-workspace', args });
+      return { id: 'project-1' };
+    },
+  } as never;
+  return {
+    calls,
+    controller: new RunnerProjectsController(projects, acceptanceDouble(), {} as never, orchestration),
+  };
+}
+
+const WORKSPACE_ID = '00000000-0000-7000-8000-0000000000d1';
+
+// The point of sending it: the acting session says WHO is asking, the field says WHERE, and a
+// coordinator that must not be this conversation has to be able to be somewhere else.
+test('a named workspace is authorized against the acting session, then coordinated there', async () => {
+  const authorized: unknown[][] = [];
+  const f = workspaceSpy(orchestrationDouble(authorized));
+  const dto: CreateProjectDto = { title: 'Crawl', workspaceId: WORKSPACE_ID };
+
+  await f.controller.createProject(RUNNER, SESSION_ID, 'orchestration-token', dto);
+
+  // Authorized with the acting session and the credential that proves the caller IS it — a
+  // discovered session id alone is what the token exists to be insufficient against.
+  assert.deepEqual(authorized, [[RUNNER, SESSION_ID, 'orchestration-token']]);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].path, 'in-workspace');
+  assert.deepEqual(f.calls[0].args.slice(0, 3), ['owner-1', dto, WORKSPACE_ID]);
+  assert.deepEqual(f.calls[0].args[3], { type: 'RUNNER', id: 'runner-1' });
+});
+
+// Without an acting session there is nothing to check the choice against, and a machine credential
+// that could name any workspace could open a conversation in every workspace this account owns.
+for (const [label, header] of [['absent', undefined], ['empty', '  ']] as const) {
+  test(`a named workspace with an ${label} session header is refused, and creates nothing`, async () => {
+    const f = workspaceSpy(orchestrationDouble());
+
+    await assert.rejects(
+      () => f.controller.createProject(RUNNER, header, undefined, {
+        title: 'Crawl',
+        workspaceId: WORKSPACE_ID,
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof ForbiddenException, `expected a 403, got ${String(e)}`);
+        // Named, because a caller told only "no" concludes there is no way to do this at all —
+        // and there is: the owner's own door takes the same field without borrowing a session.
+        assert.match(String((e as ForbiddenException).message), /X-Orbit-Session-Id|user API/);
+        return true;
+      },
+    );
+
+    // Not "refused after creating it somewhere else": the headless path would have accepted this
+    // body and produced a project whose coordinator nobody chose.
+    assert.deepEqual(f.calls, []);
+  });
+}
+
+// The gate is checked BEFORE the write, not reported after it. A refusal that arrived with the
+// project already created would be a project this session was not allowed to place.
+test('a refused orchestration credential creates nothing at all', async () => {
+  const f = workspaceSpy(orchestrationRefuses());
+
+  await assert.rejects(
+    () => f.controller.createProject(RUNNER, SESSION_ID, 'stale-token', {
+      title: 'Crawl',
+      workspaceId: WORKSPACE_ID,
+    }),
+    (e: unknown) => e instanceof ForbiddenException,
+  );
+
+  assert.deepEqual(f.calls, []);
+});
+
+// The old two paths are unchanged by the field's existence: a body without it never consults the
+// authorizer at all, which is what `orchestrationDouble()` failing proves.
+test('a create without a workspaceId still routes on the session header alone', async () => {
+  const f = workspaceSpy(orchestrationDouble());
+
+  await f.controller.createProject(RUNNER, SESSION_ID, 'orchestration-token', { title: 'Crawl' });
+  await f.controller.createProject(RUNNER, undefined, undefined, { title: 'Nightly sweep' });
+
+  assert.deepEqual(f.calls.map((call) => call.path), ['in-session', 'headless']);
 });

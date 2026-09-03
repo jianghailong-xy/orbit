@@ -25,6 +25,7 @@ import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 
 /**
  * A project's durable context, read and written by `orbit project` and the `project_*` MCP tools
@@ -60,6 +61,7 @@ export class RunnerProjectsController {
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
+    private readonly orchestration: RunnerOrchestrationAuthorizer,
   ) {}
 
   /**
@@ -71,25 +73,53 @@ export class RunnerProjectsController {
    * a project created from inside a session is bound, in the insert that creates it, to that
    * session as its coordinator and to that session's workspace. So opening the coordinator comes
    * back to the conversation the project was planned in, rather than starting a second one that
-   * knows none of it. It is deliberately not a body field — `sessionId` or `workspaceId` on the
-   * DTO would be caller-chosen, and this is a fact about where the request came from that only the
-   * server can establish (`createInSession` resolves it under this runner and this owner, and
-   * refuses anything else).
+   * knows none of it. `sessionId` is deliberately not a body field — it is a fact about where the
+   * request came from that only the server can establish (`createInSession` resolves it under this
+   * runner and this owner, and refuses anything else).
    *
-   * No orchestration credential is asked for. Writing a project is authority `project_create`
-   * already has; the header settles which conversation the project's own coordinator IS, and
-   * grants nothing — the session it names is the caller's own. The empty-string check is not
-   * cosmetic: a headless caller must reach `create`, and `''` would otherwise be looked up as a
-   * session and refused.
+   * No orchestration credential is asked for BY THAT PATH. Writing a project is authority
+   * `project_create` already has; the header settles which conversation the project's own
+   * coordinator IS, and grants nothing — the session it names is the caller's own. The
+   * empty-string check is not cosmetic: a headless caller must reach `create`, and `''` would
+   * otherwise be looked up as a session and refused.
+   *
+   * `workspaceId` IS a body field, and it is the exception the paragraph above describes rather
+   * than a hole in it. It names a workspace the caller chose, so it is exactly the authority
+   * `session_create` asks for — a live acting session whose workspace has orchestration enabled —
+   * and it is refused without one, because the alternative is a machine credential that can open a
+   * conversation in any workspace this account owns. The acting session proves who is asking; the
+   * field says where, and the two are different questions. There is no service token to refuse
+   * here: `RunnerAuthGuard` takes the machine's own credential and nothing else — a minted token
+   * reaches the session routes and only those.
    */
   @Post('projects')
-  createProject(
+  async createProject(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Body() dto: CreateProjectDto,
   ) {
     RunnerProjectsController.refuseGovernance(dto);
     const inSession = sessionId?.trim();
+    if (dto.workspaceId) {
+      if (!inSession) {
+        // Nothing to check the choice against. A headless caller IS the owner operating this
+        // machine, and the door that lets them name a workspace without borrowing a session's
+        // authority is the user API's own POST /projects.
+        throw new ForbiddenException(
+          'naming a workspaceId here needs an acting session — send X-Orbit-Session-Id with an ' +
+            'orchestration credential, or create the project through the user API',
+        );
+      }
+      await this.orchestration.assert(runner, inSession, orchestrationToken);
+      // The named workspace WINS over the acting session's own, which is the whole point of
+      // sending it: the caller is saying this project is coordinated somewhere else. The session
+      // is spent proving the caller may say so, not deciding where.
+      return this.projects.createInWorkspace(runner.ownerId, dto, dto.workspaceId, {
+        type: 'RUNNER',
+        id: runner.id,
+      });
+    }
     return inSession
       ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)
       : this.projects.create(

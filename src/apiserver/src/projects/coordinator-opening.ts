@@ -54,6 +54,33 @@ export function buildCoordinatorInstructions(title: string, projectId: string): 
   return renderCoordinatorInstructions(`项目「${title}」（id: ${uuidToBase62(projectId)}）`);
 }
 
+/**
+ * What a session is told when the project it just recorded is coordinated by a DIFFERENT
+ * conversation.
+ *
+ * A session coordinates at most one project, so a session that already has one cannot be promoted
+ * again. Recording the project anyway and leaving it coordinated by nobody is what used to happen
+ * — the caller was refused, dropped the session header, and retried — so `createInSession` now
+ * opens the new project its own conversation, in this same workspace.
+ *
+ * It travels under the same key as the promotion, deliberately: both answer "what did recording
+ * this project do to MY role", and a caller shown nothing would read the promotion's absence as
+ * the promotion.
+ */
+export function buildDelegatedCoordinatorNotice(
+  title: string,
+  projectId: string,
+  coordinatorSessionId: string,
+): string {
+  return (
+    `项目「${title}」（id: ${uuidToBase62(projectId)}）已经记下了，但它的协调会话不是你。\n\n`
+    + '你已经在协调另一个项目，而一个会话只能协调一个项目——所以已经在同一个 workspace 里为它开了'
+    + `一条自己的协调会话（session id: ${uuidToBase62(coordinatorSessionId)}），项目从此指向那条会话。\n\n`
+    + '你这边的角色没有变，手上还是原来那个项目。要跟进新项目就去那条会话；'
+    + '在这里用 project_get / task_list 读它的状态也可以，但别在这条会话里替它做协调决定。'
+  );
+}
+
 /** The repeatable delivery form carries only server-derived identity, never agent-written title. */
 export function buildCoordinatorDeliveryInstructions(projectId: string): string {
   return renderCoordinatorInstructions(`项目（id: ${uuidToBase62(projectId)}）`);

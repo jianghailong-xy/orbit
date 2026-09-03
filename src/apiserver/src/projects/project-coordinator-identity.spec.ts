@@ -396,7 +396,7 @@ test('a project response says who coordinates it and how often that conversation
 
 test('an agent cannot widen its own authority through the runner door', async () => {
   const projects = { update: async () => assert.fail('the refusal must come before the write') };
-  const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never, {} as never);
   const runner = { ownerId: OWNER_ID, id: 'runner-1' } as never;
 
   for (const field of [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId']) {
@@ -417,7 +417,7 @@ test('the runner door still carries everything an agent may say about the work',
       return { id: PROJECT_ID };
     },
   };
-  const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never, {} as never);
 
   await controller.updateProject({ ownerId: OWNER_ID, id: 'runner-1' } as never, PROJECT_ID, undefined, {
     goal: 'A goal it worked out',
@@ -516,7 +516,7 @@ test('the runner door refuses those nulls too, before anything can be written', 
   // a caller that somehow got past it still meets `refuseGovernance` — which counts a field as
   // NAMED when it is null, so nothing reaches the service either way.
   const projects = { update: async () => assert.fail('the refusal must come before the write') };
-  const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never);
+  const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never, {} as never);
   const runner = { ownerId: OWNER_ID, id: 'runner-1' } as never;
 
   for (const field of ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks']) {
