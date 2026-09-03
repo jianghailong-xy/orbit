@@ -1004,6 +1004,7 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 // ref. Called only when the server reports the session as non-resumable (Completed/in Trash);
 // a resumable end keeps its checkout, and any stale one is later reaped by gcWorktrees.
 func removeWorktree(wt *Worktree) {
+	teardownWorktreeProcesses(wt.Path)
 	if _, err := git(wt.RepoDir, "worktree", "remove", "--force", wt.Path); err != nil {
 		logln("worktree remove failed for", wt.Session+":", err)
 		_ = os.RemoveAll(wt.Path)
@@ -1871,6 +1872,7 @@ func gcWorktrees(t *Transport, live map[string]bool) {
 	}
 	for _, name := range removable {
 		path := filepath.Join(root, name)
+		teardownWorktreeProcesses(path)
 		// Resolve the main repo via the checkout's common git dir (<repo>/.git), so we can
 		// `worktree remove` it cleanly; fall back to a plain dir removal otherwise.
 		if common, err := git(path, "rev-parse", "--git-common-dir"); err == nil && common != "" {
