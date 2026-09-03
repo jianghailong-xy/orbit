@@ -149,7 +149,18 @@ function scannableFiles(): string[] {
 }
 
 // (c) --------------------------------------------------------------------------------------------
-test('(c) the EXECUTABLE and EVIDENCE_JUDGMENT satisfaction logic is gone from the evaluator', () => {
+/**
+ * What 0228 is still answerable for, after 2026-09-03.
+ *
+ * This pair of tests used to assert that NOTHING satisfies EXECUTABLE. That was 0228's state for
+ * one day: the account owner then asked for the exit-code comparison back, without the recording,
+ * and it came back in `evaluateTaskCompletion` and `runnerApi.turnComplete`. Softening these into
+ * "the evaluator does whatever it does" would delete the only check that 0228's actual subject —
+ * the request/result LEDGER and every read of it — stayed gone. So they now assert the two halves
+ * separately: the evidence carriers are still absent, and the comparison that replaced them reads
+ * nothing but its two arguments.
+ */
+test('(c) the evaluator satisfies EXECUTABLE from arguments alone, never from a stored decision', () => {
   const criterion = read('src/apiserver/src/tasks/task-completion-criterion.ts');
   const evaluator = criterion.slice(criterion.indexOf('export function evaluateTaskCompletion'));
   const body = evaluator.slice(0, evaluator.indexOf('\n}\n'));
@@ -159,39 +170,44 @@ test('(c) the EXECUTABLE and EVIDENCE_JUDGMENT satisfaction logic is gone from t
   assert.match(criterion, /acceptanceCommand\?: string \| null;/u);
   assert.match(criterion, /acceptanceExpectedExitCode\?: number \| null;/u);
 
-  // The implementation is not. Nothing in the evaluator compares an exit code or reads a decision.
+  // The two facts the restored comparison reads are arguments, and the function is pure, so
+  // nothing it answers can have come from a row. That is what "不需要实际记录数据" means here.
+  assert.match(body, /facts\.executableExitCode === facts\.acceptanceExpectedExitCode/u);
+  assert.doesNotMatch(criterion, /prisma|tx\.|await /u,
+    'the criterion boundary must stay pure: a read here would be a ledger by another name');
+
+  // The judgment-era inputs did NOT come back with it. `executableTerminationKind` and
+  // `executableLegacyTermination` were 0200's typed termination; `evidenceJudgment` was the
+  // DECIDED-PASS request this migration deleted.
   for (const gone of [
-    /executableExitCode/u,
     /executableTerminationKind/u,
     /executableLegacyTermination/u,
     /evidenceJudgment/u,
-    /acceptanceExpectedExitCode/u,
   ]) {
-    assert.doesNotMatch(body, gone, `the evaluator still reads ${gone}`);
+    assert.doesNotMatch(criterion, gone, `the evaluator reads ${gone} again`);
   }
-  // And both arms are explicit, so the exhaustiveness check keeps answering for them.
-  assert.match(body, /case 'EXECUTABLE':\s*\n\s*state = 'UNSATISFIED';/u);
+  // EVIDENCE_JUDGMENT keeps its explicit unimplemented arm, so the exhaustiveness check keeps
+  // answering for it and it cannot inherit EXECUTABLE's new answer.
   assert.match(body, /case 'EVIDENCE_JUDGMENT':\s*\n\s*state = 'UNSATISFIED';/u);
   assert.doesNotMatch(body, /default:/u, 'no default arm may absorb a criterion');
 });
 
-test('(c) the runner callback no longer derives DONE, or FAILED, from an exit code', () => {
+test('(c) the runner callback derives a status without writing a judgment record', () => {
   const controller = read('src/apiserver/src/runner-api/runner-api.controller.ts');
-  assert.doesNotMatch(controller, /deriveTaskCompletionStatus/u);
-  assert.doesNotMatch(controller, /derivedStatus/u);
-  assert.doesNotMatch(controller, /ensureLegacyExecutableJudgmentRequest/u);
-  assert.doesNotMatch(controller, /acceptanceTaskCompleted/u);
-  // Nor was it replaced by a second automatic route: the only `task.updateMany` writing a status
-  // in the whole controller would be the removed one, so there is none.
-  assert.doesNotMatch(controller, /data:\s*\{\s*status:\s*derived/u);
-  assert.doesNotMatch(controller, /postExecutableAcceptanceComment/u,
-    'the comment that announced a derived status has no derivation left to announce');
+  // The derivation is back, and it goes through the shared predicate rather than a second one.
+  assert.match(controller, /deriveTaskCompletionStatus/u);
+  assert.match(controller, /const derivedStatus = completed \?\? TaskStatus\.FAILED;/u);
 
-  // 0227 took 0200's typed attempt an hour before this change; between them the controller has
-  // no criterion evaluation left at all.
+  // What 0228 deleted did not come back with it: no request ledger, no recorded result, no
+  // rolling-upgrade bridge that manufactured either.
+  assert.doesNotMatch(controller, /ensureLegacyExecutableJudgmentRequest/u);
+  assert.doesNotMatch(controller, /taskJudgmentRequest/u);
+  assert.doesNotMatch(controller, /taskExecutableJudgmentResult/u);
+  assert.doesNotMatch(controller, /postExecutableAcceptanceComment/u,
+    'the comment that announced a derived status is the exit code and the raw output in a row');
+
+  // 0227 took 0200's typed attempt an hour before this change, and it stayed gone.
   assert.doesNotMatch(controller, /taskExecutableAttempt/u);
-  assert.doesNotMatch(controller, /acceptanceTaskChanged = true/u,
-    'nothing can set the flag that said a criterion moved the task');
 });
 
 // (d) --------------------------------------------------------------------------------------------

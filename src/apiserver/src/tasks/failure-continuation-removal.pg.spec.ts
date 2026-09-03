@@ -465,14 +465,15 @@ suite('(i) an EXECUTABLE task still runs command -> verdict, failure included',
     assert.equal((settled as { ok: boolean }).ok, true);
     assert.equal(
       (await db.task.findUniqueOrThrow({ where: { id: declared.id } })).status,
-      TaskStatus.OPEN,
-      'and a failed command routes the task nowhere: since 2026-09-02 nothing derives a status '
-      + 'from an exit code at all, so the conservative FAILED is gone with the optimistic DONE',
+      TaskStatus.FAILED,
+      'a failed command settles the task FAILED and routes it nowhere else: the continuation '
+      + 'that used to keep the goal actionable is what this removal took',
     );
-    // The result row this used to read went with the judgment machinery in 0228. What the
-    // failure leaves is one human-facing comment, and no continuation, receipt or outbox — which
-    // is what this suite is actually about.
-    assert.equal(await db.taskComment.count({ where: { taskId: declared.id } }), 1);
+    // The result row this used to read went with the judgment machinery in 0228, and restoring
+    // the comparison on 2026-09-03 did not bring it back. What the failure leaves is the status
+    // and nothing else — no continuation, receipt, outbox or comment — which is what this suite
+    // is actually about.
+    assert.equal(await db.taskComment.count({ where: { taskId: declared.id } }), 0);
   });
 
 // (j) ---------------------------------------------------------------------------------------------

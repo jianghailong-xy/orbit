@@ -383,33 +383,56 @@ test('(c) the completionCriterion vocabulary is untouched by this removal', () =
   });
 
 // The five-row table that stood here asked the pure evaluator for the four exit-code shapes plus
-// the legacy -1 sentinel. 0228 removed the comparison one migration later, at the account owner's
-// direction, so there is no exit code in `TaskCompletionFacts` to build those rows from. What can
-// still be asserted — and is the stronger statement — is that the criterion is answered by its own
-// arm, and that the arm answers UNSATISFIED for every fact anyone can present.
-test('(c)(w) the pure evaluator answers EXECUTABLE from its own arm, and never satisfies it', () => {
-  for (const facts of [
-    { completionCriterion: 'EXECUTABLE' as const },
-    { completionCriterion: 'EXECUTABLE' as const, verificationVerdict: 'PASS' as const },
-    { completionCriterion: 'EXECUTABLE' as const, ownVerdict: 'PASS' as const },
-    { completionCriterion: 'EXECUTABLE' as const, verifiesTaskId: 'not-a-verifier' },
-  ]) {
-    const evaluation = evaluateTaskCompletion(facts);
-    assert.equal(evaluation.criterion, 'EXECUTABLE');
-    assert.equal(evaluation.state, 'UNSATISFIED');
-    assert.equal(evaluation.satisfied, false);
-    assert.equal(deriveTaskCompletionStatus(facts), null);
-  }
-  // EVIDENCE_JUDGMENT is the same shape, for the same reason.
-  assert.equal(deriveTaskCompletionStatus({ completionCriterion: 'EVIDENCE_JUDGMENT' }), null);
-  // VERIFICATION is answered by the same function, and is the one that still concludes.
-  assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'VERIFICATION', verificationVerdict: 'PASS',
-  }), 'DONE');
-  assert.equal(deriveTaskCompletionStatus({
-    completionCriterion: 'VERIFICATION', verificationVerdict: 'FAIL',
-  }), null);
-});
+// the legacy -1 sentinel; 0228 then removed the comparison and it became "EXECUTABLE never
+// satisfies". 2026-09-03 restored the comparison — without any of 0200's runtime, which is what
+// THIS suite is answerable for. So the table is back, minus the sentinel row: the -1 case existed
+// because 0200's typed termination could tell a kill from a disagreement, and with that gone -1 is
+// just an integer. `task-completion-criterion.spec.ts` owns the full matrix; what is pinned here
+// is that the restored answer comes from the exit code and from nothing this migration removed.
+test('(c)(w) the pure evaluator answers EXECUTABLE from the exit code, with no runtime behind it',
+  () => {
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: 0,
+    }), 'DONE');
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: 1,
+    }), null);
+    // -1 was 0200's "not a real exit" sentinel. It is compared like anything else now, which is
+    // the accepted consequence of removing the typed termination: a killed command and a
+    // disagreeing one are the same fact.
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: -1,
+    }), null);
+    // And no admission, attempt, continuation or termination kind is consulted to get there: the
+    // fact type carries exactly two executable fields.
+    const source = read('src/apiserver/src/tasks/task-completion-criterion.ts');
+    const facts = source.slice(source.indexOf('export interface TaskCompletionFacts'));
+    const body = facts.slice(0, facts.indexOf('\n}'));
+    for (const gone of [/TerminationKind/u, /Admission/u, /attempt/iu, /Continuation/u]) {
+      assert.doesNotMatch(body, gone, `TaskCompletionFacts carries ${gone} again`);
+    }
+    for (const facts2 of [
+      { completionCriterion: 'EXECUTABLE' as const },
+      { completionCriterion: 'EXECUTABLE' as const, verificationVerdict: 'PASS' as const },
+      { completionCriterion: 'EXECUTABLE' as const, ownVerdict: 'PASS' as const },
+      { completionCriterion: 'EXECUTABLE' as const, verifiesTaskId: 'not-a-verifier' },
+    ]) {
+      const evaluation = evaluateTaskCompletion(facts2);
+      assert.equal(evaluation.criterion, 'EXECUTABLE');
+      assert.equal(evaluation.satisfied, false,
+        "no other criterion's fact can stand in for the comparison");
+      assert.equal(deriveTaskCompletionStatus(facts2), null);
+    }
+    // EVIDENCE_JUDGMENT was not restored alongside it.
+    assert.equal(deriveTaskCompletionStatus({ completionCriterion: 'EVIDENCE_JUDGMENT' }), null);
+    // VERIFICATION is answered by the same function, and still concludes.
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'VERIFICATION', verificationVerdict: 'PASS',
+    }), 'DONE');
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'VERIFICATION', verificationVerdict: 'FAIL',
+    }), null);
+  });
 
 // (u)(v) -------------------------------------------------------------------------------------------
 test('(u)(v) 0177 and 0181 are not named by this removal at all', () => {

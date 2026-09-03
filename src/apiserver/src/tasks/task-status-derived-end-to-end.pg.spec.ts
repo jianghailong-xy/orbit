@@ -114,7 +114,10 @@ async function installDerivedDoneGuard(sql: Client): Promise<void> {
           END IF;
           derivation := 'VERIFICATION_PASS';
         ELSE
-          RAISE EXCEPTION 'JR_DIRECT_DONE: % has no implementation that could derive DONE',
+          -- EXECUTABLE derives DONE from one exit-code comparison in runnerApi.turnComplete,
+          -- which this suite never drives; EVIDENCE_JUDGMENT has no implementation at all. Either
+          -- way, a bare status UPDATE arriving here is not a derivation this suite can name.
+          RAISE EXCEPTION 'JR_DIRECT_DONE: % did not reach DONE through a derivation',
             NEW."completion_criterion";
         END IF;
 
@@ -239,20 +242,29 @@ suite(
     });
     assert.equal(evidenceJudgment.status, TaskStatus.OPEN);
 
-    // The refusal is the same one it always was, and it now names the state rather than a door
-    // that no longer exists.
+    // The refusal is the same one it always was, and it names the action that CAN settle the
+    // task: since 2026-09-03 EXECUTABLE has an implementation again, so the remedy is to let the
+    // declared command run rather than to wait for a rebuild.
     await assertDirectDoneRefused(
       tasks, db, ownerId, executable.id, 'owner on EXECUTABLE',
-      'AWAIT_EXECUTABLE_IMPLEMENTATION',
+      'RUN_ACCEPTANCE_COMMAND',
     );
     await assertDirectDoneRefused(
       tasks, db, ownerId, evidenceJudgment.id, 'owner on EVIDENCE_JUDGMENT',
       'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
     );
-    // And raw SQL cannot reach DONE either: the test guard refuses it, and so does 0193's own
-    // canonical writer fence, which lost its judgment lane in 0227.
+    // And raw SQL cannot reach DONE through THIS suite either. Which wall answers changed with
+    // 0230: the production fence now admits an EXECUTABLE row carrying an intact declaration,
+    // because with nothing recorded the declaration is the only fact it can see — so what refuses
+    // here is this suite's own derivation guard, and it is named exactly rather than left to an
+    // alternation that would pass whichever way the walls moved.
     await assert.rejects(
       sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [executable.id]),
+      /JR_DIRECT_DONE/,
+    );
+    // The production fence is still the wall for a criterion with no implementation.
+    await assert.rejects(
+      sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [evidenceJudgment.id]),
       /JR_DIRECT_DONE|TASK_DONE_CANONICAL_FACT_REQUIRED/,
     );
 

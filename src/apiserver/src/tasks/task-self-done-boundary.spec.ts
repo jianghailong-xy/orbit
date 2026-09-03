@@ -182,11 +182,14 @@ test('a task execution session cannot write DONE and is directed to EXECUTABLE',
 
   const body = await refusalOf(() => f.write(TaskStatus.DONE, SESSION));
 
+  // The run that did the work is exactly the actor this boundary exists for, and the criterion
+  // having an implementation again is what makes the refusal actionable rather than a dead end:
+  // it is told to let the declared command finish, not to wait for a rebuild.
   assertCriterionRefusal(
     body,
     'EXECUTABLE',
-    'AWAIT_EXECUTABLE_IMPLEMENTATION',
-    /acceptanceCommand and[\s\S]*acceptanceExpectedExitCode are still stored/,
+    'RUN_ACCEPTANCE_COMMAND',
+    /acceptanceCommand run to completion[\s\S]*acceptanceExpectedExitCode/,
   );
   assert.deepEqual(f.writes, []);
 });

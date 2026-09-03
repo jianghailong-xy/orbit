@@ -505,8 +505,8 @@ suite('(u)(v) 0177 and 0181 survive byte for byte and stay writable', async (t) 
   const result = await runAcceptance(
     db, w, 'writable', 'printf ok', 0, 0, 'ok',
   );
-  assert.equal(result.status, TaskStatus.OPEN,
-    'nothing derives a status from an exit code any more');
+  assert.equal(result.status, TaskStatus.DONE,
+    'the exit code derives the status, with none of this migration\'s runtime in front of it');
   const declared = await db.task.findUniqueOrThrow({ where: { id: result.taskId } });
   assert.equal(declared.acceptanceCommand, 'printf ok');
   assert.equal(declared.acceptanceExpectedExitCode, 0);
@@ -514,7 +514,7 @@ suite('(u)(v) 0177 and 0181 survive byte for byte and stay writable', async (t) 
 });
 
 // (x)(y) -------------------------------------------------------------------------------------------
-suite('(x)(y) an EXECUTABLE task derives neither DONE nor FAILED, and keeps its declaration',
+suite('(x)(y) an EXECUTABLE task derives its status from the exit code alone, and keeps its declaration',
   async (t) => {
     const sql = await connectSql();
     const db = prismaClientFor(URL!);
@@ -522,32 +522,48 @@ suite('(x)(y) an EXECUTABLE task derives neither DONE nor FAILED, and keeps its 
     await empty(sql);
     const w = await owner(db, 'executable');
 
-    // 0228 removed the comparison this suite was written around, at the account owner's
-    // direction and one migration after this one. Both halves of it now answer the same way.
+    // The comparison this suite was written around was removed by 0228 and restored on
+    // 2026-09-03. What THIS migration removed is the layer that used to sit in front of it — the
+    // admission negotiation, the typed attempt, the continuation — and none of it came back. So
+    // both halves are driven again, and what is asserted is that the naked comparison is enough.
 
-    // (x) a matching exit code derives nothing.
+    // (x) a matching exit code derives DONE, with no admission and no attempt row in the way.
     const passed = await runAcceptance(
       db, w, 'exec-pass', 'test -f package.json', 0, 0, 'package.json is here',
     );
-    assert.equal(passed.status, TaskStatus.OPEN,
-      'exit 0 against expected 0 derives nothing: EXECUTABLE has no implementation');
+    assert.equal(passed.status, TaskStatus.DONE,
+      'exit 0 against expected 0 derives DONE, straight from the lease');
 
-    // (x) and so does any other code — the conservative FAILED went with the optimistic DONE.
+    // (x) and any other code derives the conservative FAILED, through the same one comparison.
     const failed = await runAcceptance(
       db, w, 'exec-fail', 'test -f absent.json', 0, 1, 'no such file\nline two',
     );
-    assert.equal(failed.status, TaskStatus.OPEN);
+    assert.equal(failed.status, TaskStatus.FAILED);
 
-    // (y) and the failing run is no longer diagnosable from a durable row: this is consequence 3
-    // of the 2026-09-02 decision, accepted explicitly. One human-facing comment says so, and the
-    // declaration the command came from is untouched.
+    // (y) and the failing run is still not diagnosable from a durable row: this is consequence 3
+    // of the 2026-09-02 decision, which restoring the comparison deliberately did not undo. No
+    // attempt, no continuation, no comment — and the declaration the command came from is intact.
     const declaration = await db.task.findUniqueOrThrow({ where: { id: failed.taskId } });
     assert.equal(declaration.acceptanceCommand, 'test -f absent.json');
     assert.equal(declaration.acceptanceExpectedExitCode, 0);
-    assert.equal(await db.taskComment.count({ where: { taskId: failed.taskId } }), 1);
+    assert.equal(await db.taskComment.count({ where: { taskId: failed.taskId } }), 0);
 
-    // The DONE fence agrees from the database side: with the judgment lane gone too, a task with
-    // no verification fact cannot be written DONE by hand.
+    // The DONE fence from the database side. 0230 gave it an EXECUTABLE lane, because with
+    // nothing recorded the declaration is the only fact it can check — so a task that HAS one is
+    // admitted, and a task whose declaration was cleared is not. The wall that stops an actor
+    // writing DONE by hand is `TasksService.update`, which refuses it for every criterion.
+    await sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [failed.taskId]);
+    assert.equal(
+      (await db.task.findUniqueOrThrow({ where: { id: failed.taskId } })).status,
+      TaskStatus.DONE,
+    );
+    await sql.query(
+      `UPDATE "task" SET "status" = 'OPEN', "acceptance_command" = NULL,
+              "acceptance_expected_exit_code" = NULL,
+              "completion_criterion" = 'EVIDENCE_JUDGMENT'::"task_completion_criterion"
+        WHERE "id" = $1::uuid`,
+      [failed.taskId],
+    );
     await assert.rejects(
       sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [failed.taskId]),
       /TASK_DONE_CANONICAL_FACT_REQUIRED/,

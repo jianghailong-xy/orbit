@@ -1,18 +1,28 @@
 /**
- * EXECUTABLE after 2026-09-02: the declaration is intact, and nothing satisfies it.
+ * EXECUTABLE end to end: one exit-code comparison, DONE or FAILED, and nothing written down.
  *
- * This file used to assert the other half — that a matching exit code derived DONE and a
- * mismatching one derived FAILED. The account owner had that evaluator deleted along with the
- * judgment machinery, to be rebuilt, and was explicit that the DECLARATION and its data stay. So
- * the same real runner path is driven here, through the same real PostgreSQL transaction, and
- * what is asserted is both halves of the new state:
+ * This file has been the record of three decisions in a row. It asserted the comparison; then
+ * 0227/0228 removed it and it asserted that a completed acceptance turn moved nothing; and on
+ * 2026-09-03 the account owner asked for the comparison back — "根据 exit code 来简单判断，不需要
+ * 实际记录数据" — which is what it asserts now. The middle state is gone, not softened: a suite
+ * that still said "a matching exit code derives nothing" would be describing a control plane
+ * nobody is running.
+ *
+ * What is driven here is the real runner path — `turnComplete`, `dequeueTurn`, `turnComplete` —
+ * against a real PostgreSQL transaction with 0193's DONE fence installed, because the fence is
+ * the half of this that a unit test cannot reach.
+ *
+ * The three claims:
  *
  *   * 0177's `acceptance_command` / `acceptance_expected_exit_code` pair is still writable,
  *     readable, editable, clearable, and still enforced as a pair by its CHECK;
- *   * a completed acceptance turn — matching exit code or not — moves no Task status.
+ *   * a matching exit code derives DONE and a mismatching one derives FAILED, in both cases
+ *     WITHOUT the needs-human signal and WITHOUT a single row recording the code or the output;
+ *   * a turn that produces no exit code at all still reaches the needs-human signal, which is
+ *     what that signal is now for.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable database accepted by the
- * coordinator PG safety guard, with all migrations (including 0177 and 0227) applied.
+ * coordinator PG safety guard, with all migrations (including 0177 and 0230) applied.
  */
 
 import assert from 'node:assert/strict';
@@ -257,7 +267,7 @@ suite('the declaration is stored, editable, clearable and still enforced as a pa
   assert.deepEqual(relations.rows, []);
 });
 
-suite('a matching exit code no longer derives DONE', async (t) => {
+suite('a matching exit code derives DONE, and records nothing', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
   const sql = new Client({ connectionString: URL });
   await sql.connect();
@@ -281,30 +291,64 @@ suite('a matching exit code no longer derives DONE', async (t) => {
   const shell = spawnSync('bash', ['-lc', acceptance.content!], { encoding: 'utf8' });
   assert.equal(shell.error, undefined);
   assert.equal(shell.status, 0);
-  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+  const request = {
     turnId: acceptance.turnId,
     status: SharedRunStatus.SUCCEEDED,
     subtype: 'shell',
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
-  });
-  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  };
+  // "不需要实际记录数据" is the account owner's whole instruction, so this is checked against the
+  // catalog rather than against a list somebody has to remember to extend: every table in the
+  // database is counted before and after, and NONE of them may gain a row. A list of table names
+  // would go stale the first time a well-meaning repair added a seventh place to write to.
+  const census = async (): Promise<Map<string, number>> => {
+    const tables = (await sql.query<{ name: string }>(`
+      SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY 1`)).rows.map((row) => row.name);
+    const counted = new Map<string, number>();
+    for (const name of tables) {
+      const rows = await sql.query<{ n: string }>(`SELECT count(*)::text AS n FROM "${name}"`);
+      counted.set(name, Number(rows.rows[0].n));
+    }
+    return counted;
+  };
+  const rowsBefore = await census();
+  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, request);
+  const rowsAfter = await census();
+  const grew = [...rowsAfter].filter(([name, n]) => n > (rowsBefore.get(name) ?? 0))
+    .map(([name, n]) => `${name}: ${rowsBefore.get(name)} -> ${n}`);
+  assert.deepEqual(grew, [],
+    'the judgment recorded a row somewhere; the exit code is a comparison input, not data');
+  assert.deepEqual([...rowsBefore.keys()], [...rowsAfter.keys()],
+    'the judgment created a table');
+  // The session parks rather than failing: the comparison agreed, so nothing about this run went
+  // wrong. Before this change every reserved acceptance turn ended RunStatus.FAILED.
+  assert.deepEqual(result, { ok: true, status: RunStatus.AWAITING_INPUT });
 
   const after = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
-  assert.equal(after.status, TaskStatus.OPEN,
-    'exit 0 against expected 0 derives nothing: EXECUTABLE has no implementation');
+  assert.equal(after.status, TaskStatus.DONE,
+    'exit 0 against expected 0 is the whole criterion, and it derives DONE');
   assert.equal(after.acceptanceCommand, 'true', 'and the declaration is untouched by the attempt');
   assert.equal(after.acceptanceExpectedExitCode, 0);
   assert.equal(after.completionCriterion, 'EXECUTABLE');
 
-  // What the session gets instead is the pre-existing needs-human signal, unchanged: there is no
-  // comparable result because there is nothing left to compare it.
-  const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
-  assert.equal(comments.length, 1);
-  assert.match(comments[0].body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
+  // The needs-human signal is NOT on this path any more. It guards a turn that produced nothing
+  // comparable, and this one produced a 0; a comment here would mean the comparison did not run.
+  assert.deepEqual(await db.taskComment.findMany({ where: { taskId: f.taskId } }), []);
+
+  // The one place either number survives is `session.error`, and only on the failing side —
+  // an UPDATE of a column that already existed, on the run's own row. Here it stays null.
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: f.sessionId } })).error, null);
+
+  // Replay: the compare-and-set is the idempotency boundary, so a retried callback finds the task
+  // no longer in a pending status and changes nothing.
+  await api.turnComplete({ id: f.runnerId }, f.sessionId, request);
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status, TaskStatus.DONE);
+  assert.equal(await db.taskComment.count({ where: { taskId: f.taskId } }), 0);
 });
 
-suite('a different exit code does not derive FAILED either', async (t) => {
+suite('a different exit code derives FAILED, and records nothing either', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
   const sql = new Client({ connectionString: URL });
   await sql.connect();
@@ -319,19 +363,62 @@ suite('a different exit code does not derive FAILED either', async (t) => {
   const api = controller(db);
   await finishMessage(api, f);
   const acceptance = await dequeueAcceptance(api, f);
-  await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+  // Genuinely executed, exactly as the runner would.
+  const shell = spawnSync('bash', ['-lc', acceptance.content!], { encoding: 'utf8' });
+  assert.equal(shell.status, 7);
+  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, {
     turnId: acceptance.turnId,
     status: SharedRunStatus.SUCCEEDED,
     subtype: 'shell',
-    shellExitCode: 7,
-    shellOutput: 'exit 7',
+    shellExitCode: shell.status!,
+    shellOutput: `${shell.stdout}${shell.stderr}`,
   });
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
   assert.equal(
     (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.OPEN,
-    'a mismatching exit code is not a conservative FAILED: the comparison itself is gone',
+    TaskStatus.FAILED,
+    'a comparable, mismatching exit code is the conservative FAILED',
   );
+  // Not the unavailable signal: the command was compared, it simply disagreed. A comment here
+  // would say the opposite of what happened.
+  assert.deepEqual(await db.taskComment.findMany({ where: { taskId: f.taskId } }), []);
+  // Where the failure IS legible, and the only place either number is written: the run's own
+  // error string. That is the "diagnosis moves to the session" the owner accepted.
+  const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
+  assert.equal(session.status, RunStatus.FAILED);
+  assert.equal(session.error, 'acceptance command exited 7; expected 0');
 });
+
+suite('the DONE fence is what the derived status passes through, and it still refuses others',
+  async (t) => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const sql = new Client({ connectionString: URL });
+    await sql.connect();
+    const db = prismaClientFor(URL!);
+    t.after(async () => {
+      await db.$disconnect();
+      await sql.end();
+    });
+    await empty(sql);
+
+    // 0193's trigger is a BEFORE UPDATE on `task` and 0228 left EXECUTABLE with no lane through
+    // it, so the restored comparison would have been rolled back one statement after it ran.
+    // 0230 adds the lane. What it can check is the declaration — the only durable fact an
+    // EXECUTABLE task has once nothing is recorded — so this pins both directions of that.
+    const f = await fixture(db, 'fence', { command: 'true', expectedExitCode: 0 });
+    await sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [f.taskId]);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
+      TaskStatus.DONE);
+
+    // An EVIDENCE_JUDGMENT task is still refused: this migration added ONE lane and none of the
+    // others moved. (i) — EVIDENCE_JUDGMENT was not restored by the side door either.
+    const other = await fixture(db, 'fence-evidence', null);
+    await assert.rejects(
+      sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [other.taskId]),
+      /TASK_DONE_CANONICAL_FACT_REQUIRED/,
+      'a task with no canonical fact and no executable declaration is still refused',
+    );
+  });
 
 suite('an acceptance turn without a comparable shell result emits a needs-human signal', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
@@ -344,6 +431,8 @@ suite('an acceptance turn without a comparable shell result emits a needs-human 
   });
   await empty(sql);
 
+  // The signal was kept, and this is the case it was kept FOR: `shellExitCode` absent means no
+  // comparison happened, so FAILED would assert something about a command that never reported.
   const f = await fixture(db, 'missing-shell-result', { command: 'true', expectedExitCode: 0 });
   const api = controller(db);
   await finishMessage(api, f);
@@ -379,6 +468,79 @@ suite('an acceptance turn without a comparable shell result emits a needs-human 
     1,
     'a retried turn-complete cannot duplicate the signal',
   );
+});
+
+suite('a SUCCEEDED acceptance turn that omits the exit code also reaches the signal', async (t) => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const sql = new Client({ connectionString: URL });
+  await sql.connect();
+  const db = prismaClientFor(URL!);
+  t.after(async () => {
+    await db.$disconnect();
+    await sql.end();
+  });
+  await empty(sql);
+
+  // The rolling-upgrade shape: a runner old enough to complete the turn successfully without
+  // sending `shellExitCode`. The comparison has one side and therefore does not happen; the task
+  // must not be guessed either way.
+  const f = await fixture(db, 'no-exit-code', { command: 'true', expectedExitCode: 0 });
+  const api = controller(db);
+  await finishMessage(api, f);
+  const acceptance = await dequeueAcceptance(api, f);
+  const result = await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellOutput: '',
+  });
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.equal(
+    (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
+    TaskStatus.OPEN,
+    'no exit code is not a status: the task stays actionable rather than being guessed',
+  );
+  const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
+  assert.equal(comments.length, 1);
+  assert.match(comments[0].body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
+});
+
+suite('an exit code judged against a declaration that moved is not judged at all', async (t) => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const sql = new Client({ connectionString: URL });
+  await sql.connect();
+  const db = prismaClientFor(URL!);
+  t.after(async () => {
+    await db.$disconnect();
+    await sql.end();
+  });
+  await empty(sql);
+
+  // The expectation is part of the queued turn's client id. Editing the declaration while the
+  // command runs makes the result an answer to a question nobody is asking, so it reaches the
+  // signal rather than settling the new declaration.
+  const f = await fixture(db, 'edited-declaration', { command: 'true', expectedExitCode: 0 });
+  const api = controller(db);
+  await finishMessage(api, f);
+  const acceptance = await dequeueAcceptance(api, f);
+  await tasksService(db).update(f.ownerId, f.taskId, {
+    acceptanceCommand: 'true', acceptanceExpectedExitCode: 3,
+  });
+  await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+    turnId: acceptance.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellExitCode: 0,
+    shellOutput: '',
+  });
+  assert.equal(
+    (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
+    TaskStatus.OPEN,
+    'a stale expectation cannot be compared against the current declaration',
+  );
+  const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
+  assert.equal(comments.length, 1);
+  assert.match(comments[0].body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
 });
 
 suite('a task with no command keeps the pre-T10 turn-complete behaviour', async (t) => {
