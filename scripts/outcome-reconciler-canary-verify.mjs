@@ -51,7 +51,10 @@ assert.ok(manifest.cohort.eligibleTasks >= 110_000 && manifest.cohort.eligibleTa
 assert.ok(manifest.cohort.selectedTasks >= manifest.cohort.minimumSampleSize);
 assert.ok(manifest.cohort.denominator.length > 0);
 assert.ok(manifest.cohort.observationWindow.seconds > 0);
-assert.equal(Object.keys(manifest.metricDimensions).length, 11);
+// Ten since 0227: that migration removed the EXECUTABLE acceptance runtime and took its
+// `acceptanceRuntimeDeadline` dimension out of the canary contract and out of the manifest
+// generator, but left this census counting the eleven that used to exist.
+assert.equal(Object.keys(manifest.metricDimensions).length, 10);
 for (const [name, metric] of Object.entries(manifest.metricDimensions)) {
   assert.ok(metric.denominator.length > 0, `${name} denominator absent`);
   assert.ok(metric.minSampleSize > 0, `${name} minimum sample absent`);

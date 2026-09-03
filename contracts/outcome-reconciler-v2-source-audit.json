@@ -361,8 +361,7 @@
       ],
       "projections": [
         "session.mergeStatus",
-        "session.branchMerged",
-        "project acceptance mergeEvidence"
+        "session.branchMerged"
       ],
       "writers": [
         {
@@ -386,11 +385,6 @@
           "path": "src/apiserver/src/sessions/merge-receipt.service.ts",
           "symbol": "async list",
           "purpose": "SESSION_RECEIPT_API"
-        },
-        {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "mergeEvidence",
-          "purpose": "ACCEPTANCE_EVIDENCE"
         },
         {
           "path": "src/apiserver/src/projects/projects.service.ts",

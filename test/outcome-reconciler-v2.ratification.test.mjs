@@ -470,23 +470,25 @@ test('(c) automatic dispatch no longer waits for an approval that no longer exis
 // (d) --------------------------------------------------------------------------------------------
 test('(d) the DONE gate carries no ratification clause', async () => {
   // 0222 removed the canonical obligation gate this used to read on both layers and restored the
-  // 0150 project acceptance gate as the single body that decides a project's DONE. That body is
-  // where a reintroduced ratification clause would have to appear, so it is what this reads.
-  const body = (await pool.query(
-    `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  // 0150 project acceptance gate as the single body that decides a project's DONE, and this read
+  // that body. 0229 then removed the project acceptance judgment whole -- the gate, its trigger,
+  // and the run/criterion/conclusion rows whose staleness it reported -- so there is no longer one
+  // body to point at, and reading `rows[0].prosrc` from a function that no longer exists threw.
+  // The question is unchanged, so it is now asked of everything that survived instead.
+  assert.equal((await pool.query(
+    `SELECT count(*)::int AS count FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.proname = 'project_acceptance_done_gate'`,
-  )).rows[0].prosrc;
-  assert.doesNotMatch(body, /ratification|OWNER_RATIFICATION/i,
-    'the DONE gate must not compute or report a ratification verdict');
+  )).rows[0].count, 0, '0229 removed the project acceptance DONE gate; nothing may restore it here');
+  const ratifying = (await pool.query(
+    `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.prosrc ~* 'ratification' ORDER BY p.proname`,
+  )).rows.map((row) => row.proname);
+  assert.deepEqual(ratifying, [],
+    'no function in force may compute or report a ratification verdict');
   assert.equal((await pool.query(
     `SELECT count(*)::int AS count FROM pg_proc
       WHERE proname LIKE 'project_owner_ratification%'`,
   )).rows[0].count, 0, 'no ratification helper is left for a gate to call');
-
-  // The acceptance clauses that share that body are kept, and are what now refuse a DONE whose
-  // evidence has moved. Removing the authority clause must not have removed those.
-  assert.match(body, /ACCEPTANCE_MISSING/, 'missing acceptance evidence must still block DONE');
-  assert.match(body, /ACCEPTANCE_EVIDENCE_STALE/, 'a superseded or reopened run must still block DONE');
   evidence.invariants.doneGateHasNoRatificationClause = true;
 });
 
@@ -777,12 +779,20 @@ test('(p) project acceptance is untouched: 0178-0190 keeps its schema and its ro
   // acceptance JUDGMENT — run, per-run criterion, conclusion and audit — on a later and separate
   // account-owner decision. 0218 still issued no statement against any of them, which is what this
   // test is about. What survives all of it is the DECLARATION table above.
+  // pg_class holds indexes as well as tables, so the DECLARATION table's three indexes survive
+  // beside it and belong in this list. Naming them exactly, rather than filtering relkind down to
+  // 'r', keeps this a census of every project_acceptance relation still installed.
   const surviving = (await pool.query(
     `SELECT c."relname" FROM "pg_class" c JOIN "pg_namespace" n ON n."oid" = c."relnamespace"
       WHERE n."nspname" = 'public' AND c."relname" LIKE 'project_acceptance%'
       ORDER BY c."relname"`,
   )).rows.map((row) => row.relname);
-  assert.deepEqual(surviving, ['project_acceptance_criterion_definition']);
+  assert.deepEqual(surviving, [
+    'project_acceptance_criterion_definition',
+    'project_acceptance_criterion_definition_pkey',
+    'project_acceptance_definition_content_idx',
+    'project_acceptance_definition_ordinal_idx',
+  ]);
   evidence.invariants.projectAcceptanceUntouched = true;
 });
 
