@@ -1,5 +1,5 @@
 import { DownOutlined } from '@ant-design/icons';
-import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
 import Markdown from 'react-markdown';
@@ -45,7 +45,14 @@ export const CRITERIA_PREVIEW = 12;
 
 /** A project detail page on a phone should establish the section and then let the task content
  *  continue. Four rows are enough to show the shape without a seven- or fifty-three-item list
- *  taking over the first visit; the disclosure below names exactly what remains. */
+ *  taking over the first visit; the disclosure below names exactly what remains.
+ *
+ *  This limit is now the ONLY thing bounding the section's height, because a phone row draws its
+ *  criterion whole. Until 2026-09-03 each row also clamped to three lines behind a per-row
+ *  chevron; on a 393px screen that cut every criterion mid-clause while saving almost nothing —
+ *  the rows already ran to three lines, so the clamp bought about a hundred pixels in exchange
+ *  for making every condition unreadable until it was tapped. A criterion read half-way is not
+ *  read, so the whole of it is what a row shows. */
 export const MOBILE_CRITERIA_PREVIEW = 4;
 
 /** Kept identical to the acceptance media block in index.css. This is narrower than the app's
@@ -59,119 +66,18 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  *  would otherwise produce are flattened, because a row is one row whatever the author typed. */
 const Flat = ({ children }: { children?: ReactNode }) => <>{children}</>;
 const INLINE_ONLY = { p: Flat, h1: Flat, h2: Flat, h3: Flat, h4: Flat, h5: Flat, h6: Flat };
-const PreviewImage = ({ alt }: ComponentProps<'img'>) => <>{alt ?? ''}</>;
-// A collapsed phone preview is readable text, not the interactive document. In particular, a
-// link clipped below line three must not remain in the keyboard order; the formatted Markdown is
-// mounted separately and `hidden` until the reader asks for it.
-const PREVIEW_ONLY = { ...INLINE_ONLY, a: Flat, img: PreviewImage };
-
-export const MOBILE_CRITERION_PREVIEW_LINES = 3;
-
-/** Real rendered overflow, not character count: CJK, code and links all wrap differently. */
-export function criterionNeedsDisclosure(element: HTMLElement): boolean {
-  const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight);
-  if (!Number.isFinite(lineHeight) || lineHeight <= 0) return false;
-  return element.scrollHeight > lineHeight * MOBILE_CRITERION_PREVIEW_LINES + 1;
-}
-
-/** One phone row. The disclosure exists only when the rendered text actually exceeds three
- *  lines. Its collapsed copy contains no interactive descendants, while the real Markdown stays
- *  natively hidden, so a clipped link cannot still receive keyboard focus. */
-function MobileCriterionRow({ criterion }: { criterion: AcceptanceCriterionItem }) {
-  const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState<boolean | null>(null);
-  const measuredText = useRef<HTMLSpanElement>(null);
-  const fullId = useId();
-
-  useLayoutEffect(() => {
-    if (expanded || measuredText.current === null) return;
-    const element = measuredText.current;
-    const measure = (): void => {
-      const next = criterionNeedsDisclosure(element);
-      setOverflows((current) => (current === next ? current : next));
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [criterion.text, expanded, overflows]);
-
-  const classes = ['acceptance-row', 'acceptance-row-mobile', expanded ? 'is-expanded' : '']
-    .filter(Boolean).join(' ');
-
-  // Once a short row has been measured, render its real Markdown directly: links that fit in the
-  // preview should work without making the reader open a disclosure that reveals nothing.
-  if (overflows === false) {
-    return (
-      <li className={classes}>
-        <span className="acceptance-row-no">{criterion.ordinal}</span>
-        <span ref={measuredText} className="acceptance-row-text acceptance-row-full">
-          <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
-            {criterion.text}
-          </Markdown>
-        </span>
-      </li>
-    );
-  }
-
-  return (
-    <li className={classes}>
-      <span className="acceptance-row-no">{criterion.ordinal}</span>
-      <span
-        ref={expanded ? undefined : measuredText}
-        className="acceptance-row-text acceptance-row-preview"
-        hidden={expanded}
-      >
-        <Markdown remarkPlugins={[remarkGfm]} components={PREVIEW_ONLY}>
-          {criterion.text}
-        </Markdown>
-      </span>
-      {overflows === true ? (
-        <span className="acceptance-row-verdict">
-          <button
-            type="button"
-            className="acceptance-row-toggle"
-            aria-expanded={expanded}
-            aria-controls={fullId}
-            aria-label={`${expanded ? 'Hide' : 'Show'} formatted criterion ${criterion.ordinal}`}
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <DownOutlined className="acceptance-row-toggle-icon" aria-hidden />
-          </button>
-        </span>
-      ) : null}
-      <span
-        ref={expanded ? measuredText : undefined}
-        id={fullId}
-        className="acceptance-row-text acceptance-row-full"
-        hidden={!expanded}
-      >
-        <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
-          {criterion.text}
-        </Markdown>
-      </span>
-    </li>
-  );
-}
 
 /** Every stated criterion, in the order they were stated. */
 export function AcceptanceCriteriaList({
   criteria,
   id,
-  compact = false,
 }: {
   criteria: AcceptanceCriterionItem[];
   id?: string;
-  compact?: boolean;
 }) {
   return (
     <ul id={id} className="acceptance-criteria">
-      {criteria.map((c) => (compact ? (
-        // Authored text changing under the same stable criterion id must reset its measured
-        // preview and disclosure state, hence text is part of this phone-only instance key.
-        <MobileCriterionRow key={`${c.id}:${c.text}`} criterion={c} />
-      ) : (
+      {criteria.map((c) => (
         <li key={c.id} className="acceptance-row">
           <span className="acceptance-row-no">{c.ordinal}</span>
           <span className="acceptance-row-text">
@@ -180,7 +86,7 @@ export function AcceptanceCriteriaList({
             </Markdown>
           </span>
         </li>
-      )))}
+      ))}
     </ul>
   );
 }
@@ -274,7 +180,7 @@ export function ProjectAcceptanceCard({
           <div className="acceptance-standing">
             {`${plural(criteria.length, 'criterion', 'criteria')} stated. Nothing in Orbit judges them.`}
           </div>
-          <AcceptanceCriteriaList id={criteriaListId} criteria={shown} compact={phone} />
+          <AcceptanceCriteriaList id={criteriaListId} criteria={shown} />
           {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
             // forty-one would read as a complete list of twelve. The control remains after it is

@@ -9929,14 +9929,6 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
   line-height: 1.66;
 }
-/* A rail, not a column that hugs its badge: right-aligned in a fixed width, the verdicts line up
-   as one vertical stripe however long the sentences beside them are. Sized for INCONCLUSIVE. */
-.acceptance-row-verdict {
-  display: flex;
-  flex: none;
-  justify-content: flex-end;
-  width: 118px;
-}
 .acceptance-more-meta.ant-typography {
   margin-inline-start: 10px;
   font-size: 12px;
@@ -9953,7 +9945,10 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* On a phone Acceptance becomes a compact, inspectable summary rather than a long table. Four
    complete rows establish the shape of the criteria and the list disclosure names everything
-   that is not initially on screen. Keep this breakpoint identical to ACCEPTANCE_PHONE_QUERY in
+   that is not initially on screen. Complete means complete: a row draws the whole criterion and
+   the sentence uses the whole card width, because clamping it to three lines behind a per-row
+   chevron cost 88px of every line (a 36px number, a rail sized for a verdict 0229 deleted) to
+   show a condition cut mid-clause. Keep this breakpoint identical to ACCEPTANCE_PHONE_QUERY in
    ProjectAcceptanceCard.tsx. */
 @media (max-width: 560px) {
   .acceptance-card.ant-card {
@@ -10020,66 +10015,6 @@ html[data-theme='dark'] .session-tag-chip {
     line-height: 1.55;
     overflow-wrap: anywhere;
   }
-  .acceptance-row-text[hidden] {
-    display: none;
-  }
-  /* The right rail is reserved before overflow is measured, so adding a chevron cannot narrow
-     the preview and create a measurement loop. The preview itself contains no live links. */
-  .acceptance-row-mobile .acceptance-row-text {
-    padding-inline-end: 116px;
-  }
-  .acceptance-row-preview {
-    display: block;
-    max-block-size: 4.65em;
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(to bottom, #000 88%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 88%, transparent 100%);
-  }
-  .acceptance-row-mobile.is-expanded .acceptance-row-full {
-    padding-block-start: 45px;
-    padding-inline-end: 0;
-  }
-  .acceptance-row-mobile .acceptance-row-verdict {
-    position: absolute;
-    inset-block-start: 8px;
-    inset-inline-end: 8px;
-    justify-content: flex-end;
-    width: 120px;
-    margin: 0;
-  }
-  .acceptance-row-toggle {
-    appearance: none;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    width: 100%;
-    min-height: 44px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    touch-action: manipulation;
-  }
-  .acceptance-row-toggle:hover {
-    background: var(--bg-hover);
-  }
-  .acceptance-row-toggle:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 1px;
-  }
-  .acceptance-row-toggle .ant-tag {
-    pointer-events: none;
-  }
-  .acceptance-row-toggle-icon {
-    margin-inline-start: 7px;
-    font-size: 11px;
-    transition: transform 160ms ease;
-  }
-  .acceptance-row-mobile.is-expanded .acceptance-row-toggle-icon {
-    transform: rotate(180deg);
-  }
   .acceptance-more {
     padding: 10px 16px 8px;
     text-align: center;
@@ -10123,30 +10058,8 @@ html[data-theme='dark'] .session-tag-chip {
 }
 
 @media (max-width: 560px) and (prefers-reduced-motion: reduce) {
-  .acceptance-row-toggle-icon,
   .acceptance-more-icon {
     transition: none;
-  }
-}
-
-/* On the narrowest phones the verdict gets its own line so INCONCLUSIVE never crowds the text. */
-@media (max-width: 380px) {
-  .acceptance-row-mobile .acceptance-row-text {
-    padding-inline-end: 0;
-  }
-  .acceptance-row-mobile .acceptance-row-verdict {
-    position: static;
-    grid-column: 2;
-    grid-row: 2;
-    justify-content: flex-start;
-    width: auto;
-  }
-  .acceptance-row-mobile.is-expanded .acceptance-row-verdict {
-    grid-row: 1;
-  }
-  .acceptance-row-mobile.is-expanded .acceptance-row-full {
-    grid-row: 2;
-    padding-block-start: 0;
   }
 }
 

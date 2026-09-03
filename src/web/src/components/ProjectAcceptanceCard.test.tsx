@@ -7,10 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCEPTANCE_PHONE_QUERY,
   CRITERIA_PREVIEW,
-  MOBILE_CRITERION_PREVIEW_LINES,
   MOBILE_CRITERIA_PREVIEW,
   ProjectAcceptanceCard,
-  criterionNeedsDisclosure,
   criteriaPreview,
   type AcceptanceCriterionItem,
 } from './ProjectAcceptanceCard';
@@ -18,6 +16,10 @@ import {
 // Migration 0229 removed the project acceptance judgment, so this card no longer draws a verdict
 // per row, a pass ratio or a meter: there is nothing that concludes anything about a criterion.
 // What it draws is the declaration, and that is what is asserted here.
+//
+// A phone row no longer clamps that declaration to three lines behind a per-row chevron either
+// (2026-09-03), so there is no rendered overflow left to measure and no ResizeObserver to stub:
+// what a phone shows is what the desktop shows, one criterion per row, whole.
 
 // The card fetches its own query, so the stub is what keeps an accidental live call visible as a
 // hang-free failure rather than a real request. A static render never dispatches one anyway —
@@ -39,60 +41,9 @@ function stubViewport(phone: boolean): void {
   }));
 }
 
-interface ObservedResize {
-  callback: ResizeObserverCallback;
-  targets: Set<Element>;
-  observer: ResizeObserver;
-}
-
-let observedResizes: ObservedResize[] = [];
-
-/** jsdom has neither layout nor ResizeObserver. Tests put explicit dimensions on the preview and
- * then send the same notification a real width change would send. */
-function stubResizeObserver(): void {
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      private readonly observed: ObservedResize;
-
-      constructor(callback: ResizeObserverCallback) {
-        this.observed = {
-          callback,
-          targets: new Set(),
-          observer: this as unknown as ResizeObserver,
-        };
-        observedResizes.push(this.observed);
-      }
-
-      observe(target: Element): void {
-        this.observed.targets.add(target);
-      }
-
-      unobserve(target: Element): void {
-        this.observed.targets.delete(target);
-      }
-
-      disconnect(): void {
-        this.observed.targets.clear();
-      }
-    },
-  );
-}
-
-async function notifyResizeObservers(): Promise<void> {
-  await act(async () => {
-    for (const observed of observedResizes) {
-      const entries = [...observed.targets].map((target) => ({ target }) as ResizeObserverEntry);
-      if (entries.length > 0) observed.callback(entries, observed.observer);
-    }
-  });
-}
-
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  observedResizes = [];
   stubViewport(false);
-  stubResizeObserver();
 });
 
 afterEach(() => {
@@ -205,38 +156,6 @@ function rowCount(html: string): number {
 
 async function click(element: HTMLElement): Promise<void> {
   await act(async () => element.click());
-}
-
-/** Supplies the layout facts jsdom deliberately does not calculate. Only the first, long fixture
- * is allowed to overflow; every ordinary row remains under the three-line threshold. */
-function stubCriterionLayout(initiallyOverflows: boolean): {
-  setLongCriterionOverflow: (next: boolean) => void;
-} {
-  let longCriterionOverflows = initiallyOverflows;
-  const getComputedStyle = window.getComputedStyle.bind(window);
-  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudoElement) => {
-    const style = getComputedStyle(element, pseudoElement);
-    if (
-      element instanceof HTMLElement
-      && (element.classList.contains('acceptance-row-preview')
-        || element.classList.contains('acceptance-row-full'))
-    ) {
-      Object.defineProperty(style, 'lineHeight', { configurable: true, value: '20px' });
-    }
-    return style;
-  });
-  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function () {
-    const criterionText = this.textContent ?? '';
-    if (criterionText.includes('full acceptance criterion')) {
-      return longCriterionOverflows ? 80 : 40;
-    }
-    return 40;
-  });
-  return {
-    setLongCriterionOverflow: (next: boolean) => {
-      longCriterionOverflows = next;
-    },
-  };
 }
 
 // The first antd render initializes its jsdom style registry and can cross Vitest's 5s default on
@@ -374,7 +293,6 @@ describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
 describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
   it('shows four of seven criteria first, names the hidden count, and can reveal the rest', async () => {
     stubViewport(true);
-    stubCriterionLayout(true);
     const qc = client();
     seed(qc, SEVEN);
     const { container, cleanup } = await mount(qc);
@@ -393,36 +311,24 @@ describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
     }
   });
 
-  it('renders a short criterion as full Markdown without a disclosure that reveals nothing', async () => {
+  it('gives a phone the whole criterion, formatted, and no per-row disclosure', async () => {
     stubViewport(true);
-    stubCriterionLayout(false);
     const qc = client();
     seed(qc, SEVEN);
     const { container, cleanup } = await mount(qc);
     try {
+      // The long fixture is exactly what the removed three-line clamp used to cut, and its link
+      // is what the collapsed preview used to flatten out of the document.
+      expect(container.textContent).toContain('needs several lines on a phone');
+      expect(container.querySelector('a[href="/docs/acceptance"]')).not.toBeNull();
       expect(container.querySelector('.acceptance-row-toggle')).toBeNull();
-      expect(container.querySelectorAll('.acceptance-row-full').length).toBeGreaterThan(0);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it('reveals and re-hides the formatted Markdown only when a criterion really overflows', async () => {
-    stubViewport(true);
-    stubCriterionLayout(true);
-    const qc = client();
-    seed(qc, SEVEN);
-    const { container, cleanup } = await mount(qc);
-    try {
-      const toggles = container.querySelectorAll<HTMLButtonElement>('.acceptance-row-toggle');
-      expect(toggles.length).toBe(1);
-      expect(toggles[0].getAttribute('aria-expanded')).toBe('false');
-      await click(toggles[0]);
-      expect(container.querySelector('.acceptance-row-toggle')!.getAttribute('aria-expanded'))
-        .toBe('true');
-      await click(container.querySelector<HTMLButtonElement>('.acceptance-row-toggle')!);
-      expect(container.querySelector('.acceptance-row-toggle')!.getAttribute('aria-expanded'))
-        .toBe('false');
+      expect(container.querySelector('.acceptance-row-preview')).toBeNull();
+      // Every phone row used to carry this class unconditionally, whatever it measured. Nothing
+      // renders a phone-only row shape any more, which is what makes the two assertions above
+      // more than an accident of jsdom having no layout.
+      expect(container.querySelector('.acceptance-row-mobile')).toBeNull();
+      // The list-level disclosure is a different control and stays: it names the hidden three.
+      expect(container.querySelector('.acceptance-more-button')).not.toBeNull();
     } finally {
       await cleanup();
     }
@@ -435,20 +341,7 @@ describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
 
     const html = paint(qc);
     expect(rowCount(html)).toBe(7);
-    expect(html).not.toContain('acceptance-row-mobile');
-  });
-});
-
-describe('mobile criterion overflow', () => {
-  it('asks for disclosure only beyond the three-line rendered preview', () => {
-    const element = document.createElement('span');
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ lineHeight: '20px' } as CSSStyleDeclaration);
-    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get');
-
-    scrollHeight.mockReturnValue(20 * MOBILE_CRITERION_PREVIEW_LINES);
-    expect(criterionNeedsDisclosure(element)).toBe(false);
-    scrollHeight.mockReturnValue(20 * MOBILE_CRITERION_PREVIEW_LINES + 20);
-    expect(criterionNeedsDisclosure(element)).toBe(true);
+    expect(html).toContain('needs several lines on a phone');
   });
 });
 
