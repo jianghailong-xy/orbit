@@ -418,7 +418,7 @@ function NeverOpened({
   status: CoordinatorStatus;
   onAction?: (action: CoordinatorAction) => void;
 }) {
-  const { landing, refusalCode, requiredAction } = status.openability;
+  const { landing, refusalCode, refusalDetail, requiredAction } = status.openability;
   const noLanding = refusalCode === 'NO_LANDING_WORKSPACE' || !landing.workspaceName;
 
   return (
@@ -437,10 +437,13 @@ function NeverOpened({
         }}
       >
         {noLanding ? (
-          // The button would 400: there is no assignee to borrow a workspace from. Say so here
-          // rather than after the press.
+          // Nothing to borrow: no task here has an assignee. Said before the press rather than as
+          // the 400 after it — and said in the words of the choice the reader is being offered,
+          // because the server's own sentence is addressed to a caller who can pass a field.
           <p style={{ ...BODY, margin: 0 }}>
-            {requiredAction ?? 'There is no workspace to open in yet — give this project a task with an assignee first.'}
+            {refusalDetail === 'NO_TASK_ASSIGNEE'
+              ? 'No task here is assigned to a workspace yet, so there is none to borrow. Name the one this conversation runs in.'
+              : requiredAction ?? 'There is no workspace to open in yet — name the one this conversation runs in.'}
           </p>
         ) : (
           <>
@@ -461,9 +464,18 @@ function NeverOpened({
       </div>
 
       <div style={ACTIONS}>
-        <Button type="primary" block disabled={noLanding} onClick={() => onAction?.('start')}>
-          Start coordinator
-        </Button>
+        {noLanding ? (
+          // Not a disabled Start: the press would 400, and what clears that refusal is naming a
+          // workspace, which is a thing this card can ask for. The name travels with the open,
+          // so this button decides the landing and opens the conversation in one press.
+          <Button type="primary" block onClick={() => onAction?.('change-workspace')}>
+            Choose a workspace…
+          </Button>
+        ) : (
+          <Button type="primary" block onClick={() => onAction?.('start')}>
+            Start coordinator
+          </Button>
+        )}
       </div>
     </>
   );

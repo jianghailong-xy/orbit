@@ -257,9 +257,11 @@ describe('ProjectsPage', () => {
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather
-      // than followed. Method and body are held here as literally as the path, because an empty
-      // body is the whole contract of this unit.
-      "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} }",
+      // than followed. Method and body are held here as literally as the path, because the body is
+      // the whole contract of this unit: `workspaceId` ONLY when the reader named one — which is
+      // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
+      // what lets the server borrow the workspace this project's work already runs in.
+      "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
       // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
       // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
       // one would be a way to REACH the state it exists to leave.

@@ -229,6 +229,31 @@ function pillOf(html: string): string {
   throw new Error('unterminated status pill');
 }
 
+/** Never opened AND nothing to borrow: no task in this project has an assignee, so the read
+ *  already knows the press would 400. */
+function nowhereToOpen(): CoordinatorStatus {
+  const s = neverOpenedStatus();
+  s.openability = {
+    ...s.openability,
+    canOpen: false,
+    refusalCode: 'NO_LANDING_WORKSPACE',
+    refusalDetail: 'NO_TASK_ASSIGNEE',
+    refusalCodeAbsentReason: null,
+    requiredAction: 'Assign a task in this project to an agent first.',
+    requiredActionAbsentReason: null,
+    landing: {
+      workspaceId: null,
+      workspaceIdAbsentReason: 'LANDING_REFUSED',
+      workspaceName: null,
+      workspaceNameAbsentReason: 'LANDING_REFUSED',
+      agentId: null,
+      agentName: null,
+      fixed: false,
+    },
+  };
+  return s;
+}
+
 describe('ProjectCoordinatorCard — NEVER_OPENED', () => {
   it('leads with the fact that nothing here starts on its own', () => {
     expect(text(paint(neverOpenedStatus()))).toContain('never start on their own');
@@ -246,29 +271,30 @@ describe('ProjectCoordinatorCard — NEVER_OPENED', () => {
     expect(buttonLabels(paint(neverOpenedStatus()))).toContain('Change');
   });
 
-  it('says why there is nowhere to open, instead of a button that would 400', () => {
-    const s = neverOpenedStatus();
-    s.openability = {
-      ...s.openability,
-      canOpen: false,
-      refusalCode: 'NO_LANDING_WORKSPACE',
-      refusalDetail: 'NO_TASK_ASSIGNEE',
-      refusalCodeAbsentReason: null,
-      requiredAction: 'Assign a task in this project to an agent first.',
-      requiredActionAbsentReason: null,
-      landing: {
-        workspaceId: null,
-        workspaceIdAbsentReason: 'LANDING_REFUSED',
-        workspaceName: null,
-        workspaceNameAbsentReason: 'LANDING_REFUSED',
-        agentId: null,
-        agentName: null,
-        fixed: false,
-      },
-    };
-    const html = paint(s);
-    expect(text(html)).toContain('Assign a task in this project to an agent first.');
-    expect(html).toMatch(/<button\b[^>]*\bdisabled\b/);
+  it('asks for the workspace it has none of, instead of a button that would 400', () => {
+    const html = paint(nowhereToOpen());
+
+    // The card promises the coordinator is where this project's work gets decided. A dead end here
+    // is that promise refused with an errand — leave, assign a task, come back — and the whole of
+    // the refusal is that nobody has said WHERE, which is a thing a reader can say from here.
+    expect(buttonLabels(html).some((l) => /Choose a workspace/.test(l))).toBe(true);
+    expect(html).not.toMatch(/<button\b[^>]*\bdisabled\b/);
+    // And not a Start beside it: there is nothing yet for that press to open in.
+    expect(buttonLabels(html)).not.toContain('Start coordinator');
+
+    // The reason still comes first — in this card's words, not the API's. "pass workspaceId" is
+    // addressed to a caller with a request body, and a reader with a picker in front of them is
+    // not that caller.
+    expect(text(html)).toMatch(/no task here is assigned/i);
+    expect(text(html)).not.toContain('workspaceId');
+  });
+
+  it('falls back to the server\'s own sentence for a refusal this build cannot name', () => {
+    // The same branch reached by a `refusalDetail` this card has no copy for. A shrug here would
+    // be the one case where the reader is told nothing at all.
+    const s = nowhereToOpen();
+    s.openability.refusalDetail = null;
+    expect(text(paint(s))).toContain('Assign a task in this project to an agent first.');
   });
 });
 

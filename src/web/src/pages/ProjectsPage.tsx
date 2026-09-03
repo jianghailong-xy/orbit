@@ -757,13 +757,18 @@ export const coordinatorSessionPath = (sessionId: string): string =>
  * `coordination.sessionId` straight to a route would skip that repair and land the reader inside
  * Trash.
  *
- * The body is `{}` rather than nothing: `workspaceId` is what picks where a FIRST coordinator
- * opens, and this unit deliberately has no picker, so it sends none and lets the server's own
- * fallback answer — down to its 400 when even that has nothing to go on, which names the two
- * things a reader can actually do about it.
+ * `workspaceId` picks where a FIRST coordinator opens, and it is sent only when the reader named
+ * one: an empty body lets the server borrow the workspace this project's work already runs in, down
+ * to its 400 when no task has an assignee to borrow from. A reader who is told that answers it by
+ * naming a workspace, and the name travels WITH the open — one statement binds the landing and the
+ * conversation, where recording the landing first would leave the project naming a workspace no
+ * coordinator has ever opened in.
  */
-export function openProjectCoordinator(projectId: string): Promise<CoordinatorResult> {
-  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} });
+export function openProjectCoordinator(
+  projectId: string,
+  workspaceId?: string,
+): Promise<CoordinatorResult> {
+  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} });
 }
 
 /**
@@ -793,16 +798,21 @@ export function ProjectCoordinatorSection({
   const qc = useQueryClient();
   const toast = useToast();
   const [rebinding, setRebinding] = useState(false);
+  const [choosingLanding, setChoosingLanding] = useState(false);
+  // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
+  // and forgotten, because every later press has to carry the same choice — a Retry that fell back
+  // to the borrow would ask for the refusal the reader just answered.
+  const [landing, setLanding] = useState<string | undefined>(undefined);
   const status = useQuery(projectCoordinatorStatusQuery(projectId));
 
   const open = useMutation({
     mutationKey: ['project', projectId, 'coordinator'],
-    mutationFn: async () => {
+    mutationFn: async (workspaceId: string | undefined) => {
       // Read BEFORE the press, because afterwards it is gone: `created` alone cannot tell a FIRST
       // coordinator from a REPLACEMENT for one that went to Trash, and only the second costs the
       // reader a conversation. The pair does tell them apart.
       const bound = status.data?.coordination.sessionId != null;
-      return { ...(await openProjectCoordinator(projectId)), bound };
+      return { ...(await openProjectCoordinator(projectId, workspaceId)), bound };
     },
     onSuccess: (result) => {
       // The id navigated to is the SERVER's, never the pointer the status read arrived with: on a
@@ -840,10 +850,17 @@ export function ProjectCoordinatorSection({
     switch (action) {
       case 'open':
       case 'start':
-        open.mutate();
+        open.mutate(landing);
         return;
-      // Both are "this project's coordinator should open somewhere else", which is one write.
+      // Two different things, and only the second is a write of its own. Naming the landing of a
+      // coordinator that has never opened records nothing: the name rides along with the open that
+      // same press performs, so the landing and the conversation are bound together. Rebinding
+      // instead would write the landing alone, and a project that names a workspace no coordinator
+      // has opened in reads back as `TRASHED` — a conversation it never had and cannot restore.
+      // Moving one that DOES have a home is the other case, and there the write is the point.
       case 'change-workspace':
+        setChoosingLanding(true);
+        return;
       case 'rebind-workspace':
         setRebinding(true);
         return;
@@ -916,7 +933,7 @@ export function ProjectCoordinatorSection({
                     Rebind workspace…
                   </Button>
                 ) : (
-                  <Button size="small" danger onClick={() => open.mutate()}>
+                  <Button size="small" danger onClick={() => open.mutate(landing)}>
                     Retry
                   </Button>
                 )
@@ -934,6 +951,18 @@ export function ProjectCoordinatorSection({
           projectId={projectId}
           currentWorkspaceId={boundWorkspaceId}
           onClose={() => setRebinding(false)}
+        />
+      ) : null}
+
+      {choosingLanding ? (
+        <CoordinatorLandingDialog
+          proposed={status.data?.openability.landing.workspaceId ?? null}
+          onPick={(workspaceId) => {
+            setLanding(workspaceId);
+            setChoosingLanding(false);
+            open.mutate(workspaceId);
+          }}
+          onClose={() => setChoosingLanding(false)}
         />
       ) : null}
     </div>
@@ -1030,6 +1059,63 @@ function CoordinatorRebindDialog({
           description={rebind.error.message}
         />
       ) : null}
+    </Modal>
+  );
+}
+
+/**
+ * Where a coordinator that has never opened will open — chosen by the reader, not borrowed.
+ *
+ * The card's own answer to `NO_LANDING_WORKSPACE`: a project whose tasks have no assignee has no
+ * workspace to borrow, and until this existed the only way out of that was to leave the project,
+ * assign a task, and come back. The whole of the refusal is that nobody had said where, so the
+ * fix is to say where.
+ *
+ * It WRITES NOTHING. The pick is handed back and travels with `POST :id/coordinator`, which binds
+ * the landing and the conversation in one statement. `coordinator/rebind` — the other door onto
+ * the same column — deliberately is not used here: it records a landing on its own, and a project
+ * that names a workspace no coordinator has opened in is read back as `TRASHED`, a conversation
+ * this project never had and cannot restore.
+ */
+function CoordinatorLandingDialog({
+  proposed,
+  onPick,
+  onClose,
+}: {
+  /** The landing the status read proposed, preselected so that confirming is the same decision the
+   *  card's own button would have made. Null when there was none to propose — the case this dialog
+   *  exists for. */
+  proposed: string | null;
+  onPick: (workspaceId: string) => void;
+  onClose: () => void;
+}) {
+  const workspaces = useQuery(workspacesQuery());
+  const [picked, setPicked] = useState<string | undefined>(proposed ?? undefined);
+
+  return (
+    <Modal
+      open
+      title="Choose the coordination workspace"
+      okText="Start coordinator here"
+      okButtonProps={{ disabled: !picked }}
+      onOk={() => picked && onPick(picked)}
+      onCancel={onClose}
+    >
+      <Typography.Paragraph type="secondary">
+        The conversation opens here now and stays here — a coordinator cannot be moved to another
+        workspace later.
+      </Typography.Paragraph>
+      <Select
+        style={{ width: '100%' }}
+        placeholder="Workspace"
+        loading={workspaces.isPending}
+        value={picked}
+        onChange={setPicked}
+        options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({
+          value: w.id,
+          label: w.name,
+        }))}
+      />
     </Modal>
   );
 }

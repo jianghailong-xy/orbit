@@ -116,6 +116,51 @@ function unavailableStatus(): CoordinatorStatus {
   };
 }
 
+/** Never opened, and nothing to borrow: no task in this project has an assignee, so the read
+ *  already knows an empty-bodied press would 400. */
+function nowhereToOpenStatus(): CoordinatorStatus {
+  const s = liveStatus();
+  return {
+    ...s,
+    state: 'NEVER_OPENED',
+    coordination: {
+      ...s.coordination,
+      sessionId: null,
+      sessionIdAbsentReason: 'COORDINATOR_NEVER_OPENED',
+      session: null,
+      sessionAbsentReason: 'COORDINATOR_NEVER_OPENED',
+      coordinatorGeneration: '0',
+      workspaceId: null,
+      workspaceIdAbsentReason: 'NO_COORDINATION_WORKSPACE',
+      workspaceName: null,
+      workspaceNameAbsentReason: 'NO_COORDINATION_WORKSPACE',
+      agentId: null,
+      agentIdAbsentReason: 'NO_COORDINATOR_AGENT',
+      agentName: null,
+      agentNameAbsentReason: 'NO_COORDINATOR_AGENT',
+    },
+    openability: {
+      canOpen: false,
+      willCreate: true,
+      refusalCode: 'NO_LANDING_WORKSPACE',
+      refusalDetail: 'NO_TASK_ASSIGNEE',
+      refusalCodeAbsentReason: null,
+      requiredAction:
+        'no workspace to open the coordinator in — none of this project\u2019s tasks has an assignee to borrow one from. Assign a task, or pass workspaceId.',
+      requiredActionAbsentReason: null,
+      landing: {
+        workspaceId: null,
+        workspaceIdAbsentReason: 'LANDING_REFUSED',
+        workspaceName: null,
+        workspaceNameAbsentReason: 'LANDING_REFUSED',
+        agentId: null,
+        agentName: null,
+        fixed: false,
+      },
+    },
+  };
+}
+
 let container: HTMLDivElement;
 let root: Root;
 /** The route the section navigated to, read off the router rather than off a spy: what matters is
@@ -400,5 +445,67 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     expect(writes).toHaveLength(1);
     expect(writes[0][0]).toBe(`/projects/${PROJECT}/coordinator/rebind`);
     expect(writes[0][1]).toEqual({ method: 'POST', body: { workspaceId: 'w-other' } });
+  });
+
+  // The mirror of the test above, and the one place the two doors onto the landing column must not
+  // be confused: a project that has never opened a coordinator is not repaired by RECORDING a
+  // landing — that leaves it naming a workspace with no conversation in it. The choice rides along
+  // with the open instead.
+  it('opens a FIRST coordinator in the workspace the reader names, rather than recording a landing first', { timeout: 20_000 }, async () => {
+    const writes: Array<[string, unknown]> = [];
+    apiMock.mockImplementation((path: string, init?: unknown) => {
+      if (path === '/workspaces') {
+        return Promise.resolve([
+          { id: 'w-other', name: 'orbit-spare' },
+          { id: '3CuIHiSJZBQ7nLVUwc7ekz', name: 'orbit-main' },
+        ]) as Promise<never>;
+      }
+      if (!init) return Promise.resolve(nowhereToOpenStatus()) as Promise<never>;
+      writes.push([path, init]);
+      return Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w-other' }) as Promise<never>;
+    });
+    await mount(section());
+
+    // Nothing to press that would 400, and nothing that sends the reader away to assign a task.
+    expect(buttonLabels().some((l) => /Choose a workspace/.test(l))).toBe(true);
+    expect(buttonLabels().some((l) => /^Start coordinator$/.test(l))).toBe(false);
+
+    await press(/Choose a workspace/);
+    expect(document.body.textContent).toContain('Choose the coordination workspace');
+    // Said where the decision is made, because it cannot be taken back after it.
+    expect(document.body.textContent).toMatch(/cannot be moved to another workspace later/);
+
+    await act(async () => {
+      (document.querySelector('.ant-select-content') as HTMLElement | null)?.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true }),
+      );
+    });
+    await settle();
+    const option = [...document.querySelectorAll('.ant-select-item-option')].find((o) =>
+      (o.textContent ?? '').includes('orbit-spare'),
+    );
+    expect(option, 'the workspaces this owner has are offered').toBeTruthy();
+    await act(async () => {
+      (option as HTMLElement).click();
+    });
+    await settle();
+
+    const ok = [...document.querySelectorAll('.ant-modal button')].find((b) =>
+      /Start coordinator here/.test((b.textContent ?? '').trim()),
+    );
+    expect(ok, 'the dialog confirms by opening the coordinator').toBeTruthy();
+    await act(async () => {
+      (ok as HTMLElement).click();
+    });
+    await settle();
+
+    // ONE write, and it is the open — carrying the name, so the landing and the conversation are
+    // bound by the same statement. A rebind here would be a second write and a worse state.
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toBe(`/projects/${PROJECT}/coordinator`);
+    expect(writes[0][1]).toEqual({ method: 'POST', body: { workspaceId: 'w-other' } });
+    expect(landedOn).toBe(`/sessions/${SERVED}`);
+    // It replaced nothing — this project never had a coordinator to lose.
+    expect(document.body.textContent ?? '').not.toMatch(/did not come with it/i);
   });
 });
