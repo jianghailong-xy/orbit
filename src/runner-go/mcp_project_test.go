@@ -245,10 +245,12 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	if required, _ := updateItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod,completionCriterion" {
 		t.Fatalf("project_update criterion required = %#v", updateItem["required"])
 	}
-	// status is a closed request set; DONE is a derived server projection.
+	// status is a closed request set, and since migration 0229 removed the project acceptance
+	// judgment DONE is inside it: nothing derives DONE any more and nothing refuses it, so a
+	// schema that still hid it would be describing a gate that no longer exists.
 	statusProp, _ := updateProps["status"].(map[string]interface{})
 	statusEnum, _ := statusProp["enum"].([]string)
-	if strings.Join(statusEnum, ",") != "OPEN,CANCELLED" {
+	if strings.Join(statusEnum, ",") != "OPEN,DONE,CANCELLED" {
 		t.Fatalf("project_update status enum = %#v", statusProp["enum"])
 	}
 	if got := mcpToolRequired(t, tools, "project_update"); len(got) != 1 || got[0] != "projectId" {

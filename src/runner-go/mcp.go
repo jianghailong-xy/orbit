@@ -1576,7 +1576,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_attribution",
-			"description": "Read one task's attribution boundary — five answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id, status and acceptance epoch; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `acceptance`: the project's stated criteria that CITE this task, each with the verdict it reached, the epoch it was reached in, and whether that is still current — an old PASS stays readable and stops counting once the project is reopened. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"no criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
+			"description": "Read one task's attribution boundary — four answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id and status; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"nothing is holding this up\" and \"this build cannot tell you\" read differently. The acceptance lane this read used to carry — which stated criteria cite the task, and what each was judged to be — went with migration 0229: the criteria are still stated, and nothing judges them. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -1675,8 +1675,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"observation and only the observation time moves; different content writes a new " +
 				"row one refGeneration up, which is what makes 'the branch changed and changed " +
 				"back' visible to a database that cannot lock a git ref. Different content advances " +
-				"the evidence version automatically and re-evaluates the current acceptance standing " +
-				"without a manual reopen.",
+				"the evidence version automatically. Nothing judges the observation: migration 0229 " +
+				"removed the project acceptance judgment, so this records what was seen and stops there.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -1769,9 +1769,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"on every item, and [] to clear the set. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
-				"write acceptance criteria. Direct status DONE is refused for every actor: it is " +
-				"produced automatically only when the exact confirmed standard set has PASS for " +
-				"every peer criterion. Only the fields you pass are sent, so " +
+				"write acceptance criteria. Status DONE is an ordinary write since migration 0229 " +
+				"removed the project acceptance judgment: nothing derives it and nothing refuses " +
+				"it, so writing it is a claim you are making rather than one the server checked. " +
+				"Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +
 				"untouched, pass a string to replace it, pass null to clear it. CANCELLED says the " +
 				"goal will not be pursued; OPEN reopens it. Read project_get first when the current context is not " +
@@ -1793,8 +1794,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"status": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"OPEN", "CANCELLED"},
-					"description": "OPEN reopens work; CANCELLED abandons it. DONE is derived and cannot be supplied.",
+					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
+					"description": "OPEN reopens work; CANCELLED abandons it; DONE says the goal was reached. Since 0229 nothing checks DONE against the project's stated criteria — it is recorded exactly as sent.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",
@@ -1875,7 +1876,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"dryRun": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title, status and acceptance epoch), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
+					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title and status), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
 				},
 			}, "tasks"),
 		},

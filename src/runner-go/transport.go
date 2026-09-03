@@ -947,10 +947,10 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 }
 
 // getTaskAttribution reads unit L7's attribution boundary for one task: the project the work
-// counts towards (title, Base62 id, status, acceptance epoch), where it was NOTICED (evidence, and
-// labelled as evidence — §3 SC7 is explicit that finding work somewhere grants no authority to
-// write there), the acceptance criteria that cite this task and whether each still counts, the
-// declared crossing that touches it, and the attribution blocker holding it up.
+// counts towards (title, Base62 id, status), where it was NOTICED (evidence, and labelled as
+// evidence — §3 SC7 is explicit that finding work somewhere grants no authority to write there),
+// the declared crossing that touches it, and the attribution blocker holding it up. The acceptance
+// lane went with migration 0229, which removed the project acceptance judgment.
 //
 // The read a coordinator most needs before it writes anywhere. Without it, the only way to learn
 // where a write lands is to be refused by the gate that decides it, which is after the decision has
