@@ -206,9 +206,8 @@ suite('(g) dispatch and verdict still run end to end for a passing command', asy
   assert.equal(acceptance.content, command);
 
   // VERDICT. The reported exit code equals the declared expectation, so the criterion derives
-  // The callback still commits, and it still settles nothing: the evaluator that compared its
-  // exit code to the declaration was removed on 2026-09-02 with the judgment machinery, so what
-  // the walls above have to keep letting through is the ACK, not a derived status.
+  // DONE. The point of this suite is that it gets there with none of the completion-ACK protocol
+  // 0220 removed: no receipt, no obligation, no outbox row is written on the way.
   const settled = await api.turnComplete({ id: f.runnerId } as never, f.sessionId, {
     turnId: acceptance.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'shell',
     shellExitCode: 0,
@@ -216,8 +215,8 @@ suite('(g) dispatch and verdict still run end to end for a passing command', asy
   } as never);
   assert.equal((settled as { ok: boolean }).ok, true);
   const declaredAfter = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
-  assert.equal(declaredAfter.status, TaskStatus.OPEN,
-    'a matching exit code derives nothing: EXECUTABLE has no implementation');
+  assert.equal(declaredAfter.status, TaskStatus.DONE,
+    'a matching exit code is the whole criterion, and it derives DONE');
   assert.equal(declaredAfter.completionCriterion, 'EXECUTABLE');
   assert.equal(declaredAfter.acceptanceExpectedExitCode, 0,
     'and the declaration it was run from is untouched');
@@ -251,13 +250,11 @@ suite('(g) a nonzero exit still derives FAILED through the same lane', async (t)
 
   assert.equal(
     (await db.task.findUniqueOrThrow({ where: { id: f.taskId } })).status,
-    TaskStatus.OPEN,
-    'a mismatching exit code is not a conservative FAILED either: the comparison itself is gone',
+    TaskStatus.FAILED,
+    'a mismatching exit code is the conservative FAILED, through the same lane',
   );
-  // And the exit code and shell output are no longer stored anywhere. That is consequence 3 of
-  // the 2026-09-02 decision, accepted explicitly by the account owner: diagnosis moves to the
-  // session record. What the run gets instead is one human-facing comment saying so.
-  const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
-  assert.equal(comments.length, 1);
-  assert.match(comments[0].body, /需要人工介入：EXECUTABLE 验收未能判定/);
+  // And the exit code and shell output are still stored nowhere. That is consequence 3 of the
+  // 2026-09-02 decision, which the 2026-09-03 restoration of the comparison deliberately did NOT
+  // undo: diagnosis moves to the session record, and the task gets no comment at all.
+  assert.deepEqual(await db.taskComment.findMany({ where: { taskId: f.taskId } }), []);
 });

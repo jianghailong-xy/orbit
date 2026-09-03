@@ -1,26 +1,30 @@
 /**
- * The completion protocol against real PostgreSQL, after the 2026-09-02 judgment removal.
+ * The completion protocol against real PostgreSQL: what settles a task, and what merely asks to.
  *
  * This file used to replay all three criteria end to end: an exit code that derived DONE, a
  * judgment request that a person decided, and an independent verifier's verdict. The account
- * owner had the first two implementations deleted — the machine, explicitly not the declaration —
- * so what is replayed here now is the state that leaves behind:
+ * owner had the first two implementations deleted on 2026-09-02 — the machine, explicitly not the
+ * declaration — and asked for the exit-code comparison back on 2026-09-03, without any of the
+ * recording. What is replayed here is the state that leaves behind:
  *
- *   * VERIFICATION is the ONE criterion that still completes anything. An independent verifier's
- *     PASS still settles its subject, a FAIL or INCONCLUSIVE still does not, and both go through
- *     the real service against the real triggers.
- *   * EXECUTABLE and EVIDENCE_JUDGMENT are declared-but-unimplemented: still creatable, still
- *     carrying their data, refused a direct DONE with a remedy that says so, and settled by
- *     nothing.
+ *   * VERIFICATION completes through this service. An independent verifier's PASS still settles
+ *     its subject, a FAIL or INCONCLUSIVE still does not, and both go through the real service
+ *     against the real triggers.
+ *   * EVIDENCE_JUDGMENT is declared-but-unimplemented: still creatable, still carrying its data,
+ *     refused a direct DONE with a remedy that says so, and settled by nothing.
+ *   * EXECUTABLE is settled by neither of the above and by nothing in THIS file: its one
+ *     comparison happens in the runner callback, which is `task-executable-acceptance.pg.spec.ts`.
+ *     What is asserted here is the other half — that the service still refuses to let anybody
+ *     write its DONE by hand, and now says which action would earn it.
  *   * The ordinary writes around them — comments, dependencies, run events, merge receipts,
  *     sessions — are untouched.
  *
  * Every optimistic DONE transition is observed by a test-only trigger that refuses it unless one
- * of the two surviving derivations is already visible in the same transaction. That is what stops
- * a service method returning DONE from standing in for the database effect it claims.
+ * of the derivations this file drives is already visible in the same transaction. That is what
+ * stops a service method returning DONE from standing in for the database effect it claims.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must identify the disposable database accepted by
- * the coordinator PG safety guard, with migrations through 0227 applied.
+ * the coordinator PG safety guard, with migrations through 0230 applied.
  */
 
 import assert from 'node:assert/strict';
@@ -114,7 +118,10 @@ async function installDerivedDoneGuard(sql: Client): Promise<void> {
           END IF;
           derivation := 'VERIFICATION_PASS';
         ELSE
-          RAISE EXCEPTION 'JR_DIRECT_DONE: % has no implementation that could derive DONE',
+          -- EXECUTABLE derives DONE from one exit-code comparison in runnerApi.turnComplete,
+          -- which this suite never drives; EVIDENCE_JUDGMENT has no implementation at all. Either
+          -- way, a bare status UPDATE arriving here is not a derivation this suite can name.
+          RAISE EXCEPTION 'JR_DIRECT_DONE: % did not reach DONE through a derivation',
             NEW."completion_criterion";
         END IF;
 
@@ -239,20 +246,29 @@ suite(
     });
     assert.equal(evidenceJudgment.status, TaskStatus.OPEN);
 
-    // The refusal is the same one it always was, and it now names the state rather than a door
-    // that no longer exists.
+    // The refusal is the same one it always was, and it names the action that CAN settle the
+    // task: since 2026-09-03 EXECUTABLE has an implementation again, so the remedy is to let the
+    // declared command run rather than to wait for a rebuild.
     await assertDirectDoneRefused(
       tasks, db, ownerId, executable.id, 'owner on EXECUTABLE',
-      'AWAIT_EXECUTABLE_IMPLEMENTATION',
+      'RUN_ACCEPTANCE_COMMAND',
     );
     await assertDirectDoneRefused(
       tasks, db, ownerId, evidenceJudgment.id, 'owner on EVIDENCE_JUDGMENT',
       'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
     );
-    // And raw SQL cannot reach DONE either: the test guard refuses it, and so does 0193's own
-    // canonical writer fence, which lost its judgment lane in 0227.
+    // And raw SQL cannot reach DONE through THIS suite either. Which wall answers changed with
+    // 0230: the production fence now admits an EXECUTABLE row carrying an intact declaration,
+    // because with nothing recorded the declaration is the only fact it can see — so what refuses
+    // here is this suite's own derivation guard, and it is named exactly rather than left to an
+    // alternation that would pass whichever way the walls moved.
     await assert.rejects(
       sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [executable.id]),
+      /JR_DIRECT_DONE/,
+    );
+    // The production fence is still the wall for a criterion with no implementation.
+    await assert.rejects(
+      sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [evidenceJudgment.id]),
       /JR_DIRECT_DONE|TASK_DONE_CANONICAL_FACT_REQUIRED/,
     );
 

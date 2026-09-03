@@ -141,7 +141,10 @@ import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { normalizeToolOutputEvent } from './tool-output';
-import type { TaskCompletionCriterionValue } from '../tasks/task-completion-criterion';
+import {
+  deriveTaskCompletionStatus,
+  type TaskCompletionCriterionValue,
+} from '../tasks/task-completion-criterion';
 import {
   completionCriterionSnapshot,
   completionDigest,
@@ -2839,16 +2842,77 @@ export class RunnerApiController {
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
-      // Nothing sets this any more: the evaluator that compared the callback's exit code to the
-      // declaration was removed on 2026-09-02. It stays as the flag the human-facing signal below
-      // reads, and it is now always false — every reserved acceptance turn reaches that signal.
-      const acceptanceTaskChanged = false;
+      let acceptanceTaskChanged = false;
+      let acceptanceTaskCompleted = false;
       let acceptanceFailureReason: string | null = null;
-      // A reserved turn whose evidence cannot be compared is a transport failure, not a criterion
-      // input. End the Session, but leave the Task in its existing pending state: since the
-      // 2026-09-02 removal there is no evaluator to compare the result against, so this is where
-      // every reserved acceptance turn now lands. Persist the human-facing signal in this same
-      // first-ACK transaction so the failure can never become a silent OPEN task.
+      // The whole EXECUTABLE decision, restored on 2026-09-03 at the account owner's direction:
+      // one comparison between the code this callback reports and the code the declaration asks
+      // for. Every input is already in hand under the rank-50 task lock taken above, so this
+      // reads nothing further and writes nothing but `task.status` — no attempt row, no result
+      // ledger, no evidence. The exit code exists for the length of this block.
+      //
+      // The guards around it are the identity checks, not evidence: the turn must be the reserved
+      // shell turn this session queued, the declaration must not have been edited since it was
+      // queued (the expectation is part of the turn's client id), and the command must still be
+      // the one that ran. A declaration that moved falls through to the unavailable signal, which
+      // is the honest answer — that result is about a question nobody is asking any more.
+      if (
+        taskAcceptanceTurn
+        && lockedAcceptanceTask != null
+        && awaitsExecutableAcceptance(lockedAcceptanceTask.status)
+        && lockedAcceptanceTask.completionCriterion === 'EXECUTABLE'
+        && lockedAcceptanceTask.acceptanceCommand != null
+        && lockedAcceptanceTask.acceptanceExpectedExitCode != null
+        && lockedAcceptanceTask.acceptanceExpectedExitCode === queuedAcceptanceExpectedExitCode
+        && completedTurn?.content === lockedAcceptanceTask.acceptanceCommand
+        && dto.status === RunStatus.SUCCEEDED
+        // -1 is what the runner reports for a start failure, a timeout kill or a signal. It is
+        // compared like any other code, because since 0227 removed the typed termination nothing
+        // can tell those apart from a command that ran and disagreed — the owner accepted that,
+        // so they all become FAILED rather than a second, quieter "unavailable" class.
+        && Number.isInteger(dto.shellExitCode)
+      ) {
+        const actualExitCode = dto.shellExitCode!;
+        const expectedExitCode = lockedAcceptanceTask.acceptanceExpectedExitCode;
+        const completed = deriveTaskCompletionStatus({
+          completionCriterion: lockedAcceptanceTask.completionCriterion,
+          acceptanceExpectedExitCode: expectedExitCode,
+          executableExitCode: actualExitCode,
+        });
+        // FAILED remains the conservative L0 outcome when the declared command returns a
+        // comparable non-matching exit code. Only the optimistic branch is criterion-derived.
+        const derivedStatus = completed ?? TaskStatus.FAILED;
+        // The command, expectation and pending state are repeated in the write even though their
+        // row is locked: they make the compare-and-set visible in SQL and fail closed if this code
+        // is ever moved away from the lock without its guard.
+        const changed = await tx.task.updateMany({
+          where: {
+            id: lockedAcceptanceTask.id,
+            status: { in: [...EXECUTABLE_ACCEPTANCE_PENDING_STATUSES] },
+            acceptanceCommand: lockedAcceptanceTask.acceptanceCommand,
+            acceptanceExpectedExitCode: expectedExitCode,
+            completionCriterion: 'EXECUTABLE',
+          },
+          data: { status: derivedStatus },
+        });
+        if (changed.count > 0) {
+          acceptanceTaskChanged = true;
+          acceptanceTaskCompleted = derivedStatus === TaskStatus.DONE;
+          if (derivedStatus === TaskStatus.FAILED) {
+            failSession = true;
+            // The one place the two numbers are written down, and it is the session's own run
+            // outcome rather than a record about the task. Diagnosis is reading the session.
+            acceptanceFailureReason =
+              `acceptance command exited ${actualExitCode}; expected ${expectedExitCode}`;
+          }
+        }
+      }
+      // A reserved turn whose result cannot be compared is a transport failure, not a criterion
+      // input. End the Session, but leave the Task in its existing pending state: nothing was
+      // compared, so nothing may be concluded. This is an older runner omitting the field, a turn
+      // that never produced one, or a declaration edited while its old command was still running.
+      // Persist the human-facing signal in this same first-ACK transaction so the failure can
+      // never become a silent OPEN task.
       if (taskAcceptanceTurn && acceptanceTaskAwaitingResult && !acceptanceTaskChanged) {
         failSession = true;
         acceptanceFailureReason = dto.status === RunStatus.FAILED
@@ -3092,8 +3156,27 @@ export class RunnerApiController {
         taskReclaimed,
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
+        taskCompleted: acceptanceTaskCompleted,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    // The immediate completion edge for a task the comparison above just settled DONE. The ACK
+    // transaction is authoritative and idempotent: only its first compare-and-set reports
+    // taskCompleted. A process crash here loses latency, not work, because the periodic READY
+    // sweep observes the same dependency watermark.
+    if (
+      'taskCompleted' in finalized
+      && finalized.taskCompleted
+      && finalized.taskOwnerId
+      && finalized.taskId
+    ) {
+      await this.tasks?.dispatchDependentsAfterCompletion(
+        finalized.taskOwnerId,
+        finalized.taskId,
+      ).catch((error) => this.logger.warn(
+        `successor dispatch after executable completion ${finalized.taskId} failed: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
+    }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.

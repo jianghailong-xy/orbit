@@ -26,11 +26,11 @@ test('undeclared completion is the ordinary EVIDENCE_JUDGMENT criterion', () => 
   });
 });
 
-// VERIFICATION is the only criterion with an implementation since 2026-09-02. The other two are
-// declared-but-unimplemented: legal to declare, impossible to satisfy, and — the point of naming
-// them here — evaluated by their OWN `case`, not by falling through to somebody else's answer or
-// to a default. `evaluateTaskCompletion`'s switch has no default arm, so the exhaustiveness check
-// is what makes that a compile-time fact rather than a comment.
+// EXECUTABLE and VERIFICATION have implementations; EVIDENCE_JUDGMENT is declared-but-
+// unimplemented since 2026-09-02: legal to declare, impossible to satisfy, and — the point of
+// naming it here — evaluated by its OWN `case`, not by falling through to somebody else's answer
+// or to a default. `evaluateTaskCompletion`'s switch has no default arm, so the exhaustiveness
+// check is what makes that a compile-time fact rather than a comment.
 test('VERIFICATION evaluates both satisfied and unsatisfied facts', () => {
   assert.deepEqual(
     evaluateTaskCompletion({ completionCriterion: 'VERIFICATION', verificationVerdict: 'PASS' }),
@@ -44,26 +44,114 @@ test('VERIFICATION evaluates both satisfied and unsatisfied facts', () => {
   );
 });
 
-test('EXECUTABLE and EVIDENCE_JUDGMENT are declared but have no implementation', () => {
-  for (const criterion of ['EXECUTABLE', 'EVIDENCE_JUDGMENT'] as const) {
-    // Every shape a caller could present, including the ones that used to satisfy them.
-    for (const facts of [
-      { completionCriterion: criterion },
-      { completionCriterion: criterion, verifiesTaskId: 'not-a-verifier-criterion' },
-      { completionCriterion: criterion, verificationVerdict: 'PASS' as const },
-      { completionCriterion: criterion, ownVerdict: 'PASS' as const },
-    ]) {
-      assert.deepEqual(
-        evaluateTaskCompletion(facts),
-        { criterion, state: 'UNSATISFIED', satisfied: false },
-        `${criterion} must be UNSATISFIED, never satisfied by another criterion's fact`,
-      );
-      assert.equal(deriveTaskCompletionStatus(facts), null);
-    }
+/**
+ * The whole EXECUTABLE criterion, as a table.
+ *
+ * Restored on 2026-09-03 at the account owner's direction, and deliberately this small: two
+ * numbers in, one of three states out, nothing kept. The four rows the account owner's task
+ * enumerated are the first four here — matching, mismatching, no exit code, no expectation — and
+ * the rest are the shapes that must NOT change the answer.
+ *
+ * ACTIONABLE earns its own state rather than collapsing into UNSATISFIED: "the command disagreed"
+ * and "there was nothing to compare" reach different places in the runner callback, and folding
+ * them together is what would turn a missing field into a task failure.
+ */
+test('EXECUTABLE is one exit-code comparison, and answers all four input shapes', () => {
+  const rows: Array<{
+    label: string;
+    facts: Parameters<typeof evaluateTaskCompletion>[0];
+    state: 'SATISFIED' | 'UNSATISFIED' | 'ACTIONABLE';
+    status: 'DONE' | null;
+  }> = [
+    {
+      label: 'the exit code matches the expectation',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: 0 },
+      state: 'SATISFIED', status: 'DONE',
+    },
+    {
+      label: 'the exit code does not match',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: 7 },
+      state: 'UNSATISFIED', status: null,
+    },
+    {
+      label: 'no exit code was reported',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: null },
+      state: 'ACTIONABLE', status: null,
+    },
+    {
+      label: 'no expectation is declared',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: null, executableExitCode: 0 },
+      state: 'ACTIONABLE', status: null,
+    },
+    {
+      label: 'neither side is present',
+      facts: { completionCriterion: 'EXECUTABLE' },
+      state: 'ACTIONABLE', status: null,
+    },
+    {
+      // -1 is what the runner reports for a start failure, a timeout kill or a signal. Since 0227
+      // removed the typed termination nothing can tell those apart from a command that ran and
+      // disagreed, so -1 is compared like any other integer. The account owner accepted exactly
+      // this loss: "超时与真实失败不再可区分".
+      label: 'the runner reported -1 for a kill, a signal or a start failure',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 0, executableExitCode: -1 },
+      state: 'UNSATISFIED', status: null,
+    },
+    {
+      label: 'a negative expectation is honoured rather than treated as a sentinel',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: -1, executableExitCode: -1 },
+      state: 'SATISFIED', status: 'DONE',
+    },
+    {
+      label: 'a nonzero expectation is the declaration, not a synonym for failure',
+      facts: { completionCriterion: 'EXECUTABLE', acceptanceExpectedExitCode: 7, executableExitCode: 7 },
+      state: 'SATISFIED', status: 'DONE',
+    },
+    {
+      label: "another criterion's satisfied fact cannot stand in for the comparison",
+      facts: {
+        completionCriterion: 'EXECUTABLE',
+        verificationVerdict: 'PASS' as const,
+        ownVerdict: 'PASS' as const,
+        verifiesTaskId: 'not-a-verifier-criterion',
+      },
+      state: 'ACTIONABLE', status: null,
+    },
+  ];
+  for (const row of rows) {
+    assert.deepEqual(
+      evaluateTaskCompletion(row.facts),
+      { criterion: 'EXECUTABLE', state: row.state, satisfied: row.state === 'SATISFIED' },
+      row.label,
+    );
+    assert.equal(deriveTaskCompletionStatus(row.facts), row.status, row.label);
   }
 });
 
-test('the removed criteria answer rather than throw, and stay out of the default arm', () => {
+test('EVIDENCE_JUDGMENT is declared but has no implementation', () => {
+  // Every shape a caller could present, including the ones that used to satisfy it and the two
+  // executable facts that satisfy its peer — a criterion may never borrow another's answer.
+  for (const facts of [
+    { completionCriterion: 'EVIDENCE_JUDGMENT' as const },
+    { completionCriterion: 'EVIDENCE_JUDGMENT' as const, verifiesTaskId: 'not-a-verifier-criterion' },
+    { completionCriterion: 'EVIDENCE_JUDGMENT' as const, verificationVerdict: 'PASS' as const },
+    { completionCriterion: 'EVIDENCE_JUDGMENT' as const, ownVerdict: 'PASS' as const },
+    {
+      completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+      acceptanceExpectedExitCode: 0,
+      executableExitCode: 0,
+    },
+  ]) {
+    assert.deepEqual(
+      evaluateTaskCompletion(facts),
+      { criterion: 'EVIDENCE_JUDGMENT', state: 'UNSATISFIED', satisfied: false },
+      "EVIDENCE_JUDGMENT must be UNSATISFIED, never satisfied by another criterion's fact",
+    );
+    assert.equal(deriveTaskCompletionStatus(facts), null);
+  }
+});
+
+test('every criterion answers rather than throws, and stays out of the default arm', () => {
   // Not an exception: an unimplemented criterion is a state, not an error, and a caller that
   // evaluates one has asked a legitimate question about a legitimate declaration.
   assert.doesNotThrow(() => evaluateTaskCompletion({ completionCriterion: 'EXECUTABLE' }));
@@ -188,23 +276,28 @@ test('an unsatisfied criterion cannot manufacture an optimistic status', () => {
 });
 
 test('every direct-DONE refusal points at the declared criterion remedy', () => {
+  // EXECUTABLE has an implementation again, so its remedy names an action the caller can take
+  // rather than a rebuild it can only wait for.
   assert.equal(taskCompletionRequiredAction('EXECUTABLE').requiredAction,
-    'AWAIT_EXECUTABLE_IMPLEMENTATION');
-  assert.match(taskCompletionRequiredAction('EXECUTABLE').instruction,
-    /implementation was removed[\s\S]*declaration is intact/u);
+    'RUN_ACCEPTANCE_COMMAND');
+  const executable = taskCompletionRequiredAction('EXECUTABLE').instruction;
+  assert.match(executable, /acceptanceCommand[\s\S]*acceptanceExpectedExitCode/u);
+  assert.match(executable, /DONE when they are equal, FAILED when they are not/u);
+  // And it is honest about the cost the owner accepted: the run is not recorded anywhere.
+  assert.match(executable, /nothing about the run is recorded/u);
+  assert.doesNotMatch(executable, /AWAIT|rebuil|removed/u,
+    'the remedy must not still describe the criterion as unimplemented');
   assert.match(
     taskCompletionRequiredAction('VERIFICATION').instruction,
     /independent verification task with verdict PASS/,
   );
-  // The two remedies with no implementation behind them say so, and say what IS still possible,
-  // rather than naming a door (`task_judge`, the exit-code evaluator) that no longer exists.
-  for (const criterion of ['EXECUTABLE', 'EVIDENCE_JUDGMENT'] as const) {
-    const remedy = taskCompletionRequiredAction(criterion);
-    assert.match(remedy.requiredAction, /^AWAIT_/u);
-    assert.match(remedy.instruction, /implementation/u);
-    assert.match(remedy.instruction, /VERIFICATION/u);
-    assert.doesNotMatch(remedy.instruction, /task_judge/u);
-  }
+  // The one remedy with no implementation behind it says so, and says what IS still possible,
+  // rather than naming a door (`task_judge`, the removed decision) that no longer exists.
+  const evidence = taskCompletionRequiredAction('EVIDENCE_JUDGMENT');
+  assert.match(evidence.requiredAction, /^AWAIT_/u);
+  assert.match(evidence.instruction, /implementation/u);
+  assert.match(evidence.instruction, /VERIFICATION/u);
+  assert.doesNotMatch(evidence.instruction, /task_judge/u);
 });
 
 test('the three peer declarations require only their own evidence shape', () => {

@@ -3,11 +3,10 @@ import type { TaskCompletionPolicyValue, TaskVerdictValue } from '../projects/ta
 /**
  * The three peer ways a task may declare how its work is proved complete.
  *
- * Since 2026-09-02 only VERIFICATION has an implementation. EXECUTABLE and EVIDENCE_JUDGMENT are
- * still legal declarations, still stored, and still carry their data — 0177's `acceptanceCommand`
- * / `acceptanceExpectedExitCode` pair for the first, completion evidence for the second — but the
- * machinery that used to satisfy them was removed at the account owner's direction, to be rebuilt.
- * `evaluateTaskCompletion` is where that state is expressed.
+ * EXECUTABLE and VERIFICATION have implementations. EVIDENCE_JUDGMENT is still a legal
+ * declaration, still stored, and still carries its completion evidence, but the machinery that
+ * used to satisfy it was removed at the account owner's direction on 2026-09-02 and has not been
+ * rebuilt. `evaluateTaskCompletion` is where that state is expressed.
  */
 export const TASK_COMPLETION_CRITERIA = [
   'EXECUTABLE',
@@ -110,6 +109,12 @@ export function taskCompletionDeclarationError(
 export interface TaskCompletionFacts {
   /** Null is accepted at this pure boundary solely for rolling/migration compatibility. */
   completionCriterion?: TaskCompletionCriterionValue | null;
+  /** 0177's declared expectation. Half a declaration is refused above, so in practice this is
+   *  present exactly when the task declares EXECUTABLE. */
+  acceptanceExpectedExitCode?: number | null;
+  /** The exit code the acceptance command actually returned, carried in memory from the runner
+   *  callback to this comparison and then dropped. Nothing stores it. */
+  executableExitCode?: number | null;
   /** The subject-facing result of an independent verifier. Only PASS settles the subject. */
   verificationVerdict?: TaskVerdictValue | null;
   /** Non-null identifies this task as the verifier carrier rather than the verified subject. */
@@ -139,17 +144,21 @@ export type TaskLifecycleStatusValue =
 /**
  * Evaluate one declared criterion. It observes facts only and never writes Task.status.
  *
- * EXECUTABLE and EVIDENCE_JUDGMENT are DECLARED BUT UNIMPLEMENTED. On 2026-09-02 the account
- * owner had the judgment machinery and the exit-code decision deleted, to be rebuilt later. What
- * was deleted is the machine: the request/result/inbox/delivery tables, their triggers, and the
- * two branches that used to read them. What was deliberately kept is the declaration — the
- * criterion labels, `acceptanceCommand`, `acceptanceExpectedExitCode` and every row carrying
- * them — so the rebuilt implementation finds its inputs exactly where it left them.
+ * EXECUTABLE is one comparison and nothing else. On 2026-09-03 the account owner asked for the
+ * exit-code decision back — "根据 exit code 来简单判断，不需要实际记录数据" — so the two facts it
+ * reads arrive as arguments and are gone when this returns. No ledger, no attempt row, no typed
+ * termination: a command that timed out, was cancelled or died on a signal is indistinguishable
+ * here from one that ran and returned the wrong code, and all of them are UNSATISFIED. That is
+ * the accepted cost of storing nothing.
  *
- * They therefore return UNSATISFIED rather than throwing or falling through to a default: a task
- * may still declare either one, and nothing will ever satisfy it on its own. Naming both cases
- * explicitly is what keeps the exhaustiveness check honest — a fourth criterion added later
- * cannot silently inherit somebody else's answer.
+ * ACTIONABLE is the third answer and is not a failure: with either side of the comparison
+ * missing there is no comparison, so the goal stays open rather than being guessed wrong.
+ *
+ * EVIDENCE_JUDGMENT remains DECLARED BUT UNIMPLEMENTED — the 2026-09-02 removal took its request
+ * ledger and decision door, and this change did not rebuild them. It returns UNSATISFIED rather
+ * than throwing or falling through to a default: a task may still declare it, and nothing will
+ * ever satisfy it on its own. Naming the case explicitly is what keeps the exhaustiveness check
+ * honest — a fourth criterion added later cannot silently inherit somebody else's answer.
  */
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
@@ -158,7 +167,14 @@ export function evaluateTaskCompletion(
   let state: TaskCompletionEvaluation['state'];
   switch (criterion) {
     case 'EXECUTABLE':
-      state = 'UNSATISFIED';
+      // Either side absent is "nothing was compared", which is what an older runner that omits
+      // the field, or a turn that never ran, produces. The caller keeps that separable from a
+      // comparison that happened and disagreed: only the latter is a conservative FAILED.
+      state = (facts.executableExitCode == null || facts.acceptanceExpectedExitCode == null)
+        ? 'ACTIONABLE'
+        : (facts.executableExitCode === facts.acceptanceExpectedExitCode
+          ? 'SATISFIED'
+          : 'UNSATISFIED');
       break;
     case 'VERIFICATION':
       state = (facts.verifiesTaskId != null
@@ -246,12 +262,12 @@ export function taskCompletionRequiredAction(
   switch (criterion) {
     case 'EXECUTABLE':
       return {
-        requiredAction: 'AWAIT_EXECUTABLE_IMPLEMENTATION',
+        requiredAction: 'RUN_ACCEPTANCE_COMMAND',
         instruction:
-          'nothing can satisfy EXECUTABLE right now: its implementation was removed on ' +
-          '2026-09-02 and is to be rebuilt. The declaration is intact — acceptanceCommand and ' +
-          'acceptanceExpectedExitCode are still stored and still editable — so redeclare this ' +
-          'task as VERIFICATION if it has to be completable today',
+          'let the declared acceptanceCommand run to completion; Orbit compares the exit code it ' +
+          'returns against acceptanceExpectedExitCode and derives DONE when they are equal, ' +
+          'FAILED when they are not. Nothing else writes this status, and nothing about the run ' +
+          'is recorded — read the session to see what the command printed',
       };
     case 'VERIFICATION':
       if (role.verifiesTaskId != null) {
