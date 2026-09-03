@@ -107,7 +107,6 @@ const EVIDENCE = new Set([
   'src/apiserver/src/push/judgment-delivery-removal.spec.ts',
   'src/apiserver/src/projects/evidence-judgment-removal.spec.ts',
   'src/apiserver/src/projects/project-acceptance-judgment-evidence-removal.spec.ts',
-  'src/apiserver/src/runner-api/executable-derivation-removal.spec.ts',
   'src/apiserver/src/runner-api/task-judge-capability-removal.spec.ts',
   'test/outcome-reconciler-v2.ratification.test.mjs',
   'test/executable-acceptance-runtime.test.mjs',

@@ -1,26 +1,30 @@
 /**
- * The completion protocol against real PostgreSQL, after the 2026-09-02 judgment removal.
+ * The completion protocol against real PostgreSQL: what settles a task, and what merely asks to.
  *
  * This file used to replay all three criteria end to end: an exit code that derived DONE, a
  * judgment request that a person decided, and an independent verifier's verdict. The account
- * owner had the first two implementations deleted — the machine, explicitly not the declaration —
- * so what is replayed here now is the state that leaves behind:
+ * owner had the first two implementations deleted on 2026-09-02 — the machine, explicitly not the
+ * declaration — and asked for the exit-code comparison back on 2026-09-03, without any of the
+ * recording. What is replayed here is the state that leaves behind:
  *
- *   * VERIFICATION is the ONE criterion that still completes anything. An independent verifier's
- *     PASS still settles its subject, a FAIL or INCONCLUSIVE still does not, and both go through
- *     the real service against the real triggers.
- *   * EXECUTABLE and EVIDENCE_JUDGMENT are declared-but-unimplemented: still creatable, still
- *     carrying their data, refused a direct DONE with a remedy that says so, and settled by
- *     nothing.
+ *   * VERIFICATION completes through this service. An independent verifier's PASS still settles
+ *     its subject, a FAIL or INCONCLUSIVE still does not, and both go through the real service
+ *     against the real triggers.
+ *   * EVIDENCE_JUDGMENT is declared-but-unimplemented: still creatable, still carrying its data,
+ *     refused a direct DONE with a remedy that says so, and settled by nothing.
+ *   * EXECUTABLE is settled by neither of the above and by nothing in THIS file: its one
+ *     comparison happens in the runner callback, which is `task-executable-acceptance.pg.spec.ts`.
+ *     What is asserted here is the other half — that the service still refuses to let anybody
+ *     write its DONE by hand, and now says which action would earn it.
  *   * The ordinary writes around them — comments, dependencies, run events, merge receipts,
  *     sessions — are untouched.
  *
  * Every optimistic DONE transition is observed by a test-only trigger that refuses it unless one
- * of the two surviving derivations is already visible in the same transaction. That is what stops
- * a service method returning DONE from standing in for the database effect it claims.
+ * of the derivations this file drives is already visible in the same transaction. That is what
+ * stops a service method returning DONE from standing in for the database effect it claims.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must identify the disposable database accepted by
- * the coordinator PG safety guard, with migrations through 0227 applied.
+ * the coordinator PG safety guard, with migrations through 0230 applied.
  */
 
 import assert from 'node:assert/strict';

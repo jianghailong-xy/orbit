@@ -4,16 +4,22 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 /**
- * After 2026-09-02, VERIFICATION is the one criterion with an implementation.
+ * VERIFICATION came through the 2026-09-02 removal intact, and nothing has been bolted onto it
+ * since.
  *
- * That sentence is the load-bearing claim of the whole removal, and it has two failure modes. One
- * is that VERIFICATION was damaged on the way past — its epoch read, its dependency predicate and
- * its SQL fragments all consulted the judgment request, and stripping that out could easily have
- * taken the surviving lane with it. The other is that a substitute crept in for one of the two
- * criteria that were supposed to be left empty.
+ * That claim has two failure modes. One is that VERIFICATION was damaged on the way past — its
+ * epoch read, its dependency predicate and its SQL fragments all consulted the judgment request,
+ * and stripping that out could easily have taken the surviving lane with it. The other is that a
+ * substitute crept in for one of the criteria that were supposed to be left empty.
+ *
+ * On 2026-09-03 EXECUTABLE stopped being one of those, by the account owner's decision: it gained
+ * back one exit-code comparison and two argument fields. That is a second implementation, not a
+ * substitute for this one — the two share `evaluateTaskCompletion` and touch nothing of each
+ * other's — so what is pinned below is the ceiling: EXECUTABLE may read its own two facts and
+ * VERIFICATION its three, and EVIDENCE_JUDGMENT still reads nothing at all.
  *
  * `task-status-derived-end-to-end.pg.spec.ts` runs the positive path on a real server. This file
- * holds the shape: what the surviving predicate reads, and what nothing reads any more.
+ * holds the shape: what the surviving predicates read, and what nothing reads any more.
  */
 
 const API = path.resolve(__dirname, '../..');
@@ -65,22 +71,29 @@ test('the SQL fragments select and pass a check on its own facts', () => {
   assert.match(selector, /ORDER BY newest_check\."created_at" DESC, newest_check\."id" DESC/u);
 });
 
-test('the two removed criteria have no substitute anywhere in the completion path', () => {
+test('no criterion reads a fact outside its own two or three, and the empty one reads none', () => {
   const criterion = read('src/tasks/task-completion-criterion.ts');
   const evaluator = criterion.slice(criterion.indexOf('export function evaluateTaskCompletion'));
   const body = evaluator.slice(0, evaluator.indexOf('\n}\n'));
-  // Exactly one criterion reads a fact; the other two read nothing.
+  // Two criteria read facts; the third reads none. The whole set is six, and a seventh appearing
+  // here is a substitute growing in — most likely for EVIDENCE_JUDGMENT, which has no inputs.
   const factReads = [...body.matchAll(/facts\.([a-zA-Z]+)/gu)].map((match) => match[1]);
   assert.deepEqual([...new Set(factReads)].sort(),
-    ['completionCriterion', 'ownVerdict', 'verificationVerdict', 'verifiesTaskId']);
+    ['acceptanceExpectedExitCode', 'completionCriterion', 'executableExitCode', 'ownVerdict',
+      'verificationVerdict', 'verifiesTaskId']);
+  // EVIDENCE_JUDGMENT's arm in particular: a constant, with no fact between the case and the
+  // break. This is what "declared but unimplemented" has to look like in code.
+  const arm = body.slice(body.indexOf("case 'EVIDENCE_JUDGMENT':"));
+  assert.match(arm.slice(0, arm.indexOf('break;')), /^case 'EVIDENCE_JUDGMENT':\s*state = 'UNSATISFIED';\s*$/u);
 
   // And the facts type carries nothing else to read: a field left behind is the seam a substitute
-  // would grow back through.
+  // would grow back through. In particular neither of 0200's typed-termination fields is back.
   const facts = criterion.slice(criterion.indexOf('export interface TaskCompletionFacts'));
   const shape = facts.slice(0, facts.indexOf('\n}\n'));
   const fields = [...shape.matchAll(/^\s{2}([a-zA-Z]+)\?:/gmu)].map((match) => match[1]);
   assert.deepEqual(fields.sort(),
-    ['completionCriterion', 'ownVerdict', 'verificationVerdict', 'verifiesTaskId']);
+    ['acceptanceExpectedExitCode', 'completionCriterion', 'executableExitCode', 'ownVerdict',
+      'verificationVerdict', 'verifiesTaskId']);
 
   // The aggregation half, which is what actually settles a VERIFICATION_PASSED subject, is
   // untouched and still keyed on a verifier's verdict.

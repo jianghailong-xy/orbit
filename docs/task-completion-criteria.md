@@ -50,7 +50,8 @@ project coordinator/judgment session, task execution session, verifier, or forem
 write `task.status = DONE` receives `DIRECT_TASK_DONE_REFUSED` together with the task's declared
 criterion and a criterion-specific `requiredAction`:
 
-- finish the run so Orbit records and compares the `EXECUTABLE` exit code;
+- let the declared command finish so Orbit compares the `EXECUTABLE` exit code (it is compared,
+  not recorded);
 - record an independent verification `PASS` for `VERIFICATION`; or
 - decide the open judgment request with `orbit task judge … --evidence …`, the `task_judge` MCP
   tool, or `POST /tasks/:id/judgment` for `EVIDENCE_JUDGMENT`.
@@ -76,13 +77,26 @@ text and never activates Orbit's detached-shell shortcut, because the runner mus
 exit code.
 
 The ordinary execution turn does not first write `IN_PROGRESS`. A newly dispatched task remains
-`OPEN` until the reserved shell result is recorded; a retry of a prior failed attempt may already
-be `IN_PROGRESS`. Both are pending inputs to the evaluator. A matching actual exit code derives
-`DONE`, and a non-matching actual exit code derives `FAILED`, in the same transaction that stores
-the command, raw combined output, and actual exit code. If the reserved turn cannot return a
-comparable result (for example, an old runner omits the shell fields or the declaration changes
-while it runs), Orbit leaves the task's pending status untouched and appends an
-`EXECUTABLE_ACCEPTANCE_UNAVAILABLE` needs-human signal instead of silently parking it.
+`OPEN` until the reserved shell turn reports; a retry of a prior failed attempt may already be
+`IN_PROGRESS`. Both are pending inputs to the comparison. A matching actual exit code derives
+`DONE` and a non-matching one derives `FAILED`, in the transaction that acknowledges the turn.
+
+Nothing about the run is stored. The account owner decided on 2026-09-03 that the exit code is a
+comparison input and not data — "根据 exit code 来简单判断，不需要实际记录数据" — so migration `0230`
+restored the comparison alone: no judgment request, no result row, no attempt, no evidence, and no
+comment carrying the command's output. Two consequences follow and are accepted:
+
+- A timeout, a cancellation, a signal and a start failure are **not distinguishable** from a
+  command that ran and returned the wrong code. The runner reports `-1` for all of them and it is
+  compared like any other integer, so every one of them derives `FAILED`.
+- The reason a task failed is **not recorded**. Diagnosis is reading the session: the run's own
+  `error` carries `acceptance command exited N; expected M`, and the command's output is in the
+  session transcript where the shell turn ran.
+
+If the reserved turn cannot return a comparable result at all (an old runner omits the shell
+fields, the turn never reports one, or the declaration changes while the command runs), there is
+nothing to compare and Orbit does not guess. It leaves the task's pending status untouched and
+appends an `EXECUTABLE_ACCEPTANCE_UNAVAILABLE` needs-human signal instead of silently parking it.
 
 The working directory is the session execution directory:
 

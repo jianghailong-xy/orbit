@@ -69,7 +69,11 @@ test('the server routes it posted to are gone, and the declaration routes are no
 test('the remedy an agent is given names the state, not a door that no longer exists', () => {
   const criterion = read('src/apiserver/src/tasks/task-completion-criterion.ts');
   const remedies = criterion.slice(criterion.indexOf('export function taskCompletionRequiredAction'));
-  assert.match(remedies, /AWAIT_EXECUTABLE_IMPLEMENTATION/u);
+  // EXECUTABLE regained an implementation on 2026-09-03, so its remedy names the action that
+  // settles it. What this suite is answerable for is that the action is not the removed door:
+  // running the declared acceptance command is a thing the run already does, and `task_judge` was
+  // an endpoint an agent had to call.
+  assert.match(remedies, /RUN_ACCEPTANCE_COMMAND/u);
   assert.match(remedies, /AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION/u);
   assert.doesNotMatch(remedies, /task_judge/u);
   assert.doesNotMatch(remedies, /RUN_EXECUTABLE_CRITERION|DECIDE_THE_OPEN_EVIDENCE_JUDGMENT/u);

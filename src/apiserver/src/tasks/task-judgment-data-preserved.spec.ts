@@ -121,12 +121,49 @@ test('the 0150/0172 gate triggers and 0141 verdict functions are not touched by 
 
 test('the ledger stays append-only, and every later migration is accounted for', () => {
   const dirs = readdirSync(MIGRATIONS).filter((dir) => /^\d{4}_/.test(dir)).sort();
-  // 0228 is no longer the newest: 0229 removed the project acceptance judgment on 2026-09-03, by a
-  // later and separate account-owner decision. Anything ADDED after this list is a migration whose
-  // effect on the claims below has not been read, which is what this assertion is for.
+  // 0228 is no longer the newest, and each later migration below was read against the claims in
+  // this file before being added to the list. Anything ADDED after it is one that has not been,
+  // which is what this assertion is for.
+  //
+  //   0229 removed the project acceptance judgment, by a later and separate account-owner
+  //        decision. It names none of the preserved relations above.
+  //   0230 restored the EXECUTABLE exit-code comparison, again by account-owner decision. It
+  //        matters here because it is the second CREATE OR REPLACE of the DONE writer fence, and
+  //        a replacement is how one migration silently reverts another. It does not: every lane
+  //        0228 wrote is carried over byte for byte, it ADDS one lane for EXECUTABLE, and it
+  //        carries no DDL and no DML of any kind besides that one function body. The preserved
+  //        data this file is about — the 0177 pair, the criterion labels, the task rows, the
+  //        project acceptance tables — is not reachable from it.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
-    [REMOVAL_DIR, '0229_project_acceptance_judgment_removal'],
+    [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
+      '0230_executable_exit_code_judgment'],
     'a later migration exists; re-read it before trusting the assertions above');
+  // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
+  const later = readFileSync(
+    path.join(MIGRATIONS, '0230_executable_exit_code_judgment', 'migration.sql'), 'utf8',
+  );
+  const executable = (sql: string): string[] => {
+    const start = sql.indexOf('CREATE OR REPLACE FUNCTION "task_done_canonical_writer_fence"');
+    return sql.slice(start, sql.indexOf('$$ LANGUAGE plpgsql;', start))
+      .split('\n').map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('--'));
+  };
+  const carried = executable(REMOVAL_SQL);
+  const restated = executable(later);
+  const added = restated.filter((line) => !carried.includes(line));
+  assert.deepEqual(added, [
+    'IF NOT canonical',
+    'AND NEW."completion_criterion" = \'EXECUTABLE\'::"task_completion_criterion"',
+    'AND NEW."acceptance_command" IS NOT NULL',
+    'AND NEW."acceptance_expected_exit_code" IS NOT NULL THEN',
+    "HINT = 'let the declared acceptance command run, or record a verification verdict; "
+      + "EVIDENCE_JUDGMENT is declared but has no implementation';",
+  ], '0230 changed a line of the fence that 0228 owns');
+  const lost = carried.filter((line) => !restated.includes(line));
+  assert.deepEqual(lost, [
+    "HINT = 'record a verification verdict; EXECUTABLE and EVIDENCE_JUDGMENT are declared but "
+      + "have no implementation';",
+  ], '0230 dropped a lane 0228 wrote: a CREATE OR REPLACE is how that happens silently');
   // 0177 itself is immutable and still declares the pair this change kept.
   const declaration = readFileSync(
     path.join(MIGRATIONS, '0177_task_executable_acceptance', 'migration.sql'), 'utf8',
