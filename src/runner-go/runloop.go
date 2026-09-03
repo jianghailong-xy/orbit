@@ -183,6 +183,37 @@ const takeoverConflictLimit = 5
 // the conflict clears — e.g. the server fails the abandoned operation over.
 const reclaimRetryInterval = 45 * time.Second
 
+// worktreeGCInterval is how often a RUNNING runner re-sweeps its session checkouts. Startup used
+// to be the only sweep, so a checkout finalization could not remove — a lease loss returns before
+// finalization even reports — leaked until the process restarted. Five minutes is far shorter than
+// the time it takes a disk to fill and far longer than the sweep costs, which is one server round
+// trip plus a directory listing when there is nothing to do.
+const worktreeGCInterval = 5 * time.Minute
+
+// worktreeSweeper schedules the run loop's checkout reclamation (gcWorktrees).
+//
+// `armed` carries the existing reclaim gate rather than re-deriving it: until a reclaim has
+// actually answered, every session this runner is about to resume looks like an orphan and the
+// sweep would delete the checkouts it is about to reattach to. A reclaim that set sessions aside
+// is the same hazard — those rows have no local supervisor either — so the deferred retry is
+// what arms it.
+type worktreeSweeper struct {
+	interval time.Duration
+	armed    bool
+	nextAt   time.Time
+}
+
+// due reports whether a sweep should run now, advancing the schedule when it says yes. An unarmed
+// sweeper never runs one and never banks a backlog to run the moment it is armed: the schedule
+// only moves on a sweep that actually happened.
+func (s *worktreeSweeper) due(now time.Time) bool {
+	if !s.armed || now.Before(s.nextAt) {
+		return false
+	}
+	s.nextAt = now.Add(s.interval)
+	return true
+}
+
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
 // response (the server may have committed PENDING -> RUNNING before the HTTP
 // response was lost). Every process takes rows over in stable session-id order,
@@ -430,6 +461,14 @@ func runLoop(cfg *RunnerConfig) bool {
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
 	pool := newSessionPool(cfg.MaxConcurrent)
+
+	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
+	// the same reason as max-concurrent above: the worktree sweep reclaims checkouts against it,
+	// and an edit in the UI should reach the sweep within a heartbeat rather than at the next
+	// restart. Written by the heartbeat goroutine, read by the claim loop's sweep — hence atomic.
+	// Zero is "no floor", which is what both a machine with none configured and a control plane
+	// too old to send one mean, and what the sweep reads as "no disk-pressure gate".
+	var diskFloorMb atomic.Int64
 
 	loopCtx, loopCancel := context.WithCancel(context.Background())
 	sig := make(chan os.Signal, 1)
@@ -766,6 +805,15 @@ func runLoop(cfg *RunnerConfig) bool {
 					logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
 				}
 			}
+			// The machine's free-space floor. Absence REPLACES rather than preserves, unlike
+			// max-concurrent: null is what a runner with no floor configured legitimately has,
+			// so "no field" and "no floor" are the same answer and must not leave the sweep
+			// gating on a number the owner has since cleared.
+			var floorMb int64
+			if resp.MinFreeDiskMb != nil {
+				floorMb = int64(*resp.MinFreeDiskMb)
+			}
+			diskFloorMb.Store(floorMb)
 			// Process ownership loss first. A terminal row can appear in both lists;
 			// marking its exact advertised epoch detaching before a durable cancel
 			// makes that overlap take the no-finalize path.
@@ -1264,9 +1312,13 @@ func runLoop(cfg *RunnerConfig) bool {
 	// an orphan and we would delete the checkouts we are about to resume. A session set
 	// aside over a takeover conflict is not in the pool either, so its checkout would
 	// look orphaned too — defer GC to a later clean start rather than remove it.
-	if reclaimed && !reclaimSkipped {
+	//
+	// This is now the FIRST sweep rather than the only one: the claim loop below repeats it on
+	// worktreeGCInterval, sharing this same gate through the sweeper's `armed` flag.
+	worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}
+	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
-		gcWorktrees(t, liveSet)
+		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
 		gcUploads(liveSet)
 	}
 
@@ -1292,6 +1344,22 @@ func runLoop(cfg *RunnerConfig) bool {
 			if skipped {
 				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
+			// A reclaim that finally answered with nothing set aside is the gate the startup
+			// sweep failed: every live session now has a local supervisor, so an orphan checkout
+			// can be told apart from one about to resume. Never disarmed again — a later partial
+			// retry cannot take those supervisors back out of the pool.
+			if !skipped {
+				worktreeGC.armed = true
+			}
+		}
+		// Re-sweep leftover checkouts on the way round the loop. Finalization no longer removes
+		// any checkout, so this is where every reclamation happens — including of a checkout
+		// finalization could not remove at all, which is how a lease loss stops leaking one until
+		// the next restart. Ahead of the saturation check below on purpose: a machine running flat
+		// out is exactly when its disk gets tight. It costs one round trip plus a directory
+		// listing when nothing is due, and the claim long-poll guarantees a lap every 35 seconds.
+		if worktreeGC.due(time.Now()) {
+			gcWorktrees(t, pool.ids(), measureWorktreePressure(diskFloorMb.Load()))
 		}
 		if pool.activeCount() >= pool.maxConcurrent() {
 			select {

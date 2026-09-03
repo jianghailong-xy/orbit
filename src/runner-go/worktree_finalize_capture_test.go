@@ -126,7 +126,9 @@ func TestFinalizeCommitsWorkAsBefore(t *testing.T) {
 	}
 
 	// …and the checkout is then removable, which is the whole point of committing first.
-	dropFinalizedCheckout(wt, false, err)
+	// Finalization no longer performs that removal; removeWorktree, which the sweep calls, is
+	// the only thing that does.
+	removeWorktree(wt)
 	if _, statErr := os.Stat(wt.Path); !os.IsNotExist(statErr) {
 		t.Fatalf("a captured checkout must still be removed: %v", statErr)
 	}
@@ -151,45 +153,32 @@ func TestFinalizeCleanSessionLeavesNoCommit(t *testing.T) {
 		t.Fatalf("an unchanged session must leave no commit: HEAD %s moved off base %s", head, wt.BaseSha)
 	}
 
-	dropFinalizedCheckout(wt, false, err)
+	removeWorktree(wt)
 	if _, statErr := os.Stat(wt.Path); !os.IsNotExist(statErr) {
-		t.Fatalf("an unchanged session's checkout is still removed: %v", statErr)
+		t.Fatalf("an unchanged session's checkout is still removable: %v", statErr)
 	}
 }
 
-// TestDropFinalizedCheckoutHonoursTheFinalizeVerdict: keepCheckout is the SERVER's answer, and on
-// the path that lost the work it was `false` — decided for a task that completed successfully,
-// from a finalize report that said the session changed nothing. A finalize that failed is exactly
-// the case where that report cannot be trusted, so the removal does not happen.
-func TestDropFinalizedCheckoutHonoursTheFinalizeVerdict(t *testing.T) {
+// TestTheSingleDeleterHonoursTheFinalizeVerdict: the server's "this checkout may go" is decided
+// for a task that completed successfully, from a finalize report that said the session changed
+// nothing — and a finalize that FAILED reports exactly that too, while holding the only copy of
+// the work. Reclamation is now deferred to the sweep rather than done at finalize, which moves
+// this refusal into removeWorktree; it still has to hold, because the sweep asks the server the
+// same question and gets the same "removable" answer.
+func TestTheSingleDeleterHonoursTheFinalizeVerdict(t *testing.T) {
 	wt := lockedIndexWorktree(t, "sVerdict")
 	_, _, captureErr := finalizeWorktree(wt, false)
 	if captureErr == nil {
 		t.Fatal("precondition: staging was supposed to fail")
 	}
 
-	dropFinalizedCheckout(wt, false, captureErr)
+	removeWorktree(wt)
 
 	if _, err := os.Stat(filepath.Join(wt.Path, "work.txt")); err != nil {
-		t.Fatalf("the checkout holding the only copy must survive keepCheckout=false: %v", err)
+		t.Fatalf("the checkout holding the only copy must survive a removable verdict: %v", err)
 	}
 	if _, err := git(wt.RepoDir, "worktree", "list", "--porcelain"); err != nil {
 		t.Fatalf("the worktree registration must be intact: %v", err)
-	}
-}
-
-// TestDropFinalizedCheckoutKeepsWhatTheServerKeeps: an Open resumable end (idle-park, user-end,
-// cancel) is keepCheckout=true and is untouched either way — unchanged behaviour.
-func TestDropFinalizedCheckoutKeepsWhatTheServerKeeps(t *testing.T) {
-	wt := sessionWorktree(t, "sPark")
-	if _, _, err := finalizeWorktree(wt, true); err != nil {
-		t.Fatalf("park finalize must succeed: %v", err)
-	}
-
-	dropFinalizedCheckout(wt, true, nil)
-
-	if _, err := os.Stat(wt.Path); err != nil {
-		t.Fatalf("keepCheckout=true must leave the checkout in place: %v", err)
 	}
 }
 
@@ -217,7 +206,7 @@ func TestOrphanSweepKeepsUncapturedWork(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gcWorktrees(NewTransport(srv.URL, "capture-token"), map[string]bool{})
+	gcWorktrees(NewTransport(srv.URL, "capture-token"), map[string]bool{}, diskUnderTheFloor())
 
 	if _, err := os.Stat(filepath.Join(stranded.Path, "work.txt")); err != nil {
 		t.Fatalf("the sweep deleted work that no branch has a copy of: %v", err)
@@ -243,7 +232,7 @@ func TestOrphanSweepStillCollectsCapturedCheckouts(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gcWorktrees(NewTransport(srv.URL, "capture-token"), map[string]bool{})
+	gcWorktrees(NewTransport(srv.URL, "capture-token"), map[string]bool{}, diskUnderTheFloor())
 
 	if _, err := os.Stat(done.Path); !os.IsNotExist(err) {
 		t.Fatalf("a committed checkout must still be swept: %v", err)

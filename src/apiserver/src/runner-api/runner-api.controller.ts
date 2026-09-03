@@ -914,11 +914,14 @@ export class RunnerApiController {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
-    // syncs its self-gate to a UI/API change without needing a restart.
+    // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
+    // rides along for the same reason: the runner reclaims its own session checkouts under disk
+    // pressure, and that has to be the floor the owner set here, not a second number.
     return {
       cancelSessionIds,
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
+      minFreeDiskMb: updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
       artifactRequests,

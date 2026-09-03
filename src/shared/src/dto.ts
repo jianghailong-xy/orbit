@@ -548,6 +548,15 @@ export interface RunnerHeartbeatResponse {
    *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
    *  (offline, older build) costs nothing more than the wait it was already in. */
   refreshModelCatalog?: boolean;
+  /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
+   *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
+   *  session checkouts on its own disk — without keeping a second copy of the setting.
+   *
+   *  Unlike `maxConcurrent`, absence here is a value rather than "no news": null is what a
+   *  machine with no floor configured stores, an older control plane sends nothing, and both
+   *  mean the same thing — no gate. The runner must therefore treat an absent field as "no
+   *  floor" and not as "keep whatever you last heard". */
+  minFreeDiskMb?: number | null;
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */

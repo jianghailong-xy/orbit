@@ -209,7 +209,8 @@ func TestWorktreeTeardownRunsOnTheOrphanSweep(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gcWorktrees(NewTransport(srv.URL, "teardown-token"), map[string]bool{})
+	// Under the free-space floor, which is the only condition that makes an eligible checkout go.
+	gcWorktrees(NewTransport(srv.URL, "teardown-token"), map[string]bool{}, diskUnderTheFloor())
 
 	leftover.requireGone(t, 10*time.Second)
 	if _, err := os.Stat(wt.Path); !os.IsNotExist(err) {

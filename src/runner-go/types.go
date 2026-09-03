@@ -279,6 +279,12 @@ type HeartbeatResponse struct {
 	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
 	// later heartbeat is the only outcome there is. False/absent on older control planes.
 	RefreshModelCatalog bool `json:"refreshModelCatalog,omitempty"`
+	// This machine's free-space floor in MB (Runner.minFreeDiskMb), which the worktree sweep
+	// reclaims checkouts against. A POINTER because absence is a value, not silence: a machine
+	// with no floor configured sends null, an older control plane sends nothing, and both mean
+	// "no gate" — so nil replaces the last value rather than preserving it. Contrast
+	// MaxConcurrent, where 0 is not a legal setting and therefore does mean "no news".
+	MinFreeDiskMb *int `json:"minFreeDiskMb,omitempty"`
 }
 
 // CloneCommand mirrors @orbit/shared: clone RepoURL onto this machine for WorkspaceID. The target
@@ -885,8 +891,10 @@ type RunFinalizeRequest struct {
 
 // RunFinalizeResponse is the control plane's reply when the runner finalizes a run through
 // /runner/sessions/:id/finalize. KeepCheckout is false only when the Session is Completed or
-// in Trash; for any resumable end it is true, so the
-// runner preserves the isolated worktree checkout.
+// in Trash; for any resumable end it is true, so the isolated worktree checkout is preserved
+// for the resume. False means the checkout has become ELIGIBLE for reclamation, not that the
+// runner removes it here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable)
+// on every sweep and is the only thing that acts on it.
 type RunFinalizeResponse struct {
 	Ok           bool `json:"ok"`
 	KeepCheckout bool `json:"keepCheckout"`

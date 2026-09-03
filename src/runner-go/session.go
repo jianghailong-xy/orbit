@@ -1090,11 +1090,20 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	// Finalize the session's worktree (when isolated): commit the work onto its branch and
 	// compute the diff, so the branch is usable for a manual merge even after the checkout
-	// is removed. Whether to drop the checkout is the SERVER's call (keepCheckout): Open
-	// resumable ends — idle-park, user-end, or cancel — keep it; Complete, Move to Trash,
-	// and a successfully completed task remove it. The finalize commit doubles as a *park
-	// checkpoint* for a resumable end —
+	// is removed. The finalize commit doubles as a *park checkpoint* for a resumable end —
 	// tagged for undo-on-resume rather than permanent.
+	//
+	// Finalization does NOT remove the checkout, and nothing on this path does. The server's
+	// keepCheckout=false says the checkout has become ELIGIBLE for reclamation — Complete, Move
+	// to Trash, a successfully completed task — not that it has to go now; Open resumable ends
+	// (idle-park, user-end, cancel) are never eligible at all. Everything git tracks is on the
+	// branch by this point, but `add -A` honours .gitignore, so removing the directory also
+	// discards what is expensive and untracked (node_modules, generated clients) and charges the
+	// next session on this repository a full rebuild — a real cost paid to reclaim disk that may
+	// not be short. gcWorktrees is the single deleter: it re-asks this same server judgement
+	// every pass and acts on it only under disk pressure or its retention cap. That also means a
+	// checkout THIS function could not remove — every `return` above, lease loss in particular —
+	// is reclaimed by a later sweep instead of leaking until the process restarts.
 	finalizeRequest := RunFinalizeRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
 	// Carry the failure reason onto the session record. Only on failure: the
 	// apiserver writes `error` straight through, so attaching a recovered-from
@@ -1108,8 +1117,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
 	// A finalize that could not put the work on the branch reports no diff — which is
-	// indistinguishable on the wire from a session that changed nothing, and is why the checkout
-	// must not be dropped on the server's say-so afterwards.
+	// indistinguishable on the wire from a session that changed nothing, and is why no checkout
+	// may be dropped on the server's say-so alone. Logged here; enforced where the removal
+	// actually happens, by removeWorktree re-checking that the work reached the branch.
 	var captureErr error
 	if job.WT != nil {
 		finalizeRequest.Branch = job.WT.Branch
@@ -1126,10 +1136,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		finalizeRequest.MergeTargets = mergeTargetsForWT(job.WT)
 	}
-	keepCheckout := true
 	err := retryIdempotentWhile(finalizeCtx, func(attemptCtx context.Context) error {
-		var attemptErr error
-		keepCheckout, attemptErr = t.finalizeRun(attemptCtx, job.SessionID, finalizeRequest)
+		_, attemptErr := t.finalizeRun(attemptCtx, job.SessionID, finalizeRequest)
 		return attemptErr
 	}, isRetryableTransportError)
 	if isLeaseOwnershipError(err) {
@@ -1142,7 +1150,6 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	} else {
 		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
 	}
-	dropFinalizedCheckout(job.WT, keepCheckout, captureErr)
 }
 
 // builtinTaskTools are Claude's built-in task/todo tools. They are disabled for

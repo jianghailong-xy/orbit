@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,8 +27,9 @@ const (
 // Worktree is a per-session git worktree the runner created for isolation. It lets
 // concurrent sessions on the same agent edit files without clobbering each other: each
 // runs claude in its own checkout on its own branch, forked from the workDir HEAD at
-// claim. On terminal completion the runner commits the work to Branch and removes the
-// checkout — the branch stays behind for a manual merge in the UI.
+// claim. On terminal completion the runner commits the work to Branch — after which the
+// branch stays behind for a manual merge in the UI, and the checkout outlives the session
+// until gcWorktrees reclaims it.
 type Worktree struct {
 	Path    string // the worktree checkout dir
 	Branch  string // orbit/<slug>-<hash>
@@ -1036,8 +1038,9 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 }
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
-// ref. Called only when the server reports the session as non-resumable (Completed/in Trash);
-// a resumable end keeps its checkout, and any stale one is later reaped by gcWorktrees.
+// ref. Called only from gcWorktrees — the single place a checkout is reclaimed, and the only
+// one that has asked the control plane whether this one may go. Finalization leaves every
+// checkout standing.
 func removeWorktree(wt *Worktree) {
 	// The checkout is dropped on the belief that finalizeWorktree already put its contents on the
 	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
@@ -1070,21 +1073,13 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	return err == nil && out == ""
 }
 
-// dropFinalizedCheckout removes a finished session's checkout when the server said not to keep
-// it (keepCheckout=false: Complete, Move to Trash, or a successfully completed task). It refuses
-// when finalize could not confirm the work reached the branch: that verdict was reached by a
-// server told the session changed nothing, which is the very thing a failed finalize cannot
-// establish, and the checkout is then the only copy there is.
-func dropFinalizedCheckout(wt *Worktree, keepCheckout bool, captureErr error) {
-	if wt == nil || keepCheckout {
-		return
-	}
-	if captureErr != nil {
-		logln("keeping the checkout for", wt.Session+": its work never reached", wt.Branch+":", captureErr)
-		return
-	}
-	removeWorktree(wt)
-}
+// rebaseScratchPrefix names the throwaway staging worktree rebaseFastForward puts beside the
+// session checkouts. It is not a session checkout, and gcWorktrees skips it by this prefix: the
+// sweep runs while merges do, and reclaiming one mid-rebase would delete the working tree a merge
+// is replaying into and kill the git process doing it. Nothing else needs to collect them —
+// rebaseFastForward removes its own on every exit path and clears any leftover before staging a
+// new one.
+const rebaseScratchPrefix = "_rebase-"
 
 // mergeLock serializes merges so two "merge to main" requests can't race on the same repo's
 // working tree / main ref.
@@ -1357,8 +1352,8 @@ func replayAnchor(repoRoot, sessionID, sourceSha, serverBase string) string {
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
 func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string) mergeOutcome {
-	tmpBranch := "orbit/_rebase-" + sessionID
-	tmp := filepath.Join(worktreesDir(), "_rebase-"+sessionID)
+	tmpBranch := "orbit/" + rebaseScratchPrefix + sessionID
+	tmp := filepath.Join(worktreesDir(), rebaseScratchPrefix+sessionID)
 	// Clear any leftover from a crashed prior attempt before staging fresh.
 	_, _ = git(repoRoot, "worktree", "remove", "--force", tmp)
 	_ = os.RemoveAll(tmp)
@@ -1923,58 +1918,159 @@ func clip(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// gcWorktrees removes leftover session checkouts that the control plane confirms are gone —
-// a session the user completed or moved to Trash, or one that no longer exists. `live` is the set of
-// session ids the runner is currently driving (never candidates). A checkout for a session
-// that is merely parked/failed but still resumable is KEPT, so an idle-parked session's
-// worktree survives a runner restart, as is one still holding uncommitted work. Branches are
-// always preserved. On any query failure the candidates are left untouched — GC never destroys
-// a checkout it couldn't confirm removable.
-func gcWorktrees(t *Transport, live map[string]bool) {
+// worktreeGCPressure is what one sweep knows about free space where the checkouts live: the
+// reading, whether there was one at all, and the floor to judge it against.
+//
+// `measured` is kept separate from `freeBytes` because an unknown and a full disk must not look
+// alike — the same rule the control plane's own probe follows (AgentDirProbe.FreeBytes is absent,
+// never zero, when the platform has no answer).
+type worktreeGCPressure struct {
+	freeBytes uint64
+	measured  bool
+	// floorMb is Runner.minFreeDiskMb as this machine's control plane last reported it; 0 is
+	// "no floor configured", which is also what an older control plane's silence stores.
+	floorMb int64
+}
+
+// belowFloor is the Go twin of the control plane's diskBelowFloor()
+// (apiserver src/tasks/tasks.service.ts), deliberately answering the same question the same way:
+// no reading and no floor both mean NO GATE, because a gate that fires on absent information
+// would reclaim checkouts precisely on the machines it knows nothing about, and the failure it
+// guards against — a volume filling up — is one its own silence cannot evidence. Documented as
+// fail-open on the server side too (workspaces.service.ts).
+func (p worktreeGCPressure) belowFloor() bool {
+	if !p.measured || p.floorMb <= 0 {
+		return false
+	}
+	return p.freeBytes < uint64(p.floorMb)*1024*1024
+}
+
+// measureWorktreePressure reads the filesystem holding the worktrees root. That root, rather than
+// the machine as a whole, because it is the only filesystem this sweep can free space on — the
+// same reason the control plane measures per working directory instead of per machine.
+func measureWorktreePressure(floorMb int64) worktreeGCPressure {
+	free, _, ok := diskUsage(worktreesDir())
+	return worktreeGCPressure{freeBytes: free, measured: ok, floorMb: floorMb}
+}
+
+// maxRetainedEligibleCheckouts caps how many removable checkouts a roomy disk is allowed to keep.
+//
+// It exists because the pressure rule below is "no pressure, no reclamation", and a machine whose
+// disk never gets tight would otherwise accumulate one checkout directory per finished session
+// forever, bounded by nothing at all. A COUNT is what makes that structurally impossible: an age
+// cap alone still admits any number of directories inside its window, since nothing limits how
+// fast sessions finish, and it is the directory and inode count — not the age — that runs away.
+//
+// 32 is two per concurrent slot at the control plane's default max-concurrent of 16. That is
+// deliberately generous: what these checkouts are being kept FOR is their .gitignored contents
+// (node_modules, generated clients), which the finalize commit does not preserve because `add -A`
+// honours .gitignore, and which the next session on the same repository would otherwise rebuild.
+// A cap this size keeps that reuse available across a normal working day while leaving the worst
+// case a bounded, inspectable number of directories.
+//
+// It is a bound on RECLAIMABLE checkouts, not on directories outright: one still holding work no
+// branch has is refused by removeWorktree whatever this says, because that work has nowhere else
+// to exist. Such a checkout is carried past the cap and retried every sweep.
+const maxRetainedEligibleCheckouts = 32
+
+// gcWorktrees is the ONLY thing that removes a session checkout. Finalization no longer does:
+// the server's keepCheckout=false means a checkout has become ELIGIBLE for reclamation, and this
+// sweep re-asks that same judgement every pass rather than anyone recording it locally.
+//
+// What it removes, and when:
+//
+//   - `live` (the sessions this runner is driving) is never a candidate, and neither is a session
+//     the control plane still reports as resumable — merely parked, failed, or awaiting input.
+//     Those are kept whatever the disk looks like, so an idle-parked session's work survives.
+//   - Of what remains, NOTHING is removed while free space is above the machine's floor. Deleting
+//     a finished session's checkout costs the next session on that repository a full rebuild of
+//     everything git does not track; on a roomy disk that trades a resource nobody needs for one
+//     that is actually spent.
+//   - Below the floor that inverts and every eligible checkout goes, oldest first.
+//   - Above the floor, only the surplus past maxRetainedEligibleCheckouts goes, oldest first, so
+//     "no pressure" can never mean "unbounded".
+//
+// Branches are always preserved — only the checkout directory and the base ref go — so anything
+// reclaimed here can be checked out again from its branch. On any query failure the candidates are
+// left untouched: GC never destroys a checkout it couldn't confirm removable.
+func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure) {
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return
 	}
-	var candidates []string
-	for _, e := range entries {
-		if e.IsDir() && !live[e.Name()] {
-			candidates = append(candidates, e.Name())
-		}
+	// touched is the checkout directory's mtime: the last time anything wrote in it, which is a
+	// better answer to "whose contents is a successor least likely to still want" than the
+	// session's age, and it is what orders every removal below. A directory that will not stat is
+	// sorted as oldest — it is the one we know least about, not one to keep preferentially.
+	type candidate struct {
+		name    string
+		touched time.Time
 	}
-	removable, err := t.worktreesRemovable(candidates)
+	var candidates []candidate
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) {
+			continue
+		}
+		var touched time.Time
+		if info, err := e.Info(); err == nil {
+			touched = info.ModTime()
+		}
+		candidates = append(candidates, candidate{name: e.Name(), touched: touched})
+		names = append(names, e.Name())
+	}
+	removable, err := t.worktreesRemovable(names)
 	if err != nil {
 		logln("gc: worktrees-removable query failed, keeping all orphan checkouts:", err)
 		return
 	}
+	eligibleNames := make(map[string]bool, len(removable))
 	for _, name := range removable {
-		path := filepath.Join(root, name)
-		// Removable says the SESSION is over, not that its work is safe: a finalize whose staging
-		// or commit failed leaves everything it produced uncommitted right here (see
-		// removeWorktree, which refuses for the same reason). Sweeping it then destroys the only
-		// copy just as surely — a day later instead of a second later. Only a status that ran and
-		// came back non-empty holds the checkout back: unlike removeWorktree this sweep also
-		// faces entries that are not checkouts at all, and those still have to be collectable.
-		if out, err := git(path, "status", "--porcelain"); err == nil && out != "" {
-			logln("gc: keeping orphan worktree", name, "— it still holds work no branch has")
-			continue
+		eligibleNames[name] = true
+	}
+	var eligible []candidate
+	for _, c := range candidates {
+		if eligibleNames[c.name] {
+			eligible = append(eligible, c)
 		}
-		teardownWorktreeProcesses(path)
-		// Resolve the main repo via the checkout's common git dir (<repo>/.git), so we can
-		// `worktree remove` it cleanly; fall back to a plain dir removal otherwise.
+	}
+	sort.Slice(eligible, func(i, j int) bool { return eligible[i].touched.Before(eligible[j].touched) })
+
+	var reason string
+	switch surplus := len(eligible) - maxRetainedEligibleCheckouts; {
+	case pressure.belowFloor():
+		reason = "under the free-space floor"
+	case surplus > 0:
+		eligible = eligible[:surplus]
+		reason = "over the retention cap"
+	default:
+		// The branch this whole change exists for: eligible checkouts survive a sweep.
+		return
+	}
+
+	for _, c := range eligible {
+		path := filepath.Join(root, c.name)
+		// Resolve the main repo via the checkout's common git dir (<repo>/.git), so the checkout
+		// can be unregistered with `git worktree remove` and its base ref dropped with it.
 		if common, err := git(path, "rev-parse", "--git-common-dir"); err == nil && common != "" {
 			if !filepath.IsAbs(common) {
 				common = filepath.Join(path, common)
 			}
-			repoRoot := filepath.Dir(common)
-			if _, err := git(repoRoot, "worktree", "remove", "--force", path); err == nil {
-				_, _ = git(repoRoot, "update-ref", "-d", baseRefName(name))
-				logln("gc: removed orphan worktree", name)
-				continue
+			removeWorktree(&Worktree{Path: path, RepoDir: filepath.Dir(common), Session: c.name})
+			// removeWorktree refuses a checkout still holding work no branch has, and logs its
+			// own reason for doing so. Only claim the reclamation that actually happened —
+			// "reclaimed" beside a directory still on disk is what makes a leak hard to read.
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				logln("gc: reclaimed checkout", c.name, "—", reason)
 			}
+			continue
 		}
+		// Not a worktree of anything we can find: there is no repo to unregister it from and no
+		// base ref we could name, so the directory itself is all there is to remove.
+		teardownWorktreeProcesses(path)
 		_ = os.RemoveAll(path)
-		logln("gc: removed orphan worktree dir", name)
+		logln("gc: removed orphan worktree dir", c.name, "—", reason)
 	}
 }
 
