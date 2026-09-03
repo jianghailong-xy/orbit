@@ -1,52 +1,54 @@
-# Project DONE gate
+# Project DONE: there is no gate
 
-A project's `DONE` means that its stated acceptance criteria are satisfied. It does not mean that
-its task list is empty, or that every task reached `DONE`.
+A project's `DONE` used to mean that its stated acceptance criteria were satisfied — decided by a
+database trigger and re-checked by the service before the write. Migration
+`0229_project_acceptance_judgment_removal` removed both, on the account owner's decision of
+2026-09-03. This page says what is true now, because a page describing a gate that is gone is worse
+than no page.
 
-## Completion inputs
+## What decides a project's DONE
 
-The gate reads:
+Nothing. `project.status = 'DONE'` is an ordinary column write:
 
-- the current acceptance-criterion definitions and the latest run's verdict for every criterion;
-- merge evidence cited by those criteria, the acceptance epoch, and the run's freshness;
-- open project blockers and unresolved live verification failures.
+- there is no database trigger on `project` that inspects it (0150's `project_acceptance_done_gate`
+  / `_advance_epoch` / `_epoch_audit` and 0172's `_criteria_fact` are all dropped);
+- there is no application-layer refusal (`ProjectsService.refuseDirectDone` and its
+  `PROJECT_DONE_AUTOMATIC_ONLY` 409 are removed);
+- there is no acceptance epoch, no accepted-run pointer and no legacy-acceptance stamp on the row.
 
-It does not read task counts, task statuses, completion policies, or task-verification verdict
-aggregates. Tasks are ways to pursue the outcome; they are not a second definition of the outcome.
-Consequently:
+Any actor that may write the project — the account owner, a runner credential, a coordinator
+session, raw SQL — may set it, and nothing is consulted first. Eleven projects were `DONE` when this
+landed; ten of them stood on an acceptance run that no longer exists. Their `status` was not
+rewritten. They are `DONE`, and the evidence for it is gone.
 
-| Acceptance criteria | Task list | DONE gate |
-|---|---|---|
-| every criterion `PASS` | may contain `OPEN` nice-to-have work | allow, unless an explicit blocker remains |
-| any criterion is not `PASS` | even if every task is `DONE` | refuse and name each non-PASS criterion |
+## What the acceptance criteria are now
 
-The service gate is `ProjectAcceptanceService.assertDoneAllowed`. Migration
-`0182_project_done_gate_acceptance_only` enforces the same criterion rule for direct database
-writers and removes the task-change triggers that previously reopened accepted projects.
+`project_acceptance_criterion_definition` is untouched: 274 authored criteria across 41 projects, one
+row each, with the assertion text, the reader-facing verification method, the declared completion
+criterion and its configuration. They are authored through `project_update`'s
+`acceptanceCriteriaItems` and read through `project_get`.
 
-An `EXECUTABLE` project criterion does consume one narrowly scoped Task fact: the newest typed,
-terminated attempt for its wired evidence Task, but only when the Task still belongs to the same
-Project and its command, expected exit code, admitted evaluation-plan digest, and current Task plan
-all match exactly. That attempt identity advances the immutable acceptance evidence version; it
-does not import Task status or backlog state. Legacy judgment-result rows remain a compatibility
-fallback when no matching typed attempt exists.
+Nothing evaluates them. That is the same position an `EXECUTABLE` task has been in since
+`0228_task_judgment_removal`: the declaration is precise, and the implementation is absent until the
+account owner rebuilds one.
 
-The runner invokes this reconciliation after committing a typed termination, outside its
-Session/Task transaction so lock order remains Project-first. A deployment that predates this hook
-needs a one-time replay of `reconcileForEvidenceTask` for already-terminated attempts; replay reads
-the append-only facts and must not rerun their commands. This acceptance projection also does not
-invent an Outcome V2 binding or fact stream: a missing canonical Outcome stream remains a separate,
-fail-closed initialization/backfill obligation.
+The legacy `project.acceptance_criteria` text went with the judgment. It was the input form of the
+per-item rows — `project_acceptance_sync_legacy_definitions()` split it by `sha256(text)` and wrote
+them — and once that parser was removed the text was prose with no parser, saying the same thing
+twice. The per-item rows are the whole of it.
 
 ## Where a new finding belongs
 
 A new finding belongs to the existing project only if it changes an acceptance criterion. In that
-case, return that criterion to non-`PASS` by opening/running the next acceptance attempt; the
-project then leaves its completed standing because its acceptance is no longer current.
+case, edit that criterion. If it changes no acceptance criterion, it does not belong to this
+project's completion claim: create a separate project for it, rather than keeping an achieved goal
+permanently open by adding unrelated work to its backlog.
 
-If the finding changes no acceptance criterion, it does not belong to this project's completion
-claim. Create a separate project for it. Do not keep an achieved goal permanently open by adding
-unrelated or nice-to-have tasks to its backlog.
+The refusal to file new work into a settled project repeats this routing rule, so a caller is told
+whether to revise this project's criteria or create a separate project.
 
-DONE refusals and the refusal to file new work into a settled project repeat this routing rule so a
-caller is told whether to re-run this project's acceptance or create a separate project.
+## What is still recorded
+
+`project_merge_evidence` survives: what a target branch was observed to CONTAIN, hashed by content
+and never by `git branch --contains`. Nothing reads it to decide anything — acceptance runs were its
+only consumer — so it is a record kept for a reader.

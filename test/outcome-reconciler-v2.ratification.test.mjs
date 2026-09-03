@@ -773,28 +773,16 @@ test('(p) project acceptance is untouched: 0178-0190 keeps its schema and its ro
   assert.deepEqual(await criteriaRows(fixture.projectId), before,
     're-cutting the contract must not move one field of a definition');
 
-  // And the per-run acceptance rows -- 313 of them in production -- still write and read back.
-  const runId = randomUUID();
-  const criterionId = randomUUID();
-  await pool.query(
-    `INSERT INTO "project_acceptance_run" ("id","project_id","attempt","decided_by",
-                                           "criteria_snapshot","criteria_revision","input_digest")
-     VALUES ($1,$2,1,'USER','[]'::jsonb,$3,$4)`,
-    [runId, fixture.projectId, digest(`revision:${runId}`), digest(`input:${runId}`)],
-  );
-  await pool.query(
-    `INSERT INTO "project_acceptance_criterion" ("id","run_id","project_id","ordinal",
-                                                 "criterion_key","criterion_text","definition_id",
-                                                 "definition_revision")
-     VALUES ($1,$2,$3,1,'k1',$4,$5,1)`,
-    [criterionId, runId, fixture.projectId, fixture.criterionText, fixture.definitionId],
-  );
-  const criterion = (await pool.query(
-    'SELECT * FROM "project_acceptance_criterion" WHERE "id" = $1::uuid', [criterionId],
-  )).rows[0];
-  assert.equal(criterion.criterion_text, fixture.criterionText);
-  assert.equal(criterion.definition_id, fixture.definitionId);
-  assert.equal(criterion.completion_criterion, 'EVIDENCE_JUDGMENT');
+  // The per-run acceptance rows this used to write are gone: migration 0229 removed the project
+  // acceptance JUDGMENT — run, per-run criterion, conclusion and audit — on a later and separate
+  // account-owner decision. 0218 still issued no statement against any of them, which is what this
+  // test is about. What survives all of it is the DECLARATION table above.
+  const surviving = (await pool.query(
+    `SELECT c."relname" FROM "pg_class" c JOIN "pg_namespace" n ON n."oid" = c."relnamespace"
+      WHERE n."nspname" = 'public' AND c."relname" LIKE 'project_acceptance%'
+      ORDER BY c."relname"`,
+  )).rows.map((row) => row.relname);
+  assert.deepEqual(surviving, ['project_acceptance_criterion_definition']);
   evidence.invariants.projectAcceptanceUntouched = true;
 });
 

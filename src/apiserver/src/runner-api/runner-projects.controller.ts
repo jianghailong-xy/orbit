@@ -16,8 +16,6 @@ import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
-  FinalizeAcceptanceRunDto,
-  OpenAcceptanceRunDto,
   RecordMergeEvidenceDto,
   UpdateProjectDto,
 } from '../projects/dto';
@@ -90,7 +88,6 @@ export class RunnerProjectsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateProjectDto,
   ) {
-    RunnerProjectsController.refuseLegacyAcceptanceCriteria(dto);
     RunnerProjectsController.refuseGovernance(dto);
     const inSession = sessionId?.trim();
     return inSession
@@ -108,55 +105,12 @@ export class RunnerProjectsController {
     return this.projects.get(runner.ownerId, id);
   }
 
-  @Get('projects/:id/acceptance')
-  projectAcceptance(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.acceptance.overview(runner.ownerId, id);
-  }
-
-  @Post('projects/:id/acceptance/runs')
-  openAcceptanceRun(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    // Attribution is transport context, not a caller-authored body field. The runner puts this
-    // header on every MCP call made from the one-shot judgment session.
-    @Headers('x-orbit-session-id') sessionId: string | undefined,
-    @Body() dto: OpenAcceptanceRunDto,
-  ) {
-    // Who concluded is a fact about which door the request came through, not a field the caller
-    // fills in: this one is a machine credential, so the run is the coordinator agent's. The user
-    // door takes the claim explicitly, and an agent cannot make it about a person.
-    return this.acceptance.openRun(runner.ownerId, id, {
-      ...dto,
-      decidedBy: 'COORDINATOR_AGENT',
-      // Override (and, headless, discard) the body claim. A run cannot choose which conversation
-      // history it belongs to; the same rule already governs project creation at this door.
-      coordinatorSessionId: sessionId?.trim() || undefined,
-    });
-  }
-
-  @Post('projects/:id/acceptance/runs/:runId/verdict')
-  finalizeAcceptanceRun(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Param('runId', PublicIdPipe) runId: string,
-    // Same header, same reason as the PATCH below: a PASS recorded here is what a project's DONE
-    // is bound to. A judgment session may still open a run and conclude FAIL or INCONCLUSIVE on
-    // every criterion. Headless calls retain runner provenance through the fallback machine id;
-    // owner-channel provenance is an audit fact, not proof of human presence.
-    @Headers('x-orbit-session-id') sessionId: string | undefined,
-    @Body() dto: FinalizeAcceptanceRunDto,
-  ) {
-    return this.acceptance.finalizeRun(
-      runner.ownerId, id, runId, dto.criteria, sessionId, runner.id,
-    );
-  }
-
   /**
-   * Record what a target branch was observed to contain (§13.4 AE9-b).
+   * Record what a target branch was observed to contain.
    *
    * The runner is the side that can actually look: it has the checkout. `contentHash` is a digest
    * of the CONTENT, never `git branch --contains` — a squash makes that a guaranteed false
-   * negative, which is the lesson §13.4 clause 6 exists to carry.
+   * negative. Since 0229 nothing reads these rows to decide anything.
    */
   @Post('projects/:id/acceptance/merge-evidence')
   recordMergeEvidence(
@@ -204,36 +158,17 @@ export class RunnerProjectsController {
     });
   }
 
-  /**
-   * Unit L7: what reopening this project would cost — the epoch it is in, the one a reopen would
-   * start, how many acceptance attempts stop being current, and whether its DONE rests on the
-   * legacy stamp.
-   *
-   * Also read only, and for the same reason: §7 says a settled project is reopened by the USER and
-   * that a coordinator does not reopen one on its own. What an agent is entitled to is to KNOW
-   * that its write was refused `PROJECT_REOPEN_REQUIRED` and what asking a person for would cost
-   * them — which is exactly this, and is not a door onto the write.
-   */
-  @Get('projects/:id/reopen')
-  getProjectReopenImpact(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-  ) {
-    return this.projects.reopenPreview(runner.ownerId, id);
-  }
-
   @Patch('projects/:id')
   updateProject(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     // The session this edit is being made from, read for the acceptance-criteria HUMAN_ONLY
-    // decision. DONE is uniformly automatic-only before this role check. A header rather than a
-    // body field makes the ordinary session-aware path attributable; omitting it preserves the
-    // intentional headless path and does not establish that the caller is human.
+    // decision. A header rather than a body field makes the ordinary session-aware path
+    // attributable; omitting it preserves the intentional headless path and does not establish
+    // that the caller is human.
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateProjectDto,
   ) {
-    RunnerProjectsController.refuseLegacyAcceptanceCriteria(dto);
     RunnerProjectsController.refuseGovernance(dto);
     return this.projects.update(runner.ownerId, id, dto, sessionId);
   }
@@ -246,30 +181,6 @@ export class RunnerProjectsController {
   @Delete('projects/:id')
   removeProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.remove(runner.ownerId, id);
-  }
-
-  /**
-   * The legacy prose authoring shape has no place to declare how each assertion is decided. The
-   * project service therefore has to backfill EVIDENCE_JUDGMENT when an old user client sends it. That
-   * remains a necessary compatibility path on the JWT/user API and for reading existing projects,
-   * but it is not a safe default for an agent: a stale CLI would otherwise silently turn every
-   * mechanically decidable outcome into work only a person can close.
-   *
-   * Keep this check at the runner boundary rather than in ProjectsService. That makes old and
-   * drifted runner clients fail loudly while leaving the user API and stored legacy rows intact.
-   * Presence, not truthiness, is what matters: `null` on update is also the legacy authoring shape;
-   * an agent clears the structured set explicitly with `acceptanceCriteriaItems: []`.
-   */
-  private static refuseLegacyAcceptanceCriteria(
-    dto: Pick<CreateProjectDto | UpdateProjectDto, 'acceptanceCriteria'>,
-  ): void {
-    if (dto.acceptanceCriteria === undefined) return;
-    throw new BadRequestException(
-      'Runner project writes do not accept legacy acceptanceCriteria because it implicitly ' +
-        'creates EVIDENCE_JUDGMENT criteria. Send acceptanceCriteriaItems and explicitly set ' +
-        'verificationMethod and completionCriterion on every item; send [] to clear the set. ' +
-        'Legacy acceptanceCriteria remains a user-API and existing-data compatibility shape.',
-    );
   }
 
   /**

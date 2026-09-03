@@ -290,6 +290,8 @@ test('(e) the source audit resolves ACCEPTANCE_REVISION without inventing a conf
   assert.deepEqual(surface.writers.map((writer) => writer.symbol),
     ['criteriaSemanticRevision', 'replaceAcceptanceDefinitions'],
     'the two surviving writers are the revision derivation and the criteria ingress');
+  // `criteriaSemanticRevision` moved out of the service and into the pure criteria module when
+  // 0229 reduced the service to the criteria it reads; the surface names the module it is in.
 
   // `validateSourceAudit` requires each SURFACE to inventory at least one writer and one reader.
   // It has no per-authority rule, which is why removing this one entry leaves a valid contract.
@@ -298,11 +300,12 @@ test('(e) the source audit resolves ACCEPTANCE_REVISION without inventing a conf
   assert.match(lib, /surface\.writers\.length > 0 && surface\.readers\.length > 0/,
     'the contract rule this decision depends on is stated in the validator, not here');
 
-  // The storage the surface is derived from: the digest column stands alone now.
+  // The storage the surface is derived from. Migration 0229 dropped the legacy digest column and
+  // the run binding with the acceptance judgment; the authored definitions and the completion
+  // contract's two digests are what a revision is derived from now.
   assert.deepEqual(surface.sourceOfTruth.map((entry) => entry.storage), [
     'project_acceptance_criterion_definition.revision/content_hash',
-    'project.acceptance_criteria_digest',
-    'project_acceptance_run.criteria_revision + input_digest + acceptance_epoch',
+    'project_completion_contract.contract_digest/evaluation_plan_digest',
   ]);
 
   // Every writer and reader must still resolve — the same check `validateSourceAudit` makes, made
@@ -327,8 +330,12 @@ test('(f) no surface promises a confirmation the API cannot return', () => {
     assert.doesNotMatch(source, /digest and its (?:set-level )?confirmation/i,
       `${relative} still promises a confirmation with the acceptance read`);
   }
-  assert.match(read('src/runner-go/project_cli.go'), /revision-bearing standard-set digest/,
-    'the CLI still reads the revision-bearing digest, and the audit names that read');
+  // The read the audit names for the CLI. It used to be the acceptance overview's digest; 0229
+  // removed that read with the judgment, and what the CLI reads now is the criteria themselves.
+  assert.match(read('src/runner-go/project_cli.go'), /acceptanceCriteriaItems/,
+    'the CLI still reads the stated criteria, and the audit names that read');
+  assert.doesNotMatch(read('src/runner-go/project_cli.go'), /project_acceptance_run/,
+    'the CLI still advertises a judgment capability 0229 removed');
 });
 
 // (g) ------------------------------------------------------------------------------------------

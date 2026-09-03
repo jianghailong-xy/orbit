@@ -1583,22 +1583,10 @@ model Project {
   /// anyone can state the outcome precisely, and refusing to record it until then loses the only
   /// place the intent could live.
   goal               String?
-  /// What would settle that the goal was reached. The same field exists on Task for the same
-  /// reason it exists here — a claim of completion is only checkable against a stated condition.
-  ///
-  /// Compatibility projection only since migration 0172. The authored source of truth is
-  /// `acceptanceCriterionDefinitions`; this text remains while older API/CLI clients still send
-  /// and read it. A database trigger keeps the two representations in step, including writes from
-  /// an older binary during a rolling upgrade.
-  acceptanceCriteria String? @map("acceptance_criteria")
-  /// Database-maintained sha256 of the current criteria's stable ids, monotone revisions, and
-  /// semantic content hashes. This, rather than the compatibility text, is the acceptance fact:
-  /// reordering a conjunction changes presentation without invalidating evidence, while an edit
-  /// followed by restoring the same words still advances the revision and requires confirmation.
-  acceptanceCriteriaDigest String @default("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") @map("acceptance_criteria_digest") @db.Char(64)
-  /// LEGACY_TEXT while current definitions came through/backfilled from the compatibility field;
-  /// STRUCTURED after a caller explicitly submitted item boundaries and stable ids.
-  acceptanceCriteriaFormat String @default("LEGACY_TEXT") @map("acceptance_criteria_format")
+  /// What would settle that the goal was reached, one authored criterion per row. The same field
+  /// exists on Task for the same reason it exists here — a claim of completion is only checkable
+  /// against a stated condition. Migration 0229 removed the compatibility text column and its
+  /// parser: `acceptanceCriterionDefinitions` is now the only representation.
   /// How this project's work is to be done, as opposed to which item is being done. The project
   /// counterpart of `TaskList.instructions`, and — importantly for this phase — NOT wired into
   /// any run prompt: nothing assembles it into a dispatch today. It is recorded so a coordinator
@@ -1703,39 +1691,6 @@ model Project {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  /// The acceptance run this project's DONE is standing on (§13.4 AE2), and the only thing that
-  /// makes a DONE legal for a project that has ever been accepted natively. Written in the same
-  /// locked transaction as `status = DONE`, and cleared by the reopen path — so "DONE" and "there
-  /// is evidence for it" are one row and cannot drift apart.
-  ///
-  /// A plain column rather than a Prisma relation: `project → run → project` is a cycle Prisma
-  /// refuses to give referential actions to. The foreign key is real all the same — migration 0127
-  /// declares it `ON DELETE SET NULL`.
-  acceptedRunId String? @map("accepted_run_id") @db.Uuid
-
-  /// Which acceptance this project is on (unit L2, migration 0150). Monotonic, never reused, and
-  /// advanced by exactly one every time the project is REOPENED — a settled status (DONE or
-  /// CANCELLED) moving back to OPEN.
-  ///
-  /// It answers the one question `project_runtime.acceptance_attempt` cannot: that counter moves
-  /// when acceptance is re-RUN and stands still when the project is reopened, which is the opposite
-  /// way round. A run records the epoch it was opened in, so "is this PASS the current one" is an
-  /// integer comparison the DONE gate makes — and a historical PASS stops being current by being
-  /// READ, not by being rewritten. That matters: `superseded_at` says the same thing along the one
-  /// service path that remembers to write it, and says nothing at all when a project is reopened by
-  /// a raw UPDATE, by a DONE → CANCELLED → OPEN route, or by a binary that predates this column.
-  ///
-  /// Maintained ENTIRELY by the database (`project_acceptance_advance_epoch`), which is what makes
-  /// the previous sentence true for writers that have never heard of it. No service writes it; a
-  /// value sent for this column is overwritten with the one the transition implies.
-  acceptanceEpoch BigInt @default(0) @map("acceptance_epoch")
-
-  /// When this project was marked as carrying a DONE that predates native acceptance (§13.5 LG1).
-  /// Migration 0127 stamps every project that was already DONE, which is what keeps AC11's promise
-  /// here: an old DONE is not reopened, not invalidated and not silently re-labelled as evidence —
-  /// it is labelled as exactly what it is, and the label is what the next DONE has to replace.
-  legacyAcceptedAt DateTime? @map("legacy_accepted_at")
-
   tasks   Task[]
   /// Tasks this project's coordination scope NOTICED but does not necessarily own. Evidence, not
   /// membership: `tasks` is the project's work, this is a list of writes that named it as where
@@ -1746,10 +1701,7 @@ model Project {
   actions ProjectAction[]
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
-  acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
-  acceptanceConclusions ProjectAcceptanceConclusion[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
-  acceptanceAudit ProjectAcceptanceAudit[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
@@ -2392,190 +2344,6 @@ model TaskRunRequest {
   @@map("task_run_request")
 }
 
-/// The conclusion an acceptance run — or one of its criteria — reached. Deliberately its own enum
-/// rather than a second use of `TaskVerdict`: a project-level acceptance is not a verification
-/// task, and one enum shared by two subjects is the one that grows a value only one of them means.
-enum ProjectAcceptanceVerdict {
-  PASS
-  FAIL
-  INCONCLUSIVE
-
-  @@map("project_acceptance_verdict")
-}
-
-/// One immutable version of the project-level acceptance evidence set.
-///
-/// The historical API/table name is retained for compatibility. Since migration 0179 this is not a
-/// human-driven attempt and does not own a verdict: merge/criteria facts advance it automatically,
-/// idempotent evaluators share one current row, and ProjectAcceptanceConclusion events supply the
-/// derived standing. Legacy terminal columns remain readable and immutable.
-model ProjectAcceptanceRun {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  projectId String  @map("project_id") @db.Uuid
-  project   Project @relation("ProjectAcceptanceRuns", fields: [projectId], references: [id], onDelete: Cascade)
-
-  /// The epoch this run was claimed at — `project_runtime.acceptance_attempt` as read when the run
-  /// opened, with the `+1` committed in the same transaction (§13.4 AE11). Monotonic and never
-  /// reused, which makes `(projectId, attempt)` a permanent evidence-version name.
-  attempt BigInt
-
-  /// The project's `acceptanceEpoch` when this run was opened (migration 0150), stamped by the
-  /// database rather than by whoever opened it — so a run opened by a binary that does not know the
-  /// column exists still lands in the epoch that is actually current, instead of fail-closing at 0.
-  /// Frozen for the life of the row, concluded or not: it is not a conclusion, it is the identity
-  /// of the world the conclusion is about.
-  acceptanceEpoch BigInt @default(0) @map("acceptance_epoch")
-
-  /// The criteria this run actually judged, frozen at open: the raw text plus its sha256. A run is
-  /// evidence about a stated condition, and a condition that can be edited afterwards is not one.
-  criteriaSnapshot String  @map("criteria_snapshot")
-  /// The structured snapshot for runs opened by schema 0172 or later. Historical runs keep null
-  /// and remain readable through `criteriaSnapshot` plus their per-criterion rows.
-  criteriaSnapshotV2 Json? @map("criteria_snapshot_v2")
-  criteriaRevision String  @map("criteria_revision") @db.Char(64)
-
-  /// The acceptance-only input digest (current criterion revision plus cited merge evidence),
-  /// computed under the project row lock when the run opened. Task status is deliberately absent:
-  /// the DONE gate recomputes this digest from the outcome being accepted, not the work backlog.
-  /// Which reading of the world this evidence was taken under (`ACCEPTANCE_DIGEST_VERSION`).
-  /// Defaults to 1, so a row produced by a binary that predates digest versioning fails closed.
-  /// Version 4 removed task rows and task-verification verdicts from this input shape.
-  digestVersion   Int      @default(1) @map("digest_version")
-  inputDigest String @map("input_digest") @db.Char(64)
-  /// Legacy pre-0179 terminal projection. New conclusions live only in the event table.
-  resultDigest String? @map("result_digest") @db.Char(64)
-
-  /// A run is superseded by the next evidence set; no path writes it a conclusion. 0215 added one
-  /// and 0227 removed it with the EXECUTABLE acceptance runtime it derived from, so this is null
-  /// on every run again and the judging lives in the criterion projection beside it.
-  verdict ProjectAcceptanceVerdict?
-
-  /// Who caused this evidence version to be materialized. Conclusion authorship is recorded on
-  /// every ProjectAcceptanceConclusion event instead.
-  decidedBy String @map("decided_by")
-
-  /// Historical attribution, deliberately without foreign keys (the reason `project_decision`'s
-  /// pair has none): rotating or deleting a coordinator must not rewrite who ran an acceptance.
-  coordinatorAgentId   String? @map("coordinator_agent_id") @db.Uuid
-  coordinatorSessionId String? @map("coordinator_session_id") @db.Uuid
-
-  /// Ledger lineage, when this run was produced by a pass rather than by a direct owner-channel
-  /// request. Optional: that channel may run acceptance directly.
-  projectActionId  String?          @map("project_action_id") @db.Uuid
-
-  /// Why this is no longer the current evidence version. Set — never cleared — when facts advance.
-  supersededAt     DateTime? @map("superseded_at")
-  supersededReason String?   @map("superseded_reason")
-
-  startedAt   DateTime  @default(now()) @map("started_at")
-  completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-
-  criteria ProjectAcceptanceCriterion[]
-  conclusions ProjectAcceptanceConclusion[]
-
-  @@unique([projectId, attempt])
-  @@index([projectId, createdAt])
-  /// "Which epoch's evidence does this project have" — the read the DONE gate and the acceptance
-  /// face both make once a project has been reopened at least once.
-  @@index([projectId, acceptanceEpoch], map: "project_acceptance_run_epoch_idx")
-  @@map("project_acceptance_run")
-}
-
-/// One append-only conclusion about one criterion, made against one durable evidence version.
-///
-/// A run is the immutable version of the evidence set. Conclusions are events over those versions:
-/// adding merge evidence advances the version but does not rewrite or invalidate an earlier
-/// conclusion. The current standing is derived by taking the highest-version conclusion for the
-/// current definition revision. This is why actor, time and evidence version are all mandatory.
-model ProjectAcceptanceConclusion {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  projectId String  @map("project_id") @db.Uuid
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  evidenceRunId  String               @map("evidence_run_id") @db.Uuid
-  evidenceRun    ProjectAcceptanceRun @relation(fields: [evidenceRunId], references: [id], onDelete: Cascade)
-  evidenceVersion BigInt              @map("evidence_version")
-
-  ordinal       Int
-  criterionKey  String @map("criterion_key")
-  criterionText String @map("criterion_text")
-  /// Historical definition identity. Null only on backfilled pre-0172 conclusions, whose original
-  /// rows deliberately did not claim an identity that did not yet exist.
-  definitionId       String? @map("definition_id") @db.Uuid
-  definitionRevision Int?    @map("definition_revision")
-
-  verdict ProjectAcceptanceVerdict
-  summary String?
-  evidence Json @default("{}")
-  evidenceTaskId    String? @map("evidence_task_id") @db.Uuid
-  evidenceSessionId String? @map("evidence_session_id") @db.Uuid
-
-  /// USER or COORDINATOR_AGENT. PASS is additionally constrained to USER by migration 0179.
-  decidedBy String @map("decided_by")
-  /// The durable credentialed principal: owner id for a USER-attributed channel, acting Session id
-  /// for a judgment agent. The former does not prove that a human held the owner credential.
-  decidedById String @map("decided_by_id") @db.Uuid
-  actingSessionId String? @map("acting_session_id") @db.Uuid
-  decidedAt DateTime @default(now()) @map("decided_at")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([projectId, definitionId, definitionRevision, evidenceVersion(sort: Desc), decidedAt(sort: Desc), id(sort: Desc)], map: "project_acceptance_conclusion_standing_idx")
-  @@index([evidenceRunId], map: "project_acceptance_conclusion_run_idx")
-  @@map("project_acceptance_conclusion")
-}
-
-/// One stated criterion, and what this run concluded about it (contract §13.4 clause 3).
-///
-/// The per-criterion row is the whole point: "the project passed" is not a fact anybody can check,
-/// while "criterion 7 passed, here is the command, the output and the SHA" is. A run cannot reach
-/// PASS unless every criterion parsed out of the snapshot has a row here with a PASS verdict.
-model ProjectAcceptanceCriterion {
-  id        String               @id @default(uuid(7)) @db.Uuid
-  runId     String               @map("run_id") @db.Uuid
-  run       ProjectAcceptanceRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  /// Denormalized so tenancy and the audit reads filter without joining the run. Kept in step by
-  /// the service, which only ever writes it from the run it just locked.
-  projectId String               @map("project_id") @db.Uuid
-
-  /// Position in the snapshot, 1-based, and the stable content key of the criterion line. The key
-  /// is what lets a later run be lined up against this one when the criteria text was reordered.
-  ordinal       Int
-  criterionKey  String @map("criterion_key")
-  criterionText String @map("criterion_text")
-  /// Historical identity of the authored definition. No FK: deleting or replacing a current
-  /// definition must never rewrite or prevent deletion of the run snapshot that judged it.
-  definitionId       String? @map("definition_id") @db.Uuid
-  definitionRevision Int?    @map("definition_revision")
-
-  /// Frozen declaration shape. Historical rows are migrated honestly to EVIDENCE_JUDGMENT; current
-  /// rows copy the definition so the review page never guesses a criterion from mutable state.
-  completionCriterion TaskCompletionCriterion @map("completion_criterion")
-  acceptanceCommand          String? @map("acceptance_command")
-  acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
-
-  verdict ProjectAcceptanceVerdict?
-  summary String?
-  /// Commands, key output, SHAs, environment — §13.4 clause 3's evidence, as JSON so a checker can
-  /// read it without parsing prose.
-  evidence Json @default("{}")
-
-  /// What in Orbit this conclusion leans on. Historical ids without foreign keys, for the reason
-  /// the run's attribution columns have none.
-  evidenceTaskId    String? @map("evidence_task_id") @db.Uuid
-  evidenceSessionId String? @map("evidence_session_id") @db.Uuid
-
-  decidedAt DateTime? @map("decided_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  @@unique([runId, ordinal])
-  // Null for every pre-0172 row; PostgreSQL permits multiple nulls, while a structured run may
-  // snapshot one current definition only once.
-  @@unique([runId, definitionId], map: "project_acceptance_criterion_run_definition_idx")
-  @@index([projectId])
-  @@map("project_acceptance_criterion")
-}
-
 /// The database's own record of what a target branch contained when it was last observed
 /// (contract §13.4 AE9).
 ///
@@ -2689,32 +2457,6 @@ model ProjectHandoffApproval {
   @@index([toProjectId, state, requestedAt])
   @@index([fromProjectId, state, requestedAt])
   @@map("project_handoff_approval")
-}
-
-/// Append-only audit of everything that happened to a project's acceptance standing: a run opened
-/// or finalized, a DONE bound to a run, a DONE refused and why, a terminal project reopened because
-/// an acceptance fact changed underneath it (§13.4 AE8's `reopened_by_fact_change`).
-///
-/// Separate from `project_decision` because most of these rows are not decisions of the control
-/// loop at all — a user pressing DONE and being refused produces one, and it is exactly the row
-/// somebody needs when they ask why the button did nothing.
-model ProjectAcceptanceAudit {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  projectId String  @map("project_id") @db.Uuid
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  /// Closed set, frozen by a CHECK in migration 0127 rather than by an enum: these values are read
-  /// by the audit face and by the reopen trigger, and a CHECK is the spelling a trigger can write.
-  kind String
-
-  runId  String? @map("run_id") @db.Uuid
-  reason String?
-  detail Json    @default("{}")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([projectId, createdAt])
-  @@map("project_acceptance_audit")
 }
 
 model TaskList {

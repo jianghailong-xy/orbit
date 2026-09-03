@@ -18,7 +18,6 @@ import { TasksService } from '../tasks/tasks.service';
 import { buildCoordinatorOpening } from './coordinator-opening';
 import { buildJudgmentOpening } from './coordinator-judgment-opening';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
-import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { sha256 } from './project-acceptance';
@@ -116,10 +115,16 @@ async function runnerFromAgentCredential(): Promise<Runner> {
   return request.runner as Runner;
 }
 
+/** Everything on the acceptance service past the gate is a world this fixture does not build.
+ *  Since 0229 that is only the merge-evidence write; the judging half is gone. */
+function acceptanceDouble() {
+  return { recordMergeEvidence: pastTheGate } as never;
+}
+
 function ownerController() {
   return new ProjectsController(
     projectFixture() as never,
-    acceptanceFixture() as never,
+    acceptanceDouble(),
     {} as never,
     {} as never,
     {} as never,
@@ -129,7 +134,7 @@ function ownerController() {
 function runnerController() {
   return new RunnerProjectsController(
     projectFixture() as never,
-    acceptanceFixture() as never,
+    acceptanceDouble(),
     {} as never,
   );
 }
@@ -158,11 +163,9 @@ function projectFixture(policy: ProjectAutomationPolicy = ProjectAutomationPolic
   return new ProjectsService(prisma as never);
 }
 
+// One authoring shape since 0229 removed the legacy text and its parser, so there is one place
+// for this boundary to be checked and no second spelling to leave unguarded.
 const PROJECT_WRITES = [
-  ['acceptanceCriteria', { acceptanceCriteria: 'anything I like' },
-    'ACCEPTANCE_CRITERIA_HUMAN_ONLY'],
-  // Both authoring shapes write the same fact. Gating one and not the other would leave the legacy
-  // text as an unguarded way to rewrite the exam.
   ['acceptanceCriteriaItems', { acceptanceCriteriaItems: [{ text: 'anything I like' }] },
     'ACCEPTANCE_CRITERIA_HUMAN_ONLY'],
 ] as const;
@@ -185,56 +188,31 @@ for (const [what, dto, code] of PROJECT_WRITES) {
   });
 }
 
-test('a judgment session cannot write status=DONE on a project', async () => {
-  await assert.rejects(
-    () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION),
-    (error: unknown) => {
-      assert.ok(error instanceof ConflictException);
-      assert.equal((error.getResponse() as Record<string, unknown>).code,
-        'PROJECT_DONE_AUTOMATIC_ONLY');
-      return true;
-    },
-  );
+// Migration 0229 removed the DONE gate from the database and `refuseDirectDone` from the service
+// in one change, on the account owner's explicit choice between a narrower guard and none. So this
+// is the same call from the same three principals, asserted from the other side: every one of them
+// reaches the write. The negative control matters more here than anywhere else in this file —
+// "nobody can write DONE" and "everybody can" are one refusal apart, and only one of them is what
+// the owner asked for.
+test('a judgment session may write status=DONE on a project', async () => {
+  await reachesTheWrite(
+    () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION));
 });
 
-test('all non-judgment callers are also refused a direct DONE because it is derived', async () => {
+test('every other caller may write a direct DONE too, because nothing derives it', async () => {
   for (const actingSessionId of [undefined, RUN]) {
-    await assert.rejects(
-      () => projectFixture().update(
-        OWNER,
-        PROJECT,
-        { status: 'DONE' } as never,
-        actingSessionId,
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof ConflictException);
-        assert.equal((error.getResponse() as Record<string, unknown>).code,
-          'PROJECT_DONE_AUTOMATIC_ONLY');
-        return true;
-      },
-    );
+    await reachesTheWrite(
+      () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, actingSessionId));
   }
 });
 
 // §0's replacement claim, end to end. The three-level dial used to be the answer to "how far may
 // this coordinator go"; if any of it still were, the same write would come out differently at the
-// three levels.
-test('the refusal does not depend on the project automation policy', async () => {
+// three levels. It does not — and since 0229 it does not come out as a refusal at any of them.
+test('the outcome does not depend on the project automation policy', async () => {
   for (const policy of Object.values(ProjectAutomationPolicy)) {
-    await assert.rejects(
-      () => projectFixture(policy).update(
-        OWNER,
-        PROJECT,
-        { status: 'DONE' } as never,
-        SESSION,
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof ConflictException);
-        assert.equal((error.getResponse() as Record<string, unknown>).code,
-          'PROJECT_DONE_AUTOMATIC_ONLY', `refused at ${policy}`);
-        return true;
-      },
-    );
+    await reachesTheWrite(
+      () => projectFixture(policy).update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION));
   }
 });
 
@@ -251,66 +229,6 @@ test('a judgment session may still write the prose that says what the work is', 
 });
 
 // ═══ acceptance runs: a PASS is what a project's DONE is bound to ═════════════════════════════
-
-function acceptanceFixture() {
-  const prisma = {
-    session: {
-      findFirst: async ({ where }: { where: { id: string } }) =>
-        where.id === SESSION
-          ? { dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR }
-          : { dispatchOrigin: SessionDispatchOrigin.USER },
-    },
-    $transaction: pastTheGate,
-  };
-  return new ProjectAcceptanceService(prisma as never);
-}
-
-// Migration 0224 removed the human step from acceptance. This is the same call the boundary used
-// to refuse, asserted from the other side: the judgment session reaches the write.
-test('dispatch_origin=judgment may now conclude an acceptance criterion PASS', async () => {
-  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
-    OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }], SESSION,
-  ));
-});
-
-test('a headless runner keeps machine attribution when it omits the acting session header', async () => {
-  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
-    OWNER,
-    PROJECT,
-    'run-1',
-    [{ ordinal: 1, verdict: 'PASS' as never }],
-    undefined,
-    RUN,
-  ));
-});
-
-test('a mixed checklist still reaches the write and derives its verdict from the conjunction',
-  async () => {
-    await reachesTheWrite(() => acceptanceFixture().finalizeRun(
-      OWNER, PROJECT, 'run-1',
-      [{ ordinal: 1, verdict: 'FAIL' as never }, { ordinal: 2, verdict: 'PASS' as never }],
-      SESSION,
-    ));
-  });
-
-test('a judgment session may report that acceptance did NOT pass', async () => {
-  // The asymmetry this unit shares with the self-DONE boundary: the conservative conclusion
-  // releases nothing and requests owner review, so there is no reason to refuse it.
-  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
-    OWNER, PROJECT, 'run-1',
-    [{ ordinal: 1, verdict: 'FAIL' as never }, { ordinal: 2, verdict: 'INCONCLUSIVE' as never }],
-    SESSION,
-  ));
-});
-
-test('a no-session owner/internal caller and a USER-origin session conclude PASS', async () => {
-  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
-    OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }],
-  ));
-  await reachesTheWrite(() => acceptanceFixture().finalizeRun(
-    OWNER, PROJECT, 'run-1', [{ ordinal: 1, verdict: 'PASS' as never }], RUN,
-  ));
-});
 
 // ═══ N21: credential possession is not human presence ═════════════════════════════════════════
 
@@ -334,82 +252,38 @@ test('an agent-held runner credential with no acting session can edit explicit s
     ));
   });
 
-test('an agent-held runner credential with no acting session records acceptance PASS', async () => {
-  // Deliberately the same credential as the test above, which still cannot touch the criteria in
-  // force. Reading the ruler is now a machine act; MOVING it is still not.
+// Migration 0229 removed the database gate AND the `refuseDirectDone` refusal in one change: the
+// account owner was offered a narrower guard and chose no guard at all. So this is the same call
+// that used to be a 409, asserted from the other side — an agent-held credential with no acting
+// session reaches the write, and there is nothing between it and `status = DONE`.
+test('an agent-held runner credential with no acting session may write project.status=DONE', async () => {
   const runner = await runnerFromAgentCredential();
-  await reachesTheWrite(() => runnerController().finalizeAcceptanceRun(
+  await reachesTheWrite(() => runnerController().updateProject(
     runner,
     PROJECT,
-    'run-1',
     undefined,
-    { criteria: [{ ordinal: 1, verdict: 'PASS' }] } as never,
+    { status: 'DONE' } as never,
   ));
 });
 
-test('an agent-held runner credential with no acting session cannot directly write project.status=DONE', async () => {
-  const runner = await runnerFromAgentCredential();
-  await assert.rejects(
-    () => runnerController().updateProject(
-      runner,
-      PROJECT,
-      undefined,
-      { status: 'DONE' } as never,
-    ),
-    (error: unknown) => {
-      assert.ok(error instanceof ConflictException);
-      assert.equal((error.getResponse() as Record<string, unknown>).code,
-        'PROJECT_DONE_AUTOMATIC_ONLY');
-      return true;
-    },
-  );
-});
-
-test('a headless runner can still record a conservative acceptance conclusion', async () => {
-  const runner = await runnerFromAgentCredential();
-  await reachesTheWrite(() => runnerController().finalizeAcceptanceRun(
-    runner,
-    PROJECT,
-    'run-1',
-    undefined,
-    { criteria: [{ ordinal: 1, verdict: 'INCONCLUSIVE' }] } as never,
-  ));
-});
-
-test('an owner JWT minted with the shared secret can edit acceptanceCriteria without a session', async () => {
+test('an owner JWT minted with the shared secret can edit the criteria without a session', async () => {
   const user = await ownerFromMintedCredential();
   await reachesTheWrite(() => ownerController().update(
     user,
     PROJECT,
-    { acceptanceCriteria: 'replacement exam' } as never,
+    {
+      acceptanceCriteriaItems: [{
+        text: 'the replacement exam',
+        verificationMethod: 'A person reviews the replacement exam.',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+      }],
+    } as never,
   ));
 });
 
-test('an owner JWT minted with the shared secret can record PASS without a session', async () => {
+test('an owner JWT minted with the shared secret may write project.status=DONE', async () => {
   const user = await ownerFromMintedCredential();
-  await reachesTheWrite(() => ownerController().finalizeAcceptanceRun(
-    user,
-    PROJECT,
-    'run-1',
-    { criteria: [{ ordinal: 1, verdict: 'PASS' }] } as never,
-  ));
-});
-
-test('an owner JWT minted with the shared secret cannot directly write project.status=DONE', async () => {
-  const user = await ownerFromMintedCredential();
-  await assert.rejects(
-    () => ownerController().update(
-      user,
-      PROJECT,
-      { status: 'DONE' } as never,
-    ),
-    (error: unknown) => {
-      assert.ok(error instanceof ConflictException);
-      assert.equal((error.getResponse() as Record<string, unknown>).code,
-        'PROJECT_DONE_AUTOMATIC_ONLY');
-      return true;
-    },
-  );
+  await reachesTheWrite(() => ownerController().update(user, PROJECT, { status: 'DONE' } as never));
 });
 
 // ═══ task_update: a verification's PASS completes the task it checks ══════════════════════════
@@ -451,7 +325,7 @@ function taskUpdateFixture(
         ({ id: where.id, runtime: { coordinatorGeneration: 0n } }),
       findMany: async (args: { where: { id: { in: string[] } } }) =>
         args.where.id.in.map((id) => ({
-          id, status: 'OPEN', acceptanceEpoch: 0n, maxConcurrentTasks: 3,
+          id, status: 'OPEN', maxConcurrentTasks: 3,
           sessionBudgetPerDay: null, members: [],
         })),
     },
@@ -560,7 +434,7 @@ function createFixture(options: {
       }),
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.map((id) => ({
-          id, status: 'OPEN', acceptanceEpoch: 0n, maxConcurrentTasks: 3,
+          id, status: 'OPEN', maxConcurrentTasks: 3,
           sessionBudgetPerDay: null, members: [],
         })),
     },
@@ -707,7 +581,7 @@ test('the conversational opening no longer offers the criteria or DONE as its ow
   assert.match(opening, /不是服务器对“真人在场”的密码学证明/);
 });
 
-test('the judgment opening states the three boundaries the server enforces', () => {
+test('the judgment opening states the boundaries, and that nothing judges the criteria', () => {
   const fact = attemptEndedUnsettledFact({
     projectId: randomUUID(),
     taskId: randomUUID(),
@@ -720,11 +594,15 @@ test('the judgment opening states the three boundaries the server enforces', () 
   // What it must DECLARE to open work, and what bounds how much of it there can be.
   assert.match(opening, /criterionKey/);
   assert.match(opening, /预算/);
-  // And the three it cannot write, said as refusals rather than as etiquette — the reader is
-  // about to meet them as HTTP 403s.
+  // And what it cannot write, said as refusals rather than as etiquette — the reader is about to
+  // meet them as HTTP 403s.
   assert.match(opening, /服务端会照着拒/);
   assert.match(opening, /验收标准/);
-  assert.match(opening, /PASS/);
-  assert.match(opening, /status=DONE/);
+  // The PASS boundary that stood here is gone with the thing that could hold one: migration 0229
+  // removed the project acceptance judgment, so the opening says THAT instead of describing a
+  // verdict a one-shot session would go looking for a tool to submit.
+  assert.equal(opening.includes('PASS'), false);
+  assert.match(opening, /没有任何东西会判定这些标准/);
+  assert.match(opening, /status 已无守卫/);
   assert.match(opening, /不是对“真人在场”的密码学证明/);
 });

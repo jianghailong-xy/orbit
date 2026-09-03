@@ -4,7 +4,7 @@ import { api } from '../api';
 import type { AttributionProjectStatus } from '../lib/attribution';
 
 /**
- * Unit L7, acceptance criterion 1: what a person is told, before they submit, about where this
+ * Unit L7, criterion 1: what a person is told, before they submit, about where this
  * work is going to be filed.
  *
  * The incident behind the whole L unit was a batch of tasks landing in a project nobody meant, and
@@ -23,7 +23,6 @@ interface FilingProject {
   publicId?: string;
   title: string;
   status: AttributionProjectStatus;
-  acceptanceEpoch?: string;
 }
 
 export function ProjectFilingBanner({ projectId }: { projectId: string }) {
@@ -57,14 +56,6 @@ export function ProjectFilingBanner({ projectId }: { projectId: string }) {
         <>
           {' '}
           <Tag aria-label={`Project status ${project.data.status}`}>{project.data.status}</Tag>
-          {project.data.acceptanceEpoch !== undefined ? (
-            <Tag
-              aria-label={`Acceptance epoch ${project.data.acceptanceEpoch}`}
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              epoch {project.data.acceptanceEpoch}
-            </Tag>
-          ) : null}
         </>
       ) : null}
       {settled ? (
@@ -75,8 +66,7 @@ export function ProjectFilingBanner({ projectId }: { projectId: string }) {
           message="This project is settled"
           description={
             'A settled project takes no new work: this create is refused with '
-            + 'PROJECT_REOPEN_REQUIRED until somebody reopens it, which starts a new acceptance '
-            + 'epoch.'
+            + 'PROJECT_REOPEN_REQUIRED until somebody reopens it.'
           }
         />
       ) : null}

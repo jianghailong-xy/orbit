@@ -50,9 +50,10 @@ test('the inventory no longer registers a trigger no database has', () => {
   assert.doesNotMatch(generated, /task_executable_judgment_result/u);
 
   // And the preserved walls are still registered, so this was a deletion and not a regeneration
-  // that quietly lost something else.
-  for (const trigger of ['project_acceptance_done_gate', 'project_acceptance_advance_epoch',
-    'project_acceptance_criteria_fact', 'project_acceptance_epoch_audit',
+  // that quietly lost something else. The four 0150/0172 gate triggers that stood here went out
+  // with migration 0229, by a later and separate account-owner decision; the declaration table's
+  // normalize trigger is what survived both changes and stands for them.
+  for (const trigger of ['project_acceptance_definition_normalize',
     'task_verification_verdict_atomic_insert', 'task_verification_verdict_atomic_update',
     'task_done_canonical_writer_fence']) {
     assert.match(generated, new RegExp(`"trigger":"${trigger}"`),

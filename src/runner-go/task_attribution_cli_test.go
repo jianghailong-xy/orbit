@@ -16,7 +16,8 @@ import (
 // route it asks, and the fact that a refusal arrives as something a person can act on rather than
 // as one line of JSON. Plus one absence, tested as deliberately as any presence — there is no
 // command that ANSWERS a crossing or reopens a settled project, because §7 RB2 puts both of those
-// with the account owner and a machine credential is not one.
+// with the account owner and a machine credential is not one. Migration 0229 removed the reopen
+// PREVIEW too — the acceptance epoch it previewed no longer exists.
 
 // oneRequest records the single request a command makes and answers it with `body`.
 func oneRequest(t *testing.T, status int, body string) (*httptest.Server, *[]*http.Request, *[]string) {
@@ -88,29 +89,20 @@ func TestProjectCrossingsSendsTheStateFilterAndRefusesAnInventedOne(t *testing.T
 	}
 }
 
-func TestProjectReopenImpactIsAReadAndNamesBothEpochs(t *testing.T) {
-	srv, seen, _ := oneRequest(t, http.StatusOK,
-		`{"settled":true,"fromEpoch":"3","toEpoch":"4","retiringRuns":2,"acknowledgement":"3"}`)
+// Migration 0229 removed `acceptance_epoch` and every acceptance run with the judgment they
+// belonged to, so there is nothing left for a reopen preview to report — and no `reopen-impact`
+// command to report it. This asserts the absence, so the verb cannot come back without a reader.
+func TestProjectReopenImpactIsGoneWithTheAcceptanceEpoch(t *testing.T) {
+	srv, seen, _ := oneRequest(t, http.StatusOK, `{}`)
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	if err := cmdProjectCLI([]string{"reopen-impact", "proj-1", "--json"},
-		strings.NewReader(""), &out); err != nil {
-		t.Fatal(err)
+	err := cmdProjectCLI([]string{"reopen-impact", "proj-1", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), `unknown command "reopen-impact"`) {
+		t.Fatalf("orbit project reopen-impact = %v", err)
 	}
-	if got := (*seen)[0].URL.Path; got != "/api/runner/projects/proj-1/reopen" {
-		t.Fatalf("path = %q", got)
-	}
-	if (*seen)[0].Method != http.MethodGet {
-		t.Fatalf("method = %q — a coordinator reads what a reopen costs, it does not perform one",
-			(*seen)[0].Method)
-	}
-	// Both epochs reach the caller, because what an account owner is being asked for is the
-	// difference between them.
-	for _, want := range []string{`"fromEpoch":"3"`, `"toEpoch":"4"`, `"acknowledgement":"3"`} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("out = %q missing %q", out.String(), want)
-		}
+	if len(*seen) != 0 {
+		t.Fatalf("a removed command still reached the server: %#v", *seen)
 	}
 }
 
@@ -233,9 +225,9 @@ func TestNoMachineDoorAnswersACrossingOrReopensAProject(t *testing.T) {
 			t.Fatalf("%s exists; answering a crossing and reopening a project are the owner's", name)
 		}
 	}
-	// And the commands themselves: `crossings` and `reopen-impact` are the only two spellings, so
-	// a future `orbit project reopen` cannot arrive without this test noticing.
-	for _, verb := range []string{"reopen", "crossing-decide", "handoff-decide"} {
+	// And the commands themselves: `crossings` is the only spelling left, so a future
+	// `orbit project reopen` cannot arrive without this test noticing.
+	for _, verb := range []string{"reopen", "reopen-impact", "crossing-decide", "handoff-decide"} {
 		if _, exists := projectActionHelp[verb]; exists {
 			t.Fatalf("orbit project %s exists; that write is the account owner's", verb)
 		}

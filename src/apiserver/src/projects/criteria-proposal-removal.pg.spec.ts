@@ -155,14 +155,17 @@ test('the proposal relation, its indexes and its nine functions are absent from 
     assert.deepEqual(callers.map((row) => row.proname), []);
   });
 
-test('every project_acceptance_* relation the proposal protected is still installed, with the '
+test('the project_acceptance_* relation the proposal protected is still installed, with the '
   + 'two columns that carry the ruler', { skip }, async () => {
   const tables = await catalog<{ relname: string }>(
     `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname LIKE 'project_acceptance%'
       ORDER BY 1`,
   );
-  assert.deepEqual(tables.map((row) => row.relname), ACCEPTANCE_TABLES,
+  // The four judgment relations that stood beside it were dropped by 0229 — a later and separate
+  // account-owner decision, and one 0223 issued no statement about. What 0223 was protecting is
+  // the ruler, and the ruler is what is left.
+  assert.deepEqual(tables.map((row) => row.relname), ['project_acceptance_criterion_definition'],
     'the removal reached a project_acceptance_* relation');
 
   const columns = await catalog<{ attname: string }>(
@@ -267,7 +270,7 @@ test('an empty structured set clears the criteria instead of being refused', { s
 // digest` again -- the 0189 column, which is where the field came from before 0218 introduced
 // the proposal-facing one. Exercised end to end because a
 // dropped function behind a `$queryRaw` is not a compile error, it is a 500 in production.
-test('the acceptance overview still reports the criteria set, and it is the one just written',
+test('the project read still reports the criteria set, and it is the one just written',
   { skip }, async () => {
     const { db, acceptance, projects } = await connect();
     try {
@@ -278,22 +281,22 @@ test('the acceptance overview still reports the criteria set, and it is the one 
       await controller.updateProject(runner, target.projectId, undefined, {
         acceptanceCriteriaItems: [criterion('The first standard')],
       } as never);
-      const before = await acceptance.overview(target.ownerId, target.projectId);
-      assert.match(String(before.criteriaDigest), /^[0-9a-f]{64}$/);
+      const before: any = await projects.get(target.ownerId, target.projectId);
       assert.deepEqual(
-        (before.criteria as Array<{ criterionText: string }>).map((c) => c.criterionText),
+        before.acceptanceCriteriaItems.map((c: { text: string }) => c.text),
         ['The first standard']);
 
       await controller.updateProject(runner, target.projectId, undefined, {
         acceptanceCriteriaItems: [criterion('The standard an agent chose instead')],
       } as never);
-      const after = await acceptance.overview(target.ownerId, target.projectId);
+      const after: any = await projects.get(target.ownerId, target.projectId);
       assert.deepEqual(
-        (after.criteria as Array<{ criterionText: string }>).map((c) => c.criterionText),
+        after.acceptanceCriteriaItems.map((c: { text: string }) => c.text),
         ['The standard an agent chose instead'],
-        'the overview must show the set the write left, not the one it replaced');
-      assert.notEqual(after.criteriaDigest, before.criteriaDigest,
-        'moving the ruler must move the digest that names it');
+        'the read must show the set the write left, not the one it replaced');
+      assert.notEqual(after.acceptanceCriteriaItems[0].contentHash,
+        before.acceptanceCriteriaItems[0].contentHash,
+        'moving the ruler must move the content hash that names it');
     } finally {
       await db.$disconnect();
     }

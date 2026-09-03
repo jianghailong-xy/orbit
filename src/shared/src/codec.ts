@@ -135,11 +135,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'defectTaskId',
   'resolvedByTaskId',
   'raisedByActionId',
-  // §13.4's acceptance record: the run a project's DONE stands on, the run a criterion belongs to,
-  // and the two rows a criterion cites as its evidence. Every one of them is an address somebody
-  // hands straight back — `GET /projects/:id/acceptance/...`, `task_get`, a session link.
+  // The acceptance record: the authored criterion, and the two rows it cites as its evidence.
+  // Every one of them is an address somebody hands straight back — `project_get`, `task_get`, a
+  // session link. `runId` and `acceptedRunId` stood here until migration 0229 removed the project
+  // acceptance judgment; `runId` is kept because a session RUN is addressed by it too.
   'runId',
-  'acceptedRunId',
   'definitionId',
   'criterionId',
   'evidenceTaskId',

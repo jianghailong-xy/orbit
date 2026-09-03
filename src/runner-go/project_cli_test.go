@@ -164,7 +164,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"acceptance", "acceptance-run", "acceptance-verdict", "merge-evidence",
+		"crossings", "merge-evidence",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -193,10 +193,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
 		specs[spec.Tool] = spec
 	}
-	// One per read/write the project family exposes. Unit L7's two reads are here — what has been
-	// asked about work crossing this project's line, and what reopening it would cost. Neither has
-	// a companion that WRITES, and that absence is the point.
-	if len(specs) != 10 {
+	// One per read/write the project family exposes. Unit L7's read is here — what has been asked
+	// about work crossing this project's line. It has no companion that WRITES, and that absence
+	// is the point. Migration 0229 took the four acceptance-judgment entries with the judgment.
+	if len(specs) != 6 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -212,23 +212,20 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	if spec.Mutates {
 		t.Fatal("project_get is advertised as mutating")
 	}
-	// `project_acceptance` is a read like the two above, and the one an agent reaches for first
-	// when it is deciding whether a project can be closed at all.
-	acceptance, ok := specs["project_acceptance"]
-	if !ok {
-		t.Fatalf("project capabilities lost project_acceptance: %#v", projectCLICapabilities)
-	}
-	if got := strings.Join(acceptance.Argv, " "); got != "orbit project acceptance" {
-		t.Fatalf("project_acceptance argv = %q", got)
-	}
-	if acceptance.Mutates {
-		t.Fatal("project_acceptance is advertised as mutating")
+	// The judgment tools are gone with the judgment, and a capability table that still advertised
+	// them would send an agent at four routes the server no longer serves.
+	for _, gone := range []string{
+		"project_acceptance", "project_acceptance_run", "project_acceptance_verdict",
+		"project_reopen_impact",
+	} {
+		if _, present := specs[gone]; present {
+			t.Fatalf("%s survives 0229 in the CLI capability table: %#v", gone, projectCLICapabilities)
+		}
 	}
 	// The write verbs must say so: an agent reads `mutates` to decide whether a command is
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
-		"project_acceptance_run", "project_acceptance_verdict",
 		"project_merge_evidence",
 	} {
 		write, ok := specs[tool]
@@ -238,8 +235,8 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 		if !write.Mutates {
 			t.Fatalf("%s is not advertised as mutating", tool)
 		}
-		// The MCP name is snake_case and the CLI verb is kebab-case — `project_acceptance_run` is
-		// `orbit project acceptance-run`. One mechanical mapping, so a new verb cannot quietly
+		// The MCP name is snake_case and the CLI verb is kebab-case — `project_merge_evidence` is
+		// `orbit project merge-evidence`. One mechanical mapping, so a new verb cannot quietly
 		// advertise an argv nobody can type.
 		verb := strings.ReplaceAll(strings.TrimPrefix(tool, "project_"), "_", "-")
 		if got := strings.Join(write.Argv, " "); got != "orbit project "+verb {
@@ -440,7 +437,10 @@ func TestProjectCreatePostsTheRunnerProjectRoute(t *testing.T) {
 	}
 }
 
-func TestProjectCreateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
+// Migration 0229 removed the legacy prose authoring shape from the project API. The flags that
+// carried it are gone too, so naming one is an unknown flag rather than a refusal explaining a
+// path that still exists somewhere else.
+func TestProjectCreateHasNoLegacyAcceptanceFlags(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
 	defer srv.Close()
@@ -452,8 +452,7 @@ func TestProjectCreateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
 	} {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
-		if err == nil || !strings.Contains(err.Error(), "EVIDENCE_JUDGMENT") ||
-			!strings.Contains(err.Error(), "completionCriterion") {
+		if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
 			t.Fatalf("legacy project create = %v", err)
 		}
 	}
@@ -763,7 +762,8 @@ func TestProjectUpdateClearsOrdinaryProseWithAnExplicitNull(t *testing.T) {
 	}
 }
 
-func TestProjectUpdateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
+// The update side of the same removal, including the legacy clear spelling.
+func TestProjectUpdateHasNoLegacyAcceptanceFlags(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
 	defer srv.Close()
@@ -776,8 +776,7 @@ func TestProjectUpdateRejectsLegacyAcceptanceBeforeHTTP(t *testing.T) {
 	} {
 		var out bytes.Buffer
 		err := cmdProjectCLI(args, strings.NewReader("Build succeeds"), &out)
-		if err == nil || !strings.Contains(err.Error(), "EVIDENCE_JUDGMENT") ||
-			!strings.Contains(err.Error(), "use [] to clear") {
+		if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
 			t.Fatalf("legacy project update = %v", err)
 		}
 	}
@@ -856,8 +855,9 @@ func TestProjectUpdateValidatesIDAndStatus(t *testing.T) {
 	if err := cmdProjectCLI([]string{"update", "../tasks/x", "--status", "CANCELLED"}, strings.NewReader(""), &out); err == nil {
 		t.Fatal("an unsafe project id was accepted")
 	}
-	// A status the server would reject is named here, with the alternatives.
-	for _, status := range []string{"DONE", "IN_PROGRESS", "done", ""} {
+	// A status the server would reject is named here, with the alternatives. DONE is NOT among
+	// them since 0229: the gate that derived it is gone, so it is an ordinary value.
+	for _, status := range []string{"IN_PROGRESS", "done", ""} {
 		out.Reset()
 		err := cmdProjectCLI([]string{"update", "proj-1", "--status", status}, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "--status must be one of") {
@@ -1059,17 +1059,21 @@ func TestProjectCreateHelpStatesTheCoordinatorDefault(t *testing.T) {
 	}
 }
 
-func TestProjectWriteHelpTreatsLegacyCriteriaAsUserCompatibilityNotAgentFallback(t *testing.T) {
+// The project write help names the ONE authoring shape there is, and nothing that no longer
+// exists: 0229 removed the legacy prose input, its parser and its flags together.
+func TestProjectWriteHelpNamesOnlyTheStructuredAuthoringShape(t *testing.T) {
 	for _, action := range []string{"create", "update"} {
 		var out bytes.Buffer
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
 			t.Fatalf("project %s --help: %v", action, err)
 		}
 		text := out.String()
-		for _, want := range []string{"user/JWT API", "not an agent authoring fallback", "EVIDENCE_JUDGMENT", "completionCriterion"} {
-			if !strings.Contains(text, want) {
-				t.Fatalf("project %s help does not explain legacy compatibility (%q):\n%s", action, want, text)
-			}
+		if !strings.Contains(text, "--acceptance-criteria-items") {
+			t.Fatalf("project %s help does not name the structured shape:\n%s", action, text)
+		}
+		if strings.Contains(text, "--acceptance-criteria TEXT") ||
+			strings.Contains(text, "--clear-acceptance-criteria") {
+			t.Fatalf("project %s help still advertises the removed legacy write:\n%s", action, text)
 		}
 	}
 
@@ -1077,13 +1081,13 @@ func TestProjectWriteHelpTreatsLegacyCriteriaAsUserCompatibilityNotAgentFallback
 		if command.Tool != "project_create" && command.Tool != "project_update" {
 			continue
 		}
-		if strings.Contains(strings.Join(command.Arguments, " "), "--acceptance-criteria <") {
-			t.Fatalf("%s capability still advertises the refused legacy write: %#v", command.Tool, command.Arguments)
+		joined := strings.Join(command.Arguments, " ")
+		if strings.Contains(joined, "--acceptance-criteria <") ||
+			strings.Contains(joined, "--clear-acceptance-criteria") {
+			t.Fatalf("%s capability still advertises the removed legacy write: %#v", command.Tool, command.Arguments)
 		}
-		for _, want := range []string{"user/JWT API", "not an agent fallback", "EVIDENCE_JUDGMENT", "completionCriterion"} {
-			if !strings.Contains(command.Description, want) {
-				t.Fatalf("%s capability does not explain legacy compatibility (%q): %q", command.Tool, want, command.Description)
-			}
+		if !strings.Contains(command.Description, "verificationMethod") {
+			t.Fatalf("%s capability does not describe the structured shape: %q", command.Tool, command.Description)
 		}
 	}
 }

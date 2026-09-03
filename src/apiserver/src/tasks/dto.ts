@@ -193,15 +193,6 @@ export class CreateTaskDto {
   // Unit L4: declare that this write crosses into another project (see TaskHandoffDto). Only
   // meaningful together with an explicit `projectId` — a crossing has to name where it is going.
   @IsOptional() @ValidateNested() @Type(() => TaskHandoffDto) handoff?: TaskHandoffDto;
-  // Unit L4: the acceptance epoch of the project this was planned against (`project.acceptanceEpoch`,
-  // migration 0150), as a decimal string.
-  //
-  // Optional, and checked only when sent. A reopen starts a new epoch, and work planned against the
-  // old one is work whose place in the goal was decided by an acceptance that has since been
-  // superseded — filing it silently is how a reopened project inherits a plan nobody re-read. A
-  // client that names none is not making the claim; inventing one for it would refuse every plan
-  // written before this field existed.
-  @IsOptional() @IsString() @MaxLength(40) projectAcceptanceEpoch?: string;
   // The task this one is a part of. Must be owned by the caller and belong to the same project —
   // a subtask of work in another project is a statement no reader could act on.
   @IsOptional() @IsPublicId() parentTaskId?: string;
@@ -400,15 +391,6 @@ export class UpdateTaskDto {
   // Unit L4: declare that this write crosses into another project (see TaskHandoffDto). Only
   // meaningful together with an explicit `projectId` — a crossing has to name where it is going.
   @IsOptional() @ValidateNested() @Type(() => TaskHandoffDto) handoff?: TaskHandoffDto;
-  // Unit L4: the acceptance epoch of the project this was planned against (`project.acceptanceEpoch`,
-  // migration 0150), as a decimal string.
-  //
-  // Optional, and checked only when sent. A reopen starts a new epoch, and work planned against the
-  // old one is work whose place in the goal was decided by an acceptance that has since been
-  // superseded — filing it silently is how a reopened project inherits a plan nobody re-read. A
-  // client that names none is not making the claim; inventing one for it would refuse every plan
-  // written before this field existed.
-  @IsOptional() @IsString() @MaxLength(40) projectAcceptanceEpoch?: string;
   // null detaches from its parent; a string makes this task part of that one. Rejected for a
   // self-parent, for a cycle, and across projects.
   @IsOptional() @IsPublicId() parentTaskId?: string | null;

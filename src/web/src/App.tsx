@@ -21,8 +21,6 @@ import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
-import { JudgmentInboxPage } from './pages/JudgmentInboxPage';
-import { ProjectAcceptanceReviewPage } from './pages/ProjectAcceptanceReviewPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -105,22 +103,6 @@ export function App() {
             <Route path="tasks" element={<TaskListView />} />
             <Route path="tasks/:id" element={<TaskListView />} />
             <Route path="lists/:key" element={<TaskListView />} />
-            <Route
-              path="judgments"
-              element={
-                <DocView>
-                  <JudgmentInboxPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="judgments/project-acceptance/:projectId/:runId"
-              element={
-                <DocView>
-                  <ProjectAcceptanceReviewPage />
-                </DocView>
-              }
-            />
             <Route
               path="settings/profile"
               element={

@@ -134,16 +134,6 @@ export function CrossingRow({
           <Typography.Text type="secondary">Reason given: {row.reason}</Typography.Text>
         </div>
       ) : null}
-      {/* The landing project's acceptance epoch, because a crossing asked before a reopen lands
-          in a project whose acceptance standing has since been retired. */}
-      {row.toProject ? (
-        <div>
-          <Typography.Text type="secondary" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            Landing epoch {row.toProject.acceptanceEpoch}
-          </Typography.Text>
-        </div>
-      ) : null}
-
       {error ? (
         <Alert
           type="error"

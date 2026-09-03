@@ -6,23 +6,32 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  ProjectAcceptanceVerdict,
   ProjectStatus,
+  TaskCompletionCriterion,
   TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
-import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectsService } from './projects.service';
 
 /**
- * N4: the service gate and its database wall over a fully migrated, disposable PostgreSQL.
+ * There is no project DONE gate. Asserted over a fully migrated, disposable PostgreSQL, because
+ * the claim is the DATABASE's: migration 0229 dropped 0150's `project_acceptance_done_gate` /
+ * `_advance_epoch` / `_epoch_audit` and 0172's `_criteria_fact` from the `project` table, and the
+ * six columns they read.
+ *
+ * The account owner was offered a narrower guard on 2026-09-03 and chose the other option:
+ * `project.status = 'DONE'` is now an ordinary column write that any actor may make, with no
+ * database gate and no application-layer refusal. That is a consequence to be shown working, not
+ * a risk to be hedged — a removal asserted only as "the trigger is not in pg_trigger" would not
+ * notice a replacement gate arriving under another name.
  *
  *   COORDINATOR_PG_URL=postgresql://... \
  *   COORDINATOR_PG_EXPECTED_DATABASE=pcc... \
@@ -49,15 +58,22 @@ function verifyDisposableDatabase(): Promise<void> {
   return safety;
 }
 
-async function connect(): Promise<{ db: PrismaClient; acceptance: ProjectAcceptanceService }> {
+async function connect(): Promise<{
+  db: PrismaClient;
+  acceptance: ProjectAcceptanceService;
+  projects: ProjectsService;
+}> {
   await verifyDisposableDatabase();
   const db = prismaClientFor(URL!);
+  const acceptance = new ProjectAcceptanceService(db as unknown as PrismaService);
   return {
     db,
-    acceptance: new ProjectAcceptanceService(db as unknown as PrismaService),
+    acceptance,
+    projects: new ProjectsService(db as unknown as PrismaService, acceptance),
   };
 }
 
+/** A project with two stated criteria and one task, in whatever status the case needs. */
 async function fixture(
   db: PrismaClient,
   label: string,
@@ -79,7 +95,15 @@ async function fixture(
       id: projectId,
       ownerId,
       title: `${label} project`,
-      acceptanceCriteria: 'Build succeeds\nImage boots',
+      acceptanceCriterionDefinitions: {
+        create: ['Build succeeds', 'Image boots'].map((text, index) => ({
+          ordinal: index + 1,
+          text,
+          verificationMethod: `A person checks that ${text.toLowerCase()}`,
+          completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
+          contentHash: '0'.repeat(64),
+        })),
+      },
     },
   });
   await db.task.create({
@@ -96,137 +120,106 @@ async function fixture(
   return { ownerId, projectId, taskId };
 }
 
-async function runAcceptance(
-  acceptance: ProjectAcceptanceService,
-  target: { ownerId: string; projectId: string },
-  verdicts: [ProjectAcceptanceVerdict, ProjectAcceptanceVerdict],
-) {
-  const opened = await acceptance.openRun(target.ownerId, target.projectId, {
-    decidedBy: 'COORDINATOR_AGENT',
-  });
-  return acceptance.finalizeRun(
-    target.ownerId,
-    target.projectId,
-    opened.id,
-    verdicts.map((verdict, index) => ({ ordinal: index + 1, verdict })),
-  );
-}
-
-async function settle(
-  db: PrismaClient,
-  acceptance: ProjectAcceptanceService,
-  target: { ownerId: string; projectId: string },
-): Promise<void> {
-  await db.$transaction(async (tx) => {
-    await ProjectAcceptanceService.lockProject(
-      tx as Prisma.TransactionClient,
-      target.projectId,
-      target.ownerId,
-      'FOR UPDATE',
-    );
-    const gate = await acceptance.assertDoneAllowed(
-      tx as Prisma.TransactionClient,
-      target.projectId,
-    );
-    await tx.project.update({
-      where: { id: target.projectId },
-      data: { status: ProjectStatus.DONE, acceptedRunId: gate.runId },
-    });
-  });
-}
-
-test('all criteria PASS allows DONE with an OPEN task; only a criterion change reopens it', { skip }, async () => {
-  const { db, acceptance } = await connect();
-  try {
-    const target = await fixture(db, 'pass-open-task', TaskStatus.OPEN);
-    await runAcceptance(acceptance, target, [
-      ProjectAcceptanceVerdict.PASS,
-      ProjectAcceptanceVerdict.PASS,
-    ]);
-
-    const before = await acceptance.evaluateGate(target.projectId);
-    assert.equal(before.allowed, true, String(before.reason ?? 'gate refused without a reason'));
-    await settle(db, acceptance, target);
-
-    const settled = await db.project.findUniqueOrThrow({
-      where: { id: target.projectId },
-      select: { status: true },
-    });
-    const openTasks = await db.task.count({
-      where: { projectId: target.projectId, status: TaskStatus.OPEN },
-    });
-    assert.equal(settled.status, ProjectStatus.DONE);
-    assert.equal(openTasks, 1, 'the nice-to-have remains OPEN while the goal is DONE');
-
-    await completeHumanTaskForPgTest(db, target.ownerId, target.taskId, 'pass-open-task');
-    const afterTaskWrite = await db.project.findUniqueOrThrow({
-      where: { id: target.projectId },
-      select: { status: true, acceptedRunId: true },
-    });
-    assert.equal(afterTaskWrite.status, ProjectStatus.DONE);
-    assert.notEqual(afterTaskWrite.acceptedRunId, null, 'a task write did not retire acceptance');
-
-    await db.project.update({
-      where: { id: target.projectId },
-      data: { acceptanceCriteria: 'Build succeeds\nImage boots\nNew finding is addressed' },
-    });
-    const afterCriterionChange = await db.project.findUniqueOrThrow({
-      where: { id: target.projectId },
-      select: { status: true, acceptedRunId: true },
-    });
-    assert.deepEqual(afterCriterionChange, {
-      status: ProjectStatus.OPEN,
-      acceptedRunId: null,
-    }, 'a finding that changes a criterion automatically exits the completed state');
-  } finally {
-    await db.$disconnect();
-  }
-});
-
-test('all tasks DONE cannot pass a failed criterion, and both gates name that criterion', { skip }, async () => {
-  const { db, acceptance } = await connect();
-  try {
-    const target = await fixture(db, 'done-task-failed-goal', TaskStatus.DONE);
-    const run = await runAcceptance(acceptance, target, [
-      ProjectAcceptanceVerdict.PASS,
-      ProjectAcceptanceVerdict.FAIL,
-    ]);
-
-    assert.equal(
-      await db.task.count({ where: { projectId: target.projectId, status: { not: TaskStatus.DONE } } }),
-      0,
-      'the task list is fully DONE for this counterexample',
-    );
-    const serviceGate = await acceptance.evaluateGate(target.projectId);
-    assert.equal(serviceGate.allowed, false);
-    assert.equal(serviceGate.runId, null);
-    assert.equal(typeof serviceGate.code, 'string');
-    assert.equal(typeof serviceGate.reason, 'string');
-
-    const client = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
-    await client.connect();
+// The database half. A raw UPDATE is the writer the gate existed for — the one that goes around
+// every service — so it is the one that has to be shown going through.
+test('a raw UPDATE settles a project DONE with an OPEN task and unjudged criteria',
+  { skip }, async () => {
+    const { db } = await connect();
     try {
-      await assert.rejects(
-        () => client.query(
-          `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2 WHERE "id" = $1`,
-          [target.projectId, run.id],
-        ),
-        (error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          assert.match(message, /ACCEPTANCE_MISSING|ACCEPTANCE_BLOCKED|ACCEPTANCE_EVIDENCE_STALE/);
-          return true;
-        },
-      );
-    } finally {
-      await client.end();
-    }
+      const target = await fixture(db, 'raw-done', TaskStatus.OPEN);
 
+      const updated = await db.$executeRaw(Prisma.sql`
+        UPDATE "project" SET "status" = 'DONE' WHERE "id" = ${target.projectId}::uuid`);
+      assert.equal(updated, 1);
+
+      const row = await db.project.findUniqueOrThrow({ where: { id: target.projectId } });
+      assert.equal(row.status, ProjectStatus.DONE);
+      // The criteria are untouched by it, and still unjudged — because nothing judges them.
+      const criteria = await db.projectAcceptanceCriterionDefinition.findMany({
+        where: { projectId: target.projectId },
+        orderBy: { ordinal: 'asc' },
+      });
+      assert.deepEqual(criteria.map((c) => c.text), ['Build succeeds', 'Image boots']);
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+// The application half. `refuseDirectDone` used to turn this into a 409 for every principal.
+test('ProjectsService.update settles a project DONE for an ordinary caller', { skip }, async () => {
+  const { db, projects } = await connect();
+  try {
+    const target = await fixture(db, 'service-done', TaskStatus.OPEN);
+
+    const updated: any = await projects.update(target.ownerId, target.projectId, {
+      status: ProjectStatus.DONE,
+    } as never);
+
+    assert.equal(updated.status, ProjectStatus.DONE);
     assert.equal(
       (await db.project.findUniqueOrThrow({ where: { id: target.projectId } })).status,
-      ProjectStatus.OPEN,
-      'the rejected direct write changed nothing',
+      ProjectStatus.DONE,
     );
   } finally {
     await db.$disconnect();
   }
 });
+
+// DONE is not a one-way door either: nothing advances an epoch on the way back, because there is
+// no epoch. The reopen acknowledgement that used to fence this is gone with it.
+test('a settled project reopens without acknowledging anything', { skip }, async () => {
+  const { db, projects } = await connect();
+  try {
+    const target = await fixture(db, 'reopen', TaskStatus.DONE);
+    await projects.update(target.ownerId, target.projectId, { status: ProjectStatus.DONE } as never);
+
+    const reopened: any = await projects.update(target.ownerId, target.projectId, {
+      status: ProjectStatus.OPEN,
+    } as never);
+
+    assert.equal(reopened.status, ProjectStatus.OPEN);
+    assert.equal('reopened' in reopened, false, 'a reopen report describes machinery that is gone');
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+// The catalog, stated as its own assertion: the four triggers and the six columns 0229 removed
+// from the core `project` table, and nothing installed in their place.
+test('the project table carries no acceptance trigger and no acceptance machine column',
+  { skip }, async () => {
+    const { db } = await connect();
+    try {
+      const triggers = await db.$queryRaw<Array<{ tgname: string }>>(Prisma.sql`
+        SELECT t."tgname" FROM "pg_trigger" t
+         WHERE t."tgrelid" = 'project'::regclass AND NOT t."tgisinternal"
+         ORDER BY t."tgname"`);
+      const names = triggers.map((t) => t.tgname);
+      for (const gone of [
+        'project_acceptance_done_gate',
+        'project_acceptance_advance_epoch',
+        'project_acceptance_epoch_audit',
+        'project_acceptance_criteria_fact',
+      ]) {
+        assert.equal(names.includes(gone), false, `${gone} survives on project`);
+      }
+      assert.equal(names.some((n) => /acceptance/i.test(n)), false,
+        `an acceptance trigger arrived under another name: ${names.join(', ')}`);
+
+      const columns = await db.$queryRaw<Array<{ column_name: string }>>(Prisma.sql`
+        SELECT "column_name" FROM "information_schema"."columns"
+         WHERE "table_schema" = 'public' AND "table_name" = 'project'
+         ORDER BY "column_name"`);
+      const columnNames = columns.map((c) => c.column_name);
+      for (const gone of [
+        'accepted_run_id', 'acceptance_epoch', 'legacy_accepted_at',
+        'acceptance_criteria', 'acceptance_criteria_digest', 'acceptance_criteria_format',
+      ]) {
+        assert.equal(columnNames.includes(gone), false, `project.${gone} survives`);
+      }
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+test('the PostgreSQL target is a disposable database', { skip }, verifyDisposableDatabase);

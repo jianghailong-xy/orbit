@@ -110,59 +110,52 @@ suite('all three criteria are still writable, and EXECUTABLE still carries its p
   );
 });
 
-suite('the three project_acceptance_* tables still take, keep and return rows', async (t) => {
+suite('the project acceptance criterion definitions still take, keep and return rows', async (t) => {
   const client = await connect();
   t.after(async () => { await client.end(); });
 
-  // Setting the project's criteria is what fires 0172's `project_acceptance_criteria_fact`, and
-  // the definitions it writes are the account-level audit records this change had to preserve.
+  // Migration 0229 removed the three JUDGMENT tables this block used to write — run, criterion and
+  // conclusion — along with 0172's `project_acceptance_criteria_fact` trigger and the legacy text
+  // column that fired it. What 0228 had to preserve and 0229 still preserves is the DECLARATION:
+  // `project_acceptance_criterion_definition`, written per item, with an EXECUTABLE criterion
+  // still declarable even though nothing satisfies it.
+  const definitionId = randomUUID();
+  // An EXECUTABLE declaration names the task that produces its evidence: the check constraint
+  // `project_acceptance_definition_declaration_chk` requires the command, the expected exit code
+  // and the evidence task together, and that constraint is one of the things 0229 left alone.
+  const evidenceTaskId = await insertTask(client, 'EXECUTABLE',
+    { command: 'npm test', expectedExitCode: 0 });
   await client.query(
-    `UPDATE "project" SET "acceptance_criteria" = $2 WHERE "id" = $1`,
-    [PROJECT,
-      '1. 命令退出码为 0 | 验证方式: 读取退出码\n2. 独立验证通过 | 验证方式: 读取 verdict'],
-  );
-  const definitions = (await client.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM "project_acceptance_criterion_definition"
-      WHERE "project_id" = $1`, [PROJECT],
-  )).rows[0].n;
-  assert.equal(definitions, '2', 'the 0172 trigger still writes one definition per criterion');
-
-  const runId = randomUUID();
-  await client.query(
-    `INSERT INTO "project_acceptance_run"
-       (id, project_id, attempt, criteria_snapshot, criteria_revision, input_digest, decided_by,
-        started_at, created_at, digest_version, acceptance_epoch)
-     VALUES ($1, $2, 1, 'snapshot', $3, $4, 'USER', now(), now(), 1, 0)`,
-    [runId, PROJECT, 'd'.repeat(64), 'e'.repeat(64)],
-  );
-  await client.query(
-    `INSERT INTO "project_acceptance_criterion"
-       (id, run_id, project_id, ordinal, criterion_key, criterion_text, verdict,
-        completion_criterion)
-     VALUES ($1, $2, $3, 1, 'k1', 'criterion one', 'PASS'::project_acceptance_verdict,
-             'EXECUTABLE'::task_completion_criterion)`,
-    [randomUUID(), runId, PROJECT],
-  );
-  await client.query(
-    `INSERT INTO "project_acceptance_conclusion"
-       (id, project_id, evidence_run_id, evidence_version, ordinal, criterion_key, criterion_text,
-        verdict, summary, decided_by, decided_by_id, decided_at, created_at)
-     VALUES ($1, $2, $3, 1, 1, 'k1', 'criterion one', 'PASS'::project_acceptance_verdict,
-             'preserved', 'USER', $4, now(), now())`,
-    [randomUUID(), PROJECT, runId, OWNER],
+    `INSERT INTO "project_acceptance_criterion_definition"
+       (id, project_id, ordinal, text, verification_method, completion_criterion, content_hash,
+        acceptance_command, acceptance_expected_exit_code, evidence_task_id)
+     VALUES ($1, $2, 1, '命令退出码为 0', '读取退出码',
+             'EXECUTABLE'::task_completion_criterion, $3, 'npm test', 0, $4)`,
+    [definitionId, PROJECT, 'f'.repeat(64), evidenceTaskId],
   );
 
-  const counts = (await client.query<{ definitions: string; criteria: string; conclusions: string }>(
-    `SELECT (SELECT count(*)::text FROM "project_acceptance_criterion_definition") AS definitions,
-            (SELECT count(*)::text FROM "project_acceptance_criterion") AS criteria,
-            (SELECT count(*)::text FROM "project_acceptance_conclusion") AS conclusions`,
-  )).rows[0];
-  assert.deepEqual(counts, { definitions: '2', criteria: '1', conclusions: '1' });
+  const stored = (await client.query<{
+    n: string; kind: string; command: string; hash: string; revision: string;
+  }>(
+    `SELECT count(*) OVER ()::text AS n, "completion_criterion"::text AS kind,
+            "acceptance_command" AS command, "content_hash" AS hash, "revision"::text AS revision
+       FROM "project_acceptance_criterion_definition" WHERE "project_id" = $1`, [PROJECT],
+  )).rows;
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].kind, 'EXECUTABLE');
+  assert.equal(stored[0].command, 'npm test');
+  assert.equal(stored[0].revision, '1');
+  // The normalize trigger that stayed recomputed the hash from the row rather than storing what
+  // the caller supplied, which is how the declaration's identity is the database's.
+  assert.notEqual(stored[0].hash, 'f'.repeat(64));
+  assert.match(stored[0].hash, /^[0-9a-f]{64}$/);
 
-  // An EXECUTABLE project criterion is still declarable even though nothing satisfies it: the
-  // criterion is the statement of what would settle the goal, not a promise about the evaluator.
-  const criterionKinds = (await client.query<{ kind: string }>(
-    `SELECT DISTINCT "completion_criterion"::text AS kind FROM "project_acceptance_criterion"`,
-  )).rows.map((row) => row.kind);
-  assert.deepEqual(criterionKinds, ['EXECUTABLE']);
+  // And the judgment tables are gone rather than empty: an empty table would still be a place for
+  // a verdict to be written.
+  const judgment = (await client.query<{ relname: string }>(
+    `SELECT c."relname" FROM "pg_class" c JOIN "pg_namespace" n ON n."oid" = c."relnamespace"
+      WHERE n."nspname" = 'public' AND c."relkind" = 'r'
+        AND c."relname" LIKE 'project_acceptance%' ORDER BY 1`,
+  )).rows.map((row) => row.relname);
+  assert.deepEqual(judgment, ['project_acceptance_criterion_definition']);
 });

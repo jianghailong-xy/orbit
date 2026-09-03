@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { CreatorType, PrismaClient, ProjectAcceptanceVerdict, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, TaskCompletionCriterion, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -17,8 +17,6 @@ import { PROJECT_NOT_CONVERGING, noProgressDedupeKey } from './coordinator-conve
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
 import { CoordinatorWakeService } from './coordinator-wake.service';
-import { parseCriteria } from './project-acceptance';
-import { ProjectAcceptanceService } from './project-acceptance.service';
 
 /**
  * Unit T4 against a real PostgreSQL, because every claim it makes is the DATABASE's.
@@ -43,7 +41,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 /** N: the documented default, read from the frozen table rather than restated as a literal. */
 const N = DEFAULT_CONVERGENCE_THRESHOLDS.maxDecisionsWithoutProgress as number;
 
-const CRITERIA = 'the ledger is in the database\nthe stop-loss stops\nthe blocker stays closed';
+const CRITERIA = ['the ledger is in the database', 'the stop-loss stops', 'the blocker stays closed'];
 
 interface Fixture {
   db: PrismaClient;
@@ -73,7 +71,16 @@ async function fixture(): Promise<Fixture> {
       ownerId,
       title: 'a project that stops converging',
       goal: 'reach the three criteria',
-      acceptanceCriteria: CRITERIA,
+      acceptanceCriterionDefinitions: {
+        create: CRITERIA.map((text, index) => ({
+          ordinal: index + 1,
+          text,
+          verificationMethod: `A person checks that ${text}`,
+          completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
+          // The normalize trigger recomputes it; Prisma needs a value for the required column.
+          contentHash: '0'.repeat(64),
+        })),
+      },
       // Left null on purpose: this is the state every project in production is in, so the N the
       // stop-loss counts to has to come from `DEFAULT_CONVERGENCE_THRESHOLDS`.
       convergenceThresholds: undefined,
@@ -143,25 +150,46 @@ async function blockers(f: Fixture) {
   });
 }
 
-/** Close one acceptance criterion by appending a new human conclusion over the same evidence set. */
-async function closeCriterion(f: Fixture, ordinal: number): Promise<void> {
-  const criteria = parseCriteria(CRITERIA);
-  const acceptance = new ProjectAcceptanceService(f.db as unknown as PrismaService);
-  const version = await acceptance.openRun(f.ownerId, f.projectId, {
-    decidedBy: 'USER',
+/**
+ * Move the progress vector by one dimension that still exists.
+ *
+ * This used to close an acceptance criterion, which is what `acceptanceClosed` counted. Migration
+ * 0229 removed the project acceptance judgment, so nothing can close a criterion any more and that
+ * dimension left the vector with it. `openBlockers` is the axis the same scenario moves now: the
+ * question this test asks — "what brings a stopped coordinator back is a measured improvement and
+ * nothing else" — is about the breaker, not about which axis improved.
+ */
+async function openWorkBlocker(f: Fixture): Promise<string> {
+  const id = randomUUID();
+  const now = new Date();
+  await f.db.projectBlocker.create({
+    data: {
+      id,
+      projectId: f.projectId,
+      kind: 'MERGE_CONFLICT',
+      subjectType: 'PROJECT',
+      subjectId: f.projectId,
+      owner: 'USER',
+      recovery: 'HUMAN',
+      severity: 'CRITICAL',
+      requiredAction: 'resolve the conflict',
+      nextCheckAt: now,
+      dedupeKey: `t4-work:${id}`,
+      lifecycleGeneration: 1n,
+      conditionVersion: 'f'.repeat(64),
+      firstSeenAt: now,
+      lastSeenAt: now,
+    },
   });
-  await acceptance.finalizeRun(
-    f.ownerId,
-    f.projectId,
-    version.id,
-    criteria.map((criterion) => ({
-      ordinal: criterion.ordinal,
-      verdict: criterion.ordinal <= ordinal
-        ? ProjectAcceptanceVerdict.PASS
-        : ProjectAcceptanceVerdict.INCONCLUSIVE,
-      summary: `criterion ${criterion.ordinal} at progress step ${ordinal}`,
-    })),
-  );
+  return id;
+}
+
+async function makeProgress(f: Fixture, blockerId: string): Promise<void> {
+  await f.db.projectBlocker.update({
+    where: { id: blockerId },
+    // `project_blocker_resolution_chk`: a resolution names who made it, or is not one.
+    data: { resolvedAt: new Date(), resolvedBy: 'USER' },
+  });
 }
 
 async function cleanup(f: Fixture): Promise<void> {
@@ -334,32 +362,39 @@ test('a stop-loss blocker a person resolved does not come back without new progr
 
 /**
  * The other half of criterion 3: what DOES bring the coordinator back is the frozen definition of
- * progress and nothing else. One acceptance criterion closes, `strictlyImproves` says so, the
+ * progress and nothing else. One measured dimension improves, `strictlyImproves` says so, the
  * window zeroes, and the next fact wakes it — without anybody clearing a row or restarting a
  * process.
  */
-test('closing an acceptance criterion is what restarts the waking', {
+test('a measured improvement is what restarts the waking', {
   skip: !URL,
   timeout: 180_000,
 }, async () => {
   const f = await fixture();
   try {
+    // One real, unresolved piece of work standing between this project and its criteria. It is
+    // what the vector measures; the stop-loss blocker this unit raises is deliberately excluded
+    // from its own measurement, so it cannot be the thing that moves.
+    const blockerId = await openWorkBlocker(f);
     for (let i = 0; i < N + 1; i += 1) await wake(f, randomUUID());
     assert.equal((await wake(f, randomUUID())).outcome, 'REFUSED');
 
-    await closeCriterion(f, 1);
+    await makeProgress(f, blockerId);
 
     const resumed = await wake(f, randomUUID());
-    assert.equal(resumed.opened, true, 'a criterion closed and the coordinator was still stopped');
+    assert.equal(resumed.opened, true, 'the vector improved and the coordinator was still stopped');
 
     const ledger = await decisions(f);
     const last = ledger[ledger.length - 1];
     assert.equal(last.progressed, true);
     assert.equal(last.outcome, 'PROCEED');
-    assert.equal((last.progressVector as unknown as ProgressVector).acceptanceClosed, 1);
+    assert.equal((last.progressVector as unknown as ProgressVector).openBlockers, 0);
     assert.equal((last.counters as { decisionsWithoutProgress: number }).decisionsWithoutProgress, 0);
-    // Still exactly one blocker: coming back does not resolve the record of having been stopped.
-    assert.equal((await blockers(f)).length, 1);
+    // Still exactly one stop-loss blocker: coming back does not resolve the record of having been
+    // stopped. (The work blocker this case resolved is the second row, and it is resolved.)
+    const open = await blockers(f);
+    assert.deepEqual(open.map((row) => `${row.kind}:${row.resolvedAt === null}`).sort(),
+      ['COORDINATOR_NO_PROGRESS:true', 'MERGE_CONFLICT:false']);
   } finally {
     await cleanup(f);
   }

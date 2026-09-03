@@ -125,6 +125,14 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
         // looks like).
         return { id: PROJECT_ID, ...data, members: [], runtime: { coordinatorGeneration: 0n } };
       },
+      // The re-read a structured create makes after writing its criterion definitions, so the
+      // response carries the rows the database normalized rather than the ones it was sent.
+      findUniqueOrThrow: async () => ({
+        id: PROJECT_ID,
+        ...(creates[creates.length - 1] ?? {}),
+        members: [],
+        runtime: { coordinatorGeneration: 0n },
+      }),
       // A binding applied by a follow-up write would leave a window in which the project exists
       // pointing at no conversation, so reaching for either of these is a failure, not an
       // alternative.
@@ -287,7 +295,6 @@ test('both halves of the binding are part of the insert, not a second write', as
   // same reason the two columns are: the coordinating identity and the project's runtime row must
   // never be a follow-up write that can fail on its own and leave a project half-bound.
   assert.deepEqual(Object.keys(f.creates[0]).sort(), [
-    'acceptanceCriteria',
     'automationPolicy',
     'coordinatorEnabled',
     'coordinatorSessionId',
@@ -341,11 +348,10 @@ test('a base62 session id resolves to the same session', async () => {
 test('prose is shaped exactly as it is on the headless path', async () => {
   const f = makeService();
 
-  await f.inSession({ title: 'Crawl', goal: '   ', acceptanceCriteria: 'Every shard reported' });
+  await f.inSession({ title: 'Crawl', goal: '   ', instructions: 'Every shard reported' });
 
   assert.equal(f.creates[0].goal, null);
-  assert.equal(f.creates[0].acceptanceCriteria, 'Every shard reported');
-  assert.equal(f.creates[0].instructions, undefined);
+  assert.equal(f.creates[0].instructions, 'Every shard reported');
 });
 
 // ── What is refused ───────────────────────────────────────────────────────────────────────────

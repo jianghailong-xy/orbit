@@ -305,17 +305,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "project_reopen_impact":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		raw, err := s.t.getProjectReopenImpact(id)
-		if err != nil {
-			return toolResult("get project reopen impact failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "task_attribution":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -361,45 +350,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "project_acceptance":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		raw, err := s.t.getProjectAcceptance(id)
-		if err != nil {
-			return toolResult("get project acceptance failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
-	case "project_acceptance_run":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		// The server derives the evidence-version identity from the durable facts.
-		raw, err := s.t.openProjectAcceptanceRun(id, map[string]interface{}{})
-		if err != nil {
-			return toolResult("evaluate project acceptance evidence version failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
-	case "project_acceptance_verdict":
-		id := getString(args, "projectId")
-		runID := getString(args, "runId")
-		if id == "" || runID == "" {
-			return toolResult("projectId and runId are required", true)
-		}
-		criteria, ok := args["criteria"].([]interface{})
-		if !ok || len(criteria) == 0 {
-			return toolResult("criteria must be a non-empty array with one entry per stated criterion", true)
-		}
-		raw, err := s.t.finalizeProjectAcceptanceRun(id, runID, map[string]interface{}{"criteria": criteria})
-		if err != nil {
-			return toolResult("append project acceptance conclusions failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "project_merge_evidence":
 		id := getString(args, "projectId")
 		requirement := getString(args, "requirementId")
@@ -429,11 +379,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if title == "" {
 			return toolResult("title is required", true)
 		}
-		_, legacyCriteria := args["acceptanceCriteria"]
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
-		if legacyCriteria {
-			return toolResult(runnerLegacyProjectCriteriaError, true)
-		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "goal", "instructions")
 		if structuredCriteria {
@@ -457,15 +403,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("projectId is required", true)
 		}
-		_, legacyCriteria := args["acceptanceCriteria"]
 		_, structuredCriteria := args["acceptanceCriteriaItems"]
-		if legacyCriteria {
-			return toolResult(runnerLegacyProjectCriteriaError, true)
-		}
 		if status, present := args["status"]; present {
 			statusText, ok := status.(string)
-			if !ok || (statusText != "OPEN" && statusText != "CANCELLED") {
-				return toolResult("status must be OPEN or CANCELLED; DONE is derived automatically", true)
+			if !ok || (statusText != "OPEN" && statusText != "DONE" && statusText != "CANCELLED") {
+				return toolResult("status must be OPEN, DONE or CANCELLED", true)
 			}
 		}
 		body := map[string]interface{}{}
@@ -1634,7 +1576,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_attribution",
-			"description": "Read one task's attribution boundary — five answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id, status and acceptance epoch; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `acceptance`: the project's stated criteria that CITE this task, each with the verdict it reached, the epoch it was reached in, and whether that is still current — an old PASS stays readable and stops counting once the project is reopened. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"no criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
+			"description": "Read one task's attribution boundary — four answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id and status; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"nothing is holding this up\" and \"this build cannot tell you\" read differently. The acceptance lane this read used to carry — which stated criteria cite the task, and what each was judged to be — went with migration 0229: the criteria are still stated, and nothing judges them. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -1667,16 +1609,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"enum":        []string{"PENDING", "APPROVED", "DENIED", "APPLIED"},
 					"description": "Only crossings in that state. Omit for all of them.",
-				},
-			}, "projectId"),
-		},
-		{
-			"name":        "project_reopen_impact",
-			"description": "Read what reopening a settled project would COST: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, still readable and no longer a claim about the world the project is in — so an account owner being asked for one should be asked with those numbers rather than with \"can you reopen this\". Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
 		},
@@ -1734,81 +1666,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}),
 		},
 		{
-			"name": "project_acceptance",
-			"description": "Read the evidence a project's DONE would be checked against, and " +
-				"whether it would be allowed right now. A comment saying the tests passed is not " +
-				"evidence this server can check; a run in this record is. Returns: the stated " +
-				"structured checklist (legacy text is conservatively backfilled one non-blank " +
-				"physical line per item), which an acceptance run must answer item for item; " +
-				"acceptanceDigest, the identity of the unordered criterion propositions and newest " +
-				"merge observation per requirement; every evidence version with the current " +
-				"per-criterion projection and its append-only conclusion events; what each target " +
-				"branch was last observed to CONTAIN and at which " +
-				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
-				"and refused, and every reopen with the fact that caused it; the current " +
-				"revision-bearing criteriaDigest; and doneGate — " +
-				"allowed, or the code and sentence the write would be refused with " +
-				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_BLOCKED when a blocker " +
-				"or unresolved verification failure is still open).",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
-				},
-			}, "projectId"),
-		},
-		{
-			"name": "project_acceptance_run",
-			"description": "Evaluate a project's current acceptance evidence version. The operation " +
-				"is idempotent: concurrent evaluators of the same criteria and merge evidence receive " +
-				"the same immutable version row and checklist. Evidence changes advance the version " +
-				"automatically; prior conclusion events carry forward until a newer-version event " +
-				"refutes them. A project that states no acceptance criteria is " +
-				"refused, because an acceptance with nothing to check would pass by having nothing " +
-				"to fail.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project to run acceptance on, as shown in its web UI URL.",
-				},
-			}, "projectId"),
-		},
-		{
-			"name": "project_acceptance_verdict",
-			"description": "Append evidence-backed conclusion events for the EVIDENCE_JUDGMENT criteria " +
-				"in a project acceptance version. EXECUTABLE and VERIFICATION are evaluated only from " +
-				"their declared durable inputs and reject a fallback human verdict. Address each human " +
-				"criterion by criterionId (its stable structured identity), " +
-				"ordinal (its position in the snapshot), or criterionKey (legacy content identity). " +
-				"Every EVIDENCE_JUDGMENT criterion must be answered: a missing one is " +
-				"refused, because a project-level PASS is the conjunction of them and one nobody " +
-				"checked is not a pass. The current verdict is DERIVED and cannot be " +
-				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
-				"which is the whole difference between this and writing 'all green' in a task " +
-				"comment. Put real evidence in each entry's `evidence`: the observation, output, " +
-				"artifact hash, and environment. Every event records who concluded, when, and the evidence " +
-				"version it was based on. A judgment-session or machine-attributed call may refute; " +
-				"PASS must use the owner-attributed channel. That is workflow and audit provenance, " +
-				"not proof of human presence.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project whose evidence version is being concluded against.",
-				},
-				"runId": map[string]interface{}{
-					"type":        "string",
-					"description": "The evidence version to conclude against, as returned by project_acceptance_run.",
-				},
-				"criteria": map[string]interface{}{
-					"type": "array",
-					"description": "One entry per EVIDENCE_JUDGMENT criterion: {criterionId, ordinal or criterionKey, " +
-						"verdict: PASS|FAIL|INCONCLUSIVE, summary, evidence, evidenceTaskId, " +
-						"evidenceSessionId}.",
-					"items": map[string]interface{}{"type": "object"},
-				},
-			}, "projectId", "runId", "criteria"),
-		},
-		{
 			"name": "project_merge_evidence",
 			"description": "Record what a target branch was observed to CONTAIN — the merge half " +
 				"of a project's acceptance evidence. Hash the content you actually read (a " +
@@ -1818,8 +1675,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"observation and only the observation time moves; different content writes a new " +
 				"row one refGeneration up, which is what makes 'the branch changed and changed " +
 				"back' visible to a database that cannot lock a git ref. Different content advances " +
-				"the evidence version automatically and re-evaluates the current acceptance standing " +
-				"without a manual reopen.",
+				"the evidence version automatically. Nothing judges the observation: migration 0229 " +
+				"removed the project acceptance judgment, so this records what was seen and stops there.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -1912,9 +1769,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"on every item, and [] to clear the set. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
-				"write acceptance criteria. Direct status DONE is refused for every actor: it is " +
-				"produced automatically only when the exact confirmed standard set has PASS for " +
-				"every peer criterion. Only the fields you pass are sent, so " +
+				"write acceptance criteria. Status DONE is an ordinary write since migration 0229 " +
+				"removed the project acceptance judgment: nothing derives it and nothing refuses " +
+				"it, so writing it is a claim you are making rather than one the server checked. " +
+				"Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +
 				"untouched, pass a string to replace it, pass null to clear it. CANCELLED says the " +
 				"goal will not be pursued; OPEN reopens it. Read project_get first when the current context is not " +
@@ -1936,8 +1794,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"status": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"OPEN", "CANCELLED"},
-					"description": "OPEN reopens work; CANCELLED abandons it. DONE is derived and cannot be supplied.",
+					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
+					"description": "OPEN reopens work; CANCELLED abandons it; DONE says the goal was reached. Since 0229 nothing checks DONE against the project's stated criteria — it is recorded exactly as sent.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",
@@ -2018,7 +1876,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"dryRun": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title, status and acceptance epoch), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
+					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title and status), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
 				},
 			}, "tasks"),
 		},

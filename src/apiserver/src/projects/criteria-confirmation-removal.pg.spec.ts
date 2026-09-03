@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
 import { Client } from 'pg';
@@ -45,31 +47,28 @@ const CONFIRMATION_INDEXES = [
 ];
 
 /**
- * Every column of the acceptance wall, in the spelling `format_type` gives it. Verbatim from
- * `tasks/verification-subject-guard-removal.pg.spec.ts`, minus the one relation this removal
- * drops: two independent suites asserting the same census is the point, because a removal that
- * widened or narrowed one of these would have to defeat both.
+ * What `project_acceptance_*` is made of after 0229, in the spelling `format_type` gives it. Kept
+ * in step with `tasks/verification-subject-guard-removal.pg.spec.ts`: two independent suites
+ * asserting the same census is the point, because a removal that widened or narrowed one of these
+ * would have to defeat both.
+ *
+ * The run, the per-run criterion, the conclusion and the audit stood here until migration 0229
+ * removed the project acceptance judgment on 2026-09-03 — a later and separate account-owner
+ * decision than 0226's. What 0226 was protecting, and what came through all of it column for
+ * column, is the authored declaration.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
-  project_acceptance_audit:
-    'id:uuid!, project_id:uuid!, kind:text!, run_id:uuid, reason:text, detail:jsonb!, created_at:timestamp(3) without time zone!',
-  project_acceptance_conclusion:
-    'id:uuid!, project_id:uuid!, evidence_run_id:uuid!, evidence_version:bigint!, ordinal:integer!, criterion_key:text!, criterion_text:text!, definition_id:uuid, definition_revision:integer, verdict:project_acceptance_verdict!, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_by:text!, decided_by_id:uuid!, acting_session_id:uuid, decided_at:timestamp(3) without time zone!, created_at:timestamp(3) without time zone!',
-  project_acceptance_criterion:
-    'id:uuid!, run_id:uuid!, project_id:uuid!, ordinal:integer!, criterion_key:text!, criterion_text:text!, verdict:project_acceptance_verdict, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, definition_id:uuid, definition_revision:integer, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer',
   project_acceptance_criterion_definition:
     'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
-  project_acceptance_run:
-    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb',
 };
 
-/** A project with one stated criterion and one PASS evidence version, ready to go DONE. */
-async function seedAcceptedProject(client: Client, label: string): Promise<{
-  ownerId: string; projectId: string; runId: string;
+
+/** A project with one stated criterion, and nothing that judges it. */
+async function seedProject(client: Client, label: string): Promise<{
+  ownerId: string; projectId: string; definitionId: string;
 }> {
   const ownerId = randomUUID();
   const projectId = randomUUID();
-  const runId = randomUUID();
   const definitionId = randomUUID();
   await client.query(
     `INSERT INTO "user" ("id","email","password_hash","name")
@@ -78,52 +77,18 @@ async function seedAcceptedProject(client: Client, label: string): Promise<{
   );
   await client.query(
     `INSERT INTO "project" ("id","owner_id","title","goal","status","updated_at")
-     VALUES ($1,$2,$3,'prove the gate still decides','OPEN'::"project_status",now())`,
+     VALUES ($1,$2,$3,'prove the criteria survive','OPEN'::"project_status",now())`,
     [projectId, ownerId, `confirmation removal ${label}`],
   );
   await client.query(
     `INSERT INTO "project_acceptance_criterion_definition"
        ("id","project_id","ordinal","text","verification_method","completion_criterion",
         "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
-     VALUES ($1,$2,1,'The gate still decides','a judgment reads the gate',
+     VALUES ($1,$2,1,'The criteria survive','a person reads the criterion',
              'EVIDENCE_JUDGMENT'::"task_completion_criterion",$3,$4,$5,now(),now())`,
     [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
   );
-  const criteriaDigest = (await client.query(
-    'SELECT project_acceptance_definition_digest($1::uuid) AS digest', [projectId],
-  )).rows[0].digest as string;
-  await client.query(
-    `UPDATE "project" SET "acceptance_criteria_digest" = $2 WHERE "id" = $1::uuid`,
-    [projectId, criteriaDigest],
-  );
-  const criterionKey = 'the-gate-still-decides';
-  await client.query(
-    `INSERT INTO "project_acceptance_run"
-       ("id","project_id","attempt","criteria_snapshot","criteria_revision","input_digest",
-        "result_digest","verdict","decided_by","digest_version","acceptance_epoch",
-        "completed_at","created_at")
-     VALUES ($1,$2,1,'[]'::jsonb,$3,$4,$5,'PASS'::"project_acceptance_verdict",
-             'COORDINATOR_AGENT',4,0,now(),now())`,
-    [runId, projectId, criteriaDigest, 'b'.repeat(64), 'c'.repeat(64)],
-  );
-  await client.query(
-    `INSERT INTO "project_acceptance_criterion"
-       ("id","run_id","project_id","ordinal","criterion_key","criterion_text","definition_id",
-        "definition_revision","verdict","created_at")
-     VALUES ($1,$2,$3,1,$4,'The gate still decides',$5,1,
-             'PASS'::"project_acceptance_verdict",now())`,
-    [randomUUID(), runId, projectId, criterionKey, definitionId],
-  );
-  await client.query(
-    `INSERT INTO "project_acceptance_conclusion"
-       ("id","project_id","evidence_run_id","evidence_version","ordinal","criterion_key",
-        "criterion_text","definition_id","definition_revision","verdict","decided_by",
-        "decided_by_id","decided_at")
-     VALUES ($1,$2,$3,1,1,$4,'The gate still decides',$5,1,
-             'PASS'::"project_acceptance_verdict",'USER',$6,now())`,
-    [randomUUID(), projectId, runId, criterionKey, definitionId, ownerId],
-  );
-  return { ownerId, projectId, runId };
+  return { ownerId, projectId, definitionId };
 }
 
 async function refusal(client: Client, sql: string, values: unknown[]): Promise<string> {
@@ -201,15 +166,16 @@ suite('(b) the acceptance standard set comes through with every column it went i
   });
 
 // (c) ------------------------------------------------------------------------------------------
-suite('(c) the guards on the acceptance family and on `project` are untouched', async (t) => {
+suite('(c) the guards on the acceptance family and on `project` are untouched by 0226', async (t) => {
   const client = await connect();
   t.after(async () => { await client.end(); });
 
-  // Nine. Ten when this file was written, minus
+  // Two. Ten when this file was written, minus
   // `project_acceptance_criteria_confirmation|..._confirmation_immutable` (the one this removal
-  // takes, and the only one it takes) and minus
+  // takes, and the only one it takes), minus
   // `project_acceptance_run|project_acceptance_run_closure_guard`, which 0227 removed with 0215's
-  // closing move — a later and separate decision about the EXECUTABLE acceptance runtime.
+  // closing move, and minus the six that went with the judgment tables in 0229. Each of those is
+  // a later and separate account-owner decision, and none of them is 0226's.
   const family = await client.query(`
     SELECT c.relname || '|' || t.tgname AS name
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
@@ -218,71 +184,50 @@ suite('(c) the guards on the acceptance family and on `project` are untouched', 
        AND c.relname LIKE 'project\\_acceptance\\_%'
      ORDER BY 1`);
   assert.deepEqual(family.rows.map((row) => row.name), [
-    'project_acceptance_audit|project_acceptance_audit_append_only',
-    'project_acceptance_conclusion|project_acceptance_conclusion_immutable',
-    'project_acceptance_conclusion|project_acceptance_conclusion_reconcile',
-    'project_acceptance_conclusion|project_acceptance_conclusion_validate',
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
-    'project_acceptance_criterion|project_acceptance_criterion_immutable_guard',
-    'project_acceptance_run|project_acceptance_run_epoch_guard',
-    'project_acceptance_run|project_acceptance_run_immutable_guard',
   ]);
 
-  // 0150's three and 0172's one, on `project` itself. Definition by definition, because a rename
-  // or a re-declared timing would read as "still four triggers" to a name-only check.
-  const onProject = await client.query<{ name: string; def: string }>(`
-    SELECT t.tgname AS name, pg_get_triggerdef(t.oid) AS def
+  // 0150's three and 0172's one, on `project` itself: all four gone with 0229, which is where the
+  // decision to remove them was made. 0226 named none of them.
+  const onProject = await client.query<{ name: string }>(`
+    SELECT t.tgname AS name
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND c.relname = 'project'
        AND t.tgname LIKE 'project\\_acceptance\\_%'
      ORDER BY t.tgname`);
-  assert.deepEqual(onProject.rows.map((row) => `${row.name} :: ${row.def}`), [
-    'project_acceptance_advance_epoch :: CREATE TRIGGER project_acceptance_advance_epoch BEFORE UPDATE ON public.project FOR EACH ROW EXECUTE FUNCTION project_acceptance_advance_epoch()',
-    'project_acceptance_criteria_fact :: CREATE TRIGGER project_acceptance_criteria_fact AFTER INSERT OR UPDATE OF acceptance_criteria ON public.project FOR EACH ROW EXECUTE FUNCTION project_acceptance_criteria_fact()',
-    'project_acceptance_done_gate :: CREATE TRIGGER project_acceptance_done_gate BEFORE UPDATE OF status, accepted_run_id ON public.project FOR EACH ROW EXECUTE FUNCTION project_acceptance_done_gate()',
-    'project_acceptance_epoch_audit :: CREATE TRIGGER project_acceptance_epoch_audit AFTER UPDATE ON public.project FOR EACH ROW WHEN ((new.acceptance_epoch IS DISTINCT FROM old.acceptance_epoch)) EXECUTE FUNCTION project_acceptance_epoch_audit()',
-  ]);
-
-  // The names are load-bearing: PostgreSQL fires BEFORE ROW triggers in alphabetical order, and
-  // `..._advance_epoch` sorting before `..._done_gate` is what pins the epoch the gate reads.
-  assert.ok('project_acceptance_advance_epoch' < 'project_acceptance_done_gate');
-  assert.deepEqual(
-    onProject.rows.map((row) => row.name),
-    [...onProject.rows.map((row) => row.name)].sort(),
-    'the catalogue order this test read IS the firing order');
+  assert.deepEqual(onProject.rows, []);
+  const removal = readFileSync(
+    path.resolve(__dirname, '../../prisma/migrations/0226_project_criteria_confirmation_removal/migration.sql'),
+    'utf8',
+  ).split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
+  for (const trigger of ['project_acceptance_advance_epoch', 'project_acceptance_criteria_fact',
+    'project_acceptance_done_gate', 'project_acceptance_epoch_audit']) {
+    assert.equal(removal.includes(trigger), false, `0226 names ${trigger} in a statement`);
+  }
 });
 
 // (d) ------------------------------------------------------------------------------------------
-suite('(d) the DONE gate still refuses, including the ordering bypass 0150 names', async (t) => {
+suite('(d) 0226 refused nothing about DONE, and after 0229 nothing refuses it at all', async (t) => {
   const client = await connect();
   t.after(async () => { await client.end(); });
-  const seeded = await seedAcceptedProject(client, 'gate');
+  const seeded = await seedProject(client, 'gate');
 
-  // No evidence version bound at all.
-  assert.match(
+  // Three refusals stood here — no evidence version, the epoch-rewriting bypass, and the positive
+  // path that earned a DONE. All three were the 0150 gate's, and 0229 removed it. What is left to
+  // check is that the write goes through and the criterion it was never judged against is intact.
+  assert.equal(
     await refusal(client, `UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`,
       [seeded.projectId]),
-    /ACCEPTANCE_MISSING/);
-
-  // The bypass: rewriting the epoch in the same statement that closes the project. It only works
-  // if the gate reads the epoch the caller supplied, which is what `..._advance_epoch` sorting
-  // first prevents.
-  assert.match(
-    await refusal(client,
-      `UPDATE "project" SET "status" = 'DONE', "acceptance_epoch" = 0 WHERE "id" = $1::uuid`,
-      [seeded.projectId]),
-    /ACCEPTANCE_MISSING/);
-
-  // And the gate still says yes to the run that earned it: the removal took a refusal clause off
-  // nothing, so the positive path has to be unchanged too.
+    '');
   await client.query(
-    `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
-    [seeded.projectId, seeded.runId]);
-  assert.deepEqual((await client.query(
-    `SELECT "status"::text AS status, "accepted_run_id"::text AS run
-       FROM "project" WHERE "id" = $1::uuid`, [seeded.projectId])).rows[0],
-  { status: 'DONE', run: seeded.runId });
+    `UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [seeded.projectId]);
+  assert.equal((await client.query(
+    `SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid`, [seeded.projectId],
+  )).rows[0].status, 'DONE');
+  assert.equal((await client.query(
+    `SELECT "text" FROM "project_acceptance_criterion_definition" WHERE "id" = $1::uuid`,
+    [seeded.definitionId])).rows[0].text, 'The criteria survive');
 });
 
 // (e) ------------------------------------------------------------------------------------------

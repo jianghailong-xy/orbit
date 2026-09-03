@@ -7,7 +7,7 @@
  * `project-attribution-surface.ts` on the server, precisely so the web app, the CLI and anything
  * after them cannot answer them differently.
  *
- * §5 of the acceptance criteria is why the labels are here at all: a screen must not leave the
+ * §5 of the project's stated criteria is why the labels are here at all: a screen must not leave the
  * meaning of a state to colour or to prose. Every state below has a WORD, and the word comes from
  * a closed map keyed by a value the server sent — so a state nobody wrote a label for renders as
  * the raw code rather than as an empty chip that looks like "fine".
@@ -21,7 +21,6 @@ export interface AttributionProjectRef {
   projectPublicId?: string;
   title: string;
   status: AttributionProjectStatus;
-  acceptanceEpoch: string;
 }
 
 export interface AttributionDiscovery {
@@ -32,18 +31,6 @@ export interface AttributionDiscovery {
   recorded: boolean;
   absentReason: string | null;
   authority: 'EVIDENCE_ONLY';
-}
-
-export interface AttributionAcceptanceLink {
-  runId: string;
-  attempt: string;
-  ordinal: number;
-  criterionKey: string;
-  text: string;
-  verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
-  epoch: string;
-  current: boolean;
-  staleReason: 'EPOCH_ADVANCED' | 'RUN_SUPERSEDED' | null;
 }
 
 export type CrossingState = 'PENDING' | 'APPROVED' | 'DENIED' | 'APPLIED';
@@ -78,8 +65,6 @@ export interface TaskAttribution {
   owning: AttributionProjectRef | null;
   owningAbsentReason: string | null;
   discovery: AttributionDiscovery;
-  acceptance: AttributionAcceptanceLink[];
-  acceptanceAbsentReason: string | null;
   crossing: AttributionCrossing | null;
   crossingAbsentReason: string | null;
   blocker: AttributionBlocker | null;
@@ -95,11 +80,7 @@ export interface ProjectCrossingRow {
   toProjectId: string;
   toProjectPublicId?: string;
   fromProject?: { title: string; status: AttributionProjectStatus } | null;
-  toProject?: {
-    title: string;
-    status: AttributionProjectStatus;
-    acceptanceEpoch: string;
-  } | null;
+  toProject?: { title: string; status: AttributionProjectStatus } | null;
   kind: string;
   subjectTaskId: string | null;
   subjectTaskPublicId?: string;
@@ -110,19 +91,6 @@ export interface ProjectCrossingRow {
   requestedAt: string;
   decidedAt: string | null;
   expiresAt: string | null;
-}
-
-/** `GET /projects/:id/reopen` — what a reopen would cost, before it is spent. */
-export interface ReopenImpact {
-  status: AttributionProjectStatus;
-  settled: boolean;
-  fromEpoch: string;
-  toEpoch: string;
-  retiringRuns: number;
-  wasLegacy: boolean;
-  acknowledgement: string | null;
-  refusalCode: string | null;
-  requiredAction: string;
 }
 
 /**
@@ -154,17 +122,10 @@ export const CROSSING_STATE_MEANING: Readonly<Record<CrossingState, string>> = {
   APPLIED: 'this answer has been spent; it authorises nothing further',
 };
 
-/** Why a conclusion is no longer current, said as the two different things they are. */
-export const STALE_REASON_LABEL: Readonly<Record<string, string>> = {
-  EPOCH_ADVANCED: 'from an earlier acceptance epoch — this project was reopened',
-  RUN_SUPERSEDED: 'superseded by a later attempt in the same epoch',
-};
-
 /** Why a fact is absent. A screen that printed nothing here would read as "there is none". */
 export const ABSENT_REASON_LABEL: Readonly<Record<string, string>> = {
   FILED_UNDER_NO_PROJECT: 'This task is filed under no project.',
   NO_DISCOVERY_RECORDED: 'Nothing was recorded about where this work was noticed.',
-  NOT_CITED_BY_ACCEPTANCE: 'No acceptance criterion cites this task as its evidence.',
   NO_CROSSING_DECLARED: 'No declared crossing touches this task.',
   NOTHING_BLOCKING_ATTRIBUTION: 'Nothing is blocking where this work counts.',
 };

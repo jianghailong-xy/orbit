@@ -76,7 +76,6 @@ async function makeProject(
       ownerId,
       title,
       status,
-      ...(status === ProjectStatus.DONE ? { legacyAcceptedAt: new Date() } : {}),
     },
   });
   return id;

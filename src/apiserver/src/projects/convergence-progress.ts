@@ -40,7 +40,8 @@ import {
 export interface ProgressVector {
   /** Which target this measurement is against. Two vectors are only comparable when these match. */
   scopeHash: string;
-  acceptanceClosed: number;
+  /** How many criteria the project STATES. Migration 0229 removed the judgment, so there is no
+   *  companion count of how many hold: nothing concludes that about a criterion any more. */
   acceptanceTotal: number;
   openP0: number;
   openP1: number;
@@ -51,7 +52,6 @@ export interface ProgressVector {
 
 export const EMPTY_PROGRESS_VECTOR: Readonly<ProgressVector> = {
   scopeHash: '',
-  acceptanceClosed: 0,
   acceptanceTotal: 0,
   openP0: 0,
   openP1: 0,
@@ -62,7 +62,6 @@ export const EMPTY_PROGRESS_VECTOR: Readonly<ProgressVector> = {
 
 /** Which way each numeric dimension is allowed to move for the change to count as improvement. */
 const DIMENSIONS: ReadonlyArray<{ key: keyof ProgressVector; better: 'UP' | 'DOWN' }> = [
-  { key: 'acceptanceClosed', better: 'UP' },
   { key: 'openP0', better: 'DOWN' },
   { key: 'openP1', better: 'DOWN' },
   { key: 'regressions', better: 'DOWN' },

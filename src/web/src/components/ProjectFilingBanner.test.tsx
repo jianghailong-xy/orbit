@@ -44,15 +44,14 @@ describe('ProjectFilingBanner', () => {
     expect(html).toContain(PROJECT);
   });
 
-  it('shows the acceptance epoch when the server reports one, and nothing when it does not', () => {
-    expect(paint({ title: 'p', status: 'OPEN', acceptanceEpoch: '4' })).toContain('epoch 4');
-    // AC3, mixed versions: a build that predates the column serves the rest of the document
-    // unchanged, and inventing an epoch for it would be this banner asserting a fact.
+  it('never reports an acceptance epoch: 0229 removed the column it read', () => {
     expect(paint({ title: 'p', status: 'OPEN' })).not.toContain('epoch');
+    // Even if an older server still sent one, the banner has no place to put it.
+    expect(paint({ title: 'p', status: 'OPEN', acceptanceEpoch: '4' } as never)).not.toContain('epoch');
   });
 
   it('warns before submit that a settled project takes no new work, with the code', () => {
-    const html = paint({ publicId: PROJECT, title: 'p', status: 'DONE', acceptanceEpoch: '4' });
+    const html = paint({ publicId: PROJECT, title: 'p', status: 'DONE' });
     expect(html).toContain('This project is settled');
     expect(html).toContain('PROJECT_REOPEN_REQUIRED');
     expect(paint({ title: 'p', status: 'OPEN' })).not.toContain('This project is settled');

@@ -6,10 +6,8 @@ import {
   ABSENT_REASON_LABEL,
   CROSSING_STATE_LABEL,
   CROSSING_STATE_MEANING,
-  STALE_REASON_LABEL,
   labelFor,
   publicIdOf,
-  type AttributionAcceptanceLink,
   type AttributionProjectRef,
   type TaskAttribution,
 } from '../lib/attribution';
@@ -30,7 +28,7 @@ import {
  *    is CALLED, and an unknown code renders as itself rather than as blank.
  *  - **No state is carried by colour or by prose alone** (AC5). Every chip has a word, every code
  *    is printed as the code, and a stale conclusion says WHICH of the two ways it went stale.
- *  - **An absent fact says why it is absent.** "No acceptance criterion cites this task" and "this
+ *  - **An absent fact says why it is absent.** "No crossing touches this task" and "this
  *    build cannot tell you" are different answers, and an empty section says neither.
  */
 
@@ -60,13 +58,6 @@ export function ProjectIdentity({ project }: { project: AttributionProjectRef })
       </Typography.Text>{' '}
       <Tag aria-label={`Project status ${project.status}`} title={`Project status ${project.status}`}>
         {project.status}
-      </Tag>{' '}
-      <Tag
-        aria-label={`Acceptance epoch ${project.acceptanceEpoch}`}
-        title={`Acceptance epoch ${project.acceptanceEpoch}`}
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
-        epoch {project.acceptanceEpoch}
       </Tag>
     </span>
   );
@@ -79,38 +70,6 @@ function Absent({ reason }: { reason: string | null }) {
     <Typography.Text type="secondary">
       {reason ? labelFor(ABSENT_REASON_LABEL, reason) : 'Not reported by this server build.'}
     </Typography.Text>
-  );
-}
-
-/**
- * One acceptance criterion that cites this task, and whether it still counts.
- *
- * The word `CURRENT` / `NOT CURRENT` is the primary signal and the stale REASON is beside it,
- * because the two reasons are two different things to do next: an epoch that moved means somebody
- * reopened the project, and a superseded run means somebody ran acceptance again.
- */
-export function AcceptanceLinkRow({ link }: { link: AttributionAcceptanceLink }) {
-  return (
-    <li style={{ padding: '6px 0', listStyle: 'none' }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <Tag style={{ fontVariantNumeric: 'tabular-nums' }}>#{link.ordinal}</Tag>
-        <Tag aria-label={`Verdict ${link.verdict ?? 'undecided'}`}>{link.verdict ?? 'UNDECIDED'}</Tag>
-        <Tag
-          aria-label={link.current ? 'Current acceptance epoch' : 'Not the current acceptance epoch'}
-        >
-          {link.current ? 'CURRENT' : 'NOT CURRENT'}
-        </Tag>
-        <Typography.Text type="secondary" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          epoch {link.epoch} · attempt {link.attempt}
-        </Typography.Text>
-      </div>
-      <div>{link.text}</div>
-      {link.staleReason ? (
-        <Typography.Text type="secondary">
-          {labelFor(STALE_REASON_LABEL, link.staleReason)}
-        </Typography.Text>
-      ) : null}
-    </li>
   );
 }
 
@@ -154,18 +113,6 @@ export function TaskAttributionBody({ view }: { view: TaskAttribution }) {
           </div>
         ) : (
           <Absent reason={view.discovery.absentReason} />
-        )}
-      </Row>
-
-      <Row label="Acceptance">
-        {view.acceptance.length ? (
-          <ul style={{ margin: 0, padding: 0 }}>
-            {view.acceptance.map((link) => (
-              <AcceptanceLinkRow key={`${link.runId}:${link.ordinal}`} link={link} />
-            ))}
-          </ul>
-        ) : (
-          <Absent reason={view.acceptanceAbsentReason} />
         )}
       </Row>
 

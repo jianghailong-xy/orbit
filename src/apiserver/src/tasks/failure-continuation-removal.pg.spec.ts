@@ -74,23 +74,16 @@ const CORE_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
  * (j) `project_acceptance_*`, field for field. Copied from the census the 0224 removal suite
  * pinned, so "unchanged" means unchanged against the same statement of it rather than against
  * whatever this file happened to read first.
+ *
+ * The run, the per-run criterion, the conclusion and the audit were pinned here until
+ * `0229_project_acceptance_judgment_removal` dropped the four of them — a later and separate
+ * account-owner decision, which removed the project acceptance judgment whole and kept the stated
+ * criteria. `project_acceptance_criteria_confirmation` went the same way in 0226. What is left is
+ * the authored declaration, still pinned column for column.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
-  project_acceptance_audit:
-    'id:uuid!, project_id:uuid!, kind:text!, run_id:uuid, reason:text, detail:jsonb!, created_at:timestamp(3) without time zone!',
-  project_acceptance_conclusion:
-    'id:uuid!, project_id:uuid!, evidence_run_id:uuid!, evidence_version:bigint!, ordinal:integer!, criterion_key:text!, criterion_text:text!, definition_id:uuid, definition_revision:integer, verdict:project_acceptance_verdict!, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_by:text!, decided_by_id:uuid!, acting_session_id:uuid, decided_at:timestamp(3) without time zone!, created_at:timestamp(3) without time zone!',
-  // `project_acceptance_criteria_confirmation` was in this census when this file was written.
-  // A sibling removal (0226_project_criteria_confirmation_removal) dropped it -- zero writers,
-  // zero readers, and the source-audit contract still naming a symbol deleted with the owner
-  // queue. It is absent here because the relation is absent, not because this assertion relaxed:
-  // every other acceptance table is still pinned column-for-column below.
-  project_acceptance_criterion:
-    'id:uuid!, run_id:uuid!, project_id:uuid!, ordinal:integer!, criterion_key:text!, criterion_text:text!, verdict:project_acceptance_verdict, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, definition_id:uuid, definition_revision:integer, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer',
   project_acceptance_criterion_definition:
     'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
-  project_acceptance_run:
-    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb',
 };
 
 function publishes(): RealtimeService {

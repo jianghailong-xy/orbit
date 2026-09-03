@@ -69,12 +69,18 @@ const DROPPED_FUNCTIONS = [
  * `project_acceptance_run_immutable_guard` refuses to rewrite a concluded run — which is itself one
  * of the walls this removal must not have knocked down.
  */
-async function seedAcceptedProject(client: Client, label: string, run: {
-  verdict?: 'PASS' | 'FAIL'; superseded?: boolean; conclusion?: 'PASS' | 'FAIL';
-} = {}): Promise<{ ownerId: string; projectId: string; runId: string }> {
+/**
+ * A project with one authored criterion, and nothing that judges it.
+ *
+ * This used to seed an accepted project: a run, a per-run criterion verdict and a conclusion event,
+ * so the 0150 gate had something to allow a DONE against. Migration 0229 removed all three tables
+ * and the gate with them, so what a fixture can build now is the declaration.
+ */
+async function seedProject(client: Client, label: string): Promise<{
+  ownerId: string; projectId: string; definitionId: string;
+}> {
   const ownerId = randomUUID();
   const projectId = randomUUID();
-  const runId = randomUUID();
   const definitionId = randomUUID();
   await client.query(
     `INSERT INTO "user" ("id","email","password_hash","name")
@@ -83,62 +89,18 @@ async function seedAcceptedProject(client: Client, label: string, run: {
   );
   await client.query(
     `INSERT INTO "project" ("id","owner_id","title","goal","status","updated_at")
-     VALUES ($1,$2,$3,'prove the gate still decides','OPEN'::"project_status",now())`,
+     VALUES ($1,$2,$3,'prove nothing decides any more','OPEN'::"project_status",now())`,
     [projectId, ownerId, `removal ${label}`],
   );
   await client.query(
     `INSERT INTO "project_acceptance_criterion_definition"
        ("id","project_id","ordinal","text","verification_method","completion_criterion",
         "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
-     VALUES ($1,$2,1,'The gate still decides','a judgment reads the gate',
+     VALUES ($1,$2,1,'The gate is gone','a person reads the criterion',
              'EVIDENCE_JUDGMENT'::"task_completion_criterion",$3,$4,$5,now(),now())`,
     [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
   );
-  // `project_acceptance_definition_digest` is the digest the 0172 trigger writes to
-  // `project.acceptance_criteria_digest`, and the one 0182's gate compares `criteria_revision`
-  // against. The proposal channel's own set-digest helper used to be read here; 0223 dropped it
-  // with the rest of that channel, and it was never the value this gate compares.
-  const criteriaDigest = (await client.query(
-    'SELECT project_acceptance_definition_digest($1::uuid) AS digest', [projectId],
-  )).rows[0].digest as string;
-  await client.query(
-    `UPDATE "project" SET "acceptance_criteria_digest" = $2 WHERE "id" = $1::uuid`,
-    [projectId, criteriaDigest],
-  );
-  // Criterion results and conclusions carry the key; the definition itself is matched by
-  // (definition_id, revision), which is what `project_acceptance_standing` joins on.
-  const criterionKey = 'the-gate-still-decides';
-  await client.query(
-    `INSERT INTO "project_acceptance_run"
-       ("id","project_id","attempt","criteria_snapshot","criteria_revision","input_digest",
-        "result_digest","verdict","decided_by","digest_version","acceptance_epoch",
-        "completed_at","superseded_at","superseded_reason","created_at")
-     VALUES ($1,$2,1,'[]'::jsonb,$3,$4,$5,$6::"project_acceptance_verdict",
-             'COORDINATOR_AGENT',4,0,now(),$7,$8,now())`,
-    [runId, projectId, criteriaDigest, 'b'.repeat(64), 'c'.repeat(64),
-      run.verdict ?? 'PASS',
-      run.superseded ? new Date() : null,
-      run.superseded ? 'a newer evidence version replaced it' : null],
-  );
-  await client.query(
-    `INSERT INTO "project_acceptance_criterion"
-       ("id","run_id","project_id","ordinal","criterion_key","criterion_text","definition_id",
-        "definition_revision","verdict","created_at")
-     VALUES ($1,$2,$3,1,$4,'The gate still decides',$5,1,
-             $6::"project_acceptance_verdict",now())`,
-    [randomUUID(), runId, projectId, criterionKey, definitionId, run.conclusion ?? 'PASS'],
-  );
-  await client.query(
-    `INSERT INTO "project_acceptance_conclusion"
-       ("id","project_id","evidence_run_id","evidence_version","ordinal","criterion_key",
-        "criterion_text","definition_id","definition_revision","verdict","decided_by",
-        "decided_by_id","decided_at")
-     VALUES ($1,$2,$3,1,1,$4,'The gate still decides',$5,1,
-             $6::"project_acceptance_verdict",'USER',$7,now())`,
-    [randomUUID(), projectId, runId, criterionKey, definitionId,
-      run.conclusion ?? 'PASS', ownerId],
-  );
-  return { ownerId, projectId, runId };
+  return { ownerId, projectId, definitionId };
 }
 
 async function refusal(client: Client, sql: string, values: unknown[]): Promise<string> {
@@ -215,149 +177,109 @@ suite('(a) the installed database has no obligation algebra, canonical gate or d
   });
 
 // (f) ---------------------------------------------------------------------------------------------
-suite('(f) the four project triggers keep their names, their subjects and their firing order',
+suite('(f) the four project triggers are gone too, by a later decision than this one',
   async (t) => {
     const client = await connect();
     t.after(async () => { await client.end(); });
 
+    // 0222 removed 0197's `project_acceptance_done_insert_gate` and restored 0150's four. On
+    // 2026-09-03 the account owner removed the whole project acceptance judgment, so migration
+    // 0229 took those four as well. `project` now carries no acceptance trigger of any kind, and
+    // 0150's load-bearing alphabetical firing order went with them — deliberately.
     const triggers = await client.query(`
-      SELECT t.tgname, pg_get_triggerdef(t.oid) AS def
+      SELECT t.tgname
         FROM pg_trigger t
        WHERE t.tgrelid = 'project'::regclass AND NOT t.tgisinternal
          AND t.tgname LIKE 'project\\_acceptance\\_%'
        ORDER BY t.tgname`);
-    assert.deepEqual(triggers.rows.map((row) => row.tgname), [
-      'project_acceptance_advance_epoch',
-      'project_acceptance_criteria_fact',
-      'project_acceptance_done_gate',
-      'project_acceptance_epoch_audit',
-    ], "0197's project_acceptance_done_insert_gate is the only one that goes");
+    assert.deepEqual(triggers.rows, []);
 
-    const byName = new Map(triggers.rows.map((row) => [row.tgname as string, row.def as string]));
-    assert.match(byName.get('project_acceptance_advance_epoch')!, /BEFORE UPDATE ON public\.project/);
-    assert.match(byName.get('project_acceptance_done_gate')!,
-      /BEFORE UPDATE OF status, accepted_run_id ON public\.project/);
-    assert.match(byName.get('project_acceptance_epoch_audit')!, /AFTER UPDATE ON public\.project/);
-    assert.match(byName.get('project_acceptance_criteria_fact')!,
-      /AFTER INSERT OR UPDATE OF acceptance_criteria ON public\.project/);
-
-    // The names are load-bearing: PostgreSQL fires BEFORE ROW triggers in alphabetical order, and
-    // `..._advance_epoch` sorting before `..._done_gate` is what pins the epoch the gate reads.
-    assert.ok('project_acceptance_advance_epoch' < 'project_acceptance_done_gate');
-
-    // And the gate is once more the acceptance body, not a delegation to a canonical one.
-    const body = (await client.query(
-      `SELECT prosrc FROM pg_proc WHERE proname = 'project_acceptance_done_gate'`)).rows[0].prosrc;
-    assert.match(body, /project_acceptance_run/);
-    assert.match(body, /ACCEPTANCE_MISSING/);
-    assert.match(body, /ACCEPTANCE_EVIDENCE_STALE/);
-    assert.doesNotMatch(body, /project_canonical_done_gate|obligation/i);
+    // And neither gate function survives, under either name.
+    const gates = await client.query(`
+      SELECT proname FROM pg_proc
+       WHERE proname IN ('project_acceptance_done_gate', 'project_canonical_done_gate')`);
+    assert.deepEqual(gates.rows, []);
   });
 
 // (g)(h)(i)(j)(k) -----------------------------------------------------------------------------------
-suite('(g)-(k) the 0150 acceptance DONE gate still decides, positively and negatively',
+suite('(g)-(k) nothing decides a project DONE: the write goes through, unconditionally',
   async (t) => {
     const client = await connect();
     t.after(async () => { await client.end(); });
-    const seeded = await seedAcceptedProject(client, 'gate');
 
-    // (g) no accepted_run_id at all.
-    assert.match(
-      await refusal(client, `UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`,
-        [seeded.projectId]),
-      /ACCEPTANCE_MISSING/);
+    // Five cases used to be refused here — no accepted run, a non-PASS run, a superseded run, a
+    // stale epoch, an open blocker. Every one of them is now the same case: a column write that
+    // commits. Asserted positively rather than as five absent errors, because "no error was
+    // raised" and "the statement did what it says" are different claims and only the second is
+    // what the account owner asked for.
+    for (const label of ['no-run', 'non-pass', 'superseded', 'stale-epoch', 'blocked']) {
+      const seeded = await seedProject(client, label);
+      const refused = await refusal(
+        client, `UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [seeded.projectId]);
+      assert.equal(refused, '', `${label} was refused: ${refused}`);
 
-    // (h) an acceptance run that did not conclude PASS. What "did not PASS" means after 0179 is the
-    // append-only conclusion projection, not the run's immutable `verdict` summary column: a run
-    // that says FAIL can have a current projection in which every criterion is PASS because a later
-    // event refuted the failure, and reading the summary would make that project unclosable behind
-    // a row nothing may rewrite. So the fixture states the non-PASS as the model states it.
-    const failed = await seedAcceptedProject(client, 'gate-fail',
-      { verdict: 'FAIL', conclusion: 'FAIL' });
-    assert.match(
-      await refusal(client,
-        `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
-        [failed.projectId, failed.runId]),
-      /ACCEPTANCE_MISSING/);
+      await client.query(
+        `UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [seeded.projectId]);
+      assert.equal((await client.query(
+        `SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid`, [seeded.projectId],
+      )).rows[0].status, 'DONE');
 
-    // And the converse, which is the reason the summary is not the input: a run whose summary is
-    // FAIL but whose current projection is all PASS still closes the project.
-    const refuted = await seedAcceptedProject(client, 'gate-refuted', { verdict: 'FAIL' });
+      // And the criterion it was never judged against is still stated, word for word.
+      assert.equal((await client.query(
+        `SELECT "text" FROM "project_acceptance_criterion_definition" WHERE "id" = $1::uuid`,
+        [seeded.definitionId],
+      )).rows[0].text, 'The gate is gone');
+    }
+
+    // The reverse door too: DONE back to OPEN, with nothing to acknowledge and no epoch to advance.
+    const reopened = await seedProject(client, 'reopen');
     await client.query(
-      `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
-      [refuted.projectId, refuted.runId]);
-    assert.equal((await client.query(
-      `SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid`, [refuted.projectId],
-    )).rows[0].status, 'DONE');
-
-    // (i) an acceptance run that was superseded.
-    const stale = await seedAcceptedProject(client, 'gate-stale', { superseded: true });
-    assert.match(
-      await refusal(client,
-        `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
-        [stale.projectId, stale.runId]),
-      /ACCEPTANCE_EVIDENCE_STALE/);
-
-    // (j) the bypass the 0150 alphabetical-order comment names: writing the epoch in the same
-    // statement that writes DONE. `project_acceptance_advance_epoch` sorts first and pins the
-    // value the gate then reads, so a hand-written 0 does not become the epoch it compares.
-    assert.match(
-      await refusal(client,
-        `UPDATE "project" SET "status" = 'DONE', "acceptance_epoch" = 0 WHERE "id" = $1::uuid`,
-        [seeded.projectId]),
-      /ACCEPTANCE_MISSING|ACCEPTANCE_EVIDENCE_STALE/);
-    assert.equal((await client.query(
-      `SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid`, [seeded.projectId],
-    )).rows[0].status, 'OPEN', 'the bypass left the project OPEN');
-
-    // (k) a PASS run that belongs to the project and was not superseded still closes it.
+      `UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [reopened.projectId]);
     await client.query(
-      `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
-      [seeded.projectId, seeded.runId]);
-    const settled = (await client.query(
-      `SELECT "status"::text AS status, "accepted_run_id"::text AS run
-         FROM "project" WHERE "id" = $1::uuid`, [seeded.projectId])).rows[0];
-    assert.deepEqual(settled, { status: 'DONE', run: seeded.runId });
+      `UPDATE "project" SET "status" = 'OPEN' WHERE "id" = $1::uuid`, [reopened.projectId]);
+    assert.equal((await client.query(
+      `SELECT "status"::text AS status FROM "project" WHERE "id" = $1::uuid`, [reopened.projectId],
+    )).rows[0].status, 'OPEN');
   });
 
 // (l)(m)(n) -----------------------------------------------------------------------------------------
-suite('(l)-(n) the acceptance standard set itself is untouched and still concludes',
+suite('(l)-(n) the acceptance standard set itself is untouched; the judging around it is gone',
   async (t) => {
     const client = await connect();
     t.after(async () => { await client.end(); });
 
-    for (const table of ['project_acceptance_criterion_definition', 'project_acceptance_criterion',
-      'project_acceptance_conclusion', 'project_acceptance_run', 'project_acceptance_audit']) {
+    // The one relation that survived 0222, 0227, 0228 and 0229 in turn.
+    assert.equal((await client.query(
+      `SELECT to_regclass('project_acceptance_criterion_definition')::text AS name`,
+    )).rows[0].name, 'project_acceptance_criterion_definition');
+    for (const table of ['project_acceptance_criterion', 'project_acceptance_conclusion',
+      'project_acceptance_run', 'project_acceptance_audit']) {
       assert.equal((await client.query(
-        `SELECT to_regclass($1)::text AS name`, [table])).rows[0].name, table);
-    }
-    // (l)(m) the columns a stated criterion, a criterion result and a conclusion are made of.
-    const columns = async (table: string) => (await client.query(`
-      SELECT a.attname FROM pg_attribute a
-       WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped
-       ORDER BY a.attname`, [table])).rows.map((row) => row.attname as string);
-    for (const field of ['text', 'verification_method', 'completion_criterion', 'revision',
-      'content_hash']) {
-      assert.ok((await columns('project_acceptance_criterion_definition')).includes(field), field);
-    }
-    for (const field of ['criterion_key', 'criterion_text', 'verdict', 'definition_id',
-      'definition_revision']) {
-      assert.ok((await columns('project_acceptance_criterion')).includes(field), field);
-    }
-    for (const field of ['verdict', 'decided_by', 'decided_by_id', 'decided_at',
-      'evidence_version']) {
-      assert.ok((await columns('project_acceptance_conclusion')).includes(field), field);
+        `SELECT to_regclass($1)::text AS name`, [table])).rows[0].name, null, table);
     }
 
-    // (n) one stated criterion still projects PASS with the canonical gate no longer folded into
-    // it. 0215's run-conclusion derivation used to be read here as well; 0227 removed it, so the
-    // per-criterion projection beside it is the whole of what this checks.
-    const seeded = await seedAcceptedProject(client, 'standing');
-    const standing = await client.query(
-      'SELECT * FROM project_acceptance_standing($1::uuid, 1::bigint)', [seeded.projectId]);
-    assert.equal(standing.rows.length, 1);
-    assert.equal(standing.rows[0].verdict, 'PASS');
-    assert.equal(seeded.runId.length > 0, true);
+    // (l)(m) the columns a stated criterion is made of, all of them still there.
+    const columns = (await client.query(`
+      SELECT a.attname FROM pg_attribute a
+       WHERE a.attrelid = 'project_acceptance_criterion_definition'::regclass
+         AND a.attnum > 0 AND NOT a.attisdropped
+       ORDER BY a.attname`)).rows.map((row) => row.attname as string);
+    for (const field of ['text', 'verification_method', 'completion_criterion', 'revision',
+      'content_hash', 'semantic_hash', 'evaluation_plan_hash', 'acceptance_command',
+      'acceptance_expected_exit_code', 'evidence_task_id']) {
+      assert.ok(columns.includes(field), field);
+    }
+
+    // (n) a stated criterion is still normalized and hashed by the trigger 0229 kept, and there is
+    // no standing function left to ask what it concluded.
+    const seeded = await seedProject(client, 'standing');
+    const stored = (await client.query(
+      `SELECT "revision", "content_hash" FROM "project_acceptance_criterion_definition"
+        WHERE "id" = $1::uuid`, [seeded.definitionId])).rows[0];
+    assert.equal(stored.revision, 1);
+    assert.notEqual(stored.content_hash, 'a'.repeat(64));
+    assert.deepEqual((await client.query(
+      `SELECT proname FROM pg_proc WHERE proname = 'project_acceptance_standing'`)).rows, []);
   });
 
 // (o)(p)(q)(r) --------------------------------------------------------------------------------------
@@ -381,7 +303,7 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
 
   // (q) an ordinary task/session/run_event write still commits, and (o) the twelve append-only
   // triggers that borrowed 0194's guard still refuse a rewrite.
-  const seeded = await seedAcceptedProject(client, 'core-writes');
+  const seeded = await seedProject(client, 'core-writes');
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
   const taskId = randomUUID();

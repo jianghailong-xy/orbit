@@ -25,9 +25,9 @@ import { WakeFact } from './coordinator-wake';
  *
  * The generic events do not say what to conclude or do: the state this judgment is about is in the
  * database, not in this prompt. `PROJECT_TASKS_SETTLED` is the deliberate exception added by T7.
- * That event has a closed acceptance protocol whose ORDER is itself an invariant: code lands on
- * main, merge evidence is recorded, and only then may an acceptance run freeze the facts. This
- * does not pre-decide a verdict; it prevents a verdict from being formed against the wrong digest.
+ * That event has a closed protocol whose ORDER is itself an invariant: code lands on main, and
+ * only then is merge evidence recorded. Migration 0229 removed the acceptance judgment this used
+ * to end in, so the protocol now ends at the observation rather than at a verdict.
  *
  * The one thing said about the session itself — that it is for this fact and lasts one turn — is a
  * property of the mechanism, not an instruction. It is here because a reader that assumed it could
@@ -100,32 +100,29 @@ export function describeWakeFact(fact: WakeFact): string {
  * T7's settlement-only action protocol.
  *
  * It is conditional rather than part of every judgment opening: an attempt-budget wake has no
- * reason to open an acceptance run, while a project-settled wake exists specifically because the
- * old system stopped after the last task and left `runs: []` forever.
+ * reason to look at the target branch, while a project-settled wake exists specifically because
+ * the old system stopped after the last task and never looked again.
+ *
+ * Migration 0229 removed the project acceptance judgment, so this protocol no longer ends in a
+ * verdict. It ends where the evidence ends: has the work actually landed on main, and is that
+ * recorded. Whether the project's stated criteria HOLD is a question nothing in Orbit answers now,
+ * and the prompt says so rather than sending a session looking for a tool that is not there.
  */
 export function settledAcceptanceProtocol(projectId: string): string {
   return (
-    '\n\n这条 PROJECT_TASKS_SETTLED 事实要闭合项目验收；按下面的顺序行动，顺序是硬约束，不是建议：\n'
-    + `1. 先用 project_acceptance（projectId 传 ${projectId}）读取验收标准、runs、mergeEvidence 和 doneGate。\n`
-    + '2. 先确认实现已经真正落到 main，并且 main 上的行为满足验收对象。任务标成 DONE 只说明某个工作分支做完了，'
-    + '不证明 main 已包含它。只要代码还没落 main，或者 mergeEvidence 为空，就开一条“合并并录入主干证据”的任务'
-    + '（task_create 必须带对应 criterionKey），无法安全开任务时就在相关 task_comment 中升级给人；然后结束本轮。'
-    + '这种情况下不得开 acceptance run，更不得写 PASS。\n'
-    + '3. 合并任务的执行顺序必须是：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据 → 将任务置于终态。'
-    + 'project_merge_evidence 会自动推进证据版本；已有结论不会被标成 stale，也不需要谁重开 attempt。\n'
-    + '4. 只有确认 main 已落地且 mergeEvidence 已存在并对应当前 main，才用 project_acceptance_run 求值当前证据版本；'
-    + '这个调用是幂等的，并发判断会拿到同一个版本。随后按清单逐条检查，并用 project_acceptance_verdict '
-    + '提交每一条标准的结论事件和可复查证据，'
-    + '不能漏项。\n'
-    + '5. 服务端的判断会话角色边界仍然有效：这次判断可以完整提交全为 FAIL/INCONCLUSIVE 的 verdict；只要任何一条应为 '
-    + 'PASS，就不得用假的 INCONCLUSIVE 绕过，也不能自己写 PASS。把每条候选 PASS 的证据写入相关 task_comment 并升级给人，'
-    + '由账号所有者通道确认标准集并仅提交真正 EVIDENCE_JUDGMENT 标准的 PASS。任何主体都不能用 project_update 直接写 '
-    + 'status=DONE；标准集已确认且三种判据全部满足后，服务端自动产生 DONE。PASS/确认事件会留下 actor、时间和证据；'
-    + 'DONE 会留下绑定的 run、digest 和自动求值来源。'
-    + '这些记录都不证明持有凭据的一定是真人。\n\n'
-    + '验收顺序再确认一次：合并到 main → project_merge_evidence → project_acceptance_run（幂等求值）→ '
-    + '自动判据求值 / owner 确认标准集并用 project_acceptance_verdict 处理 EVIDENCE_JUDGMENT；'
-    + '缺主干或缺 mergeEvidence 时停在开任务/升级。'
+    '\n\n这条 PROJECT_TASKS_SETTLED 事实要核对主干证据；按下面的顺序行动，顺序是硬约束，不是建议：\n'
+    + `1. 先用 project_get（projectId 传 ${projectId}）读取这个项目声明的验收标准。\n`
+    + '2. 确认实现已经真正落到 main，并且 main 上的行为满足验收对象。任务标成 DONE 只说明某个工作分支做完了，'
+    + '不证明 main 已包含它。只要代码还没落 main，就开一条“合并并录入主干证据”的任务'
+    + '（task_create 必须带对应 criterionKey），无法安全开任务时就在相关 task_comment 中升级给人；然后结束本轮。\n'
+    + '3. 合并任务的执行顺序必须是：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据 → 将任务置于终态。\n'
+    + '4. 到此为止。**Orbit 里没有任何东西会判定这些验收标准**：0229 移除了项目验收判定，'
+    + 'run、逐条裁决、结论事件和 DONE 闸全部不存在了。把逐条核对的结论和证据写进 task_comment 交给账号所有者，'
+    + '不要去找一个能提交裁决的工具——没有。\n'
+    + '5. 你改不了验收标准：尺子归账号所有者通道。project_update 的 status 现在没有守卫，'
+    + '这不是让你去写 DONE 的授权——写不写由账号所有者决定，你把证据交上去。\n\n'
+    + '顺序再确认一次：合并到 main → project_merge_evidence → 在 task_comment 里逐条交证据；'
+    + '缺主干时停在开任务/升级。'
   );
 }
 
@@ -147,15 +144,15 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + `去哪读全量状态：project_get（projectId 传 ${projectId}）给出这个项目的目标、验收标准、作业指导和状态；`
     + `task_list（projectId 传 ${projectId}）给出它下面每个任务的状态、验收标准和依赖；`
     + 'task_get 给出某个任务的完整描述和历史评论。\n\n'
-    + '手上有哪些工具：读——project_get、task_list、task_get、session_list、session_get、project_acceptance；'
-    + '写——task_create、task_update、task_comment、task_start、project_update、project_merge_evidence、'
-    + 'project_acceptance_run、project_acceptance_verdict。\n\n'
+    + '手上有哪些工具：读——project_get、task_list、task_get、session_list、session_get；'
+    + '写——task_create、task_update、task_comment、task_start、project_update、project_merge_evidence。\n\n'
     + '写的时候有三条边界，服务端会照着拒（不是建议）：'
     + '① 普通新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
     + '并受这个项目每天能开多少个任务的预算限制；只有服务端已将本会话绑定到 ACTIVE canonical remediation '
     + 'obligation 时，该 revision 才能作为不伪造 criterionKey 的正交范围理由，并走独立容量上限；'
-    + '② 验收标准你改不了、标准集确认不了，人工标准的 PASS 也写不了——尺子、尺子是否算数和人工结论都归账号所有者通道；'
-    + '③ 项目的 status=DONE 不由任何主体直接写，它只由全部已确认判据满足后自动产生。'
+    + '② 验收标准你改不了——尺子归账号所有者通道；'
+    + '③ 0229 移除了项目验收判定：没有任何东西会判定这些标准，也没有工具能提交裁决。'
+    + 'project_update 的 status 已无守卫，但那不是让你写 DONE 的授权——把证据交给账号所有者。'
     + '这三条是判断会话的角色隔离和按动作留痕，不是对“真人在场”的密码学证明；'
     + '把发现和还差什么写进 task_comment，账号所有者会读到。\n\n'
     + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'

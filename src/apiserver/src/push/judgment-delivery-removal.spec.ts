@@ -59,9 +59,18 @@ test('the removal migration takes the inbox and the outbox, and adds no table in
   assert.doesNotMatch(removal, /CREATE\s+TABLE/iu, 'the removal creates no table of any kind');
 
   // The one surviving device table is `device_token`, which predates all of this.
-  const web = read('src/web/src/pages/JudgmentInboxPage.tsx');
-  assert.doesNotMatch(web, /judgmentInboxPath|judgmentReviewPath/u,
-    'the web inbox must no longer read the removed task-level judgment inbox');
-  assert.match(web, /projectAcceptanceInboxPath/u,
-    'the project acceptance half of that inbox was never part of the judgment machinery');
+  //
+  // The web inbox this used to check is gone too. 0228 left it standing on its project acceptance
+  // half; migration 0229 removed that half on a later account-owner decision, so the page, both
+  // its routes and the sidebar entry that badged it went with it. Asserted as an absence, because
+  // a page that came back would come back reading an endpoint that is no longer served.
+  for (const gone of [
+    'src/web/src/pages/JudgmentInboxPage.tsx',
+    'src/web/src/pages/ProjectAcceptanceReviewPage.tsx',
+    'src/web/src/lib/projectAcceptance.ts',
+  ]) {
+    assert.equal(existsSync(path.join(ROOT, gone)), false, `${gone} survives 0229`);
+  }
+  assert.doesNotMatch(read('src/web/src/App.tsx'), /judgments/u,
+    'the judgment routes must be gone with the pages they mounted');
 });

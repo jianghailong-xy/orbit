@@ -172,28 +172,37 @@ test('the executor removal is subtraction: it installs no new relation', () => {
 });
 
 // The canonical fact/obligation relations used to be asserted here too. 0222 removed the whole
-// obligation algebra by a separate account-owner decision, and 0227 removed the EXECUTABLE
-// admission/attempt machinery by another, so what this file still owns is the acceptance evidence.
-test('the load-bearing acceptance relations were not taken down with it', () => {
-  const standing = [
-    'project_acceptance_run',
-    'project_acceptance_criterion',
-    'project_acceptance_criterion_definition',
-    'project_acceptance_conclusion',
-    'project_acceptance_audit',
-  ];
-  for (const table of standing) {
-    const create = new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${table}"?[\\s(]`, 'i');
-    const drop = new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${table}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i');
-    const verdict = lastVerdict(create, drop);
+// obligation algebra by a separate account-owner decision, 0227 the EXECUTABLE admission/attempt
+// machinery by another, and 0229 the project acceptance JUDGMENT by a third. What this file still
+// owns is the one relation all four removals left standing: the authored criteria.
+test('0219 took down no acceptance relation, and the declaration outlived every later removal', () => {
+  const create = (table: string) =>
+    new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${table}"?[\\s(]`, 'i');
+  const drop = (table: string) =>
+    new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${table}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i');
+
+  const definition = lastVerdict(
+    create('project_acceptance_criterion_definition'), drop('project_acceptance_criterion_definition'));
+  assert.ok(definition, 'project_acceptance_criterion_definition is named by no migration');
+  assert.equal(definition.verdict, 'CREATED',
+    `the criterion definitions were dropped by ${definition.dir}`);
+
+  // The judgment relations beside it were dropped, and by 0229 rather than by this removal — which
+  // is what this file is about: 0219 issued no statement against any of them.
+  for (const table of [
+    'project_acceptance_run', 'project_acceptance_criterion',
+    'project_acceptance_conclusion', 'project_acceptance_audit',
+  ]) {
+    const verdict = lastVerdict(create(table), drop(table));
     assert.ok(verdict, `${table} is named by no migration`);
-    assert.equal(verdict.verdict, 'CREATED', `${table} was dropped by ${verdict.dir}`);
+    assert.equal(verdict.verdict, 'DROPPED');
+    assert.equal(verdict.dir, '0229_project_acceptance_judgment_removal');
   }
-  // The DONE gate is a trigger function, and it must still be the last word on project completion.
   const gate = lastVerdict(
     /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+"?project_acceptance_done_gate"?\s*\(/i,
     /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?"?project_acceptance_done_gate"?/i,
   );
   assert.ok(gate);
-  assert.equal(gate.verdict, 'CREATED', `the DONE gate was dropped by ${gate.dir}`);
+  assert.equal(gate.verdict, 'DROPPED');
+  assert.equal(gate.dir, '0229_project_acceptance_judgment_removal');
 });

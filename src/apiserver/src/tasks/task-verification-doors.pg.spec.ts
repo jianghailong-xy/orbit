@@ -803,7 +803,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     assert.equal(published.length, 0, 'an aggregation that changed nothing is not an event');
   });
 
-  await t.test('a task verdict does not change the project acceptance digest', async () => {
+  await t.test('a task verdict does not change the project’s stated criteria', async () => {
     await emptyWorld(client);
     const w = await world(db, 'acceptance');
     const tasks = tasksService(db);
@@ -831,11 +831,17 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     });
 
     // N4: task verdicts are evidence for task execution, not project acceptance criteria. Neither
-    // filing nor concluding this check may redefine whether the project achieved its stated goal.
-    const beforeVerdict = await acceptance.digest(prisma, w.projectId);
+    // filing nor concluding this check may redefine what the project states it is for. Since 0229
+    // the criteria are the whole of that statement, so the assertion is that the DEFINITION rows
+    // are byte-identical either side of the verdict.
+    const criteriaOf = async () => prisma.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: w.projectId },
+      orderBy: { ordinal: 'asc' },
+    });
+    const beforeVerdict = JSON.stringify(await criteriaOf());
     await tasks.update(w.ownerId, check.id, { verdict: TaskVerdict.PASS });
-    const afterVerdict = await acceptance.digest(prisma, w.projectId);
-    assert.equal(beforeVerdict, afterVerdict, 'task state is outside the project acceptance digest');
+    const afterVerdict = JSON.stringify(await criteriaOf());
+    assert.equal(beforeVerdict, afterVerdict, 'task state must not rewrite the stated criteria');
   });
 
   await t.test('a check is counted for the phase it points at, not for the one it sits under', async () => {

@@ -30,10 +30,10 @@ export type FindingSeverity = 'P0' | 'P1' | 'P2' | 'P3';
 
 export const FINDING_SEVERITIES: readonly FindingSeverity[] = ['P0', 'P1', 'P2', 'P3'];
 
-/** One stated acceptance criterion of the task's CURRENT revision, and whether it is closed. */
+/** One stated acceptance criterion of the task's CURRENT revision. Migration 0229 removed the
+ *  judgment, so there is nothing to say about it beyond that it was read. */
 export interface AcceptanceEvidence {
   id: string;
-  closed: boolean;
   observedAt: Date;
 }
 
@@ -123,7 +123,6 @@ export function deriveProgressVector(
   const open = snapshot.findings.filter((f) => !f.resolved);
   const vector: ProgressVector = {
     scopeHash: snapshot.scopeHash,
-    acceptanceClosed: snapshot.acceptance.filter((a) => a.closed).length,
     acceptanceTotal: snapshot.acceptance.length,
     openP0: open.filter((f) => f.severity === 'P0').length,
     openP1: open.filter((f) => f.severity === 'P1').length,

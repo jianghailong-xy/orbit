@@ -40,8 +40,6 @@ function fixture(managed = true) {
         return {
           ...project,
           goal: null,
-          acceptanceCriteria: null,
-          acceptanceCriteriaFormat: 'LEGACY_TEXT',
           instructions: null,
           status: 'OPEN',
           members: [],
@@ -77,9 +75,6 @@ function fixture(managed = true) {
           config_revision: 0n,
           status: 'OPEN',
           coordinator_session_id: project.coordinatorSessionId,
-          accepted_run_id: null,
-          legacy_accepted_at: null,
-          acceptance_epoch: 0n,
         }];
       }
       throw new Error(`unexpected raw query: ${sql}`);

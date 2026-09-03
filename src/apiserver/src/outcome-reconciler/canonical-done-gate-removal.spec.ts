@@ -303,12 +303,12 @@ test('(c) each of the eight canonical-gate readers is handled, and none holds ra
     // file is the owner inbox, which is what it was cut back TO rather than what it was cut back
     // FROM, and is therefore still the property worth pinning here.
     'src/apiserver/src/outcome-reconciler/outcome-surface.service.ts': [/humanInbox/],
-    // 0150's acceptance gate is restored here; the 0197 canonical gate reader is gone.
-    'src/apiserver/src/projects/project-acceptance.ts': [/ACCEPTANCE_MISSING/, /ACCEPTANCE_BLOCKED/],
-    'src/apiserver/src/projects/project-acceptance.service.ts': [
-      /async assertDoneAllowed\(/, /assertDoneAllowedForDigest/, /async evaluateGate\(/,
-    ],
-    'src/apiserver/src/projects/projects.controller.ts': [/@Get\(':id\/acceptance'\)/],
+    // 0150's acceptance gate was restored here when the 0197 canonical one was removed, and
+    // migration 0229 later removed 0150's too — so what these two files are cut back TO is the
+    // criteria themselves. That is the property worth pinning now.
+    'src/apiserver/src/projects/project-acceptance.ts': [/criteriaFromDefinitions/],
+    'src/apiserver/src/projects/project-acceptance.service.ts': [/criteriaSummary/],
+    'src/apiserver/src/projects/projects.controller.ts': [/recordMergeEvidence/],
     'src/apiserver/src/projects/coordinator-judgment-opening.ts': [/./],
     'src/apiserver/src/common/db-write-inventory.ts': [/TRIGGER_WRITE_SOURCES/],
   };
@@ -324,16 +324,20 @@ test('(c) each of the eight canonical-gate readers is handled, and none holds ra
   }
 });
 
-test('(c) project-acceptance.service.ts keeps the 0150 layer and holds none of the 0197 one', () => {
+test('(c) project-acceptance.service.ts holds none of the 0197 canonical gate, nor 0150s', () => {
   const service = read('src/apiserver/src/projects/project-acceptance.service.ts');
-  // 0150's half: the acceptance evidence version, its criterion projection and the two refusals.
-  assert.match(service, /projectAcceptanceRun\.findFirst/);
-  assert.match(service, /ACCEPTANCE_BLOCKED,/);
-  assert.match(service, /unmetCriteria/);
+  // What it keeps: the criteria the project states, and the branch observation beside them.
+  assert.match(service, /criteriaSummary/);
+  assert.match(service, /recordMergeEvidence/);
   // 0197's half: the structured canonical view, its reader and its refusal code.
   for (const gone of ['CanonicalDoneGateView', 'canonicalGate', 'failedCanonicalGate',
     'canonicalIdentity', 'blockingObligations']) {
     assert.equal(service.includes(gone), false, `${gone} belongs to the removed canonical gate`);
+  }
+  // And 0150's half, which migration 0229 removed on a later and separate account-owner decision.
+  for (const gone of ['projectAcceptanceRun', 'ACCEPTANCE_BLOCKED', 'unmetCriteria',
+    'assertDoneAllowed', 'evaluateGate']) {
+    assert.equal(service.includes(gone), false, `${gone} belongs to the removed 0150 gate`);
   }
 });
 

@@ -616,17 +616,10 @@ export class ProjectHandoffService {
       select: {
         ...HANDOFF_SELECT,
         fromProject: { select: { title: true, status: true } },
-        toProject: { select: { title: true, status: true, acceptanceEpoch: true } },
+        toProject: { select: { title: true, status: true } },
       },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
-    })).map((row) => ({
-      ...row,
-      // BigInt has no JSON spelling, and the epoch is what says whether the landing project has
-      // been reopened since this crossing was asked about.
-      toProject: row.toProject
-        ? { ...row.toProject, acceptanceEpoch: String(row.toProject.acceptanceEpoch) }
-        : row.toProject,
     })) as unknown as HandoffRow[];
   }
 

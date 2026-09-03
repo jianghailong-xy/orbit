@@ -131,9 +131,6 @@ function serve(
     ...rows,
   };
   apiMock.mockImplementation((path: string) => {
-    if (path.startsWith('/judgments?')) {
-      return Promise.resolve({ total: 0, items: [] }) as Promise<never>;
-    }
     const answer = answers[path];
     if (!answer) return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
     return Promise.resolve(answer) as Promise<never>;

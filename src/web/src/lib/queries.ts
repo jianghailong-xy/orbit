@@ -16,7 +16,7 @@ import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
-import type { ProjectCrossingRow, ReopenImpact, TaskAttribution } from './attribution';
+import type { ProjectCrossingRow, TaskAttribution } from './attribution';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -471,12 +471,12 @@ export const projectDependencyGraphQuery = (projectId: string) =>
 // ── Unit L7: the attribution boundary, and the two writes that cross it ───────────────────────
 
 /**
- * `GET /tasks/:id/attribution` — where this work counts, who noticed it, which acceptance reads
+ * `GET /tasks/:id/attribution` — where this work counts, who noticed it, which crossing reads
  * it, what is being asked about it and what is stopping it.
  *
  * Keyed under `['task', taskId]` so the invalidation a task write already fires refreshes it, and
  * separate from the task document because the two are fetched for different reasons: the document
- * is read on every navigation, and this joins the project, its acceptance criteria, the crossings
+ * is read on every navigation, and this joins the project, the crossings
  * table and the open blockers.
  */
 export const taskAttributionQuery = (taskId: string) =>
@@ -500,15 +500,3 @@ export const projectCrossingsQuery = (projectId: string) =>
       api<ProjectCrossingRow[]>(`/projects/${encodeURIComponent(projectId)}/handoffs`),
   });
 
-/**
- * `GET /projects/:id/reopen` — what reopening this project would cost.
- *
- * Read before the button is offered and read AGAIN when it is pressed, because the value it hands
- * back (`acknowledgement`) is what the write has to echo: an epoch read a minute ago and reopened
- * now is refused rather than merged.
- */
-export const projectReopenPreviewQuery = (projectId: string) =>
-  queryOptions({
-    queryKey: ['project', projectId, 'reopen'] as const,
-    queryFn: () => api<ReopenImpact>(`/projects/${encodeURIComponent(projectId)}/reopen`),
-  });

@@ -18,6 +18,7 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
+  ProjectStatus,
   RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
@@ -203,10 +204,14 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       ownerId,
       {
         title: 'T8 integrated replay',
-        acceptanceCriteria: [
+        acceptanceCriteriaItems: [
           '失败后的一次性判断会话能创建有 criterionKey 的替代任务',
-          '全部项目任务终态后从 main 证据开出 acceptance run',
-        ].join('\n'),
+          '全部项目任务终态后从 main 证据记录一次分支观察',
+        ].map((text) => ({
+          text,
+          verificationMethod: `A person checks: ${text}`,
+          completionCriterion: 'EVIDENCE_JUDGMENT',
+        })),
       },
       { sessionId: seedSessionId, workspaceId },
     );
@@ -296,7 +301,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
 
     // Execute the action the one-shot judgment is authorized to take. T6 requires the stated
     // criterion key, and SU7 records the replacement in the same transaction as the new task.
-    const overview = await stack.acceptance.overview(ownerId, project.id);
+    const stated: any = await stack.projects.get(ownerId, project.id);
     const replacement = await stack.tasks.create(
       ownerId,
       {
@@ -306,7 +311,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
         assigneeId: workspaceId,
         autoRunWhenReady: true,
         dependsOnTaskIds: [prerequisite.id],
-        criterionKey: overview.criteria[0].criterionKey,
+        criterionKey: stated.acceptanceCriteriaItems[0].contentHash.slice(0, 32),
         supersedesTaskId: firstAttempt.id,
       },
       { type: CreatorType.AGENT, id: workspaceId },
@@ -366,15 +371,19 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       source: 'T8_PG_SPEC',
       detail: { observation: 'the integrated test represents verified target-branch content' },
     });
-    const run = await stack.acceptance.openRun(ownerId, project.id, {
-      decidedBy: 'COORDINATOR_AGENT',
-      coordinatorSessionId: settledWake.sessionId,
+    assert.equal(merged.changed, true);
+    assert.equal(merged.refGeneration, '1');
+    // And that is where the replay ends now. Migration 0229 removed the project acceptance
+    // judgment, so the settled-task wake opens a coordinator session and observes the branch, and
+    // nothing evaluates the two criteria the project states. They stay stated and unjudged.
+    const stillStated = await db.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: project.id },
+      orderBy: { ordinal: 'asc' },
     });
-    assert.equal(run.id, merged.acceptanceRunId);
-    assert.equal(run.coordinatorSessionId, null, 'the evaluator does not own the evidence version');
-    assert.equal(run.criteria.length, 2);
+    assert.equal(stillStated.length, 2);
     assert.equal(
-      await db.projectAcceptanceRun.count({ where: { projectId: project.id } }),
-      1,
+      (await db.project.findUniqueOrThrow({ where: { id: project.id } })).status,
+      ProjectStatus.OPEN,
+      'every task settled and the project is still OPEN: nothing concludes a criterion',
     );
   });

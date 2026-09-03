@@ -4,15 +4,20 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 /**
- * Consequence 2 of the 2026-09-02 removal, stated where somebody will read it.
+ * Consequence 2 of the 2026-09-02 removal, followed to where it ended a day later.
  *
  * 0150's project acceptance gate took EXECUTABLE evidence from two places: 0200's typed attempt,
  * and — when there was no attempt — `task_executable_judgment_result`, the row the judgment
- * machinery wrote from a shell exit code. The second is gone. The gate is not: its four triggers,
- * its three tables and their rows are all outside this change, and what broke is exactly one read
- * path, which now returns INCONCLUSIVE and says why.
+ * machinery wrote from a shell exit code. 0227 removed the first and 0228 the second, which left
+ * the gate standing with an EXECUTABLE criterion it could no longer conclude.
  *
- * The distinction is the whole point, so it is asserted on both sides.
+ * On 2026-09-03 the account owner removed the gate itself. Migration 0229 dropped the acceptance
+ * runs, the per-run criterion verdicts, the conclusion events, the audit ledger, the four triggers
+ * on `project` and the six columns they read. So the honest statement of this consequence is no
+ * longer "one read path is gone": it is that nothing evaluates a project criterion of any kind.
+ *
+ * What was NOT removed is the declaration, and that distinction is the whole point — so it is
+ * asserted on both sides, in this file, against the tree.
  */
 
 const API = path.resolve(__dirname, '../..');
@@ -23,40 +28,55 @@ function read(relative: string): string {
 }
 
 const SERVICE = read('src/apiserver/src/projects/project-acceptance.service.ts');
+const REMOVAL = readFileSync(
+  path.join(API, 'prisma/migrations/0229_project_acceptance_judgment_removal/migration.sql'),
+  'utf8',
+);
 
-test('the removed read path is gone and was not repointed at another evidence source', () => {
-  assert.doesNotMatch(SERVICE, /taskExecutableJudgmentResult/u);
-  assert.doesNotMatch(SERVICE, /EXECUTABLE_RESULT_RECORDED/u);
-
-  const start = SERVICE.indexOf(
-    'criterion.completionCriterion === TaskCompletionCriterion.EXECUTABLE',
-  );
-  assert.ok(start > 0, 'the EXECUTABLE branch must still exist to be checked');
-  const branch = SERVICE.slice(start, SERVICE.indexOf('const verifier =', start));
-  // Zero evidence sources: 0227 removed the typed attempt and 0228 the recorded result.
-  assert.doesNotMatch(branch, /canonicalExecutableAttempt/u);
-  // And no replacement smuggled in: no model accessor, no raw SQL, no service call.
-  assert.doesNotMatch(branch, /\$queryRaw|\$executeRaw|Unsafe/u);
-  assert.doesNotMatch(branch, /(?:tx|this\.prisma)\.[a-z]/u);
-  assert.match(branch, /ProjectAcceptanceVerdict\.INCONCLUSIVE/u);
-  assert.match(branch, /No matching recorded command result exists yet/u);
+test('no evidence source came back, and no replacement evaluator was smuggled in', () => {
+  for (const gone of [
+    'taskExecutableJudgmentResult',
+    'EXECUTABLE_RESULT_RECORDED',
+    'canonicalExecutableAttempt',
+    'ProjectAcceptanceVerdict',
+    'assertDoneAllowed',
+    'evaluateGate',
+    'reconcileForEvidenceTask',
+  ]) {
+    assert.equal(SERVICE.includes(gone), false, `${gone} came back into the acceptance service`);
+  }
+  // No raw SQL against a dropped relation either — `$queryRaw` is not type-checked, so the type
+  // checker would not have caught one.
+  for (const relation of ['project_acceptance_run', 'project_acceptance_conclusion',
+    'project_acceptance_audit']) {
+    assert.equal(SERVICE.includes(relation), false, `${relation} is still named in raw SQL`);
+  }
 });
 
-test('the gate itself, its triggers and its data are untouched', () => {
-  // The service still reads and writes the three preserved tables.
-  for (const relation of ['projectAcceptanceCriterionDefinition', 'projectAcceptanceCriterion',
-    'projectAcceptanceConclusion', 'projectAcceptanceRun']) {
-    assert.match(SERVICE, new RegExp(relation), `the gate stopped using ${relation}`);
-  }
-  // And the removal migration names none of them.
-  const removal = readFileSync(
-    path.join(API, 'prisma/migrations/0228_task_judgment_removal/migration.sql'), 'utf8',
-  );
-  const statements = removal.split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
-  assert.doesNotMatch(statements, /project_acceptance/u,
-    'no statement in the removal may name a project acceptance object');
+test('the declaration is what survived, in the service and in the migration', () => {
+  // The service still reads the one preserved relation, and reads it by the longer name.
+  assert.match(SERVICE, /projectAcceptanceCriterionDefinition/u);
+  assert.match(SERVICE, /criteriaSummary/u);
 
-  // 0150's and 0172's own migrations are immutable and still install the four triggers.
+  // 0229 drops the four judgment relations and NOT the declaration. Checked over statements, since
+  // the migration's comments name the declaration repeatedly to say what it is not touching.
+  const statements = REMOVAL.split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
+  const dropped = [...statements.matchAll(/DROP TABLE "([a-z_0-9]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(dropped, [
+    'project_acceptance_audit',
+    'project_acceptance_conclusion',
+    'project_acceptance_criterion',
+    'project_acceptance_run',
+  ]);
+  assert.equal(statements.includes('project_acceptance_criterion_definition'), false,
+    'the removal names the declaration table in a statement');
+  // And it names no `..._definition_*` function either: those six serve the declaration.
+  assert.equal(/DROP FUNCTION "project_acceptance_definition/.test(statements), false);
+});
+
+test('0150 and 0172 are immutable, and still say what they installed', () => {
+  // The migrations that PUT the gate on the schema are append-only history: 0229 removes the
+  // objects, and cannot remove the record of them having existed.
   const gate = readFileSync(
     path.join(API, 'prisma/migrations/0150_task_provenance_project_acceptance_epoch/migration.sql'),
     'utf8',
@@ -64,25 +84,20 @@ test('the gate itself, its triggers and its data are untouched', () => {
   for (const trigger of ['project_acceptance_done_gate', 'project_acceptance_advance_epoch',
     'project_acceptance_epoch_audit']) {
     assert.match(gate, new RegExp(`CREATE TRIGGER "${trigger}"`));
+    assert.match(REMOVAL, new RegExp(`DROP TRIGGER "${trigger}" ON "project"`),
+      `${trigger} was installed by 0150 and must be dropped by name`);
   }
-  const criteriaFact = readFileSync(
-    path.join(API, 'prisma/migrations/0127_project_acceptance_run/migration.sql'), 'utf8',
-  );
-  assert.match(criteriaFact, /project_acceptance_criteria_fact/u);
   const structured = readFileSync(
     path.join(API, 'prisma/migrations/0172_structured_project_acceptance_criteria/migration.sql'),
     'utf8',
   );
   assert.match(structured, /project_acceptance_criteria_fact/u,
     '0172 is where the criteria fact trigger got its structured body');
+  assert.match(REMOVAL, /DROP TRIGGER "project_acceptance_criteria_fact" ON "project"/u);
 });
 
-test('the blocker count at the gate lost its judgment view and gained nothing', () => {
-  const gate = SERVICE.slice(SERVICE.indexOf('assertDoneAllowedForDigest'));
-  const query = gate.slice(gate.indexOf('const [{ count: openBlockers }]'));
-  const statement = query.slice(0, query.indexOf('`);'));
-  assert.doesNotMatch(statement, /project_judgment_blocker/u);
-  assert.match(statement, /FROM "project_blocker" blocker/u);
-  // Exactly one source, so nothing was substituted for the view.
-  assert.equal((statement.match(/FROM "/gu) ?? []).length, 1);
+test('the blocker count the gate used to make is gone with the gate', () => {
+  assert.equal(SERVICE.includes('openBlockers'), false);
+  assert.equal(SERVICE.includes('project_judgment_blocker'), false);
+  assert.equal(SERVICE.includes('project_blocker'), false);
 });

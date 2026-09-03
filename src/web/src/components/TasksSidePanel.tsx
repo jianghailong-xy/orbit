@@ -39,14 +39,6 @@ import {
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
-import {
-  projectAcceptanceInboxPath,
-  type ProjectAcceptanceInboxPage,
-} from '../lib/projectAcceptance';
-import {
-  outcomeInboxPath,
-  type OutcomeHumanInbox,
-} from '../lib/outcomeSurfaces';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -104,7 +96,6 @@ interface TopNavItem {
 // Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
 // primary destinations in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
-  { key: 'judgments', icon: <InboxOutlined />, label: '待我判定' },
   {
     key: 'projects',
     icon: <ProjectOutlined />,
@@ -225,18 +216,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
-  const projectAcceptance = useQuery({
-    queryKey: ['project-acceptance', 'pending', 'nav-count'],
-    queryFn: () => api<ProjectAcceptanceInboxPage>(projectAcceptanceInboxPath(1)),
-    refetchInterval: 15_000,
-  });
-  const outcomeDecisions = useQuery({
-    queryKey: ['outcomes', 'inbox', 'nav-count'],
-    queryFn: () => api<OutcomeHumanInbox>(outcomeInboxPath(100)),
-    refetchInterval: 15_000,
-  });
-  const openJudgmentCount = (projectAcceptance.data?.total ?? 0)
-    + (outcomeDecisions.data?.items ?? []).length;
   const { mode, setMode } = useThemeMode();
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =
@@ -277,15 +256,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : loc.pathname.startsWith('/judgments')
-        ? 'judgments'
-        : loc.pathname.startsWith('/runner')
-          ? 'runners'
-          : loc.pathname.startsWith('/projects/')
-            ? 'projects'
-            : loc.pathname.startsWith('/lists/')
-              ? loc.pathname.slice('/lists/'.length)
-              : loc.pathname.slice(1);
+      : loc.pathname.startsWith('/runner')
+        ? 'runners'
+        : loc.pathname.startsWith('/projects/')
+          ? 'projects'
+          : loc.pathname.startsWith('/lists/')
+            ? loc.pathname.slice('/lists/'.length)
+            : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
@@ -563,11 +540,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
-            {t.key === 'judgments' && openJudgmentCount > 0 && (
-              <span className="tp-rail-badge needs-you" aria-label={`${openJudgmentCount} open judgments`}>
-                {openJudgmentCount > 99 ? '99+' : openJudgmentCount}
-              </span>
-            )}
           </div>
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
@@ -619,11 +591,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'judgments' && openJudgmentCount > 0 && (
-                <span className="tp-count needs-you" aria-label={`${openJudgmentCount} open judgments`}>
-                  {openJudgmentCount}
-                </span>
-              )}
               {t.shortcut && (
                 <kbd
                   className="tp-count tp-nav-shortcut"

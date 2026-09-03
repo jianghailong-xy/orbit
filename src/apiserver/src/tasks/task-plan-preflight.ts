@@ -90,7 +90,6 @@ export const PLAN_PREFLIGHT_COVERAGE: Readonly<
     { check: 'an edge onto an item of this SAME plan does not cross projects — nothing can name a row that does not exist yet', where: 'here' },
   ],
   ACCEPTANCE_MAPPING: [
-    { check: 'a plan that names the acceptance epoch it was made against still matches the project', where: 'here' },
     { check: 'a verification counts towards the project whose acceptance reads it', where: 'here' },
   ],
   EXECUTION_IDENTITY: [
@@ -150,8 +149,6 @@ export interface PlanItemFacts {
   listId: string | null;
   /** Whether this item would start on its own once its prerequisites finish. */
   autoRunWhenReady: boolean;
-  /** The acceptance epoch the plan claims it was made against, if it named one. */
-  acceptanceEpoch: string | null;
 }
 
 export interface PlanProjectFacts {
@@ -159,7 +156,6 @@ export interface PlanProjectFacts {
    *  plan can be shown before it is written, and never so a check can match on prose. */
   title: string;
   status: 'OPEN' | 'DONE' | 'CANCELLED';
-  acceptanceEpoch: string;
   maxConcurrentTasks: number;
   sessionBudgetPerDay: number | null;
   /** Workspaces on this project's team. */
@@ -393,23 +389,6 @@ export function preflightPlan(facts: PlanFacts): PlanPreflightFinding[] {
       }
     }
 
-    // ACCEPTANCE_MAPPING. A plan is made against a goal as it stood; a reopen starts a new
-    // acceptance epoch (L2), and work filed against the old one is work counted by an acceptance
-    // that has been superseded. Only checked when the caller SAYS which epoch it planned against —
-    // a client that names none is not making the claim, and inventing one for it would refuse every
-    // plan written before this field existed.
-    if (item.acceptanceEpoch !== null && project && item.acceptanceEpoch !== project.acceptanceEpoch) {
-      add(
-        item,
-        'ACCEPTANCE_MAPPING',
-        'REFUSE',
-        'PLAN_ACCEPTANCE_EPOCH_MOVED',
-        `this plan was made against acceptance epoch ${item.acceptanceEpoch} and the project is now `
-          + `at ${project.acceptanceEpoch}`,
-        'Re-read the project goal and acceptance criteria, then re-plan against the current epoch.',
-      );
-    }
-
     // EXECUTION_IDENTITY. Everything about WHO does the work and WHERE, past the ownership checks
     // upstream. Both of these are warnings: they describe what will happen (nothing), not a plan
     // that is wrong, and a validator that refused them would be deciding how people may stage work.
@@ -535,8 +514,6 @@ export interface PlanItemLanding {
   /** Its title, or null when the item lands under no project or names one that cannot be read. */
   projectTitle: string | null;
   projectStatus: 'OPEN' | 'DONE' | 'CANCELLED' | null;
-  /** The acceptance epoch that project is in, so a plan made against an older one is visible. */
-  acceptanceEpoch: string | null;
   /** True for an item an earlier attempt already committed: it is reported, not re-decided. */
   frozen: boolean;
 }
@@ -557,7 +534,6 @@ export function planItemLandings(facts: PlanFacts): PlanItemLanding[] {
       projectId: item.projectId,
       projectTitle: project?.title ?? null,
       projectStatus: project?.status ?? null,
-      acceptanceEpoch: project?.acceptanceEpoch ?? null,
       frozen: item.frozen === true,
     };
   });

@@ -168,8 +168,14 @@ test('(l) theWebAppCannotAuthorACriterion: no screen may restate a project\'s cr
     for (const file of webSources) {
       for (const line of file.source.split('\n')) {
         if (!line.includes('acceptanceCriteriaItems')) continue;
-        assert.match(line, /acceptanceCriteriaItems\?:/,
-          `${file.path} may only READ acceptanceCriteriaItems, never author it`);
+        // A prose mention in a file comment is not an authoring path. What this refuses is a
+        // declaration that WRITES the field or a request body that carries it, so an optional
+        // read-shape declaration and a comment both pass, and anything else does not.
+        // Reading it is fine in any shape — an optional field declaration, a destructure, an
+        // `Array.isArray` guard. What this refuses is a WRITE: the field appearing in a request
+        // body or in a mutation payload. Comments are prose and are skipped too.
+        assert.equal(/(?:body|data|payload|json)\s*[:=][^;]*acceptanceCriteriaItems/.test(line), false,
+          `${file.path} may only READ acceptanceCriteriaItems, never author it: ${line.trim()}`);
       }
       assert.doesNotMatch(file.source, /method:\s*'(POST|PATCH|PUT)'[\s\S]{0,400}?acceptanceCriteria[^I]/,
         `${file.path} must not send acceptance criteria in a write`);

@@ -6,7 +6,6 @@ import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAcceptanceVerdict,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
@@ -134,7 +133,15 @@ async function fixture(stack: Stack, label: string, taskCount: number): Promise<
       id: projectId,
       ownerId,
       title: `${label} 验收项目`,
-      acceptanceCriteria: 'main 上的路由行为符合设计\n全量服务测试通过',
+      acceptanceCriterionDefinitions: {
+        create: ['main 上的路由行为符合设计', '全量服务测试通过'].map((text, index) => ({
+          ordinal: index + 1,
+          text,
+          verificationMethod: `A person checks: ${text}`,
+          completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+          contentHash: '0'.repeat(64),
+        })),
+      },
       coordinatorEnabled: true,
       coordinatorWorkspaceId: workspaceId,
     },
@@ -230,62 +237,29 @@ test('last terminal task wakes once, then the judgment reuses and concludes one 
         1,
       );
 
-      // Merge evidence advances the version first; judgment evaluates that exact version
-      // idempotently instead of opening and owning a second attempt.
+      // What a judgment session can still do about the branch: record what it was observed to
+      // contain. Migration 0229 removed the evidence versions and the conclusions that used to be
+      // written on top of this, so an observation is where the trail now ends.
       const merged = await stack.acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
         requirementId: 'main',
         targetBranch: 'main',
         contentHash: 'a'.repeat(64),
         source: 'T7_PG_SPEC',
-        detail: { observation: 'main content checked before acceptance run' },
+        detail: { observation: 'main content checked' },
       });
-      const run = await stack.acceptance.openRun(target.ownerId, target.projectId, {
-        decidedBy: 'COORDINATOR_AGENT',
-        coordinatorSessionId: sessions[0].id,
-      });
-      assert.equal(run.id, merged.acceptanceRunId);
-      assert.equal(run.coordinatorSessionId, null, 'an evidence version is not owned by an evaluator');
-      assert.equal(run.criteria.length, 2, 'one frozen checklist row per stated criterion');
+      assert.equal(merged.changed, true);
+      assert.equal(merged.refGeneration, '1');
 
-      const concluded = await stack.acceptance.finalizeRun(
-        target.ownerId,
-        target.projectId,
-        run.id,
-        run.criteria.map((criterion) => ({
-          ordinal: criterion.ordinal,
-          verdict: ProjectAcceptanceVerdict.INCONCLUSIVE,
-          summary: 'T7 judgment exercised the full per-criterion write path',
-          evidence: { checkedFrom: 'main', result: 'requires human PASS boundary' },
-        })),
-        sessions[0].id,
-      );
-      assert.equal(concluded.verdict, ProjectAcceptanceVerdict.INCONCLUSIVE);
-      assert.ok(concluded.criteria.every((criterion) => criterion.verdict !== null));
-
-      const overview = await stack.acceptance.overview(target.ownerId, target.projectId);
-      assert.equal(overview.runs.length, 1);
-      assert.equal(overview.runsEmptyReason, null);
-      assert.equal(overview.runs[0].criteria.length, overview.criteria.length);
-      assert.ok(overview.runs[0].criteria.every((criterion) => criterion.verdict !== null));
-      assert.equal(overview.status, 'OPEN', 'T7 never settles project.status itself');
-      assert.equal(overview.doneGate.allowed, false, 'the existing gate still decides independently');
-
-      await assert.rejects(
-        stack.projects.update(
-          target.ownerId,
-          target.projectId,
-          { status: 'DONE' } as never,
-          sessions[0].id,
-        ),
-        (error: unknown) => {
-          if (!(error instanceof ConflictException)) return false;
-          return (error.getResponse() as { code?: string }).code === 'PROJECT_DONE_AUTOMATIC_ONLY';
-        },
-        'the judgment meets the same automatic-only status=DONE boundary as every other caller',
-      );
+      // T7 never settles project.status itself, and the criteria stay stated and unjudged.
       assert.equal(
         (await stack.db.project.findUniqueOrThrow({ where: { id: target.projectId } })).status,
         'OPEN',
+      );
+      assert.equal(
+        await stack.db.projectAcceptanceCriterionDefinition.count({
+          where: { projectId: target.projectId },
+        }),
+        2,
       );
     } finally {
       await stack.db.$disconnect();
@@ -302,13 +276,22 @@ test('empty merge evidence makes the judgment open merge work and stores no PASS
 
       const [session] = await judgmentSessions(stack, target);
       assert.ok(session, 'the terminal write must open its judgment session');
-      assert.match(session.prompt ?? '', /mergeEvidence 为空/);
-      assert.match(session.prompt ?? '', /不得开 acceptance run，更不得写 PASS/);
+      // The settlement protocol stops where the judgment did: migration 0229 removed the acceptance
+      // run and the verdict, so the opening tells the session to record what main contains and
+      // hand the per-criterion reading to the account owner in a comment.
+      assert.match(session.prompt ?? '', /project_merge_evidence/);
+      assert.match(session.prompt ?? '', /没有任何东西会判定这些验收标准/);
+      assert.equal((session.prompt ?? '').includes('acceptance run'), false);
 
-      const before = await stack.acceptance.overview(target.ownerId, target.projectId);
-      assert.equal(before.mergeEvidenceEmptyReason, 'NO_MERGE_EVIDENCE');
-      assert.equal(before.runsEmptyReason, 'ACCEPTANCE_NOT_ATTEMPTED');
-      const criterionKey = before.criteria[0].criterionKey;
+      assert.equal(
+        await stack.db.projectMergeEvidence.count({ where: { projectId: target.projectId } }),
+        0,
+      );
+      const stated = await stack.db.projectAcceptanceCriterionDefinition.findFirstOrThrow({
+        where: { projectId: target.projectId },
+        orderBy: { ordinal: 'asc' },
+      });
+      const criterionKey = stated.contentHash.slice(0, 32);
 
       // Execute the branch the one-shot judgment is instructed to take: file merge/evidence work,
       // tied to a stated criterion, and stop. Its eventual terminal write will derive a NEW task-set
@@ -329,16 +312,9 @@ test('empty merge evidence makes the judgment open merge work and stores no PASS
       assert.equal(mergeTask.projectId, target.projectId);
 
       assert.equal(
-        await stack.db.projectAcceptanceRun.count({ where: { projectId: target.projectId } }),
+        await stack.db.projectMergeEvidence.count({ where: { projectId: target.projectId } }),
         0,
-        'no evidence means no digest may be frozen yet',
-      );
-      assert.equal(
-        await stack.db.projectAcceptanceCriterion.count({
-          where: { projectId: target.projectId, verdict: ProjectAcceptanceVerdict.PASS },
-        }),
-        0,
-        'the missing-main branch cannot persist PASS',
+        'the missing-main branch records no observation it did not make',
       );
     } finally {
       await stack.db.$disconnect();

@@ -119,9 +119,13 @@ test('the 0150/0172 gate triggers and 0141 verdict functions are not touched by 
   }
 });
 
-test('the removal is the newest migration and the ledger stays append-only', () => {
+test('the ledger stays append-only, and every later migration is accounted for', () => {
   const dirs = readdirSync(MIGRATIONS).filter((dir) => /^\d{4}_/.test(dir)).sort();
-  assert.equal(dirs.at(-1), REMOVAL_DIR,
+  // 0228 is no longer the newest: 0229 removed the project acceptance judgment on 2026-09-03, by a
+  // later and separate account-owner decision. Anything ADDED after this list is a migration whose
+  // effect on the claims below has not been read, which is what this assertion is for.
+  assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
+    [REMOVAL_DIR, '0229_project_acceptance_judgment_removal'],
     'a later migration exists; re-read it before trusting the assertions above');
   // 0177 itself is immutable and still declares the pair this change kept.
   const declaration = readFileSync(

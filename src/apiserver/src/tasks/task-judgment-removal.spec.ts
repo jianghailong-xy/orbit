@@ -255,19 +255,17 @@ test('(s) the project acceptance gate lost its judgment-result reader and gained
   assert.doesNotMatch(service, /taskExecutableJudgmentResult\./u,
     'the gate must not read the removed result table');
   assert.doesNotMatch(service, /tx\.taskJudgment/u);
-  // The EXECUTABLE branch keeps exactly one evidence source: 0200's typed attempt.
-  const executable = service.slice(
-    service.indexOf("criterion.completionCriterion === TaskCompletionCriterion.EXECUTABLE"),
-  );
-  const branch = executable.slice(0, executable.indexOf('const verifier ='));
-  const reads = [...branch.matchAll(/(?:tx|this\.prisma)\.([A-Za-z]+)\./gu)].map((m) => m[1]);
-  assert.deepEqual([...new Set(reads)], [],
-    'the EXECUTABLE branch reads nothing at all: 0227 took the attempt and 0228 the result');
-  assert.match(branch, /No matching recorded command result exists yet/u,
-    'with no evidence source the criterion is INCONCLUSIVE and says so');
+  // The EXECUTABLE branch this used to slice out is gone with the gate that held it: on
+  // 2026-09-03 the account owner removed the project acceptance judgment entirely, so there is no
+  // branch, no evidence source and no verdict for any criterion kind.
+  for (const gone of ['TaskCompletionCriterion.EXECUTABLE', 'ProjectAcceptanceVerdict',
+    'No matching recorded command result exists yet']) {
+    assert.equal(service.includes(gone), false,
+      `${gone} survives in a service that no longer concludes anything`);
+  }
 
-  // The gate itself, and its data, are outside this change.
-  assert.match(service, /project_acceptance_criterion_definition|projectAcceptanceCriterionDefinition/u);
+  // The DECLARATION and its data are outside BOTH changes, and this one names none of it.
+  assert.match(service, /projectAcceptanceCriterionDefinition/u);
   assert.doesNotMatch(REMOVAL_SQL, /DROP\s+(?:TABLE|TRIGGER|FUNCTION)[^\n]*project_acceptance/u);
 });
 

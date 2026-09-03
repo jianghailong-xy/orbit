@@ -19,16 +19,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// The acceptance service is stubbed to the empty standing: `get` reads a criteria summary beside
-// the task tally, and no test in this file is about what that summary contains.
-function serviceWith(prisma: unknown, criteriaSummary: () => Promise<any> = async () => ({
-  total: 0, passed: 0, lastRunAt: null, criteria: [],
-})): ProjectsService {
-  const acceptance = {
-    criteriaSummary,
-    ensureCurrentEvidenceVersion: async () => undefined,
-  };
-  return new ProjectsService(prisma as never, acceptance as never);
+// The acceptance service is a stub: since 0229 nothing on ProjectsService's read paths calls into
+// it, and no test in this file is about the merge-evidence write that remains on it.
+function serviceWith(prisma: unknown): ProjectsService {
+  return new ProjectsService(prisma as never, {} as never);
 }
 
 test('create files the project against the caller and stores blank prose as null', async () => {
@@ -46,19 +40,20 @@ test('create files the project against the caller and stores blank prose as null
   await service.create(OWNER_ID, {
     title: 'Ship the coordinator',
     goal: 'A project can be driven end to end',
-    // Whitespace is not a goal. Stored as null so "not set" has exactly one representation.
-    acceptanceCriteria: '   ',
+    // Whitespace is not an instruction. Stored as null so "not set" has one representation.
+    instructions: '   ',
   } as never);
 
   assert.equal(created.ownerId, OWNER_ID);
   assert.equal(created.title, 'Ship the coordinator');
   assert.equal(created.goal, 'A project can be driven end to end');
-  assert.equal(created.acceptanceCriteria, null);
-  // Never sent at all: left to the column default rather than written as null-by-guess.
-  assert.equal(created.instructions, undefined);
+  assert.equal(created.instructions, null);
+  // 0229 removed the legacy text column and the marker beside it; neither is written any more.
+  assert.equal(created.acceptanceCriteria, undefined);
+  assert.equal(created.acceptanceCriteriaFormat, undefined);
 });
 
-test('create stores explicit assertions and required methods with a legacy projection', async () => {
+test('create stores explicit assertions and required methods', async () => {
   let created: any;
   const definitions: any[] = [];
   const prisma: any = {
@@ -70,10 +65,10 @@ test('create stores explicit assertions and required methods with a legacy proje
           members: [], runtime: { coordinatorGeneration: 0n },
         };
       },
-      update: async (args: any) => ({
+      // The re-read a structured create makes once its definitions are written.
+      findUniqueOrThrow: async () => ({
         id: PROJECT_ID,
         ...created,
-        ...args.data,
         acceptanceCriterionDefinitions: definitions,
         members: [],
         runtime: { coordinatorGeneration: 0n },
@@ -107,8 +102,6 @@ test('create stores explicit assertions and required methods with a legacy proje
     ],
   } as never);
 
-  assert.equal(created.acceptanceCriteriaFormat, 'STRUCTURED');
-  assert.equal(created.acceptanceCriteria, '1. the image boots\n2. the full suite passes');
   assert.deepEqual(definitions.map(({ id: _id, projectId: _projectId, contentHash: _hash, ...row }) => row), [
     {
       ordinal: 1,
@@ -136,10 +129,9 @@ test('create stores explicit assertions and required methods with a legacy proje
   assert.deepEqual(project.acceptanceCriteriaItems.map((item: any) => ({
     text: item.text,
     verificationMethod: item.verificationMethod,
-    currentStatus: item.currentStatus,
   })), [
-    { text: 'the image boots', verificationMethod: 'Run the image smoke test', currentStatus: 'UNDECIDED' },
-    { text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0', currentStatus: 'UNDECIDED' },
+    { text: 'the image boots', verificationMethod: 'Run the image smoke test' },
+    { text: 'the full suite passes', verificationMethod: 'Run npm test; require exit code 0' },
   ]);
 });
 
@@ -154,15 +146,14 @@ test('the service refuses structured input with no verification method before wr
   );
 });
 
-test('create refuses two competing acceptance authoring shapes', async () => {
+test('create refuses a null acceptanceCriteriaItems rather than reading it as a clear', async () => {
   const service = serviceWith({ project: { create: async () => assert.fail('must not insert') } });
   await assert.rejects(
     () => service.create(OWNER_ID, {
       title: 'Ambiguous',
-      acceptanceCriteria: 'legacy',
-      acceptanceCriteriaItems: [{ text: 'structured' }],
+      acceptanceCriteriaItems: null,
     } as never),
-    /alternative authoring shapes/,
+    /must be an array/,
   );
 });
 
@@ -369,9 +360,6 @@ test('the detail read reports progress without loading the project’s tasks', a
       },
       findMany: async () => assert.fail('the detail read must not load the project’s tasks'),
     },
-    // The acceptance standing the read serves beside the task tally. A project nobody has run
-    // acceptance against has no run to read, which is the shape this stub gives it.
-    projectAcceptanceRun: { findFirst: async () => null },
   });
 
   const project = await service.get(OWNER_ID, PROJECT_ID);
@@ -379,21 +367,19 @@ test('the detail read reports progress without loading the project’s tasks', a
   assert.deepEqual(project.tasksByStatus, { DONE: 2, OPEN: 1 });
   assert.equal(project._count.tasks, 3);
   assert.deepEqual(groupByArgs.where, { projectId: PROJECT_ID });
-  // The process measure and the outcome measure are both served: a task tally can read 100% while
-  // nothing stated has been checked. `project-acceptance-summary.pg.spec.ts` is where the tally
-  // itself is decided, against real runs.
-  assert.deepEqual(project.acceptance, { total: 0, passed: 0, lastRunAt: null, criteria: [] });
+  // The task tally is a PROCESS measure and it is the only one left: migration 0229 removed the
+  // acceptance judgment, so nothing on this read concludes anything about the stated criteria.
+  assert.equal('acceptance' in project, false,
+    'a standing that would always read the same thing is not a standing');
 });
 
-test('the detail read marks an ambiguous one-line legacy backfill for review', async () => {
+test('the detail read serves the authored criteria and no second representation of them', async () => {
   const text = '项目完成时：1. build； 2. boot';
   const service = serviceWith({
     project: {
       findFirst: async () => ({
         id: PROJECT_ID,
         title: 'LFS',
-        acceptanceCriteria: text,
-        acceptanceCriteriaFormat: 'LEGACY_TEXT',
         acceptanceCriterionDefinitions: [{
           id: CRITERION_A_ID,
           ordinal: 1,
@@ -413,14 +399,15 @@ test('the detail read marks an ambiguous one-line legacy backfill for review', a
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
 
   assert.deepEqual(project.acceptanceCriteriaItems.map((item: any) => item.text), [text]);
-  assert.deepEqual(project.acceptanceCriteriaMigration, {
-    source: 'LEGACY_TEXT',
-    needsReview: true,
-    reason: 'AMBIGUOUS_SINGLE_LINE_ENUMERATION',
-  });
+  // 0229 removed the legacy text column, its LEGACY_TEXT/STRUCTURED marker and the ambiguity
+  // review that existed to warn about a parse. There is one representation now, so there is
+  // nothing for a second one to disagree with.
+  assert.equal('acceptanceCriteriaMigration' in project, false);
+  assert.equal('acceptanceCriteria' in project, false);
+  assert.equal('acceptanceCriteriaFormat' in project, false);
 });
 
-test('the detail item projects its current status from acceptance instead of storing it', async () => {
+test('the detail item is the authored declaration, with no derived verdict beside it', async () => {
   const definition = {
     id: CRITERION_A_ID,
     ordinal: 1,
@@ -438,8 +425,6 @@ test('the detail item projects its current status from acceptance instead of sto
     project: {
       findFirst: async () => ({
         id: PROJECT_ID,
-        acceptanceCriteria: '1. the suite passes',
-        acceptanceCriteriaFormat: 'STRUCTURED',
         acceptanceCriterionDefinitions: [definition],
         _count: { tasks: 0 },
         members: [],
@@ -447,19 +432,14 @@ test('the detail item projects its current status from acceptance instead of sto
       }),
     },
     task: { groupBy: async () => [] },
-  }, async () => ({
-    total: 1,
-    passed: 1,
-    lastRunAt: new Date('2026-08-26T00:00:00.000Z'),
-    criteria: [{ id: CRITERION_A_ID, verdict: 'PASS' }],
-  }));
+  });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
 
-  assert.deepEqual(project.acceptanceCriteriaItems[0], {
-    ...definition,
-    currentStatus: 'PASS',
-  });
+  // Exactly the stored row. `currentStatus` was a projection over acceptance conclusions, and
+  // 0229 removed those: reporting a constant 'UNDECIDED' forever would be a verdict pretending
+  // to be a reading.
+  assert.deepEqual(project.acceptanceCriteriaItems[0], definition);
 });
 
 test('someone else’s project is a 404, not an empty project', async () => {
@@ -500,9 +480,8 @@ test('an update writes only the fields it was sent, and null clears one', async 
   prisma.$transaction = async (fn: any) => fn(prisma);
   const service = serviceWith(prisma);
 
-  // Settling a project must not blank the goal that says what it was for. CANCELLED rather than
-  // DONE because DONE is no longer a field write: it goes through §13.4 AE2's acceptance gate,
-  // which is the subject of its own tests (`project-acceptance*.spec.ts`).
+  // Settling a project must not blank the goal that says what it was for. Since 0229 DONE is an
+  // ordinary field write too — it is asserted separately, in the removal suites.
   await service.update(OWNER_ID, PROJECT_ID, { status: ProjectStatus.CANCELLED } as never);
   assert.deepEqual(writes[0], { status: 'CANCELLED' });
 
@@ -532,17 +511,12 @@ test('a structured update preserves ids and revisions across reorder, and increm
   const prisma: any = {
     project: {
       findFirst: async () => ({ id: PROJECT_ID, coordinatorEnabled: false }),
-      findUniqueOrThrow: async () => ({
-        status: 'OPEN', acceptedRunId: null, legacyAcceptedAt: null, acceptanceEpoch: 0n,
-      }),
       update: async (args: any) => {
         projectWrites.push(args.data);
         if (args.include) {
           return {
             id: PROJECT_ID,
             status: 'OPEN',
-            acceptanceCriteria: '1. Image boots\n2. Build with docs',
-            acceptanceCriteriaFormat: 'STRUCTURED',
             acceptanceCriterionDefinitions: finalDefinitions,
             members: [],
             runtime: { coordinatorGeneration: 0n },
@@ -577,9 +551,6 @@ test('a structured update preserves ids and revisions across reorder, and increm
       coordinator_enabled: false,
       config_revision: 0n,
       status: 'OPEN',
-      accepted_run_id: null,
-      legacy_accepted_at: null,
-      acceptance_epoch: 0n,
     }],
   };
   prisma.$transaction = async (fn: any) => fn(prisma);
@@ -599,11 +570,10 @@ test('a structured update preserves ids and revisions across reorder, and increm
     ],
   } as never);
 
-  assert.deepEqual(projectWrites[0], {
-    acceptanceCriteria: '1. Image boots\n2. Build with docs',
-    acceptanceCriteriaFormat: 'STRUCTURED',
-  });
-  assert.deepEqual(projectWrites[1], {});
+  // One project write, and it carries no criteria: 0229 removed the compatibility text column and
+  // its format marker, so a criteria edit writes the definition rows and nothing on `project`.
+  assert.equal(projectWrites.length, 1);
+  assert.deepEqual(projectWrites[0], {});
   assert.deepEqual(definitionWrites[2], ['update', CRITERION_B_ID, {
     ordinal: 1,
     text: 'Image boots',
@@ -636,11 +606,12 @@ test('a structured update preserves ids and revisions across reorder, and increm
     acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
     evidenceTaskId: item.evidenceTaskId,
     completionCriterionOverrideReason: item.completionCriterionOverrideReason,
-    currentStatus: item.currentStatus,
     revision: item.revision,
-  })), finalDefinitions.map(({ contentHash: _contentHash, ...item }) => ({
-    ...item, currentStatus: 'UNDECIDED',
-  })));
+  })), finalDefinitions.map(({ contentHash: _contentHash, ...item }) => item));
+  // No derived status beside the declaration: 0229 removed what would have derived one.
+  for (const item of updated.acceptanceCriteriaItems) {
+    assert.equal('currentStatus' in item, false);
+  }
 });
 
 test('a structured update refuses an id from another project before moving any definition', async () => {
@@ -662,9 +633,6 @@ test('a structured update refuses an id from another project before moving any d
       coordinator_enabled: false,
       config_revision: 0n,
       status: 'OPEN',
-      accepted_run_id: null,
-      legacy_accepted_at: null,
-      acceptance_epoch: 0n,
     }],
   };
   prisma.$transaction = async (fn: any) => fn(prisma);

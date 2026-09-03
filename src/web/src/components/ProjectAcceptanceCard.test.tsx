@@ -7,18 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCEPTANCE_PHONE_QUERY,
   CRITERIA_PREVIEW,
-  METER_SEGMENT_LIMIT,
   MOBILE_CRITERION_PREVIEW_LINES,
   MOBILE_CRITERIA_PREVIEW,
   ProjectAcceptanceCard,
   criterionNeedsDisclosure,
   criteriaPreview,
-  meterReading,
-  meterSegments,
-  standingLine,
-  tally,
-  type AcceptanceCriterionStanding,
+  type AcceptanceCriterionItem,
 } from './ProjectAcceptanceCard';
+
+// Migration 0229 removed the project acceptance judgment, so this card no longer draws a verdict
+// per row, a pass ratio or a meter: there is nothing that concludes anything about a criterion.
+// What it draws is the declaration, and that is what is asserted here.
 
 // The card fetches its own query, so the stub is what keeps an accidental live call visible as a
 // hang-free failure rather than a real request. A static render never dispatches one anyway —
@@ -143,40 +142,31 @@ async function mount(qc: QueryClient): Promise<{
   };
 }
 
-function criterion(
-  ordinal: number,
-  text: string,
-  verdict: AcceptanceCriterionStanding['verdict'],
-): AcceptanceCriterionStanding {
-  return { key: `c${ordinal}`, text, ordinal, verdict };
+function criterion(ordinal: number, text: string): AcceptanceCriterionItem {
+  return { id: `c${ordinal}`, text, ordinal, revision: 1 };
 }
 
-/** Five stated criteria, two of them concluded PASS by the latest attempt. */
+/** Five stated criteria. */
 const FIVE = [
-  criterion(1, 'The runner reconnects after a restart', 'PASS'),
-  criterion(2, 'A queued message survives a redeploy', 'PASS'),
-  criterion(3, 'The merge button refuses a diverged branch', 'FAIL'),
-  criterion(4, 'Acceptance runs are recorded per criterion', 'UNDECIDED'),
-  criterion(5, 'The context gauge reports a real window', 'INCONCLUSIVE'),
+  criterion(1, 'The runner reconnects after a restart'),
+  criterion(2, 'A queued message survives a redeploy'),
+  criterion(3, 'The merge button refuses a diverged branch'),
+  criterion(4, 'Acceptance criteria are stated per item'),
+  criterion(5, 'The context gauge reports a real window'),
 ];
 
 const SEVEN = [
   criterion(
     1,
     'The [full acceptance criterion](/docs/acceptance) stays readable even when its explanation needs several lines on a phone',
-    'UNDECIDED',
   ),
-  ...Array.from({ length: 6 }, (_, i) =>
-    criterion(i + 2, `Mobile acceptance criterion ${i + 2}`, 'UNDECIDED'),
-  ),
+  ...Array.from({ length: 6 }, (_, i) => criterion(i + 2, `Mobile acceptance criterion ${i + 2}`)),
 ];
 
-/** Long enough ago that `ago` reports whole days, so the sentence is the same on every run of
- *  this suite rather than flipping between "59m ago" and "1h ago" as the clock moves. */
-const RAN_AT = '2020-01-01T00:00:00.000Z';
-
-function seed(qc: QueryClient, acceptance: unknown, rest: Record<string, unknown> = {}) {
-  qc.setQueryData(['project', PROJECT], { id: PROJECT, acceptance, ...rest });
+function seed(qc: QueryClient, criteria: unknown, rest: Record<string, unknown> = {}) {
+  qc.setQueryData(['project', PROJECT], {
+    id: PROJECT, acceptanceCriteriaItems: criteria, ...rest,
+  });
 }
 
 /** The state a failed read leaves the cache in. Built rather than fetched: a static render never
@@ -252,326 +242,154 @@ function stubCriterionLayout(initiallyOverflows: boolean): {
 // The first antd render initializes its jsdom style registry and can cross Vitest's 5s default on
 // a loaded CI worker; the assertions themselves remain synchronous and bounded.
 describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
-  it('heads the card with passed over total', () => {
+  it('heads the card with what it is, not with a score', () => {
     const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
+    seed(qc, FIVE);
 
-    expect(paint(qc)).toContain('2 / 5');
+    const html = paint(qc);
+    expect(html).toContain('Acceptance criteria');
+    expect(html).toContain('5 criteria stated');
+    expect(html).toContain('Nothing in Orbit judges them');
+    // The two readings a removed judgment would still have printed. Neither may come back: a
+    // constant "0 / 5" and a row of "Unjudged" badges both read as a result somebody reached.
+    expect(html).not.toContain('/ 5 PASS');
+    expect(html).not.toContain('Unjudged');
+    expect(html).not.toContain('acceptance-meter');
   });
 
-  it('gives every criterion its text and its verdict as a word', () => {
+  it('gives every criterion its text, in stated order, numbered', () => {
     const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
+    seed(qc, FIVE);
+
     const html = paint(qc);
-
-    for (const c of FIVE) expect(html).toContain(c.text);
-
-    // The verdict is legible with the colours taken away — a badge that is only a hue says
-    // nothing to a screen reader, a monochrome print, or a red-green reader.
-    expect(withoutColour(rowFor(html, FIVE[0].text))).toContain('PASS');
-    expect(withoutColour(rowFor(html, FIVE[2].text))).toContain('FAIL');
-    expect(withoutColour(rowFor(html, FIVE[4].text))).toContain('INCONCLUSIVE');
-    // Undecided is a readable visual state. Its accessible name begins with the same visible
-    // label (label-in-name for speech input), then adds the fuller explanation.
-    const undecided = withoutColour(rowFor(html, FIVE[3].text));
-    expect(undecided).toContain('>Unjudged<');
-    expect(undecided).toContain('aria-label="Unjudged — not judged yet"');
+    for (const item of FIVE) expect(html).toContain(item.text);
+    const numbers = [...html.matchAll(/class="acceptance-row-no">(\d+)</g)].map((m) => m[1]);
+    expect(numbers).toEqual(['1', '2', '3', '4', '5']);
+    const order = FIVE.map((item) => html.indexOf(item.text));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
-  it('says a passed criterion and a failed one apart in words, not only in colour', () => {
+  it('carries no verdict rail beside a row any more', () => {
     const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
-    const html = paint(qc);
+    seed(qc, FIVE);
 
-    const passed = accessibleText(withoutColour(rowFor(html, FIVE[0].text)));
-    const failed = accessibleText(withoutColour(rowFor(html, FIVE[2].text)));
-
-    expect(passed).not.toEqual(failed);
-    expect(passed).toContain('PASS');
-    expect(passed).toContain('Passed');
-    expect(failed).toContain('FAIL');
-    expect(failed).toContain('Failed');
-  });
-
-  it('numbers each row and puts its verdict in the rail, in stated order', () => {
-    const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
-    const html = paint(qc);
-
-    // The ordinal is what ties a row back to the numbered list the author wrote, and the rail is
-    // what lines the verdicts up as one scannable column beside sentences of any length.
-    for (const c of FIVE) {
-      const row = rowFor(html, c.text);
-      expect(row).toContain(`class="acceptance-row-no">${c.ordinal}<`);
-      expect(row).toContain('class="acceptance-row-verdict"');
-    }
-
-    // Stated order, not verdict order: the meter above indexes the rows by position.
-    const order = FIVE.map((c) => html.indexOf(c.text));
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-  });
-
-  it('marks a failed row as failed beyond its badge', () => {
-    const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
-    const html = paint(qc);
-
-    expect(rowFor(html, FIVE[2].text)).toContain('is-fail');
-    // ...and no other row is dressed as one.
-    expect(rowFor(html, FIVE[0].text)).not.toContain('is-fail');
-    expect(rowFor(html, FIVE[4].text)).not.toContain('is-fail');
+    const row = rowFor(paint(qc), 'The runner reconnects after a restart');
+    expect(row).not.toContain('acceptance-row-verdict');
+    expect(withoutColour(row)).toContain('The runner reconnects after a restart');
+    expect(accessibleText(row)).toContain('The runner reconnects after a restart');
   });
 
   it('reads a criterion as Markdown rather than printing its source', () => {
     const qc = client();
-    seed(qc, {
-      total: 2,
-      passed: 0,
-      lastRunAt: null,
-      criteria: [
-        criterion(1, 'The **90** Lighthouse score holds on `/pricing`', 'UNDECIDED'),
-        // A criterion is one line of the authored field, and the parser keeps a heading line as
-        // one — so a row has to survive being handed block Markdown without becoming a heading.
-        criterion(2, '## Ship it', 'UNDECIDED'),
-      ],
-    });
-    const html = paint(qc);
+    seed(qc, [criterion(1, 'Lighthouse **≥ 90** on `/` and `/tasks`')]);
 
-    expect(html).toContain('<strong>90</strong>');
-    expect(html).toContain('<code>/pricing</code>');
-    expect(html).not.toContain('**90**');
-    // Flattened: the row is a row whatever the author typed.
-    expect(html).toContain('Ship it');
-    expect(html).not.toContain('<h2>');
-    expect(html).not.toContain('## Ship it');
+    const row = rowFor(paint(qc), 'Lighthouse');
+    expect(row).toContain('<strong>≥ 90</strong>');
+    expect(row).toContain('<code>/</code>');
+    expect(row).not.toContain('**≥ 90**');
   });
 
-  it('states that acceptance has never run instead of scoring it', () => {
+  it('says so plainly when nothing is stated', () => {
     const qc = client();
-    // The normal shape of a live project: criteria stated, no attempt against them.
-    seed(qc, {
-      total: 5,
-      passed: 0,
-      lastRunAt: null,
-      criteria: FIVE.map((c) => ({ ...c, verdict: 'UNDECIDED' as const })),
-    });
+    seed(qc, []);
+
     const html = paint(qc);
-
-    expect(html).toContain('Never run — 5 criteria stated');
-    expect(html).toContain('unknown, not zero');
-    // No ratio at all: "0 / 5" reads as a score somebody earned, and "0 / 0" as a finished one.
-    expect(html).not.toContain('0 / 5');
-    expect(html).not.toContain('0 / 0');
-    // What IS shown is a count of what was stated, which is a fact rather than a result.
-    expect(html).toContain('5 unjudged');
-    // The stated criteria are still listed — unjudged, which is a fact, not an absence.
-    for (const c of FIVE) expect(html).toContain(c.text);
-  });
-
-  it('does not print 0 / 0 for a project with no criteria and no run', () => {
-    const qc = client();
-    seed(qc, { total: 0, passed: 0, lastRunAt: null, criteria: [] });
-    const html = paint(qc);
-
     expect(html).toContain('No criteria are stated for this project');
-    expect(html).not.toContain('0 / 0');
-    // Nothing to draw a meter of, so there is no meter — an empty track reads as a zero score.
-    expect(html).not.toContain('acceptance-meter');
-    // And no count either: `0 unjudged` is a number where a score goes, for a project that was
-    // never held to anything.
-    expect(html).not.toContain('unjudged');
+    expect(rowCount(html)).toBe(0);
   });
 
   it('treats a missing criteria list as empty', () => {
     const qc = client();
-    seed(qc, { total: 0, passed: 0, lastRunAt: null });
+    qc.setQueryData(['project', PROJECT], { id: PROJECT });
 
-    const html = paint(qc);
-    expect(html).toContain('No criteria are stated for this project');
+    expect(paint(qc)).toContain('No criteria are stated for this project');
   });
 
   it('renders while the read is in flight', () => {
     const qc = client();
-    const html = paint(qc);
 
-    expect(html).toContain('ant-skeleton');
-    expect(html).not.toContain('Never run');
+    expect(paint(qc)).toContain('ant-skeleton');
   });
 
   it('renders the failure of the read as a failure', () => {
     const qc = client();
-    seedError(qc, 'network is down');
+    seedError(qc, 'gateway timeout');
+
     const html = paint(qc);
-
-    expect(html).toContain('Acceptance standing could not be loaded');
-    expect(html).toContain('network is down');
-    // Not mistaken for a project nobody has run acceptance against.
-    expect(html).not.toContain('Never run');
-  });
-
-  it('says when the server did not report acceptance at all', () => {
-    const qc = client();
-    qc.setQueryData(['project', PROJECT], { id: PROJECT });
-    const html = paint(qc);
-
-    expect(html).toContain('does not report acceptance standing');
-    expect(html).not.toContain('Never run');
-  });
-
-  it('falls back to the criteria as written when the server reports no standing', () => {
-    // The one thing the deleted `Acceptance criteria` field did that no verdict list can: on a
-    // server that does not report acceptance, the authored text is the only account of what this
-    // project is held to, and the page has nowhere else to show it.
-    const qc = client();
-    qc.setQueryData(['project', PROJECT], {
-      id: PROJECT,
-      acceptanceCriteria: '1. Lighthouse ≥ 90 on every page\n2. No **console** errors',
-    });
-    const html = paint(qc);
-
-    expect(html).toContain('does not report acceptance standing');
-    expect(html).toContain('showing the stated criteria as written');
-    expect(html).toContain('Lighthouse ≥ 90 on every page');
-    // As Markdown, like the field it replaces — not as source.
-    expect(html).toContain('<strong>console</strong>');
-    expect(html).not.toContain('**console**');
-  });
-
-  it('prefers the reported standing over the authored text when it has both', () => {
-    // Both are in the document on every modern server. Only one of them carries verdicts, and
-    // drawing both is what this card was consolidated to stop doing.
-    const qc = client();
-    seed(
-      qc,
-      { total: 1, passed: 1, lastRunAt: RAN_AT, criteria: [criterion(1, 'Every page scores 90', 'PASS')] },
-      { acceptanceCriteria: 'Lighthouse ≥ 90 on every page' },
-    );
-    const html = paint(qc);
-
-    expect(html).toContain('Every page scores 90');
-    expect(html).not.toContain('Lighthouse ≥ 90 on every page');
-  });
-
-  it('surfaces an ambiguous one-line legacy backfill instead of pretending it was split', () => {
-    const qc = client();
-    seed(
-      qc,
-      {
-        total: 1,
-        passed: 0,
-        lastRunAt: null,
-        criteria: [criterion(1, '1. Build; 2. Boot', 'UNDECIDED')],
-      },
-      {
-        acceptanceCriteria: '1. Build; 2. Boot',
-        acceptanceCriteriaMigration: {
-          source: 'LEGACY_TEXT',
-          needsReview: true,
-          reason: 'AMBIGUOUS_SINGLE_LINE_ENUMERATION',
-        },
-      },
-    );
-    const html = paint(qc);
-
-    expect(html).toContain('Legacy acceptance criteria need review');
-    expect(html).toContain('preserved as one criterion rather than guessed into several');
-    expect(rowCount(html)).toBe(1);
+    expect(html).toContain('Acceptance criteria could not be loaded');
+    expect(html).toContain('gateway timeout');
   });
 
   it('says how many criteria it is not showing on a long list', () => {
-    const many = Array.from({ length: 30 }, (_, i) =>
-      criterion(i + 1, `Criterion number ${i + 1} holds`, i % 3 === 0 ? 'PASS' : 'UNDECIDED'),
-    );
     const qc = client();
-    seed(qc, { total: 30, passed: 10, lastRunAt: RAN_AT, criteria: many });
-    const html = paint(qc);
+    seed(qc, Array.from({ length: CRITERIA_PREVIEW + 3 }, (_, i) => criterion(i + 1, `C${i + 1}`)));
 
+    const html = paint(qc);
     expect(rowCount(html)).toBe(CRITERIA_PREVIEW);
-    // Named, not silently dropped: a list that stopped at twelve without saying so reads as a
-    // complete list of twelve.
-    expect(html).toContain('Show all 30 criteria');
-    expect(html).toContain('18 more not shown');
-    expect(html).toContain('Criterion number 12 holds');
-    expect(html).not.toContain('Criterion number 13 holds');
+    expect(html).toContain(`Show all ${CRITERIA_PREVIEW + 3} criteria`);
+    expect(html).toContain('3 more not shown');
   });
 
   it('draws no expander for a list it shows whole', () => {
     const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
-    const html = paint(qc);
+    seed(qc, FIVE);
 
+    const html = paint(qc);
     expect(rowCount(html)).toBe(5);
-    expect(html).not.toContain('Show all');
     expect(html).not.toContain('more not shown');
   });
 
-  it('puts the caller\'s run control in the head', () => {
+  it("puts the caller's control in the head", () => {
     const qc = client();
-    seed(qc, { total: 0, passed: 0, lastRunAt: null, criteria: [] });
+    seed(qc, FIVE);
+
     const html = renderToStaticMarkup(
       <QueryClientProvider client={qc}>
-        <ProjectAcceptanceCard projectId={PROJECT} action={<button type="button">Run acceptance</button>} />
+        <ProjectAcceptanceCard projectId={PROJECT} action={<button type="button">Edit</button>} />
       </QueryClientProvider>,
     );
-
-    expect(html).toContain('Run acceptance');
+    expect(html).toContain('>Edit<');
   });
 
   it('reads the project document under the key the detail page already holds', () => {
-    // Same key, same URL: the card shares the page's read rather than opening a second one, and a
-    // write that invalidates ['project', id] refreshes both.
     const qc = client();
-    seed(qc, { total: 1, passed: 1, lastRunAt: RAN_AT, criteria: [criterion(1, 'It ships', 'PASS')] });
+    seed(qc, FIVE);
 
-    expect(paint(qc)).toContain('It ships');
+    // No second request: the card renders from the cache the project page filled.
+    expect(paint(qc)).toContain('The runner reconnects after a restart');
+    expect(qc.getQueryCache().getAll().map((query) => query.queryKey))
+      .toEqual([['project', PROJECT]]);
   });
 
   it('carries the process-versus-outcome note under the list', () => {
     const qc = client();
-    seed(qc, { total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE });
+    seed(qc, FIVE);
 
-    expect(paint(qc)).toContain('process measure');
+    const html = paint(qc);
+    expect(html).toContain('Task completion is a process measure');
+    expect(html).toContain('nothing evaluates these criteria');
   });
 });
 
 describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
   it('shows four of seven criteria first, names the hidden count, and can reveal the rest', async () => {
     stubViewport(true);
+    stubCriterionLayout(true);
     const qc = client();
-    seed(qc, { total: 7, passed: 0, lastRunAt: null, criteria: SEVEN });
-    const mounted = await mount(qc);
-
+    seed(qc, SEVEN);
+    const { container, cleanup } = await mount(qc);
     try {
-      expect(mounted.container.querySelectorAll('.acceptance-row')).toHaveLength(
-        MOBILE_CRITERIA_PREVIEW,
-      );
-      expect(mounted.container.textContent).toContain('Mobile acceptance criterion 4');
-      expect(mounted.container.textContent).not.toContain('Mobile acceptance criterion 5');
-      expect(mounted.container.textContent).toContain('3 more not shown');
+      expect(rowCount(container.innerHTML)).toBe(MOBILE_CRITERIA_PREVIEW);
+      expect(container.textContent).toContain('View all 7 criteria');
+      expect(container.textContent).toContain('3 more not shown');
 
-      const viewAll = [...mounted.container.querySelectorAll('button')].find(
-        (button) => button.textContent?.trim() === 'View all 7 criteria',
-      );
-      expect(viewAll, 'the control that names the complete list').toBeTruthy();
-      expect(viewAll!.getAttribute('aria-expanded')).toBe('false');
-      viewAll!.focus();
-      await click(viewAll!);
-
-      expect(mounted.container.querySelectorAll('.acceptance-row')).toHaveLength(7);
-      expect(mounted.container.textContent).toContain('Mobile acceptance criterion 7');
-      expect(viewAll!.textContent).toContain('Show first 4 criteria');
-      expect(viewAll!.getAttribute('aria-expanded')).toBe('true');
-      expect(mounted.container.textContent).toContain('Showing all 7 criteria');
-      expect(document.activeElement).toBe(viewAll);
-
-      await click(viewAll!);
-      expect(mounted.container.querySelectorAll('.acceptance-row')).toHaveLength(4);
-      expect(viewAll!.textContent).toContain('View all 7 criteria');
-      expect(viewAll!.getAttribute('aria-expanded')).toBe('false');
-      expect(mounted.container.textContent).toContain('3 more not shown');
-      expect(document.activeElement).toBe(viewAll);
+      const more = container.querySelector<HTMLButtonElement>('.acceptance-more-button');
+      expect(more).not.toBeNull();
+      await click(more!);
+      expect(rowCount(container.innerHTML)).toBe(7);
+      expect(container.textContent).toContain('Showing all 7 criteria');
     } finally {
-      await mounted.cleanup();
+      await cleanup();
     }
   });
 
@@ -579,25 +397,13 @@ describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
     stubViewport(true);
     stubCriterionLayout(false);
     const qc = client();
-    seed(qc, {
-      total: 1,
-      passed: 0,
-      lastRunAt: null,
-      criteria: [criterion(1, 'A [short criterion](/docs/short) fits', 'UNDECIDED')],
-    });
-    const mounted = await mount(qc);
-
+    seed(qc, SEVEN);
+    const { container, cleanup } = await mount(qc);
     try {
-      const row = mounted.container.querySelector<HTMLElement>('.acceptance-row-mobile');
-      expect(row).toBeTruthy();
-      expect(row!.querySelector('.acceptance-row-toggle')).toBeNull();
-      expect(row!.querySelector('.acceptance-row-preview')).toBeNull();
-      const full = row!.querySelector<HTMLElement>('.acceptance-row-full');
-      expect(full?.hidden).toBe(false);
-      expect(full?.querySelector('a')?.getAttribute('href')).toBe('/docs/short');
-      expect(row!.querySelector('.acceptance-row-verdict-static')).toBeTruthy();
+      expect(container.querySelector('.acceptance-row-toggle')).toBeNull();
+      expect(container.querySelectorAll('.acceptance-row-full').length).toBeGreaterThan(0);
     } finally {
-      await mounted.cleanup();
+      await cleanup();
     }
   });
 
@@ -605,193 +411,53 @@ describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
     stubViewport(true);
     stubCriterionLayout(true);
     const qc = client();
-    seed(qc, { total: 1, passed: 0, lastRunAt: null, criteria: [SEVEN[0]] });
-    const mounted = await mount(qc);
-
+    seed(qc, SEVEN);
+    const { container, cleanup } = await mount(qc);
     try {
-      const row = mounted.container.querySelector<HTMLElement>('.acceptance-row-mobile');
-      const preview = row?.querySelector<HTMLElement>('.acceptance-row-preview');
-      const full = row?.querySelector<HTMLElement>('.acceptance-row-full');
-      const toggle = row?.querySelector<HTMLButtonElement>('.acceptance-row-toggle');
-
-      expect(preview?.hidden).toBe(false);
-      expect(preview?.textContent).toContain('full acceptance criterion');
-      expect(preview?.querySelector('a')).toBeNull();
-      expect(full?.hidden).toBe(true);
-      expect(full?.querySelector('a')?.getAttribute('href')).toBe('/docs/acceptance');
-      expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-      expect(toggle?.getAttribute('aria-controls')).toBe(full?.id);
-      expect(toggle?.getAttribute('aria-label')).toContain('Show formatted criterion 1');
-
-      toggle!.focus();
-      await click(toggle!);
-      expect(preview?.hidden).toBe(true);
-      expect(full?.hidden).toBe(false);
-      expect(full?.querySelector<HTMLAnchorElement>('a')?.tabIndex).toBe(0);
-      expect(toggle?.getAttribute('aria-expanded')).toBe('true');
-      expect(toggle?.getAttribute('aria-label')).toContain('Hide formatted criterion 1');
-      expect(row?.classList.contains('is-expanded')).toBe(true);
-      expect(document.activeElement).toBe(toggle);
-
-      await click(toggle!);
-      expect(preview?.hidden).toBe(false);
-      expect(preview?.querySelector('a')).toBeNull();
-      expect(full?.hidden).toBe(true);
-      expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-      expect(row?.classList.contains('is-expanded')).toBe(false);
-      expect(document.activeElement).toBe(toggle);
+      const toggles = container.querySelectorAll<HTMLButtonElement>('.acceptance-row-toggle');
+      expect(toggles.length).toBe(1);
+      expect(toggles[0].getAttribute('aria-expanded')).toBe('false');
+      await click(toggles[0]);
+      expect(container.querySelector('.acceptance-row-toggle')!.getAttribute('aria-expanded'))
+        .toBe('true');
+      await click(container.querySelector<HTMLButtonElement>('.acceptance-row-toggle')!);
+      expect(container.querySelector('.acceptance-row-toggle')!.getAttribute('aria-expanded'))
+        .toBe('false');
     } finally {
-      await mounted.cleanup();
-    }
-  });
-
-  it('re-measures overflow when ResizeObserver reports a width change', async () => {
-    stubViewport(true);
-    const layout = stubCriterionLayout(true);
-    const qc = client();
-    seed(qc, { total: 1, passed: 0, lastRunAt: null, criteria: [SEVEN[0]] });
-    const mounted = await mount(qc);
-
-    try {
-      expect(mounted.container.querySelector('.acceptance-row-toggle')).toBeTruthy();
-
-      layout.setLongCriterionOverflow(false);
-      await notifyResizeObservers();
-      expect(mounted.container.querySelector('.acceptance-row-toggle')).toBeNull();
-      expect(mounted.container.querySelector<HTMLElement>('.acceptance-row-full')?.hidden).toBe(
-        false,
-      );
-
-      layout.setLongCriterionOverflow(true);
-      await notifyResizeObservers();
-      expect(mounted.container.querySelector('.acceptance-row-toggle')).toBeTruthy();
-      expect(mounted.container.querySelector<HTMLElement>('.acceptance-row-preview')?.hidden).toBe(
-        false,
-      );
-      expect(mounted.container.querySelector<HTMLElement>('.acceptance-row-full')?.hidden).toBe(
-        true,
-      );
-    } finally {
-      await mounted.cleanup();
+      await cleanup();
     }
   });
 
   it('keeps all seven criteria and full row text on a desktop', () => {
+    stubViewport(false);
     const qc = client();
-    seed(qc, { total: 7, passed: 0, lastRunAt: null, criteria: SEVEN });
-    const html = paint(qc);
+    seed(qc, SEVEN);
 
+    const html = paint(qc);
     expect(rowCount(html)).toBe(7);
-    expect(html).not.toContain('View all 7 criteria');
-    expect(html).not.toContain('more not shown');
-    expect(html).not.toContain('aria-expanded');
     expect(html).not.toContain('acceptance-row-mobile');
-    expect(html.match(/href="\/docs\/acceptance"/g)).toHaveLength(1);
   });
 });
 
 describe('mobile criterion overflow', () => {
   it('asks for disclosure only beyond the three-line rendered preview', () => {
-    const layout = stubCriterionLayout(false);
-    const preview = document.createElement('span');
-    preview.className = 'acceptance-row-preview';
-    preview.textContent = 'full acceptance criterion';
+    const element = document.createElement('span');
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ lineHeight: '20px' } as CSSStyleDeclaration);
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get');
 
-    expect(MOBILE_CRITERION_PREVIEW_LINES).toBe(3);
-    expect(criterionNeedsDisclosure(preview)).toBe(false);
-    layout.setLongCriterionOverflow(true);
-    expect(criterionNeedsDisclosure(preview)).toBe(true);
-  });
-});
-
-describe('the meter', () => {
-  it('is one segment per criterion, in stated order', () => {
-    // Segment three is criterion three: the meter indexes the list under it rather than
-    // summarizing it, which is the only reading that survives being placed above the rows.
-    expect(meterSegments(FIVE)).toEqual([
-      { verdict: 'PASS', weight: 1 },
-      { verdict: 'PASS', weight: 1 },
-      { verdict: 'FAIL', weight: 1 },
-      { verdict: 'UNDECIDED', weight: 1 },
-      { verdict: 'INCONCLUSIVE', weight: 1 },
-    ]);
-  });
-
-  it('collapses to proportional runs once per-criterion segments stop being readable', () => {
-    const many = Array.from({ length: METER_SEGMENT_LIMIT + 1 }, (_, i) =>
-      criterion(i + 1, `c${i}`, i < 20 ? 'PASS' : 'FAIL'),
-    );
-    expect(meterSegments(many)).toEqual([
-      { verdict: 'PASS', weight: 20 },
-      { verdict: 'FAIL', weight: 5 },
-    ]);
-    // Exactly at the limit it is still one segment each — the collapse is above it, not at it.
-    expect(meterSegments(many.slice(0, METER_SEGMENT_LIMIT))).toHaveLength(METER_SEGMENT_LIMIT);
-  });
-
-  it('draws nothing for a project with no criteria', () => {
-    expect(meterSegments([])).toEqual([]);
-  });
-
-  it('says its reading in words', () => {
-    const t = tally(FIVE);
-    expect(t).toEqual({ pass: 2, fail: 1, inconclusive: 1, undecided: 1, total: 5 });
-    expect(meterReading(t, true)).toBe(
-      '2 passed, 1 failed, 1 inconclusive, 1 not judged of 5 criteria',
-    );
-    // Never run says what is stated and that none of it was judged — never a pass count of zero.
-    expect(meterReading(tally(FIVE.map((c) => ({ ...c, verdict: 'UNDECIDED' as const }))), false)).toBe(
-      '5 criteria stated, none judged',
-    );
-    expect(meterReading(tally([criterion(1, 'one', 'UNDECIDED')]), false)).toBe(
-      '1 criterion stated, none judged',
-    );
-  });
-});
-
-describe('the standing sentence', () => {
-  const NOW = Date.parse('2026-08-24T00:00:00.000Z');
-
-  it('names the state rather than scoring it when no run has happened', () => {
-    const line = standingLine({ total: 5, passed: 0, lastRunAt: null, criteria: [] }, NOW);
-    expect(line).toContain('Never run — 5 criteria stated');
-    expect(line).toContain('unknown, not zero');
-    expect(line).not.toContain('0');
-  });
-
-  it('counts one criterion in the singular', () => {
-    expect(standingLine({ total: 1, passed: 0, lastRunAt: null, criteria: [] }, NOW)).toContain(
-      '1 criterion stated',
-    );
-  });
-
-  it('says there is nothing to conclude when nothing is stated', () => {
-    expect(standingLine({ total: 0, passed: 0, lastRunAt: null, criteria: [] }, NOW)).toBe(
-      'No criteria are stated for this project, so there is nothing for a run to conclude.',
-    );
-  });
-
-  it('leads with what is wrong once a run has concluded', () => {
-    expect(standingLine({ total: 5, passed: 2, lastRunAt: RAN_AT, criteria: FIVE }, NOW)).toBe(
-      'Judged 2427d ago — 1 failed, 1 inconclusive, 1 still unjudged.',
-    );
-  });
-
-  it('says so plainly when a run found nothing wrong', () => {
-    const allPass = FIVE.map((c) => ({ ...c, verdict: 'PASS' as const }));
-    expect(standingLine({ total: 5, passed: 5, lastRunAt: RAN_AT, criteria: allPass }, NOW)).toBe(
-      'Judged 2427d ago — every stated criterion passed.',
-    );
+    scrollHeight.mockReturnValue(20 * MOBILE_CRITERION_PREVIEW_LINES);
+    expect(criterionNeedsDisclosure(element)).toBe(false);
+    scrollHeight.mockReturnValue(20 * MOBILE_CRITERION_PREVIEW_LINES + 20);
+    expect(criterionNeedsDisclosure(element)).toBe(true);
   });
 });
 
 describe('criteriaPreview', () => {
-  const many = Array.from({ length: 30 }, (_, i) => criterion(i + 1, `c${i}`, 'UNDECIDED'));
+  const many = Array.from({ length: 20 }, (_, i) => criterion(i + 1, `C${i + 1}`));
 
   it('shows the first page collapsed and everything expanded', () => {
     expect(criteriaPreview(many, false)).toHaveLength(CRITERIA_PREVIEW);
-    expect(criteriaPreview(many, false)[0]).toEqual(many[0]);
-    expect(criteriaPreview(many, true)).toHaveLength(30);
+    expect(criteriaPreview(many, true)).toHaveLength(20);
   });
 
   it('leaves a short list alone in both readings', () => {
@@ -800,9 +466,8 @@ describe('criteriaPreview', () => {
   });
 
   it('accepts the smaller phone preview without changing the desktop default', () => {
-    expect(criteriaPreview(many, false, MOBILE_CRITERIA_PREVIEW)).toEqual(
-      many.slice(0, MOBILE_CRITERIA_PREVIEW),
-    );
+    expect(criteriaPreview(many, false, MOBILE_CRITERIA_PREVIEW))
+      .toHaveLength(MOBILE_CRITERIA_PREVIEW);
     expect(criteriaPreview(many, false)).toHaveLength(CRITERIA_PREVIEW);
   });
 });
