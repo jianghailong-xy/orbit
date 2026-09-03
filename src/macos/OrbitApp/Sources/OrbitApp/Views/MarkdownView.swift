@@ -350,10 +350,10 @@ private struct MarkdownImageView: View {
     // Every call site (assistant bubble, thinking block, tool card, approval plan) renders inside the
     // transcript's `AttachmentImageStore` environment — the same store `ChatAttachmentImage` reads.
     @Environment(AttachmentImageStore.self) private var store
-    #if os(iOS)
-    // A tap opens the shared full-screen zoomable viewer, like a sent-image thumbnail.
-    @State private var fullScreen = false
-    #endif
+    @Namespace private var previewNS
+    // A tap opens the shared full-screen viewer, like a sent-image thumbnail. Unused on macOS,
+    // where the image isn't tappable.
+    @State private var previewTarget: ImagePreviewTarget?
 
     // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`, rendered at an exact fitted
     // size (below) against a fixed cap — the same approach as the sibling `ChatAttachmentImage` /
@@ -419,18 +419,18 @@ private struct MarkdownImageView: View {
         .loadsAttachmentImage(id, from: store)
     }
 
-    /// iOS: a tap opens the shared full-screen zoomable viewer (pinch/pan, Copy/Save) — the same
-    /// preview a sent-image thumbnail or a tool-result image opens. macOS: the image stays static,
-    /// matching the transcript's other thumbnails.
+    /// iOS: a tap expands the image into the shared full-screen viewer (pinch/pan/drag-to-dismiss) —
+    /// the same preview, and the same zoom transition, a sent-image thumbnail or a tool-result image
+    /// opens. Its pager holds a single page: the renderer builds one `MarkdownImageView` per image
+    /// and never tells any of them about the others, so a document's images aren't a swipeable group
+    /// the way one turn's attachments or one tool result's screenshots are. macOS: the image stays
+    /// static (both helpers are no-ops there), matching the transcript's other thumbnails.
     @ViewBuilder private func withPreview(_ view: some View, image img: PlatformImage) -> some View {
-        #if os(iOS)
+        let item = PreviewImage.inline(id: source, image: img)
         view
-            .contentShape(Rectangle())
-            .onTapGesture { fullScreen = true }
-            .fullScreenCover(isPresented: $fullScreen) { FullScreenImageView(image: img) }
-        #else
-        view
-        #endif
+            .imageTap({ previewTarget = ImagePreviewTarget(index: 0, id: item.id) },
+                      sourceID: item.id, ns: previewNS)
+            .imagePreview($previewTarget, images: [item], ns: previewNS)
     }
 
     private var placeholder: some View {

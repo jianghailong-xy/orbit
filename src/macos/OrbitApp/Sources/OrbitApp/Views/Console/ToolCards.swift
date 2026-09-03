@@ -33,6 +33,9 @@ struct ToolCardView: View {
     /// Whether the untrimmed result has been fetched. Tracked apart from the two fields it fills so
     /// a result that yields neither (a picture whose bytes failed to decode) still resolves once.
     @State private var resultResolved = false
+    @Namespace private var previewNS
+    /// Tapped result image → full-screen pager (iOS). Unused on macOS, where thumbnails aren't tappable.
+    @State private var previewTarget: ImagePreviewTarget?
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.card = card
@@ -43,6 +46,14 @@ struct ToolCardView: View {
     private var d: ToolDisplay { fullDisplay ?? previewDisplay }
     private var result: String? { fullResult ?? card.result }
     private var images: [Data] { fullImages ?? card.resultImages }
+    /// `images` decoded and keyed for the viewer. Bytes that aren't a renderable image drop out here,
+    /// which is what keeps a page index aligned with the thumbnail it was tapped from.
+    private var previewImages: [PreviewImage] {
+        images.indices.compactMap { i in
+            guard let img = PlatformImage(data: images[i]) else { return nil }
+            return PreviewImage.inline(id: "\(card.id)-img\(i)", image: img)
+        }
+    }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
     private var hasDetail: Bool { d.hasBody || hasResult }
     /// A result carrying an image (a screenshot the workspace produced for the user) opens so the
@@ -192,14 +203,18 @@ struct ToolCardView: View {
     }
 
     private var detail: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Decoded once here rather than inside each thumbnail: the same images back the full-screen
+        // pager below, and a screenshot is expensive enough that decoding it twice a body pass shows.
+        let previews = previewImages
+        return VStack(alignment: .leading, spacing: 8) {
             ToolBodyView(kind: d.body)
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.
-            if !images.isEmpty {
+            if !previews.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(images.enumerated()), id: \.offset) { _, data in
-                        ToolResultImageView(data: data)
+                    ForEach(Array(previews.enumerated()), id: \.element.id) { i, item in
+                        ToolResultImageView(item: item, ns: previewNS,
+                                            onTap: { previewTarget = ImagePreviewTarget(index: i, id: item.id) })
                     }
                 }
             }
@@ -220,6 +235,10 @@ struct ToolCardView: View {
                             in: RoundedRectangle(cornerRadius: 6))
             }
         }
+        // Hosted on the detail block, so the pager exists exactly while the open card's thumbnails
+        // are on screen. Its pages are this result's images — the swipe stays inside the one tool
+        // call you tapped into, like a turn's attachments stay inside their bubble.
+        .imagePreview($previewTarget, images: previews, ns: previewNS)
     }
 }
 
@@ -279,14 +298,15 @@ private struct SessionCreateCardView: View {
 }
 
 /// A single image carried by a tool_result (e.g. `Read` on a .png, or an MCP tool returning a
-/// screenshot), decoded from the inline bytes the runner delivered. Rendered as a rounded thumbnail
-/// fitted to a cap — web parity with the inline preview the web transcript shows. On iOS a tap opens
-/// the shared full-screen zoomable viewer (like a sent-image thumbnail); macOS stays static, matching
-/// the transcript's attachment thumbnails. Renders nothing if the bytes don't decode as an image.
+/// screenshot), decoded by the card from the inline bytes the runner delivered. Rendered as a rounded
+/// thumbnail fitted to a cap — web parity with the inline preview the web transcript shows. On iOS a
+/// tap expands it into the card's full-screen pager (like a sent-image thumbnail); macOS stays static,
+/// matching the transcript's attachment thumbnails.
 private struct ToolResultImageView: View {
-    let data: Data
+    let item: PreviewImage
+    var ns: Namespace.ID
+    var onTap: () -> Void
     #if os(iOS)
-    @State private var fullScreen = false
     private static let cap = CGSize(width: 300, height: 360)
     #else
     private static let cap = CGSize(width: 240, height: 240)
@@ -301,26 +321,15 @@ private struct ToolResultImageView: View {
     }
 
     var body: some View {
-        if let img = PlatformImage(data: data) {
-            thumbnail(img, size: Self.fitted(img.size))
+        if let img = item.inlineImage {
+            let size = Self.fitted(img.size)
+            Image(platformImage: img)
+                .resizable().scaledToFit()
+                .frame(width: size.width, height: size.height)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                .imageTap(onTap, sourceID: item.id, ns: ns)
         }
-    }
-
-    @ViewBuilder
-    private func thumbnail(_ img: PlatformImage, size: CGSize) -> some View {
-        let view = Image(platformImage: img)
-            .resizable().scaledToFit()
-            .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
-        #if os(iOS)
-        view
-            .contentShape(Rectangle())
-            .onTapGesture { fullScreen = true }
-            .fullScreenCover(isPresented: $fullScreen) { FullScreenImageView(image: img) }
-        #else
-        view
-        #endif
     }
 }
 

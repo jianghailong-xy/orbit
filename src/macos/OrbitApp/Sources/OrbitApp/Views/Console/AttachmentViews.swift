@@ -109,24 +109,6 @@ struct ChatAttachmentThumb: View {
     }
 }
 
-/// iOS: make a transcript image thumbnail tappable to open the full-screen pager, and (iOS 18+) mark
-/// it as the zoom-transition source so the preview grows out of / shrinks back into this thumbnail —
-/// the WeChat-style expand animation. macOS: no-op — the thumbnail stays a static rounded image.
-private extension View {
-    @ViewBuilder func imageTap(_ onTap: @escaping () -> Void, sourceID: String, ns: Namespace.ID) -> some View {
-        #if os(iOS)
-        let tappable = self.contentShape(Rectangle()).onTapGesture(perform: onTap)
-        if #available(iOS 18.0, *) {
-            tappable.matchedTransitionSource(id: sourceID, in: ns)
-        } else {
-            tappable
-        }
-        #else
-        self
-        #endif
-    }
-}
-
 /// Minimal wrapping layout (like CSS `flex-wrap`): packs subviews left-to-right and drops onto a new
 /// row when the next one wouldn't fit, sizing the block to its content so a trailing VStack still
 /// right-aligns it under the bubble. Fixes several thumbnails / chips overflowing one HStack off the

@@ -1,12 +1,38 @@
 import SwiftUI
 import OrbitKit
 
-// The full-screen image viewers a transcript (or composer) thumbnail opens, and the presentation
-// helper that hosts them. iOS-only behind `#if os(iOS)` — on macOS thumbnails aren't tappable, so
-// the helper is a no-op there. Split out of ConsoleView.swift.
+// The full-screen image viewer any console thumbnail opens, and the presentation helper that hosts
+// it. iOS-only behind `#if os(iOS)` — on macOS thumbnails aren't tappable, so both helpers are
+// no-ops there. Split out of ConsoleView.swift.
 
-/// The image a tap opened the full-screen pager on: `index` seeds the starting page; `id` (the tapped
-/// attachment's id) is the iOS-18 zoom-transition source so the viewer zooms back to the right tile.
+/// One page of the full-screen viewer. A sent turn's attachment resolves through the shared
+/// `AttachmentImageStore` — the pager may open on a page whose bytes the bounded cache evicted, and
+/// only the store can fetch them back. A tool-result image and a staged composer draft already hold
+/// their decoded bytes, so they carry them directly.
+enum PreviewImage: Identifiable {
+    case attachment(TurnAttachment)
+    case inline(id: String, image: PlatformImage)
+
+    /// Doubles as the iOS-18 zoom-transition source id, so it has to match the `imageTap` of the
+    /// thumbnail this page belongs to.
+    var id: String {
+        switch self {
+        case .attachment(let att): return att.id
+        case .inline(let id, _): return id
+        }
+    }
+
+    /// The decoded bytes, for a page that already carries them. Nil for a store-backed attachment,
+    /// whose image is whatever the store currently holds.
+    var inlineImage: PlatformImage? {
+        if case .inline(_, let image) = self { return image }
+        return nil
+    }
+}
+
+/// The image a tap opened the full-screen pager on: `index` seeds the starting page; `id` (the
+/// tapped image's `PreviewImage.id`) is the iOS-18 zoom-transition source so the viewer zooms back
+/// to the right thumbnail.
 struct ImagePreviewTarget: Identifiable {
     let index: Int
     let id: String
@@ -14,10 +40,15 @@ struct ImagePreviewTarget: Identifiable {
 
 extension View {
     /// iOS: present the full-screen image pager for `target`, zooming out of the tapped thumbnail on
-    /// iOS 18+. macOS: no-op (thumbnails aren't tappable there, so `target` never becomes non-nil).
+    /// iOS 18+. Every tappable image in the console is presented through here, so the transition is
+    /// the same wherever you tap; what differs per surface is only how far you can swipe — the pager
+    /// spans the images of the one message you tapped into (a turn's attachments, a tool result's
+    /// screenshots, the staged drafts). `store` is needed only for `.attachment` pages; a list of
+    /// already-decoded images passes nil. macOS: no-op (thumbnails aren't tappable there, so
+    /// `target` never becomes non-nil).
     @ViewBuilder
-    func imagePreview(_ target: Binding<ImagePreviewTarget?>, images: [TurnAttachment],
-                      ns: Namespace.ID, store: AttachmentImageStore) -> some View {
+    func imagePreview(_ target: Binding<ImagePreviewTarget?>, images: [PreviewImage],
+                      ns: Namespace.ID, store: AttachmentImageStore? = nil) -> some View {
         #if os(iOS)
         self.fullScreenCover(item: target) { t in
             Group {
@@ -34,80 +65,36 @@ extension View {
         self
         #endif
     }
-}
 
-#if os(iOS)
-/// Single-image full-screen viewer for an in-memory `PlatformImage` (the composer's staged draft
-/// thumbnails, which aren't attachment-backed yet). Pinch or double-tap to zoom, drag to pan while
-/// zoomed; drag down at fit scale to dismiss with the image shrinking as the backdrop fades. The
-/// sent-turn transcript uses `ImagePagerView` (swipe between a turn's images) instead.
-struct FullScreenImageView: View {
-    let image: PlatformImage
-    @Environment(\.dismiss) private var dismiss
-
-    @GestureState private var pinch: CGFloat = 1
-    @State private var scale: CGFloat = 1
-    @State private var offset: CGSize = .zero   // committed pan, only meaningful while zoomed
-    @State private var drag: CGSize = .zero      // live drag translation
-
-    private var liveScale: CGFloat { max(1, scale * pinch) }
-    private var zoomed: Bool { liveScale > 1.01 }
-    // 0 while zoomed or idle; 0→1 as a fit-scale downward drag approaches the dismiss threshold.
-    private var dismissProgress: CGFloat { zoomed ? 0 : min(1, max(0, drag.height) / 260) }
-
-    var body: some View {
-        let magnify = MagnificationGesture()
-            .updating($pinch) { value, state, _ in state = value }
-            .onEnded { value in scale = min(max(1, scale * value), 6) }
-
-        let pan = DragGesture()
-            .onChanged { value in drag = value.translation }
-            .onEnded { value in
-                if zoomed {
-                    offset.width += value.translation.width      // commit the pan
-                    offset.height += value.translation.height
-                    drag = .zero
-                } else if value.translation.height > 150 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { drag = .zero }
-                }
-            }
-
-        ZStack {
-            Color.black.opacity(1 - dismissProgress).ignoresSafeArea()
-
-            Image(platformImage: image)
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(liveScale * (1 - dismissProgress * 0.12))
-                .offset(x: offset.width + drag.width, y: offset.height + drag.height)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)   // fill → scaledToFit centres it
-                .contentShape(Rectangle())
-                .gesture(pan)
-                .simultaneousGesture(magnify)
-                .onTapGesture(count: 2) {
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        if zoomed { scale = 1; offset = .zero } else { scale = 2.6 }
-                    }
-                }
-                // A single tap anywhere dismisses the preview (no on-screen close button).
-                .onTapGesture { dismiss() }
+    /// iOS: make an image thumbnail tappable to open the full-screen pager, and (iOS 18+) mark it as
+    /// the zoom-transition source so the preview grows out of / shrinks back into this thumbnail —
+    /// the WeChat-style expand animation. macOS: no-op — the thumbnail stays a static image.
+    @ViewBuilder
+    func imageTap(_ onTap: @escaping () -> Void, sourceID: String, ns: Namespace.ID) -> some View {
+        #if os(iOS)
+        let tappable = self.contentShape(Rectangle()).onTapGesture(perform: onTap)
+        if #available(iOS 18.0, *) {
+            tappable.matchedTransitionSource(id: sourceID, in: ns)
+        } else {
+            tappable
         }
-        .ignoresSafeArea()
-        .statusBarHidden(true)
-        .presentationBackground(.clear)
+        #else
+        self
+        #endif
     }
 }
 
-/// Full-screen, swipeable viewer for the images in a user turn — opened by tapping any transcript
-/// thumbnail. Swipe left/right to move between the turn's images; pinch or double-tap to zoom, drag
-/// to pan while zoomed; drag down at fit scale to dismiss (the image shrinks and the transcript shows
-/// through). A single `DragGesture` routes by direction — horizontal ⇒ page, vertical ⇒ dismiss, any
-/// drag while zoomed ⇒ pan — so paging, dismissing and panning never fight each other.
+#if os(iOS)
+/// Full-screen, swipeable viewer for the images of one message — opened by tapping any console
+/// thumbnail. Swipe left/right to move between them; pinch or double-tap to zoom, drag to pan while
+/// zoomed; drag down at fit scale to dismiss (the image shrinks and the transcript shows through). A
+/// single `DragGesture` routes by direction — horizontal ⇒ page, vertical ⇒ dismiss, any drag while
+/// zoomed ⇒ pan — so paging, dismissing and panning never fight each other.
 struct ImagePagerView: View {
-    let images: [TurnAttachment]
-    @Environment(AttachmentImageStore.self) private var store
+    let images: [PreviewImage]
+    /// Only `.attachment` pages need it, so it's read optionally: a pager over in-memory images is
+    /// presented without a store in its environment.
+    @Environment(AttachmentImageStore.self) private var store: AttachmentImageStore?
     @Environment(\.dismiss) private var dismiss
 
     @State private var index: Int
@@ -122,7 +109,7 @@ struct ImagePagerView: View {
     private enum DragMode { case idle, page, dismiss, pan }
     private static let gap: CGFloat = 24
 
-    init(images: [TurnAttachment], startIndex: Int) {
+    init(images: [PreviewImage], startIndex: Int) {
         self.images = images
         _index = State(initialValue: startIndex)
     }
@@ -187,8 +174,8 @@ struct ImagePagerView: View {
                 Color.black.opacity(1 - dismissProgress).ignoresSafeArea()
 
                 HStack(spacing: Self.gap) {
-                    ForEach(Array(images.enumerated()), id: \.element.id) { i, att in
-                        page(att, isCurrent: i == index, size: geo.size)
+                    ForEach(Array(images.enumerated()), id: \.element.id) { i, item in
+                        page(item, isCurrent: i == index, size: geo.size)
                             .frame(width: w, height: geo.size.height)
                     }
                 }
@@ -215,22 +202,42 @@ struct ImagePagerView: View {
     }
 
     @ViewBuilder
-    private func page(_ att: TurnAttachment, isCurrent: Bool, size: CGSize) -> some View {
+    private func page(_ item: PreviewImage, isCurrent: Bool, size: CGSize) -> some View {
         Group {
-            if let img = store.image(for: att.id) {
-                Image(platformImage: img)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(isCurrent ? liveScale : 1)
-                    .offset(isCurrent
-                            ? CGSize(width: pan.width + panLive.width, height: pan.height + panLive.height)
-                            : .zero)
-            } else {
-                ProgressView().tint(.white)
+            switch item {
+            case .attachment(let att): attachmentPage(att, isCurrent: isCurrent)
+            case .inline(_, let img): pageBody(img, isCurrent: isCurrent)
             }
         }
         .frame(width: size.width, height: size.height)
-        .loadsAttachmentImage(att.id, from: store)
+    }
+
+    /// A store-backed page: shows a spinner until the bytes land, and keeps asking for them for as
+    /// long as the page exists (the cache is bounded and may have dropped this id).
+    @ViewBuilder
+    private func attachmentPage(_ att: TurnAttachment, isCurrent: Bool) -> some View {
+        if let store {
+            Group {
+                if let img = store.image(for: att.id) {
+                    pageBody(img, isCurrent: isCurrent)
+                } else {
+                    ProgressView().tint(.white)
+                }
+            }
+            .loadsAttachmentImage(att.id, from: store)
+        } else {
+            ProgressView().tint(.white)
+        }
+    }
+
+    private func pageBody(_ img: PlatformImage, isCurrent: Bool) -> some View {
+        Image(platformImage: img)
+            .resizable()
+            .scaledToFit()
+            .scaleEffect(isCurrent ? liveScale : 1)
+            .offset(isCurrent
+                    ? CGSize(width: pan.width + panLive.width, height: pan.height + panLive.height)
+                    : .zero)
     }
 
     @ViewBuilder

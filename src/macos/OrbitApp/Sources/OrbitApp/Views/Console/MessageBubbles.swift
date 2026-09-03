@@ -96,7 +96,8 @@ struct UserBubbleView: View {
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
         }
-        .imagePreview($previewTarget, images: images, ns: previewNS, store: store)
+        .imagePreview($previewTarget, images: images.map { PreviewImage.attachment($0) },
+                      ns: previewNS, store: store)
     }
 
     // Wrapping row of attachment chips (web's flex-wrap `.chat-files`): flows onto multiple lines so

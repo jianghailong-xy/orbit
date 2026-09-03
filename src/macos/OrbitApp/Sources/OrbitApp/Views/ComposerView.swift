@@ -821,21 +821,39 @@ struct ComposerView: View {
 /// buried under the diff chip.
 struct ComposerAttachmentsView: View {
     let console: ConsoleModel
+    @Namespace private var previewNS
+    /// Tapped staged image → full-screen pager (iOS). Unused on macOS, where chips aren't tappable.
+    @State private var previewTarget: ImagePreviewTarget?
+
+    /// The staged images, in chip order, at the best resolution on hand: the full-size bytes the
+    /// finished upload seeded into the shared store, else the downsampled thumbnail. Non-image
+    /// attachments drop out, so a position here counts image chips alone.
+    private var previewImages: [PreviewImage] {
+        console.pendingAttachments.compactMap { att in
+            guard let data = att.previewImageData, let thumb = PlatformImage(data: data) else { return nil }
+            let full = att.remoteID.flatMap { console.attachments.image(for: $0) }
+            return PreviewImage.inline(id: att.id, image: full ?? thumb)
+        }
+    }
 
     var body: some View {
         if !console.pendingAttachments.isEmpty {
+            let previews = previewImages
             HStack(alignment: .top, spacing: 8) {
-                ForEach(console.pendingAttachments) { attachmentChip($0) }
+                ForEach(console.pendingAttachments) { attachmentChip($0, previews: previews) }
                 Spacer(minLength: 0)
             }
             // Gutter comes from the enclosing `ComposerBand`; this only owns its gap to the next
             // member, and only while it is actually on screen.
             .padding(.bottom, .composerBandGap)
+            // The staged images are one group: tapping any of them opens a pager over all of them,
+            // the same way this turn's attachments will page together once the message lands.
+            .imagePreview($previewTarget, images: previews, ns: previewNS)
         }
     }
 
     @ViewBuilder
-    private func attachmentChip(_ att: PendingAttachment) -> some View {
+    private func attachmentChip(_ att: PendingAttachment, previews: [PreviewImage]) -> some View {
         if let data = att.previewImageData, let image = PlatformImage(data: data) {
             // Inline image: a 48×48 thumbnail with a corner remove button (web's .composer-attach).
             Image(platformImage: image)
@@ -853,12 +871,10 @@ struct ComposerAttachmentsView: View {
                     }
                 }
                 // iOS: tap the staged thumbnail to open the full-screen viewer before sending
-                // (the tiny 48² chip is hard to read otherwise). Preview the full-resolution bytes
-                // seeded in the shared store when the upload finishes — the same source the sent
-                // bubble uses — falling back to the downsampled thumbnail while still uploading.
-                // The remove button is overlaid *after* this, so it stays on top and its taps aren't
-                // captured by the preview.
-                .modifier(ComposerImageTap(image: att.remoteID.flatMap { console.attachments.image(for: $0) } ?? image))
+                // (the tiny 48² chip is hard to read otherwise), expanding out of the chip like every
+                // other console image. The remove button is overlaid *after* this, so it stays on top
+                // and its taps aren't captured by the preview.
+                .imageTap(tapAction(att, in: previews), sourceID: att.id, ns: previewNS)
                 .overlay(alignment: .topTrailing) {
                     Button { console.removeAttachment(att) } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -906,29 +922,16 @@ struct ComposerAttachmentsView: View {
         }
     }
 
+    /// Opens the pager at this chip's image. Its page number counts image chips alone, which is why
+    /// it's looked up in `previews` rather than taken from the enclosing `ForEach` over every
+    /// staged attachment — a file chip in front of it would otherwise shift the page by one.
+    private func tapAction(_ att: PendingAttachment, in previews: [PreviewImage]) -> () -> Void {
+        let index = previews.firstIndex { $0.id == att.id } ?? 0
+        return { previewTarget = ImagePreviewTarget(index: index, id: att.id) }
+    }
+
     private func byteString(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-    }
-}
-
-/// iOS: make a staged composer image thumbnail tappable to open the shared full-screen viewer
-/// (`FullScreenImageView` from ConsoleView) — parity with the sent-message thumbnails and web's
-/// tap-to-preview. macOS: no-op, matching the transcript thumbnails there.
-private struct ComposerImageTap: ViewModifier {
-    let image: PlatformImage
-    #if os(iOS)
-    @State private var preview = false
-    #endif
-
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content
-            .contentShape(Rectangle())
-            .onTapGesture { preview = true }
-            .fullScreenCover(isPresented: $preview) { FullScreenImageView(image: image) }
-        #else
-        content
-        #endif
     }
 }
 
