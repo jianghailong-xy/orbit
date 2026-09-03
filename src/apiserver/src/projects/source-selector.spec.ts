@@ -168,7 +168,7 @@ test('SR15: a pinned revision is a full SHA or a full-name ref; an abbreviation 
 });
 
 test('every selector is exactly one of ref-valued or SHA-valued', () => {
-  // Migration 0175 states this as a CHECK (`session_source_snapshot_chk`), so a resolver that
+  // Migration 0231 states this as a CHECK (`session_source_snapshot_chk`), so a resolver that
   // produced both or neither would not fail here — it would fail at the INSERT, at dispatch time,
   // as a constraint violation with no explanation attached.
   const cases = [

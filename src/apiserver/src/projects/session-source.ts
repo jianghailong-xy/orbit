@@ -307,7 +307,7 @@ export const SESSION_SOURCE_SELECT = {
  * told `wonRace: false` — including a loser whose own resolution produced a DIFFERENT commit,
  * because by then a worktree stands on the winner's and one session may have only one baseline.
  *
- * There is deliberately no way to re-pin, and migration 0175's freeze guard refuses it at the
+ * There is deliberately no way to re-pin, and migration 0231's freeze guard refuses it at the
  * database as well: "that SHA turned out to be unreachable" may not become "use a different SHA"
  * through any door (SR12). Substituting would make the run's result be about code it never ran.
  *
@@ -337,7 +337,7 @@ export async function freezeSessionSourcePin(
   // §10.1's one dispatch-path code, and the one code that may never land on a row: a session that
   // both records "refused because no runner supports the protocol" and is still queued for one that
   // does would be the state machine holding two answers at once. Its home is the claim gate, and
-  // migration 0175's `session_source_refusal_chk` would reject it here anyway — this is the answer
+  // migration 0231's `session_source_refusal_chk` would reject it here anyway — this is the answer
   // that says WHY rather than a constraint violation.
   if (refusal?.code === 'SOURCE_PROTOCOL_UNSUPPORTED') {
     throw new BadRequestException(
@@ -363,7 +363,7 @@ export async function freezeSessionSourcePin(
         id: actor.sessionId,
         assignedRunnerId: actor.runnerId,
         // Both halves of the seal. `sourceState` is what the state machine reads and
-        // `sourceBaseSha IS NULL` is what the freeze guard reads; 0175's `session_source_pin_chk`
+        // `sourceBaseSha IS NULL` is what the freeze guard reads; 0231's `session_source_pin_chk`
         // makes them equivalent, and naming both says which invariant each reader relies on.
         sourceState: 'SELECTED',
         sourceBaseSha: null,

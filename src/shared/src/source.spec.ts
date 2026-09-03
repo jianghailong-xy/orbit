@@ -11,7 +11,7 @@ import {
  * The wire vocabulary against `docs/project-source-contract.md` itself.
  *
  * `project-source-contract.spec.ts` already proves the DOCUMENT is self-consistent, and migration
- * 0175 already proves the DATABASE spells the same codes. Neither of them looks at this file, so
+ * 0231 already proves the DATABASE spells the same codes. Neither of them looks at this file, so
  * without these the third copy — the one the control plane, the runner and every client actually
  * import — is the one free to drift. And it is the copy that decides what a person sees.
  *

@@ -1286,7 +1286,7 @@ export class RunnerApiController {
    * ignores the field and starts from the workDir's HEAD, which is worse than failing.
    *
    * `error` and NOT `source_refusal_code`: the refusal column is welded to `sourceState = 'REFUSED'`
-   * by migration 0175, and REFUSED is terminal. This row is not terminal — a newer runner makes it
+   * by migration 0231, and REFUSED is terminal. This row is not terminal — a newer runner makes it
    * runnable — so it stays SELECTED and the explanation rides on the display column instead (§10.1's
    * note on why this one dispatch-path code never lands in the state machine).
    */

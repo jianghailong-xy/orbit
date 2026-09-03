@@ -1031,7 +1031,7 @@ model Session {
   // server-side startup measurement (engineStartedAt - lastTurnAt).
   engineStartedAt      DateTime? @map("engine_started_at")
   // ── SOURCE snapshot: which commit this run starts from ──────────────────────
-  // `docs/project-source-contract.md` §3.2, migration 0175. Fifteen columns, two seals, and the
+  // `docs/project-source-contract.md` §3.2, migration 0231. Fifteen columns, two seals, and the
   // seals are what make "may this column still be written" have exactly one answer:
   //
   //   * SourceSelector (the INTENT — which repository, which line) is frozen in the SAME INSERT as
@@ -1779,9 +1779,9 @@ model Project {
   /// The progress ledger those wakes are charged against (unit T4, 0176).
   convergenceDecisions ProjectConvergenceDecision[]
 
-  /// The code line(s) this project's tasks start from, if it has any (migration 0175). Optional by
+  /// The code line(s) this project's tasks start from, if it has any (migration 0231). Optional by
   /// design: a project with no binding is not a project with a broken one — its tasks resolve no
-  /// SOURCE at all and keep the pre-0175 behaviour exactly (`docs/project-source-contract.md` SR5).
+  /// SOURCE at all and keep the pre-0231 behaviour exactly (`docs/project-source-contract.md` SR5).
   codebases ProjectCodebase[]
 
   @@index([ownerId])
@@ -1796,7 +1796,7 @@ model Project {
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
-/// migration 0175).
+/// migration 0231).
 ///
 /// This exists because SOURCE — which commit a run starts from — is currently decided by WHERE:
 /// `setupWorktree` reads the workDir's HEAD, so handing a task to a different machine silently
@@ -3048,7 +3048,7 @@ model Task {
   knownGoodSha       String?  @map("known_good_sha")
 
   /// An explicit git baseline for this task, overriding what the project would otherwise resolve
-  /// (`docs/project-source-contract.md` §4 P2, migration 0175). Either a full 40-hex lowercase SHA
+  /// (`docs/project-source-contract.md` §4 P2, migration 0231). Either a full 40-hex lowercase SHA
   /// or a full-name ref; a CHECK refuses everything else.
   ///
   /// Abbreviated SHAs are refused on purpose (SR15): an abbreviation resolves against a repository

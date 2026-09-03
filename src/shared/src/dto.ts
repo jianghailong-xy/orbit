@@ -810,7 +810,7 @@ export interface ClaimedSession {
   /** Which commit this run starts from (`docs/project-source-contract.md` §6.3 step 1).
    *
    *  Omitted for every Legacy session — `sourceState = 'UNBOUND'`, which is every session that
-   *  is not a code task of a Project with a codebase binding — and those keep the pre-0175
+   *  is not a code task of a Project with a codebase binding — and those keep the pre-0231
    *  behaviour byte for byte: the runner forks from the workDir's HEAD (SR45/SR46).
    *
    *  Present means the opposite is now true, and a runner that ignores it would start from that

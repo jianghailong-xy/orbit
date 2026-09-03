@@ -11,7 +11,7 @@ import {
 } from './coordinator-pg-test-safety';
 
 /**
- * 迁移 0175 的 S1 用例（`docs/project-source-contract.md` §12.1），全部打真实 PostgreSQL。
+ * 迁移 0231 的 S1 用例（`docs/project-source-contract.md` §12.1），全部打真实 PostgreSQL。
  *
  * 打真库而不是手搭 schema 子集，是因为本单元交付的**全部内容就是数据库约束**：CHECK 的真值、触发器
  * 的触发时机、`ADD COLUMN` 走没走 catalog 路径 —— 没有一条是在 TypeScript 里能断言的。一个只和自己
@@ -20,7 +20,7 @@ import {
  * 每条断言尽量落在**行为**上而不是 DDL 文本上：`pg_constraint` 里有没有那个名字，与"写一行违反它的
  * 数据会不会被拒"是两个不同的命题，而只有后者是这个单元承诺的东西。
  *
- * 非破坏性：只读 catalog，并且只写自己前缀的夹具行，跑完全部删掉。它不 DROP 任何 0175 的对象，因此
+ * 非破坏性：只读 catalog，并且只写自己前缀的夹具行，跑完全部删掉。它不 DROP 任何 0231 的对象，因此
  * 可以和别的 spec 共用一个迁移好的库。
  */
 
@@ -29,12 +29,12 @@ const skip = !URL;
 
 const MIGRATION_DIR = path.resolve(
   __dirname,
-  '../../prisma/migrations/0175_project_codebase_session_source',
+  '../../prisma/migrations/0231_project_codebase_session_source',
 );
 const MIGRATION = readFileSync(path.join(MIGRATION_DIR, 'migration.sql'), 'utf8');
 
 /** 夹具 id 都带这个前缀，清理按前缀走 —— 绝不整表删（0080 给 `model_provider` 装过删除守卫）。 */
-const FIX = '0175a175-0175-4175-8175-';
+const FIX = '0231a231-0231-4231-8231-';
 const id = (n: string) => `${FIX}${n.padStart(12, '0')}`;
 
 const OWNER = id('1');
@@ -141,7 +141,7 @@ async function refuses(run: () => Promise<unknown>, expected: RegExp, why: strin
   assert.match(error.message, expected, why);
 }
 
-test('0175 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
+test('0231 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
   const client = await connect();
   t.after(async () => {
     await cleanup(client).catch(() => undefined);

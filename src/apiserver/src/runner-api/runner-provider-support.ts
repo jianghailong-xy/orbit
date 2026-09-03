@@ -9,7 +9,7 @@ export const OPENCODE_RUNNER_UPGRADE_ERROR = 'OpenCode requires Orbit runner 0.1
  * codes and this is the only place it becomes visible, because it is the one code that must NOT be
  * written to `session.source_refusal_code` — a row that both says "refused because X" and is still
  * queued for dispatch would be the state machine holding two answers at once (§6.1 T4/T8 and
- * migration 0175's `session_source_refusal_chk`). The session stays SELECTED and keeps waiting: a
+ * migration 0231's `session_source_refusal_chk`). The session stays SELECTED and keeps waiting: a
  * newer runner coming online is all it takes, which is not what a configuration error looks like.
  */
 export const SOURCE_PROTOCOL_UNSUPPORTED_ERROR =

@@ -575,7 +575,7 @@ type ClaimedSession struct {
 	MergeTarget string `json:"mergeTarget,omitempty"`
 	// Source is which commit this run must start from (docs/project-source-contract.md §6.3).
 	// Nil for every Legacy session — which is every session that is not a code task of a Project
-	// with a codebase binding — and those keep the pre-0175 behaviour byte for byte: setupWorktree
+	// with a codebase binding — and those keep the pre-0231 behaviour byte for byte: setupWorktree
 	// forks from the workDir's HEAD (SR45/SR46).
 	//
 	// Non-nil means the opposite, and the server only sends it to a process that declared

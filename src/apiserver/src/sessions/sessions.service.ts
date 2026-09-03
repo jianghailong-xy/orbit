@@ -727,7 +727,7 @@ export class SessionsService {
     // Deliberately reads only the task and its project's code binding: no workspace, no workDir, no
     // `defaultMergeTarget` (SR1/SR3). Which machine this lands on is decided above and contributes
     // nothing here. A session that executes no task, or whose project has no binding, resolves
-    // `UNBOUND` and behaves exactly as it did before migration 0175 (SR45).
+    // `UNBOUND` and behaves exactly as it did before migration 0231 (SR45).
     const source = await decideSessionSource(this.prisma, sourceTask);
     // Validate any compose-page image refs up front (caller's, still unscoped) so a bad
     // one fails the request before a session is created. They're scoped to the session
@@ -821,7 +821,7 @@ export class SessionsService {
         creatorId: ownerId,
         ownerId,
         // SR28: the SOURCE selector is frozen by THIS statement, not a follow-up UPDATE. The
-        // database agrees — migration 0175's freeze guard refuses every later write to these nine
+        // database agrees — migration 0231's freeze guard refuses every later write to these nine
         // columns, so there is no second statement that could write them.
         ...source.columns,
       },

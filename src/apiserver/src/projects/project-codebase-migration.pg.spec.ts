@@ -11,7 +11,7 @@ import {
 } from './coordinator-pg-test-safety';
 
 /**
- * 0175 是 ATOMIC 的，失败什么也不留 —— 并且它在**有数据的库上**跑得过去（用例 S1.01 的前半句）。
+ * 0231 是 ATOMIC 的，失败什么也不留 —— 并且它在**有数据的库上**跑得过去（用例 S1.01 的前半句）。
  *
  * 这一批对象彼此没有意义：一张没有冻结守卫的快照表比没有更糟（它让"selector 是冻结的"这句话在数据
  * 库里不成立，而上层每一条规则都建在那句话上），一条加了 `SOURCE_UNRESOLVED` 却没有 session 快照列
@@ -23,11 +23,11 @@ import {
  *   2. 然后未经修改的文件必须能干净地应用上去 —— 而且是应用到一个**装着 session / task / project
  *      行**的数据库上，因为"在既有数据上可执行"是本单元的验收条款，不是可以在空库上代跑的东西。
  *
- * 与 0137 的一处差别值得写下来：0137 是原子但**不**幂等，重跑撞 `relation already exists`。0175 两者
+ * 与 0137 的一处差别值得写下来：0137 是原子但**不**幂等，重跑撞 `relation already exists`。0231 两者
  * 都是 —— 每条语句都带 `IF NOT EXISTS` / `duplicate_object` 守卫 / `CREATE OR REPLACE`。最后一段断言
  * 的正是后一半：重跑既不改 schema，也不碰数据，更不把一条绑定的 `configRevision` 推高。
  *
- * 设计上具有破坏性：它 DROP 0175 的对象再重建，所以需要一个属于自己的数据库。
+ * 设计上具有破坏性：它 DROP 0231 的对象再重建，所以需要一个属于自己的数据库。
  * `scripts/project-pg-matrix.sh` 给每个 pg spec 一个。
  */
 
@@ -35,11 +35,11 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 const MIGRATION = readFileSync(
-  path.join(__dirname, '../../prisma/migrations/0175_project_codebase_session_source/migration.sql'),
+  path.join(__dirname, '../../prisma/migrations/0231_project_codebase_session_source/migration.sql'),
   'utf8',
 );
 
-/** 0175 建的每一样东西，按"它在不在"这个问题分类。 */
+/** 0231 建的每一样东西，按"它在不在"这个问题分类。 */
 const OBJECTS = {
   tables: ['project_codebase'],
   triggers: ['project_codebase_config_guard', 'session_source_freeze_guard'],
@@ -54,7 +54,7 @@ const OBJECTS = {
   indexes: ['project_id_owner_id_key', 'runner_id_owner_id_key', 'session_source_codebase_idx'],
 };
 
-const FIX = '0175b175-0175-4175-8175-';
+const FIX = '0231b231-0231-4231-8231-';
 const id = (n: string) => `${FIX}${n.padStart(12, '0')}`;
 
 async function present(client: Client) {
@@ -84,8 +84,8 @@ async function present(client: Client) {
   };
 }
 
-/** 回到一个从没见过 0175 的数据库 —— 失败用例必须从那里开始度量。 */
-async function drop0175(client: Client) {
+/** 回到一个从没见过 0231 的数据库 —— 失败用例必须从那里开始度量。 */
+async function drop0231(client: Client) {
   await client.query(`DROP TRIGGER IF EXISTS "session_source_freeze_guard" ON "session"`);
   await client.query(`DROP TRIGGER IF EXISTS "project_codebase_config_guard" ON "project_codebase"`);
   await client.query(`DROP TABLE IF EXISTS "project_codebase"`);
@@ -103,7 +103,7 @@ async function drop0175(client: Client) {
       'DEPENDENCY_CYCLE', 'COORDINATOR_UNAVAILABLE', 'COORDINATOR_NO_PROGRESS',
       'AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED',
       'VERIFICATION_CANNOT_CONCLUDE', 'ENVIRONMENT_BROKEN', 'HUMAN_DECISION_REQUIRED',
-      'VERDICT_APPLY_EXHAUSTED', 'UNKNOWN_FAILURE'))`);
+      'VERDICT_APPLY_EXHAUSTED', 'COMPLETION_ACK_STALE', 'UNKNOWN_FAILURE'))`);
 }
 
 const NOTHING = {
@@ -111,7 +111,7 @@ const NOTHING = {
   sourceUnresolved: false,
 };
 
-test('0175 在有数据的库上原子地应用，失败什么也不留', { skip, timeout: 180_000 }, async (t) => {
+test('0231 在有数据的库上原子地应用，失败什么也不留', { skip, timeout: 180_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const client = new Client({ connectionString: URL!, connectionTimeoutMillis: 5_000 });
   await client.connect();
@@ -124,8 +124,8 @@ test('0175 在有数据的库上原子地应用，失败什么也不留', { skip
     await client.end().catch(() => undefined);
   });
 
-  await drop0175(client);
-  assert.deepEqual(await present(client), NOTHING, '夹具从一个没有 0175 的数据库开始');
+  await drop0231(client);
+  assert.deepEqual(await present(client), NOTHING, '夹具从一个没有 0231 的数据库开始');
 
   // 存量数据。迁移**之后**这些行必须一行未改，且全部读作 Legacy —— 这是 SR45 在真实历史数据上的
   // 断言，而不是在一张空表上的。
@@ -155,7 +155,7 @@ test('0175 在有数据的库上原子地应用，失败什么也不留', { skip
   await client.query('ROLLBACK').catch(() => undefined);
 
   assert.deepEqual(await present(client), NOTHING,
-    '失败的 0175 什么也没留下 —— 没有表、没有触发器、没有列、没有索引会在重跑时撞车');
+    '失败的 0231 什么也没留下 —— 没有表、没有触发器、没有列、没有索引会在重跑时撞车');
 
   // ……而仓库里那份原样的文件，就应用到这个装着数据的数据库上。
   await client.query(MIGRATION);

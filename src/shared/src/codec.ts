@@ -351,7 +351,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'dependentTaskId',
   'replacementEdgeId',
   // The SOURCE snapshot's two uuid references and the codebase's authority machine (migration
-  // 0175). All three are addresses, and the reason is the whole point of the snapshot: a person
+  // 0231). All three are addresses, and the reason is the whole point of the snapshot: a person
   // asking "why did this run start from that commit" follows them — open the binding it resolved
   // against, open the machine that resolved it. Deliberately NOT fences: nothing echoes them back,
   // and the one comparison the pin path makes is a compare-and-set on `source_base_sha`, which is

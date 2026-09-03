@@ -10,7 +10,7 @@
 
 /**
  * §6.1's four states. `UNBOUND` IS the Legacy path (SR45) and is the database column's default, so
- * every session that existed before migration 0175 reads it without being touched.
+ * every session that existed before migration 0231 reads it without being touched.
  */
 export type SourceState = 'UNBOUND' | 'SELECTED' | 'PINNED' | 'REFUSED';
 

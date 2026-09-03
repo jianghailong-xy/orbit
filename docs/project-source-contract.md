@@ -12,7 +12,7 @@
 
 ## 0. 本契约存在的理由
 
-今天一条 session 的代码起点由 `setupWorktree`（`src/runner-go/worktree.go:542`）决定，规则是一行：
+今天一条 session 的代码起点由 `src/runner-go/worktree.go` 的 `setupWorktree` 决定，规则是一行：
 
 ```go
 base, err := git(baseDir, "rev-parse", "HEAD")   // workDir 的当前 HEAD
@@ -30,7 +30,7 @@ base, err := git(baseDir, "rev-parse", "HEAD")   // workDir 的当前 HEAD
 
 **SR1**：Project 代码任务的 SOURCE 必须是一次**显式解析的结论**，而不是任何目录的当前状态。`workspace.workDir` 的 HEAD、`workspace.defaultMergeTarget`、worktree 的 `git symbolic-ref HEAD`，**三者都不是 SOURCE 的输入**。
 
-**SR2**：`workspace.defaultMergeTarget` 的语义在 v1 内**不变、不扩展、不复用**。它是"状态栏 Merge 下拉框上次选的分支"，由 `mergeToMain` 在每次显式合并时回写到 workspace 上（`src/apiserver/src/sessions/sessions.service.ts:3727`；`src/runner-go/worktree.go:605` 的注释已经写明：拿它当基线会让一次一次性合并悄悄给该 workspace 之后所有 session 换基线）。把它读进 SOURCE 解析器，等于把一个**会被写回的展示偏好**升级成代码基线。
+**SR2**：`workspace.defaultMergeTarget` 的语义在 v1 内**不变、不扩展、不复用**。它是"状态栏 Merge 下拉框上次选的分支"，由 `src/apiserver/src/sessions/sessions.service.ts` 的 `mergeToMain` 在每次显式合并时回写到 workspace 上（`data: { defaultMergeTarget: target }`）；`src/runner-go/worktree.go` 的 `setupWorktree` 里那句 `writes defaultMergeTarget back on every explicit "Merge to…" pick` 注释已经写明：拿它当基线会让一次一次性合并悄悄给该 workspace 之后所有 session 换基线。把它读进 SOURCE 解析器，等于把一个**会被写回的展示偏好**升级成代码基线。
 
 ---
 
@@ -140,7 +140,7 @@ Branch 表达意图，commit SHA 表达运行事实，**两者必须同时留痕
 **SR12（claim-frozen 集合无 `retiredPin` 类例外）**：PAC §6 S4 给 `model` 留了"模型被下架时改写一次"的例外，因为一个不存在的模型无法运行。SOURCE **没有对应的例外**：一个不可达的 SHA 不是"换一个"的理由，是**拒绝的理由**（SR33）。换基线会让运行结果与它声称验证的东西无关。
 
 **SR13（`sourceBaseSha` 与既有 `session.baseSha` 是两列，不是一列）**：
-- `session.baseSha` 是**既有的、可被治愈的**列：`resolveBaseSha`（`worktree.go:454`）会在 reclaim 时把它向分支真实 fork 点收紧，好让 diff 不把别人的提交算成本 session 的删除。它服务于 **diff 展示**。
+- `session.baseSha` 是**既有的、可被治愈的**列：`src/runner-go/worktree.go` 的 `resolveBaseSha` 会在 reclaim 时把它向分支真实 fork 点收紧，好让 diff 不把别人的提交算成本 session 的删除。它服务于 **diff 展示**。
 - `sourceBaseSha` 是**不可变的事实**：这次运行从哪个 commit 起步。它服务于**可复现性与依赖正确性**。
 
 一个会被治愈的列不能承载一个不可变的事实。二者的关系由一条不变量约束（SR14），而不是由合并成一列来"简化"。
@@ -340,7 +340,7 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 ### 7.1 规范化与身份
 
-**SR36（URL 规范化是一个纯函数，且只用于比较）**：`canonicalRepoUrl` 由一个纯函数产生：去首尾空白、去尾部 `/`、去尾部 `.git`、scheme/host 小写、丢弃 `user@` 认证前缀、scp 式 `git@host:owner/repo` 与 `ssh://git@host/owner/repo` 归一到同一形态。规范化结果**只用于身份比较，从不用于 clone** —— clone 用的是用户写下的原值。runner 侧已有 `cloneDirName`（`src/runner-go/clone.go:103`）做了同类拆解，两处必须共用同一份规则并有对拍测试。
+**SR36（URL 规范化是一个纯函数，且只用于比较）**：`canonicalRepoUrl` 由一个纯函数产生：去首尾空白、去尾部 `/`、去尾部 `.git`、scheme/host 小写、丢弃 `user@` 认证前缀、scp 式 `git@host:owner/repo` 与 `ssh://git@host/owner/repo` 归一到同一形态。规范化结果**只用于身份比较，从不用于 clone** —— clone 用的是用户写下的原值。runner 侧已有 `src/runner-go/clone.go` 的 `cloneDirName` 做了同类拆解，两处必须共用同一份规则并有对拍测试。
 
 **SR37（身份是一对值，URL 单独不够）**：只比 URL，一次远端迁移（GitHub → 自建）就会让所有 session 的身份全错；只比 `rootCommitSha`，两个 fork 无法区分。因此 G1 判定为：`canonicalRepoUrl` 相等 **或** `rootCommitSha` 相等且非空。两者皆不成立才是 `BASE_REPO_MISMATCH`。`rootCommitSha` 为 NULL 时首次成功解析可补写一次（这是**观测到的事实**，不是猜测），此后不可变。
 
@@ -421,9 +421,9 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 理由：`project_blocker.kind` 是一套**路由词汇** —— 它回答"谁来修、UI 给哪个按钮"。这八个码路由到**同一个结论**："必须有人改配置或先把前置合进去，重试不会有帮助"。把不改变路由决策的粒度放进封闭集合，只会让 `project_blocker_kind_chk` 每加一个错误码就要改一次；放进 payload 则粒度不丢（UI 仍按 `code` 显示不同的修复按钮，靠 `fixAction`）。
 
-**SR51（恰好一条已声明的落地位置）**：`SOURCE_UNRESOLVED` 的落地位置**有且只有一条**：数据模型任务 `34D2Afu5EbYy5pjIhTeyA` 的迁移 `0175_project_codebase_session_source` 中，一条 `ALTER TABLE "project_blocker" DROP/ADD CONSTRAINT "project_blocker_kind_chk"` 步骤，把它加进 `0142_project_blocker_verdict_apply_exhausted` 留下的封闭集合，此后共 26 个 kind。契约自检断言：本契约声称的 blocker kind 集合恰好等于当前封闭集合里的新增项，且这条声明在全文只出现一次 —— 第二处落地声明就是第二个会漂移的真相。
+**SR51（恰好一条已声明的落地位置）**：`SOURCE_UNRESOLVED` 的落地位置**有且只有一条**：数据模型任务 `34D2Afu5EbYy5pjIhTeyA` 的迁移 `0231_project_codebase_session_source` 中，一条 `ALTER TABLE "project_blocker" DROP/ADD CONSTRAINT "project_blocker_kind_chk"` 步骤，把它加进本迁移之前**当前生效**的封闭集合（`0201_completion_ack_canonical_obligation` 留下的 26 个值，其中 `COMPLETION_ACK_STALE` 是 `0220_completion_ack_removal` 明确保留的），此后共 27 个 kind。契约自检断言：本契约声称的 blocker kind 集合恰好等于当前封闭集合里的新增项，且这条声明在全文只出现一次 —— 第二处落地声明就是第二个会漂移的真相。
 
-v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺席**。0175 落地后该断言翻面：现在断言的是它**在**封闭集合里，且集合大小与这里写下的数字相等。翻的是断言的方向，不是它守的东西 —— 两个版本守的都是同一句话：契约与迁移对这个 kind 的说法必须一致。
+v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺席**。0231 落地后该断言翻面：现在断言的是它**在**封闭集合里，且集合大小与这里写下的数字相等。翻的是断言的方向，不是它守的东西 —— 两个版本守的都是同一句话：契约与迁移对这个 kind 的说法必须一致。
 
 一个写不进去的拒绝码，等于一次静默跳过的派发 —— 真实数据库对它的回答是 `violates check constraint "project_blocker_kind_chk"`，而那正是 SR33 禁止的东西。
 
@@ -470,7 +470,9 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 | SR47 / SR49 | 码表 ↔ 正文双向闭合；`fixAction` 取值封闭 | `project-source-contract.spec.ts` |
 | SR50 / SR51 / SR52 | 本契约声称的 blocker kind 集合 = 迁移新增集合；写入真库成功 | `project-source-contract.spec.ts` / `source-blocker.pg.spec.ts` |
 
-**SR53（契约自检必须先于实现存在）**：`project-source-contract.spec.ts` 是**纯契约测试**（不连数据库、不起 Nest），断言本文的自洽性：编号唯一且连续、错误码双向闭合、冻结集合不相交、闸门全序、禁列名缺席、`fixAction` 封闭、§13 的每一行都引用得到一条 §12 用例。它在任何实现任务开工前就应当能跑绿 —— 一份没有自检的契约，与一份没有人读的契约在效果上相同。
+**SR53（契约自检必须先于实现存在）**：`project-source-contract.spec.ts` 是**纯契约测试**（不连数据库、不起 Nest），断言本文的自洽性：编号唯一且连续、错误码双向闭合、冻结集合不相交、闸门全序、禁列名缺席、`fixAction` 封闭、§13 的每一行都引用得到一条 §12 用例。
+
+本文对实现的每一处引用都写成**文件名 + 符号名 + 一句可断言的内容**，**不写行号**：行号是别人一次无关提交就会作废的坐标，一条指错地方的引用比没有引用更糟——它看起来仍然被核对过。自检因此还断言两件事：全文不含 `路径:行号` 形式的引用，且被点名的每一个符号在它被点名的文件里确实声明着、被引用的那句内容确实在那里。它在任何实现任务开工前就应当能跑绿 —— 一份没有自检的契约，与一份没有人读的契约在效果上相同。
 
 ---
 
@@ -603,7 +605,7 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 1. **多仓库任务**：一个 Task 需要两个仓库同时在特定版本时，`requiredContains` 与 worktree 布局如何表达。取舍 1 的直接后续。
 2. **服务端裸镜像**：若日后引入，`refAuthority` 需要第三个取值 `SERVER_MIRROR`，且 §6.3 的三步握手会塌缩成两步。本契约的分层允许这次替换，因为解析结论的**形状**不变。
 3. **`integrationRef` 上的并发推进**：目标 tip 围栏与重新验证规则由 `34D2AgK6sXw5VEbTu70EP` 定义，本契约只固定"默认目标是 `integrationRef`"和"landed 是包含关系"两点（SR44 / SR26）。
-4. **`rootCommitSha` 与浅克隆**：浅克隆没有根提交。runner 侧 `cloneRepo` 目前是全克隆（`clone.go:79` 的注释写明了理由），因此 v1 不受影响；若日后支持浅克隆，SR37 的身份判据需要一个替代指纹。
+4. **`rootCommitSha` 与浅克隆**：浅克隆没有根提交。runner 侧 `src/runner-go/clone.go` 的 `cloneRepo` 目前是全克隆（函数体里那句 `No --depth.` 注释写明了理由），因此 v1 不受影响；若日后支持浅克隆，SR37 的身份判据需要一个替代指纹。
 
 ---
 

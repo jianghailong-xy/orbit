@@ -42,7 +42,7 @@ var fullSha = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // needsSourcePin reports whether this job must complete the handshake before it may run at all.
 //
 // Nil source, or UNBOUND, is the Legacy path and answers false: those sessions behave exactly as
-// they did before migration 0175, down to the three degradations in §0 that new-style sessions are
+// they did before migration 0231, down to the three degradations in §0 that new-style sessions are
 // forbidden (SR45/SR46).
 func needsSourcePin(job *ClaimedSession) bool {
 	return job != nil && job.Source != nil && job.Source.State != "" && job.Source.State != sourceStateUnbound

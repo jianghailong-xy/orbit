@@ -461,6 +461,13 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- blocker 的结构化 detail。理由：`kind` 是一套**路由**词汇 —— 它回答"谁来修、UI 给哪个按钮"，而这八个
 -- 码路由到同一个结论："必须有人改配置或先把前置合进去，重试不会有帮助"。把不改变路由决策的粒度放进
 -- 封闭集合，只会让这条 CHECK 每加一个错误码就要改一次；放进 payload 则粒度不丢。
+--
+-- 这是一次**整体重写**（PostgreSQL 没有"往 CHECK 里加一个值"的语法），所以它必须写在**当前生效的**
+-- 集合之上，而不是写在契约起草时读到的那一份之上。当前生效的是 `0201_completion_ack_canonical_obligation`
+-- 留下的 26 个值 —— 注意 `COMPLETION_ACK_STALE`：`0220_completion_ack_removal` 删掉了整套 completion-ACK
+-- 机制，却**明确保留**了这个成员，理由写在它自己的注释里（线上有一条 RESOLVED 的 project_blocker 行
+-- 带着它）。漏掉它这条 ADD CONSTRAINT 会在真实数据上当场失败，而在一个空 schema 上照样通过 —— 这正是
+-- `project-codebase-migration.pg.spec.ts` 要在**装了数据的库**上跑这条迁移的原因。
 -- ---------------------------------------------------------------------------------------------
 
 ALTER TABLE "project_blocker" DROP CONSTRAINT IF EXISTS "project_blocker_kind_chk";
@@ -474,7 +481,7 @@ ALTER TABLE "project_blocker" ADD CONSTRAINT "project_blocker_kind_chk"
     'DEPENDENCY_CYCLE', 'COORDINATOR_UNAVAILABLE', 'COORDINATOR_NO_PROGRESS',
     'AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED',
     'VERIFICATION_CANNOT_CONCLUDE', 'ENVIRONMENT_BROKEN', 'HUMAN_DECISION_REQUIRED',
-    'VERDICT_APPLY_EXHAUSTED', 'SOURCE_UNRESOLVED',
+    'VERDICT_APPLY_EXHAUSTED', 'COMPLETION_ACK_STALE', 'SOURCE_UNRESOLVED',
     'UNKNOWN_FAILURE'
   ));
 

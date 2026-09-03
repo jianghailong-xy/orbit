@@ -129,17 +129,24 @@ test('SR50/SR51 blocker kind 恰好一个，且确实是新增的', () => {
   const kinds = [...DOC.matchAll(/`project_blocker\.kind = '([A-Z_]+)'`/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(kinds)], ['SOURCE_UNRESOLVED'], '本契约只贡献一个 blocker kind');
   // 现行封闭集合来自最后一次改写 project_blocker_kind_chk 的迁移。
+  //
+  // 标识符的双引号是**可选**的，两种写法都要认：0125/0135/0141/0142 写 `"project_blocker_kind_chk"`，
+  // 0201 写不带引号的 `project_blocker_kind_chk`。只认带引号的那一种会让这里读到 0142 —— 一份早已被
+  // 覆盖的集合 —— 并据此断言"现行"，那时 `COMPLETION_ACK_STALE`（0220 明确保留的成员）会在这里凭空消失。
+  // 同一个文件里改写两次时取**最后**一次：留在库里生效的是它。
   const dirs = readdirSync(MIGRATIONS).filter((d) => /^\d{4}_/.test(d)).sort();
   const closedSetsByMigration: string[][] = [];
   for (const d of dirs) {
     let sql = '';
     try { sql = readFileSync(path.join(MIGRATIONS, d, 'migration.sql'), 'utf8'); } catch { continue; }
-    const m = sql.match(/ADD CONSTRAINT "project_blocker_kind_chk"[\s\S]*?CHECK \("kind" IN \(([\s\S]*?)\)\)/);
-    if (m) closedSetsByMigration.push([...m[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]));
+    const rewrites = [...sql.matchAll(
+      /ADD CONSTRAINT "?project_blocker_kind_chk"?[\s\S]*?CHECK \("?kind"? IN \(([\s\S]*?)\)\)/g)];
+    const last = rewrites.at(-1);
+    if (last) closedSetsByMigration.push([...last[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]));
   }
   const closed = closedSetsByMigration.at(-1) ?? [];
   assert.ok(closed.length > 0, '读不到 project_blocker_kind_chk 的封闭集合');
-  // 0175 之前这里断言的是它的**缺席**（SR51 那时读作"尚未落地"）。0175 落地后断言翻面，守的仍是
+  // 0231 之前这里断言的是它的**缺席**（SR51 那时读作"尚未落地"）。0231 落地后断言翻面，守的仍是
   // 同一句话：契约与迁移对这个 kind 的说法必须一致。
   assert.ok(
     closed.includes('SOURCE_UNRESOLVED'),
@@ -153,6 +160,15 @@ test('SR50/SR51 blocker kind 恰好一个，且确实是新增的', () => {
     closed.filter((k) => !before.includes(k)),
     ['SOURCE_UNRESOLVED'],
     '本契约只贡献一个 blocker kind，且它必须是最后一次改写新增的那一个',
+  );
+  // 反方向同样要断言：整体重写是这条 CHECK 唯一的修改方式（PostgreSQL 没有"加一个值"的语法），所以
+  // 一次疏忽就会**收窄**集合。`COMPLETION_ACK_STALE` 是 0220 明确保留的成员（线上有一条 RESOLVED 的
+  // project_blocker 行带着它），漏掉它这条 ADD CONSTRAINT 会在真实数据上当场失败，而在空 schema 上
+  // 照样通过。只断言"新增了什么"看不见这个。
+  assert.deepEqual(
+    before.filter((k) => !closed.includes(k)),
+    [],
+    '最后一次改写收窄了封闭集合 —— 整体重写必须写在当前生效的集合之上',
   );
   // 落地位置有且只有一条声明。
   // 数**出现次数**而不是行数：同一行里写第二处落地，按行数看仍然是一行。
@@ -207,5 +223,76 @@ test('SR2 defaultMergeTarget 只以"被禁止"的身份出现', () => {
       /不是|不得|不复用|禁止|缺席|不可达|Legacy|不改写|SR2|不被|拒绝|保留|改过/,
       `这一行把 defaultMergeTarget 当成了输入：${line.slice(0, 60)}`,
     );
+  }
+});
+
+/**
+ * SR53：本文对实现的引用是**文件名 + 符号名 + 一句可断言的内容**，不是行号。
+ *
+ * v1 写的是 `worktree.go:542` 这样的坐标。行号会被别人一次无关的提交作废，而作废是**静默**的 —— 引用
+ * 仍然读得通，只是指向了另一段代码，于是一条指错地方的引用比没有引用更糟：它看起来仍然被核对过。
+ * 这张表是那些引用的可执行形式：文件在、符号声明在那个文件里、被引用的那句话确实在那里。
+ */
+const IMPLEMENTATION_ANCHORS: readonly {
+  file: string; symbol: string; declares: string; quotes: readonly string[];
+}[] = [
+  {
+    // §0：今天的代码起点。
+    file: 'src/runner-go/worktree.go', symbol: 'setupWorktree', declares: 'func setupWorktree(',
+    quotes: ['base, err := git(baseDir, "rev-parse", "HEAD")'],
+  },
+  {
+    // SR2：`defaultMergeTarget` 是被写回的展示偏好，两处各自的证据。
+    file: 'src/apiserver/src/sessions/sessions.service.ts', symbol: 'mergeToMain',
+    declares: 'async mergeToMain(', quotes: ['data: { defaultMergeTarget: target }'],
+  },
+  {
+    file: 'src/runner-go/worktree.go', symbol: 'setupWorktree', declares: 'func setupWorktree(',
+    quotes: ['writes defaultMergeTarget back on every explicit "Merge to…" pick'],
+  },
+  {
+    // SR13：可被治愈的 `session.baseSha`。
+    file: 'src/runner-go/worktree.go', symbol: 'resolveBaseSha', declares: 'func resolveBaseSha(',
+    quotes: [],
+  },
+  {
+    // SR36：runner 侧已有的同类 URL 拆解。
+    file: 'src/runner-go/clone.go', symbol: 'cloneDirName', declares: 'func cloneDirName(',
+    quotes: [],
+  },
+  {
+    // §14 未决 4：浅克隆。
+    file: 'src/runner-go/clone.go', symbol: 'cloneRepo', declares: 'func cloneRepo(',
+    quotes: ['No --depth.'],
+  },
+];
+
+test('SR53 契约对实现的引用不含行号', () => {
+  const lineRefs = [...DOC.matchAll(/[A-Za-z0-9_./-]+\.(?:ts|tsx|go|prisma|sql):\d+/g)].map((m) => m[0]);
+  assert.deepEqual(
+    lineRefs, [],
+    '契约用行号引用了实现 —— 别人一次无关提交就会让它静默指向另一段代码',
+  );
+});
+
+test('SR53 契约点名的每个实现符号都在它被点名的文件里', () => {
+  for (const anchor of IMPLEMENTATION_ANCHORS) {
+    assert.ok(DOC.includes(`\`${anchor.file}\``), `契约没有点名文件 ${anchor.file}`);
+    assert.ok(DOC.includes(`\`${anchor.symbol}\``), `契约没有点名符号 ${anchor.symbol}`);
+    const source = readFileSync(path.join(REPO, anchor.file), 'utf8');
+    assert.ok(
+      source.includes(anchor.declares),
+      `${anchor.file} 里没有 ${anchor.symbol} 的声明（\`${anchor.declares}\`）—— 契约指向了一个不在那里的符号`,
+    );
+    for (const quote of anchor.quotes) {
+      assert.ok(
+        source.includes(quote),
+        `${anchor.file} 里没有契约引用的这句内容：${quote}`,
+      );
+      assert.ok(
+        DOC.includes(quote),
+        `契约不再引用这句内容，断言却还在守着它：${quote}`,
+      );
+    }
   }
 });

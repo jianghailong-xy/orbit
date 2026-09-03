@@ -1,4 +1,4 @@
--- 0175 的回滚，按相反顺序。Prisma 不读这个文件（它只读 `migration.sql`），它在这里是为了让回滚是一份
+-- 0231 的回滚，按相反顺序。Prisma 不读这个文件（它只读 `migration.sql`），它在这里是为了让回滚是一份
 -- 被审过的脚本，而不是凌晨三点临时写的。与 `migration.sql` 一样自带事务、一样可重跑。
 --
 -- 会丢什么：所有 `project_codebase` 行，以及每一条 session 的 SOURCE 快照（包括已冻结的
@@ -6,9 +6,14 @@
 -- 前提是写这些列的代码也一起退了；但如果有任何一条 `PINNED` 的 session 正在跑，它的 worktree 建在一个
 -- 数据库不再记得的 SHA 上。先停掉它们再回滚。
 --
--- `project_blocker_kind_chk` 退回 0142 的 25 个值。任何已经写下的 `SOURCE_UNRESOLVED` blocker 会让
--- `ADD CONSTRAINT` 失败（那是对的：约束不能对着违反它的数据装上去），所以它们先被删掉 —— 不是标成
--- 已解决：解决意味着有人修好了配置，而这里发生的是"能表达这个问题的词汇被撤回了"。
+-- `project_blocker_kind_chk` 退回本迁移之前生效的 26 个值 —— 那是 `0201_completion_ack_canonical_obligation`
+-- 留下的集合，其中 `COMPLETION_ACK_STALE` 是 `0220_completion_ack_removal` 明确保留的（线上有一条
+-- RESOLVED 的 project_blocker 行带着它，收窄会让 ADD CONSTRAINT 当场失败）。回滚只撤回本迁移加的
+-- 那一个值，不顺手收窄任何别人的。
+--
+-- 任何已经写下的 `SOURCE_UNRESOLVED` blocker 会让 `ADD CONSTRAINT` 失败（那是对的：约束不能对着违反
+-- 它的数据装上去），所以它们先被删掉 —— 不是标成已解决：解决意味着有人修好了配置，而这里发生的是
+-- "能表达这个问题的词汇被撤回了"。
 
 BEGIN;
 
@@ -24,7 +29,7 @@ ALTER TABLE "project_blocker" ADD CONSTRAINT "project_blocker_kind_chk"
     'DEPENDENCY_CYCLE', 'COORDINATOR_UNAVAILABLE', 'COORDINATOR_NO_PROGRESS',
     'AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED',
     'VERIFICATION_CANNOT_CONCLUDE', 'ENVIRONMENT_BROKEN', 'HUMAN_DECISION_REQUIRED',
-    'VERDICT_APPLY_EXHAUSTED',
+    'VERDICT_APPLY_EXHAUSTED', 'COMPLETION_ACK_STALE',
     'UNKNOWN_FAILURE'
   ));
 
