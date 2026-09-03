@@ -1937,6 +1937,11 @@ model ProjectAcceptanceCriterionDefinition {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
+  /// The work filed against this criterion (migration 0232). One criterion, many tasks: several
+  /// pieces of work can serve the same stated condition, and nothing here says any of them
+  /// settles it — `Task.criterionDefinitionId` is a declaration, not a completion input.
+  servingTasks Task[]
+
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
@@ -2885,6 +2890,30 @@ model Task {
   /// the acceptance prose. NULL means no override was needed or recorded; the text is audit
   /// evidence only and is never interpreted as completion evidence.
   completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
+  /// WHICH of the project's stated acceptance criteria this work says it serves, as a relation
+  /// rather than the name of one (migration 0232). `CreateTaskDto.criterionKey` is still how a
+  /// caller spells it — a content-addressed key read back from `project_get` — and this is where
+  /// the criterion that key resolved to is written down.
+  ///
+  /// Two columns, and the pair is the point. The id is the LIVE relation: it follows the criterion
+  /// through every edit, because editing an assertion's words changes its key and would otherwise
+  /// silently orphan every task filed under it. The revision is a SNAPSHOT of what that criterion
+  /// said at the moment the work was declared against it, so a later reader can tell work filed
+  /// against today's wording from work filed against wording that has since moved on.
+  /// `TaskCompletionEvidence` already carries exactly this pair for exactly this reason.
+  ///
+  /// SetNull on delete, and that is what makes the pair readable after the criterion is gone: the
+  /// id empties, the revision stays, and `criterion_definition_id IS NULL AND criterion_revision
+  /// IS NOT NULL` is then the whole of "this work declared a criterion that no longer exists" —
+  /// no flag column, and nothing to keep in step with the deletion. Restrict would be wrong here
+  /// for the reason `projectId` is Restrict: a project is what its tasks are FOR and must not
+  /// vanish under them, while one criterion of it is a statement the owner may rewrite or drop
+  /// without the work it prompted becoming undeleteable.
+  criterionDefinitionId String?                               @map("criterion_definition_id") @db.Uuid
+  criterionDefinition   ProjectAcceptanceCriterionDefinition? @relation(fields: [criterionDefinitionId], references: [id], onDelete: SetNull)
+  /// `ProjectAcceptanceCriterionDefinition.revision` as it stood when this task was filed. Never
+  /// advanced afterwards: a snapshot that followed the criterion would be the criterion.
+  criterionRevision     Int?                                  @map("criterion_revision")
   /// Free-text labels, written by whoever files the task (in practice the agent creating it).
   /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
   /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and
@@ -3156,6 +3185,10 @@ model Task {
   @@index([discoveredFromProjectId], map: "task_discovered_from_project_idx")
   @@index([sourceTaskId], map: "task_source_task_idx")
   @@index([sourceSessionId], map: "task_source_session_idx")
+  /// The criterion declaration's lookup index, and the referencing side of its foreign key. Both
+  /// directions need it: "which work serves this criterion" is the read, and without it every
+  /// criterion delete scans `task` to find the rows its SET NULL applies to.
+  @@index([criterionDefinitionId])
   /// The tenancy fence `[K2]`'s two ledger tables hang off: a child row names BOTH the task and
   /// the owner, so it cannot disagree with its parent about whose it is. The same device migration
   /// 0120 used for (decision, project).

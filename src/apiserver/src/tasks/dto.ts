@@ -206,10 +206,14 @@ export class CreateTaskDto {
   //
   // Required of a judgment session and of nobody else (`refuseTaskOpening`), which is why it is
   // optional here: a person filing work has never had to justify it to a gate, and making the
-  // field mandatory at the DTO would refuse every task the product creates today. It is a
-  // DECLARATION rather than a link — nothing is written from it, and the criterion it names is
-  // read back from the project at admission time, so a key that was valid when the criteria said
-  // one thing does not stay valid after a person rewrites them.
+  // field mandatory at the DTO would refuse every task the product creates today.
+  //
+  // Migration 0232 gave it a landing place. The key itself is still not stored — it is content
+  // addressed, so it changes every time somebody edits the criterion's words — but what it
+  // RESOLVES to is: `Task.criterionDefinitionId` (the criterion's stable id, a live relation) and
+  // `Task.criterionRevision` (what that criterion's revision was at this moment). The resolution
+  // happens against the project the write lands in, so a key that named a criterion when the
+  // criteria said one thing is refused, not silently dropped, after a person rewrites them.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;

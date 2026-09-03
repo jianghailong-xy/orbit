@@ -140,9 +140,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        triggers/functions above, neither of the 0177 relations, and no `project_acceptance_*`
   //        object; its only two `CREATE OR REPLACE FUNCTION`s are its own new guards, so it is not
   //        a third writer of the DONE fence.
+  //   0232 landed the task criterion declaration: two nullable columns on `task`, one index and
+  //        one foreign key into `project_acceptance_criterion_definition` with ON DELETE SET NULL.
+  //        Pure addition, and reachable from nothing here: it names none of the six preserved
+  //        triggers/functions, neither 0177 relation and no `project_acceptance_*` TRIGGER or
+  //        FUNCTION; it carries no `CREATE OR REPLACE FUNCTION` at all, so it is not another
+  //        writer of the DONE fence; and it writes no data, so no preserved row is touched. The
+  //        `project_acceptance_criterion_definition` table it references is not modified — being
+  //        pointed AT changes nothing about a criterion, which is the whole reason the referential
+  //        action is SET NULL on the referencing side.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
-      '0230_executable_exit_code_judgment', '0231_project_codebase_session_source'],
+      '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
+      '0232_task_criterion_declaration'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

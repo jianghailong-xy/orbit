@@ -508,9 +508,12 @@ test('a declared criterion inside the daily budget opens the task', async () => 
 
   assert.equal(f.writes.length, 1, 'the bound is a bound, not a ban');
   assert.equal(f.writes[0].title, 'Repair the dispatcher');
-  // The declaration is not stored: it says the work was ASKED FOR at the moment it was filed, and
-  // a criterion the project no longer states must not go on justifying tasks written under it.
+  // The KEY is not stored — it is content-addressed, so it stops naming the criterion the moment
+  // anybody edits its words. What migration 0232 stores is what the key resolved to: the
+  // criterion's stable id and the revision it then had (`task-criterion-declaration.pg.spec`).
   assert.equal(f.writes[0].criterionKey, undefined);
+  assert.equal(f.writes[0].criterionDefinitionId, 'def-1');
+  assert.equal(f.writes[0].criterionRevision, 1);
 });
 
 test('over the day’s allowance, the same task is refused', async () => {

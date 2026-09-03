@@ -135,6 +135,8 @@ import {
   TASK_BUDGET_WINDOW_MS,
   authorityPrincipal,
   refuseTaskOpening,
+  type AuthorityRefusalCode,
+  type AuthorityRequiredAction,
 } from '../projects/coordinator-authority';
 import { criteriaFromDefinitions } from '../projects/project-acceptance';
 import {
@@ -2572,6 +2574,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion,
       }],
     );
+    // Migration 0232, and against the SERVER's project rather than the one the caller named: a
+    // declaration is resolved in the project the write actually lands in, or the criterion it
+    // names would be read out of a project the task is not in. Before the transaction, like every
+    // other refusal on this path, so a refused declaration leaves nothing behind (AC1).
+    const criterionDeclaration = (await this.resolveCriterionDeclarations(
+      ownerId, [{ projectId: scopedProjectId, criterionKey: dto.criterionKey }],
+    )).get(0) ?? null;
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
@@ -2603,6 +2612,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       origin,
       idempotencyKey,
       await this.pausedListIds(ownerId, [dto.listId]),
+      criterionDeclaration,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -2851,6 +2861,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     origin: CreationOrigin | undefined,
     idempotencyKey: string | undefined,
     heldListIds: ReadonlySet<string>,
+    /** Migration 0232: what `dto.criterionKey` resolved to, or null when nothing was declared. */
+    criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -2880,6 +2892,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
       completionCriterionOverrideReason:
         normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason),
+      // Migration 0232: WHICH stated criterion this work says it serves, as the criterion's stable
+      // id plus the revision it carried at this moment. Both or neither — a revision without an id
+      // is what a DELETED criterion leaves behind, and writing that pair here would forge it.
+      // Undefined rather than null when nothing was declared, so the columns stay out of the
+      // INSERT entirely, exactly as every task written before they existed.
+      criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
+      criterionRevision: criterionDeclaration?.criterionRevision,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -3361,6 +3380,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       creatorSessionId,
       items.filter((_, index) => !frozen.has(index)),
     );
+    // Migration 0232, per item and over the projects the items were ADMITTED into. A frozen item
+    // is a replay: its row exists and is not rewritten, so re-resolving its declaration could only
+    // refuse a write that already happened. Above the dry run for the same reason the bound above
+    // is — a preview that answered "this plan lands here" for a plan the write refuses is the one
+    // thing a preview must not do.
+    const criterionDeclarations = await this.resolveCriterionDeclarations(
+      ownerId, items.map((item, index) => (frozen.has(index) ? {} : item)),
+    );
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
     // findings at once — and nothing written if any of them refuses (AC5).
     // A dry run always preflights. `planNeedsPreflight` is false for the owner's own writes (§4 R1
@@ -3524,6 +3551,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               origin,
               idempotencyKey,
               heldListIds,
+              criterionDeclarations.get(index) ?? null,
             ),
           }));
         // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
@@ -4017,6 +4045,111 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         if (refusal) throw new ForbiddenException(refusal);
       }
     }
+  }
+
+  /**
+   * Which criterion each of these items DECLARED it serves, resolved to the row `criterionKey`
+   * names — the write half of migration 0232.
+   *
+   * `refuseTaskOpening` above already reads the same key, and this is deliberately not part of it:
+   * that is an AUTHORITY bound and answers only for judgment sessions, because a person filing
+   * work has never had to justify it to a gate. This is about a value being written, so it answers
+   * for every writer. The two agree where they overlap — an unknown key is `TASK_CRITERION_UNKNOWN`
+   * either way — and the judgment path meets the authority bound first.
+   *
+   * THREE REFUSALS, ONE CODE
+   * ------------------------
+   * A key naming nothing, a key naming another project's criterion, and a key on work that is in
+   * no project at all. They are one code because they are one fact from the caller's side — the
+   * key does not resolve HERE — and the required action is the same sentence in all three: read
+   * the project's criteria back and name one of them. §12 E2's rule against synonyms is why none
+   * of them gets a code of its own, and it is why the middle case is not special-cased at all: the
+   * resolution reads only the task's OWN project, so another project's key is simply absent from
+   * the list, exactly as a deleted one is.
+   *
+   * Refusing rather than dropping the value is the point of the unit. A declaration the server
+   * silently ignores is worse than no declaration: the caller is told the work was filed against a
+   * criterion, and the database says it was filed against nothing.
+   */
+  private async resolveCriterionDeclarations(
+    ownerId: string,
+    items: ReadonlyArray<{ projectId?: string | null; criterionKey?: string }>,
+  ): Promise<Map<number, { criterionDefinitionId: string; criterionRevision: number }>> {
+    const resolved = new Map<number, { criterionDefinitionId: string; criterionRevision: number }>();
+    // One read per PROJECT, not per item, so a fifty-item plan into one project pays for one.
+    const statedByProject = new Map<string, ReturnType<typeof criteriaFromDefinitions>>();
+    for (const [index, item] of items.entries()) {
+      const declared = item.criterionKey?.trim();
+      if (!declared) continue;
+      if (!item.projectId) {
+        throw new ForbiddenException(this.criterionUnknown(declared,
+          'this task is not in any project, and a criterion is one project\'s statement of what it '
+          + 'wants. File the work in the project whose criterion it serves, or leave `criterionKey` '
+          + 'out: work outside every project serves no stated criterion, which is allowed.'));
+      }
+      let stated = statedByProject.get(item.projectId);
+      if (!stated) {
+        // Tenancy is `assertOwnedProject`'s and the scope contract's, both of which have already
+        // run; the owner filter here is what keeps this read from being a second, weaker answer.
+        const project = await this.prisma.project.findFirst({
+          where: { id: item.projectId, ownerId },
+          select: {
+            acceptanceCriterionDefinitions: {
+              select: { id: true, ordinal: true, text: true, revision: true, contentHash: true },
+            },
+          },
+        });
+        stated = criteriaFromDefinitions(project?.acceptanceCriterionDefinitions ?? []);
+        statedByProject.set(item.projectId, stated);
+      }
+      const criterion = stated.find((candidate) => candidate.key === declared);
+      if (!criterion) {
+        throw new ForbiddenException(this.criterionUnknown(declared,
+          `it does not name any acceptance criterion this project states today (it states `
+          + `${stated.length}). Re-read them with project_get: editing a criterion changes its key, `
+          + 'and a key from another project is not one this project states.'));
+      }
+      // The id is the live relation and the revision is the snapshot of what it said now. Both
+      // read from the same row in the same statement, so they cannot describe two moments.
+      resolved.set(index, {
+        criterionDefinitionId: criterion.definitionId,
+        criterionRevision: criterion.definitionRevision,
+      });
+    }
+    return resolved;
+  }
+
+  /** The one refusal `criterionKey` has, in the vocabulary `refuseTaskOpening` already speaks. */
+  private criterionUnknown(
+    declared: string,
+    why: string,
+  ): { code: AuthorityRefusalCode; requiredAction: AuthorityRequiredAction; message: string } {
+    return {
+      code: 'TASK_CRITERION_UNKNOWN',
+      requiredAction: 'NAME_THE_CRITERION_THIS_SERVES',
+      message: `criterionKey ${declared} cannot be recorded: ${why}`,
+    };
+  }
+
+  /**
+   * Work that declared a criterion which no longer exists (migration 0232).
+   *
+   * `criterion_definition_id IS NULL AND criterion_revision IS NOT NULL` is the whole predicate,
+   * and it is readable only because the two columns are stored apart: the id is a live relation
+   * that `ON DELETE SET NULL` empties when the criterion is deleted, and the revision is a
+   * snapshot nothing ever clears. A task that never declared anything has both columns NULL, so
+   * the two states cannot be confused and no flag column has to be kept in step with a delete.
+   *
+   * A read, and only a read. It gates nothing, decides no status, and is not consulted by
+   * dispatch: what to DO about work whose criterion was withdrawn is a judgement, and this only
+   * makes the question askable.
+   */
+  async orphanedCriterionDeclarations(ownerId: string) {
+    return this.prisma.task.findMany({
+      where: { ownerId, criterionDefinitionId: null, criterionRevision: { not: null } },
+      select: { id: true, projectId: true, criterionRevision: true, title: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
   }
 
   // ---------------------------------------------------------------------------------------------

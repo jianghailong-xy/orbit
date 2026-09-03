@@ -142,6 +142,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'runId',
   'definitionId',
   'criterionId',
+  // Migration 0232's declaration on `task`: WHICH stated criterion a piece of work says it serves.
+  // The same row `definitionId` names above, reached from the other side, so it is an address for
+  // the same reason — a reader follows it back to the criterion in `project_get`. Its companion
+  // `criterionRevision` is an integer, not an id, and is left exactly as it is stored.
+  'criterionDefinitionId',
   'evidenceTaskId',
   'evidenceSessionId',
   'evidenceRunId',
