@@ -186,6 +186,12 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
   },
   {
     family: 'PROJECT_BLOCKER',
+    type: 'SOURCE_UNRESOLVED',
+    resolveWhen:
+      'A later SOURCE resolution for the same subject reaches SELECTED — because the codebase binding was created or repointed, the ref exists again at its authority, or the prerequisite the closure needed landed — and no later dispatch repeats the refusal; or the affected task ceases to be live work. Retrying alone never ends it: all eight refusal codes routed here (the precise one is in the blocker detail) say a person must change configuration or land something first.',
+  },
+  {
+    family: 'PROJECT_BLOCKER',
     type: 'UNKNOWN_FAILURE',
     resolveWhen:
       'The unclassified failure or dead-letter loss is acknowledged and cleared, or later attributable evidence replaces it and the original subject is settled or obsolete.',

@@ -134,9 +134,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        carries no DDL and no DML of any kind besides that one function body. The preserved
   //        data this file is about — the 0177 pair, the criterion labels, the task rows, the
   //        project acceptance tables — is not reachable from it.
+  //   0231 landed the SOURCE snapshot: a new `project_codebase` table, fifteen `session` columns
+  //        and two on `task`, two new guards of its own, and one value added to
+  //        `project_blocker_kind_chk`. It is pure ADDITION — it names none of the six preserved
+  //        triggers/functions above, neither of the 0177 relations, and no `project_acceptance_*`
+  //        object; its only two `CREATE OR REPLACE FUNCTION`s are its own new guards, so it is not
+  //        a third writer of the DONE fence.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
-      '0230_executable_exit_code_judgment'],
+      '0230_executable_exit_code_judgment', '0231_project_codebase_session_source'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

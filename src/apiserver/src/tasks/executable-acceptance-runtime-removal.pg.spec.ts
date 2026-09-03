@@ -669,12 +669,17 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // this removal takes off `task` — and by the three 0228 takes off it the same day, which is why
   // 27 became 24. Only the tables these removals touched are counted: pinning a table neither
   // wrote on would make some third removal's work show up as a failure here.
+  //
+  // `session` went 10 -> 11 when 0231 added `session_source_freeze_guard` with the SOURCE
+  // snapshot. That is an ADDITION by a sibling change, and this suite is about what THIS removal
+  // subtracted, so the number moves and the claim does not: `task` is still 24 and `run_event`
+  // still 1.
   const counts = Object.fromEntries((await client.query<{ table: string; n: number }>(
     `SELECT c.relname AS table, count(*)::int AS n FROM pg_trigger t
        JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname IN ('task', 'session', 'run_event')
       GROUP BY 1 ORDER BY 1`)).rows.map((row) => [row.table, row.n]));
-  assert.deepEqual(counts, { run_event: 1, session: 10, task: 24 });
+  assert.deepEqual(counts, { run_event: 1, session: 11, task: 24 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

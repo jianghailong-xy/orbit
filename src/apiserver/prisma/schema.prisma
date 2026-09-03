@@ -1867,8 +1867,8 @@ model ProjectCodebase {
   ///
   /// Maintained ENTIRELY by a database trigger and never accepted from a request body (SR8):
   /// a version number the writer may choose cannot answer "is this the configuration that session
-  /// froze". Same device as `Project.acceptanceEpoch`, including pinning NEW to OLD when nothing
-  /// config-bearing moved.
+  /// froze". The trigger pins NEW to OLD whenever nothing config-bearing moved, so a write that
+  /// changes only `updatedAt` does not invalidate a frozen snapshot.
   configRevision BigInt @default(0) @map("config_revision")
 
   createdAt DateTime @default(now()) @map("created_at")
