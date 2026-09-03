@@ -139,6 +139,35 @@ final class TranscriptRowsTests: XCTestCase {
         XCTAssertEqual(shell.map(\.id), ["t1", "shell-1", "t2", "t3", "transcript-bottom"])
     }
 
+    // A picture can only be read off the result, never the name — and the folded group is the one
+    // fold the card can't open through. An image result therefore leaves the run and splits it,
+    // instead of vanishing into a closed "Tools × 7" row.
+    func testAnImageResultLeavesTheRunAndSplitsIt() {
+        let shot = TranscriptItem.toolCall(ToolCard(id: "img1", name: "Read", input: .null, result: nil,
+                                                    resultImages: [Data([0x89, 0x50])], resultHasImage: true,
+                                                    status: .ok))
+        let r = built([toolItem("t1"), toolItem("t2"), toolItem("t3"), shot,
+                       toolItem("t4"), toolItem("t5"), toolItem("t6")])
+
+        XCTAssertEqual(r.map(\.id), ["t1", "img1", "t4", "transcript-bottom"])
+        guard case .toolGroup(let head) = r[0], case .item(.toolCall(let card)) = r[1],
+              case .toolGroup(let tail) = r[2] else { return XCTFail("expected run · image · run") }
+        XCTAssertEqual(head.map(\.id), ["t1", "t2", "t3"])
+        XCTAssertEqual(card.id, "img1")
+        XCTAssertEqual(tail.map(\.id), ["t4", "t5", "t6"])
+    }
+
+    // The server strips an oversized image's bytes and keeps the block, and only an open card
+    // refetches them — so this one, with nothing decoded to show yet, is the card that most needs
+    // to stay out of the fold.
+    func testAnImageStrippedOfItsBytesStillLeavesTheRun() {
+        let shot = TranscriptItem.toolCall(ToolCard(id: "img1", name: "Read", input: .null, result: nil,
+                                                    resultImages: [], resultHasImage: true, status: .ok))
+        let r = built([toolItem("t1"), toolItem("t2"), shot, toolItem("t3")])
+
+        XCTAssertEqual(r.map(\.id), ["t1", "t2", "img1", "t3", "transcript-bottom"])
+    }
+
     func testEveryRowIdStaysUniqueWithFoldedRuns() {
         let r = built([.user(user("i1")), toolItem("t1"), toolItem("t2"), toolItem("t3"), toolItem("t4")])
 
