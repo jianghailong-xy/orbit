@@ -8,6 +8,10 @@ to the current credential and execution context before using them:
 orbit capabilities --json
 ```
 
+The document also names the binary itself: `cliVersion` and `sourceSha`, the commit it was built from —
+or `dev-local` for a build that named none. `orbit status` prints both on its first line once a runner is
+registered.
+
 ## Tasks and task lists
 
 ```bash

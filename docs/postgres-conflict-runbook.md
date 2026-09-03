@@ -326,7 +326,7 @@ The ordinary upgrade from [self-hosting](self-hosting.md#upgrading) is the whole
 
 ```bash
 git fetch --tags && git checkout <release-tag-or-reviewed-commit>
-ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build
+docker compose up -d --build
 docker compose logs apiserver --since 5m | grep -E 'migration|listening'
 ```
 

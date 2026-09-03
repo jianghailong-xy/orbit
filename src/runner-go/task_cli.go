@@ -2212,6 +2212,7 @@ type cliCapabilitiesDocument struct {
 	ContractDigest           string               `json:"contractDigest"`
 	CapabilityCount          int                  `json:"capabilityCount"`
 	CLIVersion               string               `json:"cliVersion"`
+	SourceSha                string               `json:"sourceSha"`
 	Registered               bool                 `json:"registered"`
 	UnavailableReason        string               `json:"unavailableReason,omitempty"`
 	Context                  cliCapabilityContext `json:"context"`
@@ -2304,6 +2305,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		ContractDigest:           runnerWriteContractDigest,
 		CapabilityCount:          len(commands),
 		CLIVersion:               version,
+		SourceSha:                sourceSHA,
 		Registered:               registered,
 		UnavailableReason:        unavailableReason,
 		Context:                  ctx,

@@ -3,6 +3,12 @@
 **/*.tsbuildinfo
 **/.git
 .git
+# …except the pointer to the commit being built. scripts/build-binaries.sh reads these
+# to stamp the runner binaries when the deployer did not pass ORBIT_SOURCE_SHA; the
+# object store and everything else under .git stays out of the context.
+!.git/HEAD
+!.git/refs
+!.git/packed-refs
 *.log
 .env
 .env.local

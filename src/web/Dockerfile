@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-# Build context is the repo root. Direct builds must identify the source commit:
+# Build context is the repo root. A Git checkout identifies its own source commit; build
+# from a tree without Git metadata and the commit must be named explicitly:
 # docker build --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" -f src/web/Dockerfile .
 
 # ───────────────────────────────── build ─────────────────────────────────
@@ -33,6 +34,10 @@ COPY src/runner-go ./src/runner-go
 COPY package.json ./package.json
 COPY scripts ./scripts
 COPY contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
+# The commit this build stamps into the binaries, when ORBIT_SOURCE_SHA was not passed:
+# .git/HEAD plus the refs, which is all the .dockerignore lets through. Bracketed so a
+# source tree without Git metadata still builds (it must then pass ORBIT_SOURCE_SHA).
+COPY .gi[t] ./.git/
 # Bake this deployment's public origin into the runner binary's defaultServer (see
 # build-binaries.sh) so a self-hosted runner's `orbit register` needs no --server.
 ARG PUBLIC_ORIGIN

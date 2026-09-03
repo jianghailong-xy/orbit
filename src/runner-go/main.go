@@ -44,8 +44,10 @@ func interactive() bool {
 // disables self-update.
 var version = "dev"
 
-// Exact source tree baked into release binaries. Development builds deliberately retain the
-// sentinel; v2 admission records it but production publishing always sets a full git SHA.
+// Exact source tree baked into release binaries, reported by `orbit status` and, before this
+// machine registers anything, by `orbit capabilities --json`. Development builds deliberately
+// retain the sentinel; production publishing always sets a full git SHA, and the build fails
+// if that stamp does not reach the binary (scripts/build-binaries.sh).
 var sourceSHA = "dev-local"
 
 // Control plane the runner defaults to (used by `orbit register` when no --server is given).
@@ -613,7 +615,7 @@ func cmdStatus() {
 		fmt.Printf("no runner registered on this machine\nRun `orbit register` to add one.\n")
 		return
 	}
-	fmt.Printf("orbit %s\n", version)
+	fmt.Printf("orbit %s (%s)\n", version, sourceSHA)
 	fmt.Printf("\nrunner:  %s (%s)\nserver:  %s\nlabels:  %s\nconfig:  %s\n",
 		cfg.Name, cfg.RunnerID, cfg.ServerURL, labelsOrDash(cfg.Labels), configPath())
 

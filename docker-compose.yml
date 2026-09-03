@@ -139,7 +139,8 @@ services:
         # Public origin the install commands point at; baked into the bundle at build time.
         # Defaults to the local gateway — set PUBLIC_ORIGIN in .env when serving on a domain.
         PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
-        # Full commit embedded in every advertised runner capability revision.
+        # Full commit embedded in every advertised runner capability revision. Empty is fine
+        # from a Git checkout: the build reads the commit from the checkout's own .git/HEAD.
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
     container_name: orbit-web
     restart: unless-stopped
