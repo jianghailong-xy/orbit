@@ -61,7 +61,7 @@ const lockSessions = (taskIds) => [
 async function reseed(setup, url) {
   const s = await conn('h3-setup', url);
   await s.query(`TRUNCATE "user", "workspace", "project", "task", "session", "task_dependency",
-                          "project_event", "project_acceptance_run", "project_acceptance_audit"
+                          "project_event"
                  RESTART IDENTITY CASCADE`);
   await s.query(SEED);
   if (setup) await s.query(setup);

@@ -744,7 +744,7 @@ workspaceIds
   - **最小反例**：一行 `project_member(P, W)` 加一条 `agent(A, legacy_workspace_id = W)`，按 v1.1 的顺序执行第一条 UPDATE
     立刻得到上面那个 `23503`；按 v1.2 的顺序执行三条语句全部成功。这条反例可以在一个只建了 `workspace` / `project` /
     `project_member` / `agent` 四张表的 throwaway postgres 上复现，不需要整库。
-- **M6（历史审计列不重写）**：`project_decision.coordinator_agent_id`、`project_acceptance_run.coordinator_agent_id` 等**无外键的历史审计列**
+- **M6（历史审计列不重写）**：`project_decision.coordinator_agent_id` 等**无外键的历史审计列**
   保持原值（它们记录的是"当时是谁"，指向 workspace id）。重写历史等于篡改审计。读方按行的 `created_at` 与迁移时刻比较来解释它，
   或者干脆只把它当不透明 id 展示。
 

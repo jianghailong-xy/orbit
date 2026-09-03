@@ -212,34 +212,18 @@ export class CoordinatorConvergenceService {
     asOf: Date,
   ): Promise<DerivedProgress> {
 
-    // 1. Acceptance. The stated criteria are the denominator whether or not anybody has judged them
-    //    The current definition rows are the denominator; the append-only conclusion projection is
-    //    the numerator. A criterion nobody has judged is not closed, which is the correct reading
-    //    of "no evidence" — never "assume passing".
-    const verdicts = await tx.$queryRaw<Array<{ criterionKey: string; verdict: string | null }>>(Prisma.sql`
-      WITH current_version AS (
-        SELECT r."attempt"
-          FROM "project_acceptance_run" r
-         WHERE r."project_id" = ${projectId}::uuid AND r."superseded_at" IS NULL
-         ORDER BY r."attempt" DESC
-         LIMIT 1
-      ), standing AS (
-        SELECT s.*
-          FROM current_version v
-          CROSS JOIN LATERAL project_acceptance_standing(${projectId}::uuid, v."attempt") s
-      )
-      SELECT d."id"::text AS "criterionKey", s."verdict"::text AS "verdict"
+    // 1. Acceptance. The criteria the project STATES, read from the authored definition rows.
+    //    Migration 0229 removed the judgment, so there is no numerator to read beside them: no
+    //    criterion is closed, because nothing in Orbit closes one. They remain evidence that this
+    //    snapshot looked at the project at all, which is what stops an empty read being FRESH.
+    const criteria = await tx.$queryRaw<Array<{ criterionKey: string }>>(Prisma.sql`
+      SELECT d."id"::text AS "criterionKey"
         FROM "project_acceptance_criterion_definition" d
-        LEFT JOIN standing s ON s."definition_id" = d."id"
        WHERE d."project_id" = ${projectId}::uuid
        ORDER BY d."ordinal"
     `);
-    const acceptance: AcceptanceEvidence[] = verdicts
-      .map((criterion) => ({
-        id: criterion.criterionKey,
-        closed: criterion.verdict === 'PASS',
-        observedAt: asOf,
-      }));
+    const acceptance: AcceptanceEvidence[] = criteria
+      .map((criterion) => ({ id: criterion.criterionKey, observedAt: asOf }));
 
     // 2. Findings, for `openP0` / `openP1`. A finding is closed when the defect task it filed
     //    reached DONE, and open otherwise — including when it filed none (its consequence is a
@@ -374,6 +358,11 @@ export class CoordinatorConvergenceService {
     tx: Prisma.TransactionClient | PrismaService,
     projectId: string,
   ): Promise<ProjectScope> {
+    // The criteria come from the authored definition rows, rendered by the projection function
+    // 0172 installed and 0229 kept. They used to come from `project.acceptance_criteria`, which
+    // 0229 dropped: the per-item table is the only representation now, and the projection is the
+    // same numbered text that column held — so the scope identity keeps meaning "the criteria as
+    // written", read from where they are actually written.
     const [row] = await tx.$queryRaw<Array<{
       title: string;
       goal: string | null;
@@ -381,7 +370,8 @@ export class CoordinatorConvergenceService {
       thresholdOverrides: unknown;
       unboundedAuthorizedBy: string | null;
     }>>(Prisma.sql`
-      SELECT "title", "goal", "acceptance_criteria" AS "acceptanceCriteria",
+      SELECT "title", "goal",
+             project_acceptance_definition_projection("id") AS "acceptanceCriteria",
              "convergence_thresholds" AS "thresholdOverrides",
              "unbounded_authorized_by" AS "unboundedAuthorizedBy"
         FROM "project" WHERE "id" = ${projectId}::uuid

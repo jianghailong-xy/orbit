@@ -64,17 +64,19 @@ const CORE_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
 /** The Ready predicate every Run surface shares, spliced against the alias this file queries. */
 const MANUAL_RUNNABLE = manualRunnableTaskSql('t');
 
+/**
+ * What `project_acceptance_*` is made of, field for field, after 0229.
+ *
+ * The run, the per-run criterion, the conclusion and the audit were pinned here column for column
+ * until `0229_project_acceptance_judgment_removal` dropped the four of them — a later and separate
+ * account-owner decision, which removed the project acceptance judgment whole and kept the stated
+ * criteria. They are absent below because the relations are absent, not because this assertion
+ * relaxed: the one that survived is still pinned column for column, and an unrelated change that
+ * widened or narrowed it would still fail here.
+ */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
-  project_acceptance_audit:
-    'id:uuid!, project_id:uuid!, kind:text!, run_id:uuid, reason:text, detail:jsonb!, created_at:timestamp(3) without time zone!',
-  project_acceptance_conclusion:
-    'id:uuid!, project_id:uuid!, evidence_run_id:uuid!, evidence_version:bigint!, ordinal:integer!, criterion_key:text!, criterion_text:text!, definition_id:uuid, definition_revision:integer, verdict:project_acceptance_verdict!, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_by:text!, decided_by_id:uuid!, acting_session_id:uuid, decided_at:timestamp(3) without time zone!, created_at:timestamp(3) without time zone!',
-  project_acceptance_criterion:
-    'id:uuid!, run_id:uuid!, project_id:uuid!, ordinal:integer!, criterion_key:text!, criterion_text:text!, verdict:project_acceptance_verdict, summary:text, evidence:jsonb!, evidence_task_id:uuid, evidence_session_id:uuid, decided_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, definition_id:uuid, definition_revision:integer, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer',
   project_acceptance_criterion_definition:
     'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
-  project_acceptance_run:
-    'id:uuid!, project_id:uuid!, attempt:bigint!, criteria_snapshot:text!, criteria_revision:character(64)!, input_digest:character(64)!, result_digest:character(64), verdict:project_acceptance_verdict, decided_by:text!, coordinator_agent_id:uuid, coordinator_session_id:uuid, project_action_id:uuid, superseded_at:timestamp(3) without time zone, superseded_reason:text, started_at:timestamp(3) without time zone!, completed_at:timestamp(3) without time zone, created_at:timestamp(3) without time zone!, digest_version:integer!, acceptance_epoch:bigint!, criteria_snapshot_v2:jsonb',
 };
 
 interface World {
@@ -234,7 +236,7 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     'the acceptance wall must come through this removal with every column it went in with',
   );
 
-  // Its own tables' guards too, all ten of them. The `project_acceptance_*`-named triggers that
+  // Its own tables' guards too. The `project_acceptance_*`-named triggers that
   // sit on `project` rather than on this family are deliberately outside the assertion: they are
   // the project DONE gate, a sibling removal is entitled to change them, and failing this suite for
   // that would be the same mistake as measuring subtraction against `main...HEAD`.
@@ -246,18 +248,12 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
        AND c.relname LIKE 'project\\_acceptance\\_%'
      ORDER BY 1`);
   assert.deepEqual(triggers.rows.map((row) => row.name), [
-    'project_acceptance_audit|project_acceptance_audit_append_only',
-    'project_acceptance_conclusion|project_acceptance_conclusion_immutable',
-    'project_acceptance_conclusion|project_acceptance_conclusion_reconcile',
-    'project_acceptance_conclusion|project_acceptance_conclusion_validate',
+    // Two. Ten when this file was written, minus
+    // `project_acceptance_run|project_acceptance_run_closure_guard`, which 0227 removed with
+    // 0215's closing move, minus the seven that stood on the four judgment relations 0229 dropped.
+    // Each is a later and separate account-owner decision, and none of them is this removal's.
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
-    'project_acceptance_criterion|project_acceptance_criterion_immutable_guard',
-    // `project_acceptance_run|project_acceptance_run_closure_guard` stood here until 0227 removed
-    // 0215's closing move with the rest of the EXECUTABLE acceptance runtime — a later and
-    // separate decision, and the only trigger this family has lost since.
-    'project_acceptance_run|project_acceptance_run_epoch_guard',
-    'project_acceptance_run|project_acceptance_run_immutable_guard',
   ]);
 });
 

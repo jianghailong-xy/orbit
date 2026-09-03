@@ -128,8 +128,10 @@ suite('(j) every protected family is still installed and still guarded', async (
     // frozen text, by `PROTECTED_PREFIXES` in completion-ack-removal.spec.ts.
     // `failure_continuation_*` / `failure_successor_*` were here too. Migration 0226 removed that
     // family on purpose — the failure router, not this protocol — so the catalog has no relation
-    // left to count.
-    ['project_acceptance_', 5],
+    // left to count. `project_acceptance_*` went the same way in stages: 0229 removed the run,
+    // the per-run criterion, the conclusion and the audit with the project acceptance judgment,
+    // leaving the authored criterion definitions, which is what 0220 was protecting all along.
+    ['project_acceptance_', 1],
     // 0221 removed the three-relation current-binding ledger 0206 added here, leaving the
     // expectation/heartbeat/dead-man tables and the two liveness views 0200 and 0202 created.
     ['executable_runtime_', 6],

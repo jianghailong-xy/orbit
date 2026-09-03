@@ -15,12 +15,11 @@ import { SCOPE_REFUSAL_CODES, SCOPE_RULE_BY_ID, type ScopeRefusalCode } from './
  *
  * Every field this returns already existed in some table before this unit; none of it was readable
  * from any client. The service is deliberately thin — it fetches rows and hands them to
- * `taskAttribution`, which is pure — so that "is this PASS current" is decided in a module a test
- * can run without a database, and so the web app and the CLI cannot each answer it differently.
+ * `taskAttribution`, which is pure — so that the derivation runs in a module a test can execute
+ * without a database, and so the web app and the CLI cannot each answer it differently.
  *
- * Scoped by owner at every query, not just the first. A task read under one account whose
- * acceptance criteria were read under none would be a cross-tenant read wearing a per-task
- * permission check, and §3 SC6's "one authoritative attribution column" is only worth anything if
+ * Scoped by owner at every query, not just the first. A task read under one account whose crossings
+ * were read under none would be a cross-tenant read wearing a per-task permission check, and §3 SC6's "one authoritative attribution column" is only worth anything if
  * the things hanging off it are constrained the same way.
  */
 @Injectable()
@@ -34,14 +33,13 @@ export class ProjectAttributionService {
    * it with an absent reason rather than with a project that does not exist.
    */
   private static projectRef(
-    project: { id: string; title: string; status: string; acceptanceEpoch: bigint } | null,
+    project: { id: string; title: string; status: string } | null,
   ): AttributionProjectRef | null {
     if (!project) return null;
     return {
       projectId: project.id,
       title: project.title,
       status: project.status as AttributionProjectRef['status'],
-      acceptanceEpoch: String(project.acceptanceEpoch),
     };
   }
 
@@ -56,7 +54,7 @@ export class ProjectAttributionService {
 
   async read(ownerId: string, taskId: string): Promise<TaskAttribution> {
     const PROJECT_REF = {
-      select: { id: true, title: true, status: true, acceptanceEpoch: true },
+      select: { id: true, title: true, status: true },
     } as const;
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, ownerId },
@@ -72,30 +70,7 @@ export class ProjectAttributionService {
     });
     if (!task) throw new NotFoundException('task not found');
 
-    const [criteria, crossing, blockers] = await Promise.all([
-      // The criteria of THIS task's project that name it as their evidence — the mapping "which
-      // stated criterion does this piece of work answer" that is otherwise only readable by
-      // opening every acceptance attempt and looking for the id. Constrained to the owning project
-      // as well as the owner: a criterion in another project citing this task is not this task's
-      // acceptance, and rendering it beside the project's own would be the surface asserting a
-      // cross-project claim it has no authority to make.
-      task.projectId
-        ? this.prisma.projectAcceptanceCriterion.findMany({
-            where: { evidenceTaskId: taskId, projectId: task.projectId },
-            select: {
-              ordinal: true,
-              criterionKey: true,
-              criterionText: true,
-              verdict: true,
-              run: {
-                select: {
-                  id: true, attempt: true, acceptanceEpoch: true, supersededAt: true,
-                },
-              },
-            },
-            orderBy: [{ run: { attempt: 'desc' } }, { ordinal: 'asc' }],
-          })
-        : Promise.resolve([]),
+    const [crossing, blockers] = await Promise.all([
       // The declared crossing this task is the subject of, or the one that produced it. Newest
       // first: a task can be the subject of a crossing that was denied and of a later one that was
       // approved, and the answer a reader needs is the one that is live.
@@ -177,16 +152,6 @@ export class ProjectAttributionService {
           ? { sessionId: task.sourceSession.id, title: task.sourceSession.title }
           : null,
       },
-      acceptance: criteria.map((criterion) => ({
-        runId: criterion.run.id,
-        attempt: String(criterion.run.attempt),
-        ordinal: criterion.ordinal,
-        criterionKey: criterion.criterionKey,
-        text: criterion.criterionText,
-        verdict: criterion.verdict as 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null,
-        epoch: String(criterion.run.acceptanceEpoch),
-        runSuperseded: criterion.run.supersededAt !== null,
-      })),
       crossing: crossingView,
       blocker,
     });

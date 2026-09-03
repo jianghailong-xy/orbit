@@ -67,7 +67,6 @@ function fixture(session: SessionRow | null) {
         where.id.in.map((id) => ({
           id,
           status: 'OPEN',
-          acceptanceEpoch: 0n,
           maxConcurrentTasks: 3,
           sessionBudgetPerDay: null,
           members: [],

@@ -70,14 +70,12 @@
     {
       "id": "PROJECT_DONE_GATE",
       "canonicalFactKinds": [
-        "DONE_GATE_EVALUATED",
-        "ACCEPTANCE_REVISION_RECORDED",
         "GOAL_DISPOSITION_RECORDED"
       ],
       "sourceOfTruth": [
         {
-          "storage": "project_acceptance_run + project_acceptance_criterion + project_acceptance_conclusion",
-          "role": "IMMUTABLE_EVIDENCE_VERSION_AND_APPEND_ONLY_CONCLUSIONS"
+          "storage": "project.status",
+          "role": "UNGUARDED_DISPOSITION_COLUMN_SINCE_0229"
         },
         {
           "storage": "project_completion_contract",
@@ -85,40 +83,33 @@
         }
       ],
       "projections": [
-        "project.status",
-        "project acceptance doneGate response",
-        "acceptedRunId historical link"
+        "project.status"
       ],
       "writers": [
         {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "assertDoneAllowed",
-          "authority": "APPLICATION_CANONICAL_GATE_CONSUMER"
+          "path": "src/apiserver/src/projects/projects.service.ts",
+          "symbol": "async update",
+          "authority": "ANY_ACTOR_UNGUARDED_SINCE_0229"
         },
         {
-          "path": "src/apiserver/prisma/migrations/0150_task_provenance_project_acceptance_epoch/migration.sql",
-          "symbol": "project_acceptance_done_gate",
-          "authority": "DATABASE_ACCEPTANCE_GATE_AND_DONE_WALL"
+          "path": "src/apiserver/prisma/migrations/0229_project_acceptance_judgment_removal/migration.sql",
+          "symbol": "DROP TRIGGER \"project_acceptance_done_gate\" ON \"project\"",
+          "authority": "REMOVAL_OF_THE_DATABASE_GATE"
         }
       ],
       "readers": [
         {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "doneGate",
-          "purpose": "CANONICAL_V2_PROOF_OBLIGATION_READ"
-        },
-        {
-          "path": "src/apiserver/src/projects/projects.controller.ts",
-          "symbol": "acceptanceOverview",
+          "path": "src/apiserver/src/projects/projects.service.ts",
+          "symbol": "tasksByStatus",
           "purpose": "HTTP_READ"
         },
         {
           "path": "src/runner-go/project_cli.go",
-          "symbol": "doneGate",
+          "symbol": "projectStatuses",
           "purpose": "CLI_READ"
         }
       ],
-      "v2Treatment": "ONE EXACT-CUT OUTCOME PROOF AND CANONICAL OBLIGATION VIEW DECIDES CLOSURE; LEGACY BLOCKER, SIGNAL AND ACCEPTANCE SUMMARIES ARE NOT WRITERS"
+      "v2Treatment": "NO GATE: MIGRATION 0229 REMOVED THE DATABASE DONE GATE AND THE APPLICATION REFUSAL ON THE ACCOUNT OWNER DECISION OF 2026-09-03; STATUS IS AN ORDINARY COLUMN WRITE AND NOTHING EVALUATES THE STATED CRITERIA"
     },
     {
       "id": "JUDGMENT_REQUEST",
@@ -413,8 +404,7 @@
       "id": "ACCEPTANCE_REVISION",
       "canonicalFactKinds": [
         "ACCEPTANCE_REVISION_RECORDED",
-        "GOAL_RATIFIED",
-        "DIMENSION_EVALUATED"
+        "GOAL_RATIFIED"
       ],
       "sourceOfTruth": [
         {
@@ -422,22 +412,16 @@
           "role": "STRUCTURED_CRITERIA_REVISION"
         },
         {
-          "storage": "project.acceptance_criteria_digest",
+          "storage": "project_completion_contract.contract_digest/evaluation_plan_digest",
           "role": "STANDARD_SET_DIGEST"
-        },
-        {
-          "storage": "project_acceptance_run.criteria_revision + input_digest + acceptance_epoch",
-          "role": "EVALUATION_BINDING"
         }
       ],
       "projections": [
-        "Project.acceptanceCriteria compatibility text",
-        "criteria summary verdicts",
-        "acceptedRunId"
+        "Project.acceptanceCriteriaItems"
       ],
       "writers": [
         {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "path": "src/apiserver/src/projects/project-acceptance.ts",
           "symbol": "criteriaSemanticRevision",
           "authority": "EVALUATION_REVISION_DERIVATION"
         },
@@ -449,22 +433,22 @@
       ],
       "readers": [
         {
-          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
-          "symbol": "criteriaRevision",
-          "purpose": "RUN_AND_GATE_BINDING"
+          "path": "src/apiserver/src/projects/projects.service.ts",
+          "symbol": "withAcceptanceDefinitions",
+          "purpose": "HTTP_READ"
         },
         {
           "path": "src/runner-go/project_cli.go",
-          "symbol": "revision-bearing standard-set digest",
+          "symbol": "acceptanceCriteriaItems",
           "purpose": "CLI_READ"
         },
         {
-          "path": "src/apiserver/src/projects/project-attribution.service.ts",
-          "symbol": "acceptanceEpoch",
-          "purpose": "CROSS_PROJECT_ATTRIBUTION"
+          "path": "src/apiserver/src/tasks/tasks.service.ts",
+          "symbol": "criteriaFromDefinitions",
+          "purpose": "DECLARED_CRITERION_KEY_CHECK"
         }
       ],
-      "v2Treatment": "SPLIT_OWNER_CONTRACT_DIGEST_FROM_EVALUATION_PLAN_DIGEST; MATERIAL_CONTRACT_EDITS_STALE_PROOF_ATOMICALLY"
+      "v2Treatment": "SPLIT_OWNER_CONTRACT_DIGEST_FROM_EVALUATION_PLAN_DIGEST; SINCE 0229 THE CRITERIA ARE DECLARED AND NOTHING EVALUATES THEM"
     },
     {
       "id": "GOAL_ATTEMPT",
@@ -527,14 +511,13 @@
           "role": "OWNERSHIP_AND_HANDOFF_DECISIONS"
         },
         {
-          "storage": "project acceptance criterion references",
+          "storage": "project_acceptance_criterion_definition references",
           "role": "SERVES_CRITERION_RELATION"
         }
       ],
       "projections": [
         "task attribution surface",
-        "project crossings",
-        "reopen impact"
+        "project crossings"
       ],
       "writers": [
         {
@@ -556,8 +539,8 @@
         },
         {
           "path": "src/apiserver/src/projects/project-attribution-surface.ts",
-          "symbol": "reopenImpact",
-          "purpose": "CROSSING_AND_REOPEN_PROJECTION"
+          "symbol": "taskAttribution",
+          "purpose": "CROSSING_PROJECTION"
         }
       ],
       "v2Treatment": "KEEP_HOME_PROJECT_OWNERSHIP; MODEL_SERVES_CRITERION_AND_BLOCKS_CLOSURE_AS_ORTHOGONAL_EDGES"

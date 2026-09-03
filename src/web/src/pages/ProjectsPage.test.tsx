@@ -149,17 +149,11 @@ function newClient() {
 // unilaterally should break these tests, which it can't do if both sides read one constant.
 const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'tasks', 'root'];
 
-// Unit L7's two entries, under the same `['project', id]` prefix and for the same reason: what a
-// person is asked to ANSWER about this project (the crossings queue) and what reopening it would
-// cost. Both mount with the page, so an invalidation after either write refreshes them together
-// with the document.
-const attributionKeys = (projectUuid: string) => {
-  const id = encodeId(projectUuid);
-  return [
-    ['project', id, 'crossings'],
-    ['project', id, 'reopen'],
-  ];
-};
+// Unit L7's entry, under the same `['project', id]` prefix as the document and for the same
+// reason: what a person is asked to ANSWER about this project. It mounts with the page, so an
+// invalidation after a write refreshes it together with the document. The reopen preview stood
+// beside it until migration 0229 removed the acceptance epoch it previewed.
+const attributionKeys = (projectUuid: string) => [['project', encodeId(projectUuid), 'crossings']];
 
 // Every entry the head and panorama cards register, in the order they mount:
 //
@@ -232,7 +226,9 @@ const detail = (over: Record<string, unknown> = {}) => ({
   title: 'Website Revamp',
   status: 'OPEN',
   goal: 'Ship the new marketing site',
-  acceptanceCriteria: 'Lighthouse ≥ 90 on every page',
+  acceptanceCriteriaItems: [
+    { id: 'crit-1', ordinal: 1, text: 'Lighthouse ≥ 90 on every page', revision: 1 },
+  ],
   instructions: 'Land behind a flag, then flip it',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-02T00:00:00Z',
@@ -1077,11 +1073,9 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('Goal');
     expect(html).toContain(longGoal); // in full — no excerpt, no ellipsis
     expect(html).not.toContain('…');
-    // The criteria have one home: the Acceptance section, not a second heading of their own.
-    // This fixture carries no `acceptance` payload, so what shows is the card's fallback — the
-    // authored text, which is the only account of them a server like that can give.
-    expect(html).toContain('Acceptance');
-    expect(html).not.toContain('Acceptance criteria');
+    // The criteria have one home: the Acceptance criteria card, not a second heading of their own
+    // and — since migration 0229 removed the legacy text column — not a second representation.
+    expect((html.match(/Acceptance criteria/g) ?? []).length).toBe(1);
     expect(html).toContain('Lighthouse ≥ 90 on every page');
     expect(html).toContain('Instructions');
     expect(html).toContain('Land behind a flag, then flip it');
@@ -1154,7 +1148,7 @@ describe('ProjectDetailPage', () => {
         id: P2,
         title: 'Legacy Cleanup',
         goal: null,
-        acceptanceCriteria: null,
+        acceptanceCriteriaItems: [],
         instructions: null,
         _count: { tasks: 0 },
         // groupBy returns no rows for a project with no tasks — an empty object, not zeroes.
@@ -1166,9 +1160,8 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('0 tasks');
     expect(html).toContain('No goal set');
     // Acceptance is no longer one of the free-text fields, so its empty state is the section's
-    // own: this fixture's server reports no standing at all, and there is no authored text under
-    // it either. What a project with criteria and no run says is the card suite's.
-    expect(html).toContain('does not report acceptance standing');
+    // own: this fixture states no criteria at all.
+    expect(html).toContain('No criteria are stated for this project');
     expect(html).toContain('No instructions set');
   });
 

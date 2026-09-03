@@ -45,14 +45,12 @@ const item = (over: Partial<PlanItemFacts> = {}): PlanItemFacts => ({
   assigneeId: null,
   listId: null,
   autoRunWhenReady: true,
-  acceptanceEpoch: null,
   ...over,
 });
 
 const project = (over: Partial<PlanWorldFacts['projects'][string]> = {}) => ({
   title: 'a project',
   status: 'OPEN' as const,
-  acceptanceEpoch: '0',
   maxConcurrentTasks: 3,
   sessionBudgetPerDay: null,
   memberWorkspaceIds: new Set<string>(),
@@ -173,18 +171,15 @@ test('an edge onto an item this same plan files elsewhere cannot be approved, so
   ])), []);
 });
 
-test('a plan that names the epoch it was made against is judged on it', () => {
-  const moved = preflightPlan(facts([item({ acceptanceEpoch: '3' })], {
-    projects: { [A]: project({ acceptanceEpoch: '4' }) },
-  }));
-  assert.deepEqual(moved.map((f) => f.code), ['PLAN_ACCEPTANCE_EPOCH_MOVED']);
-  assert.deepEqual(preflightPlan(facts([item({ acceptanceEpoch: '4' })], {
-    projects: { [A]: project({ acceptanceEpoch: '4' }) },
-  })), []);
-  // A client that names none is not making the claim.
-  assert.deepEqual(preflightPlan(facts([item({ acceptanceEpoch: null })], {
-    projects: { [A]: project({ acceptanceEpoch: '4' }) },
-  })), []);
+// A plan used to be able to name the acceptance epoch it was made against, and be refused when the
+// project had moved past it. Migration 0229 removed the epoch, so there is no such claim to make
+// and ACCEPTANCE_MAPPING keeps one check: a verification counts towards the project whose criteria
+// read it. Asserted as an absence, so the dimension cannot quietly grow the check back.
+test('the acceptance-epoch claim is gone, and ACCEPTANCE_MAPPING keeps its other check', () => {
+  assert.deepEqual(
+    PLAN_PREFLIGHT_COVERAGE.ACCEPTANCE_MAPPING.map((entry) => entry.check),
+    ['a verification counts towards the project whose acceptance reads it'],
+  );
 });
 
 test('execution identity warns and never refuses', () => {
@@ -246,27 +241,25 @@ test('every finding comes back, in a fixed order, and the body says nothing was 
   const plan = facts([
     item({ index: 0, parentTaskId: TASK_IN_B }),
     item({ index: 1, dependsOnTaskIds: [TASK_IN_B] }),
-    item({ index: 2, acceptanceEpoch: '9', assigneeId: WORKSPACE }),
-  ], { projects: { [A]: project({ acceptanceEpoch: '10' }), [B]: project() } });
+    item({ index: 2, assigneeId: WORKSPACE }),
+  ], { projects: { [A]: project(), [B]: project() } });
   const once = preflightPlan(plan);
   const twice = preflightPlan(plan);
   assert.deepEqual(once, twice, 'two runs over one plan must produce one answer');
   assert.deepEqual(once.map((f) => `${f.index}:${f.code}`), [
     '0:PLAN_PARENT_CROSSES_PROJECT',
     '1:CROSS_PROJECT_APPROVAL_REQUIRED',
-    '2:PLAN_ACCEPTANCE_EPOCH_MOVED',
     '2:PLAN_ASSIGNEE_NOT_ON_PROJECT_TEAM',
   ]);
   const body = planPreflightRefusalBody(once, plan);
   assert.equal(body.code, 'PLAN_PREFLIGHT_FAILED');
   assert.equal(body.written, 0);
-  assert.equal(body.findings.length, 3, 'the body carries every refusal, and only refusals');
-  assert.match(body.message, /3 checks/);
+  assert.equal(body.findings.length, 2, 'the body carries every refusal, and only refusals');
+  assert.match(body.message, /2 checks/);
   // Unit L7: a refusal says where every item WOULD have landed, not only the broken ones. The
   // thing most often actually wrong with a refused plan is the items that were not refused.
   assert.equal(body.plan.length, 3);
   assert.deepEqual(body.plan.map((row) => row.projectTitle), ['a project', 'a project', 'a project']);
-  assert.deepEqual(body.plan.map((row) => row.acceptanceEpoch), ['10', '10', '10']);
 });
 
 test('L7: a dry run reports what a refusal throws, plus the warnings a refusal leaves out', () => {
@@ -314,7 +307,7 @@ test('L7: an item landing under a project nothing could be read for still gets a
   assert.equal(landings.length, 2);
   assert.deepEqual(landings[0], {
     index: 0, ref: null, projectId: null, projectTitle: null, projectStatus: null,
-    acceptanceEpoch: null, frozen: false,
+    frozen: false,
   });
   assert.equal(landings[1].projectId, A, 'the id is reported even when the project is unreadable');
   assert.equal(landings[1].projectTitle, null);

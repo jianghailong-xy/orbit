@@ -18,9 +18,6 @@ import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
   DecideProjectHandoffDto,
-  ReopenProjectDto,
-  FinalizeAcceptanceRunDto,
-  OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
   RebindProjectCoordinatorDto,
   RecordMergeEvidenceDto,
@@ -61,18 +58,6 @@ export class ProjectsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
     return this.projects.list(user.userId, this.parseStatus(status));
-  }
-
-  /** Project-level acceptance evidence versions awaiting a complete, criterion-by-criterion answer. */
-  @Get('acceptance/pending')
-  pendingAcceptance(
-    @CurrentUser() user: AuthUser,
-    @Query('limit') limit?: string,
-  ) {
-    return this.acceptance.pendingInbox(
-      user.userId,
-      limit === undefined ? 100 : Number(limit),
-    );
   }
 
   @Get(':id')
@@ -253,60 +238,6 @@ export class ProjectsController {
   }
 
   /**
-   * This project's acceptance standing (contract §13.4 / AC12), in one read.
-   *
-   * The stated criteria as the parser decomposes them, the digest of the facts a DONE would be
-   * checked against, every evidence version with its derived criteria and conclusion events, the newest
-   * merge observation per requirement, the append-only audit — and `doneGate`, which is the same
-   * decision the write path makes, evaluated as a read so a client can say what is missing before
-   * anybody presses a button. Ids are Base62.
-   *
-   * A read holds no lock and grants nothing: the gate that DECIDES runs inside the transaction that
-   * writes DONE, under `FOR UPDATE` (§13.4 AE7).
-   */
-  @Get(':id/acceptance')
-  acceptanceOverview(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Query('limit') limit?: string,
-  ) {
-    const parsed = Number(limit);
-    return this.acceptance.overview(
-      user.userId, id, Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20,
-    );
-  }
-
-  /**
-   * Evaluate the current acceptance evidence version. The project lock plus a partial unique index
-   * makes this idempotent: concurrent evaluators of the same facts receive the same row.
-   */
-  @Post(':id/acceptance/runs')
-  openAcceptanceRun(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: OpenAcceptanceRunDto,
-  ) {
-    return this.acceptance.openRun(user.userId, id, { ...dto, decidedBy: dto.decidedBy ?? 'USER' });
-  }
-
-  /**
-   * Append conclusion events against an evidence version: one verdict per stated criterion.
-   *
-   * The current verdict is derived from the event projection — all PASS is PASS, any FAIL is FAIL, the
-   * rest is INCONCLUSIVE — and cannot be supplied, which is the difference between this and writing
-   * "all green" in a comment.
-   */
-  @Post(':id/acceptance/runs/:runId/verdict')
-  finalizeAcceptanceRun(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Param('runId', PublicIdPipe) runId: string,
-    @Body() dto: FinalizeAcceptanceRunDto,
-  ) {
-    return this.acceptance.finalizeRun(user.userId, id, runId, dto.criteria);
-  }
-
-  /**
    * Unit L4: what has been asked and answered about work crossing into or out of this project.
    *
    * Both directions. The people on the target project are the ones being asked to take work; the
@@ -378,12 +309,12 @@ export class ProjectsController {
   }
 
   /**
-   * Record what a target branch was observed to contain (§13.4 AE9-b) — the only supported way a
-   * `contentHash` enters the database.
+   * Record what a target branch was observed to contain — the only supported way a `contentHash`
+   * enters the database.
    *
    * Same content as the newest observation ⇒ only the observation time moves. Different content ⇒ a
-   * new row one generation up and an automatically advanced evidence version. Current acceptance
-   * is re-evaluated from conclusion events; no caller reopens an attempt.
+   * new row one generation up. Since 0229 nothing reads these rows to decide anything: they are a
+   * record of what was seen, kept for a reader.
    */
   @Post(':id/acceptance/merge-evidence')
   recordMergeEvidence(
@@ -392,36 +323,6 @@ export class ProjectsController {
     @Body() dto: RecordMergeEvidenceDto,
   ) {
     return this.acceptance.recordMergeEvidence(user.userId, id, dto);
-  }
-
-  /**
-   * Unit L7: what reopening this project would cost, before anybody spends it.
-   *
-   * Which epoch it is in, which one a reopen would start, how many acceptance attempts stop being
-   * current, and the `acknowledgement` the write below has to echo back. Read it and show it: a
-   * confirmation dialog that says "are you sure" asks about a feeling, and this says what happens.
-   */
-  @Get(':id/reopen')
-  reopenPreview(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.projects.reopenPreview(user.userId, id);
-  }
-
-  /**
-   * Unit L7: reopen a settled project, having named the epoch that decision was made against.
-   *
-   * `PATCH :id` with `status: OPEN` still reopens and still may — an older client, a repair script
-   * and the coordinator's own paths keep what they have always had (§8 CM1). This door differs in
-   * one way and it is the point of it: `acknowledgedAcceptanceEpoch` is REQUIRED, so the only way
-   * to reach it is to have read what the reopen costs. The response carries `reopened`, with the
-   * epoch it came from, the one it landed in and how many acceptance attempts were retired.
-   */
-  @Post(':id/reopen')
-  reopen(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: ReopenProjectDto,
-  ) {
-    return this.projects.reopen(user.userId, id, dto);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

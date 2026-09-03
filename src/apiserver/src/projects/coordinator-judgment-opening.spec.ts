@@ -120,35 +120,32 @@ test('every wake event has a sentence of its own', () => {
   assert.match(describeWakeFact(unknown), /SOMETHING_NEW/);
 });
 
-test('PROJECT_TASKS_SETTLED carries the merge-evidence-run order and the no-evidence exit', () => {
+test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the judgment did', () => {
   const settled = projectTasksSettledFact(PROJECT, [
     { taskId: TASK, status: 'DONE' },
   ])!;
   const opening = buildJudgmentOpening(settled, '验收闭环');
 
-  for (const tool of [
-    'project_acceptance',
-    'project_merge_evidence',
-    'project_acceptance_run',
-    'project_acceptance_verdict',
-  ]) {
+  for (const tool of ['project_get', 'project_merge_evidence', 'task_comment']) {
     assert.match(opening, new RegExp(tool), `settlement judgment must be handed ${tool}`);
   }
   const merge = opening.lastIndexOf('合并到 main');
   const evidence = opening.lastIndexOf('project_merge_evidence');
-  const run = opening.lastIndexOf('project_acceptance_run');
-  const verdict = opening.lastIndexOf('project_acceptance_verdict');
-  assert.ok(merge < evidence && evidence < run && run < verdict, 'the evidence order drifted');
+  assert.ok(merge < evidence, 'the evidence order drifted');
 
-  assert.match(opening, /mergeEvidence 为空/);
+  // Migration 0229 removed the judgment these three tools were: a prompt that still named them
+  // would send a one-shot session looking for a door that is not there, and the session has no
+  // second turn in which to discover that.
+  for (const gone of ['project_acceptance_run', 'project_acceptance_verdict', 'acceptance run']) {
+    assert.equal(opening.includes(gone), false,
+      `the settlement opening still names ${gone}, which 0229 removed`);
+  }
   assert.match(opening, /task_create.*criterionKey/);
   assert.match(opening, /task_comment 中升级给人/);
-  assert.match(opening, /不得开 acceptance run，更不得写 PASS/);
-  assert.match(opening, /任何主体都不能.*直接写 status=DONE/);
-  assert.match(opening, /服务端自动产生 DONE/);
-  assert.match(opening, /不证明持有凭据的一定是真人/);
-  assert.match(opening, /不会被标成 stale/);
-  assert.match(opening, /幂等/);
+  // And it says the removal out loud rather than leaving the session to infer it from an absence.
+  assert.match(opening, /没有任何东西会判定这些验收标准/);
+  assert.match(opening, /status 已无守卫/);
+  assert.match(opening, /不是对“真人在场”的密码学证明/);
 });
 
 test('a judgment session is filed under a different title from the conversation', () => {

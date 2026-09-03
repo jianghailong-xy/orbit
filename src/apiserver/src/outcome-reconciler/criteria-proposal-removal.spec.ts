@@ -395,18 +395,31 @@ test('the removal adds no compose service and no resident process', () => {
     ['start:dev'], 'no new long-running entry point');
 });
 
-test('the acceptance relations the proposal protected are still installed', () => {
-  for (const table of ACCEPTANCE_TABLES) {
-    const create = new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${table}"?[\\s(]`, 'i');
-    const drop = new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${table}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i');
-    const verdict = lastVerdict(create, drop);
+test('the ruler the proposal protected is still installed, and the judging around it is not', () => {
+  const create = (table: string) =>
+    new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${table}"?[\\s(]`, 'i');
+  const drop = (table: string) =>
+    new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?"?${table}"?\\s*(?:CASCADE|RESTRICT)?\\s*[;,]`, 'i');
+
+  // What 0223 protected and every later removal left alone: the ruler itself.
+  const definition = lastVerdict(
+    create('project_acceptance_criterion_definition'), drop('project_acceptance_criterion_definition'));
+  assert.ok(definition, 'project_acceptance_criterion_definition is named by no migration');
+  assert.equal(definition.verdict, 'CREATED', `the ruler was dropped by ${definition.dir}`);
+
+  // The judging beside it went to 0229, by a later and separate account-owner decision. 0223 still
+  // issued no statement against any of it, which is what this file is about.
+  for (const table of ACCEPTANCE_TABLES.filter((t) => t !== 'project_acceptance_criterion_definition')) {
+    const verdict = lastVerdict(create(table), drop(table));
     assert.ok(verdict, `${table} is named by no migration`);
-    assert.equal(verdict.verdict, 'CREATED', `${table} was dropped by ${verdict.dir}`);
+    assert.equal(verdict.verdict, 'DROPPED');
+    assert.equal(verdict.dir, '0229_project_acceptance_judgment_removal');
   }
   const gate = lastVerdict(
     /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+"?project_acceptance_done_gate"?\s*\(/i,
     /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?"?project_acceptance_done_gate"?/i,
   );
   assert.ok(gate);
-  assert.equal(gate.verdict, 'CREATED', `the DONE gate was dropped by ${gate.dir}`);
+  assert.equal(gate.verdict, 'DROPPED');
+  assert.equal(gate.dir, '0229_project_acceptance_judgment_removal');
 });

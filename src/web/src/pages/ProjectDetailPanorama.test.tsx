@@ -52,22 +52,16 @@ const DETAIL = {
   title: 'Website Revamp',
   status: 'OPEN',
   goal: 'Ship the new marketing site',
-  acceptanceCriteria: 'Lighthouse ≥ 90 on every page',
   instructions: 'Land behind a flag, then flip it',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-02T00:00:00Z',
   _count: { tasks: 5 },
   tasksByStatus: { OPEN: 2, DONE: 3 },
   // Read by the acceptance card off this same document, which is why the card adds no request.
-  acceptance: {
-    total: 2,
-    passed: 1,
-    lastRunAt: '2026-08-20T09:00:00.000Z',
-    criteria: [
-      { key: 'c1', text: 'Every page scores 90 or better', ordinal: 1, verdict: 'PASS' },
-      { key: 'c2', text: 'No console errors on load', ordinal: 2, verdict: 'UNDECIDED' },
-    ],
-  },
+  acceptanceCriteriaItems: [
+    { id: 'c1', text: 'Every page scores 90 or better', ordinal: 1, revision: 1 },
+    { id: 'c2', text: 'No console errors on load', ordinal: 2, revision: 1 },
+  ],
 };
 
 /** `running: 1` on purpose: a project whose queue is being served is not stalled, so the header
@@ -316,7 +310,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const goal = at('Ship the new marketing site');
     const tasks = at('>Tasks<');
     const ready = at('Run queue');
-    const acceptance = at('Acceptance</div>');
+    const acceptance = at('Acceptance criteria</div>');
 
     // The changing work account and its Coordinator lead. The stable goal follows both as one
     // full-width card, before the graph of the work it defines.
@@ -433,16 +427,13 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('Instructions')).toBe(true);
     expect(shows('Land behind a flag, then flip it')).toBe(true);
 
-    // Acceptance is not a third one any more. It used to be BOTH a field of authored text and a
-    // card of the same sentences with verdicts against them — the server makes one criterion out
-    // of every non-blank line of that field, so the two were always the same list, and only the
-    // lower one said what a run had concluded. What is left is the standing.
-    expect(shows('Acceptance criteria')).toBe(false);
+    // Acceptance is not a third free-text field any more. It used to be BOTH a field of authored
+    // text and a card of the same sentences with verdicts against them; migration 0229 removed the
+    // text column and the verdicts, and what is left is one card of stated criteria.
+    expect(shows('Acceptance criteria')).toBe(true);
+    expect(countOf('Acceptance criteria')).toBe(1);
     expect(shows('Every page scores 90 or better')).toBe(true);
     expect(shows('No console errors on load')).toBe(true);
-    // This fixture's authored text differs from its parsed criteria on purpose: it is how a
-    // second copy of the list would be caught if one ever came back.
-    expect(shows('Lighthouse ≥ 90 on every page')).toBe(false);
 
     // Goal follows the changing work account and the Coordinator action, while the task list still
     // follows the outcome measure.
@@ -455,7 +446,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // first match and stay green on a page that draws the whole block a second time lower down.
     expect(countOf('>Goal</h5>')).toBe(1);
     expect(countOf('Ship the new marketing site')).toBe(1);
-    expect(countOf('>Acceptance</div>')).toBe(1);
+    expect(countOf('>Acceptance criteria</div>')).toBe(1);
     expect(countOf('Every page scores 90 or better')).toBe(1);
     expect(countOf('>Instructions</h5>')).toBe(1);
     expect(countOf('Land behind a flag, then flip it')).toBe(1);

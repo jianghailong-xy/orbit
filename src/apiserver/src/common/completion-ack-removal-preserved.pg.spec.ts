@@ -66,20 +66,20 @@ suite('(j) task_executable_* and project_acceptance_* are both still installed',
   assert.deepEqual(executable.relations, [],
     `task_executable_* should be empty: ${executable.relations.map((r) => r.name).join(', ')}`);
   const acceptance = await census(client, 'project_acceptance_');
-  assert.ok(acceptance.relations.length >= 5,
+  assert.ok(acceptance.relations.length >= 1,
     `project_acceptance_* has only ${acceptance.relations.length} relations: `
     + acceptance.relations.map((r) => r.name).join(', '));
   assert.ok(acceptance.triggers.length >= 1,
     `project_acceptance_* lost its guards: ${acceptance.triggers.join(', ')}`);
 
-  // The named walls the task called out one by one, so a reader sees the exact list.
+  // The named wall the task called out, so a reader sees the exact list.
   for (const table of [
-    // The four 0200 relations that used to be named here went out with 0227, and
-    // `task_executable_judgment_result` with 0228 — each by a later and separate account-owner
-    // decision. 0220 still issued no statement against any of them.
-    'project_acceptance_run',
-    'project_acceptance_criterion',
-    'project_acceptance_conclusion',
+    // The four 0200 relations that used to be named here went out with 0227,
+    // `task_executable_judgment_result` with 0228, and `project_acceptance_run` /
+    // `_criterion` / `_conclusion` / `_audit` with 0229 — each by a later and separate
+    // account-owner decision. 0220 still issued no statement against any of them, which is what
+    // this file is about; the DECLARATION table under the same prefix is what survived all three.
+    'project_acceptance_criterion_definition',
   ]) {
     const present = await client.query(
       `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace

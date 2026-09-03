@@ -19,7 +19,6 @@ import {
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
-import { ProjectReopenControl } from '../components/ProjectReopenControl';
 import { ProjectSections } from '../components/ProjectSections';
 import {
   BucketMeter,
@@ -97,7 +96,6 @@ interface Project {
  *  the server's grouped task tally. Statuses with no tasks are absent from `tasksByStatus`
  *  entirely (it's a `groupBy`), so an empty object means "no tasks", not "counts unavailable". */
 interface ProjectDetail extends Project {
-  acceptanceCriteria?: string | null;
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
 }
@@ -711,13 +709,9 @@ export function ProjectDetailPage() {
               a Run press changes the row's state instead of making it disappear. */}
           <ProjectReadyToRun projectId={id} />
 
-          {/* The criteria live HERE and nowhere else on this page. There used to be a
-              `Field label="Acceptance criteria"` in this slot as well as the card below the task
-              list, and the server parses one criterion out of every non-blank line of that same
-              field — so the two were always the same sentences, and only the lower one carried the
-              verdicts. One section now carries both, in the slot the stated criteria always had:
+          {/* The criteria live HERE and nowhere else on this page, in the slot they always had:
               after the goal, above the plan, and above the task list rather than buried under it,
-              because "did it meet its bar" outranks "how far along is it". */}
+              because "what was it for" outranks "how far along is it". */}
           <ProjectAcceptanceCard projectId={id} />
 
           <Field label="Instructions" text={p.instructions} empty="No instructions set" />
@@ -729,13 +723,11 @@ export function ProjectDetailPage() {
               — the same spelling the project query above is keyed and fetched with. */}
           <ProjectTasks projectId={id} />
 
-          {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
+          {/* Unit L7. A sibling of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator
-              because both are things a PERSON answers, and §7 RB2 is explicit that these two are
-              the person's alone — no coordinator signs a crossing for another goal, and none
-              reopens a settled project on its own. */}
+              because it is a thing a PERSON answers, and §7 RB2 is explicit that it is the
+              person's alone — no coordinator signs a crossing for another goal. */}
           <ProjectCrossingsCard projectId={id} />
-          <ProjectReopenControl projectId={id} />
         </>
       ) : null}
     </div>

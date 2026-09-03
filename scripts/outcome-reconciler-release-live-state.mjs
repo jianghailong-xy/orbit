@@ -434,8 +434,10 @@ assert.deepEqual(canonicalState, {
   deliveryAttestation: null,
   projectionSchema: null,
   canonicalDoneGate: null,
-  // What still decides a project's DONE on the deployment: the 0150 acceptance gate.
-  acceptanceDoneGate: 'project_acceptance_done_gate',
+  // Nothing decides a project's DONE on the deployment any more. 0222 removed 0197's canonical
+  // gate and 0229 removed 0150's acceptance gate, on the account owner's decision of 2026-09-03:
+  // `project.status = 'DONE'` is an ordinary column write with no database guard behind it.
+  acceptanceDoneGate: null,
 });
 
 // 0221 removed the outcome-watchdog current-binding ledger together with the process it bound.

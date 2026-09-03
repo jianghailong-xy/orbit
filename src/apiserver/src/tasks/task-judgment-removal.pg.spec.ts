@@ -135,7 +135,7 @@ suite('(b) the eight functions, their triggers, and the three on the core task t
   });
 
 // (m)(q)(w) --------------------------------------------------------------------------------------
-suite('(m)(q)(w) VERIFICATION, the 0150/0172 gate and the core task triggers are intact',
+suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took the gate',
   async (t) => {
     const client = await connect();
     t.after(async () => { await client.end(); });
@@ -156,13 +156,13 @@ suite('(m)(q)(w) VERIFICATION, the 0150/0172 gate and the core task triggers are
     ]);
     // And its body is byte for byte the one the ledger declares — which is what "unchanged"
     // means when the baseline has to be content rather than a remembered digest.
+    // 0150's `..._done_gate` / `..._advance_epoch` / `..._epoch_audit` and 0172's
+    // `..._criteria_fact` stood in this list, byte for byte, until
+    // `0229_project_acceptance_judgment_removal` dropped all four — a later and separate
+    // account-owner decision. They are checked for absence under (q) below instead.
     for (const preserved of [
       'task_verification_verdict_atomic',
       'task_verification_carrier_status_derive',
-      'project_acceptance_done_gate',
-      'project_acceptance_advance_epoch',
-      'project_acceptance_epoch_audit',
-      'project_acceptance_criteria_fact',
     ]) {
       const declared = declaredBody(preserved);
       assert.equal(await installedBody(client, preserved), declared.body,
@@ -186,23 +186,17 @@ suite('(m)(q)(w) VERIFICATION, the 0150/0172 gate and the core task triggers are
     ));
     assert.equal(derive.rowCount, 2);
 
-    // (q) 0150's three and 0172's one, on `project`, in the alphabetical order that makes
-    // `advance_epoch` pin the epoch the `done_gate` then reads.
+    // (q) 0150's three and 0172's one, on `project`. This assertion was an ORDER — PostgreSQL
+    // fires BEFORE ROW triggers by name, so `advance_epoch` had to precede the `done_gate` that
+    // read the epoch it pinned. 0229 dropped all four, so the ordering constraint went with the
+    // things it ordered. 0228 named none of them, which is what this suite is answerable for.
     const gate = (await client.query<{ tgname: string }>(
       `SELECT t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
         WHERE NOT t.tgisinternal AND c.relname = 'project'
           AND t.tgname LIKE 'project_acceptance%'
         ORDER BY t.tgname`,
     )).rows.map((row) => row.tgname);
-    assert.deepEqual(gate, [
-      'project_acceptance_advance_epoch',
-      'project_acceptance_criteria_fact',
-      'project_acceptance_done_gate',
-      'project_acceptance_epoch_audit',
-    ]);
-    assert.ok(gate.indexOf('project_acceptance_advance_epoch')
-      < gate.indexOf('project_acceptance_done_gate'),
-      'PostgreSQL fires BEFORE ROW triggers in name order; advance_epoch must still precede the gate');
+    assert.deepEqual(gate, []);
 
     // (w) the core table still carries every trigger it did, minus exactly the three removed here.
     const taskTriggers = (await client.query<{ tgname: string }>(
@@ -224,7 +218,7 @@ suite('(m)(q)(w) VERIFICATION, the 0150/0172 gate and the core task triggers are
   });
 
 // (r) --------------------------------------------------------------------------------------------
-suite('(r) the project DONE gate still refuses a hand-written DONE at epoch zero', async (t) => {
+suite('(r) nothing refuses a hand-written DONE any more: 0229 removed the gate', async (t) => {
   const client = await connect();
   t.after(async () => { await client.end(); });
   await client.query('TRUNCATE "user" RESTART IDENTITY CASCADE');
@@ -238,16 +232,21 @@ suite('(r) the project DONE gate still refuses a hand-written DONE at epoch zero
     `INSERT INTO "project" (id, owner_id, title, updated_at) VALUES ($1, $2, 'gate', now())`,
     [project, owner],
   );
-  await assert.rejects(
-    client.query(
-      `UPDATE "project" SET "status" = 'DONE', "acceptance_epoch" = 0 WHERE "id" = $1`, [project],
-    ),
-    /ACCEPTANCE_MISSING|ACCEPTANCE_EVIDENCE_STALE|ACCEPTANCE_BLOCKED/,
-  );
+  // What this asserted when 0228 landed: the same statement was refused with ACCEPTANCE_MISSING,
+  // and the point was that removing the TASK judgment had not touched the PROJECT gate. 0229 then
+  // removed that gate — and the epoch column this statement used to set — on the account owner's
+  // instruction. The write is kept here, minus the dropped column, as the standing proof of what
+  // 0229 left behind: a project reaches DONE by being written DONE, and nothing inspects it.
+  await client.query(`UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1`, [project]);
   const after = await client.query<{ status: string }>(
     `SELECT "status"::text FROM "project" WHERE "id" = $1`, [project],
   );
-  assert.equal(after.rows[0].status, 'OPEN');
+  assert.equal(after.rows[0].status, 'DONE');
+  const gate = await client.query(
+    `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = 'project_acceptance_done_gate'`,
+  );
+  assert.equal(gate.rowCount, 0, 'and the function that used to refuse it is gone too');
 });
 
 // (e)(g) -----------------------------------------------------------------------------------------

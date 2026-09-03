@@ -5,7 +5,7 @@ import { BadRequestException, ForbiddenException, RequestMethod } from '@nestjs/
 import { ProjectStatus } from '@orbit/shared';
 import { METHOD_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { PublicIdPipe } from '../common/public-id';
-import { CreateProjectDto, OpenAcceptanceRunDto, UpdateProjectDto } from '../projects/dto';
+import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
 import { RunnerProjectsController } from './runner-projects.controller';
 
 /** The acceptance service this controller also takes. A double rather than a real one: every
@@ -13,9 +13,6 @@ import { RunnerProjectsController } from './runner-projects.controller';
  *  say so by failing here. */
 function acceptanceDouble(): never {
   return {
-    overview: async () => assert.fail('this scenario does not read acceptance'),
-    openRun: async () => assert.fail('this scenario does not open an acceptance run'),
-    finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
     recordMergeEvidence: async () => assert.fail('this scenario does not record merge evidence'),
   } as never;
 }
@@ -148,31 +145,6 @@ test('createProject writes into the runner owner, with the body untouched', asyn
   // canonical DTO grows later, and the two doors would quietly accept different projects.
   assert.equal(seen.dto, dto);
   assert.equal(result, created);
-});
-
-test('createProject refuses legacy acceptanceCriteria before either runner create path', async () => {
-  const projects = {
-    create: async () => assert.fail('legacy criteria must not reach the headless write'),
-    createInSession: async () => assert.fail('legacy criteria must not reach the session write'),
-  } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
-
-  for (const sessionId of [undefined, SESSION_ID]) {
-    assert.throws(
-      () => controller.createProject(RUNNER, sessionId, {
-        title: 'Crawl',
-        acceptanceCriteria: 'Every shard reported',
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof BadRequestException);
-        const message = error.message;
-        assert.match(message, /acceptanceCriteriaItems/);
-        assert.match(message, /completionCriterion/);
-        assert.match(message, /EVIDENCE_JUDGMENT/);
-        return true;
-      },
-    );
-  }
 });
 
 /** A controller whose two create paths are told apart by which one was called. */
@@ -314,11 +286,8 @@ for (const method of ['getProject', 'removeProject'] as const) {
 // editing acceptance criteria is a person's rather than a judgment session's to do.
 // Asserted rather than left implicit because a typo in the header name is
 // silent: the parameter would be `undefined` on every request and the boundary would never bite.
-for (const method of [
-  'updateProject',
-  'openAcceptanceRun',
-  'finalizeAcceptanceRun',
-] as const) {
+// The two acceptance-run routes that stood beside it went with the judgment in 0229.
+for (const method of ['updateProject'] as const) {
   test(`${method} reads the acting session from x-orbit-session-id`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown }>
@@ -329,65 +298,6 @@ for (const method of [
     assert.deepEqual(headers, ['x-orbit-session-id']);
   });
 }
-
-test('openAcceptanceRun attributes the run to the calling judgment session, not the body', async () => {
-  const seen: {
-    ownerId?: string;
-    projectId?: string;
-    input?: OpenAcceptanceRunDto & { decidedBy: string };
-  } = {};
-  const acceptance = {
-    openRun: async (
-      ownerId: string,
-      projectId: string,
-      input: OpenAcceptanceRunDto & { decidedBy: string },
-    ) => {
-      Object.assign(seen, { ownerId, projectId, input });
-      return { id: 'run-1' };
-    },
-  } as never;
-  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
-  const body = {
-    decidedBy: 'USER',
-    coordinatorSessionId: '00000000-0000-7000-8000-0000000000ff',
-  } as OpenAcceptanceRunDto;
-
-  await controller.openAcceptanceRun(RUNNER, 'project-1', SESSION_ID, body);
-
-  assert.equal(seen.ownerId, 'owner-1');
-  assert.equal(seen.projectId, 'project-1');
-  assert.equal(seen.input?.decidedBy, 'COORDINATOR_AGENT');
-  assert.equal(seen.input?.coordinatorSessionId, SESSION_ID);
-});
-
-test('finalizeAcceptanceRun identifies a headless runner as a machine principal', async () => {
-  let received: unknown[] = [];
-  const criteria = [{ ordinal: 1, verdict: 'FAIL' }];
-  const acceptance = {
-    finalizeRun: async (...args: unknown[]) => {
-      received = args;
-      return { verdict: 'FAIL' };
-    },
-  } as never;
-  const controller = new RunnerProjectsController({} as never, acceptance, {} as never);
-
-  await controller.finalizeAcceptanceRun(
-    RUNNER,
-    'project-1',
-    'run-1',
-    undefined,
-    { criteria } as never,
-  );
-
-  assert.deepEqual(received, [
-    'owner-1',
-    'project-1',
-    'run-1',
-    criteria,
-    undefined,
-    'runner-1',
-  ]);
-});
 
 test('updateProject writes into the runner owner, with the id and body untouched', async () => {
   const seen: { ownerId?: string; projectId?: string; dto?: UpdateProjectDto } = {};
@@ -435,26 +345,6 @@ test('updateProject forwards an explicit structured clear rather than dropping i
 
   assert.deepEqual(seen, { goal: null, instructions: null });
   assert.ok(seen && 'goal' in seen, 'the null clear was dropped on the way through');
-});
-
-test('updateProject refuses legacy acceptanceCriteria replacement and clear before the write', () => {
-  const projects = {
-    update: async () => assert.fail('legacy criteria must not reach the runner update'),
-  } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
-
-  for (const acceptanceCriteria of ['Every shard reported', null] as const) {
-    assert.throws(
-      () => controller.updateProject(RUNNER, 'project-1', undefined, { acceptanceCriteria }),
-      (error: unknown) => {
-        assert.ok(error instanceof BadRequestException);
-        assert.match(error.message, /acceptanceCriteriaItems/);
-        assert.match(error.message, /completionCriterion/);
-        assert.match(error.message, acceptanceCriteria === null ? /send \[\] to clear/i : /EVIDENCE_JUDGMENT/);
-        return true;
-      },
-    );
-  }
 });
 
 // An update on somebody else's project is the service's 404 — the same `assertOwned` the user door
@@ -517,20 +407,13 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
   );
   assert.deepEqual(handlers.slice().sort(), [
     'createProject',
-    // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
-    // three writes are here. Listing, opening a coordinator and the manual trigger are still
-    // absent, which is the line this test exists to hold.
-    'finalizeAcceptanceRun',
     'getProject',
-    // Unit L7's two, and both are GETs on purpose. §7 RB2 puts the ANSWER to a cross-project
-    // crossing with the user and §7 puts a settled project's reopen with the user too, so this
-    // door carries the question and what the reopen would cost, and neither of the two writes:
-    // an agent that could sign a crossing for another goal, or reopen a project it wanted to
-    // write into, is the incident this whole unit exists for wearing a different hat.
-    'getProjectReopenImpact',
+    // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
+    // crossing with the user, so this door carries the question and not the write: an agent that
+    // could sign a crossing for another goal is the incident this whole unit exists for wearing a
+    // different hat. Migration 0229 took the reopen preview with the acceptance epoch it read, and
+    // the three acceptance-judgment routes with the runs and conclusions they wrote.
     'listProjectHandoffs',
-    'openAcceptanceRun',
-    'projectAcceptance',
     'recordMergeEvidence',
     'removeProject',
     'updateProject',
@@ -543,14 +426,10 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
   );
   assert.deepEqual(verbs, {
     createProject: RequestMethod.POST,
-    finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,
-    // Unit L7: GET, both of them. The verbs are the assertion — a POST appearing on either would
-    // be a coordinator answering a crossing or reopening a settled project on a person's behalf.
-    getProjectReopenImpact: RequestMethod.GET,
+    // Unit L7: GET. The verb is the assertion — a POST appearing here would be a coordinator
+    // answering a crossing on a person's behalf.
     listProjectHandoffs: RequestMethod.GET,
-    openAcceptanceRun: RequestMethod.POST,
-    projectAcceptance: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     updateProject: RequestMethod.PATCH,

@@ -984,74 +984,11 @@ func (t *Transport) getProjectHandoffs(id, state string) (json.RawMessage, error
 	return out, err
 }
 
-// getProjectReopenImpact reads what reopening a settled project would cost: the acceptance epoch it
-// is in, the one a reopen would start, how many acceptance attempts stop being current, and whether
-// its DONE rests on the pre-acceptance compatibility stamp.
-//
-// Also read only, and for the same reason. A write refused `PROJECT_REOPEN_REQUIRED` is entitled to
-// know what asking a person for a reopen would cost them; it is not entitled to perform one.
-func (t *Transport) getProjectReopenImpact(id string) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/reopen", nil, &out, taskOpTimeout)
-	return out, err
-}
-
-// getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
-// as the server decomposes them, the digest of the facts a DONE would be checked against, every
-// evidence version with its projected per-criterion conclusions, the newest merge observation per
-// requirement, the append-only audit, and doneGate — whether a DONE would be allowed right now and,
-// if not, the code and the sentence the write path would refuse with.
-//
-// The read to make BEFORE claiming a project is finished. "The tests passed" written in a comment
-// is not evidence the server can check; a durable conclusion event in this record is.
-func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/acceptance", nil, &out, taskOpTimeout)
-	return out, err
-}
-
-// openProjectAcceptanceRun evaluates the current evidence set. It is idempotent: callers observing
-// the same criteria and merge facts receive the same immutable evidence-version row.
-//
-// Who concluded is the server's to decide from this credential (COORDINATOR_AGENT), not this
-// process's to claim.
-func (t *Transport) openProjectAcceptanceRun(id string, body map[string]interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/acceptance/runs", body, &out, taskOpTimeout)
-	return out, err
-}
-
-// finalizeProjectAcceptanceRun appends one conclusion event per stated criterion, with the evidence
-// for it. The current verdict is derived from events and cannot be supplied — all PASS is PASS, any
-// FAIL is FAIL, anything else is INCONCLUSIVE.
-func (t *Transport) finalizeProjectAcceptanceRun(id, runID string, body map[string]interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	if err := validatePathSegmentID(runID); err != nil {
-		return nil, fmt.Errorf("run id: %w", err)
-	}
-	var out json.RawMessage
-	err := t.do(nil, "POST",
-		"/runner/projects/"+url.PathEscape(id)+"/acceptance/runs/"+url.PathEscape(runID)+"/verdict",
-		body, &out, taskOpTimeout)
-	return out, err
-}
-
-// recordProjectMergeEvidence records what a target branch was observed to CONTAIN (§13.4 AE9-b).
+// recordProjectMergeEvidence records what a target branch was observed to CONTAIN.
 //
 // The runner is the side that can actually look — it has the checkout. contentHash is a sha256 of
 // the content, never `git branch --contains`: after a squash that answer is a guaranteed false
-// negative, which is the lesson the contract carries in clause 6.
+// negative. Since migration 0229 nothing reads these rows to decide anything.
 func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

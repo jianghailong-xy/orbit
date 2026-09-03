@@ -18,7 +18,6 @@ const OWNING = {
   projectPublicId: 'AAAProject',
   title: 'Coordinator control loop',
   status: 'OPEN' as const,
-  acceptanceEpoch: '3',
 };
 
 function view(over: Partial<TaskAttribution> = {}): TaskAttribution {
@@ -35,8 +34,6 @@ function view(over: Partial<TaskAttribution> = {}): TaskAttribution {
       absentReason: 'NO_DISCOVERY_RECORDED',
       authority: 'EVIDENCE_ONLY',
     },
-    acceptance: [],
-    acceptanceAbsentReason: 'NOT_CITED_BY_ACCEPTANCE',
     crossing: null,
     crossingAbsentReason: 'NO_CROSSING_DECLARED',
     blocker: null,
@@ -54,8 +51,9 @@ describe('TaskAttributionCard — where this work counts', () => {
     // AC1: the id is the thing you can look the project up by, and the title is the thing you can
     // recognise. Either one alone leaves the reader unable to check they are in the right place.
     expect(html).toContain('AAAProject');
-    expect(html).toContain('epoch 3');
     expect(html).toContain('OPEN');
+    // The acceptance epoch stood beside them until migration 0229 removed the column.
+    expect(html).not.toContain('epoch');
   });
 
   it('falls back to the raw id when a server predates the Base62 twin', () => {
@@ -68,7 +66,6 @@ describe('TaskAttributionCard — where this work counts', () => {
   it('says WHY each empty section is empty rather than rendering nothing', () => {
     const html = paint(view());
     expect(html).toContain('Nothing was recorded about where this work was noticed.');
-    expect(html).toContain('No acceptance criterion cites this task as its evidence.');
     expect(html).toContain('No declared crossing touches this task.');
     expect(html).toContain('Nothing is blocking where this work counts.');
   });
@@ -96,29 +93,6 @@ describe('TaskAttributionCard — where this work counts', () => {
     expect(html).toContain('Somewhere else');
     expect(html).toContain('session.transcript');
     expect(html).toContain('the task that noticed it');
-  });
-
-  it('tells a PASS from before a reopen apart from one from a rerun, in words', () => {
-    const link = {
-      runId: 'r1', attempt: '4', ordinal: 2, criterionKey: 'k', text: 'the loop never idles',
-      verdict: 'PASS' as const, epoch: '2', current: false,
-    };
-    const reopened = paint(view({
-      acceptance: [{ ...link, staleReason: 'EPOCH_ADVANCED' }], acceptanceAbsentReason: null,
-    }));
-    const rerun = paint(view({
-      acceptance: [{ ...link, epoch: '3', staleReason: 'RUN_SUPERSEDED' }],
-      acceptanceAbsentReason: null,
-    }));
-    // AC5: not a colour and not a tooltip — the state is a word, and the two ways of going stale
-    // are two different sentences because they are two different things to do next.
-    expect(reopened).toContain('NOT CURRENT');
-    expect(reopened).toContain('this project was reopened');
-    expect(rerun).toContain('superseded by a later attempt in the same epoch');
-    expect(paint(view({
-      acceptance: [{ ...link, epoch: '3', current: true, staleReason: null }],
-      acceptanceAbsentReason: null,
-    }))).toContain('CURRENT');
   });
 
   it('shows a pending crossing with its stable code and its required action', () => {
@@ -153,17 +127,12 @@ describe('TaskAttributionCard — where this work counts', () => {
   });
 
   it('gives every chip an accessible name, so none of them is colour alone', () => {
-    const html = paint(view({
-      acceptance: [{
-        runId: 'r1', attempt: '1', ordinal: 1, criterionKey: 'k', text: 't',
-        verdict: 'FAIL', epoch: '3', current: true, staleReason: null,
-      }],
-      acceptanceAbsentReason: null,
-    }));
+    const html = paint(view());
     expect(html).toContain('aria-label="Project status OPEN"');
-    expect(html).toContain('aria-label="Acceptance epoch 3"');
-    expect(html).toContain('aria-label="Verdict FAIL"');
-    expect(html).toContain('aria-label="Current acceptance epoch"');
+    // The three acceptance chips that stood here — the epoch, the verdict and whether it was
+    // current — went with the judgment migration 0229 removed. There is no verdict to label.
+    expect(html).not.toContain('aria-label="Verdict');
+    expect(html).not.toContain('acceptance epoch');
   });
 });
 

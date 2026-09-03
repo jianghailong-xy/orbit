@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "orbit.outcome-reconciler.release-evaluation-dag",
-  "declaredDagPlanDigest": "2f11759836516d4655d4e0d74a7a95ae3e20480f72f10f6d2c3384ac7af2b20f",
+  "declaredDagPlanDigest": "8d6f95105a97c7b1889529f74fd520f2f7ef4e64e9414995477f6bcabc58b1eb",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "builderTaskId": "34HtkVgFbLwSY1Go4JLgE",
   "supersededAttempt": {
@@ -353,8 +353,8 @@
       "contracts/outcome-reconciler-authoritative-target.json": "5a45979e5bf2a9bde3bfffb8805e74f27c9e0afba23b1ab1c28518a7ceb9ed0b",
       "contracts/outcome-reconciler-release-frontier.json": "ec48c220dafaca5ff3d1a225e08d0aea88632d6f82752f311be7aab0147cc4b8",
       "src/apiserver/src/projects/coordinator-pg-test-safety.ts": "ef413a9aecbcf0678f24c07b79d7001a6a6d84ab8db20967266745718b9af8cd",
-      "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "d23691e617d4d40322cbfb069252b684ece90b3a636bf469c269c0b10fb6d022",
-      "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "3d2db478668a7f2dd66e1fd8029864c2fe6b2f901adf0faef77ad288615f9381",
+      "src/apiserver/src/projects/project-list-rollup.audit.pg.spec.ts": "3e21bc79e624e7efa10d932915da0c0b0903b0e0b2091baf988d35e1d06d1af6",
+      "src/apiserver/src/projects/project-list-rollup.pg.spec.ts": "11cc6cdf63da3444e602a0a9ea2f62a79201e33ac712eea4f8983a89f1ba437d",
       "src/apiserver/src/runner-api/inbox-lease-generation.spec.ts": "d2a1622ce78807c44de50d4a8c8adf8e86baf139652fae6f5c15d226341ad3ee",
       "src/apiserver/src/runner-api/runner-write-lease-owner.spec.ts": "dce70b95c9112aff083bba75281838cbaa412a991fadb7a5e5d97df851bfce80",
       "src/web/src/components/ProjectReadyToRun.test.tsx": "84973ea8d2c1710e4c02e0dee7eebe414372baaa5723e4e327d33990f63ad42c",

@@ -126,7 +126,6 @@ function fixture(options: FixtureOptions = {}) {
           .map((id) => ({
             id,
             status: status[id],
-            acceptanceEpoch: 0n,
             maxConcurrentTasks: 3,
             sessionBudgetPerDay: null,
             members: [],

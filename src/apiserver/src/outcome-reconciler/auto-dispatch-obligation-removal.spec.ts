@@ -110,13 +110,9 @@ const REMOVED_SUITE_ALIASES = [
 const REMOVED_DAG_NODES = ['suite-auto-dispatch', 'suite-auto-dispatch-integration'];
 
 /** Every `project_acceptance_*` relation. None of them is this task's to touch. */
-const ACCEPTANCE_TABLES = [
-  'project_acceptance_audit',
-  'project_acceptance_conclusion',
-  'project_acceptance_criterion',
-  'project_acceptance_criterion_definition',
-  'project_acceptance_run',
-];
+/** What 0224 issued no statement against. The four judgment relations that stood here were
+ *  dropped by 0229, on a later and separate account-owner decision; the declaration outlived it. */
+const ACCEPTANCE_TABLES = ['project_acceptance_criterion_definition'];
 
 /** What automatic dispatch still runs on, and must therefore survive the removal. */
 const DISPATCH_KEPT_TABLES = ['task_dependency', 'task_dispatch_epoch', 'task_run_request'];
@@ -456,5 +452,7 @@ test('(h) every project_acceptance_* relation is untouched, field for field', ()
     /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?"?project_acceptance_done_gate"?/i,
   );
   assert.ok(gate);
-  assert.equal(gate.verdict, 'CREATED', `the DONE gate was dropped by ${gate.dir}`);
+  assert.equal(gate.verdict, 'DROPPED');
+  assert.equal(gate.dir, '0229_project_acceptance_judgment_removal',
+    'the DONE gate must have been dropped by 0229 and by nothing before it');
 });

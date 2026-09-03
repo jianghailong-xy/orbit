@@ -66,12 +66,6 @@ export const MAX_PROJECT_SESSION_BUDGET_PER_DAY = 10_000;
  */
 export const CONFIG_REVISION_PATTERN = /^\d{1,20}$/;
 
-/**
- * An `acceptanceEpoch` as it travels. Same shape, same reason, as `CONFIG_REVISION_PATTERN`: a
- * 64-bit column served as a decimal string, so what a caller echoes back is validated as the
- * string the read endpoint gave them rather than as a number that would lose its last digits.
- */
-export const ACCEPTANCE_EPOCH_PATTERN = /^\d{1,20}$/;
 export const SHA256_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 
 /**
@@ -136,13 +130,8 @@ export class CreateProjectDto {
 
   /** What this project is trying to achieve. */
   @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string;
-  /** What would settle that the goal was reached. */
-  @IsOptional()
-  @IsString()
-  @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS)
-  acceptanceCriteria?: string;
-  /** Structured authoring source. Mutually exclusive with the legacy text field; the service
-   * checks that cross-field invariant and stores a compatibility projection for older clients. */
+  /** What would settle that the goal was reached, one authored criterion per item. Migration 0229
+   * removed the legacy text shape and the parser that split it, so this is the only one. */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
@@ -167,10 +156,6 @@ export class UpdateProjectDto {
   /** null clears the field, as on the task list's `instructions`: blank and absent must not be
    *  two different stored states. */
   @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string | null;
-  @IsOptional()
-  @IsString()
-  @MaxLength(MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS)
-  acceptanceCriteria?: string | null;
   /** Whole-collection structured replacement. `[]` explicitly clears every criterion; omission
    * leaves the collection untouched. Existing item ids preserve identity and revision history. */
   @IsOptional()
@@ -183,9 +168,9 @@ export class UpdateProjectDto {
   @IsString()
   @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS)
   instructions?: string | null;
-  /** Where the work stands. OPEN and CANCELLED remain request values; DONE is accepted by the DTO
-   * vocabulary only so old clients receive the service's explicit automatic-only refusal rather
-   * than a generic validation error. The evaluator alone writes it. */
+  /** Where the work stands. All three values are ordinary request values: migration 0229 removed
+   * both the database gate and the application-layer refusal that used to make DONE
+   * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
   // ── What the project's coordinator is allowed to do ────────────────────────────────────────
@@ -231,48 +216,6 @@ export class UpdateProjectDto {
    * behaviour it has always had (last write wins). Nothing existing breaks by adding it, and
    * nothing new has to guess a revision it has no way to know.
    */
-  @IsOptional() @IsString() @Matches(CONFIG_REVISION_PATTERN, {
-    message: 'expectedConfigRevision must be the decimal configRevision you read from the project',
-  })
-  expectedConfigRevision?: string;
-
-  /**
-   * Unit L7: the acceptance epoch this reopen was decided against.
-   *
-   * Only read when `status` is OPEN and the project is settled — the one write that starts a new
-   * acceptance epoch and makes every PASS the project has stop being current. Sent, it is a
-   * compare-and-swap on that epoch: the reopen commits only if the project is still at the number
-   * the person was shown, and a 409 otherwise with nothing written.
-   *
-   * OPTIONAL here for the same compatibility reason `expectedConfigRevision` is, and REQUIRED on
-   * `POST /projects/:id/reopen` — the door a person acts through. A confirmation that a repair
-   * script has to learn about is a confirmation that stops repair scripts; one the UI cannot skip
-   * is one a person cannot spend by accident.
-   */
-  @IsOptional() @IsString() @Matches(ACCEPTANCE_EPOCH_PATTERN, {
-    message:
-      'acknowledgedAcceptanceEpoch must be the decimal acceptanceEpoch you read from the project',
-  })
-  acknowledgedAcceptanceEpoch?: string;
-}
-
-/**
- * `POST /projects/:id/reopen` — reopen a settled project, on purpose.
- *
- * One field and it is required, which is the whole difference between this door and `PATCH :id`
- * with `status: OPEN`: a reopen retires every acceptance attempt the project has and starts a new
- * epoch, so the request has to name the epoch it was decided against. Naming it is the second
- * confirmation — not a checkbox, which only proves a second button was pressed, but the number
- * from the preview, which proves it was pressed on the project as it actually stands.
- */
-export class ReopenProjectDto {
-  @IsString() @Matches(ACCEPTANCE_EPOCH_PATTERN, {
-    message:
-      'acknowledgedAcceptanceEpoch must be the decimal acceptanceEpoch you read from the project',
-  })
-  acknowledgedAcceptanceEpoch!: string;
-
-  /** As on UpdateProjectDto: the revision this request was composed against, or nothing. */
   @IsOptional() @IsString() @Matches(CONFIG_REVISION_PATTERN, {
     message: 'expectedConfigRevision must be the decimal configRevision you read from the project',
   })
@@ -336,52 +279,6 @@ export const MAX_MERGE_REQUIREMENT_CHARS = 200;
 /** A sha256 hex digest of the observed CONTENT of a target branch — never a commit SHA, and never
  *  a `git branch --contains` boolean (§13.4 clause 6: both are false negatives after a squash). */
 export const CONTENT_HASH_PATTERN = /^[0-9a-fA-F]{64}$/;
-
-const ACCEPTANCE_VERDICTS = ['PASS', 'FAIL', 'INCONCLUSIVE'] as const;
-const ACCEPTANCE_DECIDERS = ['COORDINATOR_AGENT', 'USER'] as const;
-
-export class OpenAcceptanceRunDto {
-  /** Who is concluding — the closed pair `project_decision.decided_by` carries.
-   *
-   *  Optional at the user door and defaulted to USER, because a person recording an acceptance is
-   *  recording their own. The runner door ignores it and writes COORDINATOR_AGENT: there, who
-   *  concluded is a fact about the credential rather than a claim in the body. Only a
-   *  COORDINATOR_AGENT run opens the DONE gate (§13.4 AE2 step 2), so stating it here is an
-   *  explicit claim rather than something anybody gets by accident. */
-  @IsOptional() @IsIn(ACCEPTANCE_DECIDERS) decidedBy?: 'COORDINATOR_AGENT' | 'USER';
-  /** Historical attribution: which agent, and in which conversation. Recorded, never dereferenced —
-   *  rotating or deleting either must not rewrite who ran an acceptance. */
-  @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
-  @IsOptional() @IsPublicId() coordinatorSessionId?: string | null;
-  @IsOptional() @IsPublicId() projectActionId?: string | null;
-}
-
-/** One criterion's conclusion. Addressed by `ordinal` (its position in the snapshot) or by
- *  `criterionKey` (its content), so a caller that re-read the snapshot after an edit cannot answer
- *  criterion 3 while meaning criterion 4. */
-export class AcceptanceCriterionOutcomeDto {
-  @IsOptional() @IsInt() @Min(1) ordinal?: number;
-  @IsOptional() @IsString() @MinLength(1) criterionKey?: string;
-  /** Stable authored definition id, available on runs opened after schema 0172. */
-  @IsOptional() @IsPublicId() criterionId?: string;
-  @IsIn(ACCEPTANCE_VERDICTS) verdict!: 'PASS' | 'FAIL' | 'INCONCLUSIVE';
-  @IsOptional() @IsString() @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS) summary?: string | null;
-  /** Commands, key output, SHAs, environment — §13.4 clause 3's evidence, as JSON rather than
-   *  prose so that a checker can read it without parsing sentences. */
-  @IsOptional() evidence?: Record<string, unknown>;
-  @IsOptional() @IsPublicId() evidenceTaskId?: string | null;
-  @IsOptional() @IsPublicId() evidenceSessionId?: string | null;
-}
-
-export class FinalizeAcceptanceRunDto {
-  /** Every criterion in the run's snapshot, each with its own conclusion. The run's verdict is
-   *  derived from these and never supplied: a project-level PASS is the conjunction of them. */
-  @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => AcceptanceCriterionOutcomeDto)
-  criteria!: AcceptanceCriterionOutcomeDto[];
-}
 
 export class RecordMergeEvidenceDto {
   /** What was required, in the words whoever wrote the acceptance criteria used. */

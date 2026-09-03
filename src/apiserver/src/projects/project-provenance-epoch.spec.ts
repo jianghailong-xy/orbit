@@ -242,18 +242,16 @@ test('SC7: no gate reads provenance — the names appear only where they were de
 
 // ── The acceptance epoch ──────────────────────────────────────────────────────────────────────
 
-test('the acceptance epoch is on the project, stamped on the run, and starts at 0 for everyone', () => {
-  assert.match(SCHEMA, /acceptanceEpoch BigInt @default\(0\) @map\("acceptance_epoch"\)/);
-  assert.equal(
-    (SCHEMA.match(/acceptanceEpoch BigInt @default\(0\)/g) ?? []).length,
-    2,
-    'both `project` and `project_acceptance_run` carry the epoch',
-  );
+test('0150 added the acceptance epoch to both tables, and 0229 removed it from the schema', () => {
+  // 0150's own text is immutable and still says what it said: two columns, defaulting to 0, with
+  // no backfill. What changed is that the schema no longer carries either of them — migration 0229
+  // dropped `project.acceptance_epoch` and the whole `project_acceptance_run` table with the
+  // acceptance judgment they belonged to.
   for (const table of ['project', 'project_acceptance_run']) {
     assert.match(
       MIGRATION,
       new RegExp(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "acceptance_epoch" BIGINT NOT NULL DEFAULT 0`),
-      `${table}.acceptance_epoch must default to 0 — that is what keeps every DONE that stands today standing`,
+      `${table}.acceptance_epoch is what 0150 said it added`,
     );
   }
   assert.doesNotMatch(
@@ -261,6 +259,16 @@ test('the acceptance epoch is on the project, stamped on the run, and starts at 
     /UPDATE "project"\s+SET[^;]*acceptance_epoch/,
     'the migration must not backfill the epoch: every project starts in epoch 0 by construction',
   );
+
+  assert.equal(SCHEMA.includes('acceptanceEpoch'), false,
+    'the acceptance epoch survives in the current schema');
+  assert.equal(SCHEMA.includes('model ProjectAcceptanceRun'), false,
+    'the acceptance run survives in the current schema');
+  // And the four provenance columns 0150 added in the same migration are NOT removed: they are
+  // task provenance, which this unit is actually about, and 0229 has no mandate over them.
+  for (const field of Object.keys(PROVENANCE_COLUMNS)) {
+    assert.ok(SCHEMA.includes(field), `${field} was removed with the epoch beside it`);
+  }
 });
 
 test('a reopen is both settled statuses, not only DONE', () => {

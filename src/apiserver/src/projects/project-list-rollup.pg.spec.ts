@@ -70,12 +70,8 @@ async function makeProject(
       ownerId,
       title,
       status,
-      // `project_done_evidence_chk` (migration 0127): a DONE project is bound to an acceptance run
-      // or stamped legacy, with no third shape. This fixture is only about how a finished project
-      // is BUCKETED, so it takes the legacy stamp — the same one 0127 wrote onto every project that
-      // was already DONE — rather than staging a whole acceptance run to satisfy a constraint that
-      // has nothing to do with what is being measured.
-      ...(status === ProjectStatus.DONE ? { legacyAcceptedAt: new Date() } : {}),
+      // A DONE project needs no evidence to be DONE since migration 0229 removed the check
+      // that required one; this fixture is only about how a finished project is BUCKETED.
     },
   });
   return id;

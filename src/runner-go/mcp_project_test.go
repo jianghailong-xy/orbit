@@ -153,20 +153,16 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 		for _, want := range []string{
 			"project_get", "project_create",
 			"project_update", "project_delete",
-			// Unit 25A: native acceptance. Three of the four are writes, and they are here rather
-			// than behind the orchestration gate for the reason project_create is — the session
-			// that most needs to run a project's acceptance is a coordinator, which has no
-			// session_* tools at all.
-			"project_acceptance", "project_acceptance_run",
-			"project_acceptance_verdict",
+			// What a target branch was observed to contain. Migration 0229 removed the project
+			// acceptance JUDGMENT — `project_acceptance`, `project_acceptance_run` and
+			// `project_acceptance_verdict` went with the runs and conclusions they read and wrote,
+			// and `project_reopen_impact` with the acceptance epoch it previewed. The criteria
+			// themselves are authored and read through project_update/project_get.
 			"project_merge_evidence",
-			// Unit L7: two READS and no third write. A coordinator refused
-			// CROSS_PROJECT_APPROVAL_REQUIRED or PROJECT_REOPEN_REQUIRED is entitled to know what
-			// it is waiting on and what asking a person for it would cost them; it is not entitled
-			// to answer the crossing (§7 RB2 — the approver is the account owner, never the target
-			// project's coordinator) or to reopen a settled project it wants to write into. The
-			// absence of a `project_reopen` beside `project_reopen_impact` is the whole point.
-			"project_crossings", "project_reopen_impact",
+			// Unit L7: a READ and no write. A coordinator refused CROSS_PROJECT_APPROVAL_REQUIRED is
+			// entitled to know what it is waiting on; it is not entitled to answer the crossing
+			// (§7 RB2 — the approver is the account owner, never the target project's coordinator).
+			"project_crossings",
 		} {
 			if !seen[want] {
 				t.Fatalf("%s missing from the tools", want)
@@ -470,9 +466,19 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 	}
 }
 
-func TestMCPProjectWritesRejectLegacyAcceptanceBeforeHTTP(t *testing.T) {
-	var hit bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+// Migration 0229 removed the legacy `acceptanceCriteria` text from the project API entirely: the
+// per-item table is the only representation, and there is no parser left to turn prose into rows.
+// A caller that still sends the old key must not have it forwarded as a field the server would
+// reject with a validation error naming a shape that no longer exists.
+func TestMCPProjectWritesDoNotForwardLegacyAcceptanceCriteria(t *testing.T) {
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"proj-1"}`))
+	}))
 	defer srv.Close()
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 
@@ -480,25 +486,21 @@ func TestMCPProjectWritesRejectLegacyAcceptanceBeforeHTTP(t *testing.T) {
 		name string
 		args map[string]interface{}
 	}{
-		{"project_create", map[string]interface{}{
-			"title": "LFS", "acceptanceCriteria": "Build",
-		}},
-		{"project_update", map[string]interface{}{
-			"projectId": "proj-1", "acceptanceCriteria": nil,
-		}},
+		{"project_create", map[string]interface{}{"title": "LFS", "acceptanceCriteria": "Build"}},
+		{"project_update", map[string]interface{}{"projectId": "proj-1", "acceptanceCriteria": nil, "title": "LFS"}},
 	} {
 		res := mcp.callTool(call.name, call.args)
-		if res["isError"] != true {
-			t.Fatalf("%s accepted legacy acceptanceCriteria: %#v", call.name, res)
-		}
-		content, _ := res["content"].([]map[string]interface{})
-		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "EVIDENCE_JUDGMENT") ||
-			!strings.Contains(content[0]["text"].(string), "completionCriterion") {
-			t.Fatalf("%s legacy refusal = %#v", call.name, res)
+		if res["isError"] == true {
+			t.Fatalf("%s failed: %#v", call.name, res)
 		}
 	}
-	if hit {
-		t.Fatal("legacy acceptance authoring reached the server")
+	if len(bodies) != 2 {
+		t.Fatalf("expected two requests, got %d", len(bodies))
+	}
+	for _, body := range bodies {
+		if _, present := body["acceptanceCriteria"]; present {
+			t.Fatalf("legacy acceptanceCriteria was forwarded: %#v", body)
+		}
 	}
 }
 
@@ -669,10 +671,16 @@ func TestMCPProjectUpdateRequiresAnIDAndAField(t *testing.T) {
 	}
 }
 
-func TestMCPProjectUpdateRejectsDirectDoneLocally(t *testing.T) {
-	var hit bool
+// Migration 0229 removed the DONE gate from the database and the `refuseDirectDone` refusal from
+// the API in the same change, on the account owner's explicit instruction. So `status: DONE` is an
+// ordinary field value here: it must reach the server rather than be refused locally by a client
+// still enforcing a rule nothing else enforces.
+func TestMCPProjectUpdateForwardsDirectDone(t *testing.T) {
+	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hit = true
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"proj-1","status":"DONE"}`))
 	}))
 	defer srv.Close()
 
@@ -681,15 +689,11 @@ func TestMCPProjectUpdateRejectsDirectDoneLocally(t *testing.T) {
 		"projectId": "proj-1",
 		"status":    "DONE",
 	})
-	if res["isError"] != true {
-		t.Fatalf("direct DONE isError = %#v", res["isError"])
+	if res["isError"] == true {
+		t.Fatalf("direct DONE was refused locally: %#v", res)
 	}
-	content, _ := res["content"].([]map[string]interface{})
-	if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "DONE is derived") {
-		t.Fatalf("direct DONE result = %#v", res)
-	}
-	if hit {
-		t.Fatal("direct DONE reached the server")
+	if body["status"] != "DONE" {
+		t.Fatalf("status did not reach the server: %#v", body)
 	}
 }
 

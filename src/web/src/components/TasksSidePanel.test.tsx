@@ -78,11 +78,13 @@ describe('TasksSidePanel nav', () => {
     );
   });
 
-  it('keeps the judgment inbox in TOP while leaving individual Workspaces out of a redundant parent', () => {
+  it('keeps the fixed destinations in TOP while leaving individual Workspaces out of a redundant parent', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
-    expect(keys).toEqual(['judgments', 'projects', 'runners', 'providers']);
+    // The judgment inbox stood first here until migration 0229 removed the project acceptance
+    // judgment: the page it opened read an endpoint that is no longer served.
+    expect(keys).toEqual(['projects', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });

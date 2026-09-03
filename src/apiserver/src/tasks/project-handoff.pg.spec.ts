@@ -229,12 +229,11 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
   /**
    * A real reopen, inside the barrier transaction: terminal and back.
    *
-   * The epoch is not a column anybody may simply write — 0150 pins it on every other UPDATE and
-   * advances it only on `DONE|CANCELLED -> OPEN`. A test that "moved the epoch" by adding one to it
-   * would be asserting against a statement the database silently ignores. This performs the
-   * transition that actually advances it and leaves the project OPEN, which is the shape that
-   * matters: the status this plan was admitted against has not changed, and the acceptance it was
-   * planned against has.
+   * This used to be the one event that could refuse a plan for surviving it: 0150 advanced the
+   * acceptance epoch on `DONE|CANCELLED -> OPEN`, and a plan that named the epoch before it was
+   * stale by definition. `0229_project_acceptance_judgment_removal` dropped the epoch, so what is
+   * left is a status round trip that ends on the status it started from — nothing the plan fence
+   * reads has moved. The transition is kept here because that is the fact under test now.
    */
   async function reopen(projectId: string): Promise<void> {
     await barrier.query(
@@ -671,23 +670,24 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.deepEqual(await rows(w.ownerId), []);
   });
 
-  await t.test('an owner\'s own plan locks the project it was admitted against, and re-reads it', async () => {
+  await t.test('an owner\'s own plan still locks the project it names, and lands across a reopen', async () => {
     const w = await seed('barrier-user');
     await barrier.query('BEGIN');
     await reopen(w.projectA);
     // No creator session at all: this is the user API path, the one §4 R1 exempts from the scope
-    // contract. It is exempt from the SCOPE, not from the world moving underneath it — and the gap
-    // this closes is that the fence used to return before taking a single lock for them.
+    // contract. What used to judge them here anyway was the single claim only a caller can make —
+    // "I planned this against acceptance epoch N" — and 0229 took the epoch away, so a user write
+    // has nothing left to state and nothing left to be refused for. It still parks behind the row
+    // rather than returning without taking a lock; it lands once the reopen commits.
     const creating = tasks.create(w.ownerId, {
-      title: 'the owner plans against the epoch they read', projectId: w.projectA,
-      projectAcceptanceEpoch: '0',
+      title: 'the owner plans against a project that reopens underneath them', projectId: w.projectA,
     } as never);
     creating.catch(() => undefined);
     await awaitBlockedBy(barrierPid, 'the owner\'s create parking behind the project row');
     await barrier.query('COMMIT');
-    const refusal = await refusalOf(() => creating) as { code: string };
-    assert.equal(refusal.code, 'PLAN_AUTHORITY_MOVED');
-    assert.equal((await tasksIn(w.projectA)).length, 1, 'only the fixture task is there');
+    const landed = await creating;
+    assert.equal(landed.projectId, w.projectA);
+    assert.equal((await tasksIn(w.projectA)).length, 2, 'the fixture task and the one it planned');
   });
 
   await t.test('a declared crossing locks BOTH ends before it writes', async () => {
@@ -732,7 +732,7 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     await barrier.query('DELETE FROM "project_member" WHERE "id" = $1::uuid', [membership]);
     const creating = tasks.create(w.ownerId, {
       title: 'assigned to somebody the team no longer has', projectId: w.projectA,
-      assigneeId: w.workspaceId, projectAcceptanceEpoch: '0',
+      assigneeId: w.workspaceId,
     } as never, AGENT(w.ownerId), w.sessionA);
     creating.catch(() => undefined);
     await awaitBlockedBy(barrierPid, 'the create parking behind the project row');
@@ -744,25 +744,32 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.deepEqual(await rows(w.ownerId), [], 'and no crossing was spent');
   });
 
-  await t.test('a budget lowered mid-plan refuses it, on the owner\'s own path', async () => {
+  await t.test('a budget lowered mid-plan refuses the plan the contract covers, not the owner\'s own', async () => {
     const w = await seed('barrier-budget');
     await barrier.query('BEGIN');
     await barrier.query(
       `UPDATE "project" SET "max_concurrent_tasks" = 1, "updated_at" = now() WHERE "id" = $1::uuid`,
       [w.projectA]);
-    // No creator session: the user API path. §4 R1 exempts the owner from the SCOPE, not from the
-    // world moving underneath a plan they were shown.
+    // A session's plan is inside the scope contract: it parks behind the row and is judged on the
+    // world it finds when it wakes, budget included.
     const creating = tasks.create(w.ownerId, {
       title: 'planned against a budget that has since been lowered', projectId: w.projectA,
-      projectAcceptanceEpoch: '0',
-    } as never);
+    } as never, AGENT(w.ownerId), w.sessionA);
     creating.catch(() => undefined);
-    await awaitBlockedBy(barrierPid, 'the owner\'s create parking behind the project row');
+    await awaitBlockedBy(barrierPid, 'the create parking behind the project row');
     await barrier.query('COMMIT');
     const refusal = await refusalOf(() => creating) as { code: string; message: string };
     assert.equal(refusal.code, 'PLAN_AUTHORITY_MOVED');
     assert.match(refusal.message, /concurrency budget/);
     assert.equal((await tasksIn(w.projectA)).length, 1, 'only the fixture task is there');
+
+    // The owner's own path is the other half, and it moved: §4 R1 exempted them from the SCOPE, and
+    // the acceptance-epoch claim was the only thing that ever pulled a user write into the preflight
+    // regardless. 0229 removed the epoch, so the same lowered budget does not refuse their hand.
+    const owned = await tasks.create(w.ownerId, {
+      title: 'the owner plans against the same lowered budget', projectId: w.projectA,
+    } as never);
+    assert.equal(owned.projectId, w.projectA);
   });
 
   await t.test('an automatic acceptance is re-derived when it is spent, not when it was given', async () => {
@@ -803,7 +810,6 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     await barrier.query('SELECT 1 FROM "user" WHERE "id" = $1::uuid FOR UPDATE', [w.ownerId]);
     const creating = tasks.create(w.ownerId, {
       title: 'assigned work', projectId: w.projectA, assigneeId: w.workspaceId,
-      projectAcceptanceEpoch: '0',
     } as never, AGENT(w.ownerId), w.sessionA);
     creating.catch(() => undefined);
     await awaitBlockedBy(barrierPid, 'the create parking behind the owner row');
@@ -819,19 +825,21 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.equal(landed.projectId, w.projectA);
   });
 
-  await t.test('a reopen that commits between the preflight and the write refuses the plan', async () => {
+  await t.test('a reopen that commits between the preflight and the write no longer refuses it', async () => {
     const w = await seed('barrier-epoch');
     await barrier.query('BEGIN');
     await reopen(w.projectA);
+    // The negative control for what 0229 took: this is the exact interleaving the epoch existed to
+    // refuse, run against a fence that no longer has one. The plan still parks behind the project
+    // row, still re-reads it after the reopen commits, and finds nothing it claimed has moved.
     const creating = tasks.create(w.ownerId, {
-      title: 'planned against the old epoch', projectId: w.projectA,
-      projectAcceptanceEpoch: '0',
+      title: 'planned across a reopen', projectId: w.projectA,
     } as never, AGENT(w.ownerId), w.sessionA);
     creating.catch(() => undefined);
     await awaitBlockedBy(barrierPid, 'the create parking behind the project row');
     await barrier.query('COMMIT');
-    const refusal = await refusalOf(() => creating) as { code: string };
-    assert.equal(refusal.code, 'PLAN_AUTHORITY_MOVED');
-    assert.equal((await tasksIn(w.projectA)).length, 1, 'only the fixture task is there');
+    const landed = await creating;
+    assert.equal(landed.projectId, w.projectA);
+    assert.equal((await tasksIn(w.projectA)).length, 2, 'the fixture task and the one it planned');
   });
 });

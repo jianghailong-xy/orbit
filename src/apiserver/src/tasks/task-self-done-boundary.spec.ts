@@ -90,7 +90,6 @@ function fixture(
         args.where.id.in.map((id) => ({
           id,
           status: 'OPEN',
-          acceptanceEpoch: 0n,
           maxConcurrentTasks: null,
           sessionBudgetPerDay: null,
           members: [],

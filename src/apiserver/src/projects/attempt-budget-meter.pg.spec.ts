@@ -92,7 +92,16 @@ async function fixture(options: { coordinatorEnabled?: boolean } = {}): Promise<
       ownerId,
       title: 'a project whose attempts are bounded',
       goal: 'spend six dimensions',
-      acceptanceCriteria: 'the budget is charged\nthe fact is produced',
+      acceptanceCriterionDefinitions: {
+        create: ['the budget is charged', 'the fact is produced'].map((text, index) => ({
+          ordinal: index + 1,
+          text,
+          verificationMethod: `A person checks that ${text}`,
+          completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+          // Recomputed by the normalize trigger; Prisma needs a value for the required column.
+          contentHash: '0'.repeat(64),
+        })),
+      },
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       // Deliberately absent: production has never written this column.
       attemptBudget: undefined,

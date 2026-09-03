@@ -24,7 +24,7 @@ function row(over: Partial<ProjectCrossingRow> = {}): ProjectCrossingRow {
     toProjectId: OTHER,
     toProjectPublicId: 'AAATo',
     fromProject: { title: 'Coordinator control loop', status: 'OPEN' },
-    toProject: { title: 'Runner hardening', status: 'OPEN', acceptanceEpoch: '2' },
+    toProject: { title: 'Runner hardening', status: 'OPEN' },
     kind: 'FILE_TASK',
     subjectTaskId: null,
     crossingKey: KEY,
@@ -64,8 +64,8 @@ describe('ProjectCrossingsCard — the question a person answers', () => {
     expect(html).toContain('Fix the drain race');
   });
 
-  it('shows the landing project acceptance epoch, because a reopen moves it', () => {
-    expect(paint()).toContain('Landing epoch 2');
+  it('reports no landing epoch: 0229 removed the acceptance epoch it named', () => {
+    expect(paint()).not.toContain('Landing epoch');
   });
 
   it('says what the state IS and what follows from it, in words', () => {

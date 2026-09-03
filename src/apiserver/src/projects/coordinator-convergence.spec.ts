@@ -37,7 +37,10 @@ const AT = new Date('2026-08-25T00:00:00.000Z');
 /** N: the documented default, read from the frozen table rather than restated as a literal here. */
 const N = DEFAULT_CONVERGENCE_THRESHOLDS.maxDecisionsWithoutProgress as number;
 
-/** A believable measurement of a world with `closed` of `total` criteria passing. */
+/** A believable measurement of a world with `total` stated criteria and `closed` of the project's
+ *  blockers resolved. Migration 0229 removed the acceptance judgment, so a criterion can no longer
+ *  be closed and `acceptanceClosed` left the vector with it; `openBlockers` is the dimension these
+ *  cases move now, and it moves the same way for the same reason. */
 function measured(closed: number, total: number, options: {
   scope?: string;
   openP0?: number;
@@ -49,7 +52,6 @@ function measured(closed: number, total: number, options: {
     scopeHash: scope,
     acceptance: Array.from({ length: total }, (_, i) => ({
       id: `c${i}`,
-      closed: i < closed,
       observedAt: asOf,
     })),
     findings: Array.from({ length: options.openP0 ?? 0 }, (_, i) => ({
@@ -59,11 +61,21 @@ function measured(closed: number, total: number, options: {
       regression: false,
       observedAt: asOf,
     })),
-    blockers: Array.from({ length: options.openBlockers ?? 0 }, (_, i) => ({
-      key: `b${i}`,
-      resolved: false,
-      observedAt: asOf,
-    })),
+    // `total` blockers, of which the first `closed` are resolved — so the caller's two numbers
+    // read exactly as they always did (`measured(1, 4)` is one step better than `measured(0, 4)`)
+    // against a dimension that still exists. `openBlockers` adds unresolved ones on top.
+    blockers: [
+      ...Array.from({ length: total }, (_, i) => ({
+        key: `c${i}`,
+        resolved: i < closed,
+        observedAt: asOf,
+      })),
+      ...Array.from({ length: options.openBlockers ?? 0 }, (_, i) => ({
+        key: `b${i}`,
+        resolved: false,
+        observedAt: asOf,
+      })),
+    ],
     checkpoint: null,
     asOf,
     notBefore: null,
@@ -93,7 +105,7 @@ function committed(planned: PlannedWakeConvergence): WakeConvergenceState {
   };
 }
 
-test('a wake that changed nothing is charged, and one that closed a criterion is not', () => {
+test('a wake that changed nothing is charged, and one that closed a blocker is not', () => {
   const first = plan(EMPTY_WAKE_CONVERGENCE_STATE, measured(0, 4));
   assert.equal(first.progressed, false);
   assert.equal(first.counters.decisionsWithoutProgress, 1);
@@ -109,15 +121,19 @@ test('a wake that changed nothing is charged, and one that closed a criterion is
 
 test("a project's first wake is measured against an empty baseline, and says so", () => {
   // `EMPTY_PROGRESS_VECTOR` is the fallback the task ledger uses for a first observation too, and
-  // it has a consequence worth stating rather than discovering: a project that already had a
-  // criterion passing before anybody woke its coordinator reads as one improvement. It happens at
-  // most once per scope — the second wake compares against a real measurement — so it costs the
-  // budget one pass and cannot be repeated without genuinely closing something.
+  // what it means changed when migration 0229 removed `acceptanceClosed` from the vector. That was
+  // the one dimension that improved by going UP, and it carried a consequence worth stating: a
+  // project that already had a criterion passing before anybody woke its coordinator read as one
+  // free improvement. Every remaining dimension is a defect count, and an empty baseline is
+  // already the best reading of one — so a first wake now claims no progress at all, and the free
+  // pass is gone with the axis that granted it.
   const first = plan(EMPTY_WAKE_CONVERGENCE_STATE, measured(1, 4));
   assert.equal(first.input.previousProgressVector, null);
-  assert.equal(first.progressed, true);
+  assert.equal(first.progressed, false, 'a first measurement cannot improve on nothing');
   const second = plan(committed(first), measured(1, 4));
   assert.equal(second.progressed, false);
+  // And a genuine improvement against that first real measurement still counts.
+  assert.equal(plan(committed(second), measured(2, 4)).progressed, true);
 });
 
 test('activity is not progress: a different wake event on an unchanged world still costs a pass', () => {
@@ -282,7 +298,7 @@ test('the recorded pair is the before and the after, and the digest is of the af
   const first = plan(EMPTY_WAKE_CONVERGENCE_STATE, measured(0, 4));
   const second = plan(committed(first), measured(2, 4));
   assert.deepEqual(second.previousProgressVector, first.progressVector);
-  assert.equal((second.progressVector as ProgressVector).acceptanceClosed, 2);
+  assert.equal((second.progressVector as ProgressVector).openBlockers, 2);
   assert.equal(second.progressVectorDigest, progressVectorDigest(second.progressVector));
   // The row's own input carries the same pair, so a replay reads it without its predecessor.
   assert.deepEqual(second.input.previousProgressVector, first.progressVector);

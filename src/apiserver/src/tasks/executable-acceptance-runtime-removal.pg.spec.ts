@@ -109,9 +109,11 @@ const VERIFICATION_TRIGGERS_REMOVED_BY_0228 = [
 ];
 
 /**
- * 0150 and 0172's four project triggers, in the order PostgreSQL fires BEFORE ROW triggers: by
- * name. `..._advance_epoch` must stay ahead of `..._done_gate`, because the gate compares the
- * epoch the advance pinned. Renaming either one silently reorders them.
+ * 0150 and 0172's four project triggers. This list used to be an ORDER: PostgreSQL fires BEFORE ROW
+ * triggers by name, and `..._advance_epoch` had to sort ahead of `..._done_gate` because the gate
+ * compared the epoch the advance pinned. `0229_project_acceptance_judgment_removal` dropped all
+ * four on the account owner's instruction, so the constraint is gone with the things it ordered and
+ * the list survives only to be asserted empty.
  */
 const PROJECT_ACCEPTANCE_TRIGGERS = [
   'project_acceptance_advance_epoch',
@@ -384,40 +386,40 @@ suite('(f)(g) a VERIFICATION subject is still settled by a PASS and only by a PA
 });
 
 // (h)(i)(j)(k) -------------------------------------------------------------------------------------
-suite('(h)(k) 0150/0172 keep their four triggers, their names and their firing order', async (t) => {
+suite('(h)(k) 0227 named none of 0150/0172\'s four triggers, and 0229 removed all four', async (t) => {
   const client = await connectSql();
   t.after(async () => { await client.end(); });
 
+  // 0227 left every one of these standing; `0229_project_acceptance_judgment_removal` — a later and
+  // separate account-owner decision, which removed the project acceptance judgment whole — took all
+  // four. The wall this suite guards is 0227's surgical reach, and the text proving 0227 issues no
+  // statement against them is `executable-acceptance-runtime-removal.spec.ts`; what the catalog can
+  // still say is that nothing named `project_acceptance_*` fires on `project` any more.
   const installed = (await client.query<{ name: string }>(
     `SELECT t.tgname AS name FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname = 'project' AND t.tgname LIKE 'project\\_acceptance\\_%'
       ORDER BY t.tgname`)).rows.map((row) => row.name);
-  assert.deepEqual(installed, PROJECT_ACCEPTANCE_TRIGGERS);
-  // The whole point of the names: PostgreSQL fires BEFORE ROW triggers alphabetically, so the
-  // advance has to sort before the gate that reads what it pinned.
-  assert.ok(installed.indexOf('project_acceptance_advance_epoch')
-    < installed.indexOf('project_acceptance_done_gate'));
-
-  // (k) the run table itself is 0127's and stays; only 0215's closing move went.
-  const run = await client.query(`SELECT to_regclass('project_acceptance_run')::text AS name`);
-  assert.equal(run.rows[0].name, 'project_acceptance_run');
-  const guards = (await client.query<{ name: string }>(
-    `SELECT t.tgname AS name FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-      WHERE NOT t.tgisinternal AND c.relname = 'project_acceptance_run' ORDER BY 1`))
-    .rows.map((row) => row.name);
-  assert.deepEqual(guards,
-    ['project_acceptance_run_epoch_guard', 'project_acceptance_run_immutable_guard']);
-
-  // (p) the three protected acceptance relations are here and writable — the removal issues no
-  // statement against them (proved over its text in the other half of this suite).
-  for (const table of ['project_acceptance_criterion_definition', 'project_acceptance_criterion',
-    'project_acceptance_conclusion']) {
-    const present = await client.query(`SELECT to_regclass($1)::text AS name`, [table]);
-    assert.equal(present.rows[0].name, table, `${table} must still exist`);
+  for (const gone of PROJECT_ACCEPTANCE_TRIGGERS) {
+    assert.equal(installed.includes(gone), false, `${gone} survives 0229`);
   }
+  assert.deepEqual(installed, []);
+
+  // (k) the run table was 0127's, and 0227 took only 0215's closing move from it — the guard, not
+  // the table. 0229 took the table, its two remaining guards and the two relations beside it.
+  for (const table of ['project_acceptance_run', 'project_acceptance_criterion',
+    'project_acceptance_conclusion', 'project_acceptance_audit']) {
+    const present = await client.query(`SELECT to_regclass($1)::text AS name`, [table]);
+    assert.equal(present.rows[0].name, null, `${table} went with 0229`);
+  }
+
+  // (p) and the relation neither removal ever issued a statement against: the stated criteria, the
+  // declarations that outlived every machine built to judge them.
+  const definitions = await client.query(
+    `SELECT to_regclass('project_acceptance_criterion_definition')::text AS name`);
+  assert.equal(definitions.rows[0].name, 'project_acceptance_criterion_definition');
 });
 
-suite('(i)(j) the project DONE gate still refuses a hand-written DONE and still admits a real one',
+suite('(i)(j) 0227 left the DONE gate alone, and after 0229 there is no gate left to leave alone',
   async (t) => {
     const sql = await connectSql();
     const db = prismaClientFor(URL!);
@@ -425,71 +427,38 @@ suite('(i)(j) the project DONE gate still refuses a hand-written DONE and still 
     await empty(sql);
     const w = await owner(db, 'done-gate');
 
-    // (i) the negative: a direct status write with a zero epoch and no accepted run is refused by
-    // the database, not by a service the caller could go around.
-    await assert.rejects(
-      sql.query(`UPDATE "project" SET "status" = 'DONE', "acceptance_epoch" = 0
-                  WHERE "id" = $1::uuid`, [w.projectId]),
-      /ACCEPTANCE_MISSING/,
-      'the 0150 gate must still refuse a DONE with no evidence',
+    // (i) what this asserted when 0227 landed: a hand-written DONE with no accepted run was refused
+    // by the database with ACCEPTANCE_MISSING, and the point was that 0227 had not weakened it.
+    // `0229_project_acceptance_judgment_removal` then removed the gate, the epoch and the accepted
+    // run together, on the account owner's instruction. The same statement — minus the two columns
+    // that no longer exist — now commits, and no service stands behind the database either.
+    await sql.query(`UPDATE "project" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [w.projectId]);
+    assert.equal(
+      (await db.project.findUniqueOrThrow({ where: { id: w.projectId } })).status,
+      ProjectStatus.DONE,
+      'nothing refuses a hand-written DONE any more',
     );
 
-    // (j) the positive: one stated criterion, one live run in the current epoch, one PASS
-    // conclusion. 0215's `conclusion_basis` is gone, so the run has nothing to close with — what
-    // the gate reads is the per-criterion projection, exactly as it did before 0215 added one.
+    // (j) what 0227 was actually answerable for on this side, and what 0229 kept: the stated
+    // criteria. A declaration still takes, still normalizes, and still reads back through the
+    // projection the rest of the server uses. It is judged by nothing.
     const definitionId = randomUUID();
-    const runId = randomUUID();
-    const criterionKey = 'the-gate-still-decides';
     await sql.query(
       `INSERT INTO "project_acceptance_criterion_definition"
          ("id","project_id","ordinal","text","verification_method","completion_criterion",
           "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
-       VALUES ($1,$2,1,'The gate still decides','a judgment reads the gate',
+       VALUES ($1,$2,1,'The declaration outlives the judgment','a reader reads it',
                'EVIDENCE_JUDGMENT'::"task_completion_criterion",$3,$4,$5,now(),now())`,
       [definitionId, w.projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
     );
-    const criteriaDigest = (await sql.query(
+    const projection = (await sql.query<{ criteria: string }>(
+      'SELECT project_acceptance_definition_projection($1::uuid) AS criteria', [w.projectId],
+    )).rows[0].criteria;
+    assert.equal(projection, '1. The declaration outlives the judgment');
+    const digest = (await sql.query<{ digest: string }>(
       'SELECT project_acceptance_definition_digest($1::uuid) AS digest', [w.projectId],
-    )).rows[0].digest as string;
-    await sql.query(
-      `UPDATE "project" SET "acceptance_criteria_digest" = $2 WHERE "id" = $1::uuid`,
-      [w.projectId, criteriaDigest],
-    );
-    await sql.query(
-      `INSERT INTO "project_acceptance_run"
-         ("id","project_id","attempt","criteria_snapshot","criteria_revision","input_digest",
-          "result_digest","verdict","decided_by","digest_version","acceptance_epoch",
-          "completed_at","created_at")
-       VALUES ($1,$2,1,'[]'::jsonb,$3,$4,$5,'PASS'::"project_acceptance_verdict",
-               'COORDINATOR_AGENT',4,0,now(),now())`,
-      [runId, w.projectId, criteriaDigest, 'b'.repeat(64), 'c'.repeat(64)],
-    );
-    await sql.query(
-      `INSERT INTO "project_acceptance_criterion"
-         ("id","run_id","project_id","ordinal","criterion_key","criterion_text","definition_id",
-          "definition_revision","verdict","created_at")
-       VALUES ($1,$2,$3,1,$4,'The gate still decides',$5,1,
-               'PASS'::"project_acceptance_verdict",now())`,
-      [randomUUID(), runId, w.projectId, criterionKey, definitionId],
-    );
-    await sql.query(
-      `INSERT INTO "project_acceptance_conclusion"
-         ("id","project_id","evidence_run_id","evidence_version","ordinal","criterion_key",
-          "criterion_text","definition_id","definition_revision","verdict","decided_by",
-          "decided_by_id","decided_at")
-       VALUES ($1,$2,$3,1,1,$4,'The gate still decides',$5,1,
-               'PASS'::"project_acceptance_verdict",'USER',$6,now())`,
-      [randomUUID(), w.projectId, runId, criterionKey, definitionId, w.ownerId],
-    );
-    await sql.query(
-      `UPDATE "project" SET "status" = 'DONE', "accepted_run_id" = $2::uuid WHERE "id" = $1::uuid`,
-      [w.projectId, runId],
-    );
-    assert.equal(
-      (await db.project.findUniqueOrThrow({ where: { id: w.projectId } })).status,
-      ProjectStatus.DONE,
-      'a project whose stated criteria all PASS on a live run still reaches DONE',
-    );
+    )).rows[0].digest;
+    assert.match(digest, /^[0-9a-f]{64}$/);
   });
 
 // (u)(v) -------------------------------------------------------------------------------------------

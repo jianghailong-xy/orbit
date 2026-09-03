@@ -39,16 +39,11 @@ import {
   MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
-  ReopenProjectDto,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
-import { admitReopen, reopenImpact, type ReopenImpact } from './project-attribution-surface';
-import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
-import {
-  criteriaLegacyProjection,
-  sha256,
-} from './project-acceptance';
+import { ProjectAcceptanceService } from './project-acceptance.service';
+import { sha256 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import {
   buildCoordinatorInstructions,
@@ -348,27 +343,14 @@ type WithAcceptanceDefinitions = {
     evaluationPlanRevision: number;
     evaluationPlanHash: string;
   }>;
-  acceptanceCriteriaFormat?: string;
-  acceptanceCriteria?: string | null;
-  acceptance?: {
-    criteria?: Array<{ id: string; verdict: string }>;
-  } | null;
 };
 
-/** Fold the storage relation into the author-facing array. The legacy text stays beside it during
- * the compatibility window, while `migration` makes a conservative one-item backfill that looks
- * like an inline numbered list visible rather than silently claiming it was reviewed. */
+/** Fold the storage relation into the author-facing array. Migration 0229 removed the legacy text
+ * column and its parser, so this array is the whole of a project's stated criteria — there is no
+ * second representation for it to disagree with, and nothing that judges the items in it. */
 function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project: T) {
   const { acceptanceCriterionDefinitions, ...rest } = project;
   const definitions = acceptanceCriterionDefinitions ?? [];
-  const format = project.acceptanceCriteriaFormat ?? 'LEGACY_TEXT';
-  const legacyLooksAmbiguous =
-    format === 'LEGACY_TEXT' &&
-    definitions.length === 1 &&
-    /[;；]\s*(?:\(?\d+[.)、]|[（(]\d+[）)])/u.test(project.acceptanceCriteria ?? '');
-  const currentStatus = new Map(
-    (project.acceptance?.criteria ?? []).map((criterion) => [criterion.id, criterion.verdict]),
-  );
   return {
     ...rest,
     acceptanceCriteriaItems: definitions.map((criterion) => ({
@@ -381,8 +363,6 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode ?? null,
       evidenceTaskId: criterion.evidenceTaskId ?? null,
       completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
-      // A view over the latest applicable acceptance run, never another authored/stored field.
-      currentStatus: currentStatus.get(criterion.id) ?? 'UNDECIDED',
       revision: criterion.revision,
       contentHash: criterion.contentHash,
       // Rolling/mock compatibility: old readers can omit the two new digest lanes. Real rows on
@@ -395,11 +375,6 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
         evaluationPlanHash: criterion.evaluationPlanHash,
       }),
     })),
-    acceptanceCriteriaMigration: {
-      source: format,
-      needsReview: legacyLooksAmbiguous,
-      reason: legacyLooksAmbiguous ? 'AMBIGUOUS_SINGLE_LINE_ENUMERATION' : null,
-    },
   };
 }
 
@@ -657,32 +632,10 @@ export class ProjectsService {
     return value?.trim() ? value : null;
   }
 
-  /** DONE is now the criterion evaluator's projection, never a request field's value. Kept in a
-   * helper so later code remains typed over the complete DTO while this runtime boundary refuses
-   * the one disallowed member. */
-  private static refuseDirectDone(status: ProjectStatus | undefined): void {
-    if (status !== ProjectStatus.DONE) return;
-    throw new ConflictException({
-      statusCode: 409,
-      error: 'Conflict',
-      code: 'PROJECT_DONE_AUTOMATIC_ONLY',
-      message:
-        'project.status DONE is derived automatically when every criterion in the confirmed ' +
-        'standard set is PASS; no user, runner, or judgment session may write it directly',
-      requiredAction: 'confirm the current standard set and satisfy its declared criteria',
-    });
-  }
-
-  /** Validate the invariant decorators cannot express across two optional properties. */
+  /** Validate the invariant decorators cannot express on an optional array property. */
   private static assertOneAcceptanceAuthoringShape(dto: {
-    acceptanceCriteria?: string | null;
     acceptanceCriteriaItems?: unknown;
   }): void {
-    if (dto.acceptanceCriteria !== undefined && dto.acceptanceCriteriaItems !== undefined) {
-      throw new BadRequestException(
-        'acceptanceCriteria and acceptanceCriteriaItems are alternative authoring shapes; send one',
-      );
-    }
     if (dto.acceptanceCriteriaItems === null) {
       throw new BadRequestException(
         'acceptanceCriteriaItems must be an array; use [] to clear it or omit it to leave it unchanged',
@@ -692,14 +645,13 @@ export class ProjectsService {
 
   /**
    * Unit T6: the acceptance-authoring act on this DTO is routed to owner review and refused for a
-   * judgment session. `EDIT_ACCEPTANCE_CRITERIA` covers both authoring shapes, because they write
-   * the same fact — gating only the structured one would leave the legacy text as an unguarded way
-   * to rewrite the exam. DONE is handled separately as an automatic-only projection for everyone.
+   * judgment session. Since 0229 there is one authoring shape, so `EDIT_ACCEPTANCE_CRITERIA` has
+   * one place to be checked.
    *
-   * Both are checked BEFORE the update's own transaction, so a refusal writes nothing. The session
-   * is read once and only when the request actually asks for one of them. A no-session request is
-   * NON_JUDGMENT by this role contract, so the user API and headless/internal paths keep their
-   * existing behavior; that negative classification is not proof a person held the credential.
+   * Checked BEFORE the update's own transaction, so a refusal writes nothing. The session is read
+   * once and only when the request actually asks for it. A no-session request is NON_JUDGMENT by
+   * this role contract, so the user API and headless/internal paths keep their existing behavior;
+   * that negative classification is not proof a person held the credential.
    */
   private async assertHumanOnlyProjectWrites(
     ownerId: string,
@@ -707,7 +659,7 @@ export class ProjectsService {
     actingSessionId: string | undefined,
   ): Promise<void> {
     if (!actingSessionId) return;
-    if (dto.acceptanceCriteria === undefined && dto.acceptanceCriteriaItems === undefined) return;
+    if (dto.acceptanceCriteriaItems === undefined) return;
     const acting = await this.prisma.session.findFirst({
       where: { id: actingSessionId, ownerId },
       select: { dispatchOrigin: true },
@@ -848,10 +800,10 @@ export class ProjectsService {
         completionCriterionOverrideReason,
       };
     });
-    const projection = criteriaLegacyProjection(normalized) ?? '';
-    if (projection.length > MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS) {
+    const total = normalized.reduce((sum, criterion) => sum + criterion.text.length, 0);
+    if (total > MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS) {
       throw new BadRequestException(
-        `structured acceptance criteria must fit the ${MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS}-character compatibility projection`,
+        `acceptance criteria must contain at most ${MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS} characters in total`,
       );
     }
     return normalized;
@@ -864,7 +816,7 @@ export class ProjectsService {
     tx: Prisma.TransactionClient | PrismaService,
     projectId: string,
     items: UpdateProjectAcceptanceCriterionDto[],
-  ): Promise<string | null> {
+  ): Promise<void> {
     const normalized = ProjectsService.normalizeAcceptanceItems(items);
     const existing = await tx.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId },
@@ -1016,7 +968,6 @@ export class ProjectsService {
         });
       }
     }
-    return criteriaLegacyProjection(desired);
   }
 
   /**
@@ -1046,13 +997,6 @@ export class ProjectsService {
             title: dto.title,
             ownerId,
             goal: ProjectsService.blankToNull(dto.goal),
-            acceptanceCriteria:
-              structuredCriteria === undefined
-                ? ProjectsService.blankToNull(dto.acceptanceCriteria)
-                : criteriaLegacyProjection(structuredCriteria),
-            ...(structuredCriteria === undefined
-              ? {}
-              : { acceptanceCriteriaFormat: 'STRUCTURED' }),
             instructions: ProjectsService.blankToNull(dto.instructions),
             // The defaults for a NEW project, written here rather than left to the column defaults —
             // and they are different values. The columns default to `false` / MANUAL because that is
@@ -1111,18 +1055,14 @@ export class ProjectsService {
         let finalProject = created;
 
         if (structuredCriteria !== undefined) {
-          // The INSERT compatibility trigger first makes rows from the legacy projection so an old
-          // binary remains able to create a project. Replace those rows, with the required methods,
-          // before this transaction becomes visible; the final projection write also refreshes the
-          // existing definition digest. No partially migrated structured project can commit.
-          const projection = await ProjectsService.replaceAcceptanceDefinitions(
+          // In the same transaction as the project row, so no project can commit half-authored.
+          await ProjectsService.replaceAcceptanceDefinitions(
             client,
             created.id,
             dto.acceptanceCriteriaItems ?? [],
           );
-          finalProject = await client.project.update({
+          finalProject = await client.project.findUniqueOrThrow({
             where: { id: created.id },
-            data: { acceptanceCriteria: projection, acceptanceCriteriaFormat: 'STRUCTURED' },
             include: {
               ...COORDINATION_INCLUDE,
               acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
@@ -1375,12 +1315,11 @@ export class ProjectsService {
    * `list` gives above. One grouped query, so the cost is bounded by the number of task statuses
    * rather than by the number of tasks.
    *
-   * `acceptance` is the other half of "is this project done". `tasksByStatus` measures the PROCESS
-   * and can read 100% while nothing the project was for has been checked; the acceptance tally is
-   * the OUTCOME — how many of the stated criteria the latest attempt concluded PASS about, from
-   * §13.4's per-criterion rows. It sits beside the current structured definitions and the legacy
-   * text projection: definitions are what a person edits, while this is what a frozen run
-   * concluded.
+   * `acceptanceCriteriaItems` is the other half of "is this project done", and since 0229 it is
+   * only the half that STATES it: `tasksByStatus` measures the PROCESS and can read 100% while
+   * nothing the project was for has been checked, and the criteria say what being checked would
+   * mean. Nothing here concludes anything about them — that evaluator was removed, and a tally
+   * that always read zero would be a worse answer than no tally.
    */
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
@@ -1392,18 +1331,14 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, acceptance] = await Promise.all([
-      this.prisma.task.groupBy({
-        by: ['status'],
-        where: { projectId: id },
-        _count: { _all: true },
-      }),
-      this.acceptance.criteriaSummary(id, project.acceptanceCriteria),
-    ]);
+    const byStatus = await this.prisma.task.groupBy({
+      by: ['status'],
+      where: { projectId: id },
+      _count: { _all: true },
+    });
     return withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
-      acceptance,
     });
   }
 
@@ -1917,9 +1852,6 @@ export class ProjectsService {
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
-    // DONE is a projection for every principal, so this uniform refusal precedes the role-specific
-    // criteria-authoring check and cannot vary with an acting Session.
-    ProjectsService.refuseDirectDone(dto.status);
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
@@ -1959,21 +1891,13 @@ export class ProjectsService {
       ...(authorizationWrites.length > 0 ? { configRevision: { increment: 1 } } : {}),
     };
 
-    // Direct DONE has already been refused. This transaction authors ordinary project facts or a
-    // reopen/cancellation; automatic settlement owns its own FOR UPDATE transaction in
-    // ProjectAcceptanceService.reconcile.
-    // What the reopen below did, for the caller that asked for it. Declared outside the retry
-    // closure and overwritten by each attempt, so a retried transaction reports what the attempt
-    // that COMMITTED found rather than what an aborted one saw.
-    let reopened: { fromEpoch: string; toEpoch: string; retiredRuns: number; wasLegacy: boolean }
-      | null = null;
     // A title sync must lock Session (rank 30) before Project (rank 40). The pointer is discovered
     // optimistically, then verified under the project lock; a concurrent rotation makes us retry
     // with its winner rather than reverse the lock order or leave the new coordinator stale.
     let expectedCoordinatorSessionId = current.coordinatorSessionId;
     // Retried whole. The project row is locked and re-read inside the closure, and every field the
-    // update derives — the acceptance recompute and managed title — comes from that read, so a
-    // re-run writes against the row the winner left rather than an aborted attempt's row.
+    // update derives — the managed title — comes from that read, so a re-run writes against the row
+    // the winner left rather than an aborted attempt's row.
     const writeProject = (expectedSessionId: string | null) =>
       withTransactionRetry(this.prisma, async (tx) => {
         if (dto.title !== undefined && expectedSessionId) {
@@ -1989,9 +1913,7 @@ export class ProjectsService {
         // below (project before its team row), which is the order every path takes.
         const select = Prisma.sql`
           SELECT "coordinator_enabled", "config_revision", "status"::text AS "status",
-                 "coordinator_session_id" AS "coordinator_session_id",
-                 "accepted_run_id" AS "accepted_run_id", "legacy_accepted_at" AS "legacy_accepted_at",
-                 "acceptance_epoch" AS "acceptance_epoch"
+                 "coordinator_session_id" AS "coordinator_session_id"
             FROM "project"
            WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
         const [locked] = await tx.$queryRaw<Array<{
@@ -1999,9 +1921,6 @@ export class ProjectsService {
           config_revision: bigint;
           status: string;
           coordinator_session_id: string | null;
-          accepted_run_id: string | null;
-          legacy_accepted_at: Date | null;
-          acceptance_epoch: bigint;
         }>>(Prisma.sql`${select} FOR NO KEY UPDATE`);
         if (!locked) throw new NotFoundException('project not found');
         if (
@@ -2018,118 +1937,10 @@ export class ProjectsService {
         // this project off is exactly the case the check has to see.
         ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
 
-        // Definitions and their compatibility projection change under the already-held project
-        // lock. The evaluator can only settle in its own later FOR UPDATE transaction, against the
-        // resulting digest and a confirmation naming that exact standard set.
+        // Definitions change under the already-held project lock. Nothing derives from them any
+        // more: 0229 removed the evaluator that used to re-judge a project when its exam changed.
         if (dto.acceptanceCriteriaItems !== undefined) {
-          const projection = await ProjectsService.replaceAcceptanceDefinitions(
-            tx, id, dto.acceptanceCriteriaItems,
-          );
-          await tx.project.update({
-            where: { id },
-            data: {
-              acceptanceCriteria: projection,
-              acceptanceCriteriaFormat: 'STRUCTURED',
-            },
-          });
-        } else if (dto.acceptanceCriteria !== undefined) {
-          await tx.project.update({
-            where: { id },
-            data: {
-              acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
-              acceptanceCriteriaFormat: 'LEGACY_TEXT',
-            },
-          });
-        }
-        if (dto.acceptanceCriteriaItems !== undefined || dto.acceptanceCriteria !== undefined) {
-          await this.acceptance.ensureCurrentEvidenceVersion(tx, id);
-        }
-
-        // A criteria fact edit can atomically reopen a DONE through the database trigger. Re-read
-        // that committed-within-this-transaction state so the explicit status branches below do
-        // not also retire/audit the same run as a user reopen, and so a simultaneous DONE is gated
-        // from OPEN against the new definitions rather than treated as an idempotent old DONE.
-        const state = dto.acceptanceCriteriaItems !== undefined || dto.acceptanceCriteria !== undefined
-          ? await tx.project.findUniqueOrThrow({
-              where: { id },
-              select: {
-                status: true,
-                acceptedRunId: true,
-                legacyAcceptedAt: true,
-                acceptanceEpoch: true,
-              },
-            })
-          : {
-              status: locked.status as ProjectStatus,
-              acceptedRunId: locked.accepted_run_id,
-              legacyAcceptedAt: locked.legacy_accepted_at,
-              acceptanceEpoch: locked.acceptance_epoch,
-            };
-
-        // Unit L7: the second confirmation, evaluated HERE and not at the door that asked for it.
-        // A reopen starts a new acceptance epoch, and the number a person was shown when they
-        // decided that has to be the number the row still holds when the decision commits —
-        // otherwise a second tab that reopened it first turns one considered reopen into two.
-        //
-        // Judged on BOTH settled statuses, because that is what actually advances the epoch:
-        // migration 0150's `project_acceptance_advance_epoch` fires on DONE → OPEN and on
-        // CANCELLED → OPEN alike. Gating only on DONE would leave one reopen confirmed and the
-        // other silent while both cost the project its acceptance standing. What the branch below
-        // does — retiring runs, dropping the binding — is unchanged and still DONE's alone.
-        //
-        // The acknowledgement is optional on this path and required on `POST :id/reopen`, which is
-        // the door a person acts through: an older client and the repair paths keep the reopen they
-        // have always had (§8 CM1), and nothing that omits it gains a fence it never asked for.
-        if (dto.status === ProjectStatus.OPEN && state.status !== ProjectStatus.OPEN) {
-          const impact = reopenImpact({
-            status: state.status as 'DONE' | 'CANCELLED' | 'OPEN',
-            acceptanceEpoch: String(state.acceptanceEpoch),
-            liveAcceptanceRuns: 0,
-            legacyAccepted: state.legacyAcceptedAt !== null,
-          });
-          if (dto.acknowledgedAcceptanceEpoch !== undefined) {
-            const admitted = admitReopen(impact, dto.acknowledgedAcceptanceEpoch);
-            if (!admitted.allowed) {
-              throw new ConflictException({
-                statusCode: 409,
-                error: 'Conflict',
-                code: admitted.code,
-                message: admitted.message,
-                owner: 'USER',
-                requiredAction: impact.requiredAction,
-                fromEpoch: impact.fromEpoch,
-                toEpoch: impact.toEpoch,
-              });
-            }
-          }
-          reopened = {
-            fromEpoch: impact.fromEpoch,
-            toEpoch: impact.toEpoch,
-            retiredRuns: 0,
-            wasLegacy: impact.wasLegacy,
-          };
-        }
-
-        // The reverse door, and the reason a stale PASS cannot be reused: reopening a project
-        // retires every acceptance run it has. AE4 says old evidence does not need invalidating
-        // because the digest stops matching — true for a fact change, and NOT true here, since a
-        // reopen on its own changes none of the acceptance projections. So this is the one invalidation
-        // that has to be written rather than derived.
-        if (dto.status === ProjectStatus.OPEN && state.status === ProjectStatus.DONE) {
-          const retired = await tx.projectAcceptanceRun.updateMany({
-            where: { projectId: id, supersededAt: null },
-            data: { supersededAt: new Date(), supersededReason: 'reopened_by_user' },
-          });
-          if (reopened) reopened.retiredRuns = retired.count;
-          data.acceptedRunId = null;
-          // A legacy DONE that a person reopens stops being one: its next DONE has to earn a run
-          // like any other, which is how the compatibility stamp expires instead of accumulating.
-          data.legacyAcceptedAt = null;
-          await ProjectAcceptanceService.writeAudit(
-            tx, id, 'reopened_by_user', 'the owner reopened this project',
-            { previousAcceptedRunId: state.acceptedRunId, wasLegacy: state.legacyAcceptedAt !== null },
-            state.acceptedRunId,
-          );
+          await ProjectsService.replaceAcceptanceDefinitions(tx, id, dto.acceptanceCriteriaItems);
         }
 
         if (agentId !== undefined) {
@@ -2186,29 +1997,8 @@ export class ProjectsService {
       if (!projectResult) throw new CoordinatorBindingChanged();
       const { project, changedSessionId } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
-      // `reopened` is absent — not null — on every write that did not reopen anything, so a client
-      // branching on it cannot read "this write reopened nothing" as "this write reopened
-      // something with no detail".
-      const shaped = withAcceptanceDefinitions(withCoordination(project));
-      return reopened ? { ...shaped, reopened } : shaped;
+      return withAcceptanceDefinitions(withCoordination(project));
     } catch (e) {
-      // A refused DONE is a thing somebody has to be able to look up afterwards — "I pressed it and
-      // nothing happened" is the report, and the refusal itself rolled back with the transaction
-      // that raised it. Written outside that transaction, best effort: failing to record why a
-      // write was refused must not turn the refusal into a 500.
-      if (e instanceof AcceptanceRefusal) {
-        await this.prisma.projectAcceptanceAudit
-          .create({
-            data: {
-              projectId: id,
-              kind: 'done_refused',
-              reason: e.code,
-              detail: e.getResponse() as Prisma.InputJsonValue,
-            },
-          })
-          .catch(() => undefined);
-        throw e;
-      }
       // The partial unique index behind "one coordinator per project", reached only by a second
       // writer that got between the read and the write above. Reported as the rule it is rather
       // than as a 500 — the caller can re-read and decide.
@@ -2226,78 +2016,6 @@ export class ProjectsService {
     }
   }
 
-
-  /**
-   * Unit L7: what reopening this project would cost, before anybody spends it.
-   *
-   * The read half of the second confirmation. It answers three questions a person cannot answer
-   * from the project page as it stands — which epoch the project is in, which one a reopen would
-   * start, and how many acceptance attempts stop being current when it does — and it hands back
-   * the `acknowledgement` the write then has to echo. That round trip is what makes the
-   * confirmation about THIS project at THIS moment rather than about a dialog somebody clicked
-   * through: an epoch read a minute ago and reopened now is refused, not merged.
-   *
-   * Read-only and unlocked on purpose. It is a preview, and a preview that took the row lock would
-   * serialize every project page against every acceptance write for a number that the write path
-   * re-reads under its own lock anyway.
-   */
-  async reopenPreview(ownerId: string, id: string): Promise<ReopenImpact> {
-    const project = await this.prisma.project.findFirst({
-      where: { id, ownerId },
-      select: { status: true, acceptanceEpoch: true, legacyAcceptedAt: true },
-    });
-    if (!project) throw new NotFoundException('project not found');
-    // The attempts that are live TODAY: a run already superseded by a later attempt is not
-    // something this reopen retires, and counting it would overstate what the person is agreeing
-    // to. Only meaningful for a settled project, which is why `reopenImpact` zeroes it otherwise.
-    const liveAcceptanceRuns = await this.prisma.projectAcceptanceRun.count({
-      where: { projectId: id, supersededAt: null },
-    });
-    return reopenImpact({
-      status: project.status as 'OPEN' | 'DONE' | 'CANCELLED',
-      acceptanceEpoch: String(project.acceptanceEpoch),
-      liveAcceptanceRuns,
-      legacyAccepted: project.legacyAcceptedAt !== null,
-    });
-  }
-
-  /**
-   * Unit L7: reopen a settled project, having said which epoch that decision was made against.
-   *
-   * `update` with `status: OPEN` is what actually reopens — this is not a second implementation of
-   * it, and deliberately not: two paths that both reopen are two chances to disagree about what a
-   * reopen retires. What this door adds is that the acknowledgement is not optional here, so the
-   * only way to reach it is to have read what it costs.
-   *
-   * The refusals a person can hit are answered BEFORE the write rather than by letting the update
-   * fall over: an OPEN project has nothing to reopen (`PROJECT_NOT_SETTLED`), and an epoch that has
-   * moved since it was read is `REOPEN_ACKNOWLEDGEMENT_STALE` — raised again under the row lock by
-   * `update`, which is the copy that decides. Checking here as well is what makes the common case a
-   * clear answer instead of a rolled-back transaction.
-   */
-  async reopen(ownerId: string, id: string, dto: ReopenProjectDto) {
-    const impact = await this.reopenPreview(ownerId, id);
-    const admitted = admitReopen(impact, dto.acknowledgedAcceptanceEpoch);
-    if (!admitted.allowed) {
-      throw new ConflictException({
-        statusCode: 409,
-        error: 'Conflict',
-        code: admitted.code,
-        message: admitted.message,
-        owner: 'USER',
-        requiredAction: impact.requiredAction,
-        fromEpoch: impact.fromEpoch,
-        toEpoch: impact.toEpoch,
-      });
-    }
-    return this.update(ownerId, id, {
-      status: SharedProjectStatus.OPEN,
-      acknowledgedAcceptanceEpoch: dto.acknowledgedAcceptanceEpoch,
-      ...(dto.expectedConfigRevision !== undefined
-        ? { expectedConfigRevision: dto.expectedConfigRevision }
-        : {}),
-    });
-  }
 
   /**
    * The compare-and-swap every control write goes through, or nothing if the caller did not state

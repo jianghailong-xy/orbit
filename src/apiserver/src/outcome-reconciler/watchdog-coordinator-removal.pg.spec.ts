@@ -176,15 +176,20 @@ suite('(d)(e)(f)(g) every load-bearing wall beside the removal is still standing
   // them installed — now belongs to that task's own removal spec; what remains checkable from
   // here is that 0221 names none of those relations, which the static spec asserts.
 
-  // (g) project acceptance, untouched.
+  // (g) project acceptance. The judging half went to 0229 — a later decision about the acceptance
+  // judgment, not a delayed effect of this one — so what 0221 was told not to touch, and did not,
+  // is the authored criterion definitions.
   const acceptance = await client.query(`
     SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname LIKE 'project\\_acceptance\\_%'
      ORDER BY 1`);
-  assert.ok(acceptance.rows.length >= 3);
-  const runColumns = await columnsOf(client, 'project_acceptance_run');
-  for (const column of ['id', 'project_id', 'verdict', 'criteria_snapshot', 'acceptance_epoch']) {
-    assert.ok(runColumns.includes(column), `project_acceptance_run.${column} must be unchanged`);
+  assert.deepEqual(acceptance.rows.map((row) => row.relname),
+    ['project_acceptance_criterion_definition']);
+  const definitionColumns = await columnsOf(client, 'project_acceptance_criterion_definition');
+  for (const column of ['id', 'project_id', 'text', 'verification_method', 'completion_criterion',
+    'content_hash']) {
+    assert.ok(definitionColumns.includes(column),
+      `project_acceptance_criterion_definition.${column} must be unchanged`);
   }
 });
 

@@ -75,7 +75,6 @@ import {
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
-import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
 } from '../projects/completion-input';
 import {
@@ -137,7 +136,7 @@ import {
   authorityPrincipal,
   refuseTaskOpening,
 } from '../projects/coordinator-authority';
-import { statedCriteriaFrom } from '../projects/project-acceptance';
+import { criteriaFromDefinitions } from '../projects/project-acceptance';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -270,7 +269,6 @@ type HandoffSpend = {
 type PlanAuthoritySnapshot = {
   projects: Record<string, {
     status: string;
-    acceptanceEpoch: string;
     maxConcurrentTasks: number;
     sessionBudgetPerDay: number | null;
     /**
@@ -1305,16 +1303,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     handoffs?: ProjectHandoffService,
     completionInputs?: CompletionInputRouter,
-    projectAcceptance?: ProjectAcceptanceService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.completionInputs = completionInputs;
-    this.projectAcceptance = projectAcceptance;
   }
 
   private readonly handoffs: ProjectHandoffService;
   private readonly completionInputs?: CompletionInputRouter;
-  private readonly projectAcceptance?: ProjectAcceptanceService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -2585,7 +2580,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // applies to it — the same function, the same facts, so the two can never answer differently.
     const singleItem = [dto as CreateTaskBatchItemDto];
     const noneFrozen = new Set<number>();
-    const preflighting = this.planNeedsPreflight(scopeWorld, singleItem);
+    const preflighting = this.planNeedsPreflight(scopeWorld);
     const referencedTasks = preflighting
       ? await this.referencedTaskFacts(ownerId, singleItem)
       : {};
@@ -3372,7 +3367,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // puts them outside the contract and AC5 promises they pay nothing for it) — but a preview is
     // being asked FOR the answer, and "where would these fifty tasks land" is the part of it a user
     // needs most. Paying for the read is the whole request here rather than an overhead on it.
-    const preflighting = dryRun || this.planNeedsPreflight(scopeWorld, items);
+    const preflighting = dryRun || this.planNeedsPreflight(scopeWorld);
     const referencedTasks = preflighting ? await this.referencedTaskFacts(ownerId, items) : {};
     const dependencyCrossings: DependencyCrossings = preflighting
       ? await this.resolveDependencyCrossings(
@@ -3986,7 +3981,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const project = await this.prisma.project.findFirst({
         where: { id: projectId, ownerId },
         select: {
-          acceptanceCriteria: true,
           sessionBudgetPerDay: true,
           acceptanceCriterionDefinitions: {
             select: { id: true, ordinal: true, text: true, revision: true, contentHash: true },
@@ -3996,8 +3990,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Tenancy is `assertOwnedProject`'s and the scope contract's; a project that cannot be read
       // here is one those have already answered for.
       if (!project) continue;
-      const statedCriterionKeys = statedCriteriaFrom(
-        project.acceptanceCriterionDefinitions ?? [], project.acceptanceCriteria,
+      const statedCriterionKeys = criteriaFromDefinitions(
+        project.acceptanceCriterionDefinitions ?? [],
       ).map((criterion) => criterion.key);
       // What judgment sessions have already opened here inside the window. Counted through the
       // creator SESSION's dispatch origin rather than through a column on the task, because that
@@ -4312,7 +4306,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               // every check and none of them matches on prose.
               title: true,
               status: true,
-              acceptanceEpoch: true,
               maxConcurrentTasks: true,
               sessionBudgetPerDay: true,
               coordinatorSessionId: true,
@@ -4348,14 +4341,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         assigneeId: item.assigneeId ?? null,
         listId: item.listId ?? null,
         autoRunWhenReady: item.autoRunWhenReady !== false,
-        acceptanceEpoch: item.projectAcceptanceEpoch ?? null,
       })),
       world: {
         principal: world.principal,
         projects: Object.fromEntries(projects.map((project) => [project.id, {
           title: project.title,
           status: project.status as 'OPEN' | 'DONE' | 'CANCELLED',
-          acceptanceEpoch: String(project.acceptanceEpoch),
           maxConcurrentTasks: project.maxConcurrentTasks,
           sessionBudgetPerDay: project.sessionBudgetPerDay,
           memberWorkspaceIds: new Set(project.members.map((member) => member.agentId)),
@@ -4402,15 +4393,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * still has to be true when the row is written) or is about a crossing the owner cannot make (§4
    * R1 again: their edge is an authorization in itself).
    *
-   * The one exception is the claim only a caller can make: "I planned this against acceptance epoch
-   * N". Nobody else can know it was made, so a plan that states it is judged on it whoever sent it.
+   * There used to be one exception — the claim only a caller could make, "I planned this against
+   * acceptance epoch N". Migration 0229 removed the epoch, so there is no such claim to honour and
+   * the principal is the whole of it.
    */
-  private planNeedsPreflight(
-    world: ScopeWorld,
-    items: readonly CreateTaskBatchItemDto[],
-  ): boolean {
-    return world.principal !== 'USER'
-      || items.some((item) => item.projectAcceptanceEpoch !== undefined);
+  private planNeedsPreflight(world: ScopeWorld): boolean {
+    return world.principal !== 'USER';
   }
 
   /** Every existing task a plan names, by id — the world its structural checks are judged against. */
@@ -4471,7 +4459,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     projects: ReadonlyArray<{
       id: string;
       status: string;
-      acceptanceEpoch: bigint;
       maxConcurrentTasks: number;
       sessionBudgetPerDay: number | null;
       coordinatorSessionId: string | null;
@@ -4484,7 +4471,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return {
       projects: Object.fromEntries(projects.map((project) => [project.id, {
         status: project.status,
-        acceptanceEpoch: String(project.acceptanceEpoch),
         maxConcurrentTasks: project.maxConcurrentTasks,
         sessionBudgetPerDay: project.sessionBudgetPerDay,
         identityDigest: this.planProjectIdentityDigest(project),
@@ -4575,7 +4561,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: {
           id: true,
           status: true,
-          acceptanceEpoch: true,
           maxConcurrentTasks: true,
           sessionBudgetPerDay: true,
           coordinatorSessionId: true,
@@ -4586,7 +4571,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       for (const row of rows) {
         const before = snapshot.projects[row.id];
         if (before.status !== String(row.status)) drift('a project status');
-        if (before.acceptanceEpoch !== String(row.acceptanceEpoch)) drift('a project acceptance epoch');
         if (before.maxConcurrentTasks !== row.maxConcurrentTasks) drift('a project concurrency budget');
         if (before.sessionBudgetPerDay !== row.sessionBudgetPerDay) drift('a project session budget');
         if (before.identityDigest !== this.planProjectIdentityDigest(row)) {
@@ -7341,17 +7325,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ].filter((taskId): taskId is string => !!taskId),
       ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
 
-    }
-    // A project-level VERIFICATION criterion consumes this verifier Task's current verdict.
-    // Reconciliation is post-commit: it takes the Project lock in its own transaction and derives
-    // both the conclusion and any resulting DONE; this Task write never supplies either value.
-    if (dto.verdict !== undefined && this.projectAcceptance) {
-      await this.projectAcceptance.reconcileForEvidenceTask(id).catch((error) =>
-        this.logger.warn(
-          `project acceptance reconciliation after verifier ${id} failed: ` +
-          `${error?.message ?? error}`,
-        ),
-      );
     }
     // A PASS on an evidence-bound verifier may have derived the SUBJECT's DONE inside the
     // transaction above. Release that subject's dependents now; keying this on the verifier id
