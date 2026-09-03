@@ -758,13 +758,13 @@ type TurnCompleteRequest struct {
 	Result     string `json:"result,omitempty"`
 	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
 	// the difference between a real zero/empty result and an older runner that sent neither.
-	ShellExitCode             *int                   `json:"shellExitCode,omitempty"`
-	ShellOutput               *string                `json:"shellOutput,omitempty"`
-	Subtype                   string                 `json:"subtype,omitempty"`
-	NumTurns                  int                    `json:"numTurns"`
-	CostUsd                   float64                `json:"costUsd"`
-	Usage                     *TokenUsage            `json:"usage,omitempty"`
-	ModelUsage                map[string]interface{} `json:"modelUsage,omitempty"`
+	ShellExitCode *int                   `json:"shellExitCode,omitempty"`
+	ShellOutput   *string                `json:"shellOutput,omitempty"`
+	Subtype       string                 `json:"subtype,omitempty"`
+	NumTurns      int                    `json:"numTurns"`
+	CostUsd       float64                `json:"costUsd"`
+	Usage         *TokenUsage            `json:"usage,omitempty"`
+	ModelUsage    map[string]interface{} `json:"modelUsage,omitempty"`
 	// Provider-neutral runtime session/thread id discovered during this turn.
 	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
 	// Worktree isolation, reported each turn so the web can show a LIVE status bar (branch +

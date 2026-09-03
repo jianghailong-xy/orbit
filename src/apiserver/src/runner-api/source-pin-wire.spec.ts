@@ -16,6 +16,9 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { ListEventsService } from '../task-lists/list-events.service';
+import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
+import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
+import { TasksService } from '../tasks/tasks.service';
 
 /**
  * `POST /api/runner/sessions/:id/source/pin` over real HTTP.
@@ -75,6 +78,12 @@ async function mount(prisma: PrismaService) {
       { provide: RunnerOrchestrationAuthorizer, useValue: {} },
       { provide: ReferenceExpansionService, useValue: {} },
       { provide: ListEventsService, useValue: {} },
+      // Optional in the constructor's signature, but Nest still resolves every parameter from the
+      // module, so an unregistered one is a bootstrap failure rather than an undefined field. None
+      // of the three is on the pin route; they are here because the controller is mounted whole.
+      { provide: AttemptBudgetMeterService, useValue: {} },
+      { provide: ProjectAcceptanceService, useValue: {} },
+      { provide: TasksService, useValue: {} },
     ],
   })
   class WireModule {}
