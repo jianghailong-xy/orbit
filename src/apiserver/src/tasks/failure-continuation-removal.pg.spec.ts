@@ -81,11 +81,13 @@ const CORE_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
  * criteria. `project_acceptance_criteria_confirmation` went the same way in 0226, and
  * `0233_project_acceptance_criterion_wiring_removal` then took the four columns that pointed a
  * criterion at the work serving it — a third later decision, about which direction that edge
- * points. What is left is the authored declaration, still pinned column for column.
+ * points. `0234_project_acceptance_evaluation_plan_lane_removal` then took the evaluation-plan
+ * lane those four fed, a fourth. What is left is the authored declaration, still pinned column for
+ * column.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
 };
 
 function publishes(): RealtimeService {

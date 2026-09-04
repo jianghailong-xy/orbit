@@ -72,13 +72,15 @@ const MANUAL_RUNNABLE = manualRunnableTaskSql('t');
  * account-owner decision, which removed the project acceptance judgment whole and kept the stated
  * criteria. The four wiring columns of the one that survived went the same way in
  * `0233_project_acceptance_criterion_wiring_removal`, a third later decision — about which
- * direction the criterion/work edge points. All of it is absent below because the relations and
- * columns are absent, not because this assertion relaxed: what survived is still pinned column for
- * column, and an unrelated change that widened or narrowed it would still fail here.
+ * direction the criterion/work edge points — and the evaluation-plan lane they fed went in
+ * `0234_project_acceptance_evaluation_plan_lane_removal`, a fourth. All of it is absent below
+ * because the relations and columns are absent, not because this assertion relaxed: what survived
+ * is still pinned column for column, and an unrelated change that widened or narrowed it would
+ * still fail here.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
 };
 
 interface World {

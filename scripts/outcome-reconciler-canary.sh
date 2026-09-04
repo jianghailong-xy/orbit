@@ -66,11 +66,17 @@ else
     "$API/src/outcome-reconciler/outcome-canary.ts" \
     "$API/src/outcome-reconciler/outcome-payload-redaction.ts" \
     --target ES2022 --module nodenext --moduleResolution nodenext --strict --skipLibCheck \
-    --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
+    --rootDir "$API/src" --typeRoots "$TYPE_ROOT" --outDir "$COMPILED"
+  # `--rootDir` above, so this branch emits the same tree shape as the bound production build the
+  # other branch reads: without it tsc roots at the one directory both inputs share and emits flat,
+  # and this path does not exist.
   CANARY_MODULE="$COMPILED/outcome-reconciler/outcome-canary.js"
 fi
 
 echo '==> outcome-canary: generate hash-chained 111k cohort telemetry and exercise rollback/rollforward'
+# The reporter below is pinned rather than left to default: Node 23+ emits `spec` (`ℹ tests 12`)
+# even with no TTY, and `outcome-reconciler-canary-manifest.mjs` reduces this file by matching
+# `^# tests`.
 set +e
 OUTCOME_CANARY_MODULE="$CANARY_MODULE" \
 OUTCOME_CANARY_CONTRACT_PATH="$CONTRACT" \
@@ -80,6 +86,7 @@ OUTCOME_CANARY_UPSTREAM_TASK_PATH="$UPSTREAM_TASK" \
 OUTCOME_CANARY_COLLECTOR_SHA="$COLLECTOR_SHA" \
 OUTCOME_CANARY_TARGET_SHA="$TARGET_SHA" \
 timeout -k 10 "$TIMEOUT_SECONDS" node --test --test-concurrency=1 \
+  --test-reporter=tap --test-reporter-destination=stdout \
   "$REPO/test/outcome-reconciler-v2.canary.test.mjs" 2>&1 | tee "$TAP"
 TEST_RC=${PIPESTATUS[0]}
 set -e

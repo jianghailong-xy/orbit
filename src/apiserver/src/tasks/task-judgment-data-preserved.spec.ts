@@ -164,11 +164,28 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        and `project_completion_contract_snapshot`, so it is not a third writer of the DONE
   //        fence. Its one DML statement rewrites the three hash columns of the criterion rows it
   //        just narrowed, which is the table 0228 preserved and 0233 is deliberately changing.
+  //   0234 removed `evaluation_plan_revision` and `evaluation_plan_hash` from
+  //        `project_acceptance_criterion_definition` — the lane the four columns 0233 dropped used
+  //        to feed — by a further account-owner decision. Read against every claim above: like
+  //        0233 it ALTERs exactly one preserved relation and nothing else. It names none of the
+  //        six preserved triggers/functions, neither 0177 relation, and no `task` object at all —
+  //        not `task.acceptance_command`, not `task.acceptance_expected_exit_code`, not
+  //        `task_executable_acceptance_pair`, not `task_completion_criterion`, and no task row is
+  //        read or written. It carries no `DROP TABLE`, `DROP VIEW` or `DROP TYPE`; its one
+  //        `DROP FUNCTION` is `project_acceptance_definition_evaluation_plan_hash`, which existed
+  //        only to compute the column it drops. Its two `CREATE OR REPLACE FUNCTION`s are
+  //        `project_acceptance_definition_normalize` and `project_completion_contract_snapshot`,
+  //        so it is not a third writer of the DONE fence. It has no INSERT/UPDATE/DELETE of its
+  //        own: its only write is `project_refresh_completion_contract`, which rebuilds
+  //        `project_completion_contract` — a projection that postdates 0228 and is not one of the
+  //        preserved relations — because that row stored an `evaluationPlanVersions` key listing
+  //        the two columns this migration removes.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
       '0232_task_criterion_declaration',
-      '0233_project_acceptance_criterion_wiring_removal'],
+      '0233_project_acceptance_criterion_wiring_removal',
+      '0234_project_acceptance_evaluation_plan_lane_removal'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

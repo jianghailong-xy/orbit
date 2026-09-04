@@ -95,10 +95,10 @@ async function seedProject(client: Client, label: string): Promise<{
   await client.query(
     `INSERT INTO "project_acceptance_criterion_definition"
        ("id","project_id","ordinal","text","verification_method",
-        "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
+        "content_hash","semantic_hash","created_at","updated_at")
      VALUES ($1,$2,1,'The gate is gone','a person reads the criterion',
-             $3,$4,$5,now(),now())`,
-    [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
+             $3,$4,now(),now())`,
+    [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64)],
   );
   return { ownerId, projectId, definitionId };
 }
@@ -260,20 +260,24 @@ suite('(l)-(n) the acceptance standard set itself is untouched; the judging arou
 
     // (l)(m) the columns a stated criterion is made of. Migration 0233 took the four that wired a
     // criterion to the work serving it — a later and separate decision about which direction that
-    // edge points — so what 0222 had to leave alone is the declaration and its identity, and the
-    // four are asserted gone rather than dropped from the list.
+    // edge points — and 0234 then took the evaluation-plan lane those four fed. So what 0222 had
+    // to leave alone is the declaration and its identity, and the six are asserted gone rather
+    // than dropped from the list.
     const columns = (await client.query(`
       SELECT a.attname FROM pg_attribute a
        WHERE a.attrelid = 'project_acceptance_criterion_definition'::regclass
          AND a.attnum > 0 AND NOT a.attisdropped
        ORDER BY a.attname`)).rows.map((row) => row.attname as string);
     for (const field of ['text', 'verification_method', 'revision',
-      'content_hash', 'semantic_hash', 'evaluation_plan_hash']) {
+      'content_hash', 'semantic_hash']) {
       assert.ok(columns.includes(field), field);
     }
     for (const gone of ['completion_criterion', 'acceptance_command',
       'acceptance_expected_exit_code', 'evidence_task_id']) {
       assert.equal(columns.includes(gone), false, `${gone} was removed by migration 0233`);
+    }
+    for (const gone of ['evaluation_plan_revision', 'evaluation_plan_hash']) {
+      assert.equal(columns.includes(gone), false, `${gone} was removed by migration 0234`);
     }
 
     // (n) a stated criterion is still normalized and hashed by the trigger 0229 kept, and there is

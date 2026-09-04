@@ -421,15 +421,12 @@
       "outcomes",
       "riskBoundary",
       "criteria",
-      "criteriaTrust",
       "ownerId",
       "templateDigest",
       "delegationDigest"
     ],
     "evaluationPlanMaterialFields": [
-      "commands",
       "verifiers",
-      "evidenceWiring",
       "collectorVersions",
       "environment"
     ],

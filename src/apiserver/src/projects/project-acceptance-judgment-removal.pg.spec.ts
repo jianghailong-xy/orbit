@@ -61,13 +61,18 @@ const REMOVED_FUNCTIONS = [
   'project_acceptance_sync_legacy_definitions',
 ];
 
-/** The six that serve the criterion DEFINITIONS, and are kept for that reason. */
+/**
+ * The five that serve the criterion DEFINITIONS, and are kept for that reason.
+ *
+ * `project_acceptance_definition_evaluation_plan_hash` stood here until migration 0234 removed the
+ * criterion's evaluation-plan lane. It is absent because the lane it computed is absent, not
+ * because this census was relaxed: a sixth name appearing here would still fail.
+ */
 const PRESERVED_FUNCTIONS = [
   'project_acceptance_definition_normalize',
   'project_acceptance_definition_content_hash',
   'project_acceptance_definition_digest',
   'project_acceptance_definition_semantic_hash',
-  'project_acceptance_definition_evaluation_plan_hash',
   'project_acceptance_definition_projection',
 ];
 
@@ -181,13 +186,14 @@ test('the criterion definition table keeps its trigger and every column of its s
          ORDER BY "ordinal_position"`);
       // Migration 0233 took the four wiring columns out of this shape —
       // `completion_criterion`, `acceptance_command`, `acceptance_expected_exit_code` and
-      // `evidence_task_id`. Still the whole table in ordinal order, still exact: the point of this
-      // census is that nobody adds or removes a column without saying so here.
+      // `evidence_task_id` — and migration 0234 then took `evaluation_plan_revision` and
+      // `evaluation_plan_hash`, the lane those four fed. Still the whole table in ordinal order,
+      // still exact: the point of this census is that nobody adds or removes a column without
+      // saying so here.
       assert.deepEqual(columns.map((c) => c.column_name), [
         'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
         'created_at', 'updated_at', 'verification_method',
         'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
-        'evaluation_plan_revision', 'evaluation_plan_hash',
       ]);
     } finally {
       await db.$disconnect();
@@ -225,7 +231,6 @@ test('project_update writes the criteria and project_get reads them back', { ski
     for (const item of read.acceptanceCriteriaItems) {
       assert.match(item.contentHash, /^[0-9a-f]{64}$/);
       assert.match(item.semanticHash, /^[0-9a-f]{64}$/);
-      assert.match(item.evaluationPlanHash, /^[0-9a-f]{64}$/);
       assert.equal(item.revision, 1);
     }
     // And nothing beside them concludes anything.

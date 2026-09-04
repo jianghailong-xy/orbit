@@ -62,14 +62,19 @@ const REMOVED_FIELDS: ReadonlyArray<readonly [string, unknown]> = [
   ['evidenceTaskId', '00000000-0000-4000-8000-000000000001'],
 ];
 
-/** The hash lanes the removal keeps, and whose inputs it rewrites. */
+/**
+ * The hash lanes 0233 keeps, and whose inputs it rewrites.
+ *
+ * 0233 also kept `evaluation_plan_revision`/`evaluation_plan_hash` and rewrote their input to
+ * `verification_method` alone. Migration 0234 then removed that lane on the account owner's
+ * decision, so the two are absent from this shape — and from the census below, which now asserts
+ * they are gone rather than that they are computed.
+ */
 interface Lanes {
   content_hash: string | null;
   semantic_hash: string | null;
-  evaluation_plan_hash: string | null;
   revision: number;
   semantic_revision: number;
-  evaluation_plan_revision: number;
 }
 
 test('T4: a criterion no longer names the work, and task_completion_criterion outlives it', {
@@ -110,8 +115,7 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
   /** Every lane of every criterion of one project, read straight out of the row. */
   async function lanes(projectId: string): Promise<Lanes[]> {
     const { rows } = await sql.query<Lanes>(
-      `SELECT "content_hash", "semantic_hash", "evaluation_plan_hash", "revision",
-              "semantic_revision", "evaluation_plan_revision"
+      `SELECT "content_hash", "semantic_hash", "revision", "semantic_revision"
          FROM "project_acceptance_criterion_definition"
         WHERE "project_id" = $1::uuid ORDER BY "ordinal"`,
       [projectId],
@@ -143,7 +147,6 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
       'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
       'created_at', 'updated_at', 'verification_method',
       'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
-      'evaluation_plan_revision', 'evaluation_plan_hash',
     ]);
   });
 
@@ -259,8 +262,13 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
     assert.deepEqual(task, [{ udt_name: 'task_completion_criterion', is_nullable: 'NO' }]);
   });
 
-  // ═══ 5. the hash lanes are still computed, by functions that no longer read the dropped columns ═
-  await t.test('semantic_hash and evaluation_plan_hash survive and are still computed', async () => {
+  // ═══ 5. the hash lanes 0233 kept are still computed; the one 0234 took is gone ════════════════
+  //
+  // What moved here is the SUBJECT, not the strength. 0233 kept two lanes and this case asserted
+  // both survived and were still computed. Migration 0234 removed the evaluation-plan one — a later
+  // and separate account-owner decision — so the half of the sentence about it now says it is
+  // absent. The semantic lane is asserted exactly as before.
+  await t.test('semantic_hash is still computed, and evaluation_plan_hash is gone', async () => {
     const { rows: kept } = await sql.query<{ column_name: string; is_nullable: string }>(
       `SELECT "column_name", "is_nullable" FROM "information_schema"."columns"
         WHERE "table_schema" = 'public'
@@ -269,9 +277,8 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
         ORDER BY "column_name"`,
     );
     assert.deepEqual(kept, [
-      { column_name: 'evaluation_plan_hash', is_nullable: 'NO' },
       { column_name: 'semantic_hash', is_nullable: 'NO' },
-    ]);
+    ], 'migration 0234 removed evaluation_plan_hash and left semantic_hash NOT NULL');
 
     // The executable half of the claim. `DROP COLUMN` leaves a plpgsql body alone, so a normalize
     // trigger still naming `NEW."completion_criterion"` would deploy cleanly and fail here, on the
@@ -285,11 +292,10 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
     } as never);
     const [created] = await lanes(projectId);
     assert.ok(created, 'the criterion was written');
-    for (const lane of ['content_hash', 'semantic_hash', 'evaluation_plan_hash'] as const) {
+    for (const lane of ['content_hash', 'semantic_hash'] as const) {
       assert.match(created[lane] ?? '', /^[0-9a-f]{64}$/, `${lane} was not computed on insert`);
     }
-    assert.deepEqual(
-      [created.revision, created.semantic_revision, created.evaluation_plan_revision], [1, 1, 1]);
+    assert.deepEqual([created.revision, created.semantic_revision], [1, 1]);
 
     // And on a rewrite, which is the other branch of the same function: both halves of the
     // declaration move, so both lanes move and both counters advance.
@@ -305,20 +311,16 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
       }],
     } as never);
     const [rewritten] = await lanes(projectId);
-    for (const lane of ['content_hash', 'semantic_hash', 'evaluation_plan_hash'] as const) {
+    for (const lane of ['content_hash', 'semantic_hash'] as const) {
       assert.match(rewritten[lane] ?? '', /^[0-9a-f]{64}$/, `${lane} was not computed on update`);
       assert.notEqual(rewritten[lane], created[lane], `${lane} did not move when its input did`);
     }
-    assert.deepEqual(
-      [rewritten.revision, rewritten.semantic_revision, rewritten.evaluation_plan_revision],
-      [2, 2, 2]);
+    assert.deepEqual([rewritten.revision, rewritten.semantic_revision], [2, 2]);
 
     // The stored lanes are reproducible from the live functions, which is the difference between
     // "a hash was written" and "the hash of what this row now says".
     const { rows: recomputed } = await sql.query<{ same: boolean }>(
       `SELECT d."semantic_hash" = project_acceptance_definition_semantic_hash(d."text")
-              AND d."evaluation_plan_hash"
-                  = project_acceptance_definition_evaluation_plan_hash(d."verification_method")
               AND d."content_hash"
                   = project_acceptance_definition_content_hash(d."text", d."verification_method")
                 AS "same"
@@ -326,6 +328,15 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
       [projectId],
     );
     assert.deepEqual(recomputed.map((row) => row.same), [true]);
+
+    // And the function that fed the removed lane is gone with it, rather than left in the catalog
+    // as an unreferenced overload of a hash nobody stores.
+    const { rows: laneFunction } = await sql.query<{ proname: string }>(
+      `SELECT p."proname" FROM "pg_proc" p JOIN "pg_namespace" n ON n."oid" = p."pronamespace"
+        WHERE n."nspname" = 'public'
+          AND p."proname" = 'project_acceptance_definition_evaluation_plan_hash'`,
+    );
+    assert.deepEqual(laneFunction, []);
   });
 
   // ═══ the untracked half: no function body still names a dropped column ════════════════════════

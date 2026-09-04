@@ -103,9 +103,9 @@ test('T1: a task’s criterion declaration is a relation, and outlives the crite
     await sql.query(
       `INSERT INTO "project_acceptance_criterion_definition"
          ("id","project_id","ordinal","text","verification_method",
-          "content_hash","semantic_hash","evaluation_plan_hash","updated_at")
+          "content_hash","semantic_hash","updated_at")
        VALUES ($1,$2,$3,$4,'read it and say whether it holds',
-               repeat('0',64), repeat('0',64), repeat('0',64), now())`,
+               repeat('0',64), repeat('0',64), now())`,
       [id, projectId, ordinal, text],
     );
     return read(id);

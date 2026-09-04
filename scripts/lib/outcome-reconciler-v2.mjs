@@ -325,21 +325,23 @@ const FROZEN_INVALIDATORS = Object.freeze([
   'AS_OF_ADVANCED',
 ]);
 
+// `criteriaTrust` stood here until T6. It named the criterion's `completion_criterion` column,
+// which migration 0233 removed.
 const FROZEN_CONTRACT_MATERIAL_FIELDS = Object.freeze([
   'goal',
   'outcomes',
   'riskBoundary',
   'criteria',
-  'criteriaTrust',
   'ownerId',
   'templateDigest',
   'delegationDigest',
 ]);
 
+// `commands` (from `acceptance_command` and its expected exit code) and `evidenceWiring` (from
+// `evidence_task_id`) went the same way in 0233. What is left is the contract-level plan material,
+// which is what `project_completion_contract_snapshot` still produces.
 const FROZEN_PLAN_MATERIAL_FIELDS = Object.freeze([
-  'commands',
   'verifiers',
-  'evidenceWiring',
   'collectorVersions',
   'environment',
 ]);

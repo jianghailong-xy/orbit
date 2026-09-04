@@ -748,15 +748,12 @@ test('contractDigest and evaluationPlanDigest bind disjoint material', () => {
     outcomes: ['merged', 'verified'],
     riskBoundary: 'no production mutation',
     criteria: ['all checks pass'],
-    criteriaTrust: 'INDEPENDENT_EXECUTABLE',
     ownerId: 'owner-1',
     templateDigest: null,
     delegationDigest: null,
   };
   const plan = {
-    commands: ['npm test'],
     verifiers: ['ci'],
-    evidenceWiring: ['tap->manifest'],
     collectorVersions: ['collector@2'],
     environment: 'clean target SHA',
   };
@@ -766,7 +763,7 @@ test('contractDigest and evaluationPlanDigest bind disjoint material', () => {
   assert.equal(computeContractDigest(ownerContract, contract), contractDigest);
   assert.notEqual(computeContractDigest({ ...ownerContract, goal: 'changed goal' }, contract), contractDigest);
   assert.equal(computeContractDigest(ownerContract, contract), contractDigest, 'plan edits cannot alter owner semantic digest');
-  assert.notEqual(computeEvaluationPlanDigest({ ...plan, commands: ['npm run verify'] }, contract), planDigest);
+  assert.notEqual(computeEvaluationPlanDigest({ ...plan, verifiers: ['ci', 'nightly'] }, contract), planDigest);
 });
 
 test('an unratified or stale ratification cannot close even when every evaluator dimension says satisfied', () => {

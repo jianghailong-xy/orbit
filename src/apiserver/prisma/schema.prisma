@@ -1917,14 +1917,14 @@ model ProjectAcceptanceCriterionDefinition {
   /// hashes text when matching old lines to stable ids.
   contentHash String @map("content_hash") @db.Char(64)
 
-  /// Owner Ratification separates the meaning being approved from the machinery that evaluates
-  /// it. The assertion advances the semantic lane; the reader-facing method advances the
-  /// evaluation-plan lane. `revision`/`contentHash` above remain the combined acceptance-evidence
-  /// identity for rolling compatibility.
+  /// Owner Ratification separates the meaning being approved from the machinery that evaluates it.
+  /// The assertion advances this semantic lane. The evaluation-plan lane that stood beside it was
+  /// removed by migration 0234: after 0233 took the commands and the evidence wiring, its only
+  /// remaining input was `verificationMethod`, which `revision`/`contentHash` — still the combined
+  /// acceptance-evidence identity — already count. The contract-level plan lane on
+  /// `ProjectCompletionContract` is a different thing and is untouched.
   semanticRevision      Int    @default(1) @map("semantic_revision")
   semanticHash          String @default(dbgenerated()) @map("semantic_hash") @db.Char(64)
-  evaluationPlanRevision Int   @default(1) @map("evaluation_plan_revision")
-  evaluationPlanHash    String @default(dbgenerated()) @map("evaluation_plan_hash") @db.Char(64)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")

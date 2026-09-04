@@ -60,8 +60,9 @@ const WIRING_COLUMNS = [
  * What a criterion still stores besides its identity, and what this derivation must not read.
  *
  * The four above are gone (migration 0233), so dropping them is no longer a statement anybody can
- * make. These are the successor: everything a criterion carries today that is not `id`, `ordinal`
- * or `revision`. A derivation that named one of them could not survive the rolled-back DROP below.
+ * make; `evaluation_plan_hash` joined them in 0234 and left this list for the same reason. These
+ * are the successor: everything a criterion carries today that is not `id`, `ordinal` or
+ * `revision`. A derivation that named one of them could not survive the rolled-back DROP below.
  */
 const NON_IDENTITY_COLUMNS = [
   'text',
@@ -69,7 +70,6 @@ const NON_IDENTITY_COLUMNS = [
   'completion_criterion_override_reason',
   'content_hash',
   'semantic_hash',
-  'evaluation_plan_hash',
 ] as const;
 /** build/projects -> build -> apiserver -> src -> repository root. */
 const REPO_ROOT = path.resolve(__dirname, '../../../..');

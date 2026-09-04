@@ -37,12 +37,11 @@ async function establish(
   await query(
     `INSERT INTO "project_acceptance_criterion_definition" (
        "id", "project_id", "ordinal", "text", "verification_method",
-       "content_hash", "semantic_hash", "evaluation_plan_hash"
+       "content_hash", "semantic_hash"
      )
      SELECT gen_random_uuid(), $2::uuid, 1, $3, $4,
             encode(digest('combined:' || $2::text || ':' || $3, 'sha256'), 'hex'),
-            encode(digest('semantic:' || $2::text || ':' || $3, 'sha256'), 'hex'),
-            encode(digest('evaluation:' || $2::text || ':' || $4, 'sha256'), 'hex')
+            encode(digest('semantic:' || $2::text || ':' || $3, 'sha256'), 'hex')
       WHERE EXISTS (
         SELECT 1 FROM "project" WHERE "id" = $2::uuid AND "owner_id" = $1::uuid
       ) AND NOT EXISTS (

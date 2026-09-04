@@ -276,8 +276,6 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     contentHash: true,
     semanticRevision: true,
     semanticHash: true,
-    evaluationPlanRevision: true,
-    evaluationPlanHash: true,
   },
 };
 
@@ -328,8 +326,6 @@ type WithAcceptanceDefinitions = {
     contentHash: string;
     semanticRevision: number;
     semanticHash: string;
-    evaluationPlanRevision: number;
-    evaluationPlanHash: string;
   }>;
 };
 
@@ -353,14 +349,13 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       key: criterionKeyOf(criterion.id),
       revision: criterion.revision,
       contentHash: criterion.contentHash,
-      // Rolling/mock compatibility: old readers can omit the two new digest lanes. Real rows on
-      // migration 0195 always contain them, and then they are returned together as one coherent
-      // projection rather than leaking `undefined` keys into legacy API shapes.
+      // Rolling/mock compatibility: old readers can omit the semantic digest lane. Real rows on
+      // migration 0195 always contain it, and then its two fields are returned together as one
+      // coherent projection rather than leaking `undefined` keys into legacy API shapes. The
+      // evaluation-plan lane that stood beside it went with migration 0234.
       ...(criterion.semanticRevision === undefined ? {} : {
         semanticRevision: criterion.semanticRevision,
         semanticHash: criterion.semanticHash,
-        evaluationPlanRevision: criterion.evaluationPlanRevision,
-        evaluationPlanHash: criterion.evaluationPlanHash,
       }),
     })),
   };

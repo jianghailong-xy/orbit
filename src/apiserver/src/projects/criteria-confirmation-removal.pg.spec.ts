@@ -54,12 +54,13 @@ const CONFIRMATION_INDEXES = [
  *
  * The run, the per-run criterion, the conclusion and the audit stood here until migration 0229
  * removed the project acceptance judgment on 2026-09-03 — a later and separate account-owner
- * decision than 0226's. What 0226 was protecting, and what came through all of it column for
- * column, is the authored declaration.
+ * decision than 0226's. The criterion's own wiring towards the work went in 0233, and the
+ * evaluation-plan lane those columns fed went in 0234: two more later decisions. What 0226 was
+ * protecting, and what came through all of it column for column, is the authored declaration.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
 };
 
 
@@ -83,10 +84,10 @@ async function seedProject(client: Client, label: string): Promise<{
   await client.query(
     `INSERT INTO "project_acceptance_criterion_definition"
        ("id","project_id","ordinal","text","verification_method",
-        "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
+        "content_hash","semantic_hash","created_at","updated_at")
      VALUES ($1,$2,1,'The criteria survive','a person reads the criterion',
-             $3,$4,$5,now(),now())`,
-    [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
+             $3,$4,now(),now())`,
+    [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64)],
   );
   return { ownerId, projectId, definitionId };
 }
