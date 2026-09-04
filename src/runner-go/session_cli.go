@@ -17,7 +17,7 @@ Usage:
   orbit session list [--status STATUS] [--parent-session-id ID] [--json]
   orbit session search --query TEXT [--limit N] [--json]
   orbit session get SESSION_ID [--json]
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]
   orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--json]
   orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
@@ -118,7 +118,7 @@ long-lived session has finished the turn it was given.
 	"send": `orbit session send — add a message to a session
 
 Usage:
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]
 
 --message-file accepts only '-' (stdin), so the CLI never opens an arbitrary path.
 
@@ -127,6 +127,12 @@ the turn that session is already running (no independent reply, and it cannot be
 while "accepted"/"queued" file it as the next turn — which is how a session that is waiting for
 a reply is reached. --client-turn-id makes an uncertain-response retry idempotent for the same
 payload.
+
+A session that has ended refuses the message. --resume-if-ended restarts it instead: the engine
+respawns with the conversation restored and the message becomes its first turn, and the reply
+reports "revived": true. It costs a runner slot and a fresh run, so it is off by default; a
+session with no runner, an offline one, or one whose conversation cannot be restored still
+refuses, naming the reason.
 `,
 	"interrupt": `orbit session interrupt — interrupt a session's current turn
 
@@ -168,7 +174,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
-	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--json"}, Mutates: true},
+	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--json"}, Mutates: true},
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
@@ -623,6 +629,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	message := fs.String("message", "", "follow-up message")
 	messageFile := fs.String("message-file", "", "read message from stdin (-)")
 	clientTurnID := fs.String("client-turn-id", "", "idempotency key for this message")
+	resumeIfEnded := fs.Bool("resume-if-ended", false, "restart the session if it has ended")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -645,6 +652,11 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	body := map[string]interface{}{"message": messageText}
 	if key := strings.TrimSpace(*clientTurnID); key != "" {
 		body["clientTurnId"] = key
+	}
+	// Sent only when asked. Omitted, the request is byte-for-byte the one every installed client
+	// sends, so an old server cannot read a field it does not know about as anything.
+	if *resumeIfEnded {
+		body["resumeIfEnded"] = true
 	}
 	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
 	if err != nil {

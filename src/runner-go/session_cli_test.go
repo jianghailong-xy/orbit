@@ -826,3 +826,70 @@ func sessionCLIContains(values []string, needle string) bool {
 	}
 	return false
 }
+
+// Reviving is opt-in at both doors. A caller that just wants to say something to a session must
+// not restart an ended one as a side effect of asking — that spends a runner slot and a whole
+// run — so the flag has to be absent from the wire unless it was asked for by name.
+func TestSessionSendCarriesResumeIfEndedOnlyWhenAsked(t *testing.T) {
+	type call struct {
+		path string
+		body map[string]interface{}
+	}
+	var calls []call
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		raw, _ := io.ReadAll(r.Body)
+		if len(raw) > 0 {
+			_ = json.Unmarshal(raw, &body)
+		}
+		calls = append(calls, call{r.URL.Path, body})
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"turnId":"turn-1","seq":7,"kind":"message","placement":"accepted","revived":true}`))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "parent-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+
+	var out bytes.Buffer
+	for _, args := range [][]string{
+		{"send", "child", "--message", "keep going", "--client-turn-id", "key-1"},
+		{"send", "child", "--message", "keep going", "--client-turn-id", "key-1", "--resume-if-ended"},
+	} {
+		out.Reset()
+		if err := cmdSessionCLI(args, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+
+	mcp := &mcpServer{
+		sessionID: "parent-session", orchestrationToken: "session-token",
+		allowOrchestration: true, t: NewTransport(srv.URL, "runner-secret"),
+	}
+	for _, args := range []map[string]interface{}{
+		{"sessionId": "child", "message": "keep going", "clientTurnId": "key-1"},
+		{"sessionId": "child", "message": "keep going", "clientTurnId": "key-1", "resumeIfEnded": false},
+		{"sessionId": "child", "message": "keep going", "clientTurnId": "key-1", "resumeIfEnded": true},
+	} {
+		if res := mcp.callTool("session_send", args); res["isError"] == true {
+			t.Fatalf("%v: session_send errored: %#v", args, res["content"])
+		}
+	}
+
+	plain := map[string]interface{}{"message": "keep going", "clientTurnId": "key-1"}
+	reviving := map[string]interface{}{"message": "keep going", "clientTurnId": "key-1", "resumeIfEnded": true}
+	want := []call{
+		{"/api/runner/sessions/child/turns", plain},
+		{"/api/runner/sessions/child/turns", reviving},
+		{"/api/runner/sessions/child/turns", plain},
+		// An explicit false is the default, not a third state: it must reach the server as the
+		// same request an installed client sends, so no server can tell the two apart.
+		{"/api/runner/sessions/child/turns", plain},
+		{"/api/runner/sessions/child/turns", reviving},
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("requests =\n%#v\nwant\n%#v", calls, want)
+	}
+}

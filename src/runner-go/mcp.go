@@ -802,6 +802,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"message": msg}
 		copyIfPresent(body, args, "clientTurnId")
+		// Sent only when true. Omitted, the request is the one every installed client sends, so a
+		// server that predates the flag cannot read anything into its absence.
+		if getBool(args, "resumeIfEnded") {
+			body["resumeIfEnded"] = true
+		}
 		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("send message failed: "+err.Error(), true)
@@ -1609,7 +1614,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "evidence"),
 		},
 		{
-			"name": "task_evidence_decide",
+			"name":        "task_evidence_decide",
 			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and nothing else — no task status, no session state, no comment, no notification. Four things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
@@ -2208,11 +2213,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_send",
-				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. Reuse clientTurnId after an uncertain response.",
+				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. A session that has ended refuses the message unless you pass resumeIfEnded. Reuse clientTurnId after an uncertain response.",
 				"inputSchema": obj(map[string]interface{}{
-					"sessionId":    sessionIDProp,
-					"message":      str,
-					"clientTurnId": map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending the same CURRENT_WORK payload with this key returns its existing receipt instead of delivering twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new logical send."},
+					"sessionId":     sessionIDProp,
+					"message":       str,
+					"clientTurnId":  map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending the same CURRENT_WORK payload with this key returns its existing receipt instead of delivering twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new logical send."},
+					"resumeIfEnded": map[string]interface{}{"type": "boolean", "description": "Restart the session if it has ended, instead of refusing the message. The engine respawns with the conversation restored and this message becomes its first turn; the reply reports `revived: true`. This starts a run and holds a runner slot, so ask for it only when you mean to continue THAT conversation — otherwise start a new session. A live session is unaffected. Still refuses, naming the reason, when the session has no runner, its runner is offline, or its conversation cannot be restored."},
 				}, "sessionId", "message"),
 			},
 			map[string]interface{}{

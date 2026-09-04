@@ -206,6 +206,8 @@ test('a lost resume response can retry its clientTurnId after the session became
     seq: existingTurn.seq,
     kind: 'message',
     placement: 'accepted',
+    // The row was already PENDING, so this request revived nothing — it replayed a receipt.
+    revived: false,
   });
   assert.equal(updates.length, 0);
   assert.equal(retired(), 0);

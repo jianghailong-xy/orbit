@@ -167,7 +167,7 @@ for (const tc of [
         clientTurnId: 'client-2',
         content: 'resolve this in the session',
       }),
-      { turnId: 'turn-2', seq: 2, kind: 'message', placement: 'accepted' },
+      { turnId: 'turn-2', seq: 2, kind: 'message', placement: 'accepted', revived: false },
     );
 
     // Two statements, one of each shape: take the row lock, then ask whether a turn is live.
@@ -226,6 +226,7 @@ for (const tc of [
       seq: 2,
       kind: 'message',
       placement: 'accepted',
+      revived: false,
     });
     assert.equal(h.lockCalls.length, 2);
     assert.deepEqual(

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
-import { Runner, RunStatus } from '@prisma/client';
+import { Prisma, Runner, RunStatus } from '@prisma/client';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
@@ -220,9 +220,20 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: { message: string; clientTurnId?: string },
+    @Body() dto: { message: string; clientTurnId?: string; resumeIfEnded?: boolean },
   ) {
+    const resumeIfEnded = dto.resumeIfEnded === true;
     if (isHeadlessCaller(callingSessionId)) {
+      // Reviving spawns an engine and takes a runner slot, which puts it with the lifecycle verbs
+      // below rather than with `send` — and those have no headless path at all. Refused loudly
+      // instead of quietly downgraded to a plain send: a bridge that asked to revive and got a
+      // 409 back would otherwise have no way to tell the refusal from a session that ended
+      // between its own two requests.
+      if (resumeIfEnded) {
+        throw new ForbiddenException(
+          'resumeIfEnded requires a calling session; a headless credential may only send',
+        );
+      }
       await this.sessions.assertHostedByRunner(
         runner.ownerId,
         this.headlessScope(runner, grant, 'session:send'),
@@ -243,17 +254,26 @@ export class RunnerSessionsController {
     // running or queues as the next one. Naming CURRENT_WORK here made the verb useless against
     // the sessions it most needs to reach — a session that is AWAITING_INPUT has no current work,
     // and while the routing protocol was rollout-gated the request was refused outright.
-    return this.sessions.createTurn(runner.ownerId, id, {
-      clientTurnId,
-      content: dto.message,
-    }, {
+    const turn = { clientTurnId, content: dto.message };
+    const charge = {
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
       // receipt. This is the idempotency boundary, not a preflight guess in the controller.
-      participateSendTransaction: (tx) =>
+      //
+      // Carried onto the resume route unchanged. A steer the budget refuses must not become
+      // affordable by reviving the session it was aimed at instead.
+      participateSendTransaction: (tx: Prisma.TransactionClient) =>
         this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
-    });
+    };
+    // Opt-in, unlike the browser's composer, which decides this for a person who is watching and
+    // can see the session come back up. Here the caller is an agent: reviving burns tokens and
+    // holds a runner slot, and the 409 it replaces is load-bearing for callers that re-home a
+    // message onto a fresh session instead. `resume` is a superset of `createTurn` — it delegates
+    // to it verbatim when the row turns out to still be live — so this is the same send when
+    // there is nothing to revive.
+    if (resumeIfEnded) return this.sessions.resume(runner.ownerId, id, turn, charge);
+    return this.sessions.createTurn(runner.ownerId, id, turn, charge);
   }
 
   // The lifecycle verbs below have NO headless path by design. They are the most damaging

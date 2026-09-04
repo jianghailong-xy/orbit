@@ -4921,6 +4921,13 @@ export class SessionsService {
        * lease was taken over cannot deliver a prompt the request no longer wants.
        */
       fence?: TaskRunEffectFence;
+      /**
+       * Orchestration's attempt charge — see `createTurn`'s own. Forwarded verbatim to the live
+       * delegation below and invoked inside the revive transaction, because the orchestration
+       * door reaches both branches through one verb: a caller that may not steer a running
+       * attempt may not buy the same turn by reviving the session it belongs to instead.
+       */
+      participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -5004,7 +5011,7 @@ export class SessionsService {
     // Only a *settled* outcome is stale. createTurn performs that cleanup under
     // its Session row lock so it cannot erase an operation queued after this fast read.
     if (SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt) {
-      return this.createTurn(ownerId, id, dto, {
+      const live = await this.createTurn(ownerId, id, dto, {
         clearSettledWorktreeState: true,
         // Carried through: a live paused run being handed the task's prompt is the task's work,
         // and the row has to say so in the same transaction that writes the turn.
@@ -5013,8 +5020,13 @@ export class SessionsService {
         // `AWAITING_INPUT` and `INTERRUPTED` are both LIVE — so a fence applied only to the revive
         // below would be a fence on the branch nobody uses.
         fence: opts?.fence,
+        participateSendTransaction: opts?.participateSendTransaction,
         requestFingerprint,
       });
+      // Nothing was revived: this turn joined a process that was already running. Said out loud
+      // because the orchestration door offers resume as a fallback for `send`, and the caller
+      // has to be able to tell "I restarted an engine" from "it was still up".
+      return { ...live, revived: false as const };
     }
     if (
       initialCapabilities.resumeBlockedReason &&
@@ -5237,6 +5249,10 @@ export class SessionsService {
         dto.attachmentIds,
         tx,
       );
+      // The orchestration charge, in the same place createTurn puts it: past idempotency and
+      // every refusal above, before the row it is paying for. A revive that is refused after
+      // this — or a transaction retried whole — rolls the charge back with the turn.
+      await opts?.participateSendTransaction?.(tx);
       // Self-heal terminal rows produced before generation retirement was deployed
       // (or by an older replica during a rolling upgrade). Otherwise a same-process
       // takeover returns early and the fresh engine cannot replace that active marker.
@@ -5342,6 +5358,10 @@ export class SessionsService {
       // read that found the session live returned through createTurn above instead, preserving
       // createTurn's row-locked accepted/queued/steer decision verbatim.
       placement: 'accepted' as const,
+      // Whether THIS request restarted the engine — not whether the session is running now. A
+      // retry that replays a committed turn reports false: it spent nothing and started nothing,
+      // and the revive it is replaying was reported to whoever won the race.
+      revived: revived.wasRevived,
     };
   }
 
