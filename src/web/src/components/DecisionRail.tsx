@@ -1,12 +1,24 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, Typography } from 'antd';
+import { Alert, Input, Typography } from 'antd';
+import { CardActionButton, CardActions } from './CardAction';
 import { api } from '../api';
 import { pendingDecisionsQuery } from '../lib/queries';
 import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
  * What this session is being asked to decide, pinned above the conversation.
+ *
+ * TWO GROUPS, BECAUSE THE DOOR HAS TWO ANSWERS
+ * --------------------------------------------
+ * A card that says DECISION REQUIRED and whose primary action is refused every time it is pressed
+ * is worse than no card: it teaches the reader that the screen does not know what the server will
+ * do. That is what this rail was doing to evidence quoting no live stated criterion — the queue
+ * listed it and the decision door refused it, both correctly and neither knowing about the other.
+ * The server now hands those rows over separately (`awaitingSubmitter`), and they render as what
+ * they are: an open question that is not this reader's to answer, waiting on the submitter for a
+ * revision that quotes a criterion. Not hidden — the submitter is still waiting on somebody, and a
+ * row nobody can see is a row nobody chases.
  *
  * ONE ROW AT A TIME, AND NO BULK ANYTHING
  * ---------------------------------------
@@ -47,6 +59,13 @@ export interface PendingDecisionIndependence {
   requiredAction: string | null;
 }
 
+/** Whether the decision door would record ANY answer about this row — independent of who asks. */
+export interface PendingDecisionDecidability {
+  decidable: boolean;
+  refusal: string | null;
+  requiredAction: string | null;
+}
+
 export interface PendingDecisionRow {
   taskId: string;
   title: string;
@@ -56,26 +75,53 @@ export interface PendingDecisionRow {
   claim: string;
   gaps: string[];
   citations: PendingDecisionCitation[];
+  decidability: PendingDecisionDecidability;
   independence: PendingDecisionIndependence;
 }
 
 export interface PendingDecisionQueue {
   decidingSessionId: string;
+  /** How many rows are waiting for a decision — `pending` only, never both groups summed. */
   count: number;
   oldestAgeSeconds: number | null;
   pending: PendingDecisionRow[];
+  /** Rows the door would refuse whatever anybody pressed, until the submitter files a revision. */
+  awaitingSubmitter: PendingDecisionRow[];
 }
 
 /** The queue's own label. The weight goes on what the reader is looking at, not on the button. */
 export const RAIL_LABEL = 'Awaiting judgment';
+/** The other group's label. Still this account's open questions; just not a decider's. */
+export const AWAITING_SUBMITTER_LABEL = 'Waiting on the submitter';
 /** The card's heading. A question, stated as one. */
 export const DECISION_HEADING = 'DECISION REQUIRED';
+/** And the heading for a row no decision can be recorded about. Deliberately not a demand: the
+ *  reader cannot clear it, so asking them to would be the same lie in a quieter voice. */
+export const AWAITING_SUBMITTER_HEADING = 'NOTHING TO DECIDE YET';
 export const CONFIRM_LABEL = 'Confirm completion';
 export const SEND_BACK_LABEL = 'Send back';
+/**
+ * What has to happen before this row becomes answerable, addressed to the party who can do it.
+ *
+ * It names the SUBMITTER because nothing the reader can press changes this: the decision door
+ * checks the criterion before it looks at which decision was asked for, so a send-back is refused
+ * here exactly as a confirmation is. Saying "send it back" would be a fourth version of the bug
+ * this card was fixed for.
+ */
+export const AWAITING_SUBMITTER_ACTION =
+  'The next evidence revision has to quote the project criterion this work serves. Until it does, '
+  + 'no decision can be recorded here — not by this session and not by any other.';
 
 /** What a settled row says afterwards, naming the standard and the exact version answered. */
 export function completionConfirmedLine(criterionKey: string | null, revision: string): string {
   return `Completion confirmed — coordinator · ${criterionKey ?? 'no stated criterion'} · rev ${revision}`;
+}
+
+/** When the revision arrived, as a reader reads it: the age, said as a moment. The card's second
+ *  line used to end at the dash, because the only thing after it was a claim legacy evidence does
+ *  not have; a row is entitled to say WHEN it was submitted whether or not it says what it claims. */
+export function formatSubmitted(ageSeconds: number): string {
+  return ageSeconds < 60 ? 'submitted just now' : `submitted ${formatAge(ageSeconds)} ago`;
 }
 
 /** Age as a reader reads it. Whole units only: a queue is not a stopwatch. */
@@ -116,9 +162,30 @@ export function DecisionCard({
   onDecide: (decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
   const resolved = row.citations.filter((citation) => citation.resolved).length;
+  // What the door would do, in the order it asks: a standard to measure against at all, and then
+  // this reader's standing to be the one measuring. Only a row that passes both has an action that
+  // could succeed, so only such a row gets one that can be pressed.
+  const decidable = row.decidability.decidable;
+  const answerable = decidable && row.independence.independent;
   return (
     <div className="decision-card">
-      <div className="decision-card-head">{DECISION_HEADING}</div>
+      <div className="decision-card-head">
+        {decidable ? DECISION_HEADING : AWAITING_SUBMITTER_HEADING}
+      </div>
+
+      {/* Led with, when there is one: the reason nothing on this card can be pressed, and who can
+          clear it. Everything below is still shown — a reader chasing the submitter needs to be
+          able to say what was wrong with the submission. */}
+      {decidable ? null : (
+        <div className="decision-card-section">
+          <Typography.Text type="warning">
+            {row.decidability.refusal ?? 'no decision can be recorded about this evidence'}
+          </Typography.Text>
+          <div>
+            <Typography.Text>{AWAITING_SUBMITTER_ACTION}</Typography.Text>
+          </div>
+        </div>
+      )}
 
       <div className="decision-card-section">
         <Typography.Text type="secondary">Against criterion </Typography.Text>
@@ -135,8 +202,17 @@ export function DecisionCard({
       </div>
 
       <div className="decision-card-section">
-        <Typography.Text type="secondary">{`Evidence rev ${row.evidenceRevision} — `}</Typography.Text>
-        <Typography.Text>{row.claim}</Typography.Text>
+        <Typography.Text type="secondary">
+          {`Evidence rev ${row.evidenceRevision} · ${formatSubmitted(row.ageSeconds)} — `}
+        </Typography.Text>
+        {row.claim === '' ? (
+          // Evidence from before the envelope has no claim field at all. The line says so rather
+          // than trailing off after the dash, which is what it did on the screenshot that started
+          // this: a card of blanks reads as a broken render, not as an older submission.
+          <Typography.Text type="secondary">this revision states no claim</Typography.Text>
+        ) : (
+          <Typography.Text>{row.claim}</Typography.Text>
+        )}
       </div>
 
       <div className="decision-card-section">
@@ -182,13 +258,18 @@ export function DecisionCard({
         </Typography.Text>
       </div>
 
-      <Input.TextArea
-        aria-label="What the next evidence revision must show"
-        placeholder="What the next evidence revision must show (required to send back)"
-        rows={2}
-        value={note}
-        onChange={(event) => onNote(event.target.value)}
-      />
+      {/* A note is what a send-back carries. A row that cannot be sent back is not given a box to
+          write one in — an input whose only consumer is a refused request is a third way of
+          promising something that will not happen. */}
+      {decidable ? (
+        <Input.TextArea
+          aria-label="What the next evidence revision must show"
+          placeholder="What the next evidence revision must show (required to send back)"
+          rows={2}
+          value={note}
+          onChange={(event) => onNote(event.target.value)}
+        />
+      ) : null}
 
       {error ? (
         <Alert
@@ -200,25 +281,26 @@ export function DecisionCard({
         />
       ) : null}
 
-      {/* Two buttons, and they answer THIS card. */}
-      <div className="decision-card-actions">
-        <Button
-          type="primary"
-          size="small"
-          loading={busy}
-          disabled={!row.independence.independent}
+      {/* Two buttons, and they answer THIS card. Same component and same sizes as the approval
+          card's actions (`CardAction.tsx`), and the same rule: enabled only when the request they
+          would send is one the server would accept. `Confirm completion` is pressable exactly when
+          the door would take a CONFIRM — which is the property this card exists to have. */}
+      <CardActions className="decision-card-actions">
+        <CardActionButton
+          tone="primary"
+          disabled={busy || !answerable}
           onClick={() => onDecide('CONFIRM')}
         >
           {CONFIRM_LABEL}
-        </Button>
-        <Button
-          size="small"
-          disabled={busy || !row.independence.independent || note.trim() === ''}
+        </CardActionButton>
+        <CardActionButton
+          tone="secondary"
+          disabled={busy || !answerable || note.trim() === ''}
           onClick={() => onDecide('SEND_BACK')}
         >
           {SEND_BACK_LABEL}
-        </Button>
-      </div>
+        </CardActionButton>
+      </CardActions>
     </div>
   );
 }
@@ -252,61 +334,85 @@ export function DecisionRail({
   onNote?: (note: string) => void;
   onDecide?: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
-  if (queue.pending.length === 0) {
+  const awaiting = queue.awaitingSubmitter;
+  if (queue.pending.length === 0 && awaiting.length === 0) {
     return settled ? (
       <div className="decision-rail decision-rail-settled" role="status">
         {settled}
       </div>
     ) : null;
   }
+  const rows = (group: PendingDecisionRow[]) => (
+    <ul className="decision-rail-list">
+      {group.map((row) => {
+        const open = row.taskId === expandedTaskId;
+        return (
+          <li className="decision-rail-row" key={row.taskId}>
+            <button
+              className="decision-rail-summary"
+              type="button"
+              aria-expanded={open}
+              onClick={() => onExpand(open ? null : row.taskId)}
+            >
+              <span className="decision-rail-task">{row.title}</span>
+              <span className="decision-rail-criterion">
+                {row.criterion ? row.criterion.key : 'no stated criterion'}
+              </span>
+              <span className="decision-rail-rev">{`rev ${row.evidenceRevision}`}</span>
+              <span className="decision-rail-age">{formatAge(row.ageSeconds)}</span>
+            </button>
+            {open ? (
+              <DecisionCard
+                row={row}
+                narrow={narrow}
+                note={note}
+                busy={busy}
+                error={error}
+                onNote={onNote}
+                onDecide={(decision) => onDecide(row, decision)}
+              />
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
   return (
-    <section className="decision-rail" aria-label={RAIL_LABEL}>
-      <div className="decision-rail-head">
-        <span className="decision-rail-label">{RAIL_LABEL}</span>
-        <span className="decision-rail-count">{`${queue.count} waiting`}</span>
-        {queue.oldestAgeSeconds === null ? null : (
-          <span className="decision-rail-oldest">{`oldest ${formatAge(queue.oldestAgeSeconds)}`}</span>
-        )}
-      </div>
+    <div className="decision-rail">
       {settled ? (
         <div className="decision-rail-settled" role="status">
           {settled}
         </div>
       ) : null}
-      <ul className="decision-rail-list">
-        {queue.pending.map((row) => {
-          const open = row.taskId === expandedTaskId;
-          return (
-            <li className="decision-rail-row" key={row.taskId}>
-              <button
-                className="decision-rail-summary"
-                type="button"
-                aria-expanded={open}
-                onClick={() => onExpand(open ? null : row.taskId)}
-              >
-                <span className="decision-rail-task">{row.title}</span>
-                <span className="decision-rail-criterion">
-                  {row.criterion ? row.criterion.key : 'no stated criterion'}
-                </span>
-                <span className="decision-rail-rev">{`rev ${row.evidenceRevision}`}</span>
-                <span className="decision-rail-age">{formatAge(row.ageSeconds)}</span>
-              </button>
-              {open ? (
-                <DecisionCard
-                  row={row}
-                  narrow={narrow}
-                  note={note}
-                  busy={busy}
-                  error={error}
-                  onNote={onNote}
-                  onDecide={(decision) => onDecide(row, decision)}
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+      {/* The questions for a decider. The count and the oldest age are about THIS group, because
+          they are the numbers somebody reads to decide whether to stop and look. */}
+      {queue.pending.length === 0 ? null : (
+        <section className="decision-rail-group" aria-label={RAIL_LABEL}>
+          <div className="decision-rail-head">
+            <span className="decision-rail-label">{RAIL_LABEL}</span>
+            <span className="decision-rail-count">{`${queue.count} waiting`}</span>
+            {queue.oldestAgeSeconds === null ? null : (
+              <span className="decision-rail-oldest">{`oldest ${formatAge(queue.oldestAgeSeconds)}`}</span>
+            )}
+          </div>
+          {rows(queue.pending)}
+        </section>
+      )}
+      {/* And the questions for the submitter. Below, unlabelled as urgent, and never counted into
+          the number above: they are somebody's open work, but nothing here is waiting on a reader
+          of this screen. */}
+      {awaiting.length === 0 ? null : (
+        <section className="decision-rail-group decision-rail-blocked" aria-label={AWAITING_SUBMITTER_LABEL}>
+          <div className="decision-rail-head">
+            <span className="decision-rail-label">{AWAITING_SUBMITTER_LABEL}</span>
+            <span className="decision-rail-count">
+              {`${awaiting.length} cannot be decided yet`}
+            </span>
+          </div>
+          {rows(awaiting)}
+        </section>
+      )}
+    </div>
   );
 }
 

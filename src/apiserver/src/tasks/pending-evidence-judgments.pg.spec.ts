@@ -20,6 +20,13 @@
  *    CONFIRM settles the TASK, so its row never comes back; a SEND_BACK settles only that VERSION,
  *    so the next revision is a new question.
  *
+ * The second claim, from (vi) down, is about WHICH GROUP a row is in. The queue used to promise a
+ * decision on evidence the door refuses outright — legacy evidence quoting no criterion, or one
+ * whose wording has since been rewritten — which put a card headed DECISION REQUIRED on screen
+ * whose every action was refused. Those rows now come back under `awaitingSubmitter`, and the
+ * invariant that makes the split worth anything is proved by calling the door for real: every row
+ * left in `pending` is one a CONFIRM is actually accepted for.
+ *
  * Destructive: it truncates, and it drops two tables inside a transaction it rolls back.
  * COORDINATOR_PG_URL must name the disposable guarded database with current migrations applied.
  */
@@ -40,6 +47,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { readCriterionSatisfaction } from '../projects/project-criterion-satisfaction';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
@@ -77,6 +85,11 @@ async function fixture(db: PrismaClient) {
   const projectId = randomUUID();
   const coordinatorTaskId = randomUUID();
   const coordinatorSessionId = randomUUID();
+  // The stalled population this rail actually meets: evidence imported from a task comment, from
+  // before the envelope existed. It quotes no criterion because there was nowhere to quote one.
+  const legacyTaskId = randomUUID();
+  const legacySessionId = randomUUID();
+  const legacyCommentId = randomUUID();
   const work = [0, 1, 2].map(() => ({
     taskId: randomUUID(),
     sessionId: randomUUID(),
@@ -111,6 +124,7 @@ async function fixture(db: PrismaClient) {
   for (const [id, title] of [
     ...work.map((unit, index) => [unit.taskId, `work ${index + 1}`] as const),
     [coordinatorTaskId, 'the run doing the deciding'] as const,
+    [legacyTaskId, 'the SOURCE contract rebase'] as const,
   ]) {
     await db.task.create({
       data: {
@@ -124,12 +138,22 @@ async function fixture(db: PrismaClient) {
         status: TaskStatus.OPEN,
         completionCriterion: 'EVIDENCE_JUDGMENT',
         acceptanceCriteria: 'an independent session decides the current evidence revision',
+        // 0232's declaration, on the three tasks that were filed against a stated criterion. The
+        // legacy task deliberately has none: work from before the criteria existed could not
+        // declare one, which is the same reason its evidence quotes none.
+        ...(work.some((unit) => unit.taskId === id)
+          ? {
+            criterionDefinitionId: work.find((unit) => unit.taskId === id)!.criterionId,
+            criterionRevision: 1,
+          }
+          : {}),
       },
     });
   }
   for (const [id, taskFor, title] of [
     ...work.map((unit, index) => [unit.sessionId, unit.taskId, `run ${index + 1}`] as const),
     [coordinatorSessionId, coordinatorTaskId, 'the coordinator'] as const,
+    [legacySessionId, legacyTaskId, 'the run that predates the envelope'] as const,
   ]) {
     await db.session.create({
       data: {
@@ -160,27 +184,64 @@ async function fixture(db: PrismaClient) {
     ]),
   });
 
-  return { ownerId, runnerId, workspaceId, projectId, coordinatorTaskId, coordinatorSessionId, work };
+  // What a legacy import is imported FROM: the comment a run left behind when saying "done" was
+  // prose in a thread rather than a submission.
+  await db.taskComment.create({
+    data: {
+      id: legacyCommentId,
+      taskId: legacyTaskId,
+      authorType: CreatorType.USER,
+      authorId: ownerId,
+      body: 'rebased onto main; the suite passed locally',
+    },
+  });
+
+  return {
+    ownerId,
+    runnerId,
+    workspaceId,
+    projectId,
+    coordinatorTaskId,
+    coordinatorSessionId,
+    legacyTaskId,
+    legacySessionId,
+    legacyCommentId,
+    work,
+  };
 }
 
 /** The queue, as a reader sees it. Structural and optional throughout, on purpose: this spec has
  *  to be able to run — and FAIL — against a build with no derived read at all, and importing the
  *  response through a required type would turn that into a compile error instead. */
+interface RowView {
+  taskId?: string;
+  title?: string;
+  evidenceRevision?: string;
+  criterion?: { key?: string; text?: string } | null;
+  gaps?: string[];
+  claim?: string;
+  ageSeconds?: number;
+  citations?: Array<{ ref?: string; resolved?: boolean; reason?: string | null }>;
+  decidability?: { decidable?: boolean; refusal?: string | null; requiredAction?: string | null };
+  independence?: { independent?: boolean; disqualification?: string | null; requiredAction?: string | null };
+}
+
+/** The code a Nest refusal carries, so a rejection can be asserted to be the RIGHT rejection. */
+function refusalCode(error: unknown): string | null {
+  const response = (error as { getResponse?: () => unknown })?.getResponse?.();
+  if (!response || typeof response !== 'object') return null;
+  const code = (response as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
 interface QueueView {
   count?: number;
   oldestAgeSeconds?: number | null;
   decidingSessionId?: string;
-  pending?: Array<{
-    taskId?: string;
-    title?: string;
-    evidenceRevision?: string;
-    criterion?: { key?: string; text?: string } | null;
-    gaps?: string[];
-    claim?: string;
-    ageSeconds?: number;
-    citations?: Array<{ ref?: string; resolved?: boolean; reason?: string | null }>;
-    independence?: { independent?: boolean; disqualification?: string | null; requiredAction?: string | null };
-  }>;
+  pending?: RowView[];
+  /** Optional for the same reason the rest of this view is: this spec has to be able to FAIL
+   *  against a build whose read has one group, rather than not compile against it. */
+  awaitingSubmitter?: RowView[];
 }
 
 suite('the pending-decision queue is derived from the facts, not delivered to anybody', async (t) => {
@@ -437,5 +498,162 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
           WHERE "relname" IN ('approval', 'run_event') AND "relkind" = 'r'`,
       );
       assert.equal(remaining.rows[0].n, '2');
+    });
+
+  // (vi) -----------------------------------------------------------------------------------------
+  // The row the screenshot was of. Imported through the app's own legacy door rather than written
+  // by hand, so what is under test is the shape production actually has: a submission from before
+  // the envelope, which quotes no criterion because there was nowhere to quote one.
+  await t.test('evidence quoting no criterion is a question for the submitter, not for a decider',
+    async () => {
+      const before = await queue(f.coordinatorSessionId);
+
+      await service.importLegacyComment(
+        f.ownerId,
+        f.legacyTaskId,
+        { type: CreatorType.USER, id: f.ownerId },
+        {
+          sourceCommentId: f.legacyCommentId,
+          sourceSessionId: f.legacySessionId,
+          evidence: { summary: 'rebased onto main; the suite passed locally' },
+          idempotencyKey: 'legacy-import-of-the-source-contract-rebase',
+          reviewNote: 'imported while reconciling the stalled EVIDENCE_JUDGMENT population',
+        },
+      );
+
+      const read = await queue(f.coordinatorSessionId);
+      // Not hidden: it is still an open question, and the submitter is still waiting on somebody.
+      const awaiting = read.awaitingSubmitter ?? [];
+      assert.deepEqual(awaiting.map((row) => row.taskId), [f.legacyTaskId],
+        'evidence quoting no criterion was dropped instead of being handed over separately');
+      // And not something this reader is being asked to decide: it is out of the decidable group
+      // and out of the number the rail leads with.
+      assert.equal(read.pending?.some((row) => row.taskId === f.legacyTaskId), false);
+      assert.equal(read.count, before.count);
+
+      // The row says why, in the door's own words, and names the action in the door's vocabulary.
+      const [row] = awaiting;
+      assert.equal(row.decidability?.decidable, false);
+      assert.match(String(row.decidability?.refusal), /quotes no project criterion/);
+      assert.equal(row.decidability?.requiredAction,
+        'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION');
+      // Everything a reader needs in order to chase the submitter is still on it.
+      assert.equal(row.title, 'the SOURCE contract rebase');
+      assert.equal(row.criterion, null);
+      assert.equal(row.evidenceRevision, '1');
+      assert.ok((row.ageSeconds ?? -1) >= 0);
+
+      // The other group says the opposite about every one of its rows.
+      assert.deepEqual(read.pending?.map((each) => each.decidability?.decidable),
+        read.pending?.map(() => true));
+    });
+
+  // (vii) ----------------------------------------------------------------------------------------
+  // The reverse assertion, against a derivation that shares no code with this one: T3 answers "is
+  // this criterion satisfied" from the criterion side, and the work it names as outstanding is
+  // exactly the work this rail is asking about. Two reads, one truth.
+  await t.test('the decidable group is exactly the work the criterion side is still waiting on',
+    async () => {
+      const read = await queue(f.coordinatorSessionId);
+      const satisfaction = await readCriterionSatisfaction(
+        db as unknown as PrismaService,
+        f.ownerId,
+        f.projectId,
+      );
+
+      const outstanding = [...new Set(satisfaction
+        .flatMap((criterion) => criterion.unmet)
+        .filter((reason) => reason.clause === 'SERVING_WORK_UNSETTLED')
+        .flatMap((reason) => reason.heldUpBy)
+        // The queue only asks about tasks that have not settled; a criterion held up by one that
+        // has is a different disagreement and not this one.
+        .filter((task) => task.status === TaskStatus.OPEN || task.status === TaskStatus.IN_PROGRESS)
+        .map((task) => task.taskId))];
+
+      assert.ok((read.pending?.length ?? 0) > 0, 'the comparison is vacuous with an empty group');
+      assert.deepEqual(
+        outstanding.sort(),
+        (read.pending ?? []).map((row) => String(row.taskId)).sort(),
+      );
+      // And the legacy row is in neither: the reason it serves no stated criterion is the same
+      // reason no decision can be recorded about it.
+      assert.equal(outstanding.includes(f.legacyTaskId), false);
+    });
+
+  // (viii) ---------------------------------------------------------------------------------------
+  // The other way a row becomes undecidable, and the one that moves: nothing about the submission
+  // changes, the STANDARD does. One row crosses from one group to the other and back.
+  await t.test('a criterion rewritten after the fact takes its row out of the decidable group',
+    async () => {
+      const before = await queue(f.coordinatorSessionId);
+      assert.equal(before.pending?.some((row) => row.taskId === f.work[0].taskId), true);
+
+      await db.projectAcceptanceCriterionDefinition.update({
+        where: { id: f.work[0].criterionId },
+        data: { text: `${CRITERION_TEXT[0]}, and every row says which group it is in` },
+      });
+
+      const moved = await queue(f.coordinatorSessionId);
+      assert.equal(moved.pending?.some((row) => row.taskId === f.work[0].taskId), false);
+      assert.equal(moved.count, (before.count ?? 0) - 1);
+      const row = (moved.awaitingSubmitter ?? []).find((each) => each.taskId === f.work[0].taskId);
+      assert.ok(row, 'the row left the decidable group and was not handed over at all');
+      assert.match(String(row?.decidability?.refusal), /is not what the project states today/);
+      // What it quotes is unchanged — the quote is the evidence's, and only the standard moved.
+      assert.equal(row?.criterion?.text, CRITERION_TEXT[0]);
+
+      await db.projectAcceptanceCriterionDefinition.update({
+        where: { id: f.work[0].criterionId },
+        data: { text: CRITERION_TEXT[0] },
+      });
+      const restored = await queue(f.coordinatorSessionId);
+      assert.equal(restored.pending?.some((each) => each.taskId === f.work[0].taskId), true);
+      assert.equal(restored.count, before.count);
+    });
+
+  // (ix) -----------------------------------------------------------------------------------------
+  // The invariant the split exists for, proved by calling the door rather than by comparing
+  // fields: every row this read puts in front of a decider is a row the decider can actually
+  // settle. Destructive, and last for that reason — each CONFIRM settles its task.
+  await t.test('every row in the decidable group is one the door really accepts a CONFIRM for',
+    async () => {
+      const read = await queue(f.coordinatorSessionId);
+      assert.ok((read.pending?.length ?? 0) >= 2, 'the invariant is vacuous with nothing to confirm');
+
+      for (const row of read.pending ?? []) {
+        assert.equal(row.independence?.independent, true);
+        const written = await service.decide(
+          f.ownerId,
+          String(row.taskId),
+          { type: CreatorType.USER, id: f.ownerId },
+          {
+            decidingSessionId: f.coordinatorSessionId,
+            evidenceRevision: String(row.evidenceRevision),
+            decision: 'CONFIRM',
+          },
+        ) as { decision?: string; evidenceRevision?: string };
+        assert.equal(written.decision, 'CONFIRM');
+        assert.equal(written.evidenceRevision, row.evidenceRevision);
+      }
+
+      // And the row in the other group is refused — which is why it is in the other group rather
+      // than being quietly dropped from a queue that could have answered it.
+      const legacyDecision = (decision: 'CONFIRM' | 'SEND_BACK', note?: string) => service.decide(
+        f.ownerId,
+        f.legacyTaskId,
+        { type: CreatorType.USER, id: f.ownerId },
+        { decidingSessionId: f.coordinatorSessionId, evidenceRevision: '1', decision, note },
+      );
+      await assert.rejects(legacyDecision('CONFIRM'),
+        (error: unknown) => refusalCode(error) === 'EVIDENCE_JUDGMENT_CRITERION_MOVED');
+      // SEND_BACK too, and for the same reason: check 2 runs before the door looks at WHICH
+      // decision was asked for. That is why the card for this group lights nothing at all rather
+      // than offering to send it back.
+      await assert.rejects(legacyDecision('SEND_BACK', 'quote the criterion this work serves'),
+        (error: unknown) => refusalCode(error) === 'EVIDENCE_JUDGMENT_CRITERION_MOVED');
+
+      const after = await queue(f.coordinatorSessionId);
+      assert.equal(after.count, 0);
+      assert.deepEqual((after.awaitingSubmitter ?? []).map((row) => row.taskId), [f.legacyTaskId]);
     });
 });

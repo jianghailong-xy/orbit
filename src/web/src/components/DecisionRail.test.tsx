@@ -1,13 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  AWAITING_SUBMITTER_HEADING,
+  AWAITING_SUBMITTER_LABEL,
   CONFIRM_LABEL,
   DECISION_HEADING,
+  DecisionCard,
   DecisionRail,
   RAIL_LABEL,
   SEND_BACK_LABEL,
   completionConfirmedLine,
   formatAge,
+  formatSubmitted,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -47,9 +51,28 @@ function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
       { kind: 'TOOL_CALL', ref: 'toolu_first', resolved: true, reason: null },
       { kind: 'COMMIT', ref: '7ad996c2', resolved: false, reason: 'no COMMIT of this task matches this reference' },
     ],
+    decidability: { decidable: true, refusal: null, requiredAction: null },
     independence: { independent: true, disqualification: null, requiredAction: null },
     ...over,
   };
+}
+
+/** What the server sends for evidence no decision can be recorded about: the door's reason, and
+ *  the action in the door's own vocabulary. */
+function undecidable(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
+  return row({
+    criterion: null,
+    claim: '',
+    citations: [],
+    decidability: {
+      decidable: false,
+      refusal:
+        'this evidence quotes no project criterion, so there is no stated standard to decide it '
+        + 'against',
+      requiredAction: 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
+    },
+    ...over,
+  });
 }
 
 /** Three waiting facts, oldest first, exactly as the server hands them over. */
@@ -64,6 +87,7 @@ function queue(over: Partial<PendingDecisionQueue> = {}): PendingDecisionQueue {
     count: pending.length,
     oldestAgeSeconds: pending[0].ageSeconds,
     pending,
+    awaitingSubmitter: [],
     ...over,
   };
 }
@@ -75,6 +99,42 @@ const render = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
  *  the bulk-action tests, and `includes` cannot answer it. */
 function occurrences(html: string, needle: string): number {
   return html.split(needle).length - 1;
+}
+
+/** The one rendered `<button>` carrying this label. Asserts there is exactly one, so a question
+ *  about "the Confirm button" cannot silently be answered about a different one. */
+function actionButton(html: string, label: string): string {
+  const buttons = html
+    .split('<button')
+    .slice(1)
+    .map((chunk) => `<button${chunk.split('</button>')[0]}</button>`)
+    .filter((button) => button.includes(label));
+  expect(buttons.length).toBe(1);
+  return buttons[0];
+}
+
+/** Whether that button can be pressed at all. `disabled` is the whole answer: a control greyed by
+ *  CSS alone still fires, and "looks unavailable" is not what this file is asserting anywhere. */
+function pressable(html: string, label: string): boolean {
+  return !/\sdisabled(?:=|\s|>)/.test(actionButton(html, label));
+}
+
+/** One card, on its own, in whatever state the matrix below is asking about. */
+function card(
+  only: PendingDecisionRow,
+  over: { note?: string; busy?: boolean } = {},
+): string {
+  return render(
+    <DecisionCard
+      row={only}
+      narrow={false}
+      note={over.note ?? ''}
+      busy={over.busy ?? false}
+      error={null}
+      onNote={() => {}}
+      onDecide={() => {}}
+    />,
+  );
 }
 
 describe('the pinned rail', () => {
@@ -121,6 +181,7 @@ describe('the expanded card', () => {
           count: 1,
           oldestAgeSeconds: only.ageSeconds,
           pending: [only],
+          awaitingSubmitter: [],
         }}
         expandedTaskId="task-open"
         narrow={narrow}
@@ -262,5 +323,161 @@ describe('the rail is a read face', () => {
     // the rows come from the server's derived read and nothing is assembled here.
     expect(render(<DecisionRail queue={queue()} expandedTaskId="task-middle" onExpand={() => {}} />))
       .toContain(DECISION_HEADING);
+  });
+});
+
+describe('a row the door would refuse whatever was pressed', () => {
+  const mixed = (): PendingDecisionQueue => {
+    const answerable = row({ taskId: 'task-answerable', title: 'the derived pending queue' });
+    return {
+      decidingSessionId: '61DehW1OsRMagU5WxOb2yZ',
+      count: 1,
+      oldestAgeSeconds: answerable.ageSeconds,
+      pending: [answerable],
+      awaitingSubmitter: [undecidable({ taskId: 'task-legacy', title: 'the SOURCE contract rebase' })],
+    };
+  };
+
+  it('is listed, but not among the ones a decision is being asked for', () => {
+    const html = render(
+      <DecisionRail queue={mixed()} expandedTaskId={null} onExpand={() => {}} />,
+    );
+
+    // Both groups are on screen: the row is not hidden, and the submitter is not left waiting on a
+    // question nobody can see.
+    expect(html).toContain(RAIL_LABEL);
+    expect(html).toContain(AWAITING_SUBMITTER_LABEL);
+    expect(html).toContain('the SOURCE contract rebase');
+    // The number the rail leads with counts only what a decider can answer. A "2 waiting" that
+    // includes one nobody can answer is the same false promise one level up.
+    expect(html).toContain('1 waiting');
+    expect(html).not.toContain('2 waiting');
+    expect(html).toContain('1 cannot be decided yet');
+    // And it is below, in the other group: the answerable row comes before that group's heading,
+    // the unanswerable one after it.
+    expect(html.indexOf('the derived pending queue')).toBeLessThan(html.indexOf(AWAITING_SUBMITTER_LABEL));
+    expect(html.indexOf(AWAITING_SUBMITTER_LABEL)).toBeLessThan(html.indexOf('the SOURCE contract rebase'));
+  });
+
+  it('is headed by what is missing rather than by a demand nobody can meet', () => {
+    const html = render(
+      <DecisionRail queue={mixed()} expandedTaskId="task-legacy" onExpand={() => {}} />,
+    );
+
+    expect(html).toContain(AWAITING_SUBMITTER_HEADING);
+    expect(html).not.toContain(DECISION_HEADING);
+    // The reason is the door's own, and the sentence after it says who clears it and how.
+    expect(html).toContain('quotes no project criterion');
+    expect(html).toContain('The next evidence revision has to quote the project criterion');
+    expect(html).toContain('not by this session and not by any other');
+  });
+
+  it('leaves Confirm completion unpressable, and offers no note nobody could send', () => {
+    const html = card(undecidable());
+
+    // (4) The action that would always be refused is not an action.
+    expect(pressable(html, CONFIRM_LABEL)).toBe(false);
+    // Send back is refused too — the door checks the criterion before it looks at which decision
+    // was asked for — so it is not lit either, and the box for the note it would carry is gone.
+    expect(pressable(html, SEND_BACK_LABEL)).toBe(false);
+    expect(html).not.toContain('What the next evidence revision must show');
+  });
+
+  it('still shows everything a reader would need to chase the submitter', () => {
+    const html = card(undecidable({ gaps: ['the full suite has not been run against this branch'] }));
+
+    expect(html).toContain('Evidence rev 2');
+    expect(html).toContain('Declared gaps');
+    expect(html).toContain('the full suite has not been run against this branch');
+  });
+});
+
+describe('no control is ever pressable and doomed', () => {
+  const answerable = () => row();
+
+  it('offers both buttons on a row this session may answer', () => {
+    // (5) The rules as stated: confirm needs standing, send back needs standing and a note.
+    const empty = card(answerable());
+    expect(pressable(empty, CONFIRM_LABEL)).toBe(true);
+    expect(pressable(empty, SEND_BACK_LABEL)).toBe(false);
+
+    const noted = card(answerable(), { note: 'cite the run that produced it' });
+    expect(pressable(noted, CONFIRM_LABEL)).toBe(true);
+    expect(pressable(noted, SEND_BACK_LABEL)).toBe(true);
+  });
+
+  it('holds both buttons while an answer is in flight', () => {
+    const busy = card(answerable(), { note: 'cite the run that produced it', busy: true });
+    expect(pressable(busy, CONFIRM_LABEL)).toBe(false);
+    expect(pressable(busy, SEND_BACK_LABEL)).toBe(false);
+  });
+
+  /**
+   * (6) The property this card exists to have, over every state it can be in.
+   *
+   * The three things the decision door checks before it writes anything are: a live stated
+   * criterion to measure against, a session that did not do the work, and — for a send-back — a
+   * note. Each one is a REFUSAL, so a button that is pressable while one of them is missing is a
+   * button whose only outcome is an error message. This asserts the implication in that direction
+   * as well as the equality: pressable ⇒ the request would be accepted.
+   */
+  it('never lights a button the server would refuse, in any combination', () => {
+    for (const decidable of [true, false]) {
+      for (const independent of [true, false]) {
+        for (const note of ['', '  ', 'say what the next revision must show']) {
+          for (const busy of [true, false]) {
+            const subject = decidable ? row() : undecidable();
+            const html = card(
+              {
+                ...subject,
+                independence: independent
+                  ? { independent: true, disqualification: null, requiredAction: null }
+                  : {
+                      independent: false,
+                      disqualification: 'this session is a run of the task it is deciding',
+                      requiredAction: 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK',
+                    },
+              },
+              { note, busy },
+            );
+            const state = `decidable=${decidable} independent=${independent} note=${JSON.stringify(note)} busy=${busy}`;
+            const wouldBeAccepted = decidable && independent && !busy;
+
+            expect(pressable(html, CONFIRM_LABEL), `CONFIRM at ${state}`).toBe(wouldBeAccepted);
+            expect(pressable(html, SEND_BACK_LABEL), `SEND_BACK at ${state}`).toBe(
+              wouldBeAccepted && note.trim() !== '',
+            );
+            // Said the other way round, because this is the direction that fails when somebody
+            // adds a fourth state and forgets one of the three checks: a pressable Confirm is a
+            // Confirm the door would take.
+            if (pressable(html, CONFIRM_LABEL)) {
+              expect(decidable, `a pressable CONFIRM at ${state}`).toBe(true);
+              expect(independent, `a pressable CONFIRM at ${state}`).toBe(true);
+            }
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('the revision line says when, whatever else it has', () => {
+  it('names the moment beside the revision', () => {
+    // The screenshot this task started from: `Evidence rev 2 —` and then nothing at all.
+    const html = card(row());
+    expect(html).toContain('Evidence rev 2');
+    expect(html).toContain('submitted 1h 30m ago');
+  });
+
+  it('says legacy evidence states no claim rather than trailing off after the dash', () => {
+    const html = card(undecidable({ ageSeconds: 50 * 3600 }));
+    expect(html).toContain('submitted 2d 2h ago');
+    expect(html).toContain('this revision states no claim');
+  });
+
+  it('reads a fresh submission as a moment rather than as an age', () => {
+    expect(formatSubmitted(30)).toBe('submitted just now');
+    expect(formatSubmitted(40 * 60)).toBe('submitted 40m ago');
+    expect(formatSubmitted(90 * 60)).toBe('submitted 1h 30m ago');
   });
 });

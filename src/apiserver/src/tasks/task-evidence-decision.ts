@@ -76,6 +76,51 @@ export function assertCurrentEvidenceRevision(answered: bigint, latest: bigint):
   });
 }
 
+/** Why check 2 would refuse every decision about this evidence — the door's words, not a flag. */
+export interface CriterionStandingRefusal {
+  /** The reason, as the refusal states it, for a reader who is not being refused anything yet. */
+  reason: string;
+  /** The whole sentence the door refuses with, of which `reason` is the first clause. */
+  message: string;
+  /** The key the evidence quoted, or null when it quoted no criterion at all. */
+  criterionKey: string | null;
+}
+
+/**
+ * Check 2, ASKED rather than enforced: is there a live stated standard to decide this against?
+ *
+ * The same two-function shape check 3 has, and for the same reason. The pending-decision read has
+ * to be able to ask this question WITHOUT being refused: a queue that lists a row the door will
+ * refuse whatever anybody presses is promising a decision that cannot be made, and one that
+ * silently dropped the row would leave the submitter waiting on a question nobody was ever shown.
+ * One predicate and two callers, so the queue cannot drift from what the door will do.
+ */
+export async function criterionStandingRefusal(
+  tx: PrismaTypes.TransactionClient,
+  projectId: string | null,
+  evidence: unknown,
+): Promise<CriterionStandingRefusal | null> {
+  const criterion = quotedCriterion(evidence);
+  if (!criterion) {
+    const reason =
+      'this evidence quotes no project criterion, so there is no stated standard to decide it '
+      + 'against';
+    return { reason, message: `${reason}; nothing was written`, criterionKey: null };
+  }
+  const match = await evidenceCriterionMatch(tx, projectId, criterion);
+  if (match.matchesLive) return null;
+  const reason =
+    `the criterion this evidence quotes (${criterion.key}) is not what the project states today`;
+  return {
+    reason,
+    message:
+      `${reason}; nothing was written. The quote is bound to the criterion's CONTENT, not to `
+      + 'its key, so a rewritten standard is a different standard and this evidence has not been '
+      + 'measured against it',
+    criterionKey: criterion.key,
+  };
+}
+
 /**
  * Check 2. The criterion the evidence quotes still says what the evidence says it says.
  *
@@ -93,30 +138,16 @@ export async function assertCriterionUnmoved(
   projectId: string | null,
   evidence: unknown,
 ): Promise<{ key: string; text: string }> {
-  const criterion = quotedCriterion(evidence);
-  if (!criterion) {
+  const refusal = await criterionStandingRefusal(tx, projectId, evidence);
+  if (refusal) {
     throw new ConflictException({
       code: CRITERION_MOVED_CODE,
-      message:
-        'this evidence quotes no project criterion, so there is no stated standard to decide it ' +
-        'against; nothing was written',
+      ...(refusal.criterionKey === null ? {} : { criterionKey: refusal.criterionKey }),
+      message: refusal.message,
       requiredAction: CRITERION_MOVED_ACTION,
     });
   }
-  const match = await evidenceCriterionMatch(tx, projectId, criterion);
-  if (!match.matchesLive) {
-    throw new ConflictException({
-      code: CRITERION_MOVED_CODE,
-      criterionKey: criterion.key,
-      message:
-        `the criterion this evidence quotes (${criterion.key}) is not what the project states ` +
-        'today; nothing was written. The quote is bound to the criterion\'s CONTENT, not to its ' +
-        'key, so a rewritten standard is a different standard and this evidence has not been ' +
-        'measured against it',
-      requiredAction: CRITERION_MOVED_ACTION,
-    });
-  }
-  return criterion;
+  return quotedCriterion(evidence)!;
 }
 
 /**

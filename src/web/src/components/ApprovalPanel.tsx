@@ -3,6 +3,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
+import { CardActionButton, CardActions } from './CardAction';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { bashCommandRules } from '@orbit/shared';
 
@@ -201,22 +202,22 @@ export function ApprovalPanel({
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
       </div>
-      <div className="approval-actions">
-        <button className="approval-btn approve" onClick={() => onDecide(approval.id, 'allow')}>
+      <CardActions className="approval-actions">
+        <CardActionButton tone="primary" onClick={() => onDecide(approval.id, 'allow')}>
           {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : batch ? 'Create them' : 'Approve'}
-          {active && <span className="approval-btn-kbd">{ENTER_HINT}</span>}
-        </button>
+          {active && <span className="approval-kbd">{ENTER_HINT}</span>}
+        </CardActionButton>
         {rules.length > 0 && (
-          <button
-            className="approval-btn approve-always"
+          <CardActionButton
+            tone="accent"
             title={`Stop asking about calls like this — here and in this workspace's other sessions: ${ruleNames(rules).join(', ')}. Revocable in the workspace's settings.`}
             onClick={() => onDecide(approval.id, 'allow', undefined, undefined, rules)}
           >
             Always allow <code className="approval-rule">{rememberLabel(rules)}</code>
-            {active && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
-          </button>
+            {active && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
+          </CardActionButton>
         )}
-        <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
+        <CardActionButton tone="secondary" onClick={() => onDecide(approval.id, 'deny')}>
           {isPlan(approval)
             ? 'Keep planning'
             : dag
@@ -224,8 +225,8 @@ export function ApprovalPanel({
               : batch
                 ? 'Create nothing'
                 : 'Reject'}
-        </button>
-      </div>
+        </CardActionButton>
+      </CardActions>
     </div>
   );
 }
@@ -493,14 +494,16 @@ function QuestionForm({
           })}
         </div>
       </div>
-      <div className="approval-actions">
-        <button className="approval-btn approve" disabled={!complete} onClick={submit}>
+      <CardActions className="approval-actions">
+        {/* Unanswered questions cannot be submitted, so the control that would submit them is not
+            pressable — the same rule the decision card's Confirm is under. */}
+        <CardActionButton tone="primary" disabled={!complete} onClick={submit}>
           Submit
-        </button>
-        <button className="approval-btn chat" onClick={() => onChatAbout?.(approval.id, chatLabel)}>
+        </CardActionButton>
+        <CardActionButton tone="outline" onClick={() => onChatAbout?.(approval.id, chatLabel)}>
           💬 Chat about this
-        </button>
-      </div>
+        </CardActionButton>
+      </CardActions>
     </div>
   );
 }
