@@ -7,7 +7,6 @@ import {
   Prisma,
   PrismaClient,
   ProjectStatus,
-  TaskCompletionCriterion,
   TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
@@ -100,7 +99,6 @@ async function fixture(
           ordinal: index + 1,
           text,
           verificationMethod: `A person checks that ${text.toLowerCase()}`,
-          completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
           contentHash: '0'.repeat(64),
         })),
       },

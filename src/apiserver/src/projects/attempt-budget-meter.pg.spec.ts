@@ -97,7 +97,6 @@ async function fixture(options: { coordinatorEnabled?: boolean } = {}): Promise<
           ordinal: index + 1,
           text,
           verificationMethod: `A person checks that ${text}`,
-          completionCriterion: 'EVIDENCE_JUDGMENT' as const,
           // Recomputed by the normalize trigger; Prisma needs a value for the required column.
           contentHash: '0'.repeat(64),
         })),

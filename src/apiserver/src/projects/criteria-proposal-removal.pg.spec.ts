@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, TaskCompletionCriterion } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -108,7 +108,6 @@ function criterion(text: string) {
   return {
     text,
     verificationMethod: 'A person reads the delivered work against this assertion.',
-    completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
   };
 }
 

@@ -102,10 +102,10 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
     await client.query(
       `INSERT INTO "project_acceptance_criterion_definition" (
          "id", "project_id", "ordinal", "text", "verification_method",
-         "completion_criterion", "content_hash", "semantic_hash", "evaluation_plan_hash"
+         "content_hash", "semantic_hash", "evaluation_plan_hash"
        ) VALUES (
          gen_random_uuid(), $1::uuid, 1, 'dependency dispatch remains fenced',
-         'exercise both observed PostgreSQL commit orders', 'EVIDENCE_JUDGMENT',
+         'exercise both observed PostgreSQL commit orders',
          repeat('a', 64), repeat('b', 64), repeat('c', 64)
        )`,
       [ids.projectId],

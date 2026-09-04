@@ -23,10 +23,12 @@ rewritten. They are `DONE`, and the evidence for it is gone.
 
 ## What the acceptance criteria are now
 
-`project_acceptance_criterion_definition` is untouched: 274 authored criteria across 41 projects, one
-row each, with the assertion text, the reader-facing verification method, the declared completion
-criterion and its configuration. They are authored through `project_update`'s
-`acceptanceCriteriaItems` and read through `project_get`.
+`project_acceptance_criterion_definition` still holds every authored criterion — 274 across 41
+projects when 0229 landed — one row each, with the assertion text and the reader-facing
+verification method. `0233_project_acceptance_criterion_wiring_removal` then took the declared
+completion criterion and its configuration off that row: a criterion no longer names the work that
+serves it, the work names the criterion (`task.criterion_definition_id`, migration 0232). They are
+authored through `project_update`'s `acceptanceCriteriaItems` and read through `project_get`.
 
 Nothing evaluates them. That is the same position an `EXECUTABLE` task has been in since
 `0228_task_judgment_removal`: the declaration is precise, and the implementation is absent until the

@@ -1906,29 +1906,21 @@ model ProjectAcceptanceCriterionDefinition {
   /// The required procedure/evidence by which a reader decides whether `text` holds. Legacy prose
   /// rows receive an explicit manual-review method during migration rather than an invented test.
   verificationMethod String @map("verification_method")
-  /// The same peer criterion family used by Task. There is intentionally no project-specific
-  /// enum and no fallback order between these values.
-  completionCriterion TaskCompletionCriterion @map("completion_criterion")
-  /// EXECUTABLE declarations name the exact command/result pair to consume. They are null for the
-  /// two peer criteria rather than acting as an implicit executable declaration.
-  acceptanceCommand          String? @map("acceptance_command")
-  acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
-  /// EXECUTABLE: the Task whose recorded command result is evidence. VERIFICATION: the independent
-  /// verifier Task whose current verdict is evidence. Historical pointer; deliberately no FK.
-  evidenceTaskId String? @map("evidence_task_id") @db.Uuid
-  /// N23's advisory override audit, using the same field and keyword table as Task declarations.
+  /// N23's advisory override audit, named for the `completion_criterion` migration 0233 removed
+  /// from this row. Kept deliberately: whether an audit for a declaration that is gone should be
+  /// kept is the account owner's decision, and 0233 was not given it.
   completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
-  /// Monotonic for this stable id. Editing the assertion, method, criterion kind, or mechanical
-  /// input increments it; reordering and advisory-override prose leave it alone.
+  /// Monotonic for this stable id. Editing the assertion or the method increments it; reordering
+  /// and advisory-override prose leave it alone.
   revision Int @default(1)
-  /// sha256 of the normalized assertion, reader-facing method, criterion kind, and mechanical
-  /// inputs. Legacy reconciliation separately hashes text when matching old lines to stable ids.
+  /// sha256 of the normalized assertion and reader-facing method. Legacy reconciliation separately
+  /// hashes text when matching old lines to stable ids.
   contentHash String @map("content_hash") @db.Char(64)
 
   /// Owner Ratification separates the meaning being approved from the machinery that evaluates
-  /// it. Text and criterion trust advance the semantic lane; commands, verifier prose and evidence
-  /// wiring advance the evaluation-plan lane. `revision`/`contentHash` above remain the combined
-  /// acceptance-evidence identity for rolling compatibility.
+  /// it. The assertion advances the semantic lane; the reader-facing method advances the
+  /// evaluation-plan lane. `revision`/`contentHash` above remain the combined acceptance-evidence
+  /// identity for rolling compatibility.
   semanticRevision      Int    @default(1) @map("semantic_revision")
   semanticHash          String @default(dbgenerated()) @map("semantic_hash") @db.Char(64)
   evaluationPlanRevision Int   @default(1) @map("evaluation_plan_revision")

@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
+  Equals,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -22,10 +23,6 @@ import {
 } from 'class-validator';
 import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
-import {
-  TASK_COMPLETION_CRITERIA,
-  type TaskCompletionCriterionValue,
-} from '../tasks/task-completion-criterion';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -84,6 +81,28 @@ function IsSent(): PropertyDecorator {
   return ValidateIf((_object, value) => value !== undefined);
 }
 
+/** The four names a project criterion no longer accepts, in the order the model declared them. */
+export const REMOVED_CRITERION_WIRING_FIELDS = [
+  'completionCriterion',
+  'acceptanceCommand',
+  'acceptanceExpectedExitCode',
+  'evidenceTaskId',
+] as const;
+
+/**
+ * Why a project criterion refuses one of the four fields migration 0233 dropped.
+ *
+ * One sentence, and it has to carry two things: that the field is GONE rather than optional, and
+ * where the relation it expressed lives now. A criterion no longer points at the work that serves
+ * it — the work points at the criterion (`Task.criterionDefinitionId`, migration 0232), and
+ * whether a criterion is satisfied is derived from that side.
+ */
+export function removedCriterionWiring(field: string): string {
+  return `acceptance criterion ${field} was removed by migration 0233: a criterion states text `
+    + 'and verificationMethod, and the work that serves it declares the criterion '
+    + '(task.criterionDefinitionId) rather than the criterion naming the work';
+}
+
 /** One structurally bounded project-level criterion. A criterion is deliberately one physical
  * line in this compatibility phase: the legacy text projection can round-trip it without turning
  * a continuation line into a second criterion. Inline Markdown remains valid. */
@@ -103,18 +122,32 @@ export class CreateProjectAcceptanceCriterionDto {
   @Matches(/\S/u, { message: 'criterion verificationMethod must not be blank' })
   verificationMethod!: string;
 
-  /** Required for structured project criteria. These are Task's three peer criterion values, not
-   * a project-specific enum and not an ordered fallback chain. */
-  @IsIn(TASK_COMPLETION_CRITERIA)
-  completionCriterion!: TaskCompletionCriterionValue;
-
-  @IsOptional() @IsString() acceptanceCommand?: string;
-  @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
-  @IsOptional() @IsPublicId() evidenceTaskId?: string;
-
-  /** Same advisory escape hatch as a Task declaration, evaluated from the same keyword table. */
+  /** The advisory override audit a Task declaration also carries. Since migration 0233 removed
+   * `completionCriterion` from a project criterion, nothing on this shape evaluates the N23
+   * advisory any more; the field is still accepted and stored, and whether an audit for a
+   * declaration that no longer exists should be kept is the account owner's call, not this DTO's. */
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+
+  // ── The four wiring fields migration 0233 removed ────────────────────────────────────────────
+  // Declared, rather than simply deleted, and that difference is the whole point of declaring
+  // them. The global pipe runs `whitelist: true` with `forbidNonWhitelisted: false`, so a property
+  // with no validation metadata is silently STRIPPED: a caller who kept sending `evidenceTaskId`
+  // would get 200 back and never learn that the wiring it names is gone. `@Equals(undefined)`
+  // keeps the property visible to the pipe and fails the moment it carries anything at all,
+  // including an explicit `null`, so "we no longer store this" is answered as a refusal rather
+  // than as a shrug.
+  @Equals(undefined, { message: removedCriterionWiring('completionCriterion') })
+  completionCriterion?: never;
+
+  @Equals(undefined, { message: removedCriterionWiring('acceptanceCommand') })
+  acceptanceCommand?: never;
+
+  @Equals(undefined, { message: removedCriterionWiring('acceptanceExpectedExitCode') })
+  acceptanceExpectedExitCode?: never;
+
+  @Equals(undefined, { message: removedCriterionWiring('evidenceTaskId') })
+  evidenceTaskId?: never;
 }
 
 /** Stable ids are accepted only on update. Omit one to add a new criterion; retain one returned by

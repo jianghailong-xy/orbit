@@ -135,10 +135,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'defectTaskId',
   'resolvedByTaskId',
   'raisedByActionId',
-  // The acceptance record: the authored criterion, and the two rows it cites as its evidence.
-  // Every one of them is an address somebody hands straight back — `project_get`, `task_get`, a
-  // session link. `runId` and `acceptedRunId` stood here until migration 0229 removed the project
+  // The acceptance record: the authored criterion, and the rows it cites as its evidence. Every
+  // one of them is an address somebody hands straight back — `project_get`, `task_get`, a session
+  // link. `runId` and `acceptedRunId` stood here until migration 0229 removed the project
   // acceptance judgment; `runId` is kept because a session RUN is addressed by it too.
+  // `evidenceTaskId` stood here until migration 0233 removed the criterion's pointer at the work
+  // that serves it — that edge is now `criterionDefinitionId`, pointing the other way.
   'runId',
   'definitionId',
   'criterionId',
@@ -147,7 +149,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // the same reason — a reader follows it back to the criterion in `project_get`. Its companion
   // `criterionRevision` is an integer, not an id, and is left exactly as it is stored.
   'criterionDefinitionId',
-  'evidenceTaskId',
   'evidenceSessionId',
   'evidenceRunId',
   'decidedById',

@@ -185,11 +185,19 @@ suite('(d)(e)(f)(g) every load-bearing wall beside the removal is still standing
      ORDER BY 1`);
   assert.deepEqual(acceptance.rows.map((row) => row.relname),
     ['project_acceptance_criterion_definition']);
+  // `completion_criterion` stood in this list until migration 0233 removed it, with the three
+  // wiring columns beside it — a later decision about which direction the criterion/work edge
+  // points, not a delayed effect of this one. What 0221 was told not to touch is the authored
+  // declaration, and that is what is checked.
   const definitionColumns = await columnsOf(client, 'project_acceptance_criterion_definition');
-  for (const column of ['id', 'project_id', 'text', 'verification_method', 'completion_criterion',
-    'content_hash']) {
+  for (const column of ['id', 'project_id', 'text', 'verification_method', 'content_hash']) {
     assert.ok(definitionColumns.includes(column),
       `project_acceptance_criterion_definition.${column} must be unchanged`);
+  }
+  for (const gone of ['completion_criterion', 'acceptance_command',
+    'acceptance_expected_exit_code', 'evidence_task_id']) {
+    assert.equal(definitionColumns.includes(gone), false,
+      `project_acceptance_criterion_definition.${gone} was removed by migration 0233`);
   }
 });
 

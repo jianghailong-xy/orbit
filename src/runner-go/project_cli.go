@@ -73,9 +73,8 @@ Usage:
   orbit project get PROJECT_ID [--json]
 
 Returns the project a coordinator works from: its title, goal, structured
-acceptanceCriteriaItems (stable id, order, assertion text, required verificationMethod,
-peer completionCriterion plus its configuration, and revision), instructions, project status,
-coordinator binding, and task distribution
+acceptanceCriteriaItems (stable id, order, assertion text, required verificationMethod, and
+revision), instructions, project status, coordinator binding, and task distribution
 (_count plus tasksByStatus).
 
 Returns the shape of the project, not its tasks — use ` + "`orbit task list`" + ` for those.
@@ -114,7 +113,7 @@ Options:
   --title TEXT                     what this body of work is called (required)
   --goal TEXT                      what the project is trying to achieve (max 4,000 characters)
   --goal-file -                    read the goal from stdin
-  --acceptance-criteria-items JSON explicit [{"text":"...","verificationMethod":"...","completionCriterion":"..."}]
+  --acceptance-criteria-items JSON explicit [{"text":"...","verificationMethod":"..."}]
   --acceptance-criteria-items-file -
                                    read the structured item array from stdin
   --instructions TEXT              how this project's work is to be done (max 10,000 characters)
@@ -134,11 +133,10 @@ the project's work turns out to run, or wherever you say.
 Only one --*-file flag per invocation: they all read the same stdin, and the second read
 would silently come back empty.
 
-Use the item form whenever there is an acceptance condition: every item requires the concrete
-procedure/evidence plus one explicit peer completionCriterion (EXECUTABLE, VERIFICATION, or
-EVIDENCE_JUDGMENT), and ids are assigned by the server. Migration 0229 removed the legacy prose
-input and the parser that split it, so this is the only authoring shape there is — and nothing in
-Orbit evaluates what it states.
+Use the item form whenever there is an acceptance condition: every item requires the assertion
+text and the concrete procedure/evidence a reader follows to decide it, and ids are assigned by
+the server. Migration 0229 removed the legacy prose input and the parser that split it, so this is
+the only authoring shape there is — and nothing in Orbit evaluates what it states.
 `,
 	"update": `orbit project update — revise a project's context, or settle where it stands
 
@@ -150,7 +148,7 @@ Options:
   --goal TEXT                      replace what the project is trying to achieve (max 4,000)
   --goal-file -                    read the replacement goal from stdin
   --clear-goal                     leave the project with no stated goal
-  --acceptance-criteria-items JSON replace with [{"id":"...","text":"...","verificationMethod":"...","completionCriterion":"..."}]
+  --acceptance-criteria-items JSON replace with [{"id":"...","text":"...","verificationMethod":"..."}]
   --acceptance-criteria-items-file -
                                    read the structured replacement array from stdin
   --instructions TEXT              replace how the work is to be done (max 10,000 characters)
@@ -167,10 +165,11 @@ and naming both for one field is refused rather than resolved by a preference or
 Structured acceptance is also a whole-collection replacement, and it lands immediately: the set
 you send becomes the standard this project states. Preserve ids returned by
 project_get when editing or reordering; omit id to add an item; [] clears the collection. Every
-item requires verificationMethod and one peer completionCriterion. EXECUTABLE also requires its
-command, expected exit code and source Task; VERIFICATION requires an independent verifier Task.
-Nothing evaluates the set: migration 0229 removed the project acceptance judgment, so what you
-send here is a stated condition and no more.
+item requires text and verificationMethod, and nothing else: migration 0233 removed the criterion's
+completionCriterion, acceptanceCommand, acceptanceExpectedExitCode and evidenceTaskId, so a
+criterion no longer names the work that serves it — the work names the criterion. Nothing
+evaluates the set either: migration 0229 removed the project acceptance judgment, so what you send
+here is a stated condition and no more.
 
 Status is an ordinary field for all three values. The database gate and the API refusal that used
 to make DONE automatic-only were removed with the judgment they served, so DONE settles the project
@@ -205,8 +204,8 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
-	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod + explicit completionCriterion)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text, reader-facing verificationMethod, and one explicit peer completionCriterion. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
-	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod + explicit completionCriterion required; [] clears)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement that lands immediately: every item requires text, verificationMethod and one explicit peer completionCriterion; preserve ids from project_get to retain identity, omit id to add, and use [] to clear. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
+	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; [] clears)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement that lands immediately: every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add, and use [] to clear. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
@@ -461,6 +460,16 @@ func parseProjectAcceptanceItems(text string, allowIDs bool) ([]map[string]inter
 	return normalizeProjectAcceptanceItems(raw, allowIDs)
 }
 
+// The four fields a project criterion carried until migration 0233. Kept as a named set rather
+// than folded into the unknown-field message so a caller sending yesterday's shape is told what
+// happened to it, not merely that the server does not recognise the word.
+var removedProjectCriterionWiring = map[string]struct{}{
+	"completionCriterion":        {},
+	"acceptanceCommand":          {},
+	"acceptanceExpectedExitCode": {},
+	"evidenceTaskId":             {},
+}
+
 // normalizeProjectAcceptanceItems is shared by CLI JSON and MCP arguments. JSON Schema is useful
 // guidance to a model but the MCP transport does not enforce it, so required methods are checked
 // here as well as by the server DTO and database constraint.
@@ -473,9 +482,13 @@ func normalizeProjectAcceptanceItems(raw []map[string]interface{}, allowIDs bool
 	seenIDs := map[string]struct{}{}
 	for index, item := range raw {
 		for key := range item {
+			// Named separately from "unknown field" on purpose. These four were fields until
+			// migration 0233 dropped them, so a caller sending one is not guessing — it is using
+			// the shape it was taught, and the answer it needs is where that relation went.
+			if _, removed := removedProjectCriterionWiring[key]; removed {
+				return nil, fmt.Errorf("acceptance criterion %d %s was removed by migration 0233: a criterion states text and verificationMethod, and the work that serves it declares the criterion (task.criterionDefinitionId) rather than the criterion naming the work", index+1, key)
+			}
 			allowed := key == "text" || key == "verificationMethod" ||
-				key == "completionCriterion" || key == "acceptanceCommand" ||
-				key == "acceptanceExpectedExitCode" || key == "evidenceTaskId" ||
 				key == "completionCriterionOverrideReason" || (key == "id" && allowIDs)
 			if !allowed {
 				return nil, fmt.Errorf("acceptance criterion %d has unknown field %q", index+1, key)
@@ -497,51 +510,8 @@ func normalizeProjectAcceptanceItems(raw []map[string]interface{}, allowIDs bool
 		if utf8.RuneCountInString(method) > maxProjectAcceptanceVerificationMethodChars {
 			return nil, fmt.Errorf("acceptance criterion %d verificationMethod may contain at most %d characters", index+1, maxProjectAcceptanceVerificationMethodChars)
 		}
-		criterion, criterionOK := item["completionCriterion"].(string)
-		criterion = strings.TrimSpace(criterion)
-		if !criterionOK || (criterion != "EXECUTABLE" && criterion != "VERIFICATION" && criterion != "EVIDENCE_JUDGMENT") {
-			return nil, fmt.Errorf("acceptance criterion %d requires completionCriterion EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT", index+1)
-		}
-		command, commandPresent := item["acceptanceCommand"]
-		commandText, commandOK := command.(string)
-		commandText = strings.TrimSpace(commandText)
-		if commandPresent && (!commandOK || commandText == "") {
-			return nil, fmt.Errorf("acceptance criterion %d acceptanceCommand must be a non-blank string", index+1)
-		}
-		expected, expectedPresent := item["acceptanceExpectedExitCode"]
-		expectedNumber, expectedOK := expected.(float64)
-		if expectedPresent && (!expectedOK || expectedNumber != float64(int(expectedNumber))) {
-			return nil, fmt.Errorf("acceptance criterion %d acceptanceExpectedExitCode must be an integer", index+1)
-		}
-		evidenceTask, evidencePresent := item["evidenceTaskId"]
-		evidenceTaskID, evidenceOK := evidenceTask.(string)
-		evidenceTaskID = strings.TrimSpace(evidenceTaskID)
-		if evidencePresent && (!evidenceOK || evidenceTaskID == "") {
-			return nil, fmt.Errorf("acceptance criterion %d evidenceTaskId must be a non-blank string", index+1)
-		}
-		switch criterion {
-		case "EXECUTABLE":
-			if !commandPresent || !expectedPresent || !evidencePresent {
-				return nil, fmt.Errorf("acceptance criterion %d EXECUTABLE requires acceptanceCommand, acceptanceExpectedExitCode, and evidenceTaskId", index+1)
-			}
-		case "VERIFICATION":
-			if commandPresent || expectedPresent || !evidencePresent {
-				return nil, fmt.Errorf("acceptance criterion %d VERIFICATION requires evidenceTaskId and no executable pair", index+1)
-			}
-		case "EVIDENCE_JUDGMENT":
-			if commandPresent || expectedPresent || evidencePresent {
-				return nil, fmt.Errorf("acceptance criterion %d EVIDENCE_JUDGMENT cannot declare a command or evidenceTaskId", index+1)
-			}
-		}
 		normalized := map[string]interface{}{
-			"text": value, "verificationMethod": method, "completionCriterion": criterion,
-		}
-		if commandPresent {
-			normalized["acceptanceCommand"] = commandText
-			normalized["acceptanceExpectedExitCode"] = int(expectedNumber)
-		}
-		if evidencePresent {
-			normalized["evidenceTaskId"] = evidenceTaskID
+			"text": value, "verificationMethod": method,
 		}
 		if reason, present := item["completionCriterionOverrideReason"]; present {
 			reasonText, valid := reason.(string)

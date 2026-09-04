@@ -65,17 +65,23 @@ test('a criterion key is its content, and ordinals are renumbered from the state
   assert.equal(withHash.key, 'c'.repeat(32));
 });
 
-// A criterion with no declared kind is EVIDENCE_JUDGMENT, which since 0228 is a declaration with no
-// implementation — and since 0229 that is true of every project criterion whatever it declares.
-test('an undeclared criterion kind reads as EVIDENCE_JUDGMENT rather than as nothing', () => {
+// Migration 0233 removed the four wiring fields from a criterion, so a stated criterion no longer
+// carries a kind, a command, an expected exit code or an evidence pointer AT ALL — not even as a
+// null. A null would still be a claim about wiring; their absence is the removal.
+test('a stated criterion carries no wiring back towards the work', () => {
   const [criterion] = criteriaFromDefinitions([
     { id: 'a', ordinal: 1, text: 'a person looks at it', revision: 1 },
   ]);
-  assert.equal(criterion.completionCriterion, 'EVIDENCE_JUDGMENT');
-  assert.equal(criterion.acceptanceCommand, null);
-  assert.equal(criterion.acceptanceExpectedExitCode, null);
-  assert.equal(criterion.evidenceTaskId, null);
   assert.equal(criterion.verificationMethod, null);
+  for (const gone of [
+    'completionCriterion', 'acceptanceCommand', 'acceptanceExpectedExitCode', 'evidenceTaskId',
+  ]) {
+    assert.equal(gone in criterion, false, `${gone} is still projected onto a stated criterion`);
+  }
+  assert.deepEqual(Object.keys(criterion).sort(), [
+    'completionCriterionOverrideReason', 'contentHash', 'definitionId', 'definitionRevision',
+    'key', 'ordinal', 'text', 'verificationMethod',
+  ]);
 });
 
 // The routing rule a settled-project refusal quotes. It must not name a mechanism that was
@@ -92,7 +98,10 @@ test('every id the acceptance record serves is classified as a public id', () =>
   // The response interceptor keys on FIELD NAMES, so a new uuid column served under an
   // unclassified name comes back as a raw uuid beside base62 siblings — which is how a client ends
   // up unable to hand back an id it was just given.
-  for (const field of ['definitionId', 'criterionId', 'evidenceTaskId']) {
+  // `evidenceTaskId` stood here until migration 0233 dropped the criterion's pointer at the work
+  // that serves it. Nothing produces the name any more, so classifying it would be a rule about a
+  // field no response contains.
+  for (const field of ['definitionId', 'criterionId']) {
     assert.ok(PUBLIC_ID_FIELDS.has(field), `${field} is not classified as a public id`);
     assert.equal(NEVER_PUBLIC_ID_FIELDS.has(field), false, `${field} is classified twice`);
   }

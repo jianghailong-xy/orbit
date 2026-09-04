@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { CreatorType, PrismaClient, TaskCompletionCriterion, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -76,7 +76,6 @@ async function fixture(): Promise<Fixture> {
           ordinal: index + 1,
           text,
           verificationMethod: `A person checks that ${text}`,
-          completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
           // The normalize trigger recomputes it; Prisma needs a value for the required column.
           contentHash: '0'.repeat(64),
         })),

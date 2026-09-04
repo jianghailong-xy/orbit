@@ -143,9 +143,8 @@ suite('the removal keeps every stated criterion decidable and every recorded fac
       );
       await sql.query(
         `INSERT INTO "project_acceptance_criterion_definition" (
-           "id","project_id","ordinal","text","verification_method","completion_criterion",
-           "content_hash"
-         ) VALUES ($1,$2,1,$3,$4,'EVIDENCE_JUDGMENT'::"task_completion_criterion",$5)`,
+           "id","project_id","ordinal","text","verification_method","content_hash"
+         ) VALUES ($1,$2,1,$3,$4,$5)`,
         [definitionId, projectId, criterionText, verificationMethod,
           digest(`n26:${definitionId}`)],
       );
@@ -267,16 +266,9 @@ suite('the removal keeps every stated criterion decidable and every recorded fac
         assert.equal(reachable, unfinishedBefore.length);
       });
 
-    await t.test('(g) every project keeps a stated, decidable criterion', async () => {
+    await t.test('(g) every project keeps a stated criterion, out of the rename’s reach', async () => {
       const projects = (await sql.query(
-        `SELECT p."id",
-                count(d."id")::int AS "stated",
-                count(d."id") FILTER (
-                  WHERE d."completion_criterion" IN (
-                    'EXECUTABLE'::"task_completion_criterion",
-                    'VERIFICATION'::"task_completion_criterion",
-                    'EVIDENCE_JUDGMENT'::"task_completion_criterion")
-                )::int AS "decidable"
+        `SELECT p."id", count(d."id")::int AS "stated"
            FROM "project" p
            LEFT JOIN "project_acceptance_criterion_definition" d ON d."project_id" = p."id"
           WHERE p."owner_id" = $1::uuid GROUP BY p."id"`,
@@ -287,12 +279,19 @@ suite('the removal keeps every stated criterion decidable and every recorded fac
       assert.equal(projects.length, 1 + otherProjects.length);
       for (const project of projects) {
         assert.ok(project.stated > 0, 'a project that states nothing cannot be completed');
-        assert.equal(project.decidable, project.stated,
-          'every stated criterion must still name a criterion the evaluator can decide');
       }
-      for (const definition of renamedDefinitions) {
-        assert.equal(definition.completion_criterion, 'N26_TMP_LABEL');
-      }
+      // Until migration 0233 a criterion carried the enum too, and this case asserted the renamed
+      // label appeared on it. It no longer declares that type at all — the work declares the
+      // criterion instead — so what a rename does to a criterion row is now NOTHING, and that is
+      // the stronger statement: byte-identical rows, unmoved `xmin`.
+      assert.equal(renamedDefinitions.length, definitionsBefore.length);
+      assert.deepEqual(renamedDefinitions, definitionsBefore);
+      const enumUsers = (await sql.query<{ user: string }>(
+        `SELECT table_name || '.' || column_name AS "user" FROM information_schema.columns
+          WHERE table_schema = 'public' AND udt_name = 'task_completion_criterion'
+          ORDER BY 1`,
+      )).rows.map((row) => row.user);
+      assert.deepEqual(enumUsers, ['task.completion_criterion']);
     });
 
     await t.test('(h) an already-DONE task is neither reopened nor rejudged', async () => {

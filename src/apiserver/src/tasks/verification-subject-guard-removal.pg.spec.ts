@@ -70,13 +70,15 @@ const MANUAL_RUNNABLE = manualRunnableTaskSql('t');
  * The run, the per-run criterion, the conclusion and the audit were pinned here column for column
  * until `0229_project_acceptance_judgment_removal` dropped the four of them — a later and separate
  * account-owner decision, which removed the project acceptance judgment whole and kept the stated
- * criteria. They are absent below because the relations are absent, not because this assertion
- * relaxed: the one that survived is still pinned column for column, and an unrelated change that
- * widened or narrowed it would still fail here.
+ * criteria. The four wiring columns of the one that survived went the same way in
+ * `0233_project_acceptance_criterion_wiring_removal`, a third later decision — about which
+ * direction the criterion/work edge points. All of it is absent below because the relations and
+ * columns are absent, not because this assertion relaxed: what survived is still pinned column for
+ * column, and an unrelated change that widened or narrowed it would still fail here.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
 };
 
 interface World {

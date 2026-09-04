@@ -174,9 +174,8 @@ async function createProject(label, options = {}) {
   );
   await pool.query(
     `INSERT INTO "project_acceptance_criterion_definition" (
-       "id","project_id","ordinal","text","verification_method","completion_criterion",
-       "content_hash"
-     ) VALUES ($1,$2,1,$3,$4,'EVIDENCE_JUDGMENT'::"task_completion_criterion",$5)`,
+       "id","project_id","ordinal","text","verification_method","content_hash"
+     ) VALUES ($1,$2,1,$3,$4,$5)`,
     [definitionId, projectId, criterionText, `review ${label} evidence`,
       digest(`placeholder:${definitionId}`)],
   );

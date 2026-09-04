@@ -19,11 +19,11 @@ import {
  *
  * This is the question the reversed edge exists to answer, and the whole of its point is that the
  * criterion does not have to point at anything to answer it. The minimum information is which work
- * says it serves C and whether that work has settled — both of which live on `task`. So this read
- * touches none of the four wiring columns on the criterion (`evidence_task_id`,
- * `completion_criterion`, `acceptance_command`, `acceptance_expected_exit_code`), which is what
- * lets T4 drop them without this answer changing. `project-criterion-satisfaction.pg.spec.ts`
- * proves that by dropping all four inside a rolled-back transaction and re-deriving.
+ * says it serves C and whether that work has settled — both of which live on `task`. This read
+ * named none of the four wiring columns the criterion used to carry, which is what let migration
+ * 0233 drop them without this answer changing; it names nothing on the criterion beyond its
+ * identity even now. `project-criterion-satisfaction.pg.spec.ts` proves that by dropping every
+ * non-identity column inside a rolled-back transaction and re-deriving.
  *
  * A READ, AND NOTHING ELSE
  * ------------------------

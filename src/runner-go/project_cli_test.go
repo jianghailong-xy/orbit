@@ -495,7 +495,7 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"create", "--title", "LFS", "--acceptance-criteria-items",
-		`[{"text":" Build succeeds ","verificationMethod":" Run npm test ","completionCriterion":"EVIDENCE_JUDGMENT"},{"text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"EVIDENCE_JUDGMENT"}]`, "--json",
+		`[{"text":" Build succeeds ","verificationMethod":" Run npm test "},{"text":"Image boots","verificationMethod":"Smoke the image"}]`, "--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatalf("structured project create: %v", err)
@@ -503,11 +503,18 @@ func TestProjectCreateSendsStructuredAcceptanceItems(t *testing.T) {
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["text"] != "Build succeeds" ||
 		items[0].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
-		items[0].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" ||
 		items[1].(map[string]interface{})["text"] != "Image boots" ||
-		items[1].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
-		items[1].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" {
+		items[1].(map[string]interface{})["verificationMethod"] != "Smoke the image" {
 		t.Fatalf("structured project create body = %#v", body)
+	}
+	// Migration 0233 removed the four wiring fields; the CLI must not invent one back.
+	for _, item := range items {
+		for _, gone := range []string{"completionCriterion", "acceptanceCommand",
+			"acceptanceExpectedExitCode", "evidenceTaskId"} {
+			if _, present := item.(map[string]interface{})[gone]; present {
+				t.Fatalf("structured project create sent removed field %s: %#v", gone, item)
+			}
+		}
 	}
 	if _, legacy := body["acceptanceCriteria"]; legacy {
 		t.Fatalf("structured project create invented legacy criteria: %#v", body)
@@ -694,7 +701,7 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdProjectCLI([]string{
 		"update", "proj-1", "--acceptance-criteria-items",
-		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image","completionCriterion":"EVIDENCE_JUDGMENT"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test","completionCriterion":"EVIDENCE_JUDGMENT"}]`,
+		`[{"id":"criterion-2","text":"Image boots","verificationMethod":"Smoke the image"},{"id":"criterion-1","text":"Build succeeds","verificationMethod":"Run npm test"}]`,
 		"--json",
 	}, strings.NewReader(""), &out)
 	if err != nil {
@@ -703,10 +710,8 @@ func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	items, _ := body["acceptanceCriteriaItems"].([]interface{})
 	if len(items) != 2 || items[0].(map[string]interface{})["id"] != "criterion-2" ||
 		items[0].(map[string]interface{})["verificationMethod"] != "Smoke the image" ||
-		items[0].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" ||
 		items[1].(map[string]interface{})["id"] != "criterion-1" ||
-		items[1].(map[string]interface{})["verificationMethod"] != "Run npm test" ||
-		items[1].(map[string]interface{})["completionCriterion"] != "EVIDENCE_JUDGMENT" {
+		items[1].(map[string]interface{})["verificationMethod"] != "Run npm test" {
 		t.Fatalf("structured project update body = %#v", body)
 	}
 	if len(body) != 1 {

@@ -445,10 +445,10 @@ suite('(i)(j) 0227 left the DONE gate alone, and after 0229 there is no gate lef
     const definitionId = randomUUID();
     await sql.query(
       `INSERT INTO "project_acceptance_criterion_definition"
-         ("id","project_id","ordinal","text","verification_method","completion_criterion",
+         ("id","project_id","ordinal","text","verification_method",
           "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
        VALUES ($1,$2,1,'The declaration outlives the judgment','a reader reads it',
-               'EVIDENCE_JUDGMENT'::"task_completion_criterion",$3,$4,$5,now(),now())`,
+               $3,$4,$5,now(),now())`,
       [definitionId, w.projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
     );
     const projection = (await sql.query<{ criteria: string }>(

@@ -39,6 +39,8 @@ import {
   MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
+  REMOVED_CRITERION_WIRING_FIELDS,
+  removedCriterionWiring,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
@@ -70,14 +72,8 @@ import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
-  TASK_COMPLETION_CRITERIA,
-  type TaskCompletionCriterionValue,
-} from '../tasks/task-completion-criterion';
-import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
-  taskCriterionShapeAdvice,
-  taskCriterionShapeAdviceBody,
 } from '../tasks/task-criterion-shape-advice';
 
 /**
@@ -275,10 +271,6 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     ordinal: true,
     text: true,
     verificationMethod: true,
-    completionCriterion: true,
-    acceptanceCommand: true,
-    acceptanceExpectedExitCode: true,
-    evidenceTaskId: true,
     completionCriterionOverrideReason: true,
     revision: true,
     contentHash: true,
@@ -331,10 +323,6 @@ type WithAcceptanceDefinitions = {
     ordinal: number;
     text: string;
     verificationMethod: string;
-    completionCriterion: TaskCompletionCriterionValue;
-    acceptanceCommand: string | null;
-    acceptanceExpectedExitCode: number | null;
-    evidenceTaskId: string | null;
     completionCriterionOverrideReason: string | null;
     revision: number;
     contentHash: string;
@@ -358,10 +346,6 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       ordinal: criterion.ordinal,
       text: criterion.text,
       verificationMethod: criterion.verificationMethod,
-      completionCriterion: criterion.completionCriterion ?? 'EVIDENCE_JUDGMENT',
-      acceptanceCommand: criterion.acceptanceCommand ?? null,
-      acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode ?? null,
-      evidenceTaskId: criterion.evidenceTaskId ?? null,
       completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
       revision: criterion.revision,
       contentHash: criterion.contentHash,
@@ -676,19 +660,11 @@ export class ProjectsService {
     items: Array<{
       text: string;
       verificationMethod: string;
-      completionCriterion: TaskCompletionCriterionValue;
-      acceptanceCommand?: string | null;
-      acceptanceExpectedExitCode?: number | null;
-      evidenceTaskId?: string | null;
       completionCriterionOverrideReason?: string | null;
     }>,
   ): Array<{
     text: string;
     verificationMethod: string;
-    completionCriterion: TaskCompletionCriterionValue;
-    acceptanceCommand: string | null;
-    acceptanceExpectedExitCode: number | null;
-    evidenceTaskId: string | null;
     completionCriterionOverrideReason: string | null;
   }> {
     if (!Array.isArray(items)) {
@@ -700,16 +676,22 @@ export class ProjectsService {
       );
     }
     const normalized = items.map((item, index) => {
+      // The four fields migration 0233 dropped, refused HERE as well as on the DTO. Over HTTP the
+      // pipe refuses first; this is the same refusal for the callers that reach the service
+      // directly — the runner tests and internal paths this function already exists for. Presence
+      // is what is checked, not truthiness: `acceptanceCommand: null` is still a caller asserting
+      // something about a column that is gone.
+      for (const field of REMOVED_CRITERION_WIRING_FIELDS) {
+        if (item !== null && typeof item === 'object' && field in item) {
+          throw new BadRequestException(
+            `acceptance criterion ${index + 1}: ${removedCriterionWiring(field)}`,
+          );
+        }
+      }
       const text = typeof item?.text === 'string' ? item.text.trim() : '';
       const verificationMethod = typeof item?.verificationMethod === 'string'
         ? item.verificationMethod.trim()
         : '';
-      const completionCriterion = item?.completionCriterion;
-      const acceptanceCommand = typeof item?.acceptanceCommand === 'string'
-        ? item.acceptanceCommand.trim()
-        : null;
-      const acceptanceExpectedExitCode = item?.acceptanceExpectedExitCode ?? null;
-      const evidenceTaskId = item?.evidenceTaskId ?? null;
       const completionCriterionOverrideReason = normaliseTaskCriterionOverrideReason(
         item?.completionCriterionOverrideReason,
       );
@@ -731,12 +713,6 @@ export class ProjectsService {
           `acceptance criterion ${index + 1} verificationMethod must contain at most ${MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS} characters`,
         );
       }
-      if (!TASK_COMPLETION_CRITERIA.includes(completionCriterion)) {
-        throw new BadRequestException(
-          `acceptance criterion ${index + 1} requires completionCriterion ` +
-          `(${TASK_COMPLETION_CRITERIA.join(', ')})`,
-        );
-      }
       if (
         completionCriterionOverrideReason !== null
         && completionCriterionOverrideReason.length > MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS
@@ -746,57 +722,9 @@ export class ProjectsService {
           `most ${MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS} characters`,
         );
       }
-      if (
-        acceptanceExpectedExitCode !== null
-        && !Number.isInteger(acceptanceExpectedExitCode)
-      ) {
-        throw new BadRequestException(
-          `acceptance criterion ${index + 1} acceptanceExpectedExitCode must be an integer`,
-        );
-      }
-      switch (completionCriterion) {
-        case 'EXECUTABLE':
-          if (!acceptanceCommand || acceptanceExpectedExitCode === null || !evidenceTaskId) {
-            throw new BadRequestException(
-              `acceptance criterion ${index + 1}: EXECUTABLE requires acceptanceCommand, ` +
-              'acceptanceExpectedExitCode, and evidenceTaskId',
-            );
-          }
-          break;
-        case 'VERIFICATION':
-          if (acceptanceCommand !== null || acceptanceExpectedExitCode !== null || !evidenceTaskId) {
-            throw new BadRequestException(
-              `acceptance criterion ${index + 1}: VERIFICATION requires evidenceTaskId and ` +
-              'cannot declare an executable command',
-            );
-          }
-          break;
-        case 'EVIDENCE_JUDGMENT':
-          if (acceptanceCommand !== null || acceptanceExpectedExitCode !== null || evidenceTaskId) {
-            throw new BadRequestException(
-              `acceptance criterion ${index + 1}: EVIDENCE_JUDGMENT cannot declare a command or ` +
-              'evidenceTaskId',
-            );
-          }
-          break;
-      }
-      const advice = taskCriterionShapeAdvice({
-        acceptanceCriteria: text,
-        completionCriterion,
-      });
-      if (advice && completionCriterionOverrideReason === null) {
-        throw new ConflictException({
-          ...taskCriterionShapeAdviceBody(advice),
-          criterionOrdinal: index + 1,
-        });
-      }
       return {
         text,
         verificationMethod,
-        completionCriterion,
-        acceptanceCommand,
-        acceptanceExpectedExitCode,
-        evidenceTaskId,
         completionCriterionOverrideReason,
       };
     });
@@ -825,10 +753,6 @@ export class ProjectsService {
         id: true,
         text: true,
         verificationMethod: true,
-        completionCriterion: true,
-        acceptanceCommand: true,
-        acceptanceExpectedExitCode: true,
-        evidenceTaskId: true,
         completionCriterionOverrideReason: true,
         revision: true,
       },
@@ -856,62 +780,8 @@ export class ProjectsService {
         throw new BadRequestException(`acceptance criterion id ${supplied ?? id} is repeated`);
       }
       used.add(id);
-      let evidenceTaskId: string | null = null;
-      if (criterion.evidenceTaskId) {
-        try {
-          evidenceTaskId = toUuid(criterion.evidenceTaskId);
-        } catch {
-          throw new BadRequestException(
-            `acceptance criterion ${index + 1} has an invalid evidenceTaskId`,
-          );
-        }
-      }
-      return { ...criterion, evidenceTaskId, id, ordinal: index + 1 };
+      return { ...criterion, id, ordinal: index + 1 };
     });
-
-    const evidenceIds = [...new Set(desired.flatMap((criterion) =>
-      criterion.evidenceTaskId ? [criterion.evidenceTaskId] : []))];
-    const evidenceTasks = evidenceIds.length === 0
-      ? []
-      : await tx.task.findMany({
-          where: { projectId, id: { in: evidenceIds } },
-          select: {
-            id: true,
-            completionCriterion: true,
-            acceptanceCommand: true,
-            acceptanceExpectedExitCode: true,
-            verifiesTaskId: true,
-          },
-        });
-    const evidenceById = new Map(evidenceTasks.map((task) => [task.id, task]));
-    for (const criterion of desired) {
-      if (!criterion.evidenceTaskId) continue;
-      const task = evidenceById.get(criterion.evidenceTaskId);
-      if (!task) {
-        throw new BadRequestException(
-          `acceptance criterion ${criterion.ordinal} evidenceTaskId must name a task in this project`,
-        );
-      }
-      if (
-        criterion.completionCriterion === 'EXECUTABLE'
-        && (
-          task.completionCriterion !== 'EXECUTABLE'
-          || task.acceptanceCommand !== criterion.acceptanceCommand
-          || task.acceptanceExpectedExitCode !== criterion.acceptanceExpectedExitCode
-        )
-      ) {
-        throw new BadRequestException(
-          `acceptance criterion ${criterion.ordinal} EXECUTABLE evidenceTaskId must name an ` +
-          'EXECUTABLE task with the same command and expected exit code',
-        );
-      }
-      if (criterion.completionCriterion === 'VERIFICATION' && task.verifiesTaskId === null) {
-        throw new BadRequestException(
-          `acceptance criterion ${criterion.ordinal} VERIFICATION evidenceTaskId must name an ` +
-          'independent verifier task',
-        );
-      }
-    }
 
     if (existing.length > 0) {
       await tx.projectAcceptanceCriterionDefinition.updateMany({
@@ -932,19 +802,11 @@ export class ProjectsService {
             ordinal: criterion.ordinal,
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
-            completionCriterion: criterion.completionCriterion,
-            acceptanceCommand: criterion.acceptanceCommand,
-            acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
-            evidenceTaskId: criterion.evidenceTaskId,
             completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
             contentHash,
             revision:
               previous.text === criterion.text
               && previous.verificationMethod === criterion.verificationMethod
-              && previous.completionCriterion === criterion.completionCriterion
-              && previous.acceptanceCommand === criterion.acceptanceCommand
-              && previous.acceptanceExpectedExitCode === criterion.acceptanceExpectedExitCode
-              && previous.evidenceTaskId === criterion.evidenceTaskId
                 ? previous.revision
                 : previous.revision + 1,
           },
@@ -957,10 +819,6 @@ export class ProjectsService {
             ordinal: criterion.ordinal,
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
-            completionCriterion: criterion.completionCriterion,
-            acceptanceCommand: criterion.acceptanceCommand,
-            acceptanceExpectedExitCode: criterion.acceptanceExpectedExitCode,
-            evidenceTaskId: criterion.evidenceTaskId,
             completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
             revision: 1,
             contentHash,

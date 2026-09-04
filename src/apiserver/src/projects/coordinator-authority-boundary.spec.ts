@@ -246,7 +246,6 @@ test('an agent-held runner credential with no acting session can edit explicit s
         acceptanceCriteriaItems: [{
           text: 'replacement exam',
           verificationMethod: 'A person reviews the replacement exam.',
-          completionCriterion: 'EVIDENCE_JUDGMENT',
         }],
       } as never,
     ));
@@ -275,7 +274,6 @@ test('an owner JWT minted with the shared secret can edit the criteria without a
       acceptanceCriteriaItems: [{
         text: 'the replacement exam',
         verificationMethod: 'A person reviews the replacement exam.',
-        completionCriterion: 'EVIDENCE_JUDGMENT',
       }],
     } as never,
   ));

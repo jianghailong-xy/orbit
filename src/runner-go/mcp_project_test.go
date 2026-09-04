@@ -193,11 +193,20 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	createItem, _ := createItems["items"].(map[string]interface{})
 	createItemProps, _ := createItem["properties"].(map[string]interface{})
-	if len(createItemProps) != 7 || createItemProps["text"] == nil ||
-		createItemProps["verificationMethod"] == nil || createItemProps["completionCriterion"] == nil {
+	// Three properties since migration 0233 took the four wiring fields out of the shape: the
+	// assertion, the method that decides it, and the advisory override reason beside them.
+	if len(createItemProps) != 3 || createItemProps["text"] == nil ||
+		createItemProps["verificationMethod"] == nil ||
+		createItemProps["completionCriterionOverrideReason"] == nil {
 		t.Fatalf("project_create criterion item = %#v", createItem)
 	}
-	if required, _ := createItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod,completionCriterion" {
+	for _, gone := range []string{"completionCriterion", "acceptanceCommand",
+		"acceptanceExpectedExitCode", "evidenceTaskId"} {
+		if _, exposed := createItemProps[gone]; exposed {
+			t.Fatalf("project_create criterion still offers %s, removed by migration 0233", gone)
+		}
+	}
+	if required, _ := createItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod" {
 		t.Fatalf("project_create criterion required = %#v", createItem["required"])
 	}
 	if _, exposed := createProps["acceptanceCriteria"]; exposed {
@@ -238,11 +247,13 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	updateItem, _ := updateItems["items"].(map[string]interface{})
 	updateItemProps, _ := updateItem["properties"].(map[string]interface{})
-	if len(updateItemProps) != 8 || updateItemProps["id"] == nil || updateItemProps["text"] == nil ||
-		updateItemProps["verificationMethod"] == nil || updateItemProps["completionCriterion"] == nil {
+	// Four: the create shape's three, plus the stable id only an update may carry.
+	if len(updateItemProps) != 4 || updateItemProps["id"] == nil || updateItemProps["text"] == nil ||
+		updateItemProps["verificationMethod"] == nil ||
+		updateItemProps["completionCriterionOverrideReason"] == nil {
 		t.Fatalf("project_update criterion item = %#v", updateItem)
 	}
-	if required, _ := updateItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod,completionCriterion" {
+	if required, _ := updateItem["required"].([]string); strings.Join(required, ",") != "text,verificationMethod" {
 		t.Fatalf("project_update criterion required = %#v", updateItem["required"])
 	}
 	// status is a closed request set, and since migration 0229 removed the project acceptance
@@ -292,7 +303,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 	for _, name := range []string{"project_create", "project_update"} {
 		description := mcpToolDescription(tools, name)
-		for _, want := range []string{"user/JWT API", "not an agent fallback", "EVIDENCE_JUDGMENT", "completionCriterion"} {
+		// "EVIDENCE_JUDGMENT" and "completionCriterion" stood in this list until migration 0233
+		// removed both from a project criterion. A description still naming them would be telling
+		// a model to send fields that are now refused.
+		for _, want := range []string{"user/JWT API", "not an agent fallback", "verificationMethod"} {
 			if !strings.Contains(description, want) {
 				t.Fatalf("%s does not explain legacy criteria compatibility (%q): %q", name, want, description)
 			}
@@ -437,8 +451,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 	createItems := []interface{}{
-		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "EVIDENCE_JUDGMENT"},
-		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "EVIDENCE_JUDGMENT"},
+		map[string]interface{}{"text": "Build succeeds", "verificationMethod": "Run npm test"},
+		map[string]interface{}{"text": "Image boots", "verificationMethod": "Smoke the image"},
 	}
 	if res := mcp.callTool("project_create", map[string]interface{}{
 		"title": "LFS", "acceptanceCriteriaItems": createItems,
@@ -446,8 +460,8 @@ func TestMCPProjectWritesForwardStructuredAcceptanceItems(t *testing.T) {
 		t.Fatalf("structured project_create returned an error: %#v", res["content"])
 	}
 	updateItems := []interface{}{
-		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image", "completionCriterion": "EVIDENCE_JUDGMENT"},
-		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test", "completionCriterion": "EVIDENCE_JUDGMENT"},
+		map[string]interface{}{"id": "criterion-2", "text": "Image boots", "verificationMethod": "Smoke the image"},
+		map[string]interface{}{"id": "criterion-1", "text": "Build succeeds", "verificationMethod": "Run npm test"},
 	}
 	if res := mcp.callTool("project_update", map[string]interface{}{
 		"projectId": "proj-1", "acceptanceCriteriaItems": updateItems,

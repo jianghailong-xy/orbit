@@ -138,7 +138,6 @@ async function fixture(stack: Stack, label: string, taskCount: number): Promise<
           ordinal: index + 1,
           text,
           verificationMethod: `A person checks: ${text}`,
-          completionCriterion: 'EVIDENCE_JUDGMENT' as const,
           contentHash: '0'.repeat(64),
         })),
       },

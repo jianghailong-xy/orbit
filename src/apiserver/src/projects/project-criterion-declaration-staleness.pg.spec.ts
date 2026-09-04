@@ -101,7 +101,6 @@ test('T2: a declaration whose criterion moved is marked, and stays attached', {
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
         verificationMethod: METHOD,
-        completionCriterion: 'EVIDENCE_JUDGMENT',
       })),
     } as never);
     return criteriaFromDefinitions(written.acceptanceCriteriaItems);

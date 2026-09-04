@@ -1392,21 +1392,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"assertion holds (for example a command plus expected exit code, a named spec, or a " +
 			"human review against identified direct evidence). A code comment is not a method.",
 	}
-	projectCriterionKindProp := map[string]interface{}{
-		"type": "string",
-		"enum": []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
-		"description": "Required peer criterion, using the same enum as Task. EXECUTABLE consumes " +
-			"the declared evidence Task's exact command exit code; VERIFICATION consumes an " +
-			"independent verifier Task verdict; EVIDENCE_JUDGMENT waits for a person. No fallback chain.",
-	}
+	// A criterion states a condition and how to read it, and stops there. It carried a peer
+	// criterion kind, a command, an expected exit code and an evidence Task until migration 0233
+	// removed all four: the work now declares WHICH criterion it serves (task.criterionDefinitionId,
+	// migration 0232), and sending any of the four back is refused rather than ignored.
 	projectCriterionProps := func(allowID bool) map[string]interface{} {
 		props := map[string]interface{}{
 			"text":                              projectCriterionTextProp,
 			"verificationMethod":                projectCriterionMethodProp,
-			"completionCriterion":               projectCriterionKindProp,
-			"acceptanceCommand":                 map[string]interface{}{"type": "string", "description": "Required only for EXECUTABLE."},
-			"acceptanceExpectedExitCode":        map[string]interface{}{"type": "integer", "description": "Required only for EXECUTABLE."},
-			"evidenceTaskId":                    map[string]interface{}{"type": "string", "description": "EXECUTABLE source Task or independent VERIFICATION Task."},
 			"completionCriterionOverrideReason": map[string]interface{}{"type": "string", "maxLength": 2000, "description": "Why a caller kept a declaration questioned by the shared N23 advisory."},
 		}
 		if allowID {
@@ -1417,19 +1410,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	projectCriteriaCreateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "The project's acceptance criteria as explicit assertion + method + peer " +
-			"criterion items. This is the runner write shape; all three fields are required.",
-		"items": obj(projectCriterionProps(false), "text", "verificationMethod", "completionCriterion"),
+		"description": "The project's acceptance criteria as explicit assertion + method items. " +
+			"This is the runner write shape; both fields are required.",
+		"items": obj(projectCriterionProps(false), "text", "verificationMethod"),
 	}
 	projectCriteriaUpdateProp := map[string]interface{}{
 		"type":     "array",
 		"maxItems": maxProjectAcceptanceCriteriaItems,
-		"description": "Whole structured replacement; text, verificationMethod and completionCriterion are required. " +
+		"description": "Whole structured replacement; text and verificationMethod are required. " +
 			"Preserve an item's id from project_get to " +
 			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
 			"currentStatus is derived and is not an input. Legacy acceptanceCriteria is not a " +
 			"runner write shape.",
-		"items": obj(projectCriterionProps(true), "text", "verificationMethod", "completionCriterion"),
+		"items": obj(projectCriterionProps(true), "text", "verificationMethod"),
 	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
@@ -1735,8 +1728,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"one from this same conversation is refused, and nothing is created. Existing " +
 				"legacy acceptanceCriteria text remains readable through project_get and writable " +
 				"through the old user/JWT API compatibility path. It is not an agent fallback: this " +
-				"runner tool refuses it because it would silently create EVIDENCE_JUDGMENT; every new " +
-				"item must declare its completionCriterion explicitly.",
+				"runner tool refuses it because a criterion is authored one item at a time, each " +
+				"with its own assertion text and reader-facing verificationMethod.",
 			"inputSchema": obj(map[string]interface{}{
 				"title": map[string]interface{}{
 					"type":        "string",
@@ -1764,9 +1757,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"complete set you mean. " +
 				"Existing legacy acceptanceCriteria text remains readable through project_get and " +
 				"writable through the old user/JWT API compatibility path. It is not an agent " +
-				"fallback: this runner tool refuses it because it would silently create " +
-				"EVIDENCE_JUDGMENT; use acceptanceCriteriaItems with an explicit completionCriterion " +
-				"on every item, and [] to clear the set. A " +
+				"fallback: this runner tool refuses it because a criterion is authored one item at " +
+				"a time; use acceptanceCriteriaItems with explicit text and verificationMethod on " +
+				"every item, and [] to clear the set. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
 				"write acceptance criteria. Status DONE is an ordinary write since migration 0229 " +

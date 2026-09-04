@@ -453,9 +453,13 @@ test('(u)(v) 0177 and 0181 are not named by this removal at all', () => {
     'the DONE fence this removal restored still read the request, in this migration');
   // 0177's declaration still stands in the ledger: created, never dropped. That is the half the
   // account owner kept through both removals.
+  //
+  // Both patterns are anchored on `ALTER TABLE "task"`, and the DROP one has to be: migration 0233
+  // drops a column of the same NAME from `project_acceptance_criterion_definition`, and a
+  // table-blind `DROP COLUMN "acceptance_command"` would read that as 0177's pair going away.
   const declaration = lastVerdict(
     /ALTER TABLE "task"[\s\S]{0,200}ADD COLUMN "acceptance_command"/i,
-    /DROP COLUMN "acceptance_command"/i,
+    /ALTER TABLE "task"[\s\S]{0,200}DROP COLUMN "acceptance_command"/i,
   );
   assert.ok(declaration);
   assert.equal(declaration.verdict, 'CREATED', `dropped by ${declaration.dir}`);

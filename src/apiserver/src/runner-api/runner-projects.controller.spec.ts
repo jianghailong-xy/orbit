@@ -132,8 +132,6 @@ test('createProject writes into the runner owner, with the body untouched', asyn
     acceptanceCriteriaItems: [{
       text: 'Every shard reported',
       verificationMethod: 'Compare the shard manifest with durable completion receipts.',
-      completionCriterion: 'VERIFICATION',
-      evidenceTaskId: 'verifier-1',
     }],
     instructions: 'Work shard by shard',
   };

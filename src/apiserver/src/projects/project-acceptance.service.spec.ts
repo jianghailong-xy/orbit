@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { TaskCompletionCriterion } from '@prisma/client';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { sha256 } from './project-acceptance';
 
@@ -21,10 +20,6 @@ function definition(id: string, ordinal: number, text: string, revision = 1) {
     ordinal,
     text,
     verificationMethod: `Verify exactly: ${text}`,
-    completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
-    acceptanceCommand: null,
-    acceptanceExpectedExitCode: null,
-    evidenceTaskId: null,
     completionCriterionOverrideReason: null,
     revision,
     contentHash: sha256(text),

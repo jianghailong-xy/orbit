@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma, ProjectStatus, TaskCompletionCriterion } from '@prisma/client';
+import { Prisma, ProjectStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   StatedAcceptanceCriterion,
@@ -13,7 +13,6 @@ export interface AcceptanceCriterionStanding {
   key: string;
   text: string;
   ordinal: number;
-  completionCriterion: TaskCompletionCriterion;
 }
 
 /** The criteria tally a project detail read embeds: what this project says it is for, next to the
@@ -60,10 +59,6 @@ export class ProjectAcceptanceService {
           ordinal: number;
           text: string;
           verificationMethod: string;
-          completionCriterion: TaskCompletionCriterion;
-          acceptanceCommand: string | null;
-          acceptanceExpectedExitCode: number | null;
-          evidenceTaskId: string | null;
           completionCriterionOverrideReason: string | null;
           revision: number;
           contentHash: string;
@@ -79,10 +74,6 @@ export class ProjectAcceptanceService {
         ordinal: true,
         text: true,
         verificationMethod: true,
-        completionCriterion: true,
-        acceptanceCommand: true,
-        acceptanceExpectedExitCode: true,
-        evidenceTaskId: true,
         completionCriterionOverrideReason: true,
         revision: true,
         contentHash: true,
@@ -110,7 +101,6 @@ export class ProjectAcceptanceService {
         key: criterion.key,
         text: criterion.text,
         ordinal: criterion.ordinal,
-        completionCriterion: criterion.completionCriterion as TaskCompletionCriterion,
       })),
     };
   }

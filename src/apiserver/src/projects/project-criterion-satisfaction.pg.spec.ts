@@ -49,12 +49,27 @@ const skip = !URL;
 
 /** The verification method every criterion here declares; never the thing under test. */
 const METHOD = 'Read it and say whether it holds';
-/** The four columns on the CRITERION that T4 removes, spelled as the database spells them. */
+/** The four columns on the CRITERION that T4 removed, spelled as the database spells them. */
 const WIRING_COLUMNS = [
   'evidence_task_id',
   'completion_criterion',
   'acceptance_command',
   'acceptance_expected_exit_code',
+] as const;
+/**
+ * What a criterion still stores besides its identity, and what this derivation must not read.
+ *
+ * The four above are gone (migration 0233), so dropping them is no longer a statement anybody can
+ * make. These are the successor: everything a criterion carries today that is not `id`, `ordinal`
+ * or `revision`. A derivation that named one of them could not survive the rolled-back DROP below.
+ */
+const NON_IDENTITY_COLUMNS = [
+  'text',
+  'verification_method',
+  'completion_criterion_override_reason',
+  'content_hash',
+  'semantic_hash',
+  'evaluation_plan_hash',
 ] as const;
 /** build/projects -> build -> apiserver -> src -> repository root. */
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
@@ -118,7 +133,6 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
         verificationMethod: METHOD,
-        completionCriterion: 'EVIDENCE_JUDGMENT',
       })),
     } as never);
     return criteriaFromDefinitions(written.acceptanceCriteriaItems);
@@ -323,29 +337,41 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     }], 'clause 3 is the only one missing: the work is settled, it is the declaration that is old');
   });
 
-  // ═══ the four columns T4 removes are not on this path ═════════════════════════════════════════
-  await t.test('the derivation reads none of the criterion columns T4 removes', async () => {
+  // ═══ nothing on the criterion side is on this path ════════════════════════════════════════════
+  await t.test('the derivation reads nothing on the criterion but its identity', async () => {
     const before = await readCriterionSatisfaction(prisma, ownerId, projectId);
     assert.ok(before.length === 4 && before.some((row) => !row.satisfied),
       'the comparison below is only worth making over an answer with content in it');
 
+    // T4 landed: the four columns this case used to drop are already gone, so dropping them is no
+    // longer a statement — their absence is.
+    const { rows: wiring } = await sql.query<{ column_name: string }>(
+      `SELECT "column_name" FROM information_schema.columns
+        WHERE "table_schema" = 'public'
+          AND "table_name" = 'project_acceptance_criterion_definition'
+          AND "column_name" = ANY($1::text[])`,
+      [[...WIRING_COLUMNS]],
+    );
+    assert.deepEqual(wiring.map((row) => row.column_name), [],
+      'migration 0233 removed the criterion’s wiring towards the work');
+
     class Rollback extends Error {}
     let survivingColumns: string[] = [];
     let after: CriterionSatisfaction[] = [];
-    // The equivalent proof, and a stronger one than reading the source for column names: the four
-    // columns are actually dropped, the derivation is actually re-run, and the answer is actually
-    // the same. A derivation that named any of the four could not survive this — the statement
-    // would fail, not merely disagree.
+    // The same technique, aimed at what is left, and stronger than reading the source for column
+    // names: everything a criterion still carries beyond its identity is actually dropped, the
+    // derivation is actually re-run, and the answer is actually the same. A derivation that named
+    // any of them could not survive this — the statement would fail, not merely disagree.
     //
     // Inside one transaction that always rolls back, because Postgres DDL is transactional and
-    // this case's database outlives this test. CASCADE because the four are wired into objects of
-    // their own — the declaration CHECK that relates all four, among others — and taking those
-    // with them is the point rather than a side effect: they are what T4 has to remove too. The
-    // cascade cannot reach anything this read needs, which is not an argument but an assertion
-    // below: the criterion's identity columns are still there, and the answer is unchanged.
+    // this case's database outlives this test. CASCADE because several of these are wired into
+    // objects of their own — the normalize trigger's column list, the content index — and taking
+    // those with them is a side effect the rollback undoes. The cascade cannot reach anything this
+    // read needs, which is not an argument but an assertion below: the criterion's identity
+    // columns are still there, and the answer is unchanged.
     await assert.rejects(prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(`ALTER TABLE "project_acceptance_criterion_definition" ${
-        WIRING_COLUMNS.map((column) => `DROP COLUMN "${column}" CASCADE`).join(', ')}`);
+        NON_IDENTITY_COLUMNS.map((column) => `DROP COLUMN "${column}" CASCADE`).join(', ')}`);
       const remaining = await tx.$queryRawUnsafe<Array<{ column_name: string }>>(
         `SELECT "column_name" FROM information_schema.columns
           WHERE "table_schema" = 'public'
@@ -355,14 +381,14 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       throw new Rollback();
     }, { timeout: 120_000, maxWait: 60_000 }), Rollback);
 
-    assert.deepEqual(WIRING_COLUMNS.filter((column) => survivingColumns.includes(column)), [],
-      'all four had to be gone for the re-derivation to have proved anything');
+    assert.deepEqual(NON_IDENTITY_COLUMNS.filter((column) => survivingColumns.includes(column)), [],
+      'all of them had to be gone for the re-derivation to have proved anything');
     for (const kept of ['id', 'ordinal', 'revision']) {
       assert.ok(survivingColumns.includes(kept),
         `the cascade must not have taken ${kept}, which is what the derivation reads`);
     }
     assert.deepEqual(after, before,
-      'the same answer, derived from a criterion table that no longer has the wiring');
+      'the same answer, derived from a criterion table stripped to its identity');
 
     // And the case's database is intact, so the rollback is a fact rather than an intention.
     const { rows } = await sql.query<{ column_name: string }>(
@@ -370,9 +396,9 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
         WHERE "table_schema" = 'public'
           AND "table_name" = 'project_acceptance_criterion_definition'
           AND "column_name" = ANY($1::text[]) ORDER BY "column_name"`,
-      [[...WIRING_COLUMNS]],
+      [[...NON_IDENTITY_COLUMNS]],
     );
-    assert.deepEqual(rows.map((row) => row.column_name), [...WIRING_COLUMNS].sort());
+    assert.deepEqual(rows.map((row) => row.column_name), [...NON_IDENTITY_COLUMNS].sort());
   });
 
   // ═══ it is a read, and nothing consumes it ═══════════════════════════════════════════════════

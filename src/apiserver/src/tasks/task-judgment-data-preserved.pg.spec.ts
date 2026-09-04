@@ -117,34 +117,43 @@ suite('the project acceptance criterion definitions still take, keep and return 
   // Migration 0229 removed the three JUDGMENT tables this block used to write — run, criterion and
   // conclusion — along with 0172's `project_acceptance_criteria_fact` trigger and the legacy text
   // column that fired it. What 0228 had to preserve and 0229 still preserves is the DECLARATION:
-  // `project_acceptance_criterion_definition`, written per item, with an EXECUTABLE criterion
-  // still declarable even though nothing satisfies it.
+  // `project_acceptance_criterion_definition`, written per item.
+  //
+  // Until migration 0233 the row written here also carried the EXECUTABLE wiring — a command, an
+  // expected exit code and the task that produced its evidence, held together by the check
+  // constraint `project_acceptance_definition_declaration_chk`. All four went, and the constraint
+  // with them: the work now declares the criterion (`task.criterion_definition_id`) rather than
+  // the criterion naming the work. The task that used to be cited is still an ordinary EXECUTABLE
+  // task, which is the half of that pair 0233 did not touch.
   const definitionId = randomUUID();
-  // An EXECUTABLE declaration names the task that produces its evidence: the check constraint
-  // `project_acceptance_definition_declaration_chk` requires the command, the expected exit code
-  // and the evidence task together, and that constraint is one of the things 0229 left alone.
   const evidenceTaskId = await insertTask(client, 'EXECUTABLE',
     { command: 'npm test', expectedExitCode: 0 });
   await client.query(
     `INSERT INTO "project_acceptance_criterion_definition"
-       (id, project_id, ordinal, text, verification_method, completion_criterion, content_hash,
-        acceptance_command, acceptance_expected_exit_code, evidence_task_id)
-     VALUES ($1, $2, 1, '命令退出码为 0', '读取退出码',
-             'EXECUTABLE'::task_completion_criterion, $3, 'npm test', 0, $4)`,
-    [definitionId, PROJECT, 'f'.repeat(64), evidenceTaskId],
+       (id, project_id, ordinal, text, verification_method, content_hash)
+     VALUES ($1, $2, 1, '命令退出码为 0', '读取退出码', $3)`,
+    [definitionId, PROJECT, 'f'.repeat(64)],
   );
 
   const stored = (await client.query<{
-    n: string; kind: string; command: string; hash: string; revision: string;
+    n: string; text: string; method: string; hash: string; revision: string;
   }>(
-    `SELECT count(*) OVER ()::text AS n, "completion_criterion"::text AS kind,
-            "acceptance_command" AS command, "content_hash" AS hash, "revision"::text AS revision
+    `SELECT count(*) OVER ()::text AS n, "text", "verification_method" AS method,
+            "content_hash" AS hash, "revision"::text AS revision
        FROM "project_acceptance_criterion_definition" WHERE "project_id" = $1`, [PROJECT],
   )).rows;
   assert.equal(stored.length, 1);
-  assert.equal(stored[0].kind, 'EXECUTABLE');
-  assert.equal(stored[0].command, 'npm test');
+  assert.equal(stored[0].text, '命令退出码为 0');
+  assert.equal(stored[0].method, '读取退出码');
   assert.equal(stored[0].revision, '1');
+  // The evidence task itself is untouched by the criterion losing its pointer at it.
+  assert.equal(
+    (await client.query<{ criterion: string }>(
+      `SELECT "completion_criterion"::text AS criterion FROM "task" WHERE "id" = $1`,
+      [evidenceTaskId],
+    )).rows[0].criterion,
+    'EXECUTABLE',
+  );
   // The normalize trigger that stayed recomputed the hash from the row rather than storing what
   // the caller supplied, which is how the declaration's identity is the database's.
   assert.notEqual(stored[0].hash, 'f'.repeat(64));

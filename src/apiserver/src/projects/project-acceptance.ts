@@ -21,8 +21,6 @@ export const ACCEPTANCE_FINDING_ROUTING =
   'A new finding belongs to this project only if it changes an acceptance criterion: edit that ' +
   'criterion. If it changes no criterion, create a separate project.';
 
-export type ProjectCriterionKind = 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT';
-
 export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -36,10 +34,6 @@ export interface AcceptanceCriterionDefinitionLike {
   text: string;
   /** The procedure a person follows to decide this assertion. Absent only for legacy/test rows. */
   verificationMethod?: string | null;
-  completionCriterion?: ProjectCriterionKind | null;
-  acceptanceCommand?: string | null;
-  acceptanceExpectedExitCode?: number | null;
-  evidenceTaskId?: string | null;
   completionCriterionOverrideReason?: string | null;
   revision: number;
   contentHash?: string;
@@ -54,10 +48,6 @@ export interface StatedAcceptanceCriterion {
   definitionId: string;
   definitionRevision: number;
   verificationMethod: string | null;
-  completionCriterion: ProjectCriterionKind;
-  acceptanceCommand: string | null;
-  acceptanceExpectedExitCode: number | null;
-  evidenceTaskId: string | null;
   completionCriterionOverrideReason: string | null;
   contentHash: string;
 }
@@ -81,10 +71,6 @@ export function criteriaFromDefinitions(
           typeof definition.verificationMethod === 'string' && definition.verificationMethod.trim()
             ? definition.verificationMethod.trim()
             : null,
-        completionCriterion: definition.completionCriterion ?? 'EVIDENCE_JUDGMENT',
-        acceptanceCommand: definition.acceptanceCommand?.trim() || null,
-        acceptanceExpectedExitCode: definition.acceptanceExpectedExitCode ?? null,
-        evidenceTaskId: definition.evidenceTaskId ?? null,
         completionCriterionOverrideReason:
           definition.completionCriterionOverrideReason?.trim() || null,
         contentHash,

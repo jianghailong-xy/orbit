@@ -210,7 +210,6 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
         ].map((text) => ({
           text,
           verificationMethod: `A person checks: ${text}`,
-          completionCriterion: 'EVIDENCE_JUDGMENT',
         })),
       },
       { sessionId: seedSessionId, workspaceId },

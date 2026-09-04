@@ -59,7 +59,7 @@ const CONFIRMATION_INDEXES = [
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
 };
 
 
@@ -82,10 +82,10 @@ async function seedProject(client: Client, label: string): Promise<{
   );
   await client.query(
     `INSERT INTO "project_acceptance_criterion_definition"
-       ("id","project_id","ordinal","text","verification_method","completion_criterion",
+       ("id","project_id","ordinal","text","verification_method",
         "content_hash","semantic_hash","evaluation_plan_hash","created_at","updated_at")
      VALUES ($1,$2,1,'The criteria survive','a person reads the criterion',
-             'EVIDENCE_JUDGMENT'::"task_completion_criterion",$3,$4,$5,now(),now())`,
+             $3,$4,$5,now(),now())`,
     [definitionId, projectId, 'a'.repeat(64), 'd'.repeat(64), 'e'.repeat(64)],
   );
   return { ownerId, projectId, definitionId };

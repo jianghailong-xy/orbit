@@ -305,12 +305,11 @@ export function projectTasksSettledFact(
  * `projectTasksSettledFact`'s, because the two events ask different questions — "is there anything
  * left running" against "is this claim now backed".
  *
- * `serving` is a parameter rather than a query because the edge does not exist yet: nothing today
- * records which tasks serve which criterion (`project_acceptance_criterion.evidence_task_id` is
- * written by a run that has already concluded, which is after the fact this event is about). Unit
- * T6 introduces it — it refuses a coordinator-opened task that does not name the criterion it
- * serves — and the producer of this event is one query away once it lands. See
- * `coordinator-wake.spec.ts` for the derivation's own tests.
+ * `serving` is a parameter rather than a query because this function predates the edge. Migration
+ * 0232 landed it since, on the work side: `task.criterion_definition_id` records which criterion a
+ * piece of work says it serves, and `readCriterionSatisfaction` already answers from it, so the
+ * producer of this event is one query away. See `coordinator-wake.spec.ts` for the derivation's
+ * own tests.
  */
 export function criterionReadyFact(
   projectId: string,

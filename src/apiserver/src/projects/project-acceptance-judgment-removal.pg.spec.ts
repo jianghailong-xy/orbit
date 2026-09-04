@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, TaskCompletionCriterion } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -179,10 +179,13 @@ test('the criterion definition table keeps its trigger and every column of its s
          WHERE "table_schema" = 'public'
            AND "table_name" = 'project_acceptance_criterion_definition'
          ORDER BY "ordinal_position"`);
+      // Migration 0233 took the four wiring columns out of this shape —
+      // `completion_criterion`, `acceptance_command`, `acceptance_expected_exit_code` and
+      // `evidence_task_id`. Still the whole table in ordinal order, still exact: the point of this
+      // census is that nobody adds or removes a column without saying so here.
       assert.deepEqual(columns.map((c) => c.column_name), [
         'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
-        'created_at', 'updated_at', 'verification_method', 'completion_criterion',
-        'acceptance_command', 'acceptance_expected_exit_code', 'evidence_task_id',
+        'created_at', 'updated_at', 'verification_method',
         'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
         'evaluation_plan_revision', 'evaluation_plan_hash',
       ]);
@@ -204,13 +207,11 @@ test('project_update writes the criteria and project_get reads them back', { ski
         {
           text: 'The image boots',
           verificationMethod: 'Run the image smoke test and require a clean exit.',
-          completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
           completionCriterionOverrideReason: 'A person judges the visible product behaviour',
         },
         {
           text: 'The suite is green',
           verificationMethod: 'Run npm test and require exit code 0.',
-          completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
           completionCriterionOverrideReason: 'A person judges the reported result',
         },
       ],

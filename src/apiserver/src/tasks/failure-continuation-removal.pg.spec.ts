@@ -78,12 +78,14 @@ const CORE_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
  * The run, the per-run criterion, the conclusion and the audit were pinned here until
  * `0229_project_acceptance_judgment_removal` dropped the four of them — a later and separate
  * account-owner decision, which removed the project acceptance judgment whole and kept the stated
- * criteria. `project_acceptance_criteria_confirmation` went the same way in 0226. What is left is
- * the authored declaration, still pinned column for column.
+ * criteria. `project_acceptance_criteria_confirmation` went the same way in 0226, and
+ * `0233_project_acceptance_criterion_wiring_removal` then took the four columns that pointed a
+ * criterion at the work serving it — a third later decision, about which direction that edge
+ * points. What is left is the authored declaration, still pinned column for column.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion:task_completion_criterion!, acceptance_command:text, acceptance_expected_exit_code:integer, evidence_task_id:uuid, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, evaluation_plan_revision:integer!, evaluation_plan_hash:character(64)!',
 };
 
 function publishes(): RealtimeService {
