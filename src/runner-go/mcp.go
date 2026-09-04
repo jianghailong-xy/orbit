@@ -1569,12 +1569,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_submit",
-			"description": "Submit structured completion evidence as a first-class immutable fact from the current task Session. A retry key and canonical evidence digest replay the same revision; substantively changed evidence appends one. This does not write task.status, change Session state, add a comment or send a notification.",
+			"description": "Submit the completion-evidence envelope as a first-class immutable fact from the current task Session. The server checks it in three layers: the four fields are required and no fifth is accepted; every citation is resolved against rows of THIS task under THIS owner and at least one must resolve, or the whole submission is refused; and a declared command must equal the cited tool_call's input.command byte for byte, with a declared success over a failed call refused. The receipt echoes citations[].resolved and criterionMatch.matchesLive, so you learn whether your handles held instead of inferring it from the absence of an error. A retry key and canonical evidence digest replay the same revision; substantively changed evidence appends one. This does not write task.status, change Session state, add a comment or send a notification.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"evidence": map[string]interface{}{
 					"type":        "object",
-					"description": "Structured facts supporting completion, such as commands, raw outputs, exit codes and artifact hashes. Object-key order is not significant; array order and string whitespace are.",
+					"description": "The envelope, exactly four fields: `claim` (what you assert you completed), `criterion` ({key, text} copied from the project's stated criteria), `checks` (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT, ref naming a row recorded under this task — a TOOL_CALL may also carry `command` and `succeeded`, which are checked against the cited row), and `gaps` (what this evidence does NOT establish; [] says nothing is missing). Do not copy command output in: it is part of the evidence digest, where whitespace is significant, and Orbit already stores it on the cited row. Work whose answer is only an exit code belongs to EXECUTABLE acceptance, not here. Object-key order is not significant; array order and string whitespace are.",
 				},
 				"idempotencyKey": map[string]interface{}{
 					"type":        "string",

@@ -76,9 +76,13 @@ const PROMPT_WITHOUT_INSTRUCTIONS =
   '请按以下步骤进行：\n' +
   '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
   '2. 执行任务。\n' +
-  '3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，' +
-  '以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，' +
-  '只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
+  '3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、' +
+  'criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 ' +
+  'TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、' +
+  'gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它' +
+  '和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作' +
+  '属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是' +
+  '解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
   '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
   '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
   '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。';
@@ -109,9 +113,13 @@ test('instructions are spliced between the task description and the reporting pr
       '请按以下步骤进行：\n' +
       '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
       '2. 执行任务。\n' +
-      '3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，' +
-      '以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，' +
-      '只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
+      '3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、' +
+      'criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 ' +
+      'TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、' +
+      'gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它' +
+      '和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作' +
+      '属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是' +
+      '解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
       '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
       '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
       '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。',
@@ -221,16 +229,21 @@ test('a verifier is given its own acceptance criteria, unlike the list instructi
   assert.ok(text.includes('验收标准（判定本任务是否完成的依据）：\n贴出 X 主张的命令的重跑输出。'), text);
 });
 
-test('step 3 asks for evidence and forbids writing status', async () => {
-  // The instruction half of the self-DONE boundary. It has to name the evidence — commands, raw
-  // output, exit codes — because "summarise what you did" is exactly what produced a DONE whose
-  // claim nobody could check.
+test('step 3 asks for the evidence envelope and forbids writing status', async () => {
+  // The instruction half of the self-DONE boundary. It has to name the ENVELOPE, field by field,
+  // because "summarise what you did" is exactly what produced a DONE whose claim nobody could
+  // check — and because an instruction that still asked for raw output and exit codes would now
+  // be asking for a submission the server refuses.
   const text = await (await promptFor({ description: 'x', list: null }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
   assert.match(step3, /task_evidence_submit/);
   assert.match(step3, /不要用 task_comment 代替证据提交/);
-  assert.match(step3, /原始输出/);
-  assert.match(step3, /退出码/);
+  for (const field of ['claim', 'criterion', 'checks', 'gaps']) {
+    assert.match(step3, new RegExp(field), step3);
+  }
+  assert.match(step3, /TOOL_CALL \/ COMMIT \/ ARTIFACT/);
+  assert.match(step3, /至少一条必须解析成功/);
+  assert.match(step3, /不要把命令原始输出抄进证据/);
   assert.match(step3, /不要写 status/);
   assert.equal(/置为 DONE/.test(step3), false, step3);
 });

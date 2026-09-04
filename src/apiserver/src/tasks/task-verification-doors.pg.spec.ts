@@ -326,6 +326,16 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         startsTaskWork: true,
       },
     }).then(async (session) => {
+      // The envelope cites a row of this task's own; the fixture states that row too.
+      await db.toolCall.create({
+        data: {
+          sessionId: session.id,
+          name: 'Bash',
+          toolUseId: 'toolu_formerly_done',
+          input: { command: 'npm test', description: 'what this task recorded' },
+          isError: false,
+        },
+      });
       await new TaskCompletionEvidenceService(db as unknown as PrismaService).submit(
         w.ownerId,
         formerlyDone.id,
@@ -333,7 +343,17 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         {
           sourceSessionId: session.id,
           idempotencyKey: 'formerly-done-evidence',
-          evidence: { kind: 'PG_TEST', note: 'this task recorded what it produced' },
+          evidence: {
+            claim: 'this task recorded what it produced',
+            criterion: { key: 'pg-test', text: 'the task recorded what it produced' },
+            checks: [{
+              kind: 'TOOL_CALL',
+              ref: 'toolu_formerly_done',
+              command: 'npm test',
+              succeeded: true,
+            }],
+            gaps: [],
+          },
         },
       );
     });

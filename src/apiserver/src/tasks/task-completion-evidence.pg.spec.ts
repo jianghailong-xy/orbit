@@ -88,7 +88,29 @@ async function fixture(db: PrismaClient) {
       startsTaskWork: true,
     },
   });
+  // Since the envelope landed, evidence has to cite a row of this task's own: the ledger's
+  // properties are asserted below through submissions that pass that check, not around it.
+  await db.toolCall.create({
+    data: {
+      sessionId,
+      name: 'Bash',
+      toolUseId: 'toolu_n10_green',
+      input: { command: 'npm test', description: 'the command this evidence is about' },
+      isError: false,
+    },
+  });
   return { ownerId, workspaceId, projectId, taskId, sessionId };
+}
+
+/** The four-field envelope, with one citation this task can actually resolve. */
+function envelope(overrides: Record<string, unknown> = {}) {
+  return {
+    claim: 'the declared command ran and passed in this session',
+    criterion: { key: 'n10-ledger', text: 'command exits zero and output names the artifact' },
+    checks: [{ kind: 'TOOL_CALL', ref: 'toolu_n10_green', command: 'npm test', succeeded: true }],
+    gaps: [],
+    ...overrides,
+  };
 }
 
 suite('AWAITING_INPUT submits versioned evidence without changing either lifecycle', async (t) => {
@@ -104,10 +126,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   const f = await fixture(db);
   const service = new TaskCompletionEvidenceService(db as unknown as PrismaService);
   const actor = { type: CreatorType.AGENT, id: f.workspaceId };
-  const firstPayload = {
-    commands: [{ command: 'npm test', rawOutput: 'caf\u00e9\r\n', exitCode: 0 }],
-    criteria: { second: true, first: true },
-  };
+  const firstPayload = envelope({ gaps: ['caf\u00e9\r\n was not re-read'] });
 
   const concurrent = await Promise.all(Array.from({ length: 6 }, () => service.submit(
     f.ownerId,
@@ -123,9 +142,13 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   const replay = await service.submit(f.ownerId, f.taskId, actor, {
     sourceSessionId: f.sessionId,
     idempotencyKey: 'turn-1-equivalent',
+    // The same fact, spelled with the object keys in another order and the gap in the composed
+    // Unicode form: one digest, one revision.
     evidence: {
-      criteria: { first: true, second: true },
-      commands: [{ exitCode: 0, rawOutput: 'cafe\u0301\n', command: 'npm test' }],
+      gaps: ['cafe\u0301\n was not re-read'],
+      checks: [{ ref: 'toolu_n10_green', command: 'npm test', succeeded: true, kind: 'TOOL_CALL' }],
+      criterion: { text: 'command exits zero and output names the artifact', key: 'n10-ledger' },
+      claim: 'the declared command ran and passed in this session',
     },
   });
   assert.equal(replay.id, concurrent[0].id);
@@ -143,7 +166,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
     service.submit(f.ownerId, f.taskId, actor, {
       sourceSessionId: f.sessionId,
       idempotencyKey: 'turn-1-complete',
-      evidence: { result: 'a different fact' },
+      evidence: envelope({ claim: 'a different fact' }),
     }),
     /idempotencyKey is already bound to different completion evidence/,
   );
@@ -163,7 +186,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   const changed = await service.submit(f.ownerId, f.taskId, actor, {
     sourceSessionId: f.sessionId,
     idempotencyKey: 'turn-2-complete',
-    evidence: { ...firstPayload, artifactSha256: 'a'.repeat(64) },
+    evidence: envelope({ gaps: [`the artifact ${'a'.repeat(64)} was not re-read`] }),
   });
   assert.equal(changed.revision, '2');
   assert.notEqual(changed.id, replay.id);
@@ -188,7 +211,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   const afterTerminal = await service.submit(f.ownerId, f.taskId, actor, {
     sourceSessionId: f.sessionId,
     idempotencyKey: 'turn-3-after-terminal',
-    evidence: { ...firstPayload, artifactSha256: 'b'.repeat(64), note: 'useful afterwards' },
+    evidence: envelope({ gaps: [`the artifact ${'b'.repeat(64)} was not re-read`, 'useful afterwards'] }),
   });
   assert.equal(afterTerminal.revision, '3');
   assert.equal(await db.taskCompletionEvidence.count({ where: { taskId: f.taskId } }), 3);
@@ -257,12 +280,31 @@ suite('verifier evidence is recorded for its own verdict and files no second che
       },
     });
 
+    await db.toolCall.create({
+      data: {
+        sessionId: verifierSessionId,
+        name: 'Bash',
+        toolUseId: 'toolu_verifier_check',
+        input: { command: 'npm test', description: 'the verifier re-ran the subject command' },
+        isError: false,
+      },
+    });
     const service = new TaskCompletionEvidenceService(db as unknown as PrismaService);
     const verifierActor = { type: CreatorType.AGENT, id: f.workspaceId };
     const verifierEvidence = {
       sourceSessionId: verifierSessionId,
       idempotencyKey: 'verifier-observation',
-      evidence: { checked: f.taskId, command: 'npm test', exitCode: 0 },
+      evidence: {
+        claim: `the subject task ${f.taskId} was re-checked here`,
+        criterion: { key: 'n10-verifier', text: 'the subject command was re-run by the verifier' },
+        checks: [{
+          kind: 'TOOL_CALL',
+          ref: 'toolu_verifier_check',
+          command: 'npm test',
+          succeeded: true,
+        }],
+        gaps: [],
+      },
     };
     const submitted = await service.submit(f.ownerId, verifierId, verifierActor, verifierEvidence);
     assert.equal(submitted.taskId, verifierId);

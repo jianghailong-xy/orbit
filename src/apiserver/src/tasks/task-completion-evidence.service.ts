@@ -9,6 +9,13 @@ import {
   TaskLegacyEvidenceImportDto,
 } from './dto';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
+import {
+  EvidenceCitation,
+  EvidenceCriterionMatch,
+  evidenceCriterionMatch,
+  parseEvidenceEnvelope,
+  resolveEvidenceCitations,
+} from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
@@ -129,7 +136,12 @@ function legacyImportResponse(row: EvidenceRow['legacyImport']): TaskLegacyEvide
   };
 }
 
-function response(row: EvidenceRow): TaskCompletionEvidenceDto {
+interface EvidenceReceipt {
+  citations: EvidenceCitation[];
+  criterionMatch: EvidenceCriterionMatch;
+}
+
+function response(row: EvidenceRow, receipt?: EvidenceReceipt): TaskCompletionEvidenceDto {
   return {
     id: row.id,
     taskId: row.taskId,
@@ -145,6 +157,8 @@ function response(row: EvidenceRow): TaskCompletionEvidenceDto {
     revision: row.revision.toString(),
     idempotencyKeys: row.idempotencyKeys.map(({ idempotencyKey }) => idempotencyKey),
     legacyImport: legacyImportResponse(row.legacyImport),
+    citations: receipt?.citations ?? null,
+    criterionMatch: receipt?.criterionMatch ?? null,
   };
 }
 
@@ -177,6 +191,10 @@ export class TaskCompletionEvidenceService {
     }
 
     const normalizedEvidence = normalizeCompletionEvidence(input.evidence) as JsonObject;
+    // Layer 1, outside the transaction: a shape refusal reads no row, so it need not hold the
+    // Task mutex to be decided. Parsed from the NORMALIZED object because that is what gets
+    // stored and digested, so the command layer 3 compares is the one a later reader will find.
+    const envelope = parseEvidenceEnvelope(normalizedEvidence);
     const evidenceDigest = completionDigest(normalizedEvidence);
     const idempotencyKey = input.idempotencyKey?.trim().normalize('NFC');
     if (input.idempotencyKey !== undefined && (!idempotencyKey || idempotencyKey.length > 200)) {
@@ -213,6 +231,13 @@ export class TaskCompletionEvidenceService {
         select: { id: true },
       });
 
+      // Layers 2 and 3, ahead of the retry-key lookup so a replayed submission is answered with
+      // the same receipt a first one gets. Both read only rows already inside this transaction's
+      // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
+      const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope);
+      const criterionMatch = await evidenceCriterionMatch(tx, task.projectId, envelope.criterion);
+      const receipt: EvidenceReceipt = { citations, criterionMatch };
+
       if (idempotencyKey) {
         const replay = await tx.taskCompletionEvidenceIdempotency.findFirst({
           where: { taskId, idempotencyKey },
@@ -227,7 +252,7 @@ export class TaskCompletionEvidenceService {
             throw new ConflictException('idempotencyKey is already bound to different completion evidence');
           }
           return {
-            evidence: response(replay.evidence),
+            evidence: response(replay.evidence, receipt),
             evidenceRow: replay.evidence,
             projectId: task.projectId,
           };
@@ -282,7 +307,7 @@ export class TaskCompletionEvidenceService {
         });
       }
       return {
-        evidence: response(evidence),
+        evidence: response(evidence, receipt),
         evidenceRow: evidence,
         projectId: task.projectId,
       };
@@ -315,6 +340,12 @@ export class TaskCompletionEvidenceService {
    * Nothing calls this method while listing or creating comments. The caller has to identify one
    * immutable source, supply the structured fact they found in it, and leave an audit note. The
    * source body itself is never parsed or treated as an instruction by this path.
+   *
+   * The completion-evidence envelope deliberately does NOT apply here. This path converts a
+   * historical comment, and a comment written in 2026-08 cites no `tool_call` id — demanding one
+   * would make every legacy fact unimportable, which is the opposite of what this door is for.
+   * What stands in for the citation is the receipt: the reviewed source, its digest, and the
+   * account owner's name on it.
    */
   async importLegacyComment(
     ownerId: string,
@@ -520,6 +551,7 @@ export class TaskCompletionEvidenceService {
       orderBy: { revision: 'asc' },
       include: evidenceInclude,
     });
-    return rows.map(response);
+    // Not `map(response)`: the receipt parameter would receive the array index.
+    return rows.map((row) => response(row));
   }
 }

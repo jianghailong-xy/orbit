@@ -114,6 +114,22 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       },
     });
 
+    // The envelope needs a row of this task's own to cite; this is the one the evidence is about.
+    await db.toolCall.create({
+      data: {
+        sessionId: sourceSessionId,
+        name: 'Bash',
+        toolUseId: 'toolu_n7_build',
+        input: { command: 'npm test', description: 'the command this evidence is about' },
+        isError: false,
+      },
+    });
+    const n7Envelope = (claim: string, gaps: string[]) => ({
+      claim,
+      criterion: { key: 'n7-routing', text: 'the evidence revision reaches the router exactly once' },
+      checks: [{ kind: 'TOOL_CALL', ref: 'toolu_n7_build', command: 'npm test', succeeded: true }],
+      gaps,
+    });
     const prisma = db as unknown as PrismaService;
     const router = new CompletionInputRouter(new CoordinatorWakeService(prisma));
     const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, router);
@@ -121,7 +137,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     const first = await evidenceService.submit(ownerId, taskId, actor, {
       sourceSessionId,
       idempotencyKey: 'n7-evidence-v1',
-      evidence: { artifact: 'dist/server.js', command: 'npm test', exitCode: 0 },
+      evidence: n7Envelope('the build produced dist/server.js', []),
     });
 
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: siblingId } })).status, 'OPEN');
@@ -144,8 +160,14 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     // Same stable fact: producer re-enters the router, but the database admits no new consume.
     const replay = await evidenceService.submit(ownerId, taskId, actor, {
       sourceSessionId,
+      // The same fact with its object keys in another order: one digest, one revision, one input.
       idempotencyKey: 'n7-evidence-v1',
-      evidence: { exitCode: 0, command: 'npm test', artifact: 'dist/server.js' },
+      evidence: {
+        gaps: [],
+        checks: [{ ref: 'toolu_n7_build', command: 'npm test', succeeded: true, kind: 'TOOL_CALL' }],
+        criterion: { text: 'the evidence revision reaches the router exactly once', key: 'n7-routing' },
+        claim: 'the build produced dist/server.js',
+      },
     });
     assert.equal(replay.id, first.id);
     assert.equal(await db.projectCoordinatorWake.count({ where: { projectId } }), 1);
@@ -155,7 +177,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     const second = await evidenceService.submit(ownerId, taskId, actor, {
       sourceSessionId,
       idempotencyKey: 'n7-evidence-v2',
-      evidence: { artifact: 'dist/server-v2.js', command: 'npm test', exitCode: 0 },
+      evidence: n7Envelope('the build produced dist/server-v2.js', []),
     });
     assert.equal(second.revision, '2');
     assert.equal(

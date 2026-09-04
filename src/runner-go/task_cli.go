@@ -1069,7 +1069,7 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 func cliTaskEvidenceSubmit(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task evidence-submit")
-	evidenceText := fs.String("evidence", "", "completion evidence as one JSON object")
+	evidenceText := fs.String("evidence", "", "completion evidence envelope as one JSON object: {claim, criterion{key,text}, checks[], gaps[]}")
 	evidenceFile := fs.String("evidence-file", "", "read evidence JSON from stdin (-)")
 	sourceSessionID := fs.String("source-session-id", "", "source task Session (defaults to ORBIT_SESSION_ID)")
 	idempotencyKey := fs.String("idempotency-key", "", "caller retry identity (max 200 characters)")

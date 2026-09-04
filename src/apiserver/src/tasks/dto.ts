@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import type { EvidenceCheckKind } from './task-evidence-envelope';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -132,6 +133,27 @@ export class TaskLegacyEvidenceImportDto {
   devicePolicy!: 'IMMEDIATE' | 'IN_APP_ONLY';
 }
 
+/**
+ * One check's citation, as the server resolved it.
+ *
+ * Echoed back so a submitter learns whether the handle they gave actually held. Without it the
+ * only signal a submission carries is "no error", and "my citation resolved" and "my citation was
+ * tolerated because a sibling one resolved" would look identical from the outside.
+ */
+export class TaskEvidenceCitationDto {
+  kind!: EvidenceCheckKind;
+  ref!: string;
+  resolved!: boolean;
+  reason!: string | null;
+}
+
+/** The stated criterion the envelope named, and whether it still reads that way. */
+export class TaskEvidenceCriterionMatchDto {
+  key!: string;
+  text!: string;
+  matchesLive!: boolean;
+}
+
 /** The shared REST/runner/CLI/MCP read shape; every provenance and version field is required. */
 export class TaskCompletionEvidenceDto {
   @IsPublicId()
@@ -154,6 +176,14 @@ export class TaskCompletionEvidenceDto {
   revision!: string;
   idempotencyKeys!: string[];
   legacyImport!: TaskLegacyEvidenceImportDto | null;
+  /**
+   * What this submission's citations resolved to, one per `evidence.checks` entry and in that
+   * order. Present on a submit receipt — including a replayed one — and null on a list read,
+   * which re-derives nothing: the rows a stored envelope cited may have been deleted since, and
+   * a `resolved` that quietly means "as of now" would be a different fact under the same name.
+   */
+  citations!: TaskEvidenceCitationDto[] | null;
+  criterionMatch!: TaskEvidenceCriterionMatchDto | null;
 }
 
 /**

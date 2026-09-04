@@ -407,9 +407,13 @@ export function buildTaskExecutionPrompt(task: {
         `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
         `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
         ` coordinator 审批这个机械结论。\n`
-      : `3. 完成后，用 task_evidence_submit 显式提交结构化完成证据：你跑过的命令、命令的原始输出、退出码，`
-        + `以及逐条对应的验收标准。不要用 task_comment 代替证据提交，也不要写 status——DONE 是解锁下游任务的授权，`
-        + `只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
+      : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
+        + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
+        + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`
+        + `gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它`
+        + `和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作`
+        + `属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是`
+        + `解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
     `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
     `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
     `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
@@ -7691,7 +7695,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `3. 综合判断：产物齐备且符合验收标准 → 通过（即使没有运行记录，也要在结论里写明证据是你亲自核验的，` +
       `并指出运行记录缺失这一异常）；产物缺失、不符，或根本无从核验 → 不通过。\n\n` +
       `结论处理：\n` +
-      `- 通过：用 task_evidence_submit 在**本验收任务**提交结构化核验事实，再用 task_update 给` +
+      `- 通过：用 task_evidence_submit 在**本验收任务**提交核验事实信封（claim / criterion / checks / gaps，`
+      + `checks 至少一条要能解析到本任务会话下的行），再用 task_update 给` +
       `**本验收任务**写 verdict=PASS；不要用评论代替证据，也不要写任何任务的 status=DONE。\n` +
       `- 不通过：用 task_comment 在**该任务**下写清缺什么、证据是什么，用 task_update 把**该任务**状态改回 IN_PROGRESS，` +
       `再给**本验收任务**写 verdict=FAIL；不要写 status=DONE。\n\n` +
@@ -8380,7 +8385,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
       `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
       `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
-      `完成后请用 task_evidence_submit 提交结构化判断与所做的改动；不要用评论代替证据，也不要写 ` +
+      `完成后请用 task_evidence_submit 提交判断与所做改动的证据信封（claim / criterion / checks / gaps，`
+      + `checks 至少一条要能解析到本任务会话下的行）；不要用评论代替证据，也不要写 ` +
       `status=DONE，本任务的 status 由它声明的 completionCriterion 求值产生。`
     );
   }
