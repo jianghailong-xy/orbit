@@ -225,9 +225,10 @@ const ENVELOPE_REMOVAL_MIGRATION = read(
 /**
  * One function definition, lifted verbatim out of the append-only migration history.
  *
- * This is how "before" stays a fact rather than a transcription: the pre-removal composition is
- * read from the file that installed it, not re-typed here, so a test that agreed with a mistake in
- * the new body would have to find the same mistake already sitting in 0216 or 0218.
+ * This is how the removed half of "before" stays a fact rather than a transcription: the four
+ * authority functions are read from the file that installed them, not re-typed here, so a test
+ * that agreed with a mistake in the new body would have to find the same mistake already sitting
+ * in 0216.
  */
 function historicalFunction(migration, name) {
   const source = read(`src/apiserver/prisma/migrations/${migration}/migration.sql`);
@@ -238,30 +239,77 @@ function historicalFunction(migration, name) {
   return match[0];
 }
 
+/** Replace once and only once: a substitution that silently matched nothing proves nothing. */
+function substituteExactlyOnce(source, pairs) {
+  let out = source;
+  for (const [needle, replacement] of pairs) {
+    assert.equal(out.split(needle).length - 1, 1,
+      `the installed snapshot must contain \`${needle}\` exactly once`);
+    out = out.replace(needle, replacement);
+  }
+  return out;
+}
+
+/** The six values the envelope stood in front of, and the key it read them out of. */
+const ENVELOPE_ROUTED_VALUES = [
+  ['automationPolicy', 'material."automation_policy"::text'],
+  ['convergenceThresholds', 'material."convergence_thresholds"'],
+  ['coordinatorEnabled', 'material."coordinator_enabled"'],
+  ['maxConcurrentTasks', 'material."max_concurrent_tasks"'],
+  ['attemptBudget', 'material."attempt_budget"'],
+  ['sessionBudgetPerDay', 'material."session_budget_per_day"'],
+];
+
 /**
  * Install the composition contractDigest had BEFORE the envelope was removed, under its own schema.
  *
- * The one substitution: the envelope reader took the approved ceiling from
+ * The four authority functions are still lifted verbatim out of 0216: they are what the removal
+ * removed, they read nothing but `project`, and no migration since has touched them. One
+ * substitution on them -- the envelope reader took the approved ceiling from
  * `project_completion_contract.authority_envelope`, and that column is dropped. It could only ever
  * be written by the ratification trigger 0218 deleted, so on any database carrying 0218 it holds
  * NULL for every row -- and NULL is what the replay hands the builder.
+ *
+ * The snapshot around them is the INSTALLED body with the envelope indirection put back, not
+ * 0218's frozen copy. 0218's copy also predates 0227, 0233 and 0234, each of which legitimately
+ * changed a lane the envelope never touched -- criteriaTrust, the commands and evidence-wiring
+ * material, the evaluation-plan version vector -- so replaying it now compares two functions that
+ * differ for several reasons at once and, since 0233, does not even parse. Reinstating the
+ * indirection on top of today's body isolates the one difference this test is about: the two sides
+ * then differ in exactly the six values the envelope covered, and in nothing else.
  */
 async function installPreRemovalComposition() {
-  const replayed = [
+  const authority = [
     historicalFunction('0216_project_authority_envelope', 'project_authority_policy_rank'),
     historicalFunction('0216_project_authority_envelope', 'project_authority_limit_ceiling'),
     historicalFunction('0216_project_authority_envelope', 'project_authority_envelope_material'),
     historicalFunction('0216_project_authority_envelope', 'project_authority_envelope'),
-    historicalFunction('0218_owner_ratification_queue_removal',
-      'project_completion_contract_snapshot'),
   ].join('\n\n')
-    .replaceAll('project_completion_contract_snapshot', `${PRE_REMOVAL_SCHEMA}.contract_snapshot`)
     .replaceAll('project_authority_', `${PRE_REMOVAL_SCHEMA}.authority_`)
     .replace('contract."authority_envelope"', 'NULL::jsonb');
-  assert.doesNotMatch(replayed, /contract\."authority_envelope"/,
+  assert.doesNotMatch(authority, /contract\."authority_envelope"/,
     'the replay must not read the dropped column');
+
+  const body = substituteExactlyOnce(
+    await installedFunction('project_completion_contract_snapshot'),
+    [
+      // Every downstream CTE selects `.*`, so one added column reaches the final object the way it
+      // did before the removal.
+      ['    SELECT base.*,\n',
+        `    SELECT base.*,\n      ${PRE_REMOVAL_SCHEMA}.authority_envelope(base."id") AS envelope,\n`],
+      ...ENVELOPE_ROUTED_VALUES.map(([key, live]) =>
+        [`'${key}', ${live}`, `'${key}', envelope->'${key}'`]),
+      ["  SELECT jsonb_build_object(\n    'budgetDigest'",
+        "  SELECT jsonb_build_object(\n    'authorityEnvelope', envelope,\n    'budgetDigest'"],
+    ],
+  );
+  const replayed = `${authority}\n\nCREATE FUNCTION ${PRE_REMOVAL_SCHEMA}.contract_snapshot(`
+    + `p_project UUID) RETURNS JSONB AS $replay$${body}$replay$ LANGUAGE plpgsql;`;
   assert.match(replayed, new RegExp(`${PRE_REMOVAL_SCHEMA}\\.authority_envelope\\(base`),
     'the replayed snapshot must still be the one that reads an envelope');
+  assert.equal(replayed.split("envelope->'").length - 1, ENVELOPE_ROUTED_VALUES.length,
+    'every value the envelope stood in front of must be read back out of it');
+
   await pool.query(`DROP SCHEMA IF EXISTS ${PRE_REMOVAL_SCHEMA} CASCADE`);
   await pool.query(`CREATE SCHEMA ${PRE_REMOVAL_SCHEMA}`);
   await pool.query(replayed);

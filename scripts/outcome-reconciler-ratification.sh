@@ -77,6 +77,9 @@ fi
 echo "==> owner-ratification: migrations=$MIGRATIONS system_identifier=$SYSTEM_ID port=$PORT"
 
 echo "==> owner-ratification: running digest, authority, CTA, dispatch, and race proofs"
+# The reporter below is pinned rather than left to default: Node 23+ emits `spec` (`ℹ tests 17`)
+# even with no TTY, and `outcome-reconciler-ratification-manifest.mjs` reduces this file by matching
+# `^# tests`.
 set +e
 NODE_PATH="$NODE_MODULES" \
 OWNER_RATIFICATION_PG_URL="$URL" \
@@ -85,6 +88,7 @@ OWNER_RATIFICATION_PG_EXPECTED_USER="$ADMIN" \
 OWNER_RATIFICATION_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID" \
 OWNER_RATIFICATION_EVIDENCE_PATH="$EVIDENCE" \
 timeout -k 20 "$TIMEOUT_SECONDS" node --test --test-concurrency=1 \
+  --test-reporter=tap --test-reporter-destination=stdout \
   "$REPO/test/outcome-reconciler-v2.ratification.test.mjs" 2>&1 | tee "$TAP"
 TEST_RC=${PIPESTATUS[0]}
 set -e
