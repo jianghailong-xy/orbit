@@ -683,11 +683,27 @@ export class ProjectsService {
     const normalized = items.map((item, index) => {
       // The four fields migration 0233 dropped, refused HERE as well as on the DTO. Over HTTP the
       // pipe refuses first; this is the same refusal for the callers that reach the service
-      // directly — the runner tests and internal paths this function already exists for. Presence
-      // is what is checked, not truthiness: `acceptanceCommand: null` is still a caller asserting
-      // something about a column that is gone.
+      // directly — the runner tests and internal paths this function already exists for.
+      //
+      // The VALUE is what is checked, and it has to be: a DTO instance always carries all four
+      // keys. They are declared on `CreateProjectAcceptanceCriterionDto` precisely so `whitelist:
+      // true` cannot strip them silently, and a declared class field is materialised on every
+      // instance (`useDefineForClassFields`, target ES2022) holding `undefined`. Keying this on
+      // `field in item` therefore refused every criterion that arrived over HTTP, including ones
+      // that sent only `text` and `verificationMethod` — the DTO's `@Equals(undefined)` passed and
+      // this threw about a field nobody wrote.
+      //
+      // `undefined` is read as "not sent" here, the same reading `@Equals(undefined)` gives it and
+      // the same one `IsSent()` gives it in `dto.ts`. Nothing else gets through: JSON has no
+      // `undefined`, so a caller who explicitly sends one of these over HTTP sends `null` or a
+      // value, and `acceptanceCommand: null` is still a caller asserting something about a column
+      // that is gone.
       for (const field of REMOVED_CRITERION_WIRING_FIELDS) {
-        if (item !== null && typeof item === 'object' && field in item) {
+        if (
+          item !== null
+          && typeof item === 'object'
+          && (item as Record<string, unknown>)[field] !== undefined
+        ) {
           throw new BadRequestException(
             `acceptance criterion ${index + 1}: ${removedCriterionWiring(field)}`,
           );
