@@ -219,8 +219,8 @@ test('the keyword table is readable, injectable, and unknown or mixed wording st
       ['EXECUTABLE', ['spec 通过', '测试全绿', '退出码', '命令', '不新增失败', 'typecheck']],
       ['VERIFICATION', ['改对了吗', '符合意图', '是否覆盖', '是否合理', '独立复核']],
     ],
-    'migration 0224 deleted the EVIDENCE_JUDGMENT row: its keywords meant "stop and ask a person", '
-    + 'and there is no longer a person to stop for',
+    'migration 0224 deleted the EVIDENCE_JUDGMENT row: its keywords said what the work costs, '
+    + 'and no wording can say whether an independent session will decide it',
   );
   // The proof that the row is gone rather than merely renamed: its most distinctive keyword now
   // matches nothing at all, so the table cannot advise anybody towards EVIDENCE_JUDGMENT.

@@ -44,10 +44,10 @@ export class TasksController {
    *
    * This door used to read an omitted `completionCriterion` as the compatibility spelling of
    * EVIDENCE_JUDGMENT while the runner door refused it outright, so one required field had two
-   * opposite contracts depending on which credential the caller held. The lenient reading is the
-   * more expensive half of that: EVIDENCE_JUDGMENT has been declared-but-unimplemented since
-   * 2026-09-02, so a forgotten field did not produce a lax task, it produced one nothing can ever
-   * complete.
+   * opposite contracts depending on which credential the caller held. The lenient reading was the
+   * more expensive half of that: EVIDENCE_JUDGMENT is settled by one CONFIRM decision made by an
+   * independent session about the evidence revision it references, so a forgotten field did not
+   * produce a lax task, it produced one waiting on a decision nobody had been asked for.
    */
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) {

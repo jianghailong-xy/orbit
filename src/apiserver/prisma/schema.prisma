@@ -221,9 +221,12 @@ enum TaskVerdict {
 ///
 /// These are peers, not a fallback chain. EVIDENCE_JUDGMENT is the ordinary compatibility default for
 /// tasks created before this distinction existed; it does not mean that executable or verification
-/// acceptance failed and escalated. Migration 0224 renamed it from HUMAN_SIGNOFF: the criterion
-/// still requires one decision bound to one immutable evidence version, and no longer requires
-/// that the account owner be the one who makes it.
+/// acceptance failed and escalated. Migration 0224 renamed it from HUMAN_SIGNOFF and 0239 gave it
+/// the derivation it had been declared without. What settles it is one CONFIRM decision, made by an
+/// independent session -- one that did not do the work and did not author the evidence -- about the
+/// evidence revision that decision references, and it settles the task only while that referenced
+/// revision is still this task's latest. The account owner is not required to be the one who makes
+/// it.
 enum TaskCompletionCriterion {
   EXECUTABLE
   VERIFICATION

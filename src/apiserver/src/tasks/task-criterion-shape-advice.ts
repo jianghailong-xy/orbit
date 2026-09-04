@@ -24,10 +24,13 @@ export interface TaskCriterionShapeRule {
  * evaluator advises only when exactly one criterion's row matches; mixed or unknown wording is
  * left alone, because a missed prompt is cheaper than confidently questioning an ambiguous one.
  *
- * There is deliberately no EVIDENCE_JUDGMENT row. Its former keywords — authorization,
- * irreversibility, a value tradeoff — were shorthand for "stop and ask a person", and that step no
- * longer exists: an agent decides an evidence judgment itself. Advising a caller towards it on
- * those words would route work to a queue nobody is waiting at.
+ * There is deliberately no EVIDENCE_JUDGMENT row, and the reason is not that nobody answers it:
+ * one independent session — one that did not do the work and did not author the evidence — decides
+ * the evidence revision its decision references, and a CONFIRM there is what settles the task. The
+ * reason is that this table reads WORDING, and no wording says WHO will decide. Its former
+ * keywords — authorization, irreversibility, a value at stake — describe what the work costs, not
+ * whether an independent decider exists for it, so advising a caller towards that criterion on
+ * those words would be a guess about a fact the acceptance prose does not contain.
  */
 export const TASK_CRITERION_SHAPE_RULES: readonly TaskCriterionShapeRule[] = [
   {

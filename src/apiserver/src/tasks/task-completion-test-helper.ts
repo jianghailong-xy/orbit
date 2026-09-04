@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
 
 /**
- * Drive a fixture task to genuinely finished, through the one criterion that still has an
- * implementation.
+ * Drive a fixture task to genuinely finished, through VERIFICATION.
  *
  * Until 2026-09-02 this closed an EVIDENCE_JUDGMENT task by submitting evidence, reading back the
- * request the ledger raised and deciding it. All three of those facts were removed with the rest
- * of the judgment machinery, so the only remaining route to DONE is VERIFICATION.
+ * request the ledger raised and deciding it. The ledger and the request it raised are gone and were
+ * never rebuilt; that criterion is settled again, since 0239, by one CONFIRM decision made by an
+ * independent session about the evidence revision it references — a route that needs a second
+ * session, which is not what this fixture is for. VERIFICATION is the one it drives.
  *
  * The transition goes through the same fence production takes — no trigger is disabled, and the
  * subject's own status write is 0193's `VERIFICATION_PASSED` lane. The scaffolding it needs to get
