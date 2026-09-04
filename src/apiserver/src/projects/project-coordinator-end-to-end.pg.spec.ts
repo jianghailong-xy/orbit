@@ -310,7 +310,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
         assigneeId: workspaceId,
         autoRunWhenReady: true,
         dependsOnTaskIds: [prerequisite.id],
-        criterionKey: stated.acceptanceCriteriaItems[0].contentHash.slice(0, 32),
+        criterionKey: stated.acceptanceCriteriaItems[0].key,
         supersedesTaskId: firstAttempt.id,
       },
       { type: CreatorType.AGENT, id: workspaceId },

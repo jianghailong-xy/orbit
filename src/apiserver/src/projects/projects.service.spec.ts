@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
-import { ProjectStatus } from '@orbit/shared';
+import { ProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { criterionKeyOf } from './project-acceptance';
 import { ProjectsService } from './projects.service';
 
 const { PrismaClientKnownRequestError } = Prisma;
@@ -422,10 +423,13 @@ test('the detail item is the authored declaration, with no derived verdict besid
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
 
-  // Exactly the stored row. `currentStatus` was a projection over acceptance conclusions, and
-  // 0229 removed those: reporting a constant 'UNDECIDED' forever would be a verdict pretending
-  // to be a reading.
-  assert.deepEqual(project.acceptanceCriteriaItems[0], definition);
+  // Exactly the stored row, plus the one thing the projection derives: `key`, the name a caller
+  // uses for this criterion, which is its own id and not a reading of its text. `currentStatus`
+  // was a projection over acceptance conclusions, and 0229 removed those: reporting a constant
+  // 'UNDECIDED' forever would be a verdict pretending to be a reading.
+  assert.deepEqual(project.acceptanceCriteriaItems[0],
+    { ...definition, key: criterionKeyOf(CRITERION_A_ID) });
+  assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
 });
 
 test('someone else’s project is a 404, not an empty project', async () => {

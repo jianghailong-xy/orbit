@@ -1340,8 +1340,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"coordinator's one-shot judgment session MUST send it and the server refuses the create " +
 			"without it; every other caller may omit it. It is what bounds a coordinator filing " +
 			"more work on the fact that the criteria are FINITE and a person wrote them: work that " +
-			"serves none of them is work the project was not asked for. Re-read the keys before " +
-			"sending one — editing a criterion's text changes its key.",
+			"serves none of them is work the project was not asked for. A key is the criterion's " +
+			"own id: rewriting its text does not change it, and `revision` beside it says which " +
+			"wording you read.",
 	}
 	// The same field on the edit door, where it also has to be removable. Criteria are usually
 	// written before the work is understood, so what settles a task is whatever it says at the end,

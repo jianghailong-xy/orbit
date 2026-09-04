@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { NEVER_PUBLIC_ID_FIELDS, PUBLIC_ID_FIELDS } from '@orbit/shared';
+import {
+  NEVER_PUBLIC_ID_FIELDS, PUBLIC_ID_FIELDS, toUuid, uuidToBase62,
+} from '@orbit/shared';
 import {
   ACCEPTANCE_FINDING_ROUTING,
   criteriaFromDefinitions,
   criteriaSemanticRevision,
-  sha256,
+  criterionKeyOf,
 } from './project-acceptance';
 
 // The criteria module, on its own. It is pure by design, which is what makes "what does this
@@ -45,9 +47,10 @@ test('structured criteria preserve identity while semantic revision ignores pres
   );
 });
 
-// The key is CONTENT-addressed, which is what lets a criterion be recognised across a reorder or a
-// re-ordinal while an edit to its words correctly makes it a different criterion.
-test('a criterion key is its content, and ordinals are renumbered from the stated order', () => {
+// The key is the definition's own ID, which is what lets a criterion be recognised across a
+// reorder, a re-ordinal AND an edit to its words. What an edit moves is `definitionRevision`
+// beside it — see `project-acceptance-stable-key.pg.spec.ts` for that pair on real rows.
+test('a criterion key is its definition id, and ordinals are renumbered from the stated order', () => {
   const stated = criteriaFromDefinitions([
     { id: 'b', ordinal: 40, text: '  merged to main  ', revision: 1 },
     { id: 'a', ordinal: 7, text: 'every suite green', revision: 1 },
@@ -55,14 +58,22 @@ test('a criterion key is its content, and ordinals are renumbered from the state
   assert.deepEqual(stated.map((criterion) => criterion.definitionId), ['a', 'b']);
   assert.deepEqual(stated.map((criterion) => criterion.ordinal), [1, 2]);
   assert.deepEqual(stated.map((criterion) => criterion.text), ['every suite green', 'merged to main']);
-  assert.equal(stated[0].key, sha256('every suite green').slice(0, 32));
+  assert.deepEqual(stated.map((criterion) => criterion.key), ['a', 'b']);
+  // A real row's id is a uuid, and the key is the base62 spelling of it — the same string the
+  // response's `id` and `publicId` carry, so a reader can hand back whichever one they copied.
+  const uuid = '01960000-0000-7000-8000-00000000000a';
+  const [row] = criteriaFromDefinitions([{ id: uuid, ordinal: 1, text: 'stated', revision: 1 }]);
+  assert.equal(row.key, criterionKeyOf(uuid));
+  assert.equal(row.key, uuidToBase62(uuid));
+  assert.equal(toUuid(row.key), uuid);
   // A stored content hash wins over one derived here: the database computes it, and two spellings
-  // of the same identity are two chances for a reader and a writer to disagree.
+  // of the same identity are two chances for a reader and a writer to disagree. It is no longer
+  // where the key comes from — an unrelated hash cannot move it.
   const [withHash] = criteriaFromDefinitions([
     { id: 'a', ordinal: 1, text: 'every suite green', revision: 1, contentHash: 'c'.repeat(64) },
   ]);
   assert.equal(withHash.contentHash, 'c'.repeat(64));
-  assert.equal(withHash.key, 'c'.repeat(32));
+  assert.equal(withHash.key, 'a');
 });
 
 // Migration 0233 removed the four wiring fields from a criterion, so a stated criterion no longer

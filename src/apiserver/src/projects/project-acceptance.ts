@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { uuidToBase62 } from '@orbit/shared';
 
 /**
  * Everything about a project's acceptance CRITERIA that is a pure function of what was authored:
@@ -39,8 +40,9 @@ export interface AcceptanceCriterionDefinitionLike {
   contentHash?: string;
 }
 
-/** One authored criterion, as a reader sees it. `key` is content-addressed, so reordering the list
- * keeps each criterion recognisable while editing its words correctly makes it a different one. */
+/** One authored criterion, as a reader sees it. `key` is the definition's own id and `revision`
+ * beside it is what the words are on, so reordering the list and rewording a criterion are two
+ * separately readable facts rather than one string that answers for both. */
 export interface StatedAcceptanceCriterion {
   ordinal: number;
   key: string;
@@ -50,6 +52,29 @@ export interface StatedAcceptanceCriterion {
   verificationMethod: string | null;
   completionCriterionOverrideReason: string | null;
   contentHash: string;
+}
+
+/**
+ * The name a caller uses for one stated criterion: the definition's own id.
+ *
+ * It was `contentHash.slice(0, 32)` until this unit, which made one string carry two intents —
+ * "the same criterion after a reorder" and "a different criterion after an edit" — and coupled
+ * everybody holding a key to the exact words. `(key, revision)` states them apart: the id survives
+ * an edit, the revision counts them. The content hash is still stored and still returned; nothing
+ * derives this from it any more.
+ *
+ * Spelled base62, because `key` is not a name `PUBLIC_ID_FIELDS` classifies and so nothing
+ * downstream would encode it: a raw uuid here would be the one value in the response a reader
+ * could not hand straight back, sitting beside an `id` and a `publicId` that are the same row in
+ * the other spelling. An id that is not a uuid (a unit-test row) passes through unchanged — the
+ * same rule the response encoder applies to a value it cannot decode.
+ */
+export function criterionKeyOf(definitionId: string): string {
+  try {
+    return uuidToBase62(definitionId);
+  } catch {
+    return definitionId;
+  }
 }
 
 /** Turn current definition rows into the checklist every reader of this project checks. */
@@ -63,7 +88,7 @@ export function criteriaFromDefinitions(
       const contentHash = definition.contentHash ?? sha256(text);
       return {
         ordinal: index + 1,
-        key: contentHash.slice(0, 32),
+        key: criterionKeyOf(definition.id),
         text,
         definitionId: definition.id,
         definitionRevision: definition.revision,

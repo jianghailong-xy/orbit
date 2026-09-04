@@ -4106,8 +4106,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!criterion) {
         throw new ForbiddenException(this.criterionUnknown(declared,
           `it does not name any acceptance criterion this project states today (it states `
-          + `${stated.length}). Re-read them with project_get: editing a criterion changes its key, `
-          + 'and a key from another project is not one this project states.'));
+          + `${stated.length}). Re-read them with project_get: a key is the criterion’s own id, `
+          + 'so one that resolves nowhere here names a criterion that was deleted, or one of '
+          + 'another project’s.'));
       }
       // The id is the live relation and the revision is the snapshot of what it said now. Both
       // read from the same row in the same statement, so they cannot describe two moments.

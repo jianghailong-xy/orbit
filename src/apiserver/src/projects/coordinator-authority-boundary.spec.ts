@@ -45,9 +45,10 @@ const SESSION = '00000000-0000-7000-8000-0000000000d5';
 const RUN = '00000000-0000-7000-8000-0000000000d6';
 const CREATED = '00000000-0000-7000-8000-0000000000d7';
 
-/** Two criteria the owner channel recorded, and the content keys `project_get` hands back. */
+/** Two criteria the owner channel recorded, and the keys `project_get` hands back for them: each
+ *  criterion's own id, which is what this fixture's definition rows are keyed by. */
 const CRITERION_TEXT = ['the dispatcher starts a ready task', 'the boundary is server-side'];
-const CRITERION_KEYS = CRITERION_TEXT.map((text) => sha256(text).slice(0, 32));
+const CRITERION_KEYS = CRITERION_TEXT.map((_text, index) => `def-${index}`);
 
 /** Everything past the gate is a world this fixture does not build. Reaching it IS the assertion. */
 const PAST_THE_GATE = 'reached the write';
@@ -506,9 +507,9 @@ test('a declared criterion inside the daily budget opens the task', async () => 
 
   assert.equal(f.writes.length, 1, 'the bound is a bound, not a ban');
   assert.equal(f.writes[0].title, 'Repair the dispatcher');
-  // The KEY is not stored — it is content-addressed, so it stops naming the criterion the moment
-  // anybody edits its words. What migration 0232 stores is what the key resolved to: the
-  // criterion's stable id and the revision it then had (`task-criterion-declaration.pg.spec`).
+  // The KEY is not stored, even now that it IS the criterion's id: what migration 0232 stores is
+  // what the key RESOLVED to — the definition row, plus the revision it carried at that moment,
+  // which the key deliberately no longer answers for (`task-criterion-declaration.pg.spec`).
   assert.equal(f.writes[0].criterionKey, undefined);
   assert.equal(f.writes[0].criterionDefinitionId, 'def-1');
   assert.equal(f.writes[0].criterionRevision, 1);

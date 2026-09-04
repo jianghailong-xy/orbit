@@ -45,7 +45,7 @@ import {
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { sha256 } from './project-acceptance';
+import { criterionKeyOf, sha256 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import {
   buildCoordinatorInstructions,
@@ -347,6 +347,10 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       text: criterion.text,
       verificationMethod: criterion.verificationMethod,
       completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
+      // The name `criterionKey` carries, beside the revision that says which wording it names.
+      // Two fields rather than one content hash: `criterionKeyOf` has why. `contentHash` stays on
+      // the projection — it is still what the row stores — and nothing derives the key from it.
+      key: criterionKeyOf(criterion.id),
       revision: criterion.revision,
       contentHash: criterion.contentHash,
       // Rolling/mock compatibility: old readers can omit the two new digest lanes. Real rows on

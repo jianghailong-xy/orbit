@@ -208,9 +208,11 @@ export function settlementVersion(tasks: readonly TaskSettlement[]): string {
 }
 
 /**
- * A criterion's subject id. The criterion key is `sha256(text).slice(0, 32)` (`parseCriteria`), so
- * two projects that state the same criterion in the same words share it; the project id is what
- * makes this a name for one of them.
+ * A criterion's subject id. The key used to be a hash of the criterion's WORDS, so two projects
+ * stating the same condition in the same words shared one, and the project id in front was what
+ * made this a name for one of them. Since the key became the criterion's own id
+ * (`criterionKeyOf`) it names a single row by itself; the prefix stays because this string is a
+ * persisted wake SUBJECT, and re-spelling one of those is a migration rather than a comment.
  */
 export function criterionSubjectId(projectId: string, criterionKey: string): string {
   return `${projectId}:${criterionKey}`;

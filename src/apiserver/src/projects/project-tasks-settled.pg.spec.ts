@@ -27,6 +27,7 @@ import {
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
+import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
@@ -290,7 +291,7 @@ test('empty merge evidence makes the judgment open merge work and stores no PASS
         where: { projectId: target.projectId },
         orderBy: { ordinal: 'asc' },
       });
-      const criterionKey = stated.contentHash.slice(0, 32);
+      const criterionKey = criterionKeyOf(stated.id);
 
       // Execute the branch the one-shot judgment is instructed to take: file merge/evidence work,
       // tied to a stated criterion, and stop. Its eventual terminal write will derive a NEW task-set

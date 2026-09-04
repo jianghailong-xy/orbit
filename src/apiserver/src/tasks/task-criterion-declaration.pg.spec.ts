@@ -30,6 +30,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { criterionKeyOf } from '../projects/project-acceptance';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { TasksService } from './tasks.service';
 
@@ -39,7 +40,7 @@ const skip = !URL;
 /** One stated criterion, as a caller of `task_create` meets it: a key, and what it resolves to. */
 interface Stated {
   id: string;
-  /** `contentHash.slice(0, 32)` — what `project_get` hands out and `criterionKey` carries. */
+  /** The criterion's own id — what `project_get` hands out and `criterionKey` carries. */
   key: string;
   revision: number;
 }
@@ -93,9 +94,9 @@ test('T1: a task’s criterion declaration is a relation, and outlives the crite
   /**
    * State one criterion and read back what a caller would be told to name it by.
    *
-   * Read back rather than computed here on purpose: `project_acceptance_definition_normalize` is a
-   * BEFORE INSERT trigger that rewrites `content_hash` and pins `revision` to 1, so a key this
-   * test derived itself would be a key nobody could ever send.
+   * The `revision` is read back rather than assumed: `project_acceptance_definition_normalize` is
+   * a BEFORE INSERT trigger that rewrites `content_hash` and pins `revision` to 1, so a snapshot
+   * this test predicted would be a snapshot the row never had.
    */
   async function state(projectId: string, ordinal: number, text: string): Promise<Stated> {
     const id = randomUUID();
@@ -111,13 +112,13 @@ test('T1: a task’s criterion declaration is a relation, and outlives the crite
   }
 
   async function read(id: string): Promise<Stated> {
-    const { rows } = await sql.query<{ content_hash: string; revision: number }>(
-      `SELECT "content_hash", "revision" FROM "project_acceptance_criterion_definition"
+    const { rows } = await sql.query<{ revision: number }>(
+      `SELECT "revision" FROM "project_acceptance_criterion_definition"
         WHERE "id" = $1::uuid`,
       [id],
     );
     assert.equal(rows.length, 1, 'the criterion this test states must exist');
-    return { id, key: rows[0].content_hash.slice(0, 32), revision: rows[0].revision };
+    return { id, key: criterionKeyOf(id), revision: rows[0].revision };
   }
 
   async function declarationOf(taskId: string): Promise<Declaration> {
@@ -168,7 +169,7 @@ test('T1: a task’s criterion declaration is a relation, and outlives the crite
 
     const row = await declarationOf(created.id);
     assert.equal(row.criterion_definition_id, served.id,
-      'the stable id, not the key: editing the criterion changes the key and must not orphan this');
+      'the uuid the column keys by, resolved from the key the caller sent');
     assert.equal(row.criterion_revision, served.revision,
       'the revision as it stood when the work was declared against it');
   });

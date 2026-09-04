@@ -151,8 +151,9 @@ test('a judgment session opening a task must name the criterion it serves', () =
 });
 
 // The bound is "this project asked for it", not "the caller filled the field in". A key the
-// project does not state today buys nothing — which is also what happens after the owner rewrites
-// a criterion, since editing the text changes its key.
+// project does not state today buys nothing — which is what a key names after the owner DELETES
+// the criterion it was read from; rewriting the words no longer moves it, because the key is the
+// criterion's own id.
 test('a criterion key the project does not state is refused, separately from naming none', () => {
   const refusal = refuseTaskOpening('JUDGMENT', {
     ...OPENING,

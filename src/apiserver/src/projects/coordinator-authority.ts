@@ -237,7 +237,8 @@ export interface TaskOpeningFacts {
   completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | null;
   /** The criterion the caller says this work serves — `CreateTaskDto.criterionKey`, verbatim. */
   declaredCriterionKey: string | null | undefined;
-  /** The keys of the project's currently stated criteria (`ProjectAcceptanceService`'s `key`). */
+  /** The keys of the project's currently stated criteria — each criterion's own id, as
+   *  `criteriaFromDefinitions` spells it. */
   statedCriterionKeys: readonly string[];
   /** How many tasks judgment sessions have already opened in this project inside the window. */
   openedInWindow: number;
@@ -305,8 +306,9 @@ export function refuseTaskOpening(
       message:
         `criterionKey ${declared} does not name any acceptance criterion this project states `
         + `today (it states ${facts.statedCriterionKeys.length}). Re-read them with project_get: `
-        + 'editing a criterion changes its key, and a project that states none has nothing for new '
-        + 'work to serve until an owner-authenticated channel records them.',
+        + 'a key is the criterion’s own id, so one that resolves nowhere here names a criterion '
+        + 'that was deleted or one of another project’s, and a project that states none has '
+        + 'nothing for new work to serve until an owner-authenticated channel records them.',
     };
   }
   // Read as a whole-plan question. A batch that would take the project past its allowance is
