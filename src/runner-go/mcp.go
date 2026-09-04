@@ -279,6 +279,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_evidence_decide":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("task_evidence_decide requires an Orbit Session", true)
+		}
+		decision := getString(args, "decision")
+		if decision != "CONFIRM" && decision != "SEND_BACK" {
+			return toolResult("decision must be CONFIRM or SEND_BACK", true)
+		}
+		revision := getString(args, "evidenceRevision")
+		if revision == "" {
+			return toolResult("evidenceRevision is required: name the revision you are answering", true)
+		}
+		body := map[string]interface{}{"decision": decision, "evidenceRevision": revision}
+		copyIfPresent(body, args, "note")
+		raw, err := s.t.decideTaskEvidence(id, s.agentID, s.sessionID, body)
+		if err != nil {
+			return toolResult("decide task evidence failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_get":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1583,6 +1607,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Stable identity reused for every transport retry of this submission.",
 				},
 			}, "evidence"),
+		},
+		{
+			"name": "task_evidence_decide",
+			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and nothing else — no task status, no session state, no comment, no notification. Four things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"decision": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"CONFIRM", "SEND_BACK"},
+					"description": "CONFIRM records that this evidence settles the criterion. SEND_BACK records that it does not; the task stays OPEN and waits for the next revision.",
+				},
+				"evidenceRevision": map[string]interface{}{
+					"type":        "string",
+					"description": "The revision being answered, exactly as task_evidence_list returns it. Required and compared against the task's latest, so there is deliberately no way to say 'whatever is current' — an answer has to name the version it read.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"maxLength":   4000,
+					"description": "Required on SEND_BACK: what the next evidence revision has to show. Nothing else is written, so this note is the only thing the next attempt has to aim at. Optional on CONFIRM.",
+				},
+			}, "decision", "evidenceRevision"),
 		},
 		{
 			"name":        "task_attribution",

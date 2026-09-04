@@ -944,6 +944,23 @@ func (t *Transport) submitTaskEvidence(id, agentID, sessionID string, body inter
 	return out, err
 }
 
+// The decision door. Same transport shape as submission and for the same reason: the DECIDING
+// Session is an authenticated header, never a caller-editable field. A decision whose author could
+// be typed into the body would be a decision anybody could attribute to a session that never made
+// it, and "an independent session made this" is the entire value of the row.
+func (t *Transport) decideTaskEvidence(id, agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("deciding session id is required")
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/evidence/decision",
+		body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
 func (t *Transport) listTaskEvidence(id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

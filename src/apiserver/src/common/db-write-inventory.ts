@@ -607,6 +607,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary after retry exhaustion; reused keys with different facts are an explicit 409.',
   },
   {
+    at: 'tasks/task-completion-evidence.service.ts#decide',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), then task_evidence_decision (rank 60). The deciding Session, the task\'s evidence rows and the project criterion definition are all read without a row lock: none of them is written here, and the only one a concurrent writer could move under this unit — the latest evidence revision — is allocated under the same task mutex this unit holds.',
+    identity: 'The decision row is keyed by (task, evidence id), unique in PostgreSQL. There is deliberately no caller retry key: a decision names one immutable evidence revision, so that pair already IS the request identity and a second key could only let one version be answered twice.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the Task and re-derives all four checks inside the closure — the deciding session\'s independence, MAX(revision), the live criterion text and the existing decision. A committed decision replays as itself when the retry says the same thing and is a 409 when it does not, so a retried transport never turns one decision into two and never overwrites one.',
+    effects: 'None, inside or outside PostgreSQL. It writes no Task status, no Session state, no comment, no notification and no realtime event, and it routes no completion input: 0228 removed the request ledger, inbox, device outbox and delivery worker, and this unit rebuilds none of them.',
+    answer: 'Typed 503 from the global boundary after retry exhaustion. A superseded revision, a rewritten criterion and an already-decided version are explicit 409s; a deciding session that did this work is a 403.',
+  },
+  {
     at: 'tasks/task-completion-evidence.service.ts#importLegacyComment',
     shape: 'TX_RETRIED',
     locks: 'user FOR KEY SHARE (rank 10, pre-acquired for the reviewer FK), task FOR UPDATE (rank 50), then task_completion_evidence / idempotency / task_legacy_evidence_import (rank 60). The source TaskComment is read before its later FK check; source Session/Attempt are immutable provenance snapshots and are not referenced by a new FK.',

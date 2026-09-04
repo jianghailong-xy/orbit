@@ -232,6 +232,22 @@ enum TaskCompletionCriterion {
   @@map("task_completion_criterion")
 }
 
+/// What one independent session concluded about one version of a task's completion evidence
+/// (migration 0238). Two values, because the decision door answers one question: is this version
+/// of the evidence the answer, or does the work go back for another one.
+///
+/// CONFIRM is not `Task.status = DONE` and does not write it. It records that a session which did
+/// not do the work read this exact evidence revision against the criterion it quotes and found it
+/// sufficient; deriving a status from that fact is a separate step. SEND_BACK carries a note and
+/// changes nothing about the task, which stays OPEN waiting for the next evidence revision — the
+/// absence of a status write is the whole of "keep going", so there is no third label for it.
+enum TaskEvidenceDecisionValue {
+  CONFIRM
+  SEND_BACK
+
+  @@map("task_evidence_decision_value")
+}
+
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
 /// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
 enum TaskJudgmentDevicePolicy {
@@ -3106,6 +3122,7 @@ model Task {
   comments     TaskComment[]
   completionEvidence TaskCompletionEvidence[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
+  evidenceDecisions TaskEvidenceDecision[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3223,6 +3240,7 @@ model TaskCompletionEvidence {
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
   legacyImport TaskLegacyEvidenceImport?
+  decisions TaskEvidenceDecision[]
 
   @@unique([id, taskId], map: "task_completion_evidence_id_task_key")
   @@unique([id, taskId, criterionRevision, evidenceDigest], map: "task_completion_evidence_bound_fact_key")
@@ -3244,6 +3262,57 @@ model TaskCompletionEvidenceIdempotency {
   @@unique([taskId, idempotencyKey], map: "task_completion_evidence_idempotency_task_key")
   @@index([evidenceId], map: "task_completion_evidence_idempotency_evidence_idx")
   @@map("task_completion_evidence_idempotency")
+}
+
+/// One independent session's decision about one version of a task's completion evidence
+/// (migration 0238) — the whole of the EVIDENCE_JUDGMENT criterion's decision door.
+///
+/// The row is bound to the evidence BY CONTENT, not by name: its foreign key names
+/// `(evidence_id, task_id, criterion_revision, evidence_digest)`, which is
+/// `task_completion_evidence_bound_fact_key`. Those three columns already existed on the evidence
+/// row, so binding a decision to an exact version of an exact criterion snapshot needed no new
+/// column anywhere — and a decision cannot be re-pointed at a different digest without the FK
+/// refusing, which is what makes "this was decided" a claim about something a reader can still
+/// read.
+///
+/// `deciding_session_id` carries no foreign key, exactly like
+/// `task_completion_evidence.source_session_id` beside it: it is an immutable provenance snapshot
+/// of WHO answered, and a decision that survives its session's deletion is the point. What makes
+/// the answer independent is checked at the door and stated here rather than enforced by a
+/// constraint, because "did not participate in this work" is a question about the task's whole
+/// session history, not about this one row.
+///
+/// Nothing here is a delivery queue. The request ledger, inbox item, device outbox and delivery
+/// worker migration 0228 removed are not rebuilt by this table: one decision is one row, read by
+/// whoever asks for it.
+model TaskEvidenceDecision {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_evidence_decision_task_fkey")
+
+  evidenceId        String @map("evidence_id") @db.Uuid
+  criterionRevision String @map("criterion_revision") @db.Char(64)
+  evidenceDigest    String @map("evidence_digest") @db.Char(64)
+  evidence          TaskCompletionEvidence @relation(fields: [evidenceId, taskId, criterionRevision, evidenceDigest], references: [id, taskId, criterionRevision, evidenceDigest], onDelete: Restrict, map: "task_evidence_decision_evidence_fact_fkey")
+
+  decision TaskEvidenceDecisionValue
+  /// Why the work is coming back. Required on SEND_BACK by the door: a rejection with nothing to
+  /// act on is the state the next revision cannot get out of. Optional on CONFIRM.
+  note     String?
+
+  decidedAt         DateTime    @default(now()) @map("decided_at")
+  decidedByType     CreatorType @map("decided_by_type")
+  decidedById       String      @map("decided_by_id") @db.Uuid
+  decidingSessionId String      @map("deciding_session_id") @db.Uuid
+
+  /// One decision per evidence revision. A second answer to the same version is a replay when it
+  /// says the same thing and a conflict when it does not — never a second row, because two
+  /// decisions on one version is exactly the ambiguity the CAS at the door exists to prevent.
+  @@unique([taskId, evidenceId], map: "task_evidence_decision_evidence_key")
+  @@index([taskId, decidedAt], map: "task_evidence_decision_task_decided_idx")
+  @@index([decidingSessionId], map: "task_evidence_decision_session_idx")
+  @@map("task_evidence_decision")
 }
 
 /// The audit receipt for an explicit conversion of one historical TaskComment into one structured

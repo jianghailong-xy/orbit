@@ -170,6 +170,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // legacy/manual Sessions, but when present it is as followable as the source Session beside it.
   'sourceAttemptId',
   'evidenceId',
+  // Migration 0238's decision row: WHICH run answered one version of the evidence. An address like
+  // `sourceSessionId` above and for the same reason — a reader given one opens that session to see
+  // what the decision was made from. It carries no authority: independence is checked at the door
+  // against the task's whole session history, never read back off this column.
+  'decidingSessionId',
   // N8's explicit legacy-import and bounded-backfill receipts. Each is an address returned by
   // the audit response (and pushTaskIds is the exact allowlist the operator supplied).
   'sourceCommentId',

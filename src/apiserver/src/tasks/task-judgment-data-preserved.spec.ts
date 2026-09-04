@@ -203,6 +203,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        labels survive and `task.completion_criterion` remains the type's one user; it names no
   //        `project_acceptance_*` object; and it carries no `CREATE OR REPLACE FUNCTION` and no
   //        TRIGGER at all, so it is not another writer of the DONE fence.
+  //   0238 added the evidence decision door: one new table, `task_evidence_decision`, one new enum
+  //        `task_evidence_decision_value`, and two indexes. Read against every claim above: it is
+  //        pure addition and touches no preserved relation. It ALTERs nothing — not `task`, not
+  //        `task_completion_evidence` — so the 0177 pair, `task_executable_acceptance_pair` and
+  //        every stored row are out of its reach; it names no `project_acceptance_*` object and
+  //        none of the six preserved triggers/functions; it carries no `CREATE OR REPLACE
+  //        FUNCTION` and no TRIGGER at all, so it is not another writer of the DONE fence, and
+  //        EVIDENCE_JUDGMENT remains — to that fence — a criterion with no implementation. It
+  //        REFERENCES two preserved tables, `task(id, owner_id)` and 0181's bound-fact key on
+  //        `task_completion_evidence`, which is why it needed no column of its own on either:
+  //        being pointed AT changes nothing about a row, and neither unique constraint is created,
+  //        dropped or rewritten here. It carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive untouched, and it has no INSERT/UPDATE/
+  //        DELETE, so no preserved row is read or written.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -210,7 +224,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0233_project_acceptance_criterion_wiring_removal',
       '0234_project_acceptance_evaluation_plan_lane_removal',
       '0236_executable_acceptance_budget',
-      '0237_task_completion_criterion_explicit_declaration'],
+      '0237_task_completion_criterion_explicit_declaration',
+      '0238_task_evidence_decision'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

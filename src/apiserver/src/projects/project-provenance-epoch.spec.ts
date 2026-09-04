@@ -152,6 +152,15 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':
     'validates and records completion-evidence source provenance; grants no project authority',
+  // The decision door reads the same N10 column, and reads it to REFUSE: a session that submitted
+  // evidence for a task may not decide it. That is the opposite direction from the one SC7 forbids
+  // — "evidence grants nothing" is about provenance becoming authority, and this takes authority
+  // away from the one actor whose judgment of a submission would be its own. It consults no
+  // project provenance at all: `Task.sourceSessionId`, `discoveredFromProjectId`, `sourceTaskId`
+  // and `triggerEvent` are never read here, and nothing about where this work was NOTICED changes
+  // who may answer it.
+  'src/apiserver/src/tasks/task-evidence-decision.ts':
+    'refuses the evidence submitter its own decision; reads no task project provenance',
   'src/apiserver/src/tasks/task-signoff-migration.cli.ts':
     'forwards an operator-named legacy evidence source Session; does not read Task provenance',
   'src/apiserver/src/tasks/task-judgment-repair.cli.ts':

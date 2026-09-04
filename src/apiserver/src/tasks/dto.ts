@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import type { EvidenceCheckKind } from './task-evidence-envelope';
+import { EVIDENCE_DECISIONS, type EvidenceDecisionValue } from './task-evidence-decision';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -184,6 +185,55 @@ export class TaskCompletionEvidenceDto {
    */
   citations!: TaskEvidenceCitationDto[] | null;
   criterionMatch!: TaskEvidenceCriterionMatchDto | null;
+}
+
+/**
+ * One independent session's decision about one evidence revision, over runner/CLI/MCP.
+ *
+ * The deciding Session comes from the authenticated execution header, exactly as the source
+ * Session does on a submission: a decision whose author is a caller-editable field would be a
+ * decision anybody could attribute to a session that never made it, and the independence check is
+ * the whole value of this door.
+ */
+export class DecideRunnerTaskEvidenceDto {
+  @IsIn([...EVIDENCE_DECISIONS])
+  decision!: EvidenceDecisionValue;
+
+  /**
+   * Which revision is being answered. Required, and compared against the task's latest — this is
+   * the compare-and-set, so there is deliberately no "the current one" spelling for it.
+   */
+  @IsString()
+  @Matches(/^\d{1,19}$/)
+  evidenceRevision!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4_000)
+  note?: string;
+}
+
+/** The shared read shape of one recorded decision. */
+export class TaskEvidenceDecisionDto {
+  @IsPublicId()
+  id!: string;
+  @IsPublicId()
+  taskId!: string;
+  @IsPublicId()
+  evidenceId!: string;
+  /** The revision this decision is bound to, in the spelling `task_evidence_list` returns. */
+  evidenceRevision!: string;
+  criterionRevision!: string;
+  evidenceDigest!: string;
+  decision!: EvidenceDecisionValue;
+  note!: string | null;
+  decidedAt!: Date;
+  decidedByType!: CreatorType;
+  @IsPublicId()
+  decidedById!: string;
+  @IsPublicId()
+  decidingSessionId!: string;
 }
 
 /**

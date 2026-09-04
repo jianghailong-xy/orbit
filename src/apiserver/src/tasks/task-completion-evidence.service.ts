@@ -6,8 +6,17 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   ImportLegacyTaskCommentEvidenceDto,
   TaskCompletionEvidenceDto,
+  TaskEvidenceDecisionDto,
   TaskLegacyEvidenceImportDto,
 } from './dto';
+import {
+  EVIDENCE_DECISIONS,
+  EvidenceDecisionValue,
+  assertCriterionUnmoved,
+  assertCurrentEvidenceRevision,
+  assertIndependentDecidingSession,
+  decisionNote,
+} from './task-evidence-decision';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 import {
   EvidenceCitation,
@@ -33,6 +42,15 @@ export interface SubmitCompletionEvidence {
   sourceSessionId: string;
   evidence: JsonObject;
   idempotencyKey?: string;
+}
+
+export interface DecideCompletionEvidence {
+  /** The run making the call. It is checked against this task's work, never trusted as authority. */
+  decidingSessionId: string;
+  /** Which version is being answered, as the decimal string `revision` is returned in. */
+  evidenceRevision: string;
+  decision: EvidenceDecisionValue;
+  note?: string;
 }
 
 export interface CompletionCriterionSnapshotInput {
@@ -159,6 +177,29 @@ function response(row: EvidenceRow, receipt?: EvidenceReceipt): TaskCompletionEv
     legacyImport: legacyImportResponse(row.legacyImport),
     citations: receipt?.citations ?? null,
     criterionMatch: receipt?.criterionMatch ?? null,
+  };
+}
+
+const decisionInclude = {
+  evidence: { select: { revision: true } },
+} satisfies Prisma.TaskEvidenceDecisionInclude;
+
+type DecisionRow = Prisma.TaskEvidenceDecisionGetPayload<{ include: typeof decisionInclude }>;
+
+function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    evidenceId: row.evidenceId,
+    evidenceRevision: row.evidence.revision.toString(),
+    criterionRevision: row.criterionRevision,
+    evidenceDigest: row.evidenceDigest,
+    decision: row.decision,
+    note: row.note,
+    decidedAt: row.decidedAt,
+    decidedByType: row.decidedByType,
+    decidedById: row.decidedById,
+    decidingSessionId: row.decidingSessionId,
   };
 }
 
@@ -541,6 +582,115 @@ export class TaskCompletionEvidenceService {
     }, loggedRetry(this.logger, 'taskCompletionEvidence.importLegacyComment'));
 
     return committed.evidence;
+  }
+
+  /**
+   * Record one independent session's decision about one version of this task's evidence.
+   *
+   * It writes one row and nothing else. No Task status, no Session state, no comment, no
+   * notification, and none of the delivery machinery migration 0228 removed: a CONFIRM here is the
+   * durable fact that an independent run read this exact evidence and found it sufficient, and
+   * turning that fact into a status is a separate step that does not exist yet. SEND_BACK writes
+   * the same one row with its note; the task is untouched, so it stays OPEN waiting for the next
+   * revision — the absence of a write is the whole of "keep going".
+   *
+   * The four checks run in the order authority, subject, standard: may this caller answer at all,
+   * is it answering the version that is actually open, and is the standard it is answering still
+   * the one stated. A refusal at any of them writes nothing.
+   */
+  async decide(
+    ownerId: string,
+    taskId: string,
+    actor: CompletionEvidenceActor,
+    input: DecideCompletionEvidence,
+  ) {
+    if (!UUID_RE.test(actor.id) || !Object.values(CreatorType).includes(actor.type)) {
+      throw new BadRequestException('evidence actor is invalid');
+    }
+    if (!UUID_RE.test(input.decidingSessionId)) throw new BadRequestException('decidingSessionId is invalid');
+    if (!EVIDENCE_DECISIONS.includes(input.decision)) {
+      throw new BadRequestException(`decision must be one of ${EVIDENCE_DECISIONS.join(', ')}`);
+    }
+    if (!/^\d{1,19}$/.test(input.evidenceRevision)) {
+      throw new BadRequestException('evidenceRevision must be the decimal revision being answered');
+    }
+    const answered = BigInt(input.evidenceRevision);
+    // Outside the transaction: a missing note reads no row, so it need not hold the Task mutex.
+    const note = decisionNote(input.decision, input.note);
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
+      // concurrent submission cannot allocate a new revision between the read below and the write.
+      const [task] = await tx.$queryRaw<{ projectId: string | null }[]>(Prisma.sql`
+        SELECT "project_id" AS "projectId"
+          FROM "task"
+         WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR UPDATE
+      `);
+      if (!task) throw new NotFoundException('task not found');
+
+      const decidingSession = await tx.session.findFirst({
+        where: { id: input.decidingSessionId, ownerId },
+        select: { id: true, taskId: true },
+      });
+      if (!decidingSession) throw new NotFoundException('deciding session not found');
+      await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
+
+      const latest = await tx.taskCompletionEvidence.findFirst({
+        where: { taskId },
+        orderBy: { revision: 'desc' },
+        select: { id: true, revision: true, criterionRevision: true, evidenceDigest: true, evidence: true },
+      });
+      if (!latest) throw new NotFoundException('this task has no completion evidence to decide');
+      assertCurrentEvidenceRevision(answered, latest.revision);
+      await assertCriterionUnmoved(tx, task.projectId, latest.evidence);
+
+      // One decision per version. A second answer to the same one is a replay when it says the
+      // same thing and a refusal when it does not — never a second row.
+      const existing = await tx.taskEvidenceDecision.findFirst({
+        where: { taskId, evidenceId: latest.id },
+        include: decisionInclude,
+      });
+      if (existing) {
+        const sameDecision = existing.decision === input.decision
+          && existing.note === note
+          && existing.decidedByType === actor.type
+          && existing.decidedById === actor.id
+          && existing.decidingSessionId === decidingSession.id;
+        if (!sameDecision) {
+          throw new ConflictException({
+            code: 'EVIDENCE_JUDGMENT_ALREADY_DECIDED',
+            message:
+              `revision ${latest.revision} of this task's evidence was already decided ` +
+              `${existing.decision}; nothing was written. A version is answered once, and the way ` +
+              'to raise a different answer is to decide the next revision',
+            requiredAction: 'DECIDE_THE_NEXT_EVIDENCE_REVISION',
+          });
+        }
+        return decisionResponse(existing);
+      }
+
+      const written = await tx.taskEvidenceDecision.create({
+        data: {
+          id: randomUUID(),
+          taskId,
+          ownerId,
+          evidenceId: latest.id,
+          // The binding, and the reason no column had to be added anywhere: these two travel with
+          // the evidence id into one composite foreign key, so the row cannot outlive the exact
+          // content it claims to have judged.
+          criterionRevision: latest.criterionRevision,
+          evidenceDigest: latest.evidenceDigest,
+          decision: input.decision,
+          note,
+          decidedByType: actor.type,
+          decidedById: actor.id,
+          decidingSessionId: decidingSession.id,
+        },
+        include: decisionInclude,
+      });
+      return decisionResponse(written);
+    }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));
   }
 
   async list(ownerId: string, taskId: string) {
