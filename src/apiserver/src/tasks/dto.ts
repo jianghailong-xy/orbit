@@ -514,6 +514,22 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string | null;
+  // Migration 0232's declaration, on the edit door: which of the PROJECT's stated acceptance
+  // criteria this work serves, as one of the `key` values `project_get` returns.
+  //
+  // Three-state like the links below — omit to leave the declaration alone, null to take it back
+  // (the work stays, the relation goes), a key to declare or correct one — and nullable unlike
+  // CreateTaskDto's, where there is no existing value to clear. Writing a key always stamps the
+  // criterion's CURRENT revision: the declaration is being made now, and letting a caller name a
+  // revision they never read would turn a stale declaration into a mark that a re-PATCH could
+  // switch off without anybody re-reading anything.
+  //
+  // It exists because a declaration made at create time was frozen there. Work filed before its
+  // criterion existed could never be attached to it, work that was re-scoped could never be
+  // re-pointed, and the one remedy a stale declaration names — read the criterion again and
+  // declare again — was the one thing no caller could perform. The alternative on offer was
+  // deleting the task and filing it afresh, which is the detachment 0232 refused to automate.
+  @IsOptional() @IsString() @MaxLength(64) criterionKey?: string | null;
   // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;

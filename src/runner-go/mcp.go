@@ -589,7 +589,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1394,6 +1394,22 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"onto a task claims one step settles everything. Up to %d characters.",
 			maxTaskAcceptanceCriteriaChars),
 	}
+	// The same declaration on the edit door, where it also has to be removable and, above all,
+	// re-statable. A task's criterion declaration used to be frozen at creation, so a declaration
+	// measured against wording that has since moved was marked stale and the remedy that mark
+	// names — read the criterion again and declare again — was unreachable from any tool.
+	updateCriterionKeyProp := map[string]interface{}{
+		"type":      []string{"string", "null"},
+		"maxLength": 64,
+		"description": "Which of the PROJECT's stated acceptance criteria this task serves — one of " +
+			"the `key` values project_get returns beside each criterion. Omit to leave the " +
+			"declaration alone, send a key to declare or CORRECT it, send null to take it back (the " +
+			"task stays; only the relation goes). Sending a key records the criterion's revision AS " +
+			"IT STANDS NOW, so re-sending the same key after that criterion was reworded is how work " +
+			"declared against the older wording is brought back up to date — that is what this field " +
+			"is for. The key must be one the task's OWN project states; a task in no project cannot " +
+			"declare one, and neither refusal is silent.",
+	}
 	labelsProp := map[string]interface{}{
 		"type":        "array",
 		"items":       str,
@@ -1970,6 +1986,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"provider":           providerProp,
 				"model":              modelProp,
 				"acceptanceCriteria": updateAcceptanceCriteriaProp,
+				"criterionKey":       updateCriterionKeyProp,
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},

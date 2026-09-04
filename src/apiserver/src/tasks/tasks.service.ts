@@ -6796,6 +6796,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Before the transaction, so a refusal writes nothing and takes no lock.
     let scopeWorld: ScopeWorld | undefined;
     let scopeFence: (ScopeWriteInput & { boundProjectId: string | null }) | undefined;
+    // The project this write LANDS in, as the scope contract derives it rather than as the caller
+    // spelled it. Read by the criterion declaration below, which resolves its key against that
+    // project and no other — the same rule `create` states, for the same reason: a key read out of
+    // a project the task is not in would resolve somewhere the work does not live.
+    let boundProjectId: string | null = null;
     {
       const scopeWrite: ScopeWriteInput = {
         operation: 'UPDATE_TASK',
@@ -6807,7 +6812,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       scopeWorld = await this.projectScopeWorld(
         this.prisma, ownerId, actingSessionId, [scopeWrite],
       );
-      const boundProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
+      boundProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
       // Only a write that actually claims a goal is fenced. The owner's edits and edits to tasks
       // that belong to no project keep the one-statement path exactly as they had it.
       if (scopeWorld.principal !== 'USER'
@@ -6815,6 +6820,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         scopeFence = { ...scopeWrite, boundProjectId };
       }
     }
+    // Migration 0232's declaration, on the edit door — the half `create` has had since T1 and this
+    // one has not. Its absence is what made a stale declaration a mark with no remedy: the mark
+    // asks somebody to re-read the criterion and declare again, and re-declaring was the one thing
+    // no caller could do.
+    //
+    // A blank key is refused rather than read as the retraction. `null` is how a declaration is
+    // taken back and there is deliberately no second spelling for it — an unset shell variable
+    // arriving as `""` must not quietly detach work from the criterion it was filed under.
+    if (typeof dto.criterionKey === 'string' && dto.criterionKey.trim() === '') {
+      throw new ForbiddenException(this.criterionUnknown('""',
+        'a blank key names no criterion, and it is not how a declaration is taken back. Pass one '
+        + 'of the keys project_get returns, or `null`.'));
+    }
+    // Before the transaction, like every other refusal on this path, so a refused declaration
+    // leaves the one the task already had exactly as it was.
+    const criterionDeclaration = dto.criterionKey
+      ? (await this.resolveCriterionDeclarations(
+        ownerId, [{ projectId: boundProjectId, criterionKey: dto.criterionKey }],
+      )).get(0) ?? null
+      : null;
     // Whether this write can move the task within the project/subtask structure. It decides both
     // that the hierarchy rules are checked at all and that the write takes the owner lock: the
     // check and the update it authorises have to be one serialized step, not two.
@@ -7123,6 +7148,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       data.verifies = dto.verifiesTaskId
         ? { connect: { id: dto.verifiesTaskId } }
         : { disconnect: true };
+    }
+    // 0232's pair, and it moves together or not at all. The id is the live relation; the revision
+    // is what that criterion said at the moment of THIS declaration, read from the row
+    // `resolveCriterionDeclarations` just looked at. Re-stamping rather than preserving is the
+    // whole point of the field: a caller re-sending the same key after the criterion was reworded
+    // is saying they have read it again, and that is what puts the stale mark out.
+    //
+    // Taking it back writes both NULL, which is 0232's hand-cleared state. A revision left behind
+    // without an id is the OTHER state — what `ON DELETE SET NULL` leaves when the criterion is
+    // deleted, and what `orphanedCriterionDeclarations` reads as exactly that — so writing it here
+    // would forge a deletion that never happened.
+    if (dto.criterionKey !== undefined) {
+      data.criterionDefinition = criterionDeclaration
+        ? { connect: { id: criterionDeclaration.criterionDefinitionId } }
+        : { disconnect: true };
+      data.criterionRevision = criterionDeclaration?.criterionRevision ?? null;
     }
     // One owner lock covers both structures a task can be moved within — its dependency edges and
     // its place in a project's subtask tree — because a single request can touch both and because

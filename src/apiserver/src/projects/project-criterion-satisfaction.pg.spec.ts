@@ -76,6 +76,14 @@ const NON_IDENTITY_COLUMNS = [
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 const MODULE = 'src/apiserver/src/projects/project-criterion-satisfaction.ts';
 const SPEC = 'src/apiserver/src/projects/project-criterion-satisfaction.pg.spec.ts';
+/**
+ * The one other reader, and it is a test too: `UpdateTaskDto.criterionKey` exists to put clause 3
+ * out, so its spec reads clause 3 back through this derivation rather than re-implementing the
+ * comparison and proving only that it can subtract two numbers. Named here rather than admitted by
+ * a pattern, because the list being exact is what makes a new consumer something somebody has to
+ * come and write down.
+ */
+const REDECLARATION_SPEC = 'src/apiserver/src/tasks/task-criterion-redeclaration.pg.spec.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -486,8 +494,8 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       .filter((file) => readFileSync(file, 'utf8').includes('project-criterion-satisfaction'))
       .map((file) => path.relative(REPO_ROOT, file))
       .sort();
-    assert.deepEqual(mentions, [MODULE, SPEC].sort(),
-      'the derivation has exactly one reader, and it is this spec: no gate consumes it');
+    assert.deepEqual(mentions, [MODULE, SPEC, REDECLARATION_SPEC].sort(),
+      'every reader of the derivation is a test of it: no gate, no status write, consumes it');
 
     const source = readFileSync(path.join(REPO_ROOT, MODULE), 'utf8');
     assert.doesNotMatch(
