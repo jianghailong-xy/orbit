@@ -2872,6 +2872,15 @@ model Task {
   /// command list, expression language, or separate acceptance entity behind them.
   acceptanceCommand          String? @map("acceptance_command")
   acceptanceExpectedExitCode Int?    @map("acceptance_expected_exit_code")
+  /// How long `acceptanceCommand` may run, in seconds. NULL — the overwhelmingly common case —
+  /// means the runner's own two-minute default, which is the only budget this column replaces.
+  ///
+  /// 0227 dropped a column of this name along with 0200's whole acceptance runtime. 0236 brings
+  /// back the number and none of the machinery: there is no admission that reads it before the
+  /// command starts, no owner ceiling to negotiate it against, and no typed termination behind
+  /// it. Exceeding it kills the command and reports -1, which is compared literally against
+  /// `acceptanceExpectedExitCode` exactly like any other code. Nothing about the run is stored.
+  acceptanceTimeoutSeconds Int? @map("acceptance_timeout_seconds")
   /// The declared completion fact for this task. EVIDENCE_JUDGMENT is a first-class criterion and the
   /// compatibility value for every row that predates this column, never an exceptional fallback.
   completionCriterion TaskCompletionCriterion @default(EVIDENCE_JUDGMENT) @map("completion_criterion")

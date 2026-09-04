@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,10 @@ import (
 // shellTurnTimeout bounds a `!`-prefixed shell command so a hung process (e.g. a stray
 // `tail -f`) can't pin the session's turn loop. The poller runs the command inline, so
 // nothing else on the session advances until it returns or the context is cancelled.
+//
+// It is also the DEFAULT budget for a task's EXECUTABLE acceptance command — the only budget it
+// had until a task could declare `acceptanceTimeoutSeconds`, and still the one every task that
+// declares nothing gets. See shellTurnBudget for which of the two a given turn is run under.
 const (
 	shellTurnTimeout = 2 * time.Minute
 	// tool_output is broadcast-only, so it cannot use the realtime bridge's durable-row
@@ -162,6 +167,27 @@ func waitWithForegroundShellOutput(wait func() error, output shellOutputSnapshot
 	}
 }
 
+// shellTurnBudget answers the one question a shell turn has to settle before it starts: how long
+// may this process run? `def` is the standing default (shellTurnTimeout in production); it is a
+// parameter rather than a read of the constant so the substitution can be exercised at
+// millisecond scale instead of across two real minutes.
+//
+// A declared budget belongs to ONE kind of turn: the server-generated EXECUTABLE acceptance
+// command, which is a test suite the task owner sized. A `!`-prefixed interactive shell is a
+// person waiting at a prompt and keeps the default unconditionally, so this never reads the
+// declaration off a turn that is not `taskAcceptance`.
+//
+// This changes how long a command may run and nothing else. A command that outlives whichever
+// budget applies is still killed, still reported as exit -1, and still compared literally against
+// the task's expectation like any other integer — 0227 removed the typed termination that could
+// tell a kill from a disagreement, and nothing here brings it back.
+func shellTurnBudget(resp *RunInboxResponse, def time.Duration) time.Duration {
+	if resp == nil || !resp.TaskAcceptance || resp.AcceptanceTimeoutSeconds <= 0 {
+		return def
+	}
+	return time.Duration(resp.AcceptanceTimeoutSeconds) * time.Second
+}
+
 // runShellTurn executes `command` with bash in execDir — with the agent's configured env
 // layered on the runner's own, matching the claude process — bypassing claude entirely. This is
 // also the frozen EXECUTABLE completion environment documented in docs/task-completion-criteria.md.
@@ -169,12 +195,12 @@ func waitWithForegroundShellOutput(wait func() error, output shellOutputSnapshot
 // emits a Bash tool_use/tool_result pair — the same shape claude's own Bash tool emits,
 // so the transcript renders it identically (a `$ command` card + output) with no UI
 // changes — and returns the combined stdout+stderr plus the process exit code.
-func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, turnID string, env map[string]string) (string, int) {
+func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, turnID string, env map[string]string, budget time.Duration) (string, int) {
 	toolUseID := "shell-" + turnID
 	emit(evToolUse, map[string]interface{}{
 		"id": toolUseID, "name": "Bash", "input": map[string]interface{}{"command": command},
 	})
-	cctx, cancel := context.WithTimeout(ctx, shellTurnTimeout)
+	cctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "bash", "-lc", command)
 	configureSessionProcessTree(cmd)
@@ -198,6 +224,21 @@ func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, tur
 			// Failed to start, or killed by the timeout/shutdown — surface why inline.
 			exit = -1
 			out += "\n[" + err.Error() + "]"
+		}
+		// A command killed at its budget arrives here as an *ExitError too — SIGKILL, so
+		// ExitCode() is already -1 — which means the branch above never ran and the transcript
+		// showed a truncated log and an exit code that a genuinely failing suite could equally
+		// have produced. Say which one it was, in the output TEXT and nowhere else: no typed
+		// termination field, no change to the exit code, and nothing stored. The transcript is
+		// the only place this difference is recorded, which is the accepted consequence of 0230.
+		// `ctx.Err() == nil` keeps the claim honest: a supervisor shutting the session down
+		// cancels this context too, and that is not the budget expiring.
+		if errors.Is(cctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			out += fmt.Sprintf(
+				"\n[orbit: killed at this shell turn's %s budget — the budget expired, the command"+
+					" did not report a failure of its own. Exit -1 is compared literally and still"+
+					" derives FAILED; declare acceptanceTimeoutSeconds on the task to raise it.]",
+				budget)
 		}
 	}
 	emit(evToolResult, map[string]interface{}{
@@ -278,6 +319,7 @@ func runSynchronousShellTurn(
 ) (TurnCompleteRequest, error) {
 	out, exitCode := runShellTurn(
 		ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env,
+		shellTurnBudget(resp, shellTurnTimeout),
 	)
 	return TurnCompleteRequest{
 		TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode),

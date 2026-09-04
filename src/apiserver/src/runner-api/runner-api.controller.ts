@@ -314,6 +314,27 @@ function isTaskAcceptanceClientTurnId(clientTurnId: string | null | undefined): 
   return taskAcceptanceExpectedExitCode(clientTurnId) != null;
 }
 
+/**
+ * The wall-clock budget this task declared for its acceptance command, or null for the runner's
+ * own default.
+ *
+ * One column read, and deliberately nothing else: there is no admission to run, no ceiling to
+ * check it against and nothing to record. A task that has since been deleted, or a session with no
+ * task at all, answers null and the runner falls back to its default — which is what every task
+ * that declares no budget gets anyway, so there is no failure mode here worth a refusal.
+ */
+async function acceptanceBudgetSeconds(
+  tx: Prisma.TransactionClient,
+  taskId: string | null,
+): Promise<number | null> {
+  if (!taskId) return null;
+  const task = await tx.task.findUnique({
+    where: { id: taskId },
+    select: { acceptanceTimeoutSeconds: true },
+  });
+  return task?.acceptanceTimeoutSeconds ?? null;
+}
+
 export function runnerSupportsCapability(
   header: string | string[] | undefined,
   capability: string,
@@ -2454,6 +2475,15 @@ export class RunnerApiController {
         taskAcceptance:
           t.kind === 'shell' && isTaskAcceptanceClientTurnId(t.clientTurnId)
             ? true
+            : undefined,
+        // Read here rather than frozen into the clientTurnId beside the expectation, because the
+        // two answer different questions. The expectation is what the result will be JUDGED
+        // against, so it is pinned at enqueue and an edit mid-run must not reach it. The budget is
+        // only how long this process may run: the latest declaration is the right one, and there
+        // is nothing later that compares against it.
+        acceptanceTimeoutSeconds:
+          t.kind === 'shell' && isTaskAcceptanceClientTurnId(t.clientTurnId)
+            ? (await acceptanceBudgetSeconds(tx, owned[0].taskId)) ?? undefined
             : undefined,
       };
     }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));

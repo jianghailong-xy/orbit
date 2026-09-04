@@ -693,6 +693,16 @@ type RunInboxResponse struct {
 	// TaskAcceptance marks the server-generated EXECUTABLE command. It always runs synchronously so the
 	// control plane receives one definitive exit code, even if its text ends in `&`.
 	TaskAcceptance bool `json:"taskAcceptance,omitempty"`
+	// AcceptanceTimeoutSeconds is the wall-clock budget the TASK declared for that command, read
+	// off the task at dequeue and sent with the work it bounds. Absent (0) is the overwhelmingly
+	// common case and means the runner's own default applies — see shellTurnBudget, which is the
+	// only thing that reads this. Meaningful only alongside TaskAcceptance: an interactive
+	// `!`-shell is never run under a task's budget.
+	//
+	// It buys wall-clock and nothing else. There is no admission, no ceiling to negotiate against
+	// and no typed termination behind it: a command that outlives this is killed and reported as
+	// exit -1, exactly as one that outlives the default is.
+	AcceptanceTimeoutSeconds int `json:"acceptanceTimeoutSeconds,omitempty"`
 }
 
 // AbandonedSteer is a mid-turn message a dead runner process left leased, handed to the process

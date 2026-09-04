@@ -597,6 +597,7 @@ export const TASK_LIST_SELECT = {
   acceptanceCriteria: true,
   acceptanceCommand: true,
   acceptanceExpectedExitCode: true,
+  acceptanceTimeoutSeconds: true,
   completionCriterion: true,
   completionCriterionOverrideReason: true,
   labels: true,
@@ -2885,6 +2886,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       acceptanceCriteria: dto.acceptanceCriteria,
       acceptanceCommand: dto.acceptanceCommand,
       acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
+      // Omitted stays NULL, which is the runner's own default budget.
+      acceptanceTimeoutSeconds: dto.acceptanceTimeoutSeconds,
       // Re-resolve at the shared write builder so the single and batch paths stay total when N18
       // removes the legacy default. Both paths already ran this deterministic check before any
       // ownership or transaction work; this cheap repeat protects future internal call sites too.
@@ -6725,6 +6728,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const acceptanceExpectedExitCode = dto.acceptanceExpectedExitCode === undefined
       ? before.acceptanceExpectedExitCode
       : (dto.acceptanceExpectedExitCode ?? null);
+    const acceptanceTimeoutSeconds = dto.acceptanceTimeoutSeconds === undefined
+      ? before.acceptanceTimeoutSeconds
+      : (dto.acceptanceTimeoutSeconds ?? null);
     const verifiesTaskIdAfter =
       dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
     const attachesVerifier = before.verifiesTaskId == null && verifiesTaskIdAfter != null;
@@ -6764,13 +6770,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const touchesCompletionDeclaration = dto.completionCriterion !== undefined
       || dto.acceptanceCommand !== undefined
       || dto.acceptanceExpectedExitCode !== undefined
+      || dto.acceptanceTimeoutSeconds !== undefined
       || dto.completionPolicy !== undefined
       || dto.verifiesTaskId !== undefined;
     if (touchesCompletionDeclaration) {
+      // The MERGED declaration, so an edit that clears the command while a budget is still stored
+      // is refused with a sentence here rather than by 0236's CHECK constraint as a 500.
       this.assertCompletionDeclaration({
         completionCriterion,
         acceptanceCommand,
         acceptanceExpectedExitCode,
+        acceptanceTimeoutSeconds,
         completionPolicy,
         verifiesTaskId: verifiesTaskIdAfter,
       });
@@ -6848,6 +6858,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dto.acceptanceExpectedExitCode === undefined
           ? undefined
           : (dto.acceptanceExpectedExitCode ?? null),
+      // Clearing the command clears the budget with it: a budget outliving the command it bounds
+      // is exactly what 0236's CHECK constraint refuses, and the caller did ask for the pair to go.
+      acceptanceTimeoutSeconds:
+        acceptanceCommand == null ? null
+          : dto.acceptanceTimeoutSeconds === undefined
+            ? undefined
+            : (dto.acceptanceTimeoutSeconds ?? null),
       completionCriterion: touchesCompletionDeclaration ? completionCriterion : undefined,
       autoRunWhenReady: dto.autoRunWhenReady,
       completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,

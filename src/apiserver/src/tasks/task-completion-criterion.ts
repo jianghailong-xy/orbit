@@ -23,6 +23,18 @@ export interface TaskCompletionDeclaration {
   completionCriterion?: TaskCompletionCriterionValue | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  /**
+   * How long acceptanceCommand may run, in seconds; null/absent is the runner's own default.
+   *
+   * Part of the declaration rather than a separate concern because it is only meaningful next to
+   * a command, and because the database says the same thing: 0236's
+   * `task_acceptance_timeout_shape_check` refuses a budget on a task that declares no EXECUTABLE
+   * command. Validating it here is what turns that constraint into a sentence instead of a 500.
+   *
+   * It bounds the run and decides nothing about it. A command killed at this budget reports -1
+   * and -1 is compared with acceptanceExpectedExitCode like any other integer.
+   */
+  acceptanceTimeoutSeconds?: number | null;
   completionPolicy?: TaskCompletionPolicyValue | null;
   /** A verifier task points at another task; it cannot simultaneously own executable acceptance. */
   verifiesTaskId?: string | null;
@@ -64,6 +76,15 @@ export function taskCompletionDeclarationError(
   }
   if (command != null && command.trim() === '') {
     return 'acceptanceCommand must not be blank';
+  }
+  const timeoutSeconds = declaration.acceptanceTimeoutSeconds ?? null;
+  if (timeoutSeconds != null) {
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 86400) {
+      return 'acceptanceTimeoutSeconds must be a whole number of seconds from 1 to 86400';
+    }
+    if (command == null) {
+      return 'acceptanceTimeoutSeconds bounds acceptanceCommand, so it cannot be set without one';
+    }
   }
 
   const criterion = resolveTaskCompletionCriterion(declaration);

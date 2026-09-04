@@ -152,6 +152,9 @@ Options:
   --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
   --acceptance-expected-exit-code N
                               Exit code that derives DONE; any other exit derives FAILED
+  --acceptance-timeout-seconds N
+                              How long that command may run, 1..86400. Omit for the two-minute
+                              default; raise it for a suite that legitimately runs longer
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
@@ -211,6 +214,9 @@ with the suggested criterion, or deliberately keep the original one and pass a n
 task get; it is audit material, not completion evidence.
 
 For EXECUTABLE, --acceptance-command and --acceptance-expected-exit-code must be passed together.
+--acceptance-timeout-seconds is optional and bounds only that command; omitted, it runs under the
+runner's two-minute default. Exceeding whichever budget applies kills the command and reports -1,
+which derives FAILED like any other disagreeing code, so size it above a passing run.
 After the execution turn, that same task session runs the command once and records its untrimmed
 combined output and exit code. That exit code is compared with the declared expectation: equal
 derives DONE, anything else derives FAILED. A run that never produced an exit code at all is not
@@ -349,6 +355,9 @@ Options:
   --acceptance-command SHELL  Replace the one EXECUTABLE command
   --acceptance-expected-exit-code N
                               Replace the exit code that mechanically derives DONE
+  --acceptance-timeout-seconds N
+                              Replace that command's wall-clock budget, 1..86400
+  --clear-acceptance-timeout  Return that command to the runner's two-minute default
   --clear-executable-acceptance
                               Clear the command and expected exit code together
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable. Name the SUBJECT of the
@@ -395,16 +404,19 @@ The completion criterion is one of EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMEN
 choices: EVIDENCE_JUDGMENT is not what happens when either other criterion fails. Omitting
 --completion-criterion preserves the stored choice; it cannot be cleared.
 
-No caller may write --status DONE. Since 2026-09-02 the only criterion with an implementation is
-VERIFICATION: obtain an independent verifier's PASS verdict. EXECUTABLE and EVIDENCE_JUDGMENT are
-still declarable and still keep their data, but nothing satisfies them until the account owner
-rebuilds those implementations. FAILED remains writable by a run as its conservative self-report.
+No caller may write --status DONE. Satisfy the task's declared criterion instead: EXECUTABLE is
+derived from the acceptance command's exit code, VERIFICATION from an independent verifier's PASS
+verdict. EVIDENCE_JUDGMENT is still declarable and still keeps its data, but nothing satisfies it
+until the account owner rebuilds that implementation. FAILED remains writable by a run as its
+conservative self-report.
 
-The executable acceptance is exactly two fields: --acceptance-command and
---acceptance-expected-exit-code. Either flag may replace its stored half, while
---clear-executable-acceptance clears both; a task may never be left with only one. They write the
-DECLARATION and are unaffected by the 2026-09-02 removal; what is gone is the evaluator that used
-to compare an exit code against them and derive DONE or FAILED.
+The executable acceptance declaration is --acceptance-command and --acceptance-expected-exit-code,
+which must be set or cleared together; either flag may replace its stored half, while
+--clear-executable-acceptance clears both. --acceptance-timeout-seconds is an optional third field
+bounding how long that command may run, and --clear-acceptance-timeout returns it to the runner's
+two-minute default; clearing the pair clears the budget with it. A budget buys wall-clock and
+nothing else — a command killed at one reports -1, which derives FAILED like any other exit code
+that disagrees with the declared expectation.
 
 --parent-task-id moves this task under another task you own, and --clear-parent detaches it and
 leaves it standing on its own; omitting both leaves the parent it already has alone. A
@@ -1152,6 +1164,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
+	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "wall-clock budget for that command (default two minutes)")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -1181,6 +1194,10 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if commandSet && strings.TrimSpace(*acceptanceCommand) == "" {
 		return fmt.Errorf("--acceptance-command cannot be blank")
+	}
+	// A budget bounds a command, so there is nothing for it to bound on its own.
+	if flagWasSet(fs, "acceptance-timeout-seconds") && !commandSet {
+		return fmt.Errorf("--acceptance-timeout-seconds requires --acceptance-command")
 	}
 	if flagWasSet(fs, "completion-criterion") {
 		if err := validateTaskCLICompletionCriterion(*completionCriterion); err != nil {
@@ -1287,6 +1304,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if commandSet {
 		body["acceptanceCommand"] = *acceptanceCommand
 		body["acceptanceExpectedExitCode"] = *acceptanceExpectedExitCode
+	}
+	if flagWasSet(fs, "acceptance-timeout-seconds") {
+		body["acceptanceTimeoutSeconds"] = *acceptanceTimeoutSeconds
 	}
 	if flagWasSet(fs, "due-date") {
 		if strings.TrimSpace(*dueDate) == "" {
@@ -1485,7 +1505,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	acceptanceCommand := fs.String("acceptance-command", "", "replace the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
+	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "replace the wall-clock budget for that command")
 	clearExecutableAcceptance := fs.Bool("clear-executable-acceptance", false, "clear the command and expected exit code together")
+	clearAcceptanceTimeout := fs.Bool("clear-acceptance-timeout", false, "return the command to the runner's default budget")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
 	clearDependencies := fs.Bool("clear-dependencies", false, "clear all prerequisite task ids")
@@ -1567,6 +1589,15 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearExecutableAcceptance && flagWasSet(fs, "acceptance-expected-exit-code") {
 		return fmt.Errorf("--clear-executable-acceptance and --acceptance-expected-exit-code cannot be used together")
+	}
+	if *clearExecutableAcceptance && flagWasSet(fs, "acceptance-timeout-seconds") {
+		return fmt.Errorf("--clear-executable-acceptance and --acceptance-timeout-seconds cannot be used together")
+	}
+	if *clearAcceptanceTimeout && flagWasSet(fs, "acceptance-timeout-seconds") {
+		return fmt.Errorf("--clear-acceptance-timeout and --acceptance-timeout-seconds cannot be used together")
+	}
+	if *clearAcceptanceTimeout && *clearExecutableAcceptance {
+		return fmt.Errorf("--clear-executable-acceptance already clears the budget; --clear-acceptance-timeout is redundant")
 	}
 	if flagWasSet(fs, "acceptance-command") && strings.TrimSpace(*acceptanceCommand) == "" {
 		return fmt.Errorf("--acceptance-command cannot be blank; use --clear-executable-acceptance")
@@ -1682,12 +1713,20 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if *clearExecutableAcceptance {
 		body["acceptanceCommand"] = nil
 		body["acceptanceExpectedExitCode"] = nil
+		// The budget belongs to the command; clearing the pair clears what bounded it.
+		body["acceptanceTimeoutSeconds"] = nil
 	} else {
 		if flagWasSet(fs, "acceptance-command") {
 			body["acceptanceCommand"] = *acceptanceCommand
 		}
 		if flagWasSet(fs, "acceptance-expected-exit-code") {
 			body["acceptanceExpectedExitCode"] = *acceptanceExpectedExitCode
+		}
+		if flagWasSet(fs, "acceptance-timeout-seconds") {
+			body["acceptanceTimeoutSeconds"] = *acceptanceTimeoutSeconds
+		}
+		if *clearAcceptanceTimeout {
+			body["acceptanceTimeoutSeconds"] = nil
 		}
 	}
 	if *clearDependencies {
@@ -2164,6 +2203,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
+				"--acceptance-timeout-seconds <n> (acceptanceTimeoutSeconds: how long that command may run, 1..86400; omit for the two-minute default)",
 			)
 		case "task_update":
 			capabilities[i].Arguments = append(
@@ -2171,6 +2211,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
+				"--acceptance-timeout-seconds <n> | --clear-acceptance-timeout (acceptanceTimeoutSeconds: replace that command's wall-clock budget, or return it to the two-minute default)",
 				"--clear-executable-acceptance (clear both EXECUTABLE fields)",
 			)
 		}

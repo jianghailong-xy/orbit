@@ -1049,6 +1049,15 @@ export interface RunInboxResponse {
    *  command. The runner must execute it synchronously even when the command ends in `&`, because
    *  only a completed process has an exit code the control plane can compare. */
   taskAcceptance?: boolean;
+  /** The wall-clock budget, in seconds, that this task declared for that command — read off the
+   *  task as the turn is dequeued and sent with the work it bounds. Absent is the overwhelmingly
+   *  common case and leaves the runner's own two-minute default in force; meaningful only
+   *  alongside `taskAcceptance`, since an interactive `!`-shell is never run under a task's budget.
+   *
+   *  It buys wall-clock and nothing else. A command that outlives it is killed and reported as
+   *  exit -1, which the control plane compares against the declared expectation like any other
+   *  integer — there is no admission before the command starts and no typed termination after it. */
+  acceptanceTimeoutSeconds?: number;
 }
 
 /** Runner → control plane: expire only leases owned by one dead engine process.

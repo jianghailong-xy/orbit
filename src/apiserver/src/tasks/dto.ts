@@ -50,6 +50,13 @@ export const TASK_LABEL_MAX_LENGTH = 64;
 /** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
 export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
 
+/**
+ * A day, matching 0236's `task_acceptance_timeout_shape_check`. Not a policy about how long work
+ * may take — it is the point past which "this is a wall-clock budget for one command" stops being
+ * a plausible reading of the number, and the runner holds the session's turn loop the whole time.
+ */
+export const MAX_TASK_ACCEPTANCE_TIMEOUT_SECONDS = 86_400;
+
 /** One explicit completion-evidence submission. The source is caller identity, never payload prose. */
 export class SubmitTaskCompletionEvidenceDto {
   @IsPublicId()
@@ -218,6 +225,10 @@ export class CreateTaskDto {
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
+  // How long that command may run. Omitted is the runner's two-minute default, which is the only
+  // budget this replaces — it buys wall-clock and decides nothing about the outcome.
+  @IsOptional() @IsInt() @Min(1) @Max(MAX_TASK_ACCEPTANCE_TIMEOUT_SECONDS)
+  acceptanceTimeoutSeconds?: number;
   // One ordinary completion criterion. Omission is the compatibility spelling of EVIDENCE_JUDGMENT;
   // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
@@ -406,6 +417,10 @@ export class UpdateTaskDto {
   // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;
+  // Three-state: omitted preserves the stored budget, null returns the task to the runner's
+  // default, a number replaces it.
+  @IsOptional() @IsInt() @Min(1) @Max(MAX_TASK_ACCEPTANCE_TIMEOUT_SECONDS)
+  acceptanceTimeoutSeconds?: number | null;
   // Omit to preserve it. A criterion is never nullable: EVIDENCE_JUDGMENT is the explicit normal
   // choice rather than clearing the field or escalating after another criterion failed.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)

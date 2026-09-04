@@ -314,12 +314,15 @@ suite('(a) the installed database has none of the relations, functions or types 
        ORDER BY 1`)).rows.map((row) => row.name);
     assert.deepEqual(callers, [], `installed functions still reach for a dropped one: ${callers}`);
 
-    // And every negotiation column with them.
+    // And every negotiation column with them. `acceptance_timeout_seconds` is deliberately not on
+    // this list: 0236 took that one column back as a plain declared budget, asserted below and in
+    // `(ab)` of the text half. The ceilings it was negotiated against, and everything that decided
+    // whether a task was allowed to ask, are still expected to be gone.
     const columns = (await client.query<{ table: string; name: string }>(`
       SELECT table_name AS table, column_name AS name FROM information_schema.columns
        WHERE table_schema = 'public'
          AND ((table_name = 'task' AND column_name IN (
-                'acceptance_timeout_seconds', 'acceptance_owner_timeout_ceiling_seconds',
+                'acceptance_owner_timeout_ceiling_seconds',
                 'acceptance_policy_timeout_ceiling_seconds', 'acceptance_schema_revision',
                 'acceptance_capability_revision', 'acceptance_command_digest',
                 'acceptance_evaluation_plan_digest', 'execution_attempt_count'))
@@ -327,6 +330,21 @@ suite('(a) the installed database has none of the relations, functions or types 
            OR (table_name = 'project_acceptance_run' AND column_name LIKE 'conclusion\\_%'))
        ORDER BY 1, 2`)).rows;
     assert.deepEqual(columns, [], `negotiation columns survive: ${JSON.stringify(columns)}`);
+
+    // What 0236 put back, on the server rather than in the ledger: one nullable integer, and a
+    // CHECK that ties it to a task actually declaring an EXECUTABLE command.
+    const budget = (await client.query<{ type: string; nullable: string }>(`
+      SELECT data_type AS type, is_nullable AS nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'task'
+         AND column_name = 'acceptance_timeout_seconds'`)).rows;
+    assert.deepEqual(budget, [{ type: 'integer', nullable: 'YES' }],
+      'the declared acceptance budget is missing or is not a nullable integer');
+    const shape = (await client.query<{ name: string }>(`
+      SELECT conname AS name FROM pg_constraint
+       WHERE conrelid = 'public.task'::regclass AND contype = 'c'
+         AND conname = 'task_acceptance_timeout_shape_check'`)).rows;
+    assert.deepEqual(shape, [{ name: 'task_acceptance_timeout_shape_check' }],
+      'the budget column has no shape constraint behind it');
   });
 
 // (d)(e)(f)(g) -------------------------------------------------------------------------------------

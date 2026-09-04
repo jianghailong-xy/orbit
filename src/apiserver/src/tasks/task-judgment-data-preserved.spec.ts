@@ -180,12 +180,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `project_completion_contract` — a projection that postdates 0228 and is not one of the
   //        preserved relations — because that row stored an `evaluationPlanVersions` key listing
   //        the two columns this migration removes.
+  //   0236 made the EXECUTABLE acceptance budget declarable: one nullable column on `task`,
+  //        `acceptance_timeout_seconds`, and a CHECK over it. Read against every claim above: it
+  //        ALTERs `task`, which is where the 0177 pair lives, but it only ADDS — it drops no
+  //        column, no constraint, no trigger, no function and no type, and it names none of the
+  //        six preserved triggers/functions, neither 0177 relation and no `project_acceptance_*`
+  //        object. It cannot invalidate a preserved row: every existing row reads NULL for the new
+  //        column, which the new constraint permits unconditionally, so the CHECK is satisfied
+  //        without a backfill and no task row is read or written. It carries no
+  //        `CREATE OR REPLACE FUNCTION` at all, so it is not another writer of the DONE fence, and
+  //        it neither reads nor recomputes `task.completion_criterion` — it only mentions the
+  //        label 'EXECUTABLE' inside its own CHECK.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
       '0232_task_criterion_declaration',
       '0233_project_acceptance_criterion_wiring_removal',
-      '0234_project_acceptance_evaluation_plan_lane_removal'],
+      '0234_project_acceptance_evaluation_plan_lane_removal',
+      '0236_executable_acceptance_budget'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

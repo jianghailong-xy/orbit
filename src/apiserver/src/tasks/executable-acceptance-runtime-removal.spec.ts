@@ -103,9 +103,16 @@ const DROPPED_TRIGGERS = [
   'task_executable_plan_bind',
 ];
 
-/** 0200's negotiation columns on `task`, and 0215's three on `project_acceptance_run`. */
+/**
+ * 0200's negotiation columns on `task`, and 0215's three on `project_acceptance_run`.
+ *
+ * `acceptance_timeout_seconds` is NOT here, and was until 0236. That migration takes the column
+ * back -- one nullable integer, still no admission, no ceiling and no typed termination -- and
+ * `(ab)` below is what holds it to exactly that. The rest of the negotiation stays listed, which
+ * is the point of naming the exception rather than shortening the list: a budget being declarable
+ * again says nothing about the machinery that used to decide whether a task deserved one.
+ */
 const DROPPED_COLUMNS = [
-  'acceptance_timeout_seconds',
   'acceptance_owner_timeout_ceiling_seconds',
   'acceptance_policy_timeout_ceiling_seconds',
   'acceptance_schema_revision',
@@ -146,7 +153,9 @@ const DROPPED_NAMES = [
   'acceptancePolicyTimeoutCeilingSeconds',
   'acceptanceRuntimeDeadline',
   'acceptanceSchemaRevision',
-  'acceptanceTimeoutSeconds',
+  // `acceptanceTimeoutSeconds` was here too, and came back with 0236's column -- see `(ab)`. Its
+  // two ceilings above did not, so a caller can still say how long, and nothing can be said about
+  // what happens to a task that wants longer than someone else would allow.
   'continuationAfterExecutableAttempt',
   'evaluateExecutableAttempt',
   'executableAcceptanceCapabilityV2',
@@ -502,6 +511,56 @@ test('(aa) the ability to tell a timeout from a failure is gone, and nothing rep
     assert.deepEqual(offenders, [],
       `${invented} is spelled by ${offenders.join(', ')}: this removal invents no replacement`);
   }
+});
+
+// (ab) -------------------------------------------------------------------------------------------
+/**
+ * The one thing this removal gave back, and how much of it.
+ *
+ * 0227 took out an admission, an append-only attempt with a typed termination, and a continuation
+ * that read that termination and kept a failing task actionable. It also took out the number those
+ * three were built around: how long the command may run. On 2026-09-03 the number came back, alone,
+ * because without it EXECUTABLE could not be used by a repository whose test suite runs longer than
+ * the runner's hard-coded two minutes -- this one, measured at 101-126s on the same tree, where the
+ * same code derived DONE or FAILED depending on host load.
+ *
+ * A budget and a negotiation are not the same object, and this is where that claim is made
+ * checkable rather than argued. 0236 may add the column and its CHECK. It may not create a table,
+ * a type, a trigger or a function, and its STATEMENTS may not name anything else this removal
+ * dropped -- its prose may, and does, in order to say what stays gone.
+ */
+const REINTRODUCED_DIR = '0236_executable_acceptance_budget';
+
+test('(ab) 0236 takes the budget column back, and none of the runtime it was part of', () => {
+  const sql = readFileSync(path.join(MIGRATIONS, REINTRODUCED_DIR, 'migration.sql'), 'utf8');
+  const statements = statementsOf(sql);
+  assert.match(statements, /ADD COLUMN "acceptance_timeout_seconds" integer/);
+  // The column is the last word on itself: nothing after 0227 drops it again, and 0236 is what
+  // creates it. Read from the ledger rather than from this file's constants.
+  assert.deepEqual(
+    lastVerdict(
+      /ADD COLUMN "acceptance_timeout_seconds"/,
+      /DROP COLUMN "acceptance_timeout_seconds"/,
+    ),
+    { dir: REINTRODUCED_DIR, verdict: 'CREATED' },
+  );
+  for (const structural of [/CREATE\s+TABLE/i, /CREATE\s+TYPE/i, /CREATE\s+(?:CONSTRAINT\s+)?TRIGGER/i,
+    /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION/i, /CREATE\s+INDEX/i, /CREATE\s+VIEW/i, /DROP\s/i]) {
+    assert.doesNotMatch(statements, structural,
+      `0236 is one column and a CHECK; it must not also ${structural}`);
+  }
+  // Everything else this removal dropped is still dropped, in the statements 0236 actually runs.
+  for (const name of DROPPED_NAMES) {
+    assert.equal(statements.includes(name), false,
+      `0236 returns to ${name}, which is the negotiation and not the budget`);
+  }
+  // And the accepted consequence is unchanged where it is written down: a budget buys wall-clock
+  // and decides nothing, so a command killed at one is still reported and compared as -1.
+  const doc = read('docs/task-completion-criteria.md');
+  assert.match(doc, /Two consequences follow and are accepted/);
+  assert.match(doc, /The runner reports `-1` for all of them/);
+  // The budget is documented as an input with a default, not as a second chance.
+  assert.match(doc, /acceptanceTimeoutSeconds/);
 });
 
 // (r)(s) -------------------------------------------------------------------------------------------

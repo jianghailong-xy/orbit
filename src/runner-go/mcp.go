@@ -502,7 +502,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -536,7 +536,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -565,7 +565,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1425,6 +1425,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"runner write shape.",
 		"items": obj(projectCriterionProps(true), "text", "verificationMethod"),
 	}
+	// How long acceptanceCommand may run. One number, and deliberately only one: it buys
+	// wall-clock, it is used exactly as given, and there is no ceiling to negotiate it against and
+	// no admission that could refuse it before the command starts.
+	acceptanceTimeoutSecondsDescription := "Wall-clock budget for acceptanceCommand, in seconds. " +
+		"Omit for the two-minute default — raise it when the declared command is a test suite that " +
+		"legitimately runs longer, which is the difference between a task that can use EXECUTABLE " +
+		"and one that cannot. Applies only to this task's acceptance command; an interactive `!`-shell " +
+		"is unaffected. Exceeding it kills the command and reports -1, which derives FAILED like any " +
+		"other disagreeing exit code — a budget is not a second chance, so size it above a passing run."
+	acceptanceTimeoutSecondsProp := map[string]interface{}{
+		"type": "integer", "minimum": 1, "maximum": 86400,
+		"description": acceptanceTimeoutSecondsDescription,
+	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
@@ -1449,12 +1462,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; after the execution turn, the existing task session runs it and the server derives DONE/FAILED from the exit code without an LLM judgement. If one command is not enough, split the task.",
 			},
 			"acceptanceExpectedExitCode": map[string]interface{}{
-				"type":        "integer",
-				"description": "The exit code that derives DONE for acceptanceCommand. The command runs once and its exit code is compared with this one: equal derives DONE, anything else derives FAILED. Set both fields together.",
+				"type": "integer",
+				"description": "The exit code that derives DONE for acceptanceCommand. The command runs once and its exit code is compared with this one: equal derives DONE, anything else derives FAILED. " +
+					"The comparison is literal and covers every way the command can end: a command killed at its budget, cancelled, signalled, or that failed to start is reported as -1 and derives FAILED too, indistinguishably from a run that returned the wrong code. " +
+					"Size acceptanceTimeoutSeconds so a passing suite fits inside it. Set both fields together.",
 			},
-			"dueDate":  str,
-			"provider": providerProp,
-			"model":    modelProp,
+			"acceptanceTimeoutSeconds": acceptanceTimeoutSecondsProp,
+			"dueDate":                  str,
+			"provider":                 providerProp,
+			"model":                    modelProp,
 			"dependsOnTaskIds": map[string]interface{}{
 				"type":        "array",
 				"items":       str,
@@ -1899,8 +1915,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; null/null clears executable acceptance. Omit both to preserve them. One command only — split the task if that is insufficient.",
 				},
 				"acceptanceExpectedExitCode": map[string]interface{}{
+					"type": []string{"integer", "null"},
+					"description": "The exit code that mechanically derives DONE. The recorded exit code is compared with this one; anything else derives FAILED. " +
+						"The comparison is literal and covers every way the command can end: killed at its budget, cancelled, signalled, or failed to start is reported as -1 and derives FAILED too. " +
+						"Set or clear it together with acceptanceCommand.",
+				},
+				"acceptanceTimeoutSeconds": map[string]interface{}{
 					"type":        []string{"integer", "null"},
-					"description": "The exit code that mechanically derives DONE. The recorded exit code is compared with this one; anything else derives FAILED. Set or clear it together with acceptanceCommand.",
+					"description": acceptanceTimeoutSecondsDescription + " Pass null to return this task to the default.",
 				},
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",

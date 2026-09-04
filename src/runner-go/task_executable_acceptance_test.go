@@ -19,6 +19,7 @@ func TestTaskAcceptanceCommandProducesRawOutputAndExitCodeWithoutAModel(t *testi
 		func(string, map[string]interface{}) {},
 		"acceptance-turn",
 		nil,
+		shellTurnTimeout,
 	)
 	if output != "raw output" || exitCode != 7 {
 		t.Fatalf("shell result = (%q, %d), want raw output and exit 7", output, exitCode)
@@ -41,6 +42,7 @@ func TestTaskAcceptanceCommandEnvironmentContract(t *testing.T) {
 			"N1_OVERRIDE":    "agent",
 			"ORBIT_TASK_ID":  "agent-task-context",
 		},
+		shellTurnTimeout,
 	)
 	want := strings.Join([]string{execDir, "runner", "agent", "agent", "unset"}, "\n")
 	if exitCode != 0 || output != want {

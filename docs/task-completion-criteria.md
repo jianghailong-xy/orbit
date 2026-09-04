@@ -72,9 +72,23 @@ commit that satisfies it. Retries return the original decision rather than chang
 ## `EXECUTABLE` environment contract
 
 The runner executes the command synchronously as `bash -lc <acceptanceCommand>`, after the task's
-ordinary execution turn, with a two-minute timeout. A trailing `&` is passed to Bash as command
-text and never activates Orbit's detached-shell shortcut, because the runner must observe a final
-exit code.
+ordinary execution turn. A trailing `&` is passed to Bash as command text and never activates
+Orbit's detached-shell shortcut, because the runner must observe a final exit code.
+
+The wall-clock budget is two minutes unless the task declares `acceptanceTimeoutSeconds` (1 to
+86400), which replaces it for that task's acceptance command only — an interactive `!`-shell keeps
+the two minutes unconditionally. The declared value is used exactly as given: nothing negotiates
+it, clamps it, or decides before the command starts whether it was allowed to ask for that long.
+Migration `0236` added it because the fixed ceiling made EXECUTABLE unusable for any repository
+whose suite runs longer than two minutes, including this one — a suite measured at 101s, 104s,
+105s and 126s across four runs of the same tree derived `DONE` or `FAILED` according to host load.
+
+A budget is not a second chance. Exceeding whichever budget applies kills the command and reports
+`-1`, which is compared like any other exit code, so it derives `FAILED` exactly as it did before —
+size the budget above a passing run rather than raising it after a failure. The one thing that
+changed is diagnosis: the killed command's output ends with a bracketed line naming the budget that
+expired, so a reader can tell it from a suite that genuinely went red. That line is transcript text
+and nothing else — it is not stored, and it is not a termination kind.
 
 The ordinary execution turn does not first write `IN_PROGRESS`. A newly dispatched task remains
 `OPEN` until the reserved shell turn reports; a retry of a prior failed attempt may already be
@@ -88,7 +102,8 @@ comment carrying the command's output. Two consequences follow and are accepted:
 
 - A timeout, a cancellation, a signal and a start failure are **not distinguishable** from a
   command that ran and returned the wrong code. The runner reports `-1` for all of them and it is
-  compared like any other integer, so every one of them derives `FAILED`.
+  compared like any other integer, so every one of them derives `FAILED`. Declaring
+  `acceptanceTimeoutSeconds` changes when the timeout fires, never what it derives.
 - The reason a task failed is **not recorded**. Diagnosis is reading the session: the run's own
   `error` carries `acceptance command exited N; expected M`, and the command's output is in the
   session transcript where the shell turn ran.
