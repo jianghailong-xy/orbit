@@ -322,11 +322,11 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: { targetBranch?: string },
+    @Body() dto: { targetBranch?: string; waitSeconds?: number },
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
-    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch);
+    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds);
   }
 
   /**

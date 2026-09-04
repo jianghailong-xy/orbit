@@ -844,9 +844,18 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
+		wait, err := getBoundedOptionalNumber(args, "waitSeconds", maxMergeWaitSeconds)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "targetBranch")
-		raw, err := s.t.mergeSession(s.sessionID, s.orchestrationToken, id, body)
+		if wait > 0 {
+			body["waitSeconds"] = wait
+		}
+		// The client deadline has to outlast the wait the server was asked to take, or the answer
+		// comes back as "context deadline exceeded" instead of as the outcome.
+		raw, err := s.t.mergeSession(s.sessionID, s.orchestrationToken, id, body, mergeCallTimeout(wait))
 		if err != nil {
 			return toolResult("merge session failed: "+err.Error(), true)
 		}
@@ -2249,8 +2258,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_merge",
-				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict.",
-				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp, "targetBranch": str}, "sessionId"),
+				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge and the reply says nothing about whether it worked — read the outcome with merge_receipts. With waitSeconds the reply waits for the outcome and carries the receipt itself.",
+				"inputSchema": obj(map[string]interface{}{
+					"sessionId":    sessionIDProp,
+					"targetBranch": str,
+					"waitSeconds":  map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxMergeWaitSeconds, "description": fmt.Sprintf("Wait up to this many seconds (1-%d) for the merge to finish, and return its receipt inline: result, landed, the target tip it produced, and every conflicting path when it conflicted. The runner picks a queued merge up on its NEXT HEARTBEAT, which ticks every 30 seconds, so a wait under that reports no outcome even for a merge that then succeeds — 60 is a sane floor. Running out of wait is not a failure and never claims one: the reply says it has no outcome, names the operation, and points at merge_receipts. Omitted, the merge is only queued.", maxMergeWaitSeconds)},
+				}, "sessionId"),
 			},
 			map[string]interface{}{
 				"name":        "session_end",

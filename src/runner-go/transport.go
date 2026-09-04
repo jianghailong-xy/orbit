@@ -1435,12 +1435,22 @@ func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id str
 	return out, err
 }
 
-func (t *Transport) mergeSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+// mergeCallTimeout is how long the client waits for a merge request. Without a wait it is the
+// ordinary op deadline; with one, the server is holding the response deliberately, so the client
+// budget is the wait plus that same slack for the round trip.
+func mergeCallTimeout(waitSeconds int) time.Duration {
+	if waitSeconds <= 0 {
+		return taskOpTimeout
+	}
+	return time.Duration(waitSeconds)*time.Second + taskOpTimeout
+}
+
+func (t *Transport) mergeSession(callerSessionID, orchestrationToken, id string, body interface{}, timeout time.Duration) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, callerSessionID, orchestrationToken)
+	err := t.doOrchestrationTimeout("POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, callerSessionID, orchestrationToken, timeout)
 	return out, err
 }
 
@@ -1608,17 +1618,25 @@ func (t *Transport) refreshOrchestrationCredential(sessionID string) (string, er
 // doOrchestration reads the credential dynamically, then refreshes and retries
 // exactly once only when the server explicitly identifies it as missing/invalid.
 func (t *Transport) doOrchestration(method, path string, body, out interface{}, sessionID, fallbackToken string) error {
+	return t.doOrchestrationTimeout(method, path, body, out, sessionID, fallbackToken, taskOpTimeout)
+}
+
+// doOrchestrationTimeout is doOrchestration for the one request that is allowed to take longer than
+// an ordinary op: a merge the caller asked the server to WAIT for. The client deadline has to
+// outlast the server's wait, or every successful wait comes back as a transport error and the
+// answer the caller asked for is the one thing they never see.
+func (t *Transport) doOrchestrationTimeout(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration) error {
 	// A headless caller (launchd/cron) has no calling session, so there is no session-bound
 	// credential to read or refresh: the runner token alone authenticates, and the server
 	// narrows the request to this runner's own sessions.
 	if strings.TrimSpace(sessionID) == "" {
-		return t.doHeaders(nil, method, path, body, out, taskOpTimeout, nil)
+		return t.doHeaders(nil, method, path, body, out, timeout, nil)
 	}
 	token, err := credentialForOrchestrationRequest(sessionID, fallbackToken)
 	if err != nil {
 		return err
 	}
-	err = t.doHeaders(nil, method, path, body, out, taskOpTimeout, orchestratorHeaders(sessionID, token))
+	err = t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
 	if !isRefreshableOrchestrationCredentialError(err) {
 		return err
 	}
@@ -1626,7 +1644,7 @@ func (t *Transport) doOrchestration(method, path string, body, out interface{}, 
 	if refreshErr != nil {
 		return fmt.Errorf("refresh session orchestration credential: %w", refreshErr)
 	}
-	return t.doHeaders(nil, method, path, body, out, taskOpTimeout, orchestratorHeaders(sessionID, token))
+	return t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
 }
 
 func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMessage, error) {

@@ -262,14 +262,16 @@ export class SessionsController {
   }
 
   /** Ask the runner that ran this session to merge its worktree branch into a target branch
-   *  (body.targetBranch; omitted → the runner auto-detects main, else master). */
+   *  (body.targetBranch; omitted → the runner auto-detects main, else master). With
+   *  body.waitSeconds the response waits for the outcome and carries it; without it, the reply is
+   *  the queued acknowledgement the Merge button has always read. */
   @Post(':id/merge')
   mergeToMain(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: MergeToMainDto,
   ) {
-    return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch);
+    return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch, dto?.waitSeconds);
   }
 
   /**

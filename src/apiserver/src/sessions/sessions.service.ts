@@ -70,7 +70,12 @@ import {
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
-import { MergeReceiptRow, mergeReceiptRow } from './merge-receipt';
+import {
+  MERGE_RECEIPT_RESULTS,
+  MergeReceiptRow,
+  mergeReceiptRow,
+  mergeStatusForResult,
+} from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
@@ -4216,9 +4221,18 @@ export class SessionsService {
    * switching the target sticks across all of that workspace's sessions — the next merge button
    * defaults to it. Cleared back to the auto-detect default is not offered here (picking main
    * from the dropdown re-records main).
+   *
+   * `waitSeconds` makes this call synchronous. The merge is queued exactly as it always is; the
+   * request is then held until the runner has reported an outcome, and that outcome comes back
+   * INLINE — see {@link awaitMergeConclusion}. Omitted, nothing here changes at all: the answer is
+   * `{ ok: true }`, which is what the Merge button asks for and what every existing caller reads.
    */
-  async mergeToMain(ownerId: string, id: string, targetBranch?: string) {
+  async mergeToMain(ownerId: string, id: string, targetBranch?: string, waitSeconds?: number) {
+    const wait = SessionsService.mergeWaitSeconds(waitSeconds);
     const target = targetBranch?.trim() || null;
+    // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
+    // closure because `withTransactionRetry` may run it again, and each run re-derives it.
+    let operationId: string | null = null;
     // Retried whole. The worktree-operation claim is taken under the Session row lock inside the
     // closure, so a re-run competes for it from the state that exists. The runner is only told
     // about the operation after this returns.
@@ -4241,7 +4255,13 @@ export class SessionsService {
       if (target && target === session.branch) {
         throw new BadRequestException("can't merge a branch into itself");
       }
-      if (session.mergeStatus === 'pending') return null;
+      if (session.mergeStatus === 'pending') {
+        // Idempotent, and that is what a waiting caller waits on: the operation already in flight
+        // IS this call's operation. Minting a second one here would merge the same branch twice
+        // because somebody asked twice.
+        operationId = session.mergeOperationId;
+        return null;
+      }
 
       if (session.commitStatus === 'pending') {
         throw new ConflictException('wait for the pending worktree commit to finish');
@@ -4279,13 +4299,14 @@ export class SessionsService {
         throw new ConflictException(`${gate.decision}: ${gate.detail}`);
       }
 
+      operationId = randomUUID();
       await tx.session.update({
         where: { id },
         data: {
           mergeStatus: 'pending',
           mergeTarget: target,
           mergeRequestedAt: new Date(),
-          mergeOperationId: randomUUID(),
+          mergeOperationId: operationId,
           // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
           // operation id it is part of. When the result comes back the server checks the reported
           // commit against this rather than against anything the runner sent — a gate that only
@@ -4309,12 +4330,25 @@ export class SessionsService {
       const receipt = await this.prisma.sessionMergeReceipt.findFirst({
         where: { id: landed.receiptId, ownerId },
       });
+      const row = receipt ? mergeReceiptRow(receipt as unknown as MergeReceiptRow) : null;
+      // A waiting caller gets ONE shape whatever happened, and this is a conclusion: there is
+      // nothing to wait for because the receipt in hand already says the work is in the target.
+      if (wait !== null) {
+        return {
+          outcome: 'SETTLED' as const,
+          operationId: null,
+          mergeStatus: 'merged' as const,
+          receipt: row,
+          receiptAbsentReason: row ? null : ('NO_RECEIPT_RECORDED' as const),
+          nextStep: null,
+        };
+      }
       return {
         ok: true as const,
         alreadyMerged: true as const,
         sourceSha: landed.sourceSha,
         targetSha: landed.targetSha,
-        receipt: receipt ? mergeReceiptRow(receipt as unknown as MergeReceiptRow) : null,
+        receipt: row,
       };
     }
     // Remember an explicitly chosen target on the workspace so every session of it defaults there.
@@ -4324,7 +4358,133 @@ export class SessionsService {
         data: { defaultMergeTarget: target },
       });
     }
+    if (wait !== null) return this.awaitMergeConclusion(ownerId, id, operationId, wait);
     return { ok: true };
+  }
+
+  /**
+   * The longest a caller may hold the request open waiting for a merge, and how often the wait
+   * looks. Five minutes because the floor is a heartbeat — `runloop.go`'s ticker is 30 seconds, so
+   * the runner does not even READ the command before then — and a ceiling below a few multiples of
+   * that would make the parameter useless for the one merge it exists for.
+   */
+  private static readonly MERGE_WAIT_MAX_SECONDS = 300;
+  private static readonly MERGE_WAIT_POLL_MS = 250;
+
+  /** `waitSeconds` as the rest of this path may assume it: a whole number of seconds in range, or
+   *  null for "the caller did not ask to wait" — which is every existing caller. */
+  private static mergeWaitSeconds(value: number | undefined | null): number | null {
+    if (value === undefined || value === null) return null;
+    if (!Number.isInteger(value) || value < 1 || value > SessionsService.MERGE_WAIT_MAX_SECONDS) {
+      throw new BadRequestException(
+        `waitSeconds must be a whole number of seconds from 1 to ${SessionsService.MERGE_WAIT_MAX_SECONDS}`,
+      );
+    }
+    return value;
+  }
+
+  /**
+   * Hold the request until this merge has an outcome, and hand that outcome back inline.
+   *
+   * WHY, because the shape is the whole point. `{ ok: true }` means "queued", and a caller who does
+   * not already know a second tool exists reads it as "merged". That is not hypothetical: a
+   * coordinator asked twice to merge a branch that conflicts, was told `ok: true` twice, concluded
+   * the tool had swallowed the failure, and went off to re-derive the conflict with `git
+   * merge-tree` — while the result, both conflicting paths and git's own message sat in a receipt
+   * nobody had thought to ask for. So a waiting call NEVER gets a bare `ok: true`. It gets one
+   * envelope, in every case, and the envelope says which of the two things is true: an outcome
+   * (`SETTLED`, with the receipt `merge_receipts` would serve — the same shape, not a second
+   * spelling of it) or no outcome yet (`TIMED_OUT`, saying so, naming the operation still in flight
+   * and where to read it later).
+   *
+   * The server cannot merge anything itself — the checkout is the runner's — so this is a wait, not
+   * a takeover: it polls the two facts the runner's own report writes, under the operation this
+   * call queued, and changes nothing.
+   */
+  private async awaitMergeConclusion(
+    ownerId: string,
+    sessionId: string,
+    operationId: string | null,
+    waitSeconds: number,
+  ) {
+    const deadline = Date.now() + waitSeconds * 1000;
+    for (;;) {
+      const session = await this.prisma.session.findFirst({
+        where: { id: sessionId, ownerId },
+        select: { mergeStatus: true },
+      });
+      // The runner's report writes the receipt and this column in ONE transaction, so a status that
+      // has left `pending` means whatever receipt this merge produced is already readable.
+      const mergeStatus = session?.mergeStatus ?? null;
+      if (mergeStatus !== null && mergeStatus !== 'pending') {
+        const receipt = await this.mergeOutcomeReceipt(ownerId, sessionId, operationId, mergeStatus);
+        return {
+          outcome: 'SETTLED' as const,
+          operationId,
+          mergeStatus,
+          receipt,
+          receiptAbsentReason: receipt ? null : ('NO_RECEIPT_RECORDED' as const),
+          nextStep: receipt
+            ? null
+            : 'this merge recorded no checkable receipt — the runner named no source commit, so ' +
+              '`mergeStatus` above is the whole of what it reported',
+        };
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        return {
+          outcome: 'TIMED_OUT' as const,
+          operationId,
+          mergeStatus,
+          receipt: null,
+          receiptAbsentReason: 'MERGE_STILL_RUNNING' as const,
+          nextStep:
+            `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued ` +
+            `as operation ${operationId ?? '(none recorded)'}. A runner picks a merge up on its ` +
+            'next heartbeat, which ticks every 30 seconds, so a shorter wait than that times out ' +
+            'even for a merge that then succeeds. Read the outcome with merge_receipts on this ' +
+            'session, or ask again with a longer waitSeconds.',
+        };
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(SessionsService.MERGE_WAIT_POLL_MS, remaining)),
+      );
+    }
+  }
+
+  /**
+   * The receipt this concluded merge produced, in `merge_receipts`' own shape.
+   *
+   * Found by the operation id the runner echoes onto `detail` — and, failing that, by the newest
+   * receipt whose result agrees with the status the session just reached. The fallback is not
+   * belt-and-braces: asking twice to merge a branch that conflicts is exactly the case this whole
+   * parameter exists for, and the second attempt reports an outcome identical to the first, whose
+   * receipt is therefore skipped by MR4's idempotency key. Without the fallback the caller who
+   * waited would be told "settled, no receipt" while the receipt describing that very conflict sat
+   * one row away.
+   */
+  private async mergeOutcomeReceipt(
+    ownerId: string,
+    sessionId: string,
+    operationId: string | null,
+    mergeStatus: string,
+  ) {
+    const byOperation = operationId
+      ? await this.prisma.sessionMergeReceipt.findFirst({
+          where: { sessionId, ownerId, detail: { path: ['operationId'], equals: operationId } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        })
+      : null;
+    if (byOperation) return mergeReceiptRow(byOperation as unknown as MergeReceiptRow);
+    const results = MERGE_RECEIPT_RESULTS.filter(
+      (result) => mergeStatusForResult(result) === mergeStatus,
+    );
+    if (results.length === 0) return null;
+    const latest = await this.prisma.sessionMergeReceipt.findFirst({
+      where: { sessionId, ownerId, result: { in: [...results] } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    return latest ? mergeReceiptRow(latest as unknown as MergeReceiptRow) : null;
   }
 
   /**

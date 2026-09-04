@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+// How long `session merge --wait-seconds` may hold the request open, mirroring the server's own
+// bound. The floor that matters is at the other end: a runner reads a queued merge on its next
+// heartbeat, which ticks every 30 seconds, so anything shorter than that times out even when the
+// merge then succeeds.
+const maxMergeWaitSeconds = 300
+
 const sessionHelp = `orbit session — orchestrate Orbit sessions
 
 Usage:
@@ -19,7 +25,7 @@ Usage:
   orbit session get SESSION_ID [--json]
   orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]
   orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
-  orbit session merge SESSION_ID [--target-branch BRANCH] [--json]
+  orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]
   orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
   orbit session merge-receipts SESSION_ID [--limit N] [--json]
   orbit session end SESSION_ID [--json]
@@ -147,7 +153,14 @@ request is not a promise the engine stopped: the transcript's "interrupt" event 
 	"merge": `orbit session merge — merge a session's worktree branch
 
 Usage:
-  orbit session merge SESSION_ID [--target-branch BRANCH] [--json]
+  orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]
+
+Without --wait-seconds the merge is QUEUED and the reply says only that. With it, the reply
+waits for the outcome and carries the merge receipt itself — result, landed, the target tip it
+produced, and every conflicting path when it conflicted. The runner picks a queued merge up on
+its next heartbeat, which ticks every 30 seconds, so a wait shorter than that reports "no
+outcome yet" even for a merge that goes on to succeed; 60 is a sane floor. A wait that runs out
+says so and names the operation, so read it later with: orbit session merge-receipts SESSION_ID
 `,
 	"end": `orbit session end — end and park a session
 
@@ -176,7 +189,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
 	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--json"}, Mutates: true},
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
-	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--json"}, Mutates: true},
+	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--wait-seconds <n> (1-300; wait for the outcome and return the receipt instead of just queueing)", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_delete", Argv: []string{"orbit", "session", "delete"}, Usage: "orbit session delete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
@@ -708,6 +721,7 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session merge")
 	targetBranch := fs.String("target-branch", "", "merge target branch")
+	waitSeconds := fs.Int("wait-seconds", 0, "wait this many seconds for the outcome and print the receipt")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -723,11 +737,17 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 		}
 		body["targetBranch"] = *targetBranch
 	}
+	if flagWasSet(fs, "wait-seconds") {
+		if *waitSeconds < 1 || *waitSeconds > maxMergeWaitSeconds {
+			return fmt.Errorf("--wait-seconds must be an integer from 1 to %d", maxMergeWaitSeconds)
+		}
+		body["waitSeconds"] = *waitSeconds
+	}
 	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
-	raw, err := t.mergeSession(ctx.sessionID, ctx.token, id, body)
+	raw, err := t.mergeSession(ctx.sessionID, ctx.token, id, body, mergeCallTimeout(*waitSeconds))
 	if err != nil {
 		return fmt.Errorf("merge session: %w", err)
 	}

@@ -82,6 +82,11 @@ export interface MergeToMainDto {
   /** The branch to merge this session's worktree branch INTO, picked from the status bar's
    *  branch dropdown. Omitted → the default: the runner auto-detects main, else master. */
   targetBranch?: string;
+  /** Hold the response until the merge has an outcome, and return that outcome inline instead of
+   *  `{ ok: true }` (which only ever meant "queued"). 1..300 seconds. Omitted → the asynchronous
+   *  behaviour the Merge button uses, unchanged. The floor is a heartbeat: the runner reads the
+   *  command on its next 30s tick, so a wait under that times out even for a merge that succeeds. */
+  waitSeconds?: number;
 }
 
 export interface SessionArmRetryDto {

@@ -97,7 +97,7 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/api/runner/sessions/child-session/merge",
 			call: func(transport *Transport) error {
-				_, err := transport.mergeSession("caller-session", "session-token", "child-session", map[string]string{"targetBranch": "main"})
+				_, err := transport.mergeSession("caller-session", "session-token", "child-session", map[string]string{"targetBranch": "main"}, taskOpTimeout)
 				return err
 			},
 		},
