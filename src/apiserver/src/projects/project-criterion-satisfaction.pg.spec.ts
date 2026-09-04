@@ -77,13 +77,22 @@ const REPO_ROOT = path.resolve(__dirname, '../../../..');
 const MODULE = 'src/apiserver/src/projects/project-criterion-satisfaction.ts';
 const SPEC = 'src/apiserver/src/projects/project-criterion-satisfaction.pg.spec.ts';
 /**
- * The one other reader, and it is a test too: `UpdateTaskDto.criterionKey` exists to put clause 3
- * out, so its spec reads clause 3 back through this derivation rather than re-implementing the
- * comparison and proving only that it can subtract two numbers. Named here rather than admitted by
- * a pattern, because the list being exact is what makes a new consumer something somebody has to
- * come and write down.
+ * Two other readers, and both are tests. Neither is admitted by a pattern: the list being exact
+ * is what makes a new consumer something somebody has to come and write down, and on 2026-09-04
+ * two of them arrived at once from tasks that never touched each other's files.
+ *
+ * `UpdateTaskDto.criterionKey` exists to put clause 3 out, so its spec reads clause 3 back through
+ * this derivation rather than re-implementing the comparison and proving only that it can subtract
+ * two numbers.
+ *
+ * The pending-decision queue's own spec cross-checks the rows it puts in front of a decider against
+ * the work THIS derivation names as still outstanding — two answers computed from different
+ * columns, asserted to agree. It calls `readCriterionSatisfaction` to do it, which makes it a
+ * consumer this census has to see, and a test rather than a gate: it reads the answer and writes
+ * nothing on the strength of it.
  */
 const REDECLARATION_SPEC = 'src/apiserver/src/tasks/task-criterion-redeclaration.pg.spec.ts';
+const PENDING_JUDGMENTS_SPEC = 'src/apiserver/src/tasks/pending-evidence-judgments.pg.spec.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -494,7 +503,7 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       .filter((file) => readFileSync(file, 'utf8').includes('project-criterion-satisfaction'))
       .map((file) => path.relative(REPO_ROOT, file))
       .sort();
-    assert.deepEqual(mentions, [MODULE, SPEC, REDECLARATION_SPEC].sort(),
+    assert.deepEqual(mentions, [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC].sort(),
       'every reader of the derivation is a test of it: no gate, no status write, consumes it');
 
     const source = readFileSync(path.join(REPO_ROOT, MODULE), 'utf8');
