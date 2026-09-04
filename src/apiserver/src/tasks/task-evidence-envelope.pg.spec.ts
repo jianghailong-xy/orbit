@@ -109,6 +109,9 @@ async function fixture(db: PrismaClient) {
         creatorId: ownerId,
         assigneeId: workspaceId,
         status: TaskStatus.IN_PROGRESS,
+        // Migration 0237 dropped the column default, so a criterion is now something every
+        // creator states — including a fixture.
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         acceptanceCriteria: 'the envelope resolves at least one citation',
       },
     });
