@@ -345,6 +345,38 @@ export async function resolveEvidenceCitations(
   return citations;
 }
 
+/**
+ * Layer 2 again, as a READ: what each citation resolves to right now, reported and never refused.
+ *
+ * Submitting and reading are different moments and this is the difference. At submission a
+ * citation that names another task's row is a boundary violation and the whole envelope is
+ * rejected; here the envelope is already stored and immutable, and the only question left is which
+ * of its handles a reader can still pull. So every outcome is a sentence rather than an exception:
+ * a row that has since been deleted, or a task whose sessions have been reassigned, makes a
+ * citation stop resolving, and a decider being shown that is the point of showing citations at all.
+ */
+export async function describeEvidenceCitations(
+  tx: Prisma.TransactionClient,
+  scope: CitationScope,
+  checks: ReadonlyArray<EvidenceCheck>,
+): Promise<EvidenceCitation[]> {
+  const citations: EvidenceCitation[] = [];
+  for (const check of checks) {
+    const row = await RESOLVERS[check.kind](tx, scope, check.ref);
+    citations.push({
+      kind: check.kind,
+      ref: check.ref,
+      resolved: row.found,
+      reason: row.found
+        ? null
+        : row.foreign
+          ? `this ${check.kind} is recorded under another task`
+          : `no ${check.kind} of this task matches this reference`,
+    });
+  }
+  return citations;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** The stated criterion a key names, as `project_get` spells it: the Base62 public id of the

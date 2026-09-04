@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
+import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestration-authorizer';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
@@ -51,6 +52,10 @@ const refuse = (name: string) => () => {
     { provide: ProjectsService, useValue: { get: refuse('ProjectsService.get') } },
     { provide: ProjectAcceptanceService, useValue: { overview: refuse('acceptance.overview') } },
     { provide: ProjectHandoffService, useValue: { list: refuse('handoffs.list') } },
+    // A fourth dependency `RunnerProjectsController` acquired after this probe was written. It is a
+    // double for the same reason every service here is: nothing in this file is supposed to reach a
+    // handler body, so a route that did would fail on the double rather than pass quietly.
+    { provide: RunnerOrchestrationAuthorizer, useValue: { assert: refuse('orchestration.assert') } },
     JwtAuthGuard,
     RunnerAuthGuard,
     Reflector,

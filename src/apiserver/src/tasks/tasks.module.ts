@@ -9,6 +9,7 @@ import { ReferenceExpansionService } from './reference-expansion';
 import { TasksService } from './tasks.service';
 import { TaskCompletionEvidenceController } from './task-completion-evidence.controller';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
+import { PendingEvidenceJudgmentsController } from './pending-evidence-judgments.controller';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
   ],
   controllers: [
     TasksController,
+    PendingEvidenceJudgmentsController,
     TaskCompletionEvidenceController,
   ],
   providers: [

@@ -16,6 +16,7 @@ import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
+import type { PendingDecisionQueue } from '../components/DecisionRail';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
 import {
   activeTasksPath,
@@ -500,3 +501,19 @@ export const projectCrossingsQuery = (projectId: string) =>
       api<ProjectCrossingRow[]>(`/projects/${encodeURIComponent(projectId)}/handoffs`),
   });
 
+/**
+ * What one session is being asked to decide, re-derived by the server on every read.
+ *
+ * Keyed by the session because that is what the answer is about: the rows are this account's
+ * facts, and which of them THIS session may settle is part of the payload. Nothing is cached
+ * across sessions for the same reason — the same three questions read from two sessions are two
+ * different answers about who may press the button.
+ */
+export const pendingDecisionsQuery = (decidingSessionId: string) =>
+  queryOptions({
+    queryKey: ['session', decidingSessionId, 'pending-decisions'] as const,
+    queryFn: () =>
+      api<PendingDecisionQueue>(
+        `/tasks/evidence-decisions/pending?decidingSessionId=${encodeURIComponent(decidingSessionId)}`,
+      ),
+  });

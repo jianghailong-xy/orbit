@@ -18,6 +18,7 @@ import {
   decisionNote,
 } from './task-evidence-decision';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
+import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import {
   EvidenceCitation,
   EvidenceCriterionMatch,
@@ -691,6 +692,26 @@ export class TaskCompletionEvidenceService {
       });
       return decisionResponse(written);
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));
+  }
+
+  /**
+   * What one session is being ASKED to decide, recomputed from the ledger on every call.
+   *
+   * Nothing is delivered, nothing is claimed and nothing is marked read: the answer is a function
+   * of rows this account already has, so two readers see the same questions and a reader that goes
+   * away and comes back sees whichever of them are still open. `readPendingEvidenceJudgments`
+   * holds the derivation and the reasoning behind it.
+   */
+  async pending(ownerId: string, decidingSessionId: string) {
+    if (!UUID_RE.test(decidingSessionId)) {
+      throw new BadRequestException('decidingSessionId is invalid');
+    }
+    const session = await this.prisma.session.findFirst({
+      where: { id: decidingSessionId, ownerId },
+      select: { id: true, taskId: true },
+    });
+    if (!session) throw new NotFoundException('deciding session not found');
+    return readPendingEvidenceJudgments(this.prisma, ownerId, session);
   }
 
   async list(ownerId: string, taskId: string) {

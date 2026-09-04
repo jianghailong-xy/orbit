@@ -214,6 +214,22 @@ export class DecideRunnerTaskEvidenceDto {
   note?: string;
 }
 
+/**
+ * The same decision, over the user-authenticated REST door the app's rail presses.
+ *
+ * The one added field is the whole reason this class exists separately: over the runner protocol
+ * the deciding Session is the authenticated execution header, and a browser has no such header. So
+ * it is NAMED here — and it is checked, not trusted. The service asks the same question of it that
+ * it asks of the runner's: a session of this owner that did not run this task and did not submit
+ * this evidence. The account owner therefore gets no shorter path than a coordinator does; they
+ * both press one button that reaches one door, and a person with no session to answer FROM cannot
+ * answer at all.
+ */
+export class DecideTaskEvidenceDto extends DecideRunnerTaskEvidenceDto {
+  @IsPublicId()
+  decidingSessionId!: string;
+}
+
 /** The shared read shape of one recorded decision. */
 export class TaskEvidenceDecisionDto {
   @IsPublicId()

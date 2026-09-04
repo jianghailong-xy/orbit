@@ -159,6 +159,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
+import { SessionDecisionRail } from './DecisionRail';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -5352,6 +5353,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </span>
           </button>
         )}
+
+        {/* Pinned above the conversation, and derived rather than delivered: what this session is
+            being asked to decide is re-read from the ledger, so a question answered in another
+            window is simply not in the next read. It renders nothing when nothing is waiting. */}
+        {selectedId && !selectedTrashed && <SessionDecisionRail sessionId={selectedId} />}
 
         <div className="workspace-scroll-wrap">
           {selectedMissing ? (

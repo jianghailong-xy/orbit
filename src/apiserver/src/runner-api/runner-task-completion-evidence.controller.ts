@@ -38,12 +38,15 @@ export class RunnerTaskCompletionEvidenceController {
   }
 
   /**
-   * The decision door, and deliberately only here.
+   * The decision door, as an execution reaches it.
    *
-   * There is no user REST twin the way `submit` has one: a decision is one INDEPENDENT SESSION's
-   * judgment, and a door with no session to check independence against could not make the check
-   * this criterion exists for. The account owner reaches it the same way anything else does — from
-   * a session.
+   * What a door has to establish here is not who is authenticated but WHICH SESSION is answering:
+   * a decision is one independent session's judgment, and a door with no session to check
+   * independence against could not make the check this criterion exists for. Over this protocol
+   * the session is the authenticated execution header and cannot be chosen by the caller. The app
+   * reaches the same service at `POST /tasks/:taskId/evidence/decision`, where it has to name one
+   * instead — and that named session is put through the identical check, so the account owner gets
+   * the same door rather than a shorter one.
    */
   @Post('decision')
   async decide(

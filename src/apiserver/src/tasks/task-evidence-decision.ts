@@ -128,30 +128,40 @@ export async function assertCriterionUnmoved(
  * judgment of the submission is definitionally its own. Today submitting requires a session of the
  * task, so the second is implied by the first; it is asked anyway, so the grant does not silently
  * widen the day that stops being true.
+ *
+ * The question and the refusal are two functions because the pending-decision read has to ask it
+ * WITHOUT refusing: a row that says "you may not answer this one, and here is why" tells a reader
+ * something, where hiding it or throwing at render time tells them nothing. One predicate and two
+ * callers, so the door cannot drift from what the rail promised.
  */
+export async function decidingSessionDisqualification(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; taskId: string },
+  session: { id: string; taskId: string | null },
+): Promise<string | null> {
+  if (session.taskId === scope.taskId) return 'this session is a run of the task it is deciding';
+  const submitted = await tx.taskCompletionEvidence.findFirst({
+    where: { taskId: scope.taskId, ownerId: scope.ownerId, sourceSessionId: session.id },
+    select: { id: true },
+  });
+  return submitted ? 'this session submitted completion evidence for this task' : null;
+}
+
 export async function assertIndependentDecidingSession(
   tx: PrismaTypes.TransactionClient,
   scope: { ownerId: string; taskId: string },
   session: { id: string; taskId: string | null },
 ): Promise<void> {
-  const refuse = (why: string): never => {
-    throw new ForbiddenException({
-      code: REQUIRES_INDEPENDENT_SESSION_CODE,
-      message:
-        `${why}; nothing was written. A decision about completion evidence is only worth ` +
-        'recording when it comes from a run that did not produce the work, which is the whole ' +
-        'reason this criterion is a check rather than a self-report',
-      requiredAction: REQUIRES_INDEPENDENT_SESSION_ACTION,
-    });
-  };
-  if (session.taskId === scope.taskId) {
-    refuse('this session is a run of the task it is deciding');
-  }
-  const submitted = await tx.taskCompletionEvidence.findFirst({
-    where: { taskId: scope.taskId, ownerId: scope.ownerId, sourceSessionId: session.id },
-    select: { id: true },
+  const why = await decidingSessionDisqualification(tx, scope, session);
+  if (!why) return;
+  throw new ForbiddenException({
+    code: REQUIRES_INDEPENDENT_SESSION_CODE,
+    message:
+      `${why}; nothing was written. A decision about completion evidence is only worth ` +
+      'recording when it comes from a run that did not produce the work, which is the whole ' +
+      'reason this criterion is a check rather than a self-report',
+    requiredAction: REQUIRES_INDEPENDENT_SESSION_ACTION,
   });
-  if (submitted) refuse('this session submitted completion evidence for this task');
 }
 
 /** Check 4's other half: a rejection nobody can act on leaves the next revision nothing to aim at. */
