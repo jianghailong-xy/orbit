@@ -238,10 +238,10 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if an eighth
+    // Fails if any call grows extra args or a query string, if a path changes, or if a ninth
     // api(...) call is added anywhere in the file (see API_CALL for what it can parse).
     const apiCalls = [...source.matchAll(API_CALL)].map(
       // A call wrapped across lines keeps its trailing comma; the URL is what this asserts on.
@@ -254,6 +254,11 @@ describe('ProjectsPage', () => {
       // line still fixes is that the page reads the projects collection exactly once and passes
       // it nothing but the filter.
       "projectsPath(filter)",
+      // The one press on the detail page that destroys something, and the only write in this file
+      // with no body at all: the id in the path IS the whole request. Held as literally as the
+      // reads, because a method that drifted to POST or a path that grew a segment would be a
+      // different verb against the same button — and this endpoint cascades.
+      "`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' }",
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather

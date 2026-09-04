@@ -1,8 +1,20 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { TaskStatus } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import {
+  Alert,
+  Button,
+  Empty,
+  Input,
+  List,
+  Modal,
+  Popconfirm,
+  Select,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -604,9 +616,21 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
  *  coordinator. Kept identical to `.project-command-center` in index.css. */
 const PROJECT_COMMAND_NARROW_QUERY = '(max-width: 920px)';
 
-/** Read-only detail for one project: what it's for, how anyone would know it got there, and where
- *  its tasks stand — down to a row per top-level task, and from there down to whichever levels
- *  the reader opens. Still no writes: every row is read-only, however deep it sits. */
+/**
+ * Delete one project, from the page that shows what is about to go.
+ *
+ * The server refuses this while anything still points at the project — its own tasks, or a session
+ * a coordinator dispatched from one of its actions — and answers 409 with the sentence naming
+ * which. That prose is the only thing the reader can act on, so the caller shows it verbatim
+ * rather than deciding for itself what the refusal was about.
+ */
+export function deleteProject(projectId: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+}
+
+/** Detail for one project: what it's for, how anyone would know it got there, and where its tasks
+ *  stand — down to a row per top-level task, and from there down to whichever levels the reader
+ *  opens. Every row stays read-only; the one write on the page is deleting the project itself. */
 export function ProjectDetailPage() {
   const params = useParams();
   const location = useLocation();
@@ -622,6 +646,23 @@ export function ProjectDetailPage() {
   });
   const p = project.data;
   const narrow = useMediaQuery(PROJECT_COMMAND_NARROW_QUERY);
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+  // The project is gone from under this route the moment this succeeds, so it takes its own cache
+  // entry with it and leaves for the list — every filter's entry shares the `['projects']` prefix,
+  // so the row cannot survive the project. A refusal is NOT navigated away from: the server's
+  // sentence is what says which downstream reference is holding the project, and it is rendered
+  // beside the button that was refused.
+  const remove = useMutation({
+    mutationFn: () => deleteProject(id!),
+    onSuccess: async () => {
+      qc.removeQueries({ queryKey: ['project', id], exact: true });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      toast.success('Project deleted');
+      navigate(projectsReturnPath(location.state), { replace: true });
+    },
+  });
 
   return (
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
@@ -671,8 +712,45 @@ export function ProjectDetailPage() {
               <span>
                 {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
               </span>
+              {/* Furthest from the title and behind a confirmation, because it is the one press on
+                  this page nothing undoes. The project is NAMED in the question: this is the only
+                  place a reader can tell which project they are about to lose. */}
+              <Popconfirm
+                title={`Delete “${p.title}”?`}
+                description="This deletes the project and everything filed under it. This action cannot be undone."
+                okText="Delete"
+                cancelText="Cancel"
+                okButtonProps={{ danger: true, loading: remove.isPending }}
+                onConfirm={() => remove.mutate()}
+              >
+                <Button
+                  size="small"
+                  type="text"
+                  danger
+                  style={{ marginInlineStart: 'auto' }}
+                  icon={<DeleteOutlined />}
+                  aria-label={`Delete ${p.title}`}
+                  loading={remove.isPending}
+                >
+                  Delete project
+                </Button>
+              </Popconfirm>
             </div>
           </header>
+
+          {/* A refused delete, in the server's own words. 409 here is a downstream reference — the
+              project's tasks, or a session dispatched from one of its actions — and which one it is
+              decides what the reader has to go and do first, so the sentence is shown rather than
+              flattened into "could not delete". */}
+          {remove.error ? (
+            <Alert
+              style={{ marginBottom: 14 }}
+              type="error"
+              showIcon
+              message="Project could not be deleted"
+              description={remove.error.message}
+            />
+          ) : null}
 
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On
