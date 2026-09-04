@@ -10,8 +10,10 @@
  *   * VERIFICATION completes through this service. An independent verifier's PASS still settles
  *     its subject, a FAIL or INCONCLUSIVE still does not, and both go through the real service
  *     against the real triggers.
- *   * EVIDENCE_JUDGMENT is declared-but-unimplemented: still creatable, still carrying its data,
- *     refused a direct DONE with a remedy that says so, and settled by nothing.
+ *   * EVIDENCE_JUDGMENT is settled by a decision this file does not drive either: one CONFIRM
+ *     from a session that did not do the work, recorded at the evidence door and replayed end to
+ *     end in `evidence-judgment-confirm-derives-done.pg.spec.ts`. What is asserted here is the
+ *     other half — that a direct DONE is still refused, with a remedy naming that act.
  *   * EXECUTABLE is settled by neither of the above and by nothing in THIS file: its one
  *     comparison happens in the runner callback, which is `task-executable-acceptance.pg.spec.ts`.
  *     What is asserted here is the other half — that the service still refuses to let anybody
@@ -118,9 +120,10 @@ async function installDerivedDoneGuard(sql: Client): Promise<void> {
           END IF;
           derivation := 'VERIFICATION_PASS';
         ELSE
-          -- EXECUTABLE derives DONE from one exit-code comparison in runnerApi.turnComplete,
-          -- which this suite never drives; EVIDENCE_JUDGMENT has no implementation at all. Either
-          -- way, a bare status UPDATE arriving here is not a derivation this suite can name.
+          -- EXECUTABLE derives DONE from one exit-code comparison in runnerApi.turnComplete, and
+          -- EVIDENCE_JUDGMENT from a CONFIRM recorded at the evidence door; this suite drives
+          -- neither. Either way, a bare status UPDATE arriving here is not a derivation this
+          -- suite can name.
           RAISE EXCEPTION 'JR_DIRECT_DONE: % did not reach DONE through a derivation',
             NEW."completion_criterion";
         END IF;
@@ -255,7 +258,7 @@ suite(
     );
     await assertDirectDoneRefused(
       tasks, db, ownerId, evidenceJudgment.id, 'owner on EVIDENCE_JUDGMENT',
-      'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
+      'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION',
     );
     // And raw SQL cannot reach DONE through THIS suite either. Which wall answers changed with
     // 0230: the production fence now admits an EXECUTABLE row carrying an intact declaration,
@@ -266,7 +269,8 @@ suite(
       sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [executable.id]),
       /JR_DIRECT_DONE/,
     );
-    // The production fence is still the wall for a criterion with no implementation.
+    // The production fence is still the wall here: this task has submitted no evidence, so its
+    // EVIDENCE_JUDGMENT lane has no CONFIRM to find and refuses the write on its own terms.
     await assert.rejects(
       sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [evidenceJudgment.id]),
       /JR_DIRECT_DONE|TASK_DONE_CANONICAL_FACT_REQUIRED/,

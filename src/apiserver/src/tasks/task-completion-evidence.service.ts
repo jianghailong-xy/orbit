@@ -17,7 +17,10 @@ import {
   assertIndependentDecidingSession,
   decisionNote,
 } from './task-evidence-decision';
-import type { TaskCompletionCriterionValue } from './task-completion-criterion';
+import {
+  deriveTaskCompletionStatus,
+  type TaskCompletionCriterionValue,
+} from './task-completion-criterion';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import {
   EvidenceCitation,
@@ -67,6 +70,12 @@ export interface CompletionCriterionSnapshotInput {
 }
 
 interface LockedCriterionTask extends CompletionCriterionSnapshotInput {}
+
+/** What `decide` has to read off the locked Task: the project it quotes, and its own criterion. */
+interface LockedDecisionTask {
+  projectId: string | null;
+  completionCriterion: TaskCompletionCriterionValue;
+}
 
 interface BackfillCandidate extends LockedCriterionTask {
   id: string;
@@ -207,11 +216,12 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
 /**
  * N10's append-only completion-evidence ledger.
  *
- * Since 2026-09-02 it is only a ledger. The judgment request each revision used to raise, the
- * device delivery that request filed, and the decision that closed it were removed with the rest
- * of the judgment machinery; nothing here derives a Task status or names a consumer. Submitting
- * evidence is still how a run records what it produced, and the rows are still immutable and
- * append-only, so a rebuilt implementation reads the same ledger.
+ * The delivery machinery removed on 2026-09-02 is not back: no judgment request, no inbox item,
+ * no device outbox, no worker. What came back is the ANSWER — `decide` records one independent
+ * session's CONFIRM or SEND_BACK as one row, and a CONFIRM of the current revision is the fact the
+ * shared evaluator projects onto DONE. Submitting is still only a claim: `submit` derives no
+ * status, reads no Task status to decide whether to accept one, and the rows it appends stay
+ * immutable.
  */
 @Injectable()
 export class TaskCompletionEvidenceService {
@@ -588,12 +598,14 @@ export class TaskCompletionEvidenceService {
   /**
    * Record one independent session's decision about one version of this task's evidence.
    *
-   * It writes one row and nothing else. No Task status, no Session state, no comment, no
-   * notification, and none of the delivery machinery migration 0228 removed: a CONFIRM here is the
-   * durable fact that an independent run read this exact evidence and found it sufficient, and
-   * turning that fact into a status is a separate step that does not exist yet. SEND_BACK writes
-   * the same one row with its note; the task is untouched, so it stays OPEN waiting for the next
-   * revision — the absence of a write is the whole of "keep going".
+   * It writes its own row, and the status that row derives. A CONFIRM is the durable fact that an
+   * independent run read this exact evidence against the criterion it quotes and found it
+   * sufficient; DONE follows from it through the same evaluator the other two criteria use, under
+   * the Task mutex this unit already holds, and past 0193's fence, which goes and finds the same
+   * CONFIRM for itself before admitting the write. Nothing else moves: no Session state, no
+   * comment, no notification, and none of the delivery machinery migration 0228 removed.
+   * SEND_BACK writes its row and its note and nothing else; the task is untouched, so it stays
+   * OPEN waiting for the next revision — the absence of a write is the whole of "keep going".
    *
    * The four checks run in the order authority, subject, standard: may this caller answer at all,
    * is it answering the version that is actually open, and is the standard it is answering still
@@ -619,11 +631,13 @@ export class TaskCompletionEvidenceService {
     // Outside the transaction: a missing note reads no row, so it need not hold the Task mutex.
     const note = decisionNote(input.decision, input.note);
 
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
-      // concurrent submission cannot allocate a new revision between the read below and the write.
-      const [task] = await tx.$queryRaw<{ projectId: string | null }[]>(Prisma.sql`
-        SELECT "project_id" AS "projectId"
+      // concurrent submission cannot allocate a new revision between the read below and the write,
+      // and it is the lock the derived status below is written under.
+      const [task] = await tx.$queryRaw<LockedDecisionTask[]>(Prisma.sql`
+        SELECT "project_id" AS "projectId",
+               "completion_criterion"::text AS "completionCriterion"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE
@@ -668,7 +682,9 @@ export class TaskCompletionEvidenceService {
             requiredAction: 'DECIDE_THE_NEXT_EVIDENCE_REVISION',
           });
         }
-        return decisionResponse(existing);
+        // A replay answers with the receipt the first attempt got. Whatever that decision derived
+        // was derived then, under this same lock, so nothing is re-derived here.
+        return { decision: decisionResponse(existing), completed: false };
       }
 
       const written = await tx.taskEvidenceDecision.create({
@@ -690,8 +706,45 @@ export class TaskCompletionEvidenceService {
         },
         include: decisionInclude,
       });
-      return decisionResponse(written);
+
+      // The derivation, and the only thing this door writes outside its own row. It asks the
+      // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
+      // task is recorded and answered like any other, and completes nothing, because those two are
+      // settled by facts of their own.
+      const completed = deriveTaskCompletionStatus({
+        completionCriterion: task.completionCriterion,
+        latestEvidenceRevision: latest.revision,
+        confirmedEvidenceRevision: written.decision === 'CONFIRM' ? latest.revision : null,
+      });
+      let settled = false;
+      if (completed != null) {
+        // The criterion and the pending statuses are repeated in the write even though the row is
+        // locked: they make the compare-and-set visible in SQL, and they keep a task that was
+        // cancelled or failed from being completed by a decision that arrives afterwards.
+        const changed = await tx.task.updateMany({
+          where: {
+            id: taskId,
+            ownerId,
+            completionCriterion: 'EVIDENCE_JUDGMENT',
+            status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+          },
+          data: { status: completed },
+        });
+        settled = changed.count > 0;
+      }
+      return { decision: decisionResponse(written), completed: settled };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));
+
+    // The immediate successor edge for the task this decision settled, after commit and outside
+    // the retried closure, exactly where the EXECUTABLE comparison puts its own. Losing it costs
+    // latency rather than work: the periodic READY sweep reads the same dependency watermark.
+    if (committed.completed) {
+      await this.tasks?.dispatchDependentsAfterCompletion(ownerId, taskId).catch((error) => {
+        this.logger.warn(`successor dispatch after evidence confirmation ${taskId} failed: `
+          + `${error instanceof Error ? error.message : error}`);
+      });
+    }
+    return committed.decision;
   }
 
   /**

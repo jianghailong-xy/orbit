@@ -44,7 +44,20 @@ test('the evidence service is state-orthogonal and only the explicit legacy door
     'legacy import must not enumerate comments for bulk inference');
   assert.match(source, /async importLegacyComment[\s\S]*actor\.type !== CreatorType\.USER/);
   assert.match(source, /createHash\('sha256'\)\.update\(sourceComment\.body, 'utf8'\)/);
-  assert.doesNotMatch(source, /(?:tx|this\.prisma)\.task\.update|(?:tx|this\.prisma)\.session\.update/);
+  // Still state-orthogonal on the way IN: submitting or importing evidence writes no Task and no
+  // Session. What decides is the decision door, and only there — one compare-and-set that restates
+  // the criterion and the pending statuses in its WHERE clause, so a decision cannot complete a
+  // task that declared something else or one that was already cancelled or failed.
+  const submitAndImport = source.slice(0, source.indexOf('  async decide('));
+  assert.ok(submitAndImport.includes('async importLegacyComment('), 'the slice lost a write door');
+  assert.doesNotMatch(submitAndImport,
+    /(?:tx|this\.prisma)\.task\.update|(?:tx|this\.prisma)\.session\.update/);
+  assert.doesNotMatch(source, /(?:tx|this\.prisma)\.session\.update/);
+  const decide = source.slice(source.indexOf('  async decide('), source.indexOf('  async list('));
+  assert.equal((decide.match(/(?:tx|this\.prisma)\.task\.update/g) ?? []).length, 1,
+    'the decision door writes the task once, and nothing else in this file writes it at all');
+  assert.match(decide, /completionCriterion: 'EVIDENCE_JUDGMENT',/);
+  assert.match(decide, /status: \{ in: \[TaskStatus\.OPEN, TaskStatus\.IN_PROGRESS\] \},/);
   assert.doesNotMatch(source, /ATTEMPT_WAKE_SESSION_PARKED/);
   assert.match(source, /source session for task not found/);
   assert.match(source, /taskCompletionEvidence\.create/);

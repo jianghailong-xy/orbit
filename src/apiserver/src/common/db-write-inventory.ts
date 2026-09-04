@@ -609,12 +609,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'tasks/task-completion-evidence.service.ts#decide',
     shape: 'TX_RETRIED',
-    locks: 'task FOR UPDATE (rank 50), then task_evidence_decision (rank 60). The deciding Session, the task\'s evidence rows and the project criterion definition are all read without a row lock: none of them is written here, and the only one a concurrent writer could move under this unit — the latest evidence revision — is allocated under the same task mutex this unit holds.',
+    locks: 'task FOR UPDATE (rank 50), then task_evidence_decision (rank 60), then the derived status back onto the task row this unit already holds. The deciding Session, the task\'s evidence rows and the project criterion definition are all read without a row lock: none of them is written here, and the only one a concurrent writer could move under this unit — the latest evidence revision — is allocated under the same task mutex this unit holds.',
     identity: 'The decision row is keyed by (task, evidence id), unique in PostgreSQL. There is deliberately no caller retry key: a decision names one immutable evidence revision, so that pair already IS the request identity and a second key could only let one version be answered twice.',
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-locks the Task and re-derives all four checks inside the closure — the deciding session\'s independence, MAX(revision), the live criterion text and the existing decision. A committed decision replays as itself when the retry says the same thing and is a 409 when it does not, so a retried transport never turns one decision into two and never overwrites one.',
-    effects: 'None, inside or outside PostgreSQL. It writes no Task status, no Session state, no comment, no notification and no realtime event, and it routes no completion input: 0228 removed the request ledger, inbox, device outbox and delivery worker, and this unit rebuilds none of them.',
+    effects: 'One derived Task status inside PostgreSQL and one dispatch outside it, both only for a CONFIRM that settles the EVIDENCE_JUDGMENT criterion this task declared: the compare-and-set writes status DONE under the mutex above, and after commit the committed completion is handed to the successor dispatch the other two criteria already use. Nothing else — no Session state, no comment, no notification, no realtime event, and no completion input routed: 0228 removed the request ledger, inbox, device outbox and delivery worker, and this unit rebuilds none of them.',
     answer: 'Typed 503 from the global boundary after retry exhaustion. A superseded revision, a rewritten criterion and an already-decided version are explicit 409s; a deciding session that did this work is a 403.',
   },
   {

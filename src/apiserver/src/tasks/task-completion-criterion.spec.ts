@@ -32,11 +32,10 @@ test('an undeclared service-level declaration still resolves to the ordinary cri
   });
 });
 
-// EXECUTABLE and VERIFICATION have implementations; EVIDENCE_JUDGMENT is declared-but-
-// unimplemented since 2026-09-02: legal to declare, impossible to satisfy, and — the point of
-// naming it here — evaluated by its OWN `case`, not by falling through to somebody else's answer
-// or to a default. `evaluateTaskCompletion`'s switch has no default arm, so the exhaustiveness
-// check is what makes that a compile-time fact rather than a comment.
+// All three criteria have an implementation again, and the point of naming each here is that each
+// is evaluated by its OWN `case` — never by falling through to somebody else's answer or to a
+// default. `evaluateTaskCompletion`'s switch has no default arm, so the exhaustiveness check is
+// what makes that a compile-time fact rather than a comment.
 test('VERIFICATION evaluates both satisfied and unsatisfied facts', () => {
   assert.deepEqual(
     evaluateTaskCompletion({ completionCriterion: 'VERIFICATION', verificationVerdict: 'PASS' }),
@@ -134,9 +133,10 @@ test('EXECUTABLE is one exit-code comparison, and answers all four input shapes'
   }
 });
 
-test('EVIDENCE_JUDGMENT is declared but has no implementation', () => {
-  // Every shape a caller could present, including the ones that used to satisfy it and the two
-  // executable facts that satisfy its peer — a criterion may never borrow another's answer.
+test('EVIDENCE_JUDGMENT is one CONFIRM of the evidence revision that is current', () => {
+  // Every shape that is NOT that, including the two executable facts that satisfy its peer: a
+  // criterion may never borrow another's answer, and the pair of revisions is the only thing here
+  // that is its own.
   for (const facts of [
     { completionCriterion: 'EVIDENCE_JUDGMENT' as const },
     { completionCriterion: 'EVIDENCE_JUDGMENT' as const, verifiesTaskId: 'not-a-verifier-criterion' },
@@ -147,6 +147,17 @@ test('EVIDENCE_JUDGMENT is declared but has no implementation', () => {
       acceptanceExpectedExitCode: 0,
       executableExitCode: 0,
     },
+    // Evidence submitted and nobody has answered it. A claim is not a judgment, which is the whole
+    // distinction this criterion is made of.
+    { completionCriterion: 'EVIDENCE_JUDGMENT' as const, latestEvidenceRevision: 3n },
+    // An answer to a version a later submission replaced.
+    {
+      completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+      latestEvidenceRevision: 3n,
+      confirmedEvidenceRevision: 2n,
+    },
+    // And a confirmation with nothing to be a confirmation OF.
+    { completionCriterion: 'EVIDENCE_JUDGMENT' as const, confirmedEvidenceRevision: 3n },
   ]) {
     assert.deepEqual(
       evaluateTaskCompletion(facts),
@@ -155,6 +166,17 @@ test('EVIDENCE_JUDGMENT is declared but has no implementation', () => {
     );
     assert.equal(deriveTaskCompletionStatus(facts), null);
   }
+
+  // The one shape that satisfies it. No ACTIONABLE arm: an unjudged claim is work that is not
+  // settled, not a comparison that could not be made.
+  const confirmed = {
+    completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+    latestEvidenceRevision: 3n,
+    confirmedEvidenceRevision: 3n,
+  };
+  assert.deepEqual(evaluateTaskCompletion(confirmed),
+    { criterion: 'EVIDENCE_JUDGMENT', state: 'SATISFIED', satisfied: true });
+  assert.equal(deriveTaskCompletionStatus(confirmed), 'DONE');
 });
 
 test('every criterion answers rather than throws, and stays out of the default arm', () => {
@@ -297,13 +319,16 @@ test('every direct-DONE refusal points at the declared criterion remedy', () => 
     taskCompletionRequiredAction('VERIFICATION').instruction,
     /independent verification task with verdict PASS/,
   );
-  // The one remedy with no implementation behind it says so, and says what IS still possible,
-  // rather than naming a door (`task_judge`, the removed decision) that no longer exists.
+  // The third remedy names the two acts that settle it — and neither is the removed door
+  // (`task_judge`) nor a rebuild the caller can only wait for.
   const evidence = taskCompletionRequiredAction('EVIDENCE_JUDGMENT');
-  assert.match(evidence.requiredAction, /^AWAIT_/u);
-  assert.match(evidence.instruction, /implementation/u);
-  assert.match(evidence.instruction, /VERIFICATION/u);
+  assert.equal(evidence.requiredAction, 'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION');
+  assert.match(evidence.instruction, /submit[\s\S]*completion evidence/u);
+  assert.match(evidence.instruction, /did not do the work/u);
+  assert.match(evidence.instruction, /CONFIRM/u);
   assert.doesNotMatch(evidence.instruction, /task_judge/u);
+  assert.doesNotMatch(evidence.instruction, /AWAIT|rebuil|removed/u,
+    'the remedy must not still describe the criterion as unimplemented');
 });
 
 test('the three peer declarations require only their own evidence shape', () => {

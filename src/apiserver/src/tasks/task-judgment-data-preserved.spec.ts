@@ -217,6 +217,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        dropped or rewritten here. It carries no `ALTER TYPE` and no `DROP TYPE`, so all three
   //        `task_completion_criterion` labels survive untouched, and it has no INSERT/UPDATE/
   //        DELETE, so no preserved row is read or written.
+  //   0239 gave the DONE writer fence a lane for EVIDENCE_JUDGMENT, so a CONFIRM decision on the
+  //        current evidence revision derives DONE. Read against every claim above: it is the THIRD
+  //        `CREATE OR REPLACE` of that function and therefore the third chance to revert one of
+  //        the others silently — it does not, every lane 0228 and 0230 wrote is restated and one
+  //        is added, and the assertion below still holds 0230 to differing from 0228 by exactly
+  //        its own. It creates no table, column, index, enum, type or trigger and carries no
+  //        INSERT/UPDATE/DELETE, so no preserved row is read or written and neither 0177 relation,
+  //        `task_executable_acceptance_pair` nor any `project_acceptance_*` object is named. Its
+  //        new lane READS two tables inside the fence body — `task_completion_evidence`, which is
+  //        preserved, and 0238's `task_evidence_decision` — which is not one of the things this
+  //        file forbids: reading a row drops, alters and rewrites nothing, and the unique
+  //        constraints the read leans on are neither created nor changed here. It carries no
+  //        `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion` labels
+  //        survive, and it names none of the six preserved triggers/functions above.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -225,7 +239,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0234_project_acceptance_evaluation_plan_lane_removal',
       '0236_executable_acceptance_budget',
       '0237_task_completion_criterion_explicit_declaration',
-      '0238_task_evidence_decision'],
+      '0238_task_evidence_decision',
+      '0239_evidence_judgment_confirm_lane'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -3,10 +3,11 @@ import type { TaskCompletionPolicyValue, TaskVerdictValue } from '../projects/ta
 /**
  * The three peer ways a task may declare how its work is proved complete.
  *
- * EXECUTABLE and VERIFICATION have implementations. EVIDENCE_JUDGMENT is still a legal
- * declaration, still stored, and still carries its completion evidence, but the machinery that
- * used to satisfy it was removed at the account owner's direction on 2026-09-02 and has not been
- * rebuilt. `evaluateTaskCompletion` is where that state is expressed.
+ * All three have an implementation. EXECUTABLE compares one exit code and VERIFICATION reads an
+ * independent verdict; EVIDENCE_JUDGMENT, whose machinery the account owner had removed on
+ * 2026-09-02, reads one CONFIRM decision made against the current revision of the task's
+ * completion evidence by a session that did not do the work. `evaluateTaskCompletion` is where
+ * each of those answers is stated.
  */
 export const TASK_COMPLETION_CRITERIA = [
   'EXECUTABLE',
@@ -142,6 +143,15 @@ export interface TaskCompletionFacts {
   verifiesTaskId?: string | null;
   /** A verifier's own result. Any conclusion settles the carrier activity. */
   ownVerdict?: TaskVerdictValue | null;
+  /**
+   * The newest revision of this task's completion evidence, or null when none was submitted.
+   *
+   * The ledger is append-only, so its latest revision is the one a judgment has to be about: a
+   * decision naming an earlier one answers a question a later submission has already replaced.
+   */
+  latestEvidenceRevision?: bigint | null;
+  /** The evidence revision an independent session's CONFIRM decision answers, when one exists. */
+  confirmedEvidenceRevision?: bigint | null;
 }
 
 export interface TaskCompletionEvaluation {
@@ -180,11 +190,19 @@ export type TaskLifecycleStatusValue =
  * never declared; the column is NOT NULL and, since 0237, carries no default, so there is no such
  * task to be lenient towards.
  *
- * EVIDENCE_JUDGMENT remains DECLARED BUT UNIMPLEMENTED — the 2026-09-02 removal took its request
- * ledger and decision door, and this change did not rebuild them. It returns UNSATISFIED rather
- * than throwing or falling through to a default: a task may still declare it, and nothing will
- * ever satisfy it on its own. Naming the case explicitly is what keeps the exhaustiveness check
- * honest — a fourth criterion added later cannot silently inherit somebody else's answer.
+ * EVIDENCE_JUDGMENT is two revisions compared, and the comparison lives here for the same reason
+ * EXECUTABLE's does: a caller allowed to hand in "somebody confirmed something" would be deciding
+ * the criterion instead of declaring facts to it. What satisfies it is a CONFIRM decision whose
+ * evidence revision is still the task's latest. Nothing submitted, nothing decided, a SEND_BACK,
+ * and a CONFIRM of a revision a later submission superseded are one answer, UNSATISFIED — an
+ * unjudged claim is not an uncomparable one, so this criterion has no ACTIONABLE arm.
+ *
+ * Whether the decider was independent is deliberately NOT re-derived here. That is checked where
+ * the decision is written, against this task's whole session history and the authorship of its
+ * evidence; this function reads the row that check produced.
+ *
+ * Every criterion keeps its own explicit arm and the switch has no default, which is what makes a
+ * fourth criterion unable to silently inherit somebody else's answer.
  */
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
@@ -208,7 +226,12 @@ export function evaluateTaskCompletion(
         : facts.verificationVerdict === 'PASS') ? 'SATISFIED' : 'UNSATISFIED';
       break;
     case 'EVIDENCE_JUDGMENT':
-      state = 'UNSATISFIED';
+      // Present AND equal: a confirmed revision that is no longer the latest is an answer about
+      // evidence that has since been replaced, which settles the version nobody is asking about.
+      state = (facts.confirmedEvidenceRevision != null
+        && facts.confirmedEvidenceRevision === facts.latestEvidenceRevision)
+        ? 'SATISFIED'
+        : 'UNSATISFIED';
       break;
   }
   return { criterion, state, satisfied: state === 'SATISFIED' };
@@ -312,12 +335,11 @@ export function taskCompletionRequiredAction(
       };
     case 'EVIDENCE_JUDGMENT':
       return {
-        requiredAction: 'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
+        requiredAction: 'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION',
         instruction:
-          'nothing can satisfy EVIDENCE_JUDGMENT right now: its implementation — the request ' +
-          'ledger and the decision door — was removed on 2026-09-02 and is to be rebuilt. ' +
-          'Completion evidence is still submittable and still stored; redeclare this task as ' +
-          'VERIFICATION if it has to be completable today',
+          'submit this task\'s completion evidence, then let a session that did not do the work ' +
+          'decide the revision you submitted; Orbit derives DONE from a CONFIRM of the revision ' +
+          'that is current when it is made, and a SEND_BACK leaves the task open for the next one',
       };
   }
 }

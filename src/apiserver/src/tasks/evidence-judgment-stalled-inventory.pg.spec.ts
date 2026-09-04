@@ -385,8 +385,10 @@ suite('the report query lists exactly the stalled rows, and every mark it prints
     assert.equal(row.holds_up_criterion, declared.get(row.task_id) ?? null);
   }
 
-  // The mark the inventory is actually about: EVIDENCE_JUDGMENT with no subtasks has no route to
-  // DONE at all, because AG4 makes a policy on a childless task inert.
+  // The mark the inventory is actually about: with no subtasks, AG4 makes a declared policy inert,
+  // so these rows had no route to DONE at all when this population was listed. The criterion they
+  // declare has one again since 2026-09-04 — an independent CONFIRM of submitted evidence — and it
+  // is a route somebody has to walk, which is why they are still listed rather than settled here.
   assert.deepEqual(reported.filter((row) => !row.has_subtasks).map((row) => row.title),
     ['rollup-childless', 'child-of-rollup', 'manual-childless-running', 'manual-childless-open']);
 });

@@ -16,7 +16,8 @@
  *    boundary, and it is the entire reason the third criterion is a check rather than a signature
  *    on one's own homework;
  *  - and an independent session answering the current revision writes one row, bound by foreign
- *    key to that exact evidence content, while the task itself is left exactly as it was.
+ *    key to that exact evidence content — and, because this task declares EVIDENCE_JUDGMENT, the
+ *    DONE that row derives.
  *
  * Every refusal is asserted by BOTH its stable code and its requiredAction: a refusal a caller
  * cannot act on sends a decider away holding an opinion with nowhere to put it.
@@ -342,18 +343,24 @@ suite('one independent session decides one version of the evidence, or is refuse
       );
       await sql.query('ROLLBACK');
 
-      // A decision is a fact about the evidence, and nothing else. The task it is about is not
-      // written to at all — deriving a status from this row is a separate step that does not exist.
-      const task = (await sql.query<{ status: string; updated_at: Date }>(
-        'SELECT "status", "updated_at" FROM "task" WHERE "id" = $1', [f.taskId],
+      // What that row derives, since 0239 gave the fence a lane that can go and find it: this
+      // task declares EVIDENCE_JUDGMENT, so a CONFIRM of its current revision settles it.
+      // `evidence-judgment-confirm-derives-done.pg.spec.ts` is where that derivation is the
+      // subject; it is asserted here too, because a door that quietly stopped deriving it would
+      // otherwise leave this suite green.
+      const task = (await sql.query<{ status: string }>(
+        'SELECT "status" FROM "task" WHERE "id" = $1', [f.taskId],
       )).rows[0];
-      assert.equal(task.status, 'OPEN');
+      assert.equal(task.status, 'DONE');
     });
 
   // (v) ------------------------------------------------------------------------------------------
-  await t.test('SEND_BACK carries its note, leaves the task OPEN, and waits for the next revision',
+  await t.test('SEND_BACK carries its note, writes nothing to the task, and waits for the next revision',
     async () => {
       await submit('toolu_third', 'a third attempt at the same criterion');
+      const before = (await sql.query<{ status: string; updated_at: Date }>(
+        'SELECT "status", "updated_at" FROM "task" WHERE "id" = $1', [f.taskId],
+      )).rows[0];
 
       const sent = await decide('3', f.reviewSessionId, 'SEND_BACK', 'cite the full-api manifest, not the log');
 
@@ -361,9 +368,13 @@ suite('one independent session decides one version of the evidence, or is refuse
       assert.equal(sent.evidenceRevision, '3');
       assert.equal(sent.note, 'cite the full-api manifest, not the log');
       assert.equal(await decisionCount(), 2);
-      const task = (await sql.query<{ status: string }>(
-        'SELECT "status" FROM "task" WHERE "id" = $1', [f.taskId],
+      // The task row compared with itself rather than with a status name: what a rejection means
+      // here is that nothing was written to the task, and by this point the CONFIRM above has
+      // already settled it. A newer revision nobody has answered does not take that back — this
+      // door reopens nothing.
+      const after = (await sql.query<{ status: string; updated_at: Date }>(
+        'SELECT "status", "updated_at" FROM "task" WHERE "id" = $1', [f.taskId],
       )).rows[0];
-      assert.equal(task.status, 'OPEN');
+      assert.deepEqual(after, before);
     });
 });

@@ -14,9 +14,11 @@
  *    `approval_resolved` are published live-only and `?sinceSeq=` never replays them — so this is
  *    the structural form of "it does not hang on that channel", stronger than grepping for the
  *    names. A reader that consulted either would either throw or answer differently;
- *  - and the one thing that DOES remove a row is a decision bound to the version being asked
- *    about, which is the negative control: without it the first two proofs would hold for a read
- *    that always answers "three".
+ *  - and what DOES remove a row is a decision bound to the version being asked about, which is the
+ *    negative control: without it the first two proofs would hold for a read that always answers
+ *    "three". Since 0239 that happens through two different doors, and both are exercised here: a
+ *    CONFIRM settles the TASK, so its row never comes back; a SEND_BACK settles only that VERSION,
+ *    so the next revision is a new question.
  *
  * Destructive: it truncates, and it drops two tables inside a transaction it rolls back.
  * COORDINATOR_PG_URL must name the disposable guarded database with current migrations applied.
@@ -279,9 +281,19 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     });
 
   // (iii) ----------------------------------------------------------------------------------------
-  // The negative control for everything below it. If this row did not leave, "the same rows are
+  // The negative control for everything below it. If these rows did not leave, "the same rows are
   // still there" would be true of a read that never looked at anything.
+  //
+  // Two decisions, because since 0239 a row leaves this queue through two DIFFERENT doors and the
+  // read needs both clauses to be right. A CONFIRM of the current revision derives DONE, so its row
+  // goes because the TASK settled and stays gone however many revisions follow it. A SEND_BACK
+  // writes nothing to the task, so its row goes only because that VERSION has been answered, and
+  // the next revision brings it back. Either clause on its own gets one of these two wrong.
   await t.test('a decision on the version being asked about is what removes a row', async () => {
+    const statusOf = async (taskId: string): Promise<string> => (
+      await sql.query<{ status: string }>('SELECT "status" FROM "task" WHERE "id" = $1', [taskId])
+    ).rows[0].status;
+
     await service.decide(
       f.ownerId,
       f.work[1].taskId,
@@ -292,14 +304,43 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     const read = await queue(f.coordinatorSessionId);
     assert.equal(read.count, 2);
     assert.deepEqual(read.pending?.map((row) => row.taskId), [f.work[0].taskId, f.work[2].taskId]);
+    // Which door it left by is part of the claim: the CONFIRM settled the task itself.
+    assert.equal(await statusOf(f.work[1].taskId), TaskStatus.DONE);
 
-    // And a NEW revision of the same task is a new question: the decision was bound to version 1,
-    // so it says nothing about version 2 and the row comes back at the version nobody answered.
+    // A later submission does NOT put a settled task back: the decision door reopens nothing, and a
+    // task that has settled is not a question whatever revision its ledger is at.
     await submit(1, 'the migration applied, and the rollback was rehearsed', []);
+    const afterConfirmed = await queue(f.coordinatorSessionId);
+    assert.equal(await statusOf(f.work[1].taskId), TaskStatus.DONE);
+    assert.equal(afterConfirmed.count, 2);
+    assert.deepEqual(afterConfirmed.pending?.map((row) => row.taskId),
+      [f.work[0].taskId, f.work[2].taskId]);
+
+    // SEND_BACK is the answer that settles nothing, and it is where "bound to one immutable
+    // version" is still observable: the row leaves with the task still OPEN, because THIS version
+    // was answered...
+    await service.decide(
+      f.ownerId,
+      f.work[2].taskId,
+      { type: CreatorType.USER, id: f.ownerId },
+      {
+        decidingSessionId: f.coordinatorSessionId,
+        evidenceRevision: '1',
+        decision: 'SEND_BACK',
+        note: 'cite the run that produced it, not the summary of it',
+      },
+    );
+    const afterSendBack = await queue(f.coordinatorSessionId);
+    assert.equal(await statusOf(f.work[2].taskId), TaskStatus.OPEN);
+    assert.equal(afterSendBack.count, 1);
+    assert.deepEqual(afterSendBack.pending?.map((row) => row.taskId), [f.work[0].taskId]);
+
+    // ...and a new revision is a new question, at the version nobody has answered.
+    await submit(2, 'the rail renders three rows, and the empty state', ['nothing was checked on a phone']);
     const afterRevision = await queue(f.coordinatorSessionId);
-    assert.equal(afterRevision.count, 3);
+    assert.equal(afterRevision.count, 2);
     assert.equal(
-      afterRevision.pending?.find((row) => row.taskId === f.work[1].taskId)?.evidenceRevision,
+      afterRevision.pending?.find((row) => row.taskId === f.work[2].taskId)?.evidenceRevision,
       '2',
     );
   });

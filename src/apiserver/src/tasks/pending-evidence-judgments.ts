@@ -42,7 +42,17 @@ import {
  * door is the only thing that records an answer, and this is the read that finds the question.
  */
 
-/** Which statuses can still be waiting on an answer. A task that has settled is not a question. */
+/**
+ * Which statuses can still be waiting on an answer. A task that has settled is not a question.
+ *
+ * This is NOT the same clause as "no decision bound to the latest revision" below, and neither one
+ * subsumes the other — they overlap on exactly one case. Since 0239 a CONFIRM of the current
+ * revision derives DONE, so a confirmed task leaves by both at once; but a SEND_BACK writes
+ * nothing to the task, so a sent-back one is DECIDED and still OPEN, and only the other clause
+ * takes it out. Drop this one and a settled task's later evidence revision becomes a question
+ * nobody can answer; drop that one and every sent-back task comes straight back to the top of the
+ * queue holding the version its reader has already answered.
+ */
 const UNSETTLED: readonly TaskStatus[] = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS];
 
 /** Whether this reader may answer this row, and — when it may not — the door's own words for why. */

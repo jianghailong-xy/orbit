@@ -13,10 +13,11 @@ import { test } from 'node:test';
  * substitute crept in for one of the criteria that were supposed to be left empty.
  *
  * On 2026-09-03 EXECUTABLE stopped being one of those, by the account owner's decision: it gained
- * back one exit-code comparison and two argument fields. That is a second implementation, not a
- * substitute for this one — the two share `evaluateTaskCompletion` and touch nothing of each
- * other's — so what is pinned below is the ceiling: EXECUTABLE may read its own two facts and
- * VERIFICATION its three, and EVIDENCE_JUDGMENT still reads nothing at all.
+ * back one exit-code comparison and two argument fields. On 2026-09-04 EVIDENCE_JUDGMENT did the
+ * same, with two revision fields and one CONFIRM decision to compare them against. Those are peer
+ * implementations, not substitutes for this one — the three share `evaluateTaskCompletion` and
+ * touch nothing of each other's — so what is pinned below is the ceiling: each criterion may read
+ * its own facts, and no criterion may read another's.
  *
  * `task-status-derived-end-to-end.pg.spec.ts` runs the positive path on a real server. This file
  * holds the shape: what the surviving predicates read, and what nothing reads any more.
@@ -71,20 +72,24 @@ test('the SQL fragments select and pass a check on its own facts', () => {
   assert.match(selector, /ORDER BY newest_check\."created_at" DESC, newest_check\."id" DESC/u);
 });
 
-test('no criterion reads a fact outside its own two or three, and the empty one reads none', () => {
+test('no criterion reads a fact outside its own, and none of them borrows another\'s', () => {
   const criterion = read('src/tasks/task-completion-criterion.ts');
   const evaluator = criterion.slice(criterion.indexOf('export function evaluateTaskCompletion'));
   const body = evaluator.slice(0, evaluator.indexOf('\n}\n'));
-  // Two criteria read facts; the third reads none. The whole set is six, and a seventh appearing
-  // here is a substitute growing in — most likely for EVIDENCE_JUDGMENT, which has no inputs.
+  // Three criteria, two or three facts each. The whole set is eight, and a ninth appearing here is
+  // an input growing in that nobody has argued for.
   const factReads = [...body.matchAll(/facts\.([a-zA-Z]+)/gu)].map((match) => match[1]);
   assert.deepEqual([...new Set(factReads)].sort(),
-    ['acceptanceExpectedExitCode', 'completionCriterion', 'executableExitCode', 'ownVerdict',
+    ['acceptanceExpectedExitCode', 'completionCriterion', 'confirmedEvidenceRevision',
+      'executableExitCode', 'latestEvidenceRevision', 'ownVerdict',
       'verificationVerdict', 'verifiesTaskId']);
-  // EVIDENCE_JUDGMENT's arm in particular: a constant, with no fact between the case and the
-  // break. This is what "declared but unimplemented" has to look like in code.
+  // EVIDENCE_JUDGMENT's arm in particular: it compares its own two revisions and reads nothing
+  // else — not a verdict, not an exit code, and not a status.
   const arm = body.slice(body.indexOf("case 'EVIDENCE_JUDGMENT':"));
-  assert.match(arm.slice(0, arm.indexOf('break;')), /^case 'EVIDENCE_JUDGMENT':\s*state = 'UNSATISFIED';\s*$/u);
+  const evidenceArm = arm.slice(0, arm.indexOf('break;'));
+  assert.deepEqual(
+    [...new Set([...evidenceArm.matchAll(/facts\.([a-zA-Z]+)/gu)].map((match) => match[1]))].sort(),
+    ['confirmedEvidenceRevision', 'latestEvidenceRevision']);
 
   // And the facts type carries nothing else to read: a field left behind is the seam a substitute
   // would grow back through. In particular neither of 0200's typed-termination fields is back.
@@ -94,9 +99,10 @@ test('no criterion reads a fact outside its own two or three, and the empty one 
   // able to drop it out of this list quietly.
   const fields = [...shape.matchAll(/^\s{2}([a-zA-Z]+)\??:/gmu)].map((match) => match[1]);
   assert.deepEqual(fields.sort(),
-    ['acceptanceExpectedExitCode', 'completionCriterion', 'executableExitCode', 'ownVerdict',
+    ['acceptanceExpectedExitCode', 'completionCriterion', 'confirmedEvidenceRevision',
+      'executableExitCode', 'latestEvidenceRevision', 'ownVerdict',
       'verificationVerdict', 'verifiesTaskId']);
-  // And exactly one of the six is mandatory. Since 0237 the criterion must be supplied, because the
+  // And exactly one of the eight is mandatory. Since 0237 the criterion must be supplied, because the
   // evaluator used to substitute EVIDENCE_JUDGMENT for an absent one and thereby answer about a
   // criterion no task had declared — the same substitution in the type that the arm above refuses
   // in the code.

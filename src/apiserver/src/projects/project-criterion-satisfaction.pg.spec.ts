@@ -26,10 +26,11 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import type { PrismaClient } from '@prisma/client';
+import { CreatorType, type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence.service';
 import { TasksService } from '../tasks/tasks.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -205,10 +206,11 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
   await tasks.update(ownerId, metVerifier.id, { verdict: 'PASS' } as never);
 
   // ── the criterion two tasks serve, one of which has not settled ───────────────────────────────
-  // The unsettled one is DONE. That is not a trick: its own declared criterion is
-  // EVIDENCE_JUDGMENT, whose implementation was removed on 2026-09-02, and its status came from
-  // the aggregate policy it also declares — a projection over its children, not the fact it said
-  // would settle it. A derivation that read `status = 'DONE'` would call this criterion met.
+  // The unsettled one is DONE. That is not a trick: its status came from the aggregate policy it
+  // also declares — a projection over its children, not the fact it said would settle it — while
+  // its own declared criterion, EVIDENCE_JUDGMENT, asks for something nobody has produced yet: an
+  // independent CONFIRM of its completion evidence. A derivation that read `status = 'DONE'` would
+  // call this criterion met.
   const partialSettled = await tasks.create(ownerId, {
     title: 'the piece of this one that did settle',
     projectId,
@@ -302,7 +304,7 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
         title: 'the piece of this one that never settled by its own criterion',
         status: 'DONE',
         completionCriterion: 'EVIDENCE_JUDGMENT',
-        requiredAction: 'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
+        requiredAction: 'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION',
         criterionRevision: 1,
         criterionRevisionStale: false,
       }],
@@ -314,6 +316,80 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.equal(held.status, 'DONE');
     assert.ok(!derived.unmet[0].heldUpBy.some((row) => row.taskId === partialSettled.id),
       'the EXECUTABLE task whose comparison agreed is settled and is not holding anything up');
+  });
+
+  // ═══ 3b. the same clause, released by the fact its holder's criterion actually asks for ═══════
+  // This is where the third criterion having no implementation was expensive: `servingTaskSettled`
+  // asked the shared evaluator, the evaluator could only answer UNSATISFIED, and so every criterion
+  // any such task served was unmet forever, whatever the work had done. The facts are produced the
+  // way the product produces them — the evidence door, then the decision door — because a fixture
+  // that INSERTed a decision would prove this read can read what it just wrote.
+  await t.test('an independent CONFIRM settles the EVIDENCE_JUDGMENT task and releases the clause',
+    async () => {
+    const workerSessionId = randomUUID();
+    const decidingSessionId = randomUUID();
+    await prisma.session.create({
+      // Attached to the task without claiming its work: AG6 refuses a live work session on a
+      // roll-up node, so the evidence for one comes from a session that is talking about it rather
+      // than running it. Which session it is matters to the door for one reason only — the
+      // decision below may not come from this one.
+      data: {
+        id: workerSessionId,
+        ownerId,
+        creatorId: ownerId,
+        taskId: partialOutstanding.id,
+        title: 'the run that produced the evidence',
+        prompt: 'do the work',
+        startsTaskWork: false,
+      },
+    });
+    await prisma.session.create({
+      // No task of its own: the run that judges this work never executed it, which is the whole of
+      // what the decision door checks before it accepts an answer.
+      data: {
+        id: decidingSessionId,
+        ownerId,
+        creatorId: ownerId,
+        title: 'the run that judges it',
+        prompt: 'read the ledger and decide',
+      },
+    });
+    await prisma.toolCall.create({
+      data: {
+        sessionId: workerSessionId,
+        name: 'Bash',
+        toolUseId: 'toolu_criterion_satisfaction',
+        input: { command: 'true', description: 'the work this evidence cites' },
+        isError: false,
+      },
+    });
+    const evidence = new TaskCompletionEvidenceService(prisma as unknown as PrismaService);
+    const actor = { type: CreatorType.USER, id: ownerId } as const;
+
+    await evidence.submit(ownerId, partialOutstanding.id, actor, {
+      sourceSessionId: workerSessionId,
+      evidence: {
+        claim: 'the piece of work filed against this criterion is done',
+        criterion: { key: partial.key, text: ONE_OUTSTANDING },
+        checks: [{ kind: 'TOOL_CALL', ref: 'toolu_criterion_satisfaction' }],
+        gaps: [],
+      },
+    });
+    // Still held up: a claim nobody has answered is not a judgment, and this clause knows the
+    // difference — which is the same distinction the criterion itself is made of.
+    assert.equal((await satisfactionOf(partial.definitionId)).satisfied, false,
+      'submitted evidence is a claim; the criterion asks for a decision about it');
+
+    await evidence.decide(ownerId, partialOutstanding.id, actor, {
+      decidingSessionId,
+      evidenceRevision: '1',
+      decision: 'CONFIRM',
+    });
+
+    const released = await satisfactionOf(partial.definitionId);
+    assert.deepEqual(released.unmet, [],
+      'nothing holds it up: the work it named settled by the criterion that work declared');
+    assert.equal(released.satisfied, true);
   });
 
   // ═══ 4. the negative for clause 3: a declaration measured against a criterion that moved ══════

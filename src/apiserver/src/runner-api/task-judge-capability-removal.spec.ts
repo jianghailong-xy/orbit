@@ -69,12 +69,13 @@ test('the server routes it posted to are gone, and the declaration routes are no
 test('the remedy an agent is given names the state, not a door that no longer exists', () => {
   const criterion = read('src/apiserver/src/tasks/task-completion-criterion.ts');
   const remedies = criterion.slice(criterion.indexOf('export function taskCompletionRequiredAction'));
-  // EXECUTABLE regained an implementation on 2026-09-03, so its remedy names the action that
-  // settles it. What this suite is answerable for is that the action is not the removed door:
-  // running the declared acceptance command is a thing the run already does, and `task_judge` was
-  // an endpoint an agent had to call.
+  // EXECUTABLE regained an implementation on 2026-09-03 and EVIDENCE_JUDGMENT on 2026-09-04, so
+  // both remedies name the action that settles them. What this suite is answerable for is that
+  // neither action is the removed door: running the declared command and submitting evidence for
+  // an independent session to decide are things a run already does, and `task_judge` was an
+  // endpoint an agent had to call.
   assert.match(remedies, /RUN_ACCEPTANCE_COMMAND/u);
-  assert.match(remedies, /AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION/u);
+  assert.match(remedies, /SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION/u);
   assert.doesNotMatch(remedies, /task_judge/u);
   assert.doesNotMatch(remedies, /RUN_EXECUTABLE_CRITERION|DECIDE_THE_OPEN_EVIDENCE_JUDGMENT/u);
   // VERIFICATION's two remedies are unchanged: it is the one criterion that still works.

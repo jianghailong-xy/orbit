@@ -185,9 +185,14 @@ test('(c) the evaluator satisfies EXECUTABLE from arguments alone, never from a 
   ]) {
     assert.doesNotMatch(criterion, gone, `the evaluator reads ${gone} again`);
   }
-  // EVIDENCE_JUDGMENT keeps its explicit unimplemented arm, so the exhaustiveness check keeps
-  // answering for it and it cannot inherit EXECUTABLE's new answer.
-  assert.match(body, /case 'EVIDENCE_JUDGMENT':\s*\n\s*state = 'UNSATISFIED';/u);
+  // EVIDENCE_JUDGMENT keeps its own explicit arm, so the exhaustiveness check keeps answering for
+  // it and it cannot inherit EXECUTABLE's answer. Since 2026-09-04 that arm has an implementation
+  // of its own — two evidence revisions compared — and the thing 0228 is answerable for is what it
+  // still does NOT read: not a request, not a result, not a stored decided PASS.
+  assert.match(body, /case 'EVIDENCE_JUDGMENT':/u);
+  const evidenceArm = body.slice(body.indexOf("case 'EVIDENCE_JUDGMENT':"));
+  assert.doesNotMatch(evidenceArm.slice(0, evidenceArm.indexOf('break;')),
+    /executableExitCode|acceptanceExpectedExitCode|Verdict/u);
   assert.doesNotMatch(body, /default:/u, 'no default arm may absorb a criterion');
 });
 

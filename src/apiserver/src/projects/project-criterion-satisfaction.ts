@@ -4,6 +4,7 @@ import {
   evaluateTaskCompletion,
   taskCompletionRequiredAction,
 } from '../tasks/task-completion-criterion';
+import type { EvidenceDecisionValue } from '../tasks/task-evidence-decision';
 import {
   criterionDeclarations,
   type CriterionServingTask,
@@ -108,6 +109,15 @@ export interface ServingTaskFacts {
     terminalReason: string | null;
     supersededByTaskId: string | null;
   }>;
+  /**
+   * The head of this task's completion-evidence ledger — newest first, and only ever one row —
+   * carrying the decision made about it. A list because that is the shape the query answers with;
+   * what the criterion turns on is the first element and whether anybody confirmed it.
+   */
+  completionEvidence: ReadonlyArray<{
+    revision: bigint;
+    decisions: ReadonlyArray<{ decision: EvidenceDecisionValue }>;
+  }>;
 }
 
 /** The rows the fold needs, kept structural so it is testable without Prisma. */
@@ -134,10 +144,11 @@ export interface CriterionWithSettlementFacts {
  *    comparison that happened and agreed.
  *  - VERIFICATION: a live PASS from an independent check, or, for a carrier, its own verdict.
  *    Both are rows this read can go and look at, so it hands them to the shared evaluator.
- *  - EVIDENCE_JUDGMENT: never settled. Its implementation was removed on 2026-09-02 and has not
- *    been rebuilt, so `evaluateTaskCompletion` answers UNSATISFIED for every such task, whatever
- *    its status. A criterion served by one is therefore held up by it, and says so — that is a
- *    true and visible fact about this system rather than a defect in this read.
+ *  - EVIDENCE_JUDGMENT: a CONFIRM decision standing on the newest revision of this task's
+ *    completion evidence. Two rows this read can go and look at, like VERIFICATION's, handed to
+ *    the same evaluator rather than compared here. Until 2026-09-04 this arm could not be
+ *    satisfied at all, so a criterion any such task served was held up by it forever, whatever
+ *    the work had done — which is why the arm is written as facts read rather than as a constant.
  */
 export function servingTaskSettled(task: ServingTaskFacts): boolean {
   switch (task.completionCriterion) {
@@ -150,8 +161,16 @@ export function servingTaskSettled(task: ServingTaskFacts): boolean {
         ownVerdict: task.verdict,
         verificationVerdict: livePassVerdict(task.verifiedBy),
       }).satisfied;
-    case 'EVIDENCE_JUDGMENT':
-      return evaluateTaskCompletion({ completionCriterion: 'EVIDENCE_JUDGMENT' }).satisfied;
+    case 'EVIDENCE_JUDGMENT': {
+      const [latest] = task.completionEvidence;
+      return evaluateTaskCompletion({
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+        latestEvidenceRevision: latest?.revision ?? null,
+        confirmedEvidenceRevision: latest?.decisions.some(({ decision }) => decision === 'CONFIRM')
+          ? latest.revision
+          : null,
+      }).satisfied;
+    }
   }
 }
 
@@ -277,6 +296,13 @@ export async function readCriterionSatisfaction(
               terminalReason: true,
               supersededByTaskId: true,
             },
+          },
+          // Only the newest revision: an older one is a claim a later submission replaced, and the
+          // criterion is about the claim standing now.
+          completionEvidence: {
+            orderBy: { revision: 'desc' },
+            take: 1,
+            select: { revision: true, decisions: { select: { decision: true } } },
           },
         },
       },

@@ -112,9 +112,13 @@ test('the pure criterion boundary owns the comparison and has no default arm', (
   assert.match(body, /case 'EXECUTABLE':/u);
   assert.match(body, /case 'VERIFICATION':/u);
   assert.match(body, /case 'EVIDENCE_JUDGMENT':/u);
-  // EVIDENCE_JUDGMENT was NOT restored alongside EXECUTABLE. It is still declared and still
-  // unimplemented, and its arm still says so without reading a fact.
-  assert.match(body, /case 'EVIDENCE_JUDGMENT':\s*\n\s*state = 'UNSATISFIED';/u);
+  // EVIDENCE_JUDGMENT was restored on 2026-09-04, separately and from its own facts. What this
+  // file is answerable for is that the two did not run together: its arm reads its own two
+  // revisions and neither of the exit-code facts.
+  const evidenceArm = body.slice(body.indexOf("case 'EVIDENCE_JUDGMENT':"));
+  assert.doesNotMatch(evidenceArm.slice(0, evidenceArm.indexOf('break;')),
+    /executableExitCode|acceptanceExpectedExitCode/u,
+    'the third criterion may not be settled by the exit-code comparison');
   // `deriveTaskCompletionStatus` is still the one projection onto a status.
   assert.match(criterion, /return evaluateTaskCompletion\(facts\)\.satisfied \? 'DONE' : null;/u);
 });

@@ -144,10 +144,11 @@ function assertCriterionRefusal(
   assert.match(String(body.message), /cannot be written directly by a person, coordinator or execution session/);
 }
 
-// The refusal is unchanged; what it POINTS AT changed on 2026-09-02. EVIDENCE_JUDGMENT and
-// EXECUTABLE lost their implementations, so the remedy names that state instead of a door that no
-// longer exists — which is the whole point of this boundary: every refusal has to tell the caller
-// what could actually complete this task, and "nothing, until it is rebuilt" is an answer.
+// The refusal is unchanged; what it POINTS AT has moved twice. Both criteria that lost their
+// implementations on 2026-09-02 have them back — EXECUTABLE on 2026-09-03, EVIDENCE_JUDGMENT on
+// 2026-09-04 — so the remedy names the act that settles the task instead of a rebuild to wait for.
+// That is the whole point of this boundary: every refusal has to tell the caller what could
+// actually complete this task.
 test('nobody can write DONE and every caller is directed to the EVIDENCE_JUDGMENT criterion',
   async () => {
     const f = fixture(THE_RUN_ITSELF, 'EVIDENCE_JUDGMENT');
@@ -157,8 +158,8 @@ test('nobody can write DONE and every caller is directed to the EVIDENCE_JUDGMEN
     assertCriterionRefusal(
       body,
       'EVIDENCE_JUDGMENT',
-      'AWAIT_EVIDENCE_JUDGMENT_IMPLEMENTATION',
-      /implementation[\s\S]*removed on 2026-09-02[\s\S]*VERIFICATION/,
+      'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION',
+      /submit[\s\S]*did not do the work[\s\S]*CONFIRM/,
     );
     assert.deepEqual(f.writes, []);
   });
