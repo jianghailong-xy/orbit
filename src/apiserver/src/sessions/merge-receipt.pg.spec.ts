@@ -67,7 +67,10 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
   await establishProjectContractForPgTest(db, ownerId, projectId, label);
   await db.task.create({
-    data: { id: taskId, ownerId, title: label, creatorType: 'USER', creatorId: ownerId, projectId },
+    data: {
+      id: taskId, ownerId, title: label, creatorType: 'USER', creatorId: ownerId, projectId,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+    },
   });
   await db.session.create({
     data: {

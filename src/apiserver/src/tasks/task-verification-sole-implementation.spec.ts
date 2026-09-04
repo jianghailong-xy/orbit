@@ -90,10 +90,18 @@ test('no criterion reads a fact outside its own two or three, and the empty one 
   // would grow back through. In particular neither of 0200's typed-termination fields is back.
   const facts = criterion.slice(criterion.indexOf('export interface TaskCompletionFacts'));
   const shape = facts.slice(0, facts.indexOf('\n}\n'));
-  const fields = [...shape.matchAll(/^\s{2}([a-zA-Z]+)\?:/gmu)].map((match) => match[1]);
+  // Optional or not: the pin is on the SET of fields, so making one of them mandatory must not be
+  // able to drop it out of this list quietly.
+  const fields = [...shape.matchAll(/^\s{2}([a-zA-Z]+)\??:/gmu)].map((match) => match[1]);
   assert.deepEqual(fields.sort(),
     ['acceptanceExpectedExitCode', 'completionCriterion', 'executableExitCode', 'ownVerdict',
       'verificationVerdict', 'verifiesTaskId']);
+  // And exactly one of the six is mandatory. Since 0237 the criterion must be supplied, because the
+  // evaluator used to substitute EVIDENCE_JUDGMENT for an absent one and thereby answer about a
+  // criterion no task had declared — the same substitution in the type that the arm above refuses
+  // in the code.
+  const mandatory = [...shape.matchAll(/^\s{2}([a-zA-Z]+):/gmu)].map((match) => match[1]);
+  assert.deepEqual(mandatory, ['completionCriterion']);
 
   // The aggregation half, which is what actually settles a VERIFICATION_PASSED subject, is
   // untouched and still keyed on a verifier's verdict.

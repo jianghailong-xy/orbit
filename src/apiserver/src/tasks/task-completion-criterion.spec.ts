@@ -19,9 +19,15 @@ const ACTIVE_VERIFIER_RETIREMENT = {
   nextSupersededByTaskId: null,
 };
 
-test('undeclared completion is the ordinary EVIDENCE_JUDGMENT criterion', () => {
+// `resolveTaskCompletionCriterion` is the SERVICE's compatibility rule, and it still answers
+// EVIDENCE_JUDGMENT for a declaration that states nothing at all. That is not the door's rule: both
+// write boundaries run `requireExplicitCompletionCriterion` first and refuse an untranslatable
+// omission before it gets here (`task-completion-criterion.pg.spec.ts`). The evaluator below no
+// longer takes a null criterion at all — it used to substitute EVIDENCE_JUDGMENT and thereby answer
+// about a criterion no task had declared.
+test('an undeclared service-level declaration still resolves to the ordinary criterion', () => {
   assert.equal(resolveTaskCompletionCriterion({}), 'EVIDENCE_JUDGMENT');
-  assert.deepEqual(evaluateTaskCompletion({ completionCriterion: null }), {
+  assert.deepEqual(evaluateTaskCompletion({ completionCriterion: 'EVIDENCE_JUDGMENT' }), {
     criterion: 'EVIDENCE_JUDGMENT', state: 'UNSATISFIED', satisfied: false,
   });
 });

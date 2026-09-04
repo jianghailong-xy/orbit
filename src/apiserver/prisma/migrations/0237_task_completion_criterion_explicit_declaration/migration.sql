@@ -1,0 +1,19 @@
+-- Take away the database's answer to a task that declared no completion criterion.
+--
+-- 0179 added "completion_criterion" NOT NULL DEFAULT 'HUMAN_SIGNOFF' (renamed EVIDENCE_JUDGMENT in
+-- place by 0224). That default was doing two different jobs under one spelling: it gave the rows
+-- that predated the column a value without rewriting them, and it silently answered for every
+-- INSERT that omitted the field afterwards. The first job finished the moment 0179 committed. The
+-- second one outlived it as a way for a forgotten field to become a declaration nobody made -- and
+-- since the 2026-09-02 removal left EVIDENCE_JUDGMENT declared but unimplemented, the declaration
+-- it invented is the one criterion nothing can satisfy.
+--
+-- Dropping the default separates them: the backfill value stays frozen in 0179 where it belongs,
+-- and from here an INSERT without a criterion raises 23502 instead of picking one. Both write doors
+-- already refuse that request before it reaches SQL (`requireExplicitCompletionCriterion`); this is
+-- the same rule stated where no caller can route around it.
+--
+-- Existing rows are untouched on purpose. Their stored value is the fact of what was declared, or
+-- defaulted, when they were written; rewriting it now would replace history with today's opinion.
+-- The column stays NOT NULL and keeps its type, so no row changes and no read changes.
+ALTER TABLE "task" ALTER COLUMN "completion_criterion" DROP DEFAULT;

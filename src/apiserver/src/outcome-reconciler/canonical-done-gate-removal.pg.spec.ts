@@ -328,9 +328,9 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
      VALUES ($1,$2,$3,'removal workspace',true)`, [workspaceId, seeded.ownerId, runnerId]);
   await client.query(
     `INSERT INTO "task" ("id","owner_id","project_id","assignee_id","title","creator_type",
-                         "creator_id","provider","status","updated_at")
+                         "creator_id","provider","status","updated_at","completion_criterion")
      VALUES ($1,$2,$3,$4,'removal task','USER'::"creator_type",$2,'claude',
-             'OPEN'::"task_status",now())`,
+             'OPEN'::"task_status",now(),'EVIDENCE_JUDGMENT')`,
     [taskId, seeded.ownerId, seeded.projectId, workspaceId]);
   await client.query(
     `INSERT INTO "session" ("id","owner_id","creator_id","task_id","workspace_id",

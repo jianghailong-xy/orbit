@@ -55,8 +55,8 @@ export async function seedEpochFixture(client: Client, ids: EpochIds): Promise<v
     for (const [id, title] of [[ids.a, 'a'], [ids.b, 'b'], [ids.c, 'c']] as Array<[string, string]>) {
       await client.query(
         `INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id", "status",
-                            "updated_at")
-         VALUES ($1::uuid, $2, $3::uuid, 'USER', $3::uuid, 'OPEN'::task_status, CURRENT_TIMESTAMP)`,
+                            "updated_at", "completion_criterion")
+         VALUES ($1::uuid, $2, $3::uuid, 'USER', $3::uuid, 'OPEN'::task_status, CURRENT_TIMESTAMP, 'EVIDENCE_JUDGMENT')`,
         [id, `${ids.label}-${title}`, ids.ownerId],
       );
     }

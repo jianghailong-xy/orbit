@@ -248,8 +248,8 @@ test('0231 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
 
     // Task 侧的同一条规则（SR15）：缩写 SHA 与短名 ref 都拒，全名两种形态都收。
     await client.query(
-      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at")
-       VALUES ($1,'S1 task',$2,'USER',$2,now())`, [id('200'), OWNER]);
+      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","completion_criterion")
+       VALUES ($1,'S1 task',$2,'USER',$2,now(),'EVIDENCE_JUDGMENT')`, [id('200'), OWNER]);
     for (const bad of ['abc1234', 'main', SHA('A'), `${SHA('a')} `, SHA('a').slice(0, 39)]) {
       await refuses(
         () => client.query(`UPDATE "task" SET "pinned_revision" = $2 WHERE "id" = $1`, [id('200'), bad]),
@@ -262,8 +262,8 @@ test('0231 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
 
     // SR16：verification 任务不得携带 pin，两个方向都关着。
     await client.query(
-      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","verifies_task_id")
-       VALUES ($1,'S1 verifier',$2,'USER',$2,now(),$3)`, [id('201'), OWNER, id('200')]);
+      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","verifies_task_id","completion_criterion")
+       VALUES ($1,'S1 verifier',$2,'USER',$2,now(),$3,'EVIDENCE_JUDGMENT')`, [id('201'), OWNER, id('200')]);
     await refuses(
       () => client.query(`UPDATE "task" SET "pinned_revision" = 'refs/tags/v1' WHERE "id" = $1`, [id('201')]),
       /task_pinned_revision_verification_chk/,
@@ -271,11 +271,11 @@ test('0231 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
     );
     // 反方向：一个已经 pin 的任务不能被改成 verification。同一条 CHECK，因此不需要第二处规则。
     await client.query(
-      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","pinned_revision")
-       VALUES ($1,'S1 pinned',$2,'USER',$2,now(),$3)`, [id('202'), OWNER, SHA('b')]);
+      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","pinned_revision","completion_criterion")
+       VALUES ($1,'S1 pinned',$2,'USER',$2,now(),$3,'EVIDENCE_JUDGMENT')`, [id('202'), OWNER, SHA('b')]);
     await client.query(
-      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at")
-       VALUES ($1,'S1 subject',$2,'USER',$2,now())`, [id('203'), OWNER]);
+      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","completion_criterion")
+       VALUES ($1,'S1 subject',$2,'USER',$2,now(),'EVIDENCE_JUDGMENT')`, [id('203'), OWNER]);
     await refuses(
       () => client.query(`UPDATE "task" SET "verifies_task_id" = $2 WHERE "id" = $1`, [id('202'), id('203')]),
       /task_pinned_revision_verification_chk/,
@@ -554,8 +554,8 @@ test('0231 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
     assert.equal(bindings.rows[0].n, '0');
 
     await client.query(
-      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","project_id")
-       VALUES ($1,'codeless work',$2,'USER',$2,now(),$3)`, [id('210'), OWNER, PROJECT]);
+      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","project_id","completion_criterion")
+       VALUES ($1,'codeless work',$2,'USER',$2,now(),$3,'EVIDENCE_JUDGMENT')`, [id('210'), OWNER, PROJECT]);
     await insertSession(client, id('120'), { task_id: id('210') });
 
     const row = await client.query<{ state: string; codeless: boolean }>(

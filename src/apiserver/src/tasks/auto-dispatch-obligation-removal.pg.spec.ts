@@ -123,7 +123,8 @@ async function dependentTask(
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
   const task = (id: string, title: string, extra: Record<string, unknown>) => ({
     id, ownerId: ids.ownerId, projectId, assigneeId: ids.agentId, title,
-    creatorType: CreatorType.USER, creatorId: ids.ownerId, provider: 'claude', ...extra,
+    creatorType: CreatorType.USER, creatorId: ids.ownerId, provider: 'claude',
+    completionCriterion: 'EVIDENCE_JUDGMENT' as const, ...extra,
   });
   await db.task.create({
     data: task(prerequisiteId, `${label} prerequisite`, {
@@ -289,7 +290,7 @@ test('(g) the dependency mechanism itself is untouched: satisfying an edge relea
           id: randomUUID(), ownerId: ids.ownerId, projectId, parentTaskId: prerequisiteId,
           assigneeId: ids.agentId, title: '0224-edge child', creatorType: CreatorType.USER,
           creatorId: ids.ownerId, provider: 'claude', status: TaskStatus.DONE,
-          autoRunWhenReady: false,
+          completionCriterion: 'EVIDENCE_JUDGMENT', autoRunWhenReady: false,
         },
       });
       await s.db.task.update({

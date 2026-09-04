@@ -114,6 +114,7 @@ async function fixture(options: { coordinatorEnabled?: boolean } = {}): Promise<
       projectId,
       title: 'a task with one attempt on it',
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: ownerId,
       status: TaskStatus.IN_PROGRESS,
     },

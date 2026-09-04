@@ -2881,9 +2881,11 @@ model Task {
   /// it. Exceeding it kills the command and reports -1, which is compared literally against
   /// `acceptanceExpectedExitCode` exactly like any other code. Nothing about the run is stored.
   acceptanceTimeoutSeconds Int? @map("acceptance_timeout_seconds")
-  /// The declared completion fact for this task. EVIDENCE_JUDGMENT is a first-class criterion and the
-  /// compatibility value for every row that predates this column, never an exceptional fallback.
-  completionCriterion TaskCompletionCriterion @default(EVIDENCE_JUDGMENT) @map("completion_criterion")
+  /// The declared completion fact for this task. Every writer states it: migration 0237 dropped the
+  /// column default, so a row inserted without one is refused instead of being given a criterion
+  /// nobody chose. EVIDENCE_JUDGMENT remains a first-class value and remains what rows written
+  /// before 0179 carry -- what it is no longer is the answer to a caller who said nothing.
+  completionCriterion TaskCompletionCriterion @map("completion_criterion")
   /// Revision of the database-owned canonical DONE fence. Current task creation writes 1
   /// explicitly and the database default protects rows inserted by an N-1 server too.
   completionFenceRevision Int @default(1) @map("completion_fence_revision")

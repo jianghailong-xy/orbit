@@ -191,13 +191,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `CREATE OR REPLACE FUNCTION` at all, so it is not another writer of the DONE fence, and
   //        it neither reads nor recomputes `task.completion_criterion` — it only mentions the
   //        label 'EXECUTABLE' inside its own CHECK.
+  //   0237 dropped the column default from `task.completion_criterion`, so that a criterion has to
+  //        be declared rather than supplied by the database. Read against every claim above: it is
+  //        one statement, `ALTER TABLE "task" ALTER COLUMN ... DROP DEFAULT`. Like 0236 it ALTERs
+  //        `task` — the table whose ROWS this file is about — and like 0236 it cannot reach one: a
+  //        default is read only by an INSERT that omits the column, so dropping it changes what a
+  //        FUTURE insert must say and leaves every stored value where it is. The column stays NOT
+  //        NULL and keeps its type. It has no INSERT/UPDATE/DELETE, so no preserved row is read or
+  //        written; it names neither 0177 relation and not `task_executable_acceptance_pair`; it
+  //        carries no `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion`
+  //        labels survive and `task.completion_criterion` remains the type's one user; it names no
+  //        `project_acceptance_*` object; and it carries no `CREATE OR REPLACE FUNCTION` and no
+  //        TRIGGER at all, so it is not another writer of the DONE fence.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
       '0232_task_criterion_declaration',
       '0233_project_acceptance_criterion_wiring_removal',
       '0234_project_acceptance_evaluation_plan_lane_removal',
-      '0236_executable_acceptance_budget'],
+      '0236_executable_acceptance_budget',
+      '0237_task_completion_criterion_explicit_declaration'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

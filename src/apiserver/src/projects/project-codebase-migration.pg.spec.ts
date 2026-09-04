@@ -136,8 +136,8 @@ test('0231 在有数据的库上原子地应用，失败什么也不留', { skip
     `INSERT INTO "project"("id","title","owner_id","updated_at") VALUES ($1,'legacy project',$2,now())`,
     [id('10'), id('1')]);
   await client.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","project_id")
-     VALUES ($1,'legacy task',$2,'USER',$2,now(),$3)`, [id('20'), id('1'), id('10')]);
+    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","project_id","completion_criterion")
+     VALUES ($1,'legacy task',$2,'USER',$2,now(),$3,'EVIDENCE_JUDGMENT')`, [id('20'), id('1'), id('10')]);
   await client.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","base_sha","branch")
      VALUES ($1,'legacy session','p',$2,$2,now(),$3,'orbit/legacy')`,

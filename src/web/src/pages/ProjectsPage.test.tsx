@@ -1894,7 +1894,13 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     // `@MinLength(1)` on the server would happily accept '   ', so the trim is a real check.
     expect(canCreateProjectTask({ title: '   ' })).toBe(false);
     expect(canCreateProjectTask({ title: '' })).toBe(false);
-    expect(canCreateProjectTask({ title: 'Ship the pricing page' })).toBe(true);
+    expect(canCreateProjectTask({
+      title: 'Ship the pricing page', completionCriterion: 'EVIDENCE_JUDGMENT',
+    })).toBe(true);
+    // A criterion is required by `POST /tasks` at both write doors, so an unselected picker closes
+    // the button rather than sending a request the server refuses. Nothing is chosen on the
+    // reader's behalf: the whole point of the server-side rule is that nobody invents one.
+    expect(canCreateProjectTask({ title: 'Ship the pricing page' })).toBe(false);
     // ...and that the dialog is wired to it, which only the source can show.
     expect(source).toContain('const creatable = canCreateProjectTask(draft);');
     expect(source).toContain('okButtonProps={{ disabled: !creatable }}');
@@ -2575,19 +2581,21 @@ describe('the New task form’s Start at control', () => {
     // the predicate that decides it is what gets asserted — the dialog's wiring to it is checked
     // where the rest of the dialog's wiring is.
     inTimeZone(BERLIN, () => {
-      expect(canCreateProjectTask({ title: 'x', runAtLocal: '2026-03-29T02:30' })).toBe(false);
+      // Declared throughout, so what this test varies is the schedule and nothing else.
+      const declared = { completionCriterion: 'EVIDENCE_JUDGMENT' } as const;
+      expect(canCreateProjectTask({ title: 'x', ...declared, runAtLocal: '2026-03-29T02:30' })).toBe(false);
       // Fixing the time reopens it...
-      expect(canCreateProjectTask({ title: 'x', runAtLocal: '2026-03-29T03:30' })).toBe(true);
+      expect(canCreateProjectTask({ title: 'x', ...declared, runAtLocal: '2026-03-29T03:30' })).toBe(true);
       // ...as does clearing it, since no schedule at all was always allowed.
-      expect(canCreateProjectTask({ title: 'x' })).toBe(true);
+      expect(canCreateProjectTask({ title: 'x', ...declared })).toBe(true);
       // A good time cannot rescue a bad title, and vice versa: both gates are real.
-      expect(canCreateProjectTask({ title: '  ', runAtLocal: '2026-03-29T03:30' })).toBe(false);
-      expect(canCreateProjectTask({ title: '  ', runAtLocal: '2026-03-29T02:30' })).toBe(false);
+      expect(canCreateProjectTask({ title: '  ', ...declared, runAtLocal: '2026-03-29T03:30' })).toBe(false);
+      expect(canCreateProjectTask({ title: '  ', ...declared, runAtLocal: '2026-03-29T02:30' })).toBe(false);
 
       // And the predicate agrees with the field, so the button cannot be open on a draft the form
       // is showing an error for — nor closed on one it is not.
       for (const local of ['2026-03-29T02:30', '2026-03-29T03:30', '2026-02-31T12:00', undefined]) {
-        expect(canCreateProjectTask({ title: 'x', runAtLocal: local })).toBe(
+        expect(canCreateProjectTask({ title: 'x', ...declared, runAtLocal: local })).toBe(
           runAtProblem(local) === null,
         );
       }

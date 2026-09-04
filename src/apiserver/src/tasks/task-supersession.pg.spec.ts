@@ -390,8 +390,8 @@ suite('task supersession, on real PostgreSQL', async (t) => {
     ) =>
       client.query(
         `INSERT INTO "task" ("id","title","status","owner_id","creator_type","creator_id",
-                             "project_id","parent_task_id","labels","created_at","updated_at")
-         VALUES ($1,$2,$3::task_status,$4,'USER',$4,$5,$6,$7,$8,$9)`,
+                             "project_id","parent_task_id","labels","created_at","updated_at","completion_criterion")
+         VALUES ($1,$2,$3::task_status,$4,'USER',$4,$5,$6,$7,$8,$9,'EVIDENCE_JUDGMENT')`,
         [id, title, status, ownerId, w.projectId, parent, labels, created, updated],
       );
 

@@ -94,6 +94,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
           projectId,
           title: 'intentionally still open',
           creatorType: CreatorType.USER,
+          completionCriterion: 'EVIDENCE_JUDGMENT',
           creatorId: ownerId,
           status: TaskStatus.OPEN,
         },
@@ -228,6 +229,7 @@ suite('result/verdict inputs consume once; refusal releases the exact fact for r
         projectId,
         title: 'input subject',
         creatorType: CreatorType.USER,
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         creatorId: ownerId,
       },
     });

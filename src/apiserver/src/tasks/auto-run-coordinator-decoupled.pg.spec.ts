@@ -117,7 +117,8 @@ async function releasedTask(
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
   const task = (id: string, title: string, extra: Record<string, unknown>) => ({
     id, ownerId: ids.ownerId, projectId, assigneeId: ids.agentId, title,
-    creatorType: CreatorType.USER, creatorId: ids.ownerId, provider: 'claude', ...extra,
+    creatorType: CreatorType.USER, creatorId: ids.ownerId, provider: 'claude',
+    completionCriterion: 'EVIDENCE_JUDGMENT' as const, ...extra,
   });
   await db.task.create({ data: task(doneId, `${label} prerequisite`, { status: TaskStatus.DONE }) });
   await db.task.create({
@@ -202,6 +203,7 @@ test('the scheduled sweep dispatches a coordinated Project\'s due task',
         data: {
           id: taskId, ownerId: ids.ownerId, projectId, assigneeId: ids.agentId, title: 't1-due task',
           creatorType: CreatorType.USER, creatorId: ids.ownerId, provider: 'claude',
+          completionCriterion: 'EVIDENCE_JUDGMENT',
           status: TaskStatus.OPEN, runAt: new Date(Date.now() - 60 * 60_000),
         },
       });

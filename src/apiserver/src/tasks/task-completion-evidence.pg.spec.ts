@@ -66,6 +66,7 @@ async function fixture(db: PrismaClient) {
       projectId,
       title: 'explicit evidence',
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: ownerId,
       assigneeId: workspaceId,
       status: TaskStatus.IN_PROGRESS,

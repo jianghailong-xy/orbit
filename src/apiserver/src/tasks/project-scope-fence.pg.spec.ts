@@ -328,8 +328,8 @@ test('unit L3: a rotation cannot be written past', { skip, concurrency: 1, timeo
     const id = randomUUID();
     await client.query(
       `INSERT INTO "task" ("id","title","status","owner_id","creator_type","creator_id",
-         "project_id","creator_session_id","idempotency_key","updated_at")
-       VALUES ($1::uuid,$2,'OPEN',$3::uuid,'USER',$3::uuid,$4::uuid,$5::uuid,$6,now())`,
+         "project_id","creator_session_id","idempotency_key","updated_at","completion_criterion")
+       VALUES ($1::uuid,$2,'OPEN',$3::uuid,'USER',$3::uuid,$4::uuid,$5::uuid,$6,now(),'EVIDENCE_JUDGMENT')`,
       [
         id,
         over.title ?? 'l3-key-race',

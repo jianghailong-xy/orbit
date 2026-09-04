@@ -1811,6 +1811,12 @@ export function taskCriterionShapeAdviceFrom(
  */
 export function canCreateProjectTask(draft: NewProjectTaskDraft): boolean {
   if (draft.title.trim().length === 0 || runAtProblem(draft.runAtLocal) !== null) return false;
+  // A completion criterion is required by `POST /tasks` itself, at both write doors, since the
+  // database stopped supplying one. Leaving the button live for an unselected picker would send a
+  // request the server is certain to refuse — and the picker is deliberately not pre-filled, since
+  // choosing EVIDENCE_JUDGMENT on the reader's behalf is the invented declaration that rule exists
+  // to stop.
+  if (!draft.completionCriterion) return false;
   if (draft.completionCriterion === 'EXECUTABLE') {
     return Boolean(draft.acceptanceCommand?.trim())
       && Number.isInteger(draft.acceptanceExpectedExitCode);

@@ -27,6 +27,7 @@ import {
   UpdateTaskDto,
 } from './dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
+import { requireExplicitCompletionCriterion } from './task-completion-criterion-gate';
 import { TasksService } from './tasks.service';
 
 @UseGuards(JwtAuthGuard)
@@ -37,8 +38,20 @@ export class TasksController {
     private readonly attribution: ProjectAttributionService,
   ) {}
 
+  /**
+   * A task this door creates declares how it will be proved complete, or it is refused — the same
+   * function, the same code and the same requiredAction the runner door has always answered with.
+   *
+   * This door used to read an omitted `completionCriterion` as the compatibility spelling of
+   * EVIDENCE_JUDGMENT while the runner door refused it outright, so one required field had two
+   * opposite contracts depending on which credential the caller held. The lenient reading is the
+   * more expensive half of that: EVIDENCE_JUDGMENT has been declared-but-unimplemented since
+   * 2026-09-02, so a forgotten field did not produce a lax task, it produced one nothing can ever
+   * complete.
+   */
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) {
+    requireExplicitCompletionCriterion(dto);
     return this.tasks.create(user.userId, dto);
   }
 
@@ -191,6 +204,9 @@ export class TasksController {
   // that can disagree with the write.
   @Post('batch-create')
   batchCreate(@CurrentUser() user: AuthUser, @Body() dto: CreateTasksBatchDto) {
+    // Before the dryRun branch, so the preview a person decides on is judged by the rule the write
+    // will apply: a plan the writer would refuse must not be previewed as one it would accept.
+    dto.tasks?.forEach((item, index) => requireExplicitCompletionCriterion(item, index));
     return dto.dryRun
       ? this.tasks.previewPlan(user.userId, dto)
       : this.tasks.createMany(user.userId, dto);

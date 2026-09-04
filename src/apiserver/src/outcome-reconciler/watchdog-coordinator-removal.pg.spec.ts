@@ -220,9 +220,9 @@ suite('(h) an ordinary task, session and run_event write still commits', async (
       `INSERT INTO workspace (id, owner_id, name) VALUES ($1::uuid, $2::uuid, $3)`,
       [workspaceId, ownerId, `watchdog-removal-${RUN}`]);
     await client.query(
-      `INSERT INTO task (id, owner_id, creator_type, creator_id, title, status, updated_at)
+      `INSERT INTO task (id, owner_id, creator_type, creator_id, title, status, updated_at, completion_criterion)
        VALUES ($1::uuid, $2::uuid, 'USER', $2::uuid, 'ordinary write after the removal', 'OPEN',
-               now())`,
+               now(), 'EVIDENCE_JUDGMENT')`,
       [taskId, ownerId]);
     await client.query(
       `UPDATE task SET title = 'still writable' WHERE id = $1::uuid`, [taskId]);

@@ -6710,9 +6710,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // change exists to remove. The rule applies equally to a person (no Session header), a project
     // judgment/coordinator Session, the task's own run, a verifier and any other Session.
     if (dto.status === TaskStatus.DONE) {
-      const criterion = (
-        before.completionCriterion ?? 'EVIDENCE_JUDGMENT'
-      ) as TaskCompletionCriterionValue;
+      const criterion = before.completionCriterion as TaskCompletionCriterionValue;
       const remedy = taskCompletionRequiredAction(criterion, {
         verifiesTaskId: before.verifiesTaskId,
       });
@@ -6739,9 +6737,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
     const attachesVerifier = before.verifiesTaskId == null && verifiesTaskIdAfter != null;
     let completionPolicy = dto.completionPolicy ?? before.completionPolicy;
-    let completionCriterion = (
-      before.completionCriterion ?? 'EVIDENCE_JUDGMENT'
-    ) as TaskCompletionCriterionValue;
+    let completionCriterion = before.completionCriterion as TaskCompletionCriterionValue;
     if (dto.completionCriterion !== undefined) {
       completionCriterion = dto.completionCriterion;
     } else if (

@@ -144,8 +144,8 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     }
     for (const [id, project] of [[w.taskInA, w.projectA], [w.taskInB, w.projectB]] as const) {
       await admin.query(
-        `INSERT INTO "task" ("id","owner_id","title","status","project_id","creator_type","creator_id","updated_at")
-         VALUES ($1,$2,$3,'OPEN'::"task_status",$4,'USER'::"creator_type",$2,now())`,
+        `INSERT INTO "task" ("id","owner_id","title","status","project_id","creator_type","creator_id","updated_at","completion_criterion")
+         VALUES ($1,$2,$3,'OPEN'::"task_status",$4,'USER'::"creator_type",$2,now(),'EVIDENCE_JUDGMENT')`,
         [id, w.ownerId, `${label}-task-${id.slice(0, 4)}`, project],
       );
     }

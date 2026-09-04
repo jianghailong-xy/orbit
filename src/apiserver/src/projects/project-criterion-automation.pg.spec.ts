@@ -89,6 +89,7 @@ async function task(
       projectId: target.projectId,
       title,
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: target.ownerId,
       status: TaskStatus.OPEN,
       ...data,

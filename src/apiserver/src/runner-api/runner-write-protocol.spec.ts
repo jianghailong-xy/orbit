@@ -10,8 +10,10 @@ import {
   RUNNER_WRITE_CAPABILITY_REVISION,
   RUNNER_WRITE_CONTRACT_DIGEST,
   RUNNER_WRITE_SCHEMA_REVISION,
-  translateLegacyRunnerCompletionDeclaration,
 } from './runner-write-protocol';
+import {
+  requireExplicitCompletionCriterion,
+} from '../tasks/task-completion-criterion-gate';
 
 test('the server revision and digest are generated from the repository contract', () => {
   const contractPath = path.resolve(__dirname, '../../../../contracts/runner-write-protocol.json');
@@ -62,14 +64,14 @@ test('legacy completion shapes translate only when their intent is unambiguous',
     completionCriterion?: string;
     acceptanceCommand: string;
     acceptanceExpectedExitCode: number;
-  } = translateLegacyRunnerCompletionDeclaration({
+  } = requireExplicitCompletionCriterion({
     acceptanceCommand: 'npm test',
     acceptanceExpectedExitCode: 0,
   });
   assert.equal(executable.completionCriterion, 'EXECUTABLE');
 
   const verification: { completionCriterion?: string; completionPolicy: string } =
-    translateLegacyRunnerCompletionDeclaration({
+    requireExplicitCompletionCriterion({
     completionPolicy: 'VERIFICATION_PASSED',
     });
   assert.equal(verification.completionCriterion, 'VERIFICATION');
@@ -77,7 +79,7 @@ test('legacy completion shapes translate only when their intent is unambiguous',
 
 test('an omitted completion criterion can never fall back to EVIDENCE_JUDGMENT', () => {
   assert.throws(
-    () => translateLegacyRunnerCompletionDeclaration({}),
+    () => requireExplicitCompletionCriterion({}),
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
       const body = error.getResponse() as Record<string, unknown>;

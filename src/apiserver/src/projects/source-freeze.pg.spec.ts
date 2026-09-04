@@ -89,13 +89,16 @@ async function world(db: PrismaClient, label: string): Promise<World> {
     select: { id: true },
   });
   const task = await db.task.create({
-    data: { ownerId, projectId, title: `${label} work`, creatorType: 'USER', creatorId: ownerId },
+    data: {
+      ownerId, projectId, title: `${label} work`, creatorType: 'USER', creatorId: ownerId,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+    },
     select: { id: true },
   });
   const codelessTask = await db.task.create({
     data: {
       ownerId, projectId, title: `${label} research`, creatorType: 'USER', creatorId: ownerId,
-      codeless: true,
+      codeless: true, completionCriterion: 'EVIDENCE_JUDGMENT',
     },
     select: { id: true },
   });

@@ -159,6 +159,7 @@ suite('transaction doubles answer as the real client does', async (t) => {
         status: row.status as never,
         ownerId: row.ownerId,
         creatorType: 'USER',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         creatorId: row.ownerId,
         parentTaskId: row.parentTaskId,
       },

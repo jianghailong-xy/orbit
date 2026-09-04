@@ -463,10 +463,12 @@ test('(c) automatic dispatch no longer waits for an approval that no longer exis
     [workspaceId, ownerId, runnerId],
   );
   await pool.query(
+    // The criterion is stated rather than left to the column default, which 0237 dropped: this
+    // fixture is about dispatch, and EVIDENCE_JUDGMENT is the value the default was giving it.
     `INSERT INTO "task" ("id","owner_id","project_id","assignee_id","title","creator_type",
-                         "creator_id","provider","status","updated_at")
+                         "creator_id","provider","status","completion_criterion","updated_at")
      VALUES ($1,$2,$3,$4,'dispatch task','USER'::"creator_type",$2,'claude',
-             'OPEN'::"task_status",now())`,
+             'OPEN'::"task_status",'EVIDENCE_JUDGMENT'::"task_completion_criterion",now())`,
     [taskId, ownerId, fixture.projectId, workspaceId],
   );
 

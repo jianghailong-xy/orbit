@@ -111,6 +111,7 @@ async function fixture(
       projectId,
       title: `${label} task`,
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: ownerId,
       status: taskStatus,
     },

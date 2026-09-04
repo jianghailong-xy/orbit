@@ -101,8 +101,8 @@ const TELEMETRY_SESSION_UPDATE = `
 
 const INSERT_TASK = `
   INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id",
-                      "creator_session_id", "project_id", "updated_at")
-  VALUES ($1::uuid, $2, $3::uuid, 'AGENT'::creator_type, $4::uuid, $5::uuid, $6::uuid, CURRENT_TIMESTAMP)`;
+                      "creator_session_id", "project_id", "updated_at", "completion_criterion")
+  VALUES ($1::uuid, $2, $3::uuid, 'AGENT'::creator_type, $4::uuid, $5::uuid, $6::uuid, CURRENT_TIMESTAMP, 'EVIDENCE_JUDGMENT')`;
 
 /** Create the owner, runner, workspace, project, both Sessions and the prerequisite task. */
 export async function seedLockFixture(client: Client, ids: FixtureIds): Promise<void> {

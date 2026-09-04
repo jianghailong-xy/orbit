@@ -28,10 +28,8 @@ import { ProjectAttributionService } from '../projects/project-attribution.servi
 import { TasksService } from '../tasks/tasks.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
-import {
-  RunnerWriteProtocolInterceptor,
-  translateLegacyRunnerCompletionDeclaration,
-} from './runner-write-protocol';
+import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
+import { requireExplicitCompletionCriterion } from '../tasks/task-completion-criterion-gate';
 
 /**
  * The acting workspace, from either spelling of the header.
@@ -350,9 +348,10 @@ export class RunnerTasksController {
   }
 
   /**
-   * The canonical task DTO keeps omission as the legacy EVIDENCE_JUDGMENT spelling so old JWT/user
-   * clients and stored callers remain compatible. That is unsafe at the runner boundary: a stale
-   * agent client that forgets one field would silently manufacture a human obligation.
+   * A stale agent client that forgets one field must not silently manufacture a human obligation.
+   *
+   * `TasksController` applies this very same function to the JWT/user door, so this is no longer
+   * the strict half of a lenient pair — it is one of two doors stating one contract.
    *
    * Do not infer the criterion from another field here. Apart from making the contract harder to
    * audit, that exception lets a retry collide with an older same-turn EVIDENCE_JUDGMENT winner whose
@@ -366,7 +365,7 @@ export class RunnerTasksController {
     completionPolicy?: string | null;
     verifiesTaskId?: string | null;
   }, itemIndex?: number): void {
-    translateLegacyRunnerCompletionDeclaration(dto, itemIndex);
+    requireExplicitCompletionCriterion(dto, itemIndex);
   }
 
   private static refuseImplicitEvidenceJudgmentBatch(dto: CreateTasksBatchDto): void {

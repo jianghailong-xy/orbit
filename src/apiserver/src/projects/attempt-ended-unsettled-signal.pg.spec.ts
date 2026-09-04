@@ -141,6 +141,7 @@ async function fixture(
       assigneeId: workspaceId,
       title: `${label}-task`,
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: ownerId,
       status: TaskStatus.OPEN,
       ...(options.acceptanceCommand
@@ -156,6 +157,7 @@ async function fixture(
         assigneeId: workspaceId,
         title: `${label}-verifier`,
         creatorType: CreatorType.USER,
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         creatorId: ownerId,
         status: TaskStatus.OPEN,
         verifiesTaskId: taskId,

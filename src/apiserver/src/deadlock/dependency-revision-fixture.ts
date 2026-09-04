@@ -54,8 +54,8 @@ export function newRevisionIds(label: string): RevisionIds {
 
 const INSERT_TASK = `
   INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id", "project_id",
-                      "status", "updated_at")
-  VALUES ($1::uuid, $2, $3::uuid, 'USER', $3::uuid, $4::uuid, $5::task_status, CURRENT_TIMESTAMP)`;
+                      "status", "updated_at", "completion_criterion")
+  VALUES ($1::uuid, $2, $3::uuid, 'USER', $3::uuid, $4::uuid, $5::task_status, CURRENT_TIMESTAMP, 'EVIDENCE_JUDGMENT')`;
 
 /** One more Task in the fixture's Project — for the cases that need a second dependent. */
 export async function insertTask(

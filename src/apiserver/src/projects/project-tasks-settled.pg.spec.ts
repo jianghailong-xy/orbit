@@ -155,6 +155,7 @@ async function fixture(stack: Stack, label: string, taskCount: number): Promise<
       assigneeId: workspaceId,
       title: `${label} task ${index + 1}`,
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: ownerId,
       status: TaskStatus.IN_PROGRESS,
     })),

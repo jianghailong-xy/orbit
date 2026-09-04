@@ -124,6 +124,7 @@ async function fixture(db: PrismaClient, label: string, landed = true): Promise<
     data: {
       id: taskId, ownerId, projectId, assigneeId: workspaceId, title: `${label} 的一个任务`,
       creatorType: CreatorType.USER, creatorId: ownerId, status: TaskStatus.IN_PROGRESS,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     },
   });
   await establishProjectContractForPgTest(db, ownerId, projectId, label);

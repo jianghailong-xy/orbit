@@ -84,6 +84,7 @@ async function project(
         projectId,
         title: `${label}-${name}`,
         creatorType: CreatorType.USER,
+        completionCriterion: 'EVIDENCE_JUDGMENT',
         creatorId: ownerId,
         status: one.status ?? TaskStatus.OPEN,
         parentTaskId: one.parent ? ids[one.parent] : null,

@@ -119,6 +119,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
     data: {
       id: taskId, ownerId, projectId, assigneeId: agentId, title: TITLE,
       creatorType: CreatorType.USER, creatorId: ownerId, provider: 'claude',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
     },
   });
   return { ownerId, runnerId, agentId, projectId, taskId };

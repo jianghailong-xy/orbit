@@ -259,8 +259,12 @@ export class CreateTaskDto {
   // budget this replaces — it buys wall-clock and decides nothing about the outcome.
   @IsOptional() @IsInt() @Min(1) @Max(MAX_TASK_ACCEPTANCE_TIMEOUT_SECONDS)
   acceptanceTimeoutSeconds?: number;
-  // One ordinary completion criterion. Omission is the compatibility spelling of EVIDENCE_JUDGMENT;
-  // the old executable pair and VERIFICATION_PASSED policy are inferred for rolling clients.
+  // One ordinary completion criterion. Optional to VALIDATION only: both write doors run
+  // `requireExplicitCompletionCriterion` before the service, and an omission they cannot translate
+  // from an unambiguous legacy shape (the executable pair, or a VERIFICATION_PASSED policy /
+  // verifier relation) is refused there rather than read as EVIDENCE_JUDGMENT. Class-validator has
+  // no way to express "required unless another field implies it", which is why the requirement is
+  // stated at the door and not with a decorator here.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
   completionCriterion?: TaskCompletionCriterionValue;
   // Audit material for deliberately keeping a criterion that the acceptance prose makes the

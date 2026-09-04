@@ -93,6 +93,7 @@ async function fixture(): Promise<Fixture> {
       projectId,
       title: 'a task whose attempts keep ending badly',
       creatorType: CreatorType.USER,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
       creatorId: ownerId,
       status: TaskStatus.OPEN,
     },

@@ -251,8 +251,8 @@ suite('(e) ordinary control-plane writes are unaffected', async (t) => {
     `INSERT INTO "workspace" ("id","owner_id","runner_id","name","work_dir")
      VALUES ($1,$2,$3,'ws','/tmp/ws')`, [workspaceId, ownerId, runnerId]);
   await client.query(
-    `INSERT INTO "task" ("id","owner_id","title","creator_type","creator_id","updated_at")
-     VALUES ($1,$2,'ordinary task','USER'::"creator_type",$2,now())`, [taskId, ownerId]);
+    `INSERT INTO "task" ("id","owner_id","title","creator_type","creator_id","updated_at","completion_criterion")
+     VALUES ($1,$2,'ordinary task','USER'::"creator_type",$2,now(),'EVIDENCE_JUDGMENT')`, [taskId, ownerId]);
   await client.query(
     `INSERT INTO "session" ("id","owner_id","creator_id","workspace_id","task_id","title","prompt",
                             "updated_at")

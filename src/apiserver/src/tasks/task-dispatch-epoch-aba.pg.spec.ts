@@ -128,7 +128,7 @@ async function fixture(
     data: {
       id: ids.taskId, ownerId: ids.ownerId, projectId: ids.projectId, assigneeId: ids.agentId,
       title: `${label} task`, creatorType: CreatorType.USER, creatorId: ids.ownerId,
-      provider: 'claude', runAt: task.runAt ?? null,
+      completionCriterion: 'EVIDENCE_JUDGMENT', provider: 'claude', runAt: task.runAt ?? null,
       autoRunWhenReady: task.autoRunWhenReady ?? false,
     },
   });
@@ -147,7 +147,7 @@ async function extraTask(
     data: {
       id, ownerId: ids.ownerId, projectId: ids.projectId, assigneeId: ids.agentId,
       title: `extra ${id.slice(0, 8)}`, creatorType: CreatorType.USER, creatorId: ids.ownerId,
-      provider: 'claude', status: TaskStatus.OPEN,
+      completionCriterion: 'EVIDENCE_JUDGMENT', provider: 'claude', status: TaskStatus.OPEN,
       autoRunWhenReady: opts.autoRunWhenReady ?? false,
       parentTaskId: opts.parentTaskId ?? null,
     },

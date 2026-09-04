@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   CallHandler,
   ConflictException,
   ExecutionContext,
@@ -181,54 +180,6 @@ export function negotiateRunnerWriteProtocol(
     schemaRevision,
     contractDigest: digest,
   };
-}
-
-type CompletionDeclaration = {
-  completionCriterion?: string | null;
-  acceptanceCommand?: string | null;
-  acceptanceExpectedExitCode?: number | null;
-  completionPolicy?: string | null;
-  verifiesTaskId?: string | null;
-};
-
-/** Translate only legacy declarations whose intent is unambiguous; omission never means human. */
-export function translateLegacyRunnerCompletionDeclaration<T extends CompletionDeclaration>(
-  declaration: T,
-  itemIndex?: number,
-): T {
-  if (declaration.completionCriterion != null) return declaration;
-  const subject = itemIndex == null ? 'task' : `tasks[${itemIndex}]`;
-  const command = declaration.acceptanceCommand ?? null;
-  const exitCode = declaration.acceptanceExpectedExitCode ?? null;
-  if (command != null || exitCode != null) {
-    if (command == null || exitCode == null) {
-      throw new BadRequestException({
-        code: 'RUNNER_LEGACY_COMPLETION_SHAPE_INVALID',
-        kind: 'REFUSAL',
-        itemIndex: itemIndex ?? null,
-        requiredAction: 'SEND_BOTH_EXECUTABLE_ACCEPTANCE_FIELDS',
-        message: `${subject} must send acceptanceCommand and acceptanceExpectedExitCode together.`,
-      });
-    }
-    declaration.completionCriterion = 'EXECUTABLE';
-    return declaration;
-  }
-  if (
-    declaration.verifiesTaskId != null
-    || declaration.completionPolicy === 'VERIFICATION_PASSED'
-  ) {
-    declaration.completionCriterion = 'VERIFICATION';
-    return declaration;
-  }
-  throw new BadRequestException({
-    code: 'RUNNER_COMPLETION_CRITERION_REQUIRED',
-    kind: 'REFUSAL',
-    itemIndex: itemIndex ?? null,
-    requiredAction: 'DECLARE_COMPLETION_CRITERION_EXPLICITLY',
-    message:
-      `${subject}.completionCriterion is required at the runner boundary; omission is never `
-      + 'translated to EVIDENCE_JUDGMENT.',
-  });
 }
 
 @Injectable()

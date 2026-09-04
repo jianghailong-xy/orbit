@@ -128,8 +128,8 @@ export function taskCompletionDeclarationError(
 }
 
 export interface TaskCompletionFacts {
-  /** Null is accepted at this pure boundary solely for rolling/migration compatibility. */
-  completionCriterion?: TaskCompletionCriterionValue | null;
+  /** Required, and not nullable: evaluating a criterion begins with knowing which one was declared. */
+  completionCriterion: TaskCompletionCriterionValue;
   /** 0177's declared expectation. Half a declaration is refused above, so in practice this is
    *  present exactly when the task declares EXECUTABLE. */
   acceptanceExpectedExitCode?: number | null;
@@ -175,6 +175,11 @@ export type TaskLifecycleStatusValue =
  * ACTIONABLE is the third answer and is not a failure: with either side of the comparison
  * missing there is no comparison, so the goal stays open rather than being guessed wrong.
  *
+ * The criterion itself is not one of the facts that may be missing. It used to fall back to
+ * EVIDENCE_JUDGMENT when absent, which meant this evaluator answered about a criterion the task had
+ * never declared; the column is NOT NULL and, since 0237, carries no default, so there is no such
+ * task to be lenient towards.
+ *
  * EVIDENCE_JUDGMENT remains DECLARED BUT UNIMPLEMENTED — the 2026-09-02 removal took its request
  * ledger and decision door, and this change did not rebuild them. It returns UNSATISFIED rather
  * than throwing or falling through to a default: a task may still declare it, and nothing will
@@ -184,7 +189,7 @@ export type TaskLifecycleStatusValue =
 export function evaluateTaskCompletion(
   facts: TaskCompletionFacts,
 ): TaskCompletionEvaluation {
-  const criterion = facts.completionCriterion ?? 'EVIDENCE_JUDGMENT';
+  const criterion = facts.completionCriterion;
   let state: TaskCompletionEvaluation['state'];
   switch (criterion) {
     case 'EXECUTABLE':

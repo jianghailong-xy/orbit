@@ -93,7 +93,7 @@ async function makeTask(
   await db.task.create({
     data: {
       id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId,
-      assigneeId, status,
+      assigneeId, status, completionCriterion: 'EVIDENCE_JUDGMENT',
     },
   });
   return id;

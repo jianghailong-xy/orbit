@@ -113,8 +113,8 @@ async function task(db: Db, over: {
   const id = over.id ?? randomUUID();
   await db.$executeRawUnsafe(
     `INSERT INTO "task" ("id","title","status","owner_id","creator_type","creator_id","project_id",
-       "assignee_id","verifies_task_id","verdict","verdict_revision","updated_at")
-     VALUES ($1,$2,$3::"task_status",$4,'USER',$4,$5,$6,$7,$8::"task_verdict",$9,now())`,
+       "assignee_id","verifies_task_id","verdict","verdict_revision","updated_at","completion_criterion")
+     VALUES ($1,$2,$3::"task_status",$4,'USER',$4,$5,$6,$7,$8::"task_verdict",$9,now(),'EVIDENCE_JUDGMENT')`,
     id, `t-${id.slice(0, 8)}`, over.status ?? 'OPEN', OWNER, over.projectId,
     over.assignee ?? null, over.verifies ?? null, over.verdict ?? null,
     over.verdictRevision ?? 0,
@@ -815,8 +815,8 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
     const verdict = over.verdict === undefined ? 'PASS' : over.verdict;
     await db.$executeRawUnsafe(
       `INSERT INTO "task" ("id","title","status","owner_id","creator_type","creator_id","project_id",
-         "assignee_id","verifies_task_id","verdict","verdict_revision","updated_at")
-       VALUES ($1,'forged',$2::"task_status",$3,'USER',$3,$4,$5,$6,$7::"task_verdict",1,now())`,
+         "assignee_id","verifies_task_id","verdict","verdict_revision","updated_at","completion_criterion")
+       VALUES ($1,'forged',$2::"task_status",$3,'USER',$3,$4,$5,$6,$7::"task_verdict",1,now(),'EVIDENCE_JUDGMENT')`,
       id, status, scope.ownerId, scope.projectId, scope.agentId, subjectId, verdict,
     );
     if (status === 'DONE' && verdict === 'PASS') {
