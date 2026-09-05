@@ -1229,6 +1229,37 @@ const (
 // and asking again with the SAME triggerId reads back the first delivery's answer.
 const taskRunRequestInProgress = "TASK_RUN_REQUEST_IN_PROGRESS"
 
+// The two answers a task's project MOVE can come back with that are a question rather than a
+// verdict: nobody has been asked yet, and somebody has been asked and has not answered. Both are
+// about a declared crossing — a row somebody can read — and neither is a refusal the caller can
+// fix by rewording the request.
+const (
+	crossProjectApprovalRequired = "CROSS_PROJECT_APPROVAL_REQUIRED"
+	crossProjectApprovalPending  = "APPROVAL_PENDING"
+)
+
+// crossProjectCrossingGuidance is the one thing the server's refusal cannot say: WHERE the crossing
+// it names can be read. Appended to the refusal, never in place of it — the code and the body are
+// what a caller matches on, and a client that replaced them with prose of its own would be a second
+// vocabulary for a boundary that already has one.
+//
+// It is deliberately not a retry hint. The approver of a cross-project crossing is the account
+// owner, and there is no tool that answers for them, so the next step is a person and this says so.
+func crossProjectCrossingGuidance(err error) string {
+	httpErr, answered := err.(*transportHTTPError)
+	if !answered {
+		return ""
+	}
+	switch httpErr.code() {
+	case crossProjectApprovalRequired, crossProjectApprovalPending:
+		return "\n  where:   this names one row of project_crossings " +
+			"(orbit project crossings PROJECT_ID) — read it to see whether the crossing has been " +
+			"asked, is still waiting, or was already answered. Only the ACCOUNT OWNER can answer " +
+			"it: no tool does, by design, so point them at the project page."
+	}
+	return ""
+}
+
 // isResendableRunFailure says whether this attempt left the request unanswered.
 //
 // Two cases and no others. A non-HTTP error means the answer never arrived — the POST may well have

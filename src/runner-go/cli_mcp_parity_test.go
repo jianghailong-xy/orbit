@@ -30,6 +30,10 @@ var cliParityParamAlias = map[string]string{
 	// One array of {op, taskId, dependsOnTaskId} over MCP; at a terminal the same batch is typed
 	// as repeated --add A:B / --remove C:D, because nobody hand-writes JSON into a flag.
 	"ops": "--add",
+	// `orbit task create --project-id` files new work; the edit door spells the same field
+	// `--project`, because there it is one half of a pair — `--no-project` is the detach, and
+	// `--project-id`/`--no-project-id` would name the id in one and the relation in the other.
+	"projectId": "--project",
 	// Singular at a terminal for the same reason --label is: one flag carries one path and
 	// repeats, and a separator that can occur inside a value is a parser that would silently split
 	// a filename in half.

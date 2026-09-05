@@ -1765,7 +1765,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     db: Prisma.TransactionClient,
     ownerId: string,
     taskId: string,
-    current: { projectId: string | null; parentTaskId: string | null; verifiesTaskId: string | null },
+    current: {
+      projectId: string | null;
+      parentTaskId: string | null;
+      verifiesTaskId: string | null;
+      criterionDefinitionId: string | null;
+    },
     dto: UpdateTaskDto,
   ): Promise<void> {
     if (
@@ -1812,6 +1817,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException(
           `This task has ${checks} verification(s) that would be left in a different project — ` +
             'move or detach them before moving it',
+        );
+      }
+      // The same statement a third time, about the relation 0232 added. A criterion is ONE
+      // project's sentence about what it wants, so a move that leaves the declaration behind
+      // leaves this task claiming to serve a criterion of a project it is not in — which
+      // `readCriterionSatisfaction` counts under the old project while the work has left it, and
+      // which no reader of either project can see is wrong.
+      //
+      // Refused rather than silently cleared, and refused for the same reason as the two checks
+      // above: a move is not a place to destroy a declaration nobody mentioned. The remedy is in
+      // the caller's hands and can travel in THIS request — `criterionKey: null` alongside the
+      // move takes the declaration back, and `dto.criterionKey === undefined` is precisely the
+      // case where the write says nothing about it. Naming a key instead is already handled
+      // before this: it is resolved against the project this write lands in, so a key that does
+      // not belong there is refused as `TASK_CRITERION_UNKNOWN` and one that does is re-stamped.
+      if (current.criterionDefinitionId && dto.criterionKey === undefined) {
+        throw new BadRequestException(
+          'This task declares one of its project’s acceptance criteria, and moving it would ' +
+            'leave that declaration pointing at a criterion of a project the task is no longer ' +
+            'in — take the declaration back in this same write (criterionKey: null), or name a ' +
+            'criterion the destination project states',
         );
       }
     }
@@ -7234,7 +7260,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             const current = needsCurrent
               ? await tx.task.findFirst({
                 where: { id, ownerId },
-                select: { projectId: true, parentTaskId: true, verifiesTaskId: true },
+                select: {
+                  projectId: true,
+                  parentTaskId: true,
+                  verifiesTaskId: true,
+                  // Read here rather than from `before`, for the reason every other fact in this
+                  // row is: a declaration made between the pre-transaction read and this lock is
+                  // one the move would strand, and a check against the older copy cannot see it.
+                  criterionDefinitionId: true,
+                },
               })
               : null;
             if (needsCurrent && !current) throw new NotFoundException('task not found');

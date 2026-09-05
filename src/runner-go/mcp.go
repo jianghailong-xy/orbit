@@ -589,13 +589,16 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
 		raw, err := s.t.updateTask(s.sessionID, id, body)
 		if err != nil {
-			return toolResult("update task failed: "+err.Error(), true)
+			// Verbatim, plus the address of the crossing when the refusal is one a projectId move
+			// can meet. A model that is told only "request failed" retries the same write.
+			return toolResult("update task failed: "+err.Error()+
+				crossProjectCrossingGuidance(err), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1315,6 +1318,30 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"exist yet, use `parentRef` instead. Either spelling is membership, not ordering — when a " +
 			"task RUNS is dependsOnTaskIds/dependsOnRefs, a separate question.",
 	}
+	// The same filing on the edit door, where it also has to be REMOVABLE. A task filed under the
+	// wrong project was frozen there: `task_create` takes `projectId` and `task_update` did not, so
+	// work the server had filed by inference — a coordinator's session, not the caller's word — had
+	// no agent-facing way back out, and a person had to send the PATCH by hand. Nullable, unlike the
+	// create prop above: on a create there is nothing to detach from.
+	updateProjectIDProp := map[string]interface{}{
+		"type": []string{"string", "null"},
+		"description": "Which project this task is filed under. Omit to leave the filing alone, " +
+			"send a project id to (re)file it there, send null to take it out of every project (the " +
+			"task stays; only the membership goes, and where the work was noticed is still recorded " +
+			"beside it). This is how a mis-filing is corrected, including one the " +
+			"SERVER made: a task created in a session without a projectId is filed under the " +
+			"project that session coordinates. WHO may correct it is not symmetric and the server " +
+			"decides: the ACCOUNT OWNER may file work anywhere and may unfile it, while a session " +
+			"acting under a project scope is refused UNMAPPED_PROJECT_WORK for null (work under no " +
+			"goal is counted by nothing) and PROJECT_SCOPE_MISMATCH for another project unless the " +
+			"crossing was declared — a declared crossing then waits on the owner as " +
+			"CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, which no tool can answer for " +
+			"them. Each refusal comes back with its own code: read the row with project_crossings " +
+			"and take it to the owner rather than retrying. Refused too while this task has " +
+			"subtasks, or verifications pointing at it, that the move would leave in another " +
+			"project, and while it carries a criterion declaration this same write does not take " +
+			"back (criterionKey: null) — a criterion is one project's statement of what it wants.",
+	}
 	// The same link on the edit door, where it also has to be removable. A decomposition is
 	// usually understood after the tasks exist — a step turns out to belong under a different
 	// piece of work, or under none — so re-parenting has to be expressible without deleting and
@@ -1982,13 +2009,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
 				"description":        taskDescriptionProp,
 				"status":             taskUpdateStatus,
 				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
+				"projectId":          updateProjectIDProp,
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 				"parentTaskId":       updateParentTaskIDProp,
 				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
