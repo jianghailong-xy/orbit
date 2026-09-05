@@ -20,7 +20,10 @@ import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { ApiError, api, restoreSession } from '../api';
-import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
+import {
+  ProjectAcceptanceCard,
+  type AcceptanceCriterionItem,
+} from '../components/ProjectAcceptanceCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import {
@@ -104,12 +107,31 @@ interface Project {
   attention: ProjectAttentionSummary;
 }
 
+/** One stated criterion, plus the two facts the server offers about the work filed under it.
+ *
+ *  `satisfied` is ABSENT for a criterion the derivation did not answer for — an omission rather
+ *  than a `false`, because "nobody answered" and "the clauses do not hold" are different states.
+ *  `landing` is always present and has no third value: `UNKNOWN` means no merge receipt proves
+ *  the work reached the default branch, which is the absence of evidence and never a finding that
+ *  the work is absent (see the server's `project-criterion-landing`, which omits `NOT_LANDED`
+ *  from its type on purpose). */
+interface ProjectCriterionStanding extends AcceptanceCriterionItem {
+  satisfied?: boolean;
+  landing: 'LANDED' | 'UNKNOWN';
+}
+
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
  *  the server's grouped task tally. Statuses with no tasks are absent from `tasksByStatus`
- *  entirely (it's a `groupBy`), so an empty object means "no tasks", not "counts unavailable". */
+ *  entirely (it's a `groupBy`), so an empty object means "no tasks", not "counts unavailable" —
+ *  the FIELD being absent is what means that, which is why the cancel question below states a
+ *  number only when it is present. */
 interface ProjectDetail extends Project {
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
+  /** The project's stated criteria, carrying settlement and landing per criterion. The acceptance
+   *  card draws its rows from this same document; the status press reads it for the evidence it
+   *  puts in front of somebody about to claim the goal is met. */
+  acceptanceCriteriaItems?: ProjectCriterionStanding[];
 }
 
 const STATUS_COLOR: Record<Project['status'], string> = {
@@ -628,9 +650,301 @@ export function deleteProject(projectId: string): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
 }
 
+/** The three status writes this page offers, and the only writes to `project.status` a person has
+ *  ever had short of the API or the CLI. */
+type ProjectStatusPress = 'DONE' | 'CANCELLED' | 'OPEN';
+
+/**
+ * Write one project's own status.
+ *
+ * NOT a status picker, and the difference is the whole unit: since migration 0229 removed the
+ * project acceptance judgment, nothing derives `DONE` and nothing refuses it, so this call records
+ * a CLAIM the person is making rather than a fact the server checked. The confirmation each press
+ * goes through is where that claim is put beside whatever evidence the server can actually offer;
+ * a dropdown would read as filing a status the system already knew.
+ */
+export function updateProjectStatus(
+  projectId: string,
+  status: ProjectStatusPress,
+): Promise<{ id: string }> {
+  return api<{ id: string }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } });
+}
+
+/** The two task statuses that END a task. FAILED is deliberately not one of them: it is a run's
+ *  own conservative self-report that it stopped short, so the work under it is still outstanding —
+ *  which is exactly what somebody abandoning the goal above it is being told. */
+const SETTLED_TASK_STATUSES: ReadonlyArray<string> = ['DONE', 'CANCELLED'];
+
+/** How much work is still outstanding under a project, from the tally the document already
+ *  carries. Not `_count.tasks`, which counts finished work alongside the rest. */
+function unfinishedTasks(byStatus: Record<string, number>): number {
+  return Object.entries(byStatus)
+    .filter(([status]) => !SETTLED_TASK_STATUSES.includes(status))
+    .reduce((total, [, count]) => total + count, 0);
+}
+
+/** What the server can say about ONE criterion, in the order the two facts have to be read: what
+ *  settled, then whether anything proves it landed. The landing half is never phrased as a finding
+ *  about the work — there is no receipt, and that is all it says. */
+function criterionFacts(criterion: ProjectCriterionStanding): string {
+  const settlement =
+    criterion.satisfied === true
+      ? 'Settled'
+      : criterion.satisfied === false
+        ? 'Not settled'
+        : 'No settlement answer';
+  const landing = criterion.landing === 'LANDED' ? 'Landed — merge receipt' : 'No merge receipt';
+  return `${settlement} · ${landing}`;
+}
+
+/**
+ * The evidence behind a "this goal is met" claim, per stated criterion and as a tally.
+ *
+ * BOTH facts, never just the first. `satisfied` is derived from work settling in each task's own
+ * worktree and says nothing about the default branch, so a criterion can read settled while the
+ * code implementing it is on nobody's `main` — which is exactly what happened to project
+ * 34IUpy9PJxnqgJ6TGHP24 on 2026-09-05. Showing settlement alone would hand the reader the same
+ * false green in a confirmation dialog, at the one moment they are deciding on it.
+ *
+ * The tally counts, and does not gate: a criterion with no receipt does not disable anything
+ * below. The press is a claim a person is entitled to make on incomplete evidence; what they are
+ * owed is the count, not a locked button.
+ */
+function CriteriaEvidence({ criteria }: { criteria: ProjectCriterionStanding[] }) {
+  const settled = criteria.filter((c) => c.satisfied === true).length;
+  const noReceipt = criteria.filter((c) => c.landing === 'UNKNOWN').length;
+  return (
+    <div className="project-status-evidence">
+      <p className="project-status-evidence-tally">
+        {`${criteria.length} stated ${criteria.length === 1 ? 'criterion' : 'criteria'} · ` +
+          `${settled} settled by the work filed under them · ` +
+          `${noReceipt} with no merge receipt`}
+      </p>
+      <p className="project-status-evidence-tally">
+        {`共 ${criteria.length} 条标准 · ${settled} 条的工作已按各自判据结算 · ` +
+          `${noReceipt} 条没有合并回执可证`}
+      </p>
+      <ul>
+        {criteria.map((c) => (
+          <li key={c.id}>
+            <span className="project-status-evidence-no">{c.ordinal}</span>
+            <span className="project-status-evidence-text">
+              {excerpt(markdownToPlainText(c.text), 'No criterion text')}
+            </span>
+            <span className="project-status-evidence-facts">{criterionFacts(c)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="project-status-evidence-note">
+        Settling is decided inside each task’s own worktree, so it says nothing about the default
+        branch. “No merge receipt” means Orbit holds no receipt proving that work landed — a merge
+        it never saw leaves none behind, so this is the absence of evidence rather than a finding
+        about where the work is.
+      </p>
+      <p className="project-status-evidence-note">
+        「已结算」是在任务各自的工作区里判定的，与成果有没有进入主干无关；「没有合并回执」表示
+        Orbit 手上没有能证明它落地的回执——Orbit 没看见的那次合并本来就不留回执，所以这是证据缺席，
+        不是对成果的结论。
+      </p>
+    </div>
+  );
+}
+
+/** Title and confirm label per press. Held together so the question a press asks and the verb it
+ *  is answered with cannot drift apart. “Record” rather than “Mark”: `mark` reads as filing a
+ *  status the system already knows, and everywhere else in this product a DONE is derived — this
+ *  one place it is not, which is precisely why it has to say it is a record being made. */
+const STATUS_PRESS: Record<
+  ProjectStatusPress,
+  { entry: string; ok: string; title: (project: string) => string; recorded: string }
+> = {
+  DONE: {
+    entry: 'Record as done',
+    ok: 'Record as done',
+    title: (project) => `Record “${project}” as done?`,
+    recorded: 'Recorded as done',
+  },
+  CANCELLED: {
+    entry: 'Record as cancelled',
+    ok: 'Record as cancelled',
+    title: (project) => `Stop pursuing “${project}”?`,
+    recorded: 'Recorded as cancelled',
+  },
+  OPEN: {
+    entry: 'Reopen project',
+    ok: 'Reopen',
+    title: (project) => `Reopen “${project}”?`,
+    recorded: 'Project reopened',
+  },
+};
+
+/**
+ * The account owner's own door onto `project.status`.
+ *
+ * It exists because the product reserves this write to the person and then shipped no way for them
+ * to make it: a project whose every criterion was met sat OPEN for a day and was finally written
+ * by an agent, which is the provenance the ledger now carries. Nothing here is offered to a
+ * coordinator — a session is told this is not its call, and this button is on the screen the owner
+ * is looking at.
+ *
+ * Three presses, and deliberately three different questions. DONE is the claim, so it is asked
+ * with the evidence beside it. CANCELLED is a decision to stop pursuing the goal, which is not a
+ * statement about whether it was met, so criteria have no place in it — what the reader needs is
+ * how much unfinished work is filed under what they are abandoning. OPEN is the way back from
+ * either, so it is asked once and asked plainly: friction on the correction path only strands
+ * whoever pressed the wrong thing.
+ */
+function ProjectStatusActions({
+  projectId,
+  project,
+}: {
+  projectId: string;
+  project: ProjectDetail;
+}) {
+  const [press, setPress] = useState<ProjectStatusPress | null>(null);
+  const qc = useQueryClient();
+  const toast = useToast();
+  // Every card on this page reads under `['project', id]` — the document, the panorama, the
+  // acceptance criteria — so one invalidation without `exact` refreshes the status tag beside this
+  // button and everything drawn from the same read. The list entries go too: a project that just
+  // became DONE belongs in a different section of it.
+  const write = useMutation({
+    mutationFn: (status: ProjectStatusPress) => updateProjectStatus(projectId, status),
+    onSuccess: async (_result, status) => {
+      setPress(null);
+      await qc.invalidateQueries({ queryKey: ['project', projectId] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      toast.success(STATUS_PRESS[status].recorded);
+    },
+  });
+  const criteria = project.acceptanceCriteriaItems ?? [];
+  // Null, not 0, when the document carried no tally at all: "no unfinished work" is a claim of its
+  // own, and a project being abandoned is the last place to invent one.
+  const unfinished = project.tasksByStatus ? unfinishedTasks(project.tasksByStatus) : null;
+
+  return (
+    <>
+      {project.status === 'OPEN' ? (
+        <>
+          <Button
+            size="small"
+            type="text"
+            aria-label={`Record ${project.title} as done`}
+            onClick={() => setPress('DONE')}
+          >
+            {STATUS_PRESS.DONE.entry}
+          </Button>
+          <Button
+            size="small"
+            type="text"
+            aria-label={`Record ${project.title} as cancelled`}
+            onClick={() => setPress('CANCELLED')}
+          >
+            {STATUS_PRESS.CANCELLED.entry}
+          </Button>
+        </>
+      ) : (
+        // From a status already written, the only move offered is back to OPEN. Recording a second
+        // terminal status over the first would be a re-decision dressed as a correction; taking it
+        // back to OPEN and pressing again says both halves out loud.
+        <Button
+          size="small"
+          type="text"
+          aria-label={`Reopen ${project.title}`}
+          onClick={() => setPress('OPEN')}
+        >
+          {STATUS_PRESS.OPEN.entry}
+        </Button>
+      )}
+
+      <Modal
+        open={press !== null}
+        title={press ? STATUS_PRESS[press].title(project.title) : ''}
+        okText={press ? STATUS_PRESS[press].ok : ''}
+        cancelText="Back"
+        // Never disabled by the evidence above it, however incomplete that evidence is. A missing
+        // receipt is something the reader has to know, not something that takes the decision off
+        // them — they are the only one entitled to make it.
+        okButtonProps={{ danger: press === 'CANCELLED', loading: write.isPending }}
+        onOk={() => press && write.mutate(press)}
+        onCancel={() => {
+          write.reset();
+          setPress(null);
+        }}
+      >
+        {press === 'DONE' ? (
+          <>
+            <Typography.Paragraph type="secondary">
+              Nothing decides this for you. Recording it is a claim you are making about the goal,
+              not a conclusion Orbit reached — so here is everything Orbit can put beside it.
+            </Typography.Paragraph>
+            <Typography.Paragraph type="secondary">
+              这一条没有任何机制会替你判定：按下即是你在为这个目标作出主张，而不是 Orbit
+              得出的结论——下面是 Orbit 能摆出来的全部依据。
+            </Typography.Paragraph>
+            {criteria.length > 0 ? (
+              <CriteriaEvidence criteria={criteria} />
+            ) : (
+              <Typography.Paragraph type="secondary">
+                This project states no acceptance criteria, so there is nothing to put beside the
+                claim.（这个项目没有声明验收标准，主张旁边没有可摆的依据。）
+              </Typography.Paragraph>
+            )}
+          </>
+        ) : press === 'CANCELLED' ? (
+          <>
+            <Typography.Paragraph type="secondary">
+              This records that the goal is no longer being pursued. It says nothing about whether
+              the project reached what it was stated for, and it neither stops nor deletes the work
+              filed under it.
+            </Typography.Paragraph>
+            <Typography.Paragraph type="secondary">
+              这表示不再追求这个目标。它不评价项目有没有达成当初声明的条件，也不会停止或删除项目下的任何工作。
+            </Typography.Paragraph>
+            {unfinished === null ? null : (
+              <>
+                <Typography.Paragraph strong>
+                  {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it.`}
+                </Typography.Paragraph>
+                <Typography.Paragraph type="secondary">
+                  {`项目下还有 ${unfinished} 个任务没有结束，它们会留在原地。`}
+                </Typography.Paragraph>
+              </>
+            )}
+          </>
+        ) : press === 'OPEN' ? (
+          <>
+            <Typography.Paragraph type="secondary">
+              Reopening puts this project back to Open and changes nothing else: its tasks, its
+              stated criteria and its history stay as they are. It is how a status written by
+              mistake is taken back, so it asks once and asks for nothing.
+            </Typography.Paragraph>
+            <Typography.Paragraph type="secondary">
+              重开只是把项目改回 Open，其余一概不动：任务、验收标准与历史都保持原样。写错了就是靠它纠回来，所以只问一次，不要求任何依据。
+            </Typography.Paragraph>
+          </>
+        ) : null}
+
+        {/* The server's own sentence, where the press earned one. Kept inside the question rather
+            than behind it: the reader is still deciding, and a refusal is part of what they are
+            deciding with. */}
+        {write.error ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Project status was not changed"
+            description={write.error.message}
+          />
+        ) : null}
+      </Modal>
+    </>
+  );
+}
+
 /** Detail for one project: what it's for, how anyone would know it got there, and where its tasks
  *  stand — down to a row per top-level task, and from there down to whichever levels the reader
- *  opens. Every row stays read-only; the one write on the page is deleting the project itself. */
+ *  opens. Every row stays read-only; the writes on the page are the project's own — its status,
+ *  which is the account owner's alone to record, and deleting it. */
 export function ProjectDetailPage() {
   const params = useParams();
   const location = useLocation();
@@ -712,6 +1026,10 @@ export function ProjectDetailPage() {
               <span>
                 {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
               </span>
+              {/* Beside the status it writes, because that tag is the only place on this page the
+                  status is stated — and until now the only place it could be READ, with every way
+                  to change it living behind the API, the CLI or an agent. */}
+              <ProjectStatusActions projectId={id!} project={p} />
               {/* Furthest from the title and behind a confirmation, because it is the one press on
                   this page nothing undoes. The project is NAMED in the question: this is the only
                   place a reader can tell which project they are about to lose. */}

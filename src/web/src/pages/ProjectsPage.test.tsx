@@ -238,7 +238,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE and status PATCH, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if a ninth
@@ -259,6 +259,12 @@ describe('ProjectsPage', () => {
       // reads, because a method that drifted to POST or a path that grew a segment would be a
       // different verb against the same button — and this endpoint cascades.
       "`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' }",
+      // The account owner's own write to `project.status`, and the only one this app has: PATCH,
+      // with a body carrying nothing but the status being claimed. Held as literally as the rest,
+      // because the shape of this body is the unit — a second field smuggled in here would make a
+      // status press write something nobody confirmed, and the method drifting to PUT would
+      // replace the project document with three characters of it.
+      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } }",
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather

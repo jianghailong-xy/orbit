@@ -9957,6 +9957,10 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .project-detail-meta {
   display: flex;
+  /* Wraps because this row now carries the status presses beside the tag and the count: on a
+     phone the three of them plus Delete are wider than the screen, and a row that cannot wrap
+     pushes the last one out of reach rather than under the others. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   margin-top: 10px;
@@ -9965,6 +9969,58 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .project-detail-meta .ant-tag {
   margin-inline-end: 0;
+}
+
+/* What the account owner is shown before claiming a project's goal is met: one row per stated
+   criterion, each carrying BOTH facts the server can offer — whether the work filed under it
+   settled, and whether any receipt proves that work landed. Inside a modal, so the list scrolls
+   rather than pushing the confirm button off a laptop screen. */
+.project-status-evidence {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.project-status-evidence-tally {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.project-status-evidence ul {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.project-status-evidence li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.project-status-evidence-no {
+  flex: none;
+  min-width: 16px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.project-status-evidence-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.project-status-evidence-facts {
+  flex: none;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.project-status-evidence-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
 }
 
 /* A project's stable purpose follows the live work account. Long Markdown stays complete here, so
