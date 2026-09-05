@@ -152,9 +152,11 @@ export function resolveSource(input: SourceResolutionInput): SourceResolution {
     configRevision: codebase.configRevision,
     refAuthority: codebase.refAuthority,
   };
-  // Only P4 fills this, and it is frozen with the rest of the selector: a prerequisite that lands a
-  // further checkpoint after this session was created belongs to the NEXT session, not this one.
-  const requiredContains = closureFor(input);
+  // Only P4 fills `requiredContains`, and it is frozen with the rest of the selector: a prerequisite
+  // that lands a further checkpoint after this session was created belongs to the NEXT session, not
+  // this one.
+  const closure = closureFor(input);
+  const requiredContains = closure.requiredContains;
 
   // P1 — a verification checks THE candidate it was filed against. Beats a pin (D1) and beats an
   // inherited known-good (D2): re-running a verification must re-check the same commit, or the code
@@ -237,7 +239,24 @@ export function resolveSource(input: SourceResolutionInput): SourceResolution {
   // P4 — has code prerequisites: start from the integration tip AND require it to contain each
   // prerequisite's accepted product. `requiredContains` is what makes "landed" mean containment
   // rather than "somebody reported a merge" (SR26).
-  if (requiredContains.length > 0) {
+  //
+  // The predicate is §4.1's own — "there is at least one CODE prerequisite" — and not "the closure
+  // came out non-empty". The two differ exactly when a code prerequisite has produced nothing
+  // accepted, and that difference is SR19's third negative: the row matched, its input is unusable,
+  // so it refuses. Reading the closure as the predicate instead would fall through to P5 and start
+  // the run from the upstream tip with no containment requirement at all — the prerequisite's work
+  // would be neither present nor asked for.
+  if (closure.codePrerequisites.length > 0) {
+    if (closure.withoutAcceptedProduct.length > 0) {
+      throw new SourceResolutionRefusal(
+        'BASE_SHA_UNAVAILABLE',
+        {
+          sourceKind: 'DEPENDENCY_CLOSURE',
+          prerequisiteTaskIds: closure.withoutAcceptedProduct,
+        },
+        `${closure.withoutAcceptedProduct.length} prerequisite(s) of this task have no accepted checkpoint, so there is no commit for its baseline to be required to contain: ${closure.withoutAcceptedProduct.join(', ')}`,
+      );
+    }
     return {
       state: 'SELECTED',
       selector: {
@@ -272,21 +291,40 @@ export function resolveSource(input: SourceResolutionInput): SourceResolution {
 }
 
 /**
- * The prerequisite commits this task's baseline must contain.
+ * P4's predicate and its input, read off the same rows.
  *
- * Only `ACCEPTED` rows (SR25) — a `WIP_RED` commit may not become anybody's baseline, the same rule
- * the merge receipt trigger already enforces one table over. A prerequisite that produced nothing
- * accepted contributes nothing here rather than a refusal, because whether that is legal depends on
- * whether the prerequisite is a code task at all (SR27), and THAT is decided by the caller that
- * gathers these rows: a documentation prerequisite must not manufacture a Git requirement.
+ * `codePrerequisites` is SR27 as the closed input set can express it: a prerequisite is a CODE
+ * prerequisite exactly when the caller gathered checkpoint rows for it. A `codeless` prerequisite,
+ * or one whose project has no binding, contributes no row and therefore cannot make this task P4 —
+ * a documentation prerequisite must not manufacture a Git requirement. The caller owns that
+ * exclusion because `dependsOnTaskIds` alone cannot say which prerequisites are code tasks.
+ *
+ * `requiredContains` takes only `ACCEPTED` rows (SR25) — a `WIP_RED` commit may not become
+ * anybody's baseline, the same rule the merge receipt trigger already enforces one table over.
+ * `withoutAcceptedProduct` names the code prerequisites left with nothing after that filter, which
+ * is what P4 refuses on rather than silently shipping a closure that is short by one prerequisite.
  *
  * Deduplicated and sorted so the frozen column is a function of the facts and not of row order —
  * two resolutions of the same state have to produce the same nine columns.
  */
-function closureFor(input: SourceResolutionInput): string[] {
-  const accepted = input.prerequisiteCheckpoints
-    .filter((checkpoint) => checkpoint.kind === 'ACCEPTED')
-    .map((checkpoint) => checkpoint.commitSha.trim().toLowerCase())
-    .filter((sha) => FULL_SHA.test(sha));
-  return [...new Set(accepted)].sort();
+function closureFor(input: SourceResolutionInput): {
+  codePrerequisites: string[];
+  requiredContains: string[];
+  withoutAcceptedProduct: string[];
+} {
+  const accepted = new Map<string, string[]>();
+  for (const checkpoint of input.prerequisiteCheckpoints) {
+    const sha = checkpoint.commitSha.trim().toLowerCase();
+    const shas = accepted.get(checkpoint.taskId) ?? [];
+    if (checkpoint.kind === 'ACCEPTED' && FULL_SHA.test(sha)) shas.push(sha);
+    accepted.set(checkpoint.taskId, shas);
+  }
+  return {
+    codePrerequisites: [...accepted.keys()].sort(),
+    requiredContains: [...new Set([...accepted.values()].flat())].sort(),
+    withoutAcceptedProduct: [...accepted]
+      .filter(([, shas]) => shas.length === 0)
+      .map(([taskId]) => taskId)
+      .sort(),
+  };
 }

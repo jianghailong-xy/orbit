@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
+import { SOURCE_REFUSAL_CODES, SourceRefusalCode } from '@orbit/shared';
+
 import {
   SourceResolutionInput,
   SourceResolutionRefusal,
@@ -240,4 +242,438 @@ test('the same task resolves identically however many times it is asked', () => 
     first.state === 'SELECTED' ? first.selector.requiredContains : null,
     [SHA('1'), SHA('2')],
   );
+});
+
+/* -------------------------------------------------------------------------------------------- *
+ * Everything below was added by the audit of §4 / §4.2 (task `34IMkgju3LpGIRhaEv3FL`). The tests
+ * above are the ones `a9389ea7` landed with; these close the rows and pairs they left open — D1,
+ * D4, D5, D6, SR19's second and third negatives, the refusal-code division, `SourceReason` field by
+ * field, and the type-level form of SR17 the source-text scan above could only approximate.
+ * -------------------------------------------------------------------------------------------- */
+
+/**
+ * SR17's closed input set as a VALUE, so the type and the assertion cannot drift apart.
+ *
+ * `Record<keyof T, true>` refuses to compile the day a field is added to the input and not listed
+ * here — but a compile error is satisfied by adding the key, and the point of SR17 is that certain
+ * keys must never be addable. `Object.keys` on these witnesses is what turns that into a test that
+ * goes RED on the value rather than merely failing to build.
+ */
+const INPUT_KEYS: Record<keyof SourceResolutionInput, true> = {
+  task: true,
+  codebase: true,
+  subjectCandidate: true,
+  prerequisiteCheckpoints: true,
+};
+
+const TASK_KEYS: Record<keyof SourceResolutionInput['task'], true> = {
+  id: true,
+  projectId: true,
+  verifiesTaskId: true,
+  pinnedRevision: true,
+  codeless: true,
+  attemptGeneration: true,
+  inheritedKnownGoodSha: true,
+  dependsOnTaskIds: true,
+};
+
+const CODEBASE_KEYS: Record<keyof NonNullable<SourceResolutionInput['codebase']>, true> = {
+  id: true,
+  canonicalRepoUrl: true,
+  rootCommitSha: true,
+  upstreamRef: true,
+  integrationRef: true,
+  refAuthority: true,
+  remoteName: true,
+  authorityRunnerId: true,
+  configRevision: true,
+};
+
+/** The two §10.1 codes the PRIORITY TABLE can reach. The other eight belong to §5's gate. */
+const SELECTOR_CODES: readonly SourceRefusalCode[] = [
+  'BASE_SHA_UNAVAILABLE',
+  'CODEBASE_AUTHORITY_INVALID',
+];
+
+function selected(resolution: ReturnType<typeof resolveSource>) {
+  assert.equal(resolution.state, 'SELECTED');
+  if (resolution.state !== 'SELECTED') throw new Error('unreachable');
+  return resolution;
+}
+
+function refusalFrom(run: () => unknown): SourceResolutionRefusal | null {
+  try {
+    run();
+    return null;
+  } catch (error) {
+    if (error instanceof SourceResolutionRefusal) return error;
+    throw error;
+  }
+}
+
+/**
+ * §4.1 top to bottom, one positive per row, each with the `reason` §4.1 obliges it to carry.
+ *
+ * `because` is checked against the fact that DECIDED the row, not against a fixed string: what has
+ * to be true of it is that a person reading it learns why this run starts here, which a message
+ * that never mentions the pin, the candidate or the ref cannot do.
+ */
+const ROWS: readonly {
+  row: string;
+  kind: string;
+  input: SourceResolutionInput;
+  ref: string | null;
+  revisionSha: string | null;
+  requiredContains: string[];
+  becauseMentions: RegExp;
+}[] = [
+  {
+    row: 'P1',
+    kind: 'VERIFICATION_SUBJECT',
+    input: input({
+      task: { verifiesTaskId: 't-subject' },
+      subjectCandidate: { taskId: 't-subject', commitSha: SHA('f') },
+    }),
+    ref: null,
+    revisionSha: SHA('f'),
+    requiredContains: [],
+    becauseMentions: /verifies .*checkpoint ffffffff/,
+  },
+  {
+    row: 'P2',
+    kind: 'PINNED_REVISION',
+    input: input({ task: { pinnedRevision: 'refs/tags/v1.2.3' } }),
+    ref: 'refs/tags/v1.2.3',
+    revisionSha: null,
+    requiredContains: [],
+    becauseMentions: /pins its baseline to refs\/tags\/v1\.2\.3/,
+  },
+  {
+    row: 'P3',
+    kind: 'TASK_KNOWN_GOOD',
+    input: input({ task: { attemptGeneration: 2n, inheritedKnownGoodSha: SHA('e') } }),
+    ref: null,
+    revisionSha: SHA('e'),
+    requiredContains: [],
+    becauseMentions: /retry 2 of the same work.*known-good commit eeeeeeee/,
+  },
+  {
+    row: 'P4',
+    kind: 'DEPENDENCY_CLOSURE',
+    input: input({
+      task: { dependsOnTaskIds: ['t-a'] },
+      prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('b'), kind: 'ACCEPTED' }],
+    }),
+    ref: 'refs/heads/release/next',
+    revisionSha: null,
+    requiredContains: [SHA('b')],
+    becauseMentions: /already be in refs\/heads\/release\/next/,
+  },
+  {
+    row: 'P5',
+    kind: 'PROJECT_UPSTREAM',
+    input: input(),
+    ref: 'refs/heads/main',
+    revisionSha: null,
+    requiredContains: [],
+    becauseMentions: /ordinary task .*starts from refs\/heads\/main/,
+  },
+];
+
+test('S3.01 §4.1: each of the five rows has a positive case, and produces its own selector', () => {
+  for (const expected of ROWS) {
+    const resolved = selected(resolveSource(expected.input));
+    assert.equal(resolved.reason.rank, expected.row, `${expected.row} did not win its own row`);
+    assert.equal(resolved.selector.kind, expected.kind);
+    assert.equal(resolved.selector.ref, expected.ref);
+    assert.equal(resolved.selector.revisionSha, expected.revisionSha);
+    assert.deepEqual(resolved.selector.requiredContains, expected.requiredContains);
+    // Criterion 5's other half: the output's `repoUrl` describes the CHOSEN source's repository and
+    // is read off the binding — it is not a WHERE field that leaked in through the back door.
+    assert.equal(resolved.selector.repoUrl, CODEBASE.canonicalRepoUrl);
+    assert.equal(resolved.selector.codebaseId, CODEBASE.id);
+    assert.equal(resolved.selector.configRevision, CODEBASE.configRevision);
+  }
+});
+
+test('SR18: `reason.rank` and `reason.because` are both asserted, per row', () => {
+  const sentences = new Map<string, string>();
+  for (const expected of [...ROWS]) {
+    const { reason } = resolveSource(expected.input);
+    assert.equal(reason.rank, expected.row);
+    assert.match(
+      reason.because,
+      expected.becauseMentions,
+      `${expected.row}'s sentence does not name the fact that decided it: "${reason.because}"`,
+    );
+    sentences.set(expected.row, reason.because);
+  }
+  // P0' has two sentences of its own — no binding and opted out are different answers to "why does
+  // this run start where it starts", and a UI that showed the same one for both would be wrong.
+  sentences.set("P0'/unbound", resolveSource(input({ codebase: null })).reason.because);
+  sentences.set("P0'/codeless", resolveSource(input({ task: { codeless: true } })).reason.because);
+
+  for (const [row, because] of sentences) {
+    assert.ok(because.length >= 20, `${row}'s because is too short to be a sentence: "${because}"`);
+    assert.ok(because.trim().split(/\s+/).length >= 5, `${row}'s because is not a sentence`);
+    assert.doesNotMatch(
+      because,
+      /TODO|TBD|FIXME|placeholder|lorem|^n\/?a$|^-+$/i,
+      `${row}'s because is a placeholder, and this string is shown to a person`,
+    );
+  }
+  // A placeholder's tell is that it is the SAME string everywhere. Seven rows, seven answers.
+  assert.equal(new Set(sentences.values()).size, sentences.size, 'two rows share one sentence');
+});
+
+test('D1 (SR20): a verification that is ALSO pinned resolves at P1, not at the pin', () => {
+  // Both predicates true. SR16 stops new rows from being written this way, but rows written before
+  // it exist, and D1 is what gives them a determined answer: allowing the pin to move the baseline
+  // is allowing a verification to declare PASS about code that is not the code it was filed against.
+  const pinnedVerification = selected(
+    resolveSource(
+      input({
+        task: { verifiesTaskId: 't-subject', pinnedRevision: SHA('d') },
+        subjectCandidate: { taskId: 't-subject', commitSha: SHA('f') },
+      }),
+    ),
+  );
+  assert.equal(pinnedVerification.reason.rank, 'P1');
+  assert.equal(pinnedVerification.selector.kind, 'VERIFICATION_SUBJECT');
+  assert.equal(pinnedVerification.selector.revisionSha, SHA('f'));
+});
+
+test('D4 (SR20/SR22): a retry that also has prerequisites resolves at P3 and still carries the closure', () => {
+  // P3 wins: re-basing onto a moved integration tip throws away the known-good point the previous
+  // generation earned. The ordering does NOT buy an exemption from the dependency check — the
+  // closure travels with the P3 selector so G5 makes the same demand of a different baseline.
+  const retryWithPrerequisites = selected(
+    resolveSource(
+      input({
+        task: {
+          attemptGeneration: 4n,
+          inheritedKnownGoodSha: SHA('e'),
+          dependsOnTaskIds: ['t-a'],
+        },
+        prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('b'), kind: 'ACCEPTED' }],
+      }),
+    ),
+  );
+  assert.equal(retryWithPrerequisites.reason.rank, 'P3');
+  assert.equal(retryWithPrerequisites.selector.kind, 'TASK_KNOWN_GOOD');
+  assert.equal(retryWithPrerequisites.selector.revisionSha, SHA('e'));
+  assert.deepEqual(retryWithPrerequisites.selector.requiredContains, [SHA('b')]);
+});
+
+test('D5: P4 and P5 are structurally exclusive — the same set decides both', () => {
+  // §4.2 says this pair needs no ordering because the predicates are complements. That is a claim
+  // about the code, so it is asserted rather than trusted: the presence of a code prerequisite is
+  // the whole difference between the two rows, with nothing else changed.
+  const withPrerequisite = input({
+    task: { dependsOnTaskIds: ['t-a'] },
+    prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('b'), kind: 'ACCEPTED' }],
+  });
+  const withoutPrerequisite = input();
+  assert.equal(selected(resolveSource(withPrerequisite)).reason.rank, 'P4');
+  assert.equal(selected(resolveSource(withoutPrerequisite)).reason.rank, 'P5');
+});
+
+test('D6 / P0: with no binding every other predicate is moot, and nothing is refused', () => {
+  // §4.2 D6 says P0 cannot intersect P1–P5 because they all read the codebase. Constructed here at
+  // its worst: verification AND pinned AND retried AND with prerequisites, all at once, with no
+  // binding. SR5 settles what comes out — an unbound project's task takes no Git requirement and
+  // produces NO refusal — and §9's SR45 says the same thing from the Legacy side.
+  const everythingAtOnce = resolveSource(
+    input({
+      codebase: null,
+      task: {
+        verifiesTaskId: 't-subject',
+        pinnedRevision: 'not-a-ref-and-not-a-sha',
+        attemptGeneration: 9n,
+        inheritedKnownGoodSha: 'also-not-a-sha',
+        dependsOnTaskIds: ['t-a'],
+      },
+      subjectCandidate: { taskId: 't-subject', commitSha: SHA('f') },
+      prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('c'), kind: 'WIP_RED' }],
+    }),
+  );
+  assert.equal(everythingAtOnce.state, 'UNBOUND');
+  assert.equal(everythingAtOnce.reason.rank, "P0'");
+});
+
+test('SR19: all three of §4.1\'s unusable-input rows refuse rather than fall to the next row', () => {
+  // §11 asks for three negatives here. P1's was the one `a9389ea7` shipped; P3's and P4's are new,
+  // and P4's is the one that was WRONG — a task whose prerequisite had produced nothing accepted
+  // fell through to P5 and started from the upstream tip with an EMPTY containment requirement.
+  // Neither the prerequisite's work nor a demand for it would have been anywhere in the run.
+  const p1 = refusalFrom(() => resolveSource(input({ task: { verifiesTaskId: 't-subject' } })));
+  assert.equal(p1?.code, 'BASE_SHA_UNAVAILABLE');
+  assert.equal(p1?.detail.sourceKind, 'VERIFICATION_SUBJECT');
+
+  const p3 = refusalFrom(() =>
+    resolveSource(input({ task: { attemptGeneration: 1n, inheritedKnownGoodSha: 'a1b2c3d' } })),
+  );
+  assert.equal(p3?.code, 'BASE_SHA_UNAVAILABLE');
+  assert.equal(p3?.detail.sourceKind, 'TASK_KNOWN_GOOD');
+
+  const p4 = refusalFrom(() =>
+    resolveSource(
+      input({
+        task: { dependsOnTaskIds: ['t-a'] },
+        prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('c'), kind: 'WIP_RED' }],
+      }),
+    ),
+  );
+  assert.equal(p4?.code, 'BASE_SHA_UNAVAILABLE');
+  assert.equal(p4?.detail.sourceKind, 'DEPENDENCY_CLOSURE');
+  assert.deepEqual(p4?.detail.prerequisiteTaskIds, ['t-a']);
+
+  // And the same shape one prerequisite wider: a task with two code prerequisites of which only one
+  // delivered must not ship a closure that is short by the other one.
+  const halfLanded = refusalFrom(() =>
+    resolveSource(
+      input({
+        task: { dependsOnTaskIds: ['t-a', 't-b'] },
+        prerequisiteCheckpoints: [
+          { taskId: 't-a', commitSha: SHA('b'), kind: 'ACCEPTED' },
+          { taskId: 't-b', commitSha: SHA('c'), kind: 'WIP_RED' },
+        ],
+      }),
+    ),
+  );
+  assert.equal(halfLanded?.code, 'BASE_SHA_UNAVAILABLE');
+  assert.deepEqual(halfLanded?.detail.prerequisiteTaskIds, ['t-b']);
+});
+
+test('SR27: a prerequisite with no checkpoints of its own makes no Git requirement', () => {
+  // The positive side of the refusal above, and the line between them. A `codeless` prerequisite —
+  // a piece of writing, a decision — reaches the resolver as a task id with no checkpoint rows,
+  // because the caller that gathers those rows is where SR27's exclusion is applied. It must leave
+  // this task at P5, not refuse it and not invent a containment requirement for a commit that was
+  // never going to exist.
+  const documentationPrerequisite = selected(
+    resolveSource(input({ task: { dependsOnTaskIds: ['t-doc'] }, prerequisiteCheckpoints: [] })),
+  );
+  assert.equal(documentationPrerequisite.reason.rank, 'P5');
+  assert.equal(documentationPrerequisite.selector.kind, 'PROJECT_UPSTREAM');
+  assert.deepEqual(documentationPrerequisite.selector.requiredContains, []);
+});
+
+test('§10.1 division: the priority table reaches two codes, and names none of the gate\'s eight', () => {
+  // §4 decides WHICH selector; §5's G0–G6 decide whether it may be used, on the runner, which is
+  // the machine that has the repository. So the eight gate codes are not this file's to produce,
+  // and the assertion is that it cannot produce them by accident: every refusal reachable from the
+  // priority table is one of two, and the other eight are not so much as spelled here.
+  const everyRefusal = [
+    () => resolveSource(input({ task: { verifiesTaskId: 't-subject' } })),
+    () => resolveSource(input({ task: { attemptGeneration: 1n, inheritedKnownGoodSha: 'nope' } })),
+    () =>
+      resolveSource(
+        input({
+          task: { dependsOnTaskIds: ['t-a'] },
+          prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('c'), kind: 'WIP_RED' }],
+        }),
+      ),
+    () => resolveSource(input({ task: { pinnedRevision: 'main' } })),
+    () => classifyPinnedRevision('origin/main'),
+  ];
+  const raised = new Set<SourceRefusalCode>();
+  for (const one of everyRefusal) {
+    const refusal = refusalFrom(one);
+    assert.ok(refusal, 'an input built to be refused resolved instead');
+    raised.add(refusal.code);
+  }
+  assert.deepEqual([...raised].sort(), [...SELECTOR_CODES].sort());
+
+  const source = readFileSync(path.join(SRC, 'projects/source-selector.ts'), 'utf8');
+  for (const code of SOURCE_REFUSAL_CODES) {
+    if (SELECTOR_CODES.includes(code)) continue;
+    assert.equal(
+      source.includes(code),
+      false,
+      `${code} is a §5 admission-gate code — the resolver naming it means the two halves have been mixed back together`,
+    );
+  }
+});
+
+test('§10.1 division: both of the resolver\'s codes have a positive side too', () => {
+  // A code with only a refusing case proves the refusal fires, not that it fires on the right
+  // input. Each of these is one field away from the negative above and must resolve cleanly.
+  const candidatePresent = selected(
+    resolveSource(
+      input({
+        task: { verifiesTaskId: 't-subject' },
+        subjectCandidate: { taskId: 't-subject', commitSha: SHA('f') },
+      }),
+    ),
+  );
+  assert.equal(candidatePresent.selector.revisionSha, SHA('f'));
+
+  const knownGoodUsable = selected(
+    resolveSource(input({ task: { attemptGeneration: 1n, inheritedKnownGoodSha: SHA('8') } })),
+  );
+  assert.equal(knownGoodUsable.selector.revisionSha, SHA('8'));
+
+  const prerequisiteDelivered = selected(
+    resolveSource(
+      input({
+        task: { dependsOnTaskIds: ['t-a'] },
+        prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('b'), kind: 'ACCEPTED' }],
+      }),
+    ),
+  );
+  assert.deepEqual(prerequisiteDelivered.selector.requiredContains, [SHA('b')]);
+
+  // CODEBASE_AUTHORITY_INVALID's positive side: the two spellings SR15 does accept.
+  assert.deepEqual(classifyPinnedRevision(SHA('a')), { kind: 'sha', sha: SHA('a') });
+  assert.deepEqual(classifyPinnedRevision('refs/heads/main'), {
+    kind: 'ref',
+    ref: 'refs/heads/main',
+  });
+});
+
+test('SR1/SR17: the input type is the contract\'s closed set, field for field', () => {
+  // The source-text scan further up catches a resolver that READS a workspace. This catches the
+  // step before it — a workspace being addable to the input at all — and it catches it as a failed
+  // assertion on a list of names, which a type-only check could not do.
+  assert.deepEqual(Object.keys(INPUT_KEYS).sort(), [
+    'codebase',
+    'prerequisiteCheckpoints',
+    'subjectCandidate',
+    'task',
+  ]);
+  assert.deepEqual(Object.keys(TASK_KEYS).sort(), [
+    'attemptGeneration',
+    'codeless',
+    'dependsOnTaskIds',
+    'id',
+    'inheritedKnownGoodSha',
+    'pinnedRevision',
+    'projectId',
+    'verifiesTaskId',
+  ]);
+
+  const everyInputField = [
+    ...Object.keys(INPUT_KEYS),
+    ...Object.keys(TASK_KEYS),
+    ...Object.keys(CODEBASE_KEYS),
+  ];
+  // Matched exactly, not by substring, and that is the point: `canonicalRepoUrl` is the identity of
+  // the repository the binding names and `authorityRunnerId` is where a ref resolution COUNTS
+  // (§2 — "not which machine runs it"). Neither is a place to put where this run happens, which is
+  // what the five names below are.
+  for (const forbidden of [
+    'workspace',
+    'workDir',
+    'defaultMergeTarget',
+    'runnerId',
+    'assignedRunnerId',
+    'repoUrl',
+  ]) {
+    assert.equal(
+      everyInputField.includes(forbidden),
+      false,
+      `${forbidden} became an input to SOURCE resolution — WHERE a run happens may not decide WHICH code it starts from`,
+    );
+  }
 });
