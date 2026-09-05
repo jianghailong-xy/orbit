@@ -2494,11 +2494,12 @@ export class RunnerApiController {
         // is only needed while this one message is being answered for: a steer that provably
         // never reached the engine can come back here as an ordinary message (see turnComplete)
         // instead of being reported as a failure the person has to re-send by hand.
-        // Explicit CURRENT_WORK is an at-most-this-turn instruction. A runner that cannot deliver
-        // it reports the refusal and the API terminalizes this authored receipt; asking for
-        // steer_requeue would claim the row became a message even though that fallback is forbidden.
-        steerRequeue:
-          t.kind === 'steer' ? t.sendIntent !== 'CURRENT_WORK' : undefined,
+        // Explicit CURRENT_WORK gets the same answer. It was an at-most-this-turn instruction only
+        // in the sense that steering was the route it asked for; a message the engine PROVABLY
+        // never read has not been steered anywhere, and reporting that as a refusal leaves the
+        // sender re-typing what they already sent. Same rule as the target-completion boundary,
+        // reached from the other direction — see requeueUnreadCurrentWorkSteers.
+        steerRequeue: t.kind === 'steer' ? true : undefined,
         taskAcceptance:
           t.kind === 'shell' && isTaskAcceptanceClientTurnId(t.clientTurnId)
             ? true
@@ -2893,12 +2894,10 @@ export class RunnerApiController {
       //
       // Only for provable non-delivery, which is the runner's judgement to make (see
       // TURN_COMPLETE_STEER_REQUEUE): re-filing a message Codex may already have taken is how
-      // one prompt gets run twice, and Codex does not de-duplicate.
-      if (
-        steering
-        && steering.sendIntent !== 'CURRENT_WORK'
-        && dto.subtype === TURN_COMPLETE_STEER_REQUEUE
-      ) {
+      // one prompt gets run twice, and Codex does not de-duplicate. The runner withholds the
+      // subtype for anything less certain — an abandoned lease is reported undelivered, never
+      // re-filed — which is what makes this safe for an explicit CURRENT_WORK row too.
+      if (steering && dto.subtype === TURN_COMPLETE_STEER_REQUEUE) {
         // Idempotent by the kind itself: the update changes one leased steer at most once. The
         // guard above is the other half of that invariant — a retry which now observes the row as
         // a message must stop here rather than settling that message as an ordinary completed turn.
@@ -2912,6 +2911,12 @@ export class RunnerApiController {
             deliveredAt: null,
             leaseDeadlineAt: null,
             leaseGeneration: null,
+            // The two columns only a steer may carry. A legacy row has neither and is left
+            // exactly as it always was; an explicit one has to shed both, or the row shape
+            // constraints reject the message it is becoming.
+            ...(steering.sendIntent === 'CURRENT_WORK'
+              ? { sendIntent: 'NEXT_TURN', targetTurnId: null }
+              : {}),
           },
         });
         if (requeued.count > 0) {
