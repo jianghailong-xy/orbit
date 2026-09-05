@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
+  CreateProjectCodebaseDto,
   CreateProjectDto,
   DecideProjectHandoffDto,
   OpenProjectCoordinatorDto,
@@ -328,6 +329,31 @@ export class ProjectsController {
     @Body() dto: RecordMergeEvidenceDto,
   ) {
     return this.acceptance.recordMergeEvidence(user.userId, id, dto);
+  }
+
+  /**
+   * Bind this project to a code line, and read the binding back.
+   *
+   * The user door, because binding is the account owner's decision: it sets where every task in
+   * the project takes its code from, and an agent that could write one could move the ground under
+   * every other session in the project. `POST /api/runner/projects/:id/codebase` says so in as
+   * many words rather than 404ing.
+   *
+   * The GET answers `{ codebase: null }` for an unbound project rather than 404ing — SR5: a
+   * Project is allowed to have no code line, and one that has none is not a missing thing.
+   */
+  @Post(':id/codebase')
+  bindCodebase(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: CreateProjectCodebaseDto,
+  ) {
+    return this.projects.bindCodebase(user.userId, id, dto);
+  }
+
+  @Get(':id/codebase')
+  codebase(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.codebase(user.userId, id);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

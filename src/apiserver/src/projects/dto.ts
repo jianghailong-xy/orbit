@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  Allow,
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
@@ -448,4 +449,48 @@ export class DecideProjectHandoffDto {
     message: 'acknowledgedCrossingKey must be the crossingKey you read from the crossing',
   })
   acknowledgedCrossingKey?: string;
+}
+
+/**
+ * The explicit binding of a Project to one code line — §3.1's four declared fields plus the
+ * repository identity they are declared about.
+ *
+ * The shape is checked here; the VALUES are checked in `projectCodebaseCreateColumns`, which is
+ * also where the refusal gets the contract's own name (`CODEBASE_AUTHORITY_INVALID`) and the fix
+ * action §10.1 pairs with it. Splitting it that way is what lets every value refusal on this
+ * surface carry one stable code instead of a code for the ones a decorator happened to catch and a
+ * bare message for the rest.
+ */
+export class CreateProjectCodebaseDto {
+  /** Repository identity, first half: the normalised remote URL (§7.1). */
+  @IsString() canonicalRepoUrl!: string;
+
+  /** Where this line comes FROM — a full-name ref (`refs/heads/main`), never a short name (SR9). */
+  @IsString() upstreamRef!: string;
+
+  /** Where it goes TO. Omitted, it is written equal to `upstreamRef`, which is what SR44 then
+   *  reads as this project's default merge target. */
+  @IsOptional() @IsString() integrationRef?: string;
+
+  /** `REMOTE` or `RUNNER_LOCAL` — where a ref → SHA resolution COUNTS (SR40). */
+  @IsString() refAuthority!: string;
+
+  /** The remote to ask. `origin` unless stated. */
+  @IsOptional() @IsString() remoteName?: string;
+
+  /** Required exactly when `refAuthority` is `RUNNER_LOCAL`, refused otherwise (SR31). The one
+   *  field on this surface that names a machine, and it names the AUTHORITY — not where the work
+   *  runs (SR10). */
+  @IsOptional() @IsPublicId() authorityRunnerId?: string;
+
+  // ── The three the database owns ──────────────────────────────────────────────────────────────
+  // Declared and refused rather than omitted, for the reason `CreateProjectAcceptanceCriterionDto`
+  // gives above: `whitelist: true` STRIPS an undeclared property, so a caller who sent
+  // `configRevision: 7` would read 201 and believe a version number was theirs to choose.
+  // `@Allow()` rather than `@Equals(undefined)` so the value reaches the service and is refused
+  // with the same `CODEBASE_AUTHORITY_INVALID` every other value rule on this surface uses — one
+  // code for one door. See `project-codebase.ts` for why each of the three is not spellable.
+  @Allow() configRevision?: never;
+  @Allow() rootCommitSha?: never;
+  @Allow() slot?: never;
 }
