@@ -71,10 +71,19 @@ export interface CompletionCriterionSnapshotInput {
 
 interface LockedCriterionTask extends CompletionCriterionSnapshotInput {}
 
-/** What `decide` has to read off the locked Task: the project it quotes, and its own criterion. */
+/**
+ * What `decide` has to read off the locked Task: the project it quotes, its own criterion, and the
+ * acceptance criteria it states for itself.
+ *
+ * The third is here because check 2 holds the evidence against a LIVE stated standard, and a task
+ * in no project has one of those without having a project criterion: its own `acceptanceCriteria`.
+ * Selecting it here rather than reading it inside the check keeps that read under the Task mutex
+ * this transaction already holds.
+ */
 interface LockedDecisionTask {
   projectId: string | null;
   completionCriterion: TaskCompletionCriterionValue;
+  acceptanceCriteria: string | null;
 }
 
 interface BackfillCandidate extends LockedCriterionTask {
@@ -287,7 +296,7 @@ export class TaskCompletionEvidenceService {
       // the same receipt a first one gets. Both read only rows already inside this transaction's
       // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
       const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope);
-      const criterionMatch = await evidenceCriterionMatch(tx, task.projectId, envelope.criterion);
+      const criterionMatch = await evidenceCriterionMatch(tx, task, envelope.criterion);
       const receipt: EvidenceReceipt = { citations, criterionMatch };
 
       if (idempotencyKey) {
@@ -637,7 +646,8 @@ export class TaskCompletionEvidenceService {
       // and it is the lock the derived status below is written under.
       const [task] = await tx.$queryRaw<LockedDecisionTask[]>(Prisma.sql`
         SELECT "project_id" AS "projectId",
-               "completion_criterion"::text AS "completionCriterion"
+               "completion_criterion"::text AS "completionCriterion",
+               "acceptance_criteria" AS "acceptanceCriteria"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE
@@ -658,7 +668,7 @@ export class TaskCompletionEvidenceService {
       });
       if (!latest) throw new NotFoundException('this task has no completion evidence to decide');
       assertCurrentEvidenceRevision(answered, latest.revision);
-      await assertCriterionUnmoved(tx, task.projectId, latest.evidence);
+      await assertCriterionUnmoved(tx, task, latest.evidence);
 
       // One decision per version. A second answer to the same one is a replay when it says the
       // same thing and a refusal when it does not — never a second row.

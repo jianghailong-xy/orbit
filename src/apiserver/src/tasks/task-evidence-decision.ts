@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import type { Prisma as PrismaTypes } from '@prisma/client';
-import { evidenceCriterionMatch } from './task-evidence-envelope';
+import { type CriterionStandingTask, evidenceCriterionMatch } from './task-evidence-envelope';
 
 /**
  * The four checks `task_evidence_decide` makes, and the codes it makes them under.
@@ -97,7 +97,7 @@ export interface CriterionStandingRefusal {
  */
 export async function criterionStandingRefusal(
   tx: PrismaTypes.TransactionClient,
-  projectId: string | null,
+  task: CriterionStandingTask,
   evidence: unknown,
 ): Promise<CriterionStandingRefusal | null> {
   const criterion = quotedCriterion(evidence);
@@ -107,17 +107,57 @@ export async function criterionStandingRefusal(
       + 'against';
     return { reason, message: `${reason}; nothing was written`, criterionKey: null };
   }
-  const match = await evidenceCriterionMatch(tx, projectId, criterion);
+  const match = await evidenceCriterionMatch(tx, task, criterion);
   if (match.matchesLive) return null;
+  return { ...movedRefusal(task, criterion.key), criterionKey: criterion.key };
+}
+
+/**
+ * The words for a quote the live standard did not match, and the ONE thing this branches on.
+ *
+ * Whether a decision may be recorded was already settled above by `evidenceCriterionMatch`; this
+ * only says why, and it may not reach a different answer. So it asks nothing the row did not
+ * already carry: a task with no project and no `acceptanceCriteria` of its own states no standard
+ * at all, which is a different sentence from a standard that moved and the only honest one when
+ * there is nothing to have moved from. Reading that off the same row the predicate was given is
+ * what keeps this a wording choice rather than a second opinion.
+ */
+function movedRefusal(
+  task: CriterionStandingTask,
+  key: string,
+): { reason: string; message: string } {
+  if (task.projectId) {
+    // Word for word what this refusal has always said for a task in a project: nothing about that
+    // path is being changed here, and its message is as much of it as its code.
+    const reason =
+      `the criterion this evidence quotes (${key}) is not what the project states today`;
+    return {
+      reason,
+      message:
+        `${reason}; nothing was written. The quote is bound to the criterion's CONTENT, not to `
+        + 'its key, so a rewritten standard is a different standard and this evidence has not been '
+        + 'measured against it',
+    };
+  }
+  if ((task.acceptanceCriteria ?? '').trim() === '') {
+    const reason =
+      'this task is in no project and states no acceptance criteria of its own, so there is no '
+      + 'live standard to decide this evidence against';
+    return {
+      reason,
+      message:
+        `${reason}; nothing was written. Write what would settle this task into its `
+        + 'acceptanceCriteria, then submit a revision quoting them',
+    };
+  }
   const reason =
-    `the criterion this evidence quotes (${criterion.key}) is not what the project states today`;
+    'the acceptance criteria this evidence quotes are not what this task states today';
   return {
     reason,
     message:
-      `${reason}; nothing was written. The quote is bound to the criterion's CONTENT, not to `
-      + 'its key, so a rewritten standard is a different standard and this evidence has not been '
-      + 'measured against it',
-    criterionKey: criterion.key,
+      `${reason}; nothing was written. The quote is bound to the standard's CONTENT, so `
+      + 'acceptance criteria rewritten after this evidence was submitted are a different standard '
+      + 'and this evidence has not been measured against them',
   };
 }
 
@@ -129,16 +169,17 @@ export async function criterionStandingRefusal(
  * question: submitting is a claim about work that was already done, and invalidating it because
  * the wording moved afterwards would punish the submitter for somebody else's edit — while
  * deciding is a judgment being made NOW, and a judgment made against wording that no longer exists
- * settles nothing. So evidence quoting no criterion, quoting a key that resolves to nothing, or
- * sitting on a task with no project all reach the same refusal: there is no live standard to hold
- * this evidence against.
+ * settles nothing. So evidence quoting no criterion, or quoting a key that resolves to nothing in
+ * the project it names, reaches the same refusal: there is no live standard to hold this evidence
+ * against. A task in no project is NOT that case — its own `acceptanceCriteria` are a live stated
+ * standard, and it is refused only when the quote has moved away from them or there are none.
  */
 export async function assertCriterionUnmoved(
   tx: PrismaTypes.TransactionClient,
-  projectId: string | null,
+  task: CriterionStandingTask,
   evidence: unknown,
 ): Promise<{ key: string; text: string }> {
-  const refusal = await criterionStandingRefusal(tx, projectId, evidence);
+  const refusal = await criterionStandingRefusal(tx, task, evidence);
   if (refusal) {
     throw new ConflictException({
       code: CRITERION_MOVED_CODE,

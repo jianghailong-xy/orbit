@@ -48,6 +48,17 @@ export interface EvidenceCheck {
 
 export interface EvidenceEnvelope {
   claim: string;
+  /**
+   * The stated standard this evidence is measured against, quoted by key AND by text.
+   *
+   * `key` says WHICH standard and `text` says what it said, and only the text is ever checked
+   * (`evidenceCriterionMatch`). For a task filed under a project the key is one of the keys
+   * `project_get` prints beside that project's criteria. For a task in NO project there is nothing
+   * to select — such a task has exactly one standard, its own `acceptanceCriteria` — so the
+   * convention is the task's own public id, which is what submitters already write, and no key
+   * resolves to anything either way. The field is required in both cases because the envelope has
+   * no optional halves; what changes is only whether anything looks the key up.
+   */
   criterion: { key: string; text: string };
   checks: EvidenceCheck[];
   gaps: string[];
@@ -64,8 +75,17 @@ export interface EvidenceCitation {
 export interface EvidenceCriterionMatch {
   key: string;
   text: string;
-  /** Whether the quoted text is still what the criterion that key names says today. */
+  /** Whether the quoted text is still what the standard this task is held to says today. */
   matchesLive: boolean;
+}
+
+/** What the criterion lane reads off the task: where this task's stated standard lives. A task in
+ * a project quotes one of the project's criteria; a task in no project has its own
+ * `acceptanceCriteria` and nothing else. Passed in rather than read here because both callers hold
+ * the row already, under the Task mutex in the two that write. */
+export interface CriterionStandingTask {
+  projectId: string | null;
+  acceptanceCriteria: string | null;
 }
 
 const MAX_CLAIM = 2_000;
@@ -396,28 +416,64 @@ function comparableCriterionText(text: string): string {
 }
 
 /**
+ * The live stated standard this quote is held against, or null when the task states none.
+ *
+ * TWO SOURCES, BECAUSE A TASK HAS A STANDARD WHETHER OR NOT IT IS IN A PROJECT
+ * ---------------------------------------------------------------------------
+ * A task filed under a project quotes one of that project's criteria, and the live text is the
+ * definition row the key names. A task in NO project has exactly one stated standard and it is its
+ * own `acceptanceCriteria` column — a persistent field, editable through `task_update` for the
+ * whole life of the task, and already the text such a submission quotes verbatim.
+ *
+ * Until this branch existed the second case read nothing at all: `definitionIdFromKey` was skipped
+ * for a task with no project, so the live text was unconditionally null and every such quote was
+ * reported as not matching. Downstream that false was spent as "the standard moved", which is a
+ * different sentence from "nothing was ever consulted" and the only one of the two that was true.
+ */
+async function liveCriterionText(
+  tx: Prisma.TransactionClient,
+  task: CriterionStandingTask,
+  key: string,
+): Promise<string | null> {
+  if (task.projectId) {
+    const definitionId = definitionIdFromKey(key);
+    const live = definitionId
+      ? await tx.projectAcceptanceCriterionDefinition.findFirst({
+          where: { id: definitionId, projectId: task.projectId },
+          select: { text: true },
+        })
+      : null;
+    return live ? live.text : null;
+  }
+  // The key is not resolved here, and deliberately: a task in no project has one standard rather
+  // than a table of them, so there is nothing for a key to select. What submitters write today is
+  // the task's own public id (`evidence.criterion.key` may not be blank), and that keeps working
+  // because nothing reads it — this lane binds to the TEXT, exactly as the project lane does.
+  const stated = task.acceptanceCriteria;
+  return stated && comparableCriterionText(stated) !== '' ? stated : null;
+}
+
+/**
  * Whether the criterion the envelope quotes is still worded that way.
  *
  * Reported, never refused. A stale quote is worth telling the submitter about — it means they are
  * arguing against wording that has since moved — but the criterion lane is not the load-bearing
  * one here, and refusing on it would make an edit to a project's criteria retroactively invalidate
  * evidence that was true when it was written.
+ *
+ * One predicate, and the reason it takes the task row rather than a project id: the submission
+ * path reports what it returns and the decision door refuses on it, so a second implementation of
+ * "is this quote still live" is a queue promising decisions the door refuses.
  */
 export async function evidenceCriterionMatch(
   tx: Prisma.TransactionClient,
-  projectId: string | null,
+  task: CriterionStandingTask,
   criterion: { key: string; text: string },
 ): Promise<EvidenceCriterionMatch> {
-  const definitionId = projectId ? definitionIdFromKey(criterion.key) : null;
-  const live = definitionId
-    ? await tx.projectAcceptanceCriterionDefinition.findFirst({
-        where: { id: definitionId, projectId: projectId! },
-        select: { text: true },
-      })
-    : null;
+  const live = await liveCriterionText(tx, task, criterion.key);
   return {
     key: criterion.key,
     text: criterion.text,
-    matchesLive: !!live && comparableCriterionText(live.text) === comparableCriterionText(criterion.text),
+    matchesLive: live !== null && comparableCriterionText(live) === comparableCriterionText(criterion.text),
   };
 }

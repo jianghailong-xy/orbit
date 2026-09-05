@@ -223,6 +223,10 @@ export async function readPendingEvidenceJudgments(
       title: true,
       status: true,
       projectId: true,
+      // Read for the standing check below and for nothing else: a task in no project is held to
+      // its own acceptance criteria, so a queue that did not select them would ask the door a
+      // narrower question than the door asks itself.
+      acceptanceCriteria: true,
       completionEvidence: {
         orderBy: { revision: 'desc' },
         take: 1,
@@ -250,7 +254,7 @@ export async function readPendingEvidenceJudgments(
     // Asked of the door's own predicate rather than re-derived from `envelope` above: whether a
     // decision can be recorded is the door's question, and a second opinion here is exactly the
     // drift that would put an undecidable row back among the answerable ones.
-    const standing = await criterionStandingRefusal(tx, task.projectId, latest.evidence);
+    const standing = await criterionStandingRefusal(tx, task, latest.evidence);
     const row: PendingEvidenceJudgment = {
       taskId: task.id,
       title: task.title,
