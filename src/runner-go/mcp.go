@@ -589,7 +589,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1394,6 +1394,24 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"suggests another criterion, either adopt that suggestion or retry with this non-blank " +
 			"audit explanation; Orbit stores it on the task and task_get reads it back.",
 	}
+	// The same field on the EDIT door, where it answers a different question. Creating a task
+	// states a criterion for the first time; changing one rewrites what counts as done on work
+	// that already exists, which is the cheapest way around a completion decision and used to cost
+	// nothing at all. It still succeeds — a mis-declared criterion is ordinary, and one that cannot
+	// be corrected is a deadlock — but it now has to say why, and the why is kept.
+	criterionChangeReasonProp := map[string]interface{}{
+		"type":      "string",
+		"minLength": 1,
+		"maxLength": maxTaskCriterionOverrideReasonChars,
+		"description": "Why this edit CHANGES completionCriterion. Required exactly when the write " +
+			"lands on a different criterion than the task already carries — including when you " +
+			"never name the criterion and it moves anyway, as sending acceptanceCommand alone " +
+			"derives EXECUTABLE. Without it the write is refused as " +
+			"TASK_COMPLETION_CRITERION_CHANGE_UNEXPLAINED and nothing is written; blank or " +
+			"whitespace is not a reason. Orbit stores it together with the criterion being left " +
+			"behind, and task_get returns both as completionCriterionChange. Declaring a criterion " +
+			"at creation is unaffected, and so is re-sending the value this task already has.",
+	}
 	// Which of the PROJECT's stated acceptance criteria a new task serves. Required of a project's
 	// one-shot judgment session and of nobody else, so the description says who has to send it
 	// rather than marking it required — a person filing work has never had to justify it to a gate.
@@ -2027,8 +2045,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
-					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and EVIDENCE_JUDGMENT are peers, not an escalation order.",
+					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and EVIDENCE_JUDGMENT are peers, not an escalation order. Changing it to a different value requires completionCriterionOverrideReason in the same call.",
 				},
+				"completionCriterionOverrideReason": criterionChangeReasonProp,
 				"acceptanceCommand": map[string]interface{}{
 					"type":        []string{"string", "null"},
 					"description": "The one EXECUTABLE shell acceptance command. Set it together with acceptanceExpectedExitCode; null/null clears executable acceptance. Omit both to preserve them. One command only — split the task if that is insufficient.",

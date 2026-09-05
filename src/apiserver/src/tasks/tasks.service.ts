@@ -211,6 +211,11 @@ import {
   taskCriterionShapeAdvice,
   taskCriterionShapeAdviceBody,
 } from './task-criterion-shape-advice';
+import {
+  formatTaskCriterionChange,
+  readTaskCriterionChange,
+  taskCriterionChangeRefusalBody,
+} from './task-completion-criterion-change-guard';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -6628,6 +6633,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
       blocked: !canRun(dependencyState),
+      // The last change to this task's completion criterion, read back out of the audit column the
+      // change door writes: which criterion it moved away from, which it landed on, and why.
+      // Derived rather than stored a second time — the reason column already carries all three, and
+      // a reader should not have to parse prose to learn that "what counts as done" was rewritten.
+      // Null on every task whose criterion is still the one it was declared with.
+      completionCriterionChange: readTaskCriterionChange(task.completionCriterionOverrideReason),
       ...supersession,
     };
   }
@@ -6820,6 +6831,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         verifiesTaskId: verifiesTaskIdAfter,
       });
     }
+    // The criterion-change door (`task-completion-criterion-change-guard.ts`).
+    //
+    // Judged on the MERGED criterion, for the same reason the declaration above is: `EXECUTABLE` is
+    // reachable without ever naming it — sending the acceptance pair alone derives it — so a door
+    // that only watched `dto.completionCriterion` would refuse the spelling and wave the synonym
+    // through. What is questioned is the criterion this write LANDS on differing from the stored
+    // one, and only on a request that touches the completion declaration at all.
+    //
+    // Before the transaction, like every refusal on this path, so an unexplained change writes
+    // nothing at all rather than being rolled back.
+    let criterionChangeRecord: string | null = null;
+    if (touchesCompletionDeclaration && completionCriterion !== before.completionCriterion) {
+      const change = {
+        from: before.completionCriterion as TaskCompletionCriterionValue,
+        to: completionCriterion,
+      };
+      const reason = normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason);
+      if (reason == null) throw new BadRequestException(taskCriterionChangeRefusalBody(change));
+      criterionChangeRecord = formatTaskCriterionChange({ ...change, reason });
+    }
+    // Attaching a verifier role drops audit prose that has stopped describing the row (see the
+    // write below). A stored change record never stops describing it, so it is not that prose.
+    const clearsStaleOverrideReason = attachesVerifier
+      && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -6930,8 +6965,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,
       // A role declaration is not a criterion exception.  In particular, attaching an old task
       // must not preserve a EVIDENCE_JUDGMENT override reason that no longer describes the row.
+      //
+      // A change record is the exception to that clear, in both directions. One written by the
+      // door above outranks it, because it is the sentence that describes the row this write
+      // leaves behind; and one already stored survives it, because attaching a role is not a
+      // licence to erase how this task came to carry the criterion it has.
       completionCriterionOverrideReason:
-        attachesVerifier ? null : undefined,
+        criterionChangeRecord ?? (clearsStaleOverrideReason ? null : undefined),
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than

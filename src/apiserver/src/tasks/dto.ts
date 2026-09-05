@@ -541,6 +541,16 @@ export class UpdateTaskDto {
   // choice rather than clearing the field or escalating after another criterion failed.
   @IsOptional() @IsIn(TASK_COMPLETION_CRITERION_VALUES)
   completionCriterion?: TaskCompletionCriterionValue;
+  // Why this edit CHANGES the criterion. Required exactly when the write lands on a different
+  // criterion than the one stored, and read on this door for nothing else: an edit that leaves the
+  // criterion where it is has no change to explain, so a reason sent with one is not stored.
+  //
+  // Rewriting what counts as done is the cheapest way around a completion decision, and until this
+  // field reached the edit door it cost nothing and left nothing (`updatedAt` only). It is still
+  // allowed — a mis-declared criterion is common, and one that cannot be corrected is a deadlock —
+  // but it is now recorded, beside the criterion being left behind.
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
+  completionCriterionOverrideReason?: string;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // Three-state like dueDate above: omit to keep the current schedule, null to cancel it, an ISO
   // instant to (re)schedule. Rescheduling a task whose dispatch is in flight is safe — the

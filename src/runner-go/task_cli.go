@@ -385,6 +385,11 @@ Options:
   --clear-criterion-key       Take the declaration back; the task stays, the relation goes
   --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT
                               Replace the task's one normal completion criterion
+  --completion-criterion-override-reason TEXT
+                              Why this edit CHANGES that criterion. Required whenever the write
+                              lands on a different criterion than the task already carries,
+                              including when the change is derived rather than named. Stored
+                              beside the criterion being left behind and read back by task get
   --acceptance-command SHELL  Replace the one EXECUTABLE command
   --acceptance-expected-exit-code N
                               Replace the exit code that mechanically derives DONE
@@ -1587,6 +1592,7 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	criterionKey := fs.String("criterion-key", "", "declare or correct which of the project's acceptance criteria this task serves")
 	clearCriterionKey := fs.Bool("clear-criterion-key", false, "take back this task's criterion declaration")
 	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
+	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this edit changes the completion criterion")
 	acceptanceCommand := fs.String("acceptance-command", "", "replace the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
 	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "replace the wall-clock budget for that command")
@@ -1823,6 +1829,15 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if flagWasSet(fs, "completion-criterion") {
 		body["completionCriterion"] = *completionCriterion
+	}
+	// Refused locally when it is blank, for the same reason --criterion-key is: an unset shell
+	// variable arrives as "" and the server would refuse it anyway, so the terminal says which
+	// flag was empty instead of returning a request the caller has to decode.
+	if flagWasSet(fs, "completion-criterion-override-reason") {
+		if strings.TrimSpace(*completionCriterionOverrideReason) == "" {
+			return fmt.Errorf("--completion-criterion-override-reason cannot be blank")
+		}
+		body["completionCriterionOverrideReason"] = strings.TrimSpace(*completionCriterionOverrideReason)
 	}
 	if *clearExecutableAcceptance {
 		body["acceptanceCommand"] = nil
@@ -2326,6 +2341,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
+				"--completion-criterion-override-reason <text> (completionCriterionOverrideReason: non-blank reason for CHANGING the criterion, required whenever the write lands on a different one than the task carries — including a change derived from --acceptance-command rather than named; stored beside the criterion left behind)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
 				"--acceptance-timeout-seconds <n> | --clear-acceptance-timeout (acceptanceTimeoutSeconds: replace that command's wall-clock budget, or return it to the two-minute default)",
