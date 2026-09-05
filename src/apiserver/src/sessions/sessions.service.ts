@@ -836,7 +836,10 @@ export class SessionsService {
     // and cascade-delete with the session.
     if (attachmentIds.length > 0) {
       await this.prisma.attachment.updateMany({
-        where: { id: { in: attachmentIds }, sessionId: null, turnId: null },
+        // `taskId: null` for the same reason the validator carries it, but here it is the
+        // CONCURRENT case: an upload that became a task's input between that check and this write
+        // is skipped, leaving it as the task's, rather than raising 0241's CHECK mid-create.
+        where: { id: { in: attachmentIds }, sessionId: null, turnId: null, taskId: null },
         data: { sessionId: session.id },
       });
     }
@@ -3392,10 +3395,16 @@ export class SessionsService {
   }
 
   /**
-   * Verify the given attachment ids are the caller's and still unscoped (no session, no
-   * turn) — i.e. fresh uploads made on the compose page before any session existed. Returns
+   * Verify the given attachment ids are the caller's and still unscoped (no session, no turn and
+   * no task) — i.e. fresh uploads made on the compose page before any session existed. Returns
    * the de-duped ids. Throws on any unknown/foreign/already-scoped id so a bad reference is
    * rejected BEFORE the session is created. Used by create() for the seeded first turn.
+   *
+   * `taskId: null` is part of "unscoped" and not a redundancy: a task's INPUT template also has no
+   * session and no turn, so without it a caller naming one would pass this check and be refused by
+   * migration 0241's CHECK instead — a 500 with a constraint name in it, for a request whose real
+   * answer is "that file belongs to a task". The template must never be consumable this way: it is
+   * copied per dispatch precisely so that no one run can take it away from the task.
    */
   private async assertScopableAttachments(
     ownerId: string,
@@ -3404,7 +3413,7 @@ export class SessionsService {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
     const found = await this.prisma.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId: null, turnId: null },
+      where: { id: { in: ids }, ownerId, sessionId: null, turnId: null, taskId: null },
       select: { id: true },
     });
     if (found.length !== ids.length) {

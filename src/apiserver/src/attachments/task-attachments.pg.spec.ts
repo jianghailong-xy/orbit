@@ -23,6 +23,9 @@ const MIGRATION = readFileSync(path.resolve(
 const TASKS_SERVICE = readFileSync(path.resolve(
   __dirname, '../..', 'src/tasks/tasks.service.ts',
 ), 'utf8');
+const SESSIONS_SERVICE = readFileSync(path.resolve(
+  __dirname, '../..', 'src/sessions/sessions.service.ts',
+), 'utf8');
 
 test('0241 gives an attachment a task scope that cascades and excludes the other two', () => {
   assert.match(MIGRATION, /ALTER TABLE "attachment" ADD COLUMN "task_id" UUID/);
@@ -52,6 +55,23 @@ test('both dispatch paths copy the task inputs into the run', () => {
   // COPIES, never moves — the whole point. An implementation that reassigned `taskId` would empty
   // the task on its first run, so the template must never appear on the left of a write here.
   assert.doesNotMatch(TASKS_SERVICE, /data: \{ taskId: null \}/);
+});
+
+/**
+ * The delivery door's idea of "unscoped" has to include the task scope, or a task's template is
+ * consumable as a compose-page upload — which 0241's CHECK then refuses as a 500 rather than the
+ * 400 the request deserves. Both spots are pinned: the validator that answers the caller, and the
+ * adoption that races it.
+ */
+test('a session upload cannot claim a row that belongs to a task', () => {
+  assert.match(
+    SESSIONS_SERVICE,
+    /where: \{ id: \{ in: ids \}, ownerId, sessionId: null, turnId: null, taskId: null \}/,
+  );
+  assert.match(
+    SESSIONS_SERVICE,
+    /where: \{ id: \{ in: attachmentIds \}, sessionId: null, turnId: null, taskId: null \}/,
+  );
 });
 
 suite('a task keeps its inputs across runs, and a copy cannot also be a template', { timeout: 60_000 }, async (t) => {
@@ -129,6 +149,18 @@ suite('a task keeps its inputs across runs, and a copy cannot also be a template
       ),
       /attachment_scope_exclusive/,
     );
+  });
+
+  await t.test('a task template cannot be consumed as a session upload', async () => {
+    // The template has no session and no turn, which is what "unscoped" used to mean — so the
+    // delivery door let it through and migration 0241's CHECK refused the adoption, turning a
+    // wrong reference into a 500. The task scope is now part of that question, and the row a
+    // dispatch must copy cannot be handed to one conversation instead.
+    const stillTemplate = await db.attachment.findMany({
+      where: { id: template.id, sessionId: null, turnId: null, taskId: null },
+      select: { id: true },
+    });
+    assert.deepEqual(stillTemplate, [], 'a task input must not read as an unscoped upload');
   });
 
   await t.test('deleting the task takes its inputs with it', async () => {
