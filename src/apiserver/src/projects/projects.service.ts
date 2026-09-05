@@ -72,6 +72,7 @@ import {
   type CriterionSatisfaction,
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
+import { type CriterionLanding, readCriterionLanding } from './project-criterion-landing';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -1302,6 +1303,13 @@ export class ProjectsService {
    * judges what a criterion says, and this read remains the only consumer of the answer. It is
    * served, not acted on: `project.status = 'DONE'` is not gated by it here or anywhere, which is
    * the decision 0223 and 0229 recorded and is not quietly reopened by making the answer visible.
+   *
+   * `landing` is a FOURTH fact beside those, and the one that keeps `satisfied` honest: settling
+   * happens in a task session's own worktree and says nothing about the default branch, so a
+   * criterion can read satisfied while the code implementing it is on nobody's `main`. It is
+   * additive — no value of it moves `satisfied` — and it is three-valued for the reason its module
+   * gives at length, of which the short version is that "no receipt" means "no evidence", never
+   * "not merged".
    */
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
@@ -1313,7 +1321,7 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, satisfaction] = await Promise.all([
+    const [byStatus, satisfaction, landing] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId: id },
@@ -1322,8 +1330,15 @@ export class ProjectsService {
       // One more query, not one per criterion: the derivation is a single findMany whose nested
       // select carries every serving task's settlement facts with it.
       readCriterionSatisfaction(this.prisma, ownerId, id),
+      // And one more of the same shape for the landing lane, issued in the SAME batch as the read
+      // above rather than per criterion or per task. It is a second call because the lane is bolted
+      // on beside the derivation instead of inside it, which is what keeps the three clauses out of
+      // reach of it; its cost is one findMany whose nested select carries every serving task's
+      // merge receipts, so it is bounded by this project's criteria and not by its work.
+      readCriterionLanding(this.prisma, ownerId, id),
     ]);
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
+    const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
     const stated = withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
@@ -1333,6 +1348,11 @@ export class ProjectsService {
       acceptanceCriteriaItems: stated.acceptanceCriteriaItems.map((item) => ({
         ...item,
         ...criterionAnswer(answered.get(item.id)),
+        // Always present, where `satisfied` is omitted for a criterion the derivation did not
+        // answer for. The two are not inconsistent: an omitted `satisfied` avoids INVENTING a
+        // claim, and UNKNOWN is the absence of one — the honest answer for a criterion this lane
+        // has no receipt about is the same as for one it never saw.
+        landing: landed.get(item.id) ?? ('UNKNOWN' satisfies CriterionLanding),
       })),
     };
   }

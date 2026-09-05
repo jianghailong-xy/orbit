@@ -351,10 +351,11 @@ test('the detail read reports progress without loading the project’s tasks', a
       },
       findMany: async () => assert.fail('the detail read must not load the project’s tasks'),
     },
-    // A project with no stated criteria has nothing for the satisfaction read to answer about.
-    // It is still asked, and it is asked once: the serving work it folds arrives as a nested
-    // select on this one query rather than as a task read, which is why the refusal above still
-    // holds with it in place.
+    // A project with no stated criteria has nothing for the satisfaction read, or for the landing
+    // lane beside it, to answer about. Both are still asked, and both ask THIS delegate: the
+    // serving work each folds — its settlement facts, and its merge receipts — arrives as a nested
+    // select on a criterion query rather than as a task read, which is why the refusal above still
+    // holds with them in place.
     projectAcceptanceCriterionDefinition: { findMany: async () => [] },
   });
 
@@ -445,6 +446,11 @@ test('the detail item is the authored declaration, with no derived verdict besid
     key: criterionKeyOf(CRITERION_A_ID),
     satisfied: false,
     unmet: [{ clause: 'NO_WORK_SERVES_IT', heldUpBy: [] }],
+    // And whether that work is on the default branch, which is a different question about the
+    // same work and never an input to the one above it. Nobody serves this criterion, so there is
+    // no receipt to have read: UNKNOWN, which is the absence of evidence and not a claim that
+    // nothing merged.
+    landing: 'UNKNOWN',
   });
   assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
 });
