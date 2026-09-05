@@ -14,8 +14,13 @@ import {
 } from './ProjectAcceptanceCard';
 
 // Migration 0229 removed the project acceptance judgment, so this card no longer draws a verdict
-// per row, a pass ratio or a meter: there is nothing that concludes anything about a criterion.
-// What it draws is the declaration, and that is what is asserted here.
+// per row, a pass ratio or a meter: there is nothing that CONCLUDES anything about a criterion.
+//
+// What a row now says beside its declaration is a different kind of fact and the assertions keep
+// the two apart. `satisfied`, `unmet` and `landing` are COMPUTED by the project read out of the
+// tasks filed under a criterion — nobody writes them, nobody can overrule them — so the drawing
+// is asserted to be words about that work, and the shapes 0229 deleted are asserted to stay gone:
+// no ratio, no meter, no per-row verdict rail, no badge reading "Unjudged".
 //
 // A phone row no longer clamps that declaration to three lines behind a per-row chevron either
 // (2026-09-03), so there is no rendered overflow left to measure and no ResizeObserver to stub:
@@ -149,6 +154,12 @@ function accessibleText(row: string): string {
   return `${labels} ${text}`.replace(/\s+/g, ' ').trim();
 }
 
+/** The markup of each unmet reason in a row, split on the reason marker so that a task named
+ *  under the second reason cannot pass for one named under the first. */
+function unmetReasons(row: string): string[] {
+  return row.split('class="acceptance-unmet-reason"').slice(1);
+}
+
 /** How many criteria rows the card drew. */
 function rowCount(html: string): number {
   return (html.match(/class="acceptance-row(?: |")/g) ?? []).length;
@@ -161,14 +172,18 @@ async function click(element: HTMLElement): Promise<void> {
 // The first antd render initializes its jsdom style registry and can cross Vitest's 5s default on
 // a loaded CI worker; the assertions themselves remain synchronous and bounded.
 describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
-  it('heads the card with what it is, not with a score', () => {
+  it('heads the card with what it is, and says where a row\'s answer comes from', () => {
     const qc = client();
     seed(qc, FIVE);
 
     const html = paint(qc);
     expect(html).toContain('Acceptance criteria');
     expect(html).toContain('5 criteria stated');
-    expect(html).toContain('Nothing in Orbit judges them');
+    // The head used to say only that nothing judges these criteria, which was the whole of what
+    // was true. A row now carries an answer, so the head has to say where that answer comes from:
+    // it is read off the work, and the criterion's own text is still judged by nobody.
+    expect(html).toContain('read off the work filed under it');
+    expect(html).toContain('nothing in Orbit judges the criteria themselves');
     // The two readings a removed judgment would still have printed. Neither may come back: a
     // constant "0 / 5" and a row of "Unjudged" badges both read as a result somebody reached.
     expect(html).not.toContain('/ 5 PASS');
@@ -287,6 +302,119 @@ describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
     const html = paint(qc);
     expect(html).toContain('Task completion is a process measure');
     expect(html).toContain('nothing evaluates these criteria');
+  });
+});
+
+// What a row says about the WORK filed under its criterion. Every field below is computed by the
+// project read — nobody writes `satisfied`, `unmet` or `landing`, and nobody can overrule them —
+// which is the distinction these cases exist to keep visible: the card draws a derivation, not
+// the judgment 0229 removed.
+const MET_CRITERION: AcceptanceCriterionItem = {
+  ...criterion(1, 'The project read serves each criterion its satisfaction'),
+  satisfied: true,
+  unmet: [],
+  landing: 'LANDED',
+};
+
+const HELD_UP_CRITERION: AcceptanceCriterionItem = {
+  ...criterion(2, 'A reader can see what is holding a criterion open'),
+  satisfied: false,
+  landing: 'UNKNOWN',
+  unmet: [
+    {
+      clause: 'SERVING_WORK_UNSETTLED',
+      heldUpBy: [
+        { taskId: 't-1', title: 'Carry the derivation onto the project read', requiredAction: 'RUN_ACCEPTANCE_COMMAND' },
+        { taskId: 't-2', title: 'Prove the read has no N+1', requiredAction: 'OBTAIN_INDEPENDENT_VERIFICATION_PASS' },
+      ],
+    },
+    {
+      clause: 'DECLARATION_STALE',
+      heldUpBy: [
+        { taskId: 't-3', title: 'Reword the landing lane', requiredAction: 'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION' },
+      ],
+    },
+  ],
+};
+
+const DERIVED = [MET_CRITERION, HELD_UP_CRITERION];
+
+describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 }, () => {
+  it('says a criterion its work has met, and says it about the work', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const row = rowFor(paint(qc), 'The project read serves each criterion its satisfaction');
+    expect(row).toContain('Met by its work');
+    // Not a colour, not an icon: a reader who cannot tell a green pill from a red one is told the
+    // same thing as everybody else.
+    expect(accessibleText(withoutColour(row))).toContain('Met by its work');
+    expect(row).not.toContain('acceptance-unmet');
+  });
+
+  it('gives an unmet criterion every reason, and each reason the work holding it open', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const row = rowFor(paint(qc), 'A reader can see what is holding a criterion open');
+    expect(row).toContain('Not met by its work');
+
+    // Both reasons, not the first one: a reader who fixes what they were shown and comes back for
+    // the next has been sent round the loop twice.
+    const reasons = unmetReasons(row);
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toContain('has not settled by the criterion that work declared');
+    expect(reasons[1]).toContain('filed against an earlier wording of this criterion');
+
+    // Each reason names ITS OWN tasks, and each named task carries what would settle it. A title
+    // alone says a red dot has a name; `requiredAction` says who does what next.
+    expect(reasons[0]).toContain('Carry the derivation onto the project read');
+    expect(reasons[0]).toContain('RUN_ACCEPTANCE_COMMAND');
+    expect(reasons[0]).toContain('Prove the read has no N+1');
+    expect(reasons[0]).toContain('OBTAIN_INDEPENDENT_VERIFICATION_PASS');
+    expect(reasons[1]).toContain('Reword the landing lane');
+    expect(reasons[1]).toContain('SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION');
+    // Grouped, not run together: the stale task is under the stale clause and nowhere else.
+    expect(reasons[0]).not.toContain('Reword the landing lane');
+  });
+
+  it('draws a landing that is unknown as unknown, never as unlanded', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const html = paint(qc);
+    expect(rowFor(html, 'The project read serves each criterion its satisfaction'))
+      .toContain('Landed on the default branch');
+    const unknown = rowFor(html, 'A reader can see what is holding a criterion open');
+    expect(unknown).toContain('Landing unknown');
+    expect(unknown).not.toContain('Landed on the default branch');
+    // The value the lane refuses to produce may not be invented by the drawing either: no receipt
+    // is no evidence, and work lands without leaving one.
+    for (const lie of ['Not landed', 'NOT_LANDED', 'not merged', 'Unmerged']) {
+      expect(html).not.toContain(lie);
+    }
+  });
+
+  it('reports the derivation without any of the shapes 0229 deleted', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const html = paint(qc);
+    expect(html).not.toContain('Unjudged');
+    expect(html).not.toContain('acceptance-meter');
+    expect(html).not.toContain('acceptance-row-verdict');
+    // And no ratio anywhere: "1 / 2 met" is the pass count that was removed, under a new name.
+    expect(html).not.toMatch(/\d+\s*(?:\/|of)\s*\d+/);
+  });
+
+  it('draws nothing for a criterion the read did not answer for', () => {
+    const qc = client();
+    seed(qc, [criterion(1, 'The runner reconnects after a restart')]);
+
+    const html = paint(qc);
+    expect(html).toContain('The runner reconnects after a restart');
+    expect(html).not.toContain('acceptance-work');
+    expect(html).not.toContain('Met by its work');
   });
 });
 

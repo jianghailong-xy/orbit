@@ -10234,6 +10234,58 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
   line-height: 1.66;
 }
+/* What the read says about a criterion's work, under the criterion itself. Words at 12px, not a
+   pill and not a rail: 0229 deleted a per-row verdict and a head meter, and this is a different
+   kind of thing — computed from task rows, written by nobody — so it must not arrive dressed as
+   the score that was removed. No hue carries meaning here either; the nested edge below is the
+   same subtle border every indented block on the page uses. */
+.acceptance-work {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.acceptance-work-state {
+  color: var(--text-2);
+}
+.acceptance-landing::before {
+  content: '· ';
+  color: var(--text-4);
+}
+.acceptance-unmet {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.acceptance-unmet-reason + .acceptance-unmet-reason {
+  margin-top: 6px;
+}
+.acceptance-unmet-clause {
+  color: var(--text-2);
+}
+/* One task holding a reason open, and what would settle it. Indented under its reason so a
+   criterion with two reasons reads as two groups rather than one run of names. */
+.acceptance-held-up {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 3px;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--border-subtle);
+  color: var(--text-3);
+}
+.acceptance-held-up-title {
+  color: var(--text-2);
+}
+.acceptance-held-up-action .ant-typography code {
+  margin-inline: 0;
+  font-size: 11px;
+}
 .acceptance-more-meta.ant-typography {
   margin-inline-start: 10px;
   font-size: 12px;

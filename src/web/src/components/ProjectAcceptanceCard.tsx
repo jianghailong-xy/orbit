@@ -16,21 +16,67 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  *
  * Until 2026-09-03 it also drew a verdict per row, a pass ratio and a meter. Migration 0229
  * removed the project acceptance judgment on the account owner's instruction, so there is nothing
- * left that concludes anything about a criterion, and this card says only what is true: here is
- * what the project is for, stated one condition at a time. A badge reading "Unjudged" on every row
- * forever would be a score dressed as a status.
+ * left that concludes anything about a criterion. A badge reading "Unjudged" on every row forever
+ * would be a score dressed as a status, which is why that whole rail went.
+ *
+ * WHAT A ROW SAYS NOW, AND WHY IT IS NOT THAT COMING BACK
+ * ------------------------------------------------------
+ * Each row also reports whether the WORK filed under its criterion has met it, and where that
+ * work is. NO PRINCIPAL WROTE ANY OF IT. There is no field anybody sets, no decision anybody
+ * records and nothing to overrule: `satisfied`, `unmet` and `landing` are COMPUTED by the project
+ * read, out of which tasks declare they serve this criterion, whether each of those tasks has
+ * settled by the criterion IT declared, and whether a merge receipt exists for that work. Delete
+ * the tasks and the answer changes; nobody has an opinion to revise.
+ *
+ * That distinction is invisible on a screen, so the drawing is what has to carry it, and the rules
+ * are the ones 0229's removal implies:
+ *
+ *  - No ratio. Not in the head, not anywhere: "3 / 5 met" is the pass count under a new name.
+ *  - No meter, no bar, no gauge.
+ *  - No per-row badge that reads as a score. A row states its condition and then says, in words,
+ *    what its work has done — never a pill a reader scans for a colour.
+ *  - Nothing here is a verdict on what a criterion SAYS. The text is never judged; only the work
+ *    filed under it is read, and the note under the list keeps saying so.
+ *
+ * `landing` is the fourth fact and the one most easily drawn wrong: it is not a boolean. LANDED
+ * means a merge receipt puts the work on the default branch, and UNKNOWN means no receipt says
+ * anything either way — never "not landed", because work lands without leaving a receipt. Drawing
+ * UNKNOWN as a red "not merged" would be a false red invented by this file.
  *
  * THIS IS THE PROJECT PAGE'S ONE HOME FOR THE CRITERIA. It used to render them twice, once as the
  * authored legacy `acceptanceCriteria` text under its own heading and again here; 0229 removed
  * that text column too, and the per-item rows are the whole of it.
  */
 
-/** One stated criterion, as the project document reports it. */
+/** One task standing between a criterion and its work having met it, and the one thing that
+ *  would move it. `requiredAction` is the code every completion refusal already quotes, so the
+ *  reader is told what settles that task rather than only that it is unfinished. */
+export interface CriterionBlockingTask {
+  taskId: string;
+  title: string;
+  requiredAction: string;
+}
+
+/** One clause that does not hold, and the work holding it open. `heldUpBy` is empty for the
+ *  clause whose whole content is that there is nobody to name. */
+export interface CriterionUnmetReason {
+  clause: string;
+  heldUpBy?: CriterionBlockingTask[];
+}
+
+/** One stated criterion, as the project document reports it.
+ *
+ *  Everything below `revision` is DERIVED by the read rather than authored — see the card comment
+ *  — and every one of them is optional, because a criterion the read did not answer for arrives
+ *  without them, and a card that invented a state for it would be inventing the answer. */
 export interface AcceptanceCriterionItem {
   id: string;
   ordinal: number;
   text: string;
   revision: number;
+  satisfied?: boolean;
+  unmet?: CriterionUnmetReason[];
+  landing?: string;
 }
 
 /** The parts of the project detail document this card reads. */
@@ -61,11 +107,80 @@ export const ACCEPTANCE_PHONE_QUERY = '(max-width: 560px)';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** Said about the WORK, never about the criterion: the read folds task rows, and "met" is those
+ *  rows agreeing rather than anybody's finding. Words in the row's own type size — a pill here
+ *  would be the badge 0229 deleted, wearing a derivation's clothes. */
+const MET = 'Met by its work';
+const NOT_MET = 'Not met by its work';
+
+/** Each clause as a sentence. The codes are the read's vocabulary and a person looking at a
+ *  project page has not agreed to learn it. An unrecognised clause prints as itself rather than
+ *  vanishing: a browser held open across a deploy is how that happens, and dropping a reason
+ *  would under-report exactly when there is more to say. */
+const UNMET_CLAUSE: Record<string, string> = {
+  NO_WORK_SERVES_IT: 'No task says it serves this criterion.',
+  SERVING_WORK_UNSETTLED: 'Work filed under it has not settled by the criterion that work declared.',
+  DECLARATION_STALE: 'Work here was filed against an earlier wording of this criterion.',
+};
+
+/** The landing lane, which has no third value to print. UNKNOWN is the ABSENCE of evidence — work
+ *  lands without leaving a receipt — so it is drawn as not knowing, and never as not landed. */
+const LANDING: Record<string, string> = {
+  LANDED: 'Landed on the default branch',
+  UNKNOWN: 'Landing unknown — no merge receipt either way',
+};
+
 /** A criterion is one LINE of the authored field, so it is rendered as inline Markdown: emphasis,
  *  code spans and links come out as themselves, and the block elements a stray `## heading` line
  *  would otherwise produce are flattened, because a row is one row whatever the author typed. */
 const Flat = ({ children }: { children?: ReactNode }) => <>{children}</>;
 const INLINE_ONLY = { p: Flat, h1: Flat, h2: Flat, h3: Flat, h4: Flat, h5: Flat, h6: Flat };
+
+/**
+ * What the read says about one criterion's work: whether it has met the criterion, where that work
+ * is, and, when it has not, every reason it has not — each naming the tasks holding it open and
+ * what would settle each of them.
+ *
+ * Every unmet reason is drawn, not the first: a reader who fixes the one they were shown and comes
+ * back to the next has been sent round twice. And a criterion the read did not answer for draws
+ * nothing at all, which is also what an older server's document renders as.
+ */
+function CriterionWork({ criterion }: { criterion: AcceptanceCriterionItem }) {
+  if (criterion.satisfied === undefined) return null;
+  const unmet = criterion.unmet ?? [];
+  return (
+    <>
+      <div className="acceptance-work">
+        <span className="acceptance-work-state">{criterion.satisfied ? MET : NOT_MET}</span>
+        {criterion.landing === undefined ? null : (
+          <span className="acceptance-landing">
+            {LANDING[criterion.landing] ?? criterion.landing}
+          </span>
+        )}
+      </div>
+      {unmet.length === 0 ? null : (
+        <div className="acceptance-unmet">
+          {unmet.map((reason) => (
+            <div key={reason.clause} className="acceptance-unmet-reason">
+              <div className="acceptance-unmet-clause">
+                {UNMET_CLAUSE[reason.clause] ?? reason.clause}
+              </div>
+              {(reason.heldUpBy ?? []).map((task) => (
+                <div key={task.taskId} className="acceptance-held-up">
+                  <span className="acceptance-held-up-title">{task.title}</span>
+                  <span className="acceptance-held-up-action">
+                    {'Next: '}
+                    <Typography.Text code>{task.requiredAction}</Typography.Text>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 /** Every stated criterion, in the order they were stated. */
 export function AcceptanceCriteriaList({
@@ -80,11 +195,12 @@ export function AcceptanceCriteriaList({
       {criteria.map((c) => (
         <li key={c.id} className="acceptance-row">
           <span className="acceptance-row-no">{c.ordinal}</span>
-          <span className="acceptance-row-text">
+          <div className="acceptance-row-text">
             <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
               {c.text}
             </Markdown>
-          </span>
+            <CriterionWork criterion={c} />
+          </div>
         </li>
       ))}
     </ul>
@@ -98,7 +214,8 @@ function OutcomeNote() {
     <div className="acceptance-note">
       <span className="acceptance-note-wide">
         Task completion is a process measure, and nothing evaluates these criteria — a project can
-        finish every task and still meet none of the conditions it was stated for.
+        finish every task and still meet none of the conditions it was stated for. What a row says
+        about a criterion is computed from the work filed under it, not a judgment anybody made.
       </span>
       <span className="acceptance-note-compact">
         Tasks track process · Nothing judges these criteria.
@@ -178,7 +295,8 @@ export function ProjectAcceptanceCard({
       ) : (
         <>
           <div className="acceptance-standing">
-            {`${plural(criteria.length, 'criterion', 'criteria')} stated. Nothing in Orbit judges them.`}
+            {`${plural(criteria.length, 'criterion', 'criteria')} stated. Whether one is met is `
+              + 'read off the work filed under it; nothing in Orbit judges the criteria themselves.'}
           </div>
           <AcceptanceCriteriaList id={criteriaListId} criteria={shown} />
           {hasCriteriaDisclosure ? (
