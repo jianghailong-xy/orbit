@@ -110,6 +110,31 @@ func (r *deliverySession) eventsOfType(eventType string) []RunEvent {
 	return out
 }
 
+// engineRead reports whether the CLI has read the frame carrying `text` off its stdin. It is
+// the only signal the harness has that a turn is RUNNING rather than merely handed over: a
+// frame is written asynchronously, so a turn is accepted, its slot committed and its delivery
+// reported while its bytes are still on their way to the engine.
+//
+// Read raw rather than through Stdin(), which fatals on a malformed line: this runs on the
+// inbox server's goroutine, where a t.Fatal would not fail the test.
+func (r *deliverySession) engineRead(text string) bool {
+	for _, line := range r.fake.readLines("stdin.jsonl") {
+		var frame map[string]interface{}
+		if json.Unmarshal([]byte(line), &frame) != nil {
+			continue // a line still being appended: it will be whole on the next poll
+		}
+		message, _ := frame["message"].(map[string]interface{})
+		content, _ := message["content"].([]interface{})
+		for _, block := range content {
+			b, _ := block.(map[string]interface{})
+			if b["type"] == "text" && b["text"] == text {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (r *deliverySession) turnResult(turnID string) *TurnCompleteRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -138,6 +163,13 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 	// not have.
 	var queueMu sync.Mutex
 	queued := append([]scriptedTurn(nil), turns...)
+	// What each scripted turn's frame will say, so afterEngineRead below can recognise the
+	// moment the engine read it. Built here rather than looked up in the gate because the
+	// gate runs on the server's goroutine.
+	frameText := map[string]string{}
+	for _, s := range turns {
+		frameText[s.turn.TurnID] = s.turn.Content
+	}
 	inFlight := ""
 	nextTurn := func() (RunInboxResponse, bool) {
 		queueMu.Lock()
@@ -151,6 +183,9 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 		next := queued[0]
 		if next.after != "" && run.turnResult(next.after) == nil {
 			return RunInboxResponse{}, false // it is not this turn's moment yet
+		}
+		if next.afterEngineRead != "" && !run.engineRead(frameText[next.afterEngineRead]) {
+			return RunInboxResponse{}, false // the turn it must arrive behind has not started
 		}
 		switch {
 		case next.ungated:
@@ -254,6 +289,13 @@ type scriptedTurn struct {
 	// what the server WILL hand over; this says when the runner gets round to reading it,
 	// which for a control turn aimed at a turn that has just ended is the whole question.
 	after string
+	// afterEngineRead holds the turn back until the ENGINE has read the named turn's frame.
+	// Neither of the two rules above says that much: the in-flight slot is taken when the
+	// server hands a turn over, and `after` waits for a turn to end — but a turn whose frame
+	// is still in the write queue is one the runner will refuse a steer against for having
+	// nothing to steer. A test whose assertions are about which turn was running has to wait
+	// for this signal, not for either of those. Empty leaves the turn ungated by it.
+	afterEngineRead string
 }
 
 func messageTurn(id, text string) scriptedTurn {
@@ -595,6 +637,14 @@ func TestSessionCurrentWorkSteerTargetFenceStopsResultBeforeReplay(t *testing.T)
 // A delayed inbox response can be selected while A is live but reach the runner after A ended and
 // B started. The local Orbit target check is the second fence after the server SQL predicate.
 func TestSessionCurrentWorkSteerTargetFenceRejectsARolloverIntoB(t *testing.T) {
+	// The steer is held until the engine has actually read B's frame, which is the premise of
+	// everything below: B is the running turn, and the steer names A. Holding it only until the
+	// server hands B over is not enough — B's bytes are still in the write queue at that point,
+	// and a steer let out in that window is refused for having NOTHING to steer. That refusal
+	// settles the steer identically, so `until` fires, the harness cancels the session, and B's
+	// frame is never read: one frame, and a test that checked a fence it never reached.
+	late := currentWorkSteerTurn("late-current-work", "turn-A", "A only, too late")
+	late.afterEngineRead = "turn-B"
 	run := runDeliverySession(t,
 		[]fakeStep{
 			{Await: "user"},
@@ -608,13 +658,27 @@ func TestSessionCurrentWorkSteerTargetFenceRejectsARolloverIntoB(t *testing.T) {
 		[]scriptedTurn{
 			messageTurn("turn-A", "do A"),
 			messageTurn("turn-B", "do B"),
-			currentWorkSteerTurn("late-current-work", "turn-A", "A only, too late"),
+			late,
 		},
 		func(r *deliverySession) bool { return r.turnResult("late-current-work") != nil })
 
 	frames := run.fake.Stdin()
 	if len(frames) != 2 {
 		t.Fatalf("rollover wrote %d frames, want only A and B: %v", len(frames), frames)
+	}
+	// WHY it was refused, not just that it was. The runner logs the same line for either
+	// refusal and settles the steer the same way, so a test that only asks whether the steer
+	// failed keeps passing while checking nothing: "nothing was running" is the answer this
+	// test must never accept, because the fence it exists for is the target comparison.
+	refusal := ""
+	for _, report := range run.deliveryReports() {
+		if report["turnId"] == "late-current-work" && report["delivery"] == string(deliveryFailed) {
+			refusal, _ = report["reason"].(string)
+		}
+	}
+	if refusal != errCurrentWorkTargetEnded.Error() {
+		t.Fatalf("late CURRENT_WORK was refused as %q, want the target fence %q",
+			refusal, errCurrentWorkTargetEnded)
 	}
 	if got := run.turnResult("late-current-work"); got == nil || got.Status != stFailed {
 		t.Fatalf("late CURRENT_WORK settled as %+v, want visible failure", got)

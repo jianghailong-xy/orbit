@@ -889,10 +889,23 @@ func TestRunOpenCodeTurnInterruptKillsToolProcessTree(t *testing.T) {
 	dir := t.TempDir()
 	readyPath := filepath.Join(dir, "ready")
 	leakPath := filepath.Join(dir, "leaked")
+	firePath := filepath.Join(dir, "fire")
+	// The escaped tool child leaks when the TEST lights its fuse, not on a timer of its own.
+	// A timer would make this a race against the kill rather than a test of it:
+	// terminateSessionProcessTree finds a child that left the process group by shelling out to
+	// `ps -A`, twice, and that costs 70-200ms per call on a loaded host — so a child on a
+	// fixed fuse decides this test by how busy the machine is. Lit after the interrupt has
+	// returned, the marker's absence means the child was killed, not that it was slow.
+	//
+	// The loop is bounded so a survivor of a genuine regression cannot spin forever, and its
+	// output goes to /dev/null so it cannot hold the turn's stdout pipe open and turn that
+	// regression into a hang instead of the failure below.
+	fuse := `i=0; while [ ! -f "$FIRE_PATH" ] && [ $i -lt 3000 ]; do i=$((i+1)); sleep 0.02; done
+if [ -f "$FIRE_PATH" ]; then printf leaked > "$LEAK_PATH"; fi`
 	script := `if command -v setsid >/dev/null 2>&1; then
-  setsid sh -c 'sleep 0.4; printf leaked > "$LEAK_PATH"' &
+  setsid sh -c '` + fuse + `' >/dev/null 2>&1 &
 else
-  ( sleep 0.4; printf leaked > "$LEAK_PATH" ) &
+  ( ` + fuse + ` ) >/dev/null 2>&1 &
 fi
 printf ready > "$READY_PATH"
 wait`
@@ -903,6 +916,7 @@ wait`
 		Agent: AgentExecConfig{Env: map[string]string{
 			"READY_PATH": readyPath,
 			"LEAK_PATH":  leakPath,
+			"FIRE_PATH":  firePath,
 		}},
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -931,9 +945,14 @@ wait`
 		t.Fatal("interrupted OpenCode process did not exit")
 	}
 
-	// Without process-group cancellation the provider shell exits, but its tool
-	// child survives long enough to write this marker.
-	time.Sleep(600 * time.Millisecond)
+	// The turn has returned, so the kill is over: cmd.Wait does not return until its cancel
+	// hook has, and waitSessionProcessTree sweeps the tree once more after it. Only now is the
+	// child given something to leak on. Without process-group cancellation the provider shell
+	// is gone but its escaped tool child is still there to see the fuse and write the marker.
+	if err := os.WriteFile(firePath, []byte("go"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
 	if _, err := os.Stat(leakPath); !os.IsNotExist(err) {
 		t.Fatalf("tool child survived interrupt; leak stat error = %v", err)
 	}
