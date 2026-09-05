@@ -160,28 +160,31 @@ test('an ordinary turn still settles the session, so the steer branch is not a w
   });
 });
 
-test('lost dequeue response then target completion terminalizes IN_FLIGHT CURRENT_WORK durably', async () => {
+test('lost dequeue response then target completion hands IN_FLIGHT CURRENT_WORK back to the queue', async () => {
+  // The steer never crossed the engine-read boundary — no ACK arrived, and the target it was
+  // aimed at is over. Its content is still the only thing the person asked for, so it becomes the
+  // next turn rather than a receipt they can answer only by typing it again.
   const h = harness('message', true);
 
   await complete(h, 'SUCCEEDED');
 
-  const retired = h.turnWrites.find((write) =>
+  const requeued = h.turnWrites.find((write) =>
     (write.where.id as { in?: string[] } | undefined)?.in?.includes(CURRENT_WORK_ID));
-  assert.equal(retired?.data.status, 'ANSWERED');
-  assert.equal(retired?.data.deliveryStatus, 'FAILED');
-  assert.equal(retired?.data.deliveryFailureCode, 'CURRENT_WORK_TARGET_COMPLETED');
-  assert.match(String(retired?.data.deliveryFailureReason), /target turn completed/i);
-  assert.ok(retired?.data.deliveryTerminalAt instanceof Date);
-  assert.deepEqual((retired?.where.status as { in: string[] }).in, ['PENDING', 'IN_FLIGHT']);
+  assert.equal(requeued?.data.kind, 'message');
+  assert.equal(requeued?.data.sendIntent, 'NEXT_TURN');
+  assert.equal(requeued?.data.targetTurnId, null);
+  assert.equal(requeued?.data.status, 'PENDING');
+  // Still one row and one message: no receipt is written beside the requeue, or the pane would
+  // carry an undelivered bubble above the very turn that delivers it.
+  assert.equal(requeued?.data.deliveryStatus, undefined);
+  assert.equal(requeued?.data.deliveryFailureCode, undefined);
+  assert.deepEqual((requeued?.where.status as { in: string[] }).in, ['PENDING', 'IN_FLIGHT']);
   assert.equal(
     h.published.some((event) => event.type === 'user_delivery'),
     false,
     'the API must not allocate or synthesize a runner delivery event',
   );
-  assert.equal(
-    h.turnWrites.some((write) =>
-      write.where.id === CURRENT_WORK_ID && write.data.kind === 'message'),
-    false,
-    'explicit CURRENT_WORK was silently converted to an executable message',
-  );
+  // The queue view changed, so the clients are told: the bubble under the transcript stops
+  // saying "Delivering…" and becomes the queued turn it now is.
+  assert.deepEqual(h.queueChanges, [SESSION_ID]);
 });

@@ -60,6 +60,73 @@ export function acknowledgedRuntimeTurnIds(
 }
 
 /**
+ * Put an unread CURRENT_WORK message back in the queue as an ordinary next turn.
+ *
+ * At the exact completion boundary of its own target, a steer carrying no acknowledgement was
+ * never read — the same reasoning that lets {@link terminalizePendingCurrentWorkSteers} call one
+ * FAILED here rather than UNCONFIRMED. But "nothing read it" is a reason to deliver the message,
+ * not a reason to drop it. Sending was the whole instruction; steering was only the route, picked
+ * by a composer default because a turn happened to be running, and a route that missed leaves the
+ * message itself untouched. Dropping it means the sender retypes what they already sent.
+ *
+ * The SAME row is converted, keeping its seq and its attachments, so the message lands once and in
+ * the order it was written rather than as a second copy under a bubble that failed. This is the
+ * recovery no-intent steers have always had (the `kind: 'steer'` → `'message'` sweep at this same
+ * boundary), finally reaching the explicit rows that replaced them — until now the two shapes of
+ * the same action ended differently depending on which client sent it.
+ *
+ * What it costs: the row stops recording that it was ever a steer, so a missed steer leaves no
+ * audit. That is the legacy sweep's trade too, and a red bubble no one can act on is not an audit.
+ *
+ * Only here. An interrupt is the person overtaking their own message; a finalized, ended or reaped
+ * session has no queue left to re-enter; and a runner that vanished cannot prove the engine did
+ * not read it, so requeueing there could say the same thing twice.
+ */
+export async function requeueUnreadCurrentWorkSteers(
+  tx: CurrentWorkSteerTransaction,
+  sessionId: string,
+  targetTurnIds: readonly string[],
+): Promise<string[]> {
+  const rows = await tx.conversationTurn.findMany({
+    where: {
+      sessionId,
+      kind: 'steer',
+      status: { in: ['PENDING', 'IN_FLIGHT'] },
+      sendIntent: 'CURRENT_WORK',
+      deliveryStatus: null,
+      targetTurnId: { in: [...targetTurnIds] },
+    },
+    orderBy: { seq: 'asc' },
+    select: { id: true, targetTurnId: true, status: true },
+  });
+  if (rows.length === 0) return [];
+  await tx.conversationTurn.updateMany({
+    where: {
+      sessionId,
+      id: { in: rows.map((row) => row.id) },
+      kind: 'steer',
+      status: { in: ['PENDING', 'IN_FLIGHT'] },
+      sendIntent: 'CURRENT_WORK',
+      deliveryStatus: null,
+    },
+    data: {
+      // NEXT_TURN with no target is the only shape the row constraints accept for a message, and
+      // it is also the true one: this is now a turn of its own, waiting like any other.
+      kind: 'message',
+      sendIntent: 'NEXT_TURN',
+      targetTurnId: null,
+      status: 'PENDING',
+      // The lease it is carrying belongs to a delivery that did not happen. Left behind, it would
+      // describe this message as already handed to an engine that never read a word of it.
+      deliveredAt: null,
+      leaseDeadlineAt: null,
+      leaseGeneration: null,
+    },
+  });
+  return rows.map((row) => row.id);
+}
+
+/**
  * Settle explicit CURRENT_WORK steers that have no durable runtime acknowledgement.
  *
  * The receipt lives on `conversation_turn`; this function intentionally does not allocate a

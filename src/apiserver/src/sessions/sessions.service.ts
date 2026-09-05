@@ -4134,7 +4134,10 @@ export class SessionsService {
 
   /** Withdraw a queued user message or `!cmd` shell turn. Only a still-PENDING one can be
    *  cancelled; once the runner has leased it (IN_FLIGHT) it's already feeding claude / already
-   *  running, and will appear in the transcript, so cancelling is rejected. */
+   *  running, and will appear in the transcript, so cancelling is rejected.
+   *
+   *  Also the door for discarding a CURRENT_WORK message whose delivery settled undelivered:
+   *  the engine never received it, so it is still the sender's to take back. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
     await this.getSendable(ownerId, id);
     // Retried whole. A cancel is a compare-and-set against a turn still queued; an attempt the
@@ -4161,6 +4164,22 @@ export class SessionsService {
         },
       });
       if (res.count === 0) {
+        // A steer whose delivery already settled undelivered is the exception to that refusal.
+        // It is not on its way anywhere: the boundary that failed it is durable, no engine read
+        // it, and the row exists only to say so. Left un-withdrawable it is a bubble with no
+        // exit, which is how "Not delivered" ends up sitting under a conversation that moved on
+        // days ago. Discarding one changes no executable count, so the queue-slot bookkeeping
+        // below deliberately does not run.
+        const discarded = await tx.conversationTurn.deleteMany({
+          where: {
+            id: turnId,
+            sessionId: id,
+            kind: 'steer',
+            sendIntent: 'CURRENT_WORK',
+            deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
+          },
+        });
+        if (discarded.count > 0) return;
         // A steer is the one thing here that is refused for a reason of its own rather than
         // for being gone: it is not waiting its turn, it is on its way into the one already
         // running, and the engine may be reading it as we ask. Saying "already started or

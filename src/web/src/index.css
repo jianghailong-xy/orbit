@@ -5548,6 +5548,16 @@ html[data-theme='dark'] .session-tag-chip {
   border-color: color-mix(in srgb, var(--danger, #c53b3b) 35%, transparent);
   background: color-mix(in srgb, var(--danger, #c53b3b) 8%, transparent);
 }
+/* Why it did not land — said in place, between the state and the way out of it, rather than
+   left in a tooltip nobody hovers. Ellipsised on a narrow pane; the row's title still carries
+   the server's full wording. */
+.chat-queued-why {
+  color: var(--text-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* A queued `!cmd`: shown verbatim as the shell command it will run, so it reads like
    the Bash card its output eventually lands in rather than a chat message. Red picks up
    the CLI's own `!`-input colouring, and reads as "this bypasses the agent" — it's the
