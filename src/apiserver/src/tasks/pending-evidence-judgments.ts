@@ -113,25 +113,47 @@ export interface PendingEvidenceJudgment {
 }
 
 /**
- * The rail: the count and the oldest age, over the rows themselves — and the two groups.
+ * What THIS session is being asked about: the count, the oldest age, and the three groups.
  *
- * `count` counts `pending` and nothing else, because it is the number a rail leads with and the
- * thing a rail leads with is what it is asking somebody to do. The rows in `awaitingSubmitter` are
- * not hidden and not dropped: they are still this account's open questions, they are simply not
- * questions for a decider, so they are handed over as their own group with the door's reason on
- * every one of them.
+ * READ FOR ONE SESSION, NOT FOR THE ACCOUNT
+ * -----------------------------------------
+ * The rows are found by owner, because that is the only way to find them — a question is a shape
+ * some task's columns have, and tasks belong to an account. What comes BACK is scoped to the
+ * session that asked, because a question is addressed to whoever can act on it and to nobody else.
+ * Handing every session the same account-level list is how one fact came to be painted onto N
+ * faces at once: every open session showed the same two undecidable rows, none of whose readers
+ * could do anything about them, while the party who could — the submitter — was told nothing in
+ * particular. Broadcasting is not delivery.
+ *
+ * So each row goes to exactly one of three places, decided by the two questions the door already
+ * asks and this read already has the answers to:
+ *
+ *  - `pending` — a decision can be recorded, and THIS reader is one the door would take it from.
+ *    These are the only rows a decider is asked about, and `count` counts these and nothing else.
+ *  - `waitingOnYou` — no decision can be recorded until another revision is filed, and this
+ *    reader is the run that filed the last one. It is actionable exactly here, which is why it is
+ *    its own group rather than a greyed line: the reader can fix it.
+ *  - `awaitingSubmitter` — no decision can be recorded, and somebody else has to file it. Kept,
+ *    not dropped, because a reader chasing a stall is entitled to know what is stuck and on whom;
+ *    handed over separately because there is nothing here for this reader to do.
+ *
+ * And the fourth combination — decidable, but not by this reader — is not returned at all. It is
+ * somebody else's question, already addressed to whoever may answer it, and putting it here would
+ * be the same broadcast in a quieter voice.
  */
 export interface PendingEvidenceJudgmentQueue {
   readAt: Date;
-  /** The session these rows were read FOR — every `independence` below is about it. */
+  /** The session these rows were read FOR — every group below is scoped to it. */
   decidingSessionId: string;
-  /** How many rows are waiting for a DECISION: the length of `pending`, never of both groups. */
+  /** How many rows are waiting for a DECISION FROM THIS SESSION: the length of `pending`. */
   count: number;
-  /** The age of the oldest question, or null when there is none. */
+  /** The age of the oldest question this session is asked to decide, or null when there is none. */
   oldestAgeSeconds: number | null;
-  /** Rows the door would accept a decision on, from a reader it accepts one from. */
+  /** Rows the door would accept a decision on, from this reader. */
   pending: PendingEvidenceJudgment[];
-  /** Rows no decision can be recorded about until the submitter files another revision. */
+  /** Rows waiting on a revision THIS session is the one to file. */
+  waitingOnYou: PendingEvidenceJudgment[];
+  /** Rows waiting on a revision somebody else has to file: nothing here is this reader's to do. */
   awaitingSubmitter: PendingEvidenceJudgment[];
 }
 
@@ -163,16 +185,25 @@ function ageSeconds(readAt: Date, submittedAt: Date): number {
  * all, which is what makes an answered row disappear from every reader's next read rather than
  * from the one that happened to be listening.
  *
- * WHY THE ROWS ARE IN TWO GROUPS
- * ------------------------------
- * Because the door has two different answers for them and one list can only promise one. Check 2
+ * WHY THE ROWS ARE IN GROUPS, AND WHY THE GROUPS ARE ABOUT THE READER
+ * ------------------------------------------------------------------
+ * Because the door has different answers for them and one list can only promise one. Check 2
  * refuses evidence that quotes no live stated standard — for a CONFIRM and for a SEND_BACK alike,
  * since it runs before either is written — so a legacy submission from before the envelope, or one
  * whose criterion has since been rewritten, is a row on which every decision fails. Listing it
  * beside the answerable ones is what put a card on screen headed DECISION REQUIRED whose only
  * enabled control was refused every time it was pressed. It is not filtered out either: the
  * submitter is still waiting, and a question dropped from every read is a question nobody knows
- * they are waiting on. So it comes back in its own group, carrying the reason and the action.
+ * they are waiting on.
+ *
+ * Check 3 is then asked of the SAME row for a different purpose. It has always been asked here —
+ * every row already said whether this reader may answer it — but the answer only decorated the
+ * row instead of placing it, so a session that could not answer a single one of these questions
+ * was still handed all of them. Now it decides which group the row lands in, which is what makes
+ * this a read for one session rather than a copy of the account posted through every open window.
+ * The predicates are the door's own (`criterionStandingRefusal`, `decidingSessionDisqualification`)
+ * for the reason they always were: a second opinion here is drift, and drift is how a queue comes
+ * to promise a decision the door refuses.
  */
 export async function readPendingEvidenceJudgments(
   tx: PrismaTypes.TransactionClient,
@@ -206,6 +237,7 @@ export async function readPendingEvidenceJudgments(
   });
 
   const pending: PendingEvidenceJudgment[] = [];
+  const waitingOnYou: PendingEvidenceJudgment[] = [];
   const awaitingSubmitter: PendingEvidenceJudgment[] = [];
   for (const task of tasks) {
     const [latest] = task.completionEvidence;
@@ -245,7 +277,17 @@ export async function readPendingEvidenceJudgments(
         requiredAction: disqualification === null ? null : REQUIRES_INDEPENDENT_SESSION_ACTION,
       },
     };
-    (standing === null ? pending : awaitingSubmitter).push(row);
+    // The placement, in the order the door asks: is there a standard to decide this against at
+    // all, and then is this reader one the door would take the decision from. A decidable row
+    // this reader may not answer goes nowhere — it is already in front of every session that CAN
+    // answer it, and a copy here would be a row whose only possible reading is "not your problem".
+    if (standing === null) {
+      if (disqualification === null) pending.push(row);
+    } else if (disqualification === null) {
+      awaitingSubmitter.push(row);
+    } else {
+      waitingOnYou.push(row);
+    }
   }
 
   // Oldest first, and by task id where two were submitted in the same millisecond: the rail leads
@@ -255,6 +297,7 @@ export async function readPendingEvidenceJudgments(
       || left.taskId.localeCompare(right.taskId)
   );
   pending.sort(oldestFirst);
+  waitingOnYou.sort(oldestFirst);
   awaitingSubmitter.sort(oldestFirst);
 
   return {
@@ -263,6 +306,7 @@ export async function readPendingEvidenceJudgments(
     count: pending.length,
     oldestAgeSeconds: pending.length === 0 ? null : pending[0].ageSeconds,
     pending,
+    waitingOnYou,
     awaitingSubmitter,
   };
 }

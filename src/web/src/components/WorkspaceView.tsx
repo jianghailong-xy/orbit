@@ -159,7 +159,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
-import { SessionDecisionRail } from './DecisionRail';
+import { DecisionLog, SessionDecisionStrip } from './DecisionRail';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -1178,6 +1178,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  /**
+   * The decisions answered from this tab, per session, in the order they were answered.
+   *
+   * A decision is an event: it happened once and goes on having happened. The pinned strip above
+   * says only what is TRUE NOW and is re-derived from the ledger every read, so an answered
+   * question leaves it — and if that were the whole story, a decision would be a thing that made a
+   * row silently vanish. These lines are what it leaves behind, rendered in the transcript where it
+   * happened. Kept per session id so switching sessions does not carry one conversation's answers
+   * into another's log.
+   */
+  const [decisionEvents, setDecisionEvents] = useState<Record<string, string[]>>({});
   // Controlled because the multi-select tag items stay open after a choice; ordinary actions
   // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -5335,6 +5346,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           />
         )}
 
+        {/* Flush under the header, above everything that scrolls or that the conversation pushes
+            around: what this session is being asked to decide is STATE — recomputed from the ledger
+            on every read — and state that sat in the transcript's vertical flow read as a message
+            nobody sent. One line until it is asked to be more. */}
+        {selectedId && !selectedTrashed && (
+          <SessionDecisionStrip
+            sessionId={selectedId}
+            onDecided={(line) =>
+              setDecisionEvents((previous) => ({
+                ...previous,
+                [selectedId]: [...(previous[selectedId] ?? []), line],
+              }))
+            }
+          />
+        )}
+
         {stuck && (
           <button
             className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
@@ -5353,11 +5380,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </span>
           </button>
         )}
-
-        {/* Pinned above the conversation, and derived rather than delivered: what this session is
-            being asked to decide is re-read from the ledger, so a question answered in another
-            window is simply not in the next read. It renders nothing when nothing is waiting. */}
-        {selectedId && !selectedTrashed && <SessionDecisionRail sessionId={selectedId} />}
 
         <div className="workspace-scroll-wrap">
           {selectedMissing ? (
@@ -5413,6 +5435,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
+              {/* In the flow, at the bottom, scrolling with everything else that happened: what a
+                  decision made from this session left behind. */}
+              <DecisionLog lines={decisionEvents[selectedId] ?? []} />
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&

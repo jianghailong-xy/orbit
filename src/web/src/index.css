@@ -5281,15 +5281,74 @@ html[data-theme='dark'] .session-tag-chip {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* The pending-decision rail. Pinned above the transcript, beside the sticky question, because a
-   question nobody scrolls to is a question nobody answers — and unlike the transcript it must not
-   move when the conversation does. */
-.decision-rail {
+/* The pending-decision strip. Flush under the header and OUTSIDE the transcript scroller, because
+   it says what is true now rather than what happened: the transcript's vertical flow is for
+   events, and a thing recomputed every turn sitting in it read as a message nobody sent. Collapsed
+   it is one line of counts — it blocks no turn, so it must not look like the approval card, which
+   does. */
+.decision-strip {
   flex: none;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-sunken);
+}
+.decision-strip-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.decision-strip-line:hover {
+  background: var(--bg-hover);
+}
+/* The one mark of attention the collapsed line carries, and only when something is being asked of
+   the reader. */
+.decision-strip-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #3b82f6);
+}
+.decision-strip-count {
+  font-variant-numeric: tabular-nums;
+}
+.decision-strip-quiet,
+.decision-strip-sep {
+  color: var(--text-3);
+}
+.decision-strip-caret {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-3);
+}
+.decision-strip-unread {
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+/* Expanded, the groups scroll inside the strip rather than pushing the conversation down the
+   screen: the pinned area has a ceiling and the transcript keeps its own space. */
+.decision-strip-body {
   max-height: 46vh;
   overflow-y: auto;
+  border-top: 1px solid var(--border-subtle);
+}
+/* What one decision left behind, in the transcript, in place: an event among events. */
+.decision-log {
+  display: grid;
+  gap: 4px;
+  padding: 8px 16px 0;
+}
+.decision-log-line {
+  font-size: 12px;
+  color: var(--text-2);
 }
 .decision-rail-head {
   display: flex;
@@ -5307,19 +5366,19 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
-.decision-rail-settled {
-  padding: 7px 12px;
-  font-size: 12px;
-  color: var(--text-2);
-}
 /* The second group sits under the first, separated and quieter: it is somebody's open work, but
    nothing in it is waiting on the reader of this screen. */
 .decision-rail-group + .decision-rail-group {
   border-top: 1px solid var(--border);
 }
-.decision-rail-blocked .decision-rail-label {
-  color: var(--text-2);
+.decision-rail-blocked .decision-rail-label,
+.decision-rail-blocked .decision-rail-task {
+  color: var(--text-3);
   font-weight: 500;
+}
+/* Not greyed: in this one session the same fact is an instruction the reader can act on. */
+.decision-rail-mine .decision-rail-label {
+  color: var(--text-1);
 }
 .decision-rail-list {
   margin: 0;

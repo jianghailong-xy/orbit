@@ -7,7 +7,33 @@ import { pendingDecisionsQuery } from '../lib/queries';
 import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
- * What this session is being asked to decide, pinned above the conversation.
+ * What is TRUE right now about this session's open questions, pinned under the header.
+ *
+ * STATE IS PINNED; EVENTS STAY IN THE LOG
+ * ---------------------------------------
+ * The transcript is a record of what happened. This is not that: it is recomputed from the ledger
+ * on every read, and a row leaves it because a decision now exists, not because a frame arrived.
+ * Putting it in the vertical flow of the transcript put a thing that changes every turn between
+ * two things that never change again, with no boundary of its own — it read as a message nobody
+ * sent. So the two kinds of content are separated by kind: what is true now is pinned here and
+ * does not scroll, and what HAPPENED — a decision, once made — is a line in the log where it
+ * happened (`DecisionLog`, rendered inside the transcript scroller).
+ *
+ * ONE LINE UNTIL ASKED
+ * --------------------
+ * Collapsed is two numbers and nothing else. This blocks no turn, so it must not look like the
+ * approval card, which does; expanding is a deliberate act. The same judgment the iOS Needs-you
+ * banner was settled on: one signal and one way through to the thing, never a cascade of badges
+ * saying the same fact in four places.
+ *
+ * NOTHING IS SHOWN TO SOMEBODY WHO CANNOT ACT ON IT
+ * ------------------------------------------------
+ * `NEEDS YOUR DECISION` lists rows THIS session may answer and nothing else. The server already
+ * scopes its read that way; the filter here is the second half of the same rule rather than a
+ * second opinion about it — it reads `independence.independent`, which is the decision door's own
+ * answer carried on the row, and it is what keeps the count and the list from ever disagreeing.
+ * A row a reader may not answer under a heading that says DECIDE is the same broken promise this
+ * card was fixed for once already.
  *
  * TWO GROUPS, BECAUSE THE DOOR HAS TWO ANSWERS
  * --------------------------------------------
@@ -15,10 +41,11 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  * is worse than no card: it teaches the reader that the screen does not know what the server will
  * do. That is what this rail was doing to evidence quoting no live stated criterion — the queue
  * listed it and the decision door refused it, both correctly and neither knowing about the other.
- * The server now hands those rows over separately (`awaitingSubmitter`), and they render as what
- * they are: an open question that is not this reader's to answer, waiting on the submitter for a
- * revision that quotes a criterion. Not hidden — the submitter is still waiting on somebody, and a
- * row nobody can see is a row nobody chases.
+ * The server hands those rows over separately, split again by who can clear them: `waitingOnYou`
+ * where this session filed the submission — actionable exactly here, and stated as an instruction
+ * — and `awaitingSubmitter` everywhere else, greyed and headed with the fact that there is nothing
+ * here for this reader to do. Greyed, not hidden: a reader chasing a stall is entitled to see what
+ * is stuck and on whom.
  *
  * ONE ROW AT A TIME, AND NO BULK ANYTHING
  * ---------------------------------------
@@ -38,9 +65,8 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  * THE OWNER PRESSES THE SAME BUTTON
  * ---------------------------------
  * There is no separate owner path. The two buttons post to the one decision door, naming the
- * session this rail is being read in, and that session is put through the same independence check
- * whoever is signed in. A row this session may not answer says so and keeps its buttons disabled —
- * it is still a question, it is just not this reader's to settle.
+ * session this strip is being read in, and that session is put through the same independence check
+ * whoever is signed in.
  *
  * NOT `Mark complete`. Nothing here writes a status: a decision is a fact about one version of the
  * evidence, and DONE is derived from it.
@@ -81,25 +107,44 @@ export interface PendingDecisionRow {
 
 export interface PendingDecisionQueue {
   decidingSessionId: string;
-  /** How many rows are waiting for a decision — `pending` only, never both groups summed. */
+  /** How many rows this session is asked to decide — `pending` only, never the groups summed.
+   *  On the wire, and not what the strip renders: every number on screen is read off the list it
+   *  sits above, so the two can never come apart. */
   count: number;
   oldestAgeSeconds: number | null;
   pending: PendingDecisionRow[];
-  /** Rows the door would refuse whatever anybody pressed, until the submitter files a revision. */
+  /** Rows waiting on a revision THIS session is the one to file. */
+  waitingOnYou?: PendingDecisionRow[];
+  /** Rows waiting on a revision somebody else has to file. */
   awaitingSubmitter: PendingDecisionRow[];
 }
 
-/** The queue's own label. The weight goes on what the reader is looking at, not on the button. */
-export const RAIL_LABEL = 'Awaiting judgment';
-/** The other group's label. Still this account's open questions; just not a decider's. */
-export const AWAITING_SUBMITTER_LABEL = 'Waiting on the submitter';
+/** The strip's own name, for the reader of a screen reader and for a test asking "is it there". */
+export const STRIP_LABEL = 'Open questions';
+/** The group that asks something of this reader. Nothing else goes under it. */
+export const NEEDS_DECISION_LABEL = 'NEEDS YOUR DECISION';
+/** The group this reader is the one to clear, by submitting another revision. */
+export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
+/** And the group that is somebody else's, said in full so nobody has to work it out. */
+export const AWAITING_SUBMITTER_LABEL = 'WAITING ON THE SUBMITTER — NOTHING FOR YOU TO DO HERE';
 /** The card's heading. A question, stated as one. */
 export const DECISION_HEADING = 'DECISION REQUIRED';
 /** And the heading for a row no decision can be recorded about. Deliberately not a demand: the
  *  reader cannot clear it, so asking them to would be the same lie in a quieter voice. */
 export const AWAITING_SUBMITTER_HEADING = 'NOTHING TO DECIDE YET';
+/** Except when the reader IS the one who can clear it, which is the one place it is a demand. */
+export const WAITING_ON_YOU_HEADING = 'WAITING ON YOUR NEXT REVISION';
 export const CONFIRM_LABEL = 'Confirm completion';
 export const SEND_BACK_LABEL = 'Send back';
+
+/** The two numbers the collapsed line is made of, and the only two it may carry. */
+export function needsDecisionCount(rows: number): string {
+  return `${rows} needs your decision`;
+}
+export function waitingOnSubmitterCount(rows: number): string {
+  return `${rows} waiting on the submitter`;
+}
+
 /**
  * What has to happen before this row becomes answerable, addressed to the party who can do it.
  *
@@ -112,9 +157,59 @@ export const AWAITING_SUBMITTER_ACTION =
   'The next evidence revision has to quote the project criterion this work serves. Until it does, '
   + 'no decision can be recorded here — not by this session and not by any other.';
 
-/** What a settled row says afterwards, naming the standard and the exact version answered. */
-export function completionConfirmedLine(criterionKey: string | null, revision: string): string {
-  return `Completion confirmed — coordinator · ${criterionKey ?? 'no stated criterion'} · rev ${revision}`;
+/** The same fact, in the one session where it is an instruction rather than a bulletin. */
+export const WAITING_ON_YOU_ACTION =
+  'This is your own submission, and you are the one who can clear it: submit another evidence '
+  + 'revision quoting the project criterion this work serves. Until you do, no decision can be '
+  + 'recorded here — not by this session and not by any other.';
+
+/**
+ * What a decision leaves behind, as a sentence in the log rather than a row that stopped existing.
+ *
+ * A decision is an EVENT: it happened once, at a moment, and it is still true afterwards that it
+ * happened. So it does not belong in the pinned area, which says what is true NOW and is recomputed
+ * every read — it belongs where the rest of the session's history is. Naming the task, the standard
+ * and the exact version answered is what makes it readable a week later: `bound to rev N` is the
+ * whole of the compare-and-set the door performed, in the words the door uses.
+ */
+export function completionConfirmedLine(
+  title: string,
+  criterionKey: string | null,
+  revision: string,
+): string {
+  return `Completion confirmed — ${title} against ${criterionKey ?? 'no stated criterion'}, `
+    + `bound to rev ${revision}`;
+}
+
+/** The other answer, said the same way: nothing was settled, and this version was the one answered. */
+export function sentBackLine(title: string, revision: string): string {
+  return `Sent back — ${title}, bound to rev ${revision}`;
+}
+
+/**
+ * The decisions made in this session, in the transcript, in place.
+ *
+ * Rendered INSIDE the scroller, under the conversation, because that is what "an event" means
+ * here: it stays where it happened and scrolls with everything else that happened. The pinned
+ * strip above never shows it — a settled question is not a pending one, and a pinned area that
+ * accumulated past answers would be a log that refuses to scroll.
+ */
+export function DecisionLog({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    // One live region for the lot, on the container: each answer announces itself as it lands
+    // without turning every past one into a region of its own.
+    <div className="decision-log" role="status">
+      {/* Keyed by position because the list is append-only — nothing is inserted, removed or
+          reordered, and two decisions can carry the same sentence only if the same version of the
+          same task was answered twice, which the door refuses. */}
+      {lines.map((line, index) => (
+        <div className="decision-log-line" key={index}>
+          {line}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** When the revision arrived, as a reader reads it: the age, said as a moment. The card's second
@@ -150,6 +245,7 @@ export function DecisionCard({
   note,
   busy,
   error,
+  yours = false,
   onNote,
   onDecide,
 }: {
@@ -158,6 +254,9 @@ export function DecisionCard({
   note: string;
   busy: boolean;
   error: Error | null;
+  /** True when THIS session filed the submission, which is the one case where the sentence about
+   *  what has to change next is addressed to the person reading it. */
+  yours?: boolean;
   onNote: (note: string) => void;
   onDecide: (decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
@@ -170,7 +269,7 @@ export function DecisionCard({
   return (
     <div className="decision-card">
       <div className="decision-card-head">
-        {decidable ? DECISION_HEADING : AWAITING_SUBMITTER_HEADING}
+        {decidable ? DECISION_HEADING : (yours ? WAITING_ON_YOU_HEADING : AWAITING_SUBMITTER_HEADING)}
       </div>
 
       {/* Led with, when there is one: the reason nothing on this card can be pressed, and who can
@@ -182,7 +281,9 @@ export function DecisionCard({
             {row.decidability.refusal ?? 'no decision can be recorded about this evidence'}
           </Typography.Text>
           <div>
-            <Typography.Text>{AWAITING_SUBMITTER_ACTION}</Typography.Text>
+            <Typography.Text>
+              {yours ? WAITING_ON_YOU_ACTION : AWAITING_SUBMITTER_ACTION}
+            </Typography.Text>
           </div>
         </div>
       )}
@@ -306,43 +407,36 @@ export function DecisionCard({
 }
 
 /**
- * The rail itself: presentational, and rendered only when there is something to decide.
+ * One group's rows, each opening into its card.
  *
- * It takes the whole payload as a prop and issues no request, so a static render can assert what
- * each state puts on screen — including the states that are about absence.
+ * Extracted so the three groups share one row renderer: a group that grew its own would be a
+ * second place for "what a row shows" to drift, and the difference between the groups is which
+ * rows are in them and what the card says, never how a row reads.
  */
-export function DecisionRail({
-  queue,
+function DecisionRows({
+  group,
   expandedTaskId,
-  narrow = false,
-  note = '',
-  busy = false,
-  error = null,
-  settled = null,
+  yours,
+  narrow,
+  note,
+  busy,
+  error,
   onExpand,
-  onNote = () => {},
-  onDecide = () => {},
+  onNote,
+  onDecide,
 }: {
-  queue: PendingDecisionQueue;
+  group: PendingDecisionRow[];
   expandedTaskId: string | null;
-  narrow?: boolean;
-  note?: string;
-  busy?: boolean;
-  error?: Error | null;
-  settled?: string | null;
+  yours: boolean;
+  narrow: boolean;
+  note: string;
+  busy: boolean;
+  error: Error | null;
   onExpand: (taskId: string | null) => void;
-  onNote?: (note: string) => void;
-  onDecide?: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
+  onNote: (note: string) => void;
+  onDecide: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
-  const awaiting = queue.awaitingSubmitter;
-  if (queue.pending.length === 0 && awaiting.length === 0) {
-    return settled ? (
-      <div className="decision-rail decision-rail-settled" role="status">
-        {settled}
-      </div>
-    ) : null;
-  }
-  const rows = (group: PendingDecisionRow[]) => (
+  return (
     <ul className="decision-rail-list">
       {group.map((row) => {
         const open = row.taskId === expandedTaskId;
@@ -368,6 +462,7 @@ export function DecisionRail({
                 note={note}
                 busy={busy}
                 error={error}
+                yours={yours}
                 onNote={onNote}
                 onDecide={(decision) => onDecide(row, decision)}
               />
@@ -377,41 +472,142 @@ export function DecisionRail({
       })}
     </ul>
   );
+}
+
+/**
+ * The strip itself: presentational, pinned, and one line until somebody asks for more.
+ *
+ * It takes the whole payload as a prop and issues no request, so a static render can assert what
+ * each state puts on screen — including the states that are about absence.
+ *
+ * `NEEDS YOUR DECISION` is built from the rows this session may answer and from nothing else, and
+ * the count on the collapsed line is the length of that same array. One array, so the number a
+ * reader decides to stop on cannot promise more than the list under it delivers — and a row this
+ * reader may not answer can never appear under a heading that says it should.
+ */
+export function DecisionStrip({
+  queue,
+  open,
+  expandedTaskId,
+  narrow = false,
+  note = '',
+  busy = false,
+  error = null,
+  onToggle,
+  onExpand,
+  onNote = () => {},
+  onDecide = () => {},
+}: {
+  queue: PendingDecisionQueue;
+  /** Expanded is a deliberate act; the default is the one line. */
+  open: boolean;
+  expandedTaskId: string | null;
+  narrow?: boolean;
+  note?: string;
+  busy?: boolean;
+  error?: Error | null;
+  onToggle: (open: boolean) => void;
+  onExpand: (taskId: string | null) => void;
+  onNote?: (note: string) => void;
+  onDecide?: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
+}) {
+  // The door's own answer, carried on the row and read here rather than re-derived: a row this
+  // session may not answer is not a question put to this session.
+  const decisions = queue.pending.filter((row) => row.independence.independent);
+  // Oldest first is the order the server sends, so the age this group leads with is the first row's
+  // rather than the payload's `oldestAgeSeconds`. Same reason the count comes from `decisions`:
+  // every number on screen is read off the list under it, so there is no second value to drift.
+  const yours = queue.waitingOnYou ?? [];
+  const theirs = queue.awaitingSubmitter;
+  const waiting = yours.length + theirs.length;
+  if (decisions.length === 0 && waiting === 0) return null;
+
+  const rowsFor = (group: PendingDecisionRow[], mine: boolean) => (
+    <DecisionRows
+      group={group}
+      expandedTaskId={expandedTaskId}
+      yours={mine}
+      narrow={narrow}
+      note={note}
+      busy={busy}
+      error={error}
+      onExpand={onExpand}
+      onNote={onNote}
+      onDecide={onDecide}
+    />
+  );
+
   return (
-    <div className="decision-rail">
-      {settled ? (
-        <div className="decision-rail-settled" role="status">
-          {settled}
+    <div className="decision-strip" aria-label={STRIP_LABEL}>
+      {/* The collapsed state, and the whole of it: at most two numbers, on one line, with no
+          control that answers anything. It blocks no turn and must not look like the approval card,
+          which does. */}
+      <button
+        className="decision-strip-line"
+        type="button"
+        aria-expanded={open}
+        onClick={() => onToggle(!open)}
+      >
+        {decisions.length === 0 ? null : (
+          <span className="decision-strip-dot" aria-hidden="true" />
+        )}
+        {decisions.length === 0 ? null : (
+          <span className="decision-strip-count">{needsDecisionCount(decisions.length)}</span>
+        )}
+        {decisions.length === 0 || waiting === 0 ? null : (
+          <span className="decision-strip-sep" aria-hidden="true">·</span>
+        )}
+        {waiting === 0 ? null : (
+          <span className="decision-strip-count decision-strip-quiet">
+            {waitingOnSubmitterCount(waiting)}
+          </span>
+        )}
+        <span className="decision-strip-caret" aria-hidden="true">{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open ? (
+        <div className="decision-strip-body">
+          {/* The questions for a decider, and the only group that asks the reader for anything. */}
+          {decisions.length === 0 ? null : (
+            <section className="decision-rail-group" aria-label={NEEDS_DECISION_LABEL}>
+              <div className="decision-rail-head">
+                <span className="decision-rail-label">{NEEDS_DECISION_LABEL}</span>
+                <span className="decision-rail-oldest">
+                  {`oldest ${formatAge(decisions[0].ageSeconds)}`}
+                </span>
+              </div>
+              {rowsFor(decisions, false)}
+            </section>
+          )}
+
+          {/* The submissions this session is the one to fix. Not greyed, because here the sentence
+              about the next revision is an instruction to the reader rather than news about
+              somebody else. */}
+          {yours.length === 0 ? null : (
+            <section className="decision-rail-group decision-rail-mine" aria-label={WAITING_ON_YOU_LABEL}>
+              <div className="decision-rail-head">
+                <span className="decision-rail-label">{WAITING_ON_YOU_LABEL}</span>
+                <span className="decision-rail-count">{`${yours.length} to resubmit`}</span>
+              </div>
+              {rowsFor(yours, true)}
+            </section>
+          )}
+
+          {/* And somebody else's, greyed and said in full. Greyed is not hidden: a reader chasing a
+              stall is entitled to open it and see what it is stuck on. */}
+          {theirs.length === 0 ? null : (
+            <section className="decision-rail-group decision-rail-blocked" aria-label={AWAITING_SUBMITTER_LABEL}>
+              <div className="decision-rail-head">
+                <span className="decision-rail-label">{AWAITING_SUBMITTER_LABEL}</span>
+                <span className="decision-rail-count">
+                  {`${theirs.length} cannot be decided yet`}
+                </span>
+              </div>
+              {rowsFor(theirs, false)}
+            </section>
+          )}
         </div>
       ) : null}
-      {/* The questions for a decider. The count and the oldest age are about THIS group, because
-          they are the numbers somebody reads to decide whether to stop and look. */}
-      {queue.pending.length === 0 ? null : (
-        <section className="decision-rail-group" aria-label={RAIL_LABEL}>
-          <div className="decision-rail-head">
-            <span className="decision-rail-label">{RAIL_LABEL}</span>
-            <span className="decision-rail-count">{`${queue.count} waiting`}</span>
-            {queue.oldestAgeSeconds === null ? null : (
-              <span className="decision-rail-oldest">{`oldest ${formatAge(queue.oldestAgeSeconds)}`}</span>
-            )}
-          </div>
-          {rows(queue.pending)}
-        </section>
-      )}
-      {/* And the questions for the submitter. Below, unlabelled as urgent, and never counted into
-          the number above: they are somebody's open work, but nothing here is waiting on a reader
-          of this screen. */}
-      {awaiting.length === 0 ? null : (
-        <section className="decision-rail-group decision-rail-blocked" aria-label={AWAITING_SUBMITTER_LABEL}>
-          <div className="decision-rail-head">
-            <span className="decision-rail-label">{AWAITING_SUBMITTER_LABEL}</span>
-            <span className="decision-rail-count">
-              {`${awaiting.length} cannot be decided yet`}
-            </span>
-          </div>
-          {rows(awaiting)}
-        </section>
-      )}
     </div>
   );
 }
@@ -438,13 +634,26 @@ export function decideEvidence(
  *  the gaps are never what gives way. */
 export const DECISION_NARROW_QUERY = '(max-width: 640px)';
 
-/** The wired rail: one query, one mutation, and the expansion the reader is holding open. */
-export function SessionDecisionRail({ sessionId }: { sessionId: string }) {
+/**
+ * The wired strip: one query, one mutation, the fold, and the expansion the reader is holding open.
+ *
+ * `onDecided` is how an answer becomes an EVENT rather than a disappearance. The strip says what is
+ * true now, so a settled question simply leaves it on the next read; the sentence describing what
+ * was decided is handed up and rendered in the transcript, in place, by `DecisionLog`. A settled
+ * line kept HERE would be a pinned area slowly filling with history.
+ */
+export function SessionDecisionStrip({
+  sessionId,
+  onDecided,
+}: {
+  sessionId: string;
+  onDecided?: (line: string) => void;
+}) {
   const qc = useQueryClient();
   const narrow = useMediaQuery(DECISION_NARROW_QUERY);
+  const [open, setOpen] = useState(false);
   const [expandedTaskId, setExpanded] = useState<string | null>(null);
   const [note, setNote] = useState('');
-  const [settled, setSettled] = useState<string | null>(null);
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
@@ -456,35 +665,45 @@ export function SessionDecisionRail({ sessionId }: { sessionId: string }) {
     onSuccess: (_result, { row, decision }) => {
       setExpanded(null);
       setNote('');
-      setSettled(
+      onDecided?.(
         decision === 'CONFIRM'
-          ? completionConfirmedLine(row.criterion?.key ?? null, row.evidenceRevision)
-          : `Sent back — ${row.title} · rev ${row.evidenceRevision}`,
+          ? completionConfirmedLine(row.title, row.criterion?.key ?? null, row.evidenceRevision)
+          : sentBackLine(row.title, row.evidenceRevision),
       );
       void qc.invalidateQueries({ queryKey: pendingDecisionsQuery(sessionId).queryKey });
     },
   });
 
   // A read that failed is not "nothing is waiting". Saying so in one muted line is the smallest
-  // thing that keeps a reader from mistaking a broken query for an empty queue; the rail is
+  // thing that keeps a reader from mistaking a broken query for an empty queue; the strip is
   // otherwise silent while the first read is in flight, so it never flashes.
   if (pending.isError) {
     return (
-      <div className="decision-rail decision-rail-settled" role="status">
-        {`${RAIL_LABEL}: this queue could not be read.`}
+      <div className="decision-strip decision-strip-unread" role="status">
+        {`${STRIP_LABEL}: this queue could not be read.`}
       </div>
     );
   }
   if (!pending.data) return null;
   return (
-    <DecisionRail
+    <DecisionStrip
       queue={pending.data}
+      open={open}
       expandedTaskId={expandedTaskId}
       narrow={narrow}
       note={note}
       busy={answer.isPending}
       error={answer.isError ? (answer.error as Error) : null}
-      settled={settled}
+      onToggle={(next) => {
+        setOpen(next);
+        // Folding it away closes whatever was open inside it: a card held open behind a fold is a
+        // note the reader cannot see they are still writing.
+        if (!next) {
+          answer.reset();
+          setNote('');
+          setExpanded(null);
+        }
+      }}
       onExpand={(taskId) => {
         answer.reset();
         // A note is written about ONE submission. Carrying it to the next card open would put

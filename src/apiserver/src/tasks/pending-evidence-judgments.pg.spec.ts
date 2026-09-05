@@ -20,12 +20,20 @@
  *    CONFIRM settles the TASK, so its row never comes back; a SEND_BACK settles only that VERSION,
  *    so the next revision is a new question.
  *
- * The second claim, from (vi) down, is about WHICH GROUP a row is in. The queue used to promise a
- * decision on evidence the door refuses outright — legacy evidence quoting no criterion, or one
- * whose wording has since been rewritten — which put a card headed DECISION REQUIRED on screen
- * whose every action was refused. Those rows now come back under `awaitingSubmitter`, and the
- * invariant that makes the split worth anything is proved by calling the door for real: every row
- * left in `pending` is one a CONFIRM is actually accepted for.
+ * The second claim is about WHICH GROUP a row is in, and it has two halves. The queue used to
+ * promise a decision on evidence the door refuses outright — legacy evidence quoting no criterion,
+ * or one whose wording has since been rewritten — which put a card headed DECISION REQUIRED on
+ * screen whose every action was refused. Those rows now come back under `awaitingSubmitter`, and
+ * the invariant that makes the split worth anything is proved by calling the door for real: every
+ * row left in `pending` is one a CONFIRM is actually accepted for.
+ *
+ * The other half is (ii), and it is about the READER rather than the row. The rows are found by
+ * owner, so before this every session was handed every one of this account's open questions and
+ * merely told, per row, which ones it was not allowed to answer — one fact painted onto as many
+ * faces as there were open sessions, none of whose readers could act on most of it. What comes
+ * back is now scoped: four readers of the same three facts are asked about three, two, two and
+ * two of them, and the row only the submitter can clear is handed to the submitter as its own
+ * group rather than to everybody as a notice.
  *
  * Destructive: it truncates, and it drops two tables inside a transaction it rolls back.
  * COORDINATOR_PG_URL must name the disposable guarded database with current migrations applied.
@@ -242,6 +250,8 @@ interface QueueView {
   /** Optional for the same reason the rest of this view is: this spec has to be able to FAIL
    *  against a build whose read has one group, rather than not compile against it. */
   awaitingSubmitter?: RowView[];
+  /** The same, for the group a build that scopes nothing does not have at all. */
+  waitingOnYou?: RowView[];
 }
 
 suite('the pending-decision queue is derived from the facts, not delivered to anybody', async (t) => {
@@ -323,23 +333,54 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     });
 
   // (ii) -----------------------------------------------------------------------------------------
-  await t.test('the reader is told which rows it may answer, and why not for the rest',
-    async () => {
-      const read = await queue(f.coordinatorSessionId);
-      assert.deepEqual(read.pending?.map((row) => row.independence?.independent), [true, true, true]);
+  // The scope claim, and the one the screenshot was of. Three questions exist on this ACCOUNT; the
+  // number any one session is asked about is decided by what that session may answer, so four
+  // readers of the same three facts get four different answers. A read that only decorated its
+  // rows with independence — which is what this was before — answers "three" to every one of them.
+  await t.test('what comes back is scoped to the reader, not to the account', async () => {
+    const read = await queue(f.coordinatorSessionId);
+    assert.deepEqual(read.pending?.map((row) => row.independence?.independent), [true, true, true]);
 
-      // Read from the run that DID the first task's work: the same three questions are there — a
-      // question does not disappear because this particular reader cannot answer it — and the one
-      // it may not answer says so, with the action that would clear it.
-      const fromTheSubmitter = await queue(f.work[0].sessionId);
-      assert.equal(fromTheSubmitter.count, 3);
-      assert.deepEqual(fromTheSubmitter.pending?.map((row) => row.independence?.independent),
-        [false, true, true]);
-      assert.equal(fromTheSubmitter.pending?.[0].independence?.requiredAction,
-        'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK');
-      assert.match(String(fromTheSubmitter.pending?.[0].independence?.disqualification),
-        /run of the task it is deciding/);
-    });
+    // Read from the run that DID the first task's work. That question has not gone anywhere — the
+    // coordinator above is still being asked it — it is simply not among the ones put to a reader
+    // the door would refuse. Nothing this session can act on is withheld, and nothing it cannot
+    // act on is shown.
+    const fromTheSubmitter = await queue(f.work[0].sessionId);
+    assert.equal(fromTheSubmitter.count, 2);
+    assert.deepEqual(fromTheSubmitter.pending?.map((row) => row.taskId),
+      [f.work[1].taskId, f.work[2].taskId]);
+    assert.equal(fromTheSubmitter.pending?.some((row) => row.taskId === f.work[0].taskId), false,
+      'a session was handed the question about its own work');
+    // Not shunted into the other group either: that group is about evidence no decision can be
+    // recorded about, which is a different fact from "not by you".
+    assert.equal(
+      (fromTheSubmitter.awaitingSubmitter ?? []).some((row) => row.taskId === f.work[0].taskId),
+      false,
+    );
+    assert.equal(
+      (fromTheSubmitter.waitingOnYou ?? []).some((row) => row.taskId === f.work[0].taskId),
+      false,
+    );
+    // And the headline number follows the rows rather than the account, so a session cannot lead
+    // with a count of questions it is not being asked.
+    assert.equal(fromTheSubmitter.oldestAgeSeconds, fromTheSubmitter.pending?.[0].ageSeconds);
+
+    // The whole shape of the bug, stated as one assertion: N readers, the same three account-level
+    // facts, and the size of the list is a function of the READER. Before this, every entry in
+    // `asked` was 3.
+    const asked = new Map<string, number>();
+    for (const [label, sessionId] of [
+      ['coordinator', f.coordinatorSessionId],
+      ['run 1', f.work[0].sessionId],
+      ['run 2', f.work[1].sessionId],
+      ['run 3', f.work[2].sessionId],
+    ] as const) {
+      asked.set(label, (await queue(sessionId)).count ?? -1);
+    }
+    assert.deepEqual([...asked.entries()],
+      [['coordinator', 3], ['run 1', 2], ['run 2', 2], ['run 3', 2]],
+      'the same account-level list was handed to every session');
+  });
 
   // (iii) ----------------------------------------------------------------------------------------
   // The negative control for everything below it. If these rows did not leave, "the same rows are
@@ -546,6 +587,29 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
       // The other group says the opposite about every one of its rows.
       assert.deepEqual(read.pending?.map((each) => each.decidability?.decidable),
         read.pending?.map(() => true));
+
+      // And it has ONE home, which is not this reader's. Read from the run that submitted it, the
+      // same row comes back in the group that is about what the reader can fix — the only place
+      // where "the next revision has to quote a criterion" is an instruction to somebody rather
+      // than a fact about somebody else. That is the difference between broadcasting a stall and
+      // telling the party who can clear it.
+      const fromTheSubmitter = await queue(f.legacySessionId);
+      assert.deepEqual((fromTheSubmitter.waitingOnYou ?? []).map((each) => each.taskId),
+        [f.legacyTaskId],
+        'the row that only the submitter can clear was not put in front of the submitter');
+      assert.equal(
+        (fromTheSubmitter.awaitingSubmitter ?? []).some((each) => each.taskId === f.legacyTaskId),
+        false,
+        'the submitter was shown its own stall as somebody else\u2019s problem');
+      // The reason travels with it: what has to change is stated wherever the row is shown, and
+      // it is the door's own words in both places.
+      assert.match(String(fromTheSubmitter.waitingOnYou?.[0].decidability?.refusal),
+        /quotes no project criterion/);
+      assert.equal(fromTheSubmitter.waitingOnYou?.[0].decidability?.requiredAction,
+        'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION');
+      // Every other reader gets it the other way round: it is in the group that has nothing for
+      // them to do, and never in the one that has.
+      assert.deepEqual((read.waitingOnYou ?? []).map((each) => each.taskId), []);
     });
 
   // (vii) ----------------------------------------------------------------------------------------
