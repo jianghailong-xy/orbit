@@ -41,11 +41,12 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  * is worse than no card: it teaches the reader that the screen does not know what the server will
  * do. That is what this rail was doing to evidence quoting no live stated criterion — the queue
  * listed it and the decision door refused it, both correctly and neither knowing about the other.
- * The server hands those rows over separately, split again by who can clear them: `waitingOnYou`
- * where this session filed the submission — actionable exactly here, and stated as an instruction
- * — and `awaitingSubmitter` everywhere else, greyed and headed with the fact that there is nothing
- * here for this reader to do. Greyed, not hidden: a reader chasing a stall is entitled to see what
- * is stuck and on whom.
+ * The server hands those rows over separately and only to the run that can clear them:
+ * `waitingOnYou`, where this session filed the submission, so the sentence about what the next
+ * revision must quote is an instruction to the reader rather than news about somebody else. No
+ * other session is sent them at all. A greyed group repeating the same stall on every open window
+ * was the same broadcast one heading further down — being able to see a stall is not the same as
+ * being told one, and the stalled population belongs in the report that exists for it.
  *
  * ONE ROW AT A TIME, AND NO BULK ANYTHING
  * ---------------------------------------
@@ -115,8 +116,6 @@ export interface PendingDecisionQueue {
   pending: PendingDecisionRow[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou?: PendingDecisionRow[];
-  /** Rows waiting on a revision somebody else has to file. */
-  awaitingSubmitter: PendingDecisionRow[];
 }
 
 /** The strip's own name, for the reader of a screen reader and for a test asking "is it there". */
@@ -125,14 +124,10 @@ export const STRIP_LABEL = 'Open questions';
 export const NEEDS_DECISION_LABEL = 'NEEDS YOUR DECISION';
 /** The group this reader is the one to clear, by submitting another revision. */
 export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
-/** And the group that is somebody else's, said in full so nobody has to work it out. */
-export const AWAITING_SUBMITTER_LABEL = 'WAITING ON THE SUBMITTER — NOTHING FOR YOU TO DO HERE';
 /** The card's heading. A question, stated as one. */
 export const DECISION_HEADING = 'DECISION REQUIRED';
-/** And the heading for a row no decision can be recorded about. Deliberately not a demand: the
- *  reader cannot clear it, so asking them to would be the same lie in a quieter voice. */
-export const AWAITING_SUBMITTER_HEADING = 'NOTHING TO DECIDE YET';
-/** Except when the reader IS the one who can clear it, which is the one place it is a demand. */
+/** And the heading for a row no decision can be recorded about. It is a demand rather than a
+ *  bulletin because the only reader who is sent one is the reader who can clear it. */
 export const WAITING_ON_YOU_HEADING = 'WAITING ON YOUR NEXT REVISION';
 export const CONFIRM_LABEL = 'Confirm completion';
 export const SEND_BACK_LABEL = 'Send back';
@@ -141,23 +136,18 @@ export const SEND_BACK_LABEL = 'Send back';
 export function needsDecisionCount(rows: number): string {
   return `${rows} needs your decision`;
 }
-export function waitingOnSubmitterCount(rows: number): string {
-  return `${rows} waiting on the submitter`;
+export function waitingOnYouCount(rows: number): string {
+  return `${rows} waiting on you`;
 }
 
 /**
  * What has to happen before this row becomes answerable, addressed to the party who can do it.
  *
- * It names the SUBMITTER because nothing the reader can press changes this: the decision door
- * checks the criterion before it looks at which decision was asked for, so a send-back is refused
- * here exactly as a confirmation is. Saying "send it back" would be a fourth version of the bug
- * this card was fixed for.
+ * There is one such party and this card is only ever shown to it: nothing the reader can press
+ * changes the row, because the decision door checks the criterion before it looks at which
+ * decision was asked for, so a send-back is refused here exactly as a confirmation is. Saying
+ * "send it back" would be a fourth version of the bug this card was fixed for.
  */
-export const AWAITING_SUBMITTER_ACTION =
-  'The next evidence revision has to quote the project criterion this work serves. Until it does, '
-  + 'no decision can be recorded here — not by this session and not by any other.';
-
-/** The same fact, in the one session where it is an instruction rather than a bulletin. */
 export const WAITING_ON_YOU_ACTION =
   'This is your own submission, and you are the one who can clear it: submit another evidence '
   + 'revision quoting the project criterion this work serves. Until you do, no decision can be '
@@ -245,7 +235,6 @@ export function DecisionCard({
   note,
   busy,
   error,
-  yours = false,
   onNote,
   onDecide,
 }: {
@@ -254,9 +243,6 @@ export function DecisionCard({
   note: string;
   busy: boolean;
   error: Error | null;
-  /** True when THIS session filed the submission, which is the one case where the sentence about
-   *  what has to change next is addressed to the person reading it. */
-  yours?: boolean;
   onNote: (note: string) => void;
   onDecide: (decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
@@ -269,21 +255,19 @@ export function DecisionCard({
   return (
     <div className="decision-card">
       <div className="decision-card-head">
-        {decidable ? DECISION_HEADING : (yours ? WAITING_ON_YOU_HEADING : AWAITING_SUBMITTER_HEADING)}
+        {decidable ? DECISION_HEADING : WAITING_ON_YOU_HEADING}
       </div>
 
-      {/* Led with, when there is one: the reason nothing on this card can be pressed, and who can
-          clear it. Everything below is still shown — a reader chasing the submitter needs to be
-          able to say what was wrong with the submission. */}
+      {/* Led with, when there is one: the reason nothing on this card can be pressed, and what
+          the reader has to do about it. Everything below is still shown — deciding what the next
+          revision should say means reading what this one did. */}
       {decidable ? null : (
         <div className="decision-card-section">
           <Typography.Text type="warning">
             {row.decidability.refusal ?? 'no decision can be recorded about this evidence'}
           </Typography.Text>
           <div>
-            <Typography.Text>
-              {yours ? WAITING_ON_YOU_ACTION : AWAITING_SUBMITTER_ACTION}
-            </Typography.Text>
+            <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
           </div>
         </div>
       )}
@@ -409,14 +393,13 @@ export function DecisionCard({
 /**
  * One group's rows, each opening into its card.
  *
- * Extracted so the three groups share one row renderer: a group that grew its own would be a
- * second place for "what a row shows" to drift, and the difference between the groups is which
- * rows are in them and what the card says, never how a row reads.
+ * Extracted so both groups share one row renderer: a group that grew its own would be a second
+ * place for "what a row shows" to drift, and the difference between the groups is which rows are
+ * in them and what the card says, never how a row reads.
  */
 function DecisionRows({
   group,
   expandedTaskId,
-  yours,
   narrow,
   note,
   busy,
@@ -427,7 +410,6 @@ function DecisionRows({
 }: {
   group: PendingDecisionRow[];
   expandedTaskId: string | null;
-  yours: boolean;
   narrow: boolean;
   note: string;
   busy: boolean;
@@ -462,7 +444,6 @@ function DecisionRows({
                 note={note}
                 busy={busy}
                 error={error}
-                yours={yours}
                 onNote={onNote}
                 onDecide={(decision) => onDecide(row, decision)}
               />
@@ -518,15 +499,12 @@ export function DecisionStrip({
   // rather than the payload's `oldestAgeSeconds`. Same reason the count comes from `decisions`:
   // every number on screen is read off the list under it, so there is no second value to drift.
   const yours = queue.waitingOnYou ?? [];
-  const theirs = queue.awaitingSubmitter;
-  const waiting = yours.length + theirs.length;
-  if (decisions.length === 0 && waiting === 0) return null;
+  if (decisions.length === 0 && yours.length === 0) return null;
 
-  const rowsFor = (group: PendingDecisionRow[], mine: boolean) => (
+  const rowsFor = (group: PendingDecisionRow[]) => (
     <DecisionRows
       group={group}
       expandedTaskId={expandedTaskId}
-      yours={mine}
       narrow={narrow}
       note={note}
       busy={busy}
@@ -554,12 +532,12 @@ export function DecisionStrip({
         {decisions.length === 0 ? null : (
           <span className="decision-strip-count">{needsDecisionCount(decisions.length)}</span>
         )}
-        {decisions.length === 0 || waiting === 0 ? null : (
+        {decisions.length === 0 || yours.length === 0 ? null : (
           <span className="decision-strip-sep" aria-hidden="true">·</span>
         )}
-        {waiting === 0 ? null : (
+        {yours.length === 0 ? null : (
           <span className="decision-strip-count decision-strip-quiet">
-            {waitingOnSubmitterCount(waiting)}
+            {waitingOnYouCount(yours.length)}
           </span>
         )}
         <span className="decision-strip-caret" aria-hidden="true">{open ? '▴' : '▾'}</span>
@@ -576,34 +554,20 @@ export function DecisionStrip({
                   {`oldest ${formatAge(decisions[0].ageSeconds)}`}
                 </span>
               </div>
-              {rowsFor(decisions, false)}
+              {rowsFor(decisions)}
             </section>
           )}
 
-          {/* The submissions this session is the one to fix. Not greyed, because here the sentence
-              about the next revision is an instruction to the reader rather than news about
-              somebody else. */}
+          {/* The submissions this session is the one to fix, and the only undecidable rows that
+              reach any session at all. Not greyed, because the sentence about the next revision is
+              an instruction to the reader rather than news about somebody else. */}
           {yours.length === 0 ? null : (
             <section className="decision-rail-group decision-rail-mine" aria-label={WAITING_ON_YOU_LABEL}>
               <div className="decision-rail-head">
                 <span className="decision-rail-label">{WAITING_ON_YOU_LABEL}</span>
                 <span className="decision-rail-count">{`${yours.length} to resubmit`}</span>
               </div>
-              {rowsFor(yours, true)}
-            </section>
-          )}
-
-          {/* And somebody else's, greyed and said in full. Greyed is not hidden: a reader chasing a
-              stall is entitled to open it and see what it is stuck on. */}
-          {theirs.length === 0 ? null : (
-            <section className="decision-rail-group decision-rail-blocked" aria-label={AWAITING_SUBMITTER_LABEL}>
-              <div className="decision-rail-head">
-                <span className="decision-rail-label">{AWAITING_SUBMITTER_LABEL}</span>
-                <span className="decision-rail-count">
-                  {`${theirs.length} cannot be decided yet`}
-                </span>
-              </div>
-              {rowsFor(theirs, false)}
+              {rowsFor(yours)}
             </section>
           )}
         </div>

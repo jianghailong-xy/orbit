@@ -1,8 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  AWAITING_SUBMITTER_HEADING,
-  AWAITING_SUBMITTER_LABEL,
   CONFIRM_LABEL,
   DECISION_HEADING,
   DecisionCard,
@@ -17,7 +17,7 @@ import {
   formatSubmitted,
   needsDecisionCount,
   sentBackLine,
-  waitingOnSubmitterCount,
+  waitingOnYouCount,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -41,6 +41,8 @@ import {
  *    it is that every session sees all of them, one fact painted onto as many faces as there are
  *    open windows. That regression is invisible to any test that renders one session, so the test
  *    below renders four and asserts the group appears in exactly the ones with standing to answer.
+ *    A greyed group carrying the same stall to everybody was that same broadcast one heading
+ *    further down, so the copy it was worded in is asserted ABSENT from the rendered output.
  *
  * NO `../api` MOCK and none needed: `DecisionStrip` takes its payload as a prop and issues no
  * request. The last test in the file holds that property in place.
@@ -108,7 +110,6 @@ function queue(over: Partial<PendingDecisionQueue> = {}): PendingDecisionQueue {
     oldestAgeSeconds: pending[0].ageSeconds,
     pending,
     waitingOnYou: [],
-    awaitingSubmitter: [],
     ...over,
   };
 }
@@ -167,7 +168,7 @@ function pressable(html: string, label: string): boolean {
 /** One card, on its own, in whatever state the matrix below is asking about. */
 function card(
   only: PendingDecisionRow,
-  over: { note?: string; busy?: boolean; yours?: boolean } = {},
+  over: { note?: string; busy?: boolean } = {},
 ): string {
   return render(
     <DecisionCard
@@ -176,7 +177,6 @@ function card(
       note={over.note ?? ''}
       busy={over.busy ?? false}
       error={null}
-      yours={over.yours ?? false}
       onNote={() => {}}
       onDecide={() => {}}
     />,
@@ -185,7 +185,11 @@ function card(
 
 describe('the collapsed strip', () => {
   const mixed = queue({
-    awaitingSubmitter: [undecidable({ taskId: 'task-legacy', title: 'the SOURCE contract rebase' })],
+    waitingOnYou: [undecidable({
+      taskId: 'task-legacy',
+      title: 'the SOURCE contract rebase',
+      independence: { ...DISQUALIFIED },
+    })],
   });
 
   it('is one line carrying two numbers and nothing else', () => {
@@ -194,7 +198,7 @@ describe('the collapsed strip', () => {
     expect(occurrences(html, 'decision-strip-line')).toBe(1);
     expect(occurrences(html, 'decision-strip-count')).toBe(2);
     expect(html).toContain(needsDecisionCount(3));
-    expect(html).toContain(waitingOnSubmitterCount(1));
+    expect(html).toContain(waitingOnYouCount(1));
   });
 
   it('says nothing about any individual row until it is asked to', () => {
@@ -202,7 +206,7 @@ describe('the collapsed strip', () => {
 
     // No group headings, no rows, no cards: the counts are the whole of the folded state.
     expect(html).not.toContain(NEEDS_DECISION_LABEL);
-    expect(html).not.toContain(AWAITING_SUBMITTER_LABEL);
+    expect(html).not.toContain(WAITING_ON_YOU_LABEL);
     expect(html).not.toContain('the decision door');
     expect(html).not.toContain('the SOURCE contract rebase');
     expect(occurrences(html, 'decision-rail-row')).toBe(0);
@@ -229,10 +233,10 @@ describe('the collapsed strip', () => {
       count: 0,
       pending: [],
       oldestAgeSeconds: null,
-      awaitingSubmitter: [undecidable({ taskId: 'task-legacy' })],
+      waitingOnYou: [undecidable({ taskId: 'task-legacy', independence: { ...DISQUALIFIED } })],
     }));
     expect(occurrences(onlyWaiting, 'decision-strip-count')).toBe(1);
-    expect(onlyWaiting).toContain(waitingOnSubmitterCount(1));
+    expect(onlyWaiting).toContain(waitingOnYouCount(1));
     // Nothing is being asked of this reader, so the mark of attention is not there either.
     expect(onlyWaiting).not.toContain('decision-strip-dot');
     expect(collapsed(queue())).toContain('decision-strip-dot');
@@ -276,7 +280,6 @@ describe('a question is put to the sessions that can answer it, and to no others
       oldestAgeSeconds: pending[0].ageSeconds,
       pending,
       waitingOnYou: [],
-      awaitingSubmitter: [],
     };
   };
 
@@ -354,7 +357,6 @@ describe('the expanded card', () => {
           oldestAgeSeconds: only.ageSeconds,
           pending: [only],
           waitingOnYou: [],
-          awaitingSubmitter: [],
         }}
         open
         expandedTaskId="task-open"
@@ -512,84 +514,112 @@ describe('the strip is a read face', () => {
 });
 
 /**
- * The rows no decision can be recorded about, and the one place where they are somebody's job.
+ * The rows no decision can be recorded about, and the one session they are ever sent to.
  *
  * They are not decisions and they are not put among them. Every row under the heading that asks
- * for a decision is one the reader could act on; these are handed to the party who can — the
- * submitter, in the session that filed them — and shown to everybody else greyed, said in full,
- * and still openable, because a reader chasing a stall is entitled to know what it is stuck on.
+ * for a decision is one the reader could act on; these go to the party who can clear them — the
+ * submitter, in the session that filed them — and to nobody else at all. Showing everybody else a
+ * greyed copy was the same one fact on as many faces as there were open windows, said politely: a
+ * reader chasing the stalled population has the report of stalled tasks to read, and does not need
+ * it pinned to every screen in the account.
  */
 describe('a row the door would refuse whatever was pressed', () => {
   const legacy = undecidable({ taskId: 'task-legacy', title: 'the SOURCE contract rebase' });
 
-  const mixed = (): PendingDecisionQueue => {
+  /** The one reader it is sent to: the session that filed the submission. */
+  const mine = (): PendingDecisionQueue => {
     const answerable = row({ taskId: 'task-answerable', title: 'the derived pending queue' });
     return {
-      decidingSessionId: '61DehW1OsRMagU5WxOb2yZ',
+      decidingSessionId: 'the-submitting-run',
+      count: 1,
+      oldestAgeSeconds: answerable.ageSeconds,
+      pending: [answerable],
+      waitingOnYou: [{ ...legacy, independence: { ...DISQUALIFIED } }],
+    };
+  };
+
+  /** And what every OTHER session is now handed about the same account fact: no group, no field,
+   *  nothing. This is the payload the server sends them, and rendering it is the whole test. */
+  const theirs = (): PendingDecisionQueue => {
+    const answerable = row({ taskId: 'task-answerable', title: 'the derived pending queue' });
+    return {
+      decidingSessionId: 'some-other-run',
       count: 1,
       oldestAgeSeconds: answerable.ageSeconds,
       pending: [answerable],
       waitingOnYou: [],
-      awaitingSubmitter: [legacy],
     };
   };
 
-  /** The same account fact, read from the session that filed it. */
-  const mine = (): PendingDecisionQueue => ({
-    decidingSessionId: 'the-submitting-run',
-    count: 0,
-    oldestAgeSeconds: null,
-    pending: [],
-    waitingOnYou: [{ ...legacy, independence: { ...DISQUALIFIED } }],
-    awaitingSubmitter: [],
-  });
-
   it('is never listed among the decisions, and never counted as one', () => {
-    const html = expandedStrip(mixed());
+    const html = expandedStrip(mine());
 
     expect(html).toContain(NEEDS_DECISION_LABEL);
-    expect(html).toContain(AWAITING_SUBMITTER_LABEL);
+    expect(html).toContain(WAITING_ON_YOU_LABEL);
     expect(html).toContain('the SOURCE contract rebase');
     // The number the strip leads with counts only what a decider can answer. A "2" that includes
     // one nobody can answer is the same false promise one level up.
-    expect(collapsed(mixed())).toContain(needsDecisionCount(1));
-    expect(collapsed(mixed())).toContain(waitingOnSubmitterCount(1));
-    expect(html).toContain('1 cannot be decided yet');
+    expect(collapsed(mine())).toContain(needsDecisionCount(1));
+    expect(collapsed(mine())).toContain(waitingOnYouCount(1));
+    expect(html).toContain('1 to resubmit');
     // And it is below, in the other group: the answerable row comes before that group's heading,
     // the unanswerable one after it.
-    expect(html.indexOf('the derived pending queue')).toBeLessThan(html.indexOf(AWAITING_SUBMITTER_LABEL));
-    expect(html.indexOf(AWAITING_SUBMITTER_LABEL)).toBeLessThan(html.indexOf('the SOURCE contract rebase'));
+    expect(html.indexOf('the derived pending queue')).toBeLessThan(html.indexOf(WAITING_ON_YOU_LABEL));
+    expect(html.indexOf(WAITING_ON_YOU_LABEL)).toBeLessThan(html.indexOf('the SOURCE contract rebase'));
   });
 
-  it('says in its own heading that there is nothing here for this reader to do', () => {
-    const html = expandedStrip(mixed());
-    expect(html.toLowerCase()).toContain('nothing for you to do here');
-    // Greyed is not hidden: the row is still a control that opens.
-    expect(html).toContain('decision-rail-summary');
-    expect(occurrences(html, 'decision-rail-row')).toBe(2);
+  it('is not shown at all to a session that is not the one who filed it', () => {
+    // The payload for every other reader, rendered: the decidable question is still there and the
+    // stall is simply not, in any group and under any heading. Before this round the same fact
+    // came back to all of them as a greyed line headed with an apology for existing.
+    const html = expandedStrip(theirs());
+
+    expect(html).toContain(NEEDS_DECISION_LABEL);
+    expect(html).toContain('the derived pending queue');
+    expect(html).not.toContain(WAITING_ON_YOU_LABEL);
+    expect(html).not.toContain('the SOURCE contract rebase');
+    expect(occurrences(html, 'decision-rail-row')).toBe(1);
+    // And the folded line carries one number, because there is one group.
+    expect(occurrences(collapsed(theirs()), 'decision-strip-count')).toBe(1);
   });
 
-  it('is headed by what is missing rather than by a demand nobody can meet', () => {
-    const html = expandedStrip(mixed(), 'task-legacy');
-
-    expect(html).toContain(AWAITING_SUBMITTER_HEADING);
-    expect(html).not.toContain(DECISION_HEADING);
-    // The reason is the door's own, and the sentence after it says who clears it and how.
-    expect(html).toContain('quotes no project criterion');
-    expect(html).toContain('The next evidence revision has to quote the project criterion');
-    expect(html).toContain('not by this session and not by any other');
+  /**
+   * The copy that addressed "everybody else", asserted absent from what is actually rendered.
+   *
+   * A predicate over the OUTPUT rather than over the props: a constant can be renamed, a group can
+   * be re-added under another name, and either would leave these sentences back on screen while a
+   * test that asserted about the payload went on passing.
+   */
+  it('never says a word about a submitter this reader is not', () => {
+    for (const payload of [mine(), theirs(), queue()]) {
+      const renders = [
+        collapsed(payload),
+        expandedStrip(payload),
+        expandedStrip(payload, 'task-legacy'),
+        expandedStrip(payload, 'task-answerable'),
+      ];
+      for (const html of renders) {
+        expect(html.toLowerCase()).not.toContain('waiting on the submitter');
+        expect(html.toUpperCase()).not.toContain('NOTHING FOR YOU TO DO HERE');
+        expect(html.toUpperCase()).not.toContain('NOTHING TO DECIDE YET');
+      }
+    }
   });
 
   it('reads as an instruction in the one session that can act on it', () => {
     const html = expandedStrip(mine(), 'task-legacy');
 
-    // Its own group, addressed to the reader, and not the greyed one.
+    // Its own group, addressed to the reader, with the row it is about under it.
     expect(html).toContain(WAITING_ON_YOU_LABEL);
-    expect(html).not.toContain(AWAITING_SUBMITTER_LABEL);
+    expect(html).toContain('the SOURCE contract rebase');
     expect(html).toContain(WAITING_ON_YOU_HEADING);
-    // What the submitter has to add, said as something to do rather than as news.
+    // Greyed is not hidden, and never was: the row is still a control that opens.
+    expect(html).toContain('decision-rail-summary');
+    // The reason is the door's own, and the sentence after it says what to do about it.
+    expect(html).toContain('quotes no project criterion');
     expect(html).toContain('This is your own submission');
     expect(html).toContain('submit another evidence revision quoting the project criterion');
+    expect(html).toContain('not by this session and not by any other');
     // Still nothing to press: this session cannot decide it either, and never could.
     expect(html).not.toContain(DECISION_HEADING);
     expect(pressable(html, CONFIRM_LABEL)).toBe(false);
@@ -642,44 +672,106 @@ describe('no control is ever pressable and doomed', () => {
    * criterion to measure against, a session that did not do the work, and — for a send-back — a
    * note. Each one is a REFUSAL, so a button that is pressable while one of them is missing is a
    * button whose only outcome is an error message. This asserts the implication in that direction
-   * as well as the equality: pressable ⇒ the request would be accepted. `yours` is in the matrix
-   * because it changes who the card is TALKING to and must never change what it OFFERS.
+   * as well as the equality: pressable ⇒ the request would be accepted.
    */
   it('never lights a button the server would refuse, in any combination', () => {
     for (const decidable of [true, false]) {
       for (const independent of [true, false]) {
-        for (const yours of [true, false]) {
-          for (const note of ['', '  ', 'say what the next revision must show']) {
-            for (const busy of [true, false]) {
-              const subject = decidable ? row() : undecidable();
-              const html = card(
-                {
-                  ...subject,
-                  independence: independent
-                    ? { independent: true, disqualification: null, requiredAction: null }
-                    : { ...DISQUALIFIED },
-                },
-                { note, busy, yours },
-              );
-              const state = `decidable=${decidable} independent=${independent} yours=${yours} `
-                + `note=${JSON.stringify(note)} busy=${busy}`;
-              const wouldBeAccepted = decidable && independent && !busy;
+        for (const note of ['', '  ', 'say what the next revision must show']) {
+          for (const busy of [true, false]) {
+            const subject = decidable ? row() : undecidable();
+            const html = card(
+              {
+                ...subject,
+                independence: independent
+                  ? { independent: true, disqualification: null, requiredAction: null }
+                  : { ...DISQUALIFIED },
+              },
+              { note, busy },
+            );
+            const state = `decidable=${decidable} independent=${independent} `
+              + `note=${JSON.stringify(note)} busy=${busy}`;
+            const wouldBeAccepted = decidable && independent && !busy;
 
-              expect(pressable(html, CONFIRM_LABEL), `CONFIRM at ${state}`).toBe(wouldBeAccepted);
-              expect(pressable(html, SEND_BACK_LABEL), `SEND_BACK at ${state}`).toBe(
-                wouldBeAccepted && note.trim() !== '',
-              );
-              // Said the other way round, because this is the direction that fails when somebody
-              // adds a fourth state and forgets one of the three checks: a pressable Confirm is a
-              // Confirm the door would take.
-              if (pressable(html, CONFIRM_LABEL)) {
-                expect(decidable, `a pressable CONFIRM at ${state}`).toBe(true);
-                expect(independent, `a pressable CONFIRM at ${state}`).toBe(true);
-              }
+            expect(pressable(html, CONFIRM_LABEL), `CONFIRM at ${state}`).toBe(wouldBeAccepted);
+            expect(pressable(html, SEND_BACK_LABEL), `SEND_BACK at ${state}`).toBe(
+              wouldBeAccepted && note.trim() !== '',
+            );
+            // Said the other way round, because this is the direction that fails when somebody
+            // adds a fourth state and forgets one of the three checks: a pressable Confirm is a
+            // Confirm the door would take.
+            if (pressable(html, CONFIRM_LABEL)) {
+              expect(decidable, `a pressable CONFIRM at ${state}`).toBe(true);
+              expect(independent, `a pressable CONFIRM at ${state}`).toBe(true);
             }
           }
         }
       }
+    }
+  });
+});
+
+/**
+ * The two claims that outlive any one render: what the stylesheet does with a disabled primary,
+ * and what these files still SAY about a group that no longer exists.
+ */
+describe('what is left on disk', () => {
+  /** Both spellings, because the web suite runs from `src/web` and a runner may start at the root. */
+  const fromRepo = (...candidates: string[]): string => {
+    const found = candidates.map((each) => resolve(process.cwd(), each)).find(existsSync);
+    if (!found) throw new Error(`none of ${candidates.join(', ')} exists from ${process.cwd()}`);
+    return readFileSync(found, 'utf8');
+  };
+
+  /** Selector/body pairs, comments stripped so a rule cannot be satisfied by a sentence about it. */
+  function rules(css: string): Array<{ selector: string; body: string }> {
+    const found: Array<{ selector: string; body: string }> = [];
+    const pattern = /([^{}]+)\{([^{}]*)\}/gu;
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, '');
+    for (let match = pattern.exec(stripped); match; match = pattern.exec(stripped)) {
+      found.push({ selector: match[1].trim(), body: match[2] });
+    }
+    return found;
+  }
+
+  it('gives a disabled primary a different shape, not the same shape at half strength', () => {
+    // `CardAction.tsx` promises that an action which cannot succeed arrives as `disabled` rather
+    // than lit-and-refused. JS kept it and the stylesheet did not: `.card-action:disabled` set
+    // opacity and a cursor, so a solid brand slab at 50% was still the most pressable-looking
+    // thing on a card that has just said no decision can be recorded here. The fill has to go.
+    const css = fromRepo('src/index.css', 'src/web/src/index.css');
+    // `:not(:disabled)` mentions both halves and is the hover rule, so it is taken out of the
+    // selector before the question is asked. Without that this passes on the stylesheet it was
+    // written to reject.
+    const disabledPrimary = rules(css).filter((rule) => {
+      const selector = rule.selector.replace(/:not\([^)]*\)/gu, '');
+      return /\.card-action--primary\b/u.test(selector) && selector.includes(':disabled');
+    });
+
+    expect(disabledPrimary.length).toBeGreaterThan(0);
+    expect(disabledPrimary.some((rule) => /(^|[;\s])background\s*:/u.test(rule.body))).toBe(true);
+    // And the enabled tone still is the solid one, so this is a difference in shape between the
+    // two states rather than the primary having quietly stopped being primary.
+    const enabledPrimary = rules(css).filter((rule) => rule.selector.trim() === '.card-action--primary');
+    expect(enabledPrimary.length).toBe(1);
+    expect(enabledPrimary[0].body).toMatch(/background\s*:\s*var\(--brand\)/u);
+  });
+
+  it('leaves no text describing the group that was removed', () => {
+    // Contract prose is part of the contract. A comment that still explains why a third group is
+    // kept, beside an implementation that no longer has one, is a file telling a reader something
+    // untrue — and it is how a removed thing gets added back by somebody who believed the comment.
+    for (const [name, body] of [
+      ['pending-evidence-judgments.ts', fromRepo(
+        '../apiserver/src/tasks/pending-evidence-judgments.ts',
+        'src/apiserver/src/tasks/pending-evidence-judgments.ts',
+      )],
+      ['DecisionRail.tsx', fromRepo(
+        'src/components/DecisionRail.tsx',
+        'src/web/src/components/DecisionRail.tsx',
+      )],
+    ] as const) {
+      expect(body.toLowerCase().includes('awaitingsubmitter'), name).toBe(false);
     }
   });
 });

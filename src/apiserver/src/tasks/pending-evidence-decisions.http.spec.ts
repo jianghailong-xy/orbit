@@ -35,8 +35,9 @@ import { TasksService } from './tasks.service';
 
 const OWNER_ID = randomUUID();
 const TASK_ID = randomUUID();
-/** The other group's row: an open question that no decision can be recorded about yet. */
-const AWAITING_TASK_ID = randomUUID();
+/** The other group's row: an open question this reader is the one to clear, and which no decision
+ *  can be recorded about until they do. */
+const WAITING_ON_YOU_TASK_ID = randomUUID();
 const SESSION_ID = randomUUID();
 
 /** Anything `TasksController` was asked to look up. Must stay empty: the two paths below belong to
@@ -67,8 +68,8 @@ const evidenceService = {
       decidability: { decidable: true, refusal: null, requiredAction: null },
       independence: { independent: ownerId === OWNER_ID, disqualification: null, requiredAction: null },
     }],
-    awaitingSubmitter: [{
-      taskId: AWAITING_TASK_ID,
+    waitingOnYou: [{
+      taskId: WAITING_ON_YOU_TASK_ID,
       title: 'the SOURCE contract rebase',
       status: 'OPEN',
       projectId: null,
@@ -141,7 +142,7 @@ test('GET /api/tasks/evidence-decisions/pending reaches the queue and not the ta
       count?: number;
       decidingSessionId?: string;
       pending?: Array<{ taskId?: string; gaps?: string[] }>;
-      awaitingSubmitter?: Array<{ taskId?: string; decidability?: { decidable?: boolean } }>;
+      waitingOnYou?: Array<{ taskId?: string; decidability?: { decidable?: boolean } }>;
     };
 
     assert.equal(response.status, 200);
@@ -156,9 +157,9 @@ test('GET /api/tasks/evidence-decisions/pending reaches the queue and not the ta
     // The second group crosses the same door, and its ids are keyed by the same field name — a row
     // that arrived spelled as a raw UUID would be one the browser could not put in a link or hand
     // back to the decision door, and it would have travelled that way silently.
-    assert.equal(body.awaitingSubmitter?.length, 1);
-    assert.equal(body.awaitingSubmitter?.[0].taskId, uuidToBase62(AWAITING_TASK_ID));
-    assert.equal(body.awaitingSubmitter?.[0].decidability?.decidable, false);
+    assert.equal(body.waitingOnYou?.length, 1);
+    assert.equal(body.waitingOnYou?.[0].taskId, uuidToBase62(WAITING_ON_YOU_TASK_ID));
+    assert.equal(body.waitingOnYou?.[0].decidability?.decidable, false);
     // And it is not counted into the number the rail leads with.
     assert.equal(body.count, 1);
   });

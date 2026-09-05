@@ -5366,17 +5366,12 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
-/* The second group sits under the first, separated and quieter: it is somebody's open work, but
-   nothing in it is waiting on the reader of this screen. */
+/* The second group sits under the first, separated: it asks something different of the reader,
+   not something weaker. */
 .decision-rail-group + .decision-rail-group {
   border-top: 1px solid var(--border);
 }
-.decision-rail-blocked .decision-rail-label,
-.decision-rail-blocked .decision-rail-task {
-  color: var(--text-3);
-  font-weight: 500;
-}
-/* Not greyed: in this one session the same fact is an instruction the reader can act on. */
+/* Not greyed: every row that reaches this group is an instruction the reader can act on. */
 .decision-rail-mine .decision-rail-label {
   color: var(--text-1);
 }
@@ -7006,6 +7001,15 @@ html[data-theme='dark'] .session-tag-chip {
 .card-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* And the primary tone loses its FILL while it is disabled, rather than only being dimmed. A solid
+   brand slab at half strength is still the most pressable-looking thing on a card, so a Confirm
+   the door would refuse went on inviting the press it was built to refuse. Outline instead of
+   fill, so the two states differ in shape and not only in strength. Enabled is untouched. */
+.card-action--primary:disabled {
+  background: var(--bg-raised);
+  color: var(--text-3);
+  border-color: var(--border);
 }
 .approval-kbd {
   margin-left: 8px;

@@ -113,7 +113,7 @@ export interface PendingEvidenceJudgment {
 }
 
 /**
- * What THIS session is being asked about: the count, the oldest age, and the three groups.
+ * What THIS session is being asked about: the count, the oldest age, and the two groups.
  *
  * READ FOR ONE SESSION, NOT FOR THE ACCOUNT
  * -----------------------------------------
@@ -125,21 +125,21 @@ export interface PendingEvidenceJudgment {
  * could do anything about them, while the party who could — the submitter — was told nothing in
  * particular. Broadcasting is not delivery.
  *
- * So each row goes to exactly one of three places, decided by the two questions the door already
- * asks and this read already has the answers to:
+ * So each row has three destinations and only two of them are groups, decided by the two
+ * questions the door already asks and this read already has the answers to:
  *
  *  - `pending` — a decision can be recorded, and THIS reader is one the door would take it from.
  *    These are the only rows a decider is asked about, and `count` counts these and nothing else.
  *  - `waitingOnYou` — no decision can be recorded until another revision is filed, and this
  *    reader is the run that filed the last one. It is actionable exactly here, which is why it is
  *    its own group rather than a greyed line: the reader can fix it.
- *  - `awaitingSubmitter` — no decision can be recorded, and somebody else has to file it. Kept,
- *    not dropped, because a reader chasing a stall is entitled to know what is stuck and on whom;
- *    handed over separately because there is nothing here for this reader to do.
- *
- * And the fourth combination — decidable, but not by this reader — is not returned at all. It is
- * somebody else's question, already addressed to whoever may answer it, and putting it here would
- * be the same broadcast in a quieter voice.
+ *  - and everything else is not returned at all. Both remaining combinations are addressed to
+ *    somebody who is already being shown them — a decidable row to every session that may answer
+ *    it, an undecidable one to the run that has to file the next revision — so a copy here would
+ *    be a row whose only possible reading is "not your problem". Handing the stalled ones to
+ *    every OTHER session was the same broadcast this read was scoped to stop, one grey heading
+ *    further down: a reader chasing the stalled population wants the report of stalled tasks, not
+ *    a notice pinned to every screen in the account.
  */
 export interface PendingEvidenceJudgmentQueue {
   readAt: Date;
@@ -153,8 +153,6 @@ export interface PendingEvidenceJudgmentQueue {
   pending: PendingEvidenceJudgment[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou: PendingEvidenceJudgment[];
-  /** Rows waiting on a revision somebody else has to file: nothing here is this reader's to do. */
-  awaitingSubmitter: PendingEvidenceJudgment[];
 }
 
 /**
@@ -192,15 +190,17 @@ function ageSeconds(readAt: Date, submittedAt: Date): number {
  * since it runs before either is written — so a legacy submission from before the envelope, or one
  * whose criterion has since been rewritten, is a row on which every decision fails. Listing it
  * beside the answerable ones is what put a card on screen headed DECISION REQUIRED whose only
- * enabled control was refused every time it was pressed. It is not filtered out either: the
- * submitter is still waiting, and a question dropped from every read is a question nobody knows
- * they are waiting on.
+ * enabled control was refused every time it was pressed. It is not dropped from everywhere
+ * either: it goes to the one run that can file the revision that clears it, which is the whole
+ * difference between delivering a stall and posting it. No other reader is sent it, because there
+ * is nothing any of them could do with it.
  *
  * Check 3 is then asked of the SAME row for a different purpose. It has always been asked here —
  * every row already said whether this reader may answer it — but the answer only decorated the
  * row instead of placing it, so a session that could not answer a single one of these questions
- * was still handed all of them. Now it decides which group the row lands in, which is what makes
- * this a read for one session rather than a copy of the account posted through every open window.
+ * was still handed all of them. Now it decides whether the row reaches this reader at all, which
+ * is what makes this a read for one session rather than a copy of the account posted through
+ * every open window.
  * The predicates are the door's own (`criterionStandingRefusal`, `decidingSessionDisqualification`)
  * for the reason they always were: a second opinion here is drift, and drift is how a queue comes
  * to promise a decision the door refuses.
@@ -238,7 +238,6 @@ export async function readPendingEvidenceJudgments(
 
   const pending: PendingEvidenceJudgment[] = [];
   const waitingOnYou: PendingEvidenceJudgment[] = [];
-  const awaitingSubmitter: PendingEvidenceJudgment[] = [];
   for (const task of tasks) {
     const [latest] = task.completionEvidence;
     if (!latest || latest.decisions.length > 0) continue;
@@ -278,14 +277,15 @@ export async function readPendingEvidenceJudgments(
       },
     };
     // The placement, in the order the door asks: is there a standard to decide this against at
-    // all, and then is this reader one the door would take the decision from. A decidable row
-    // this reader may not answer goes nowhere — it is already in front of every session that CAN
-    // answer it, and a copy here would be a row whose only possible reading is "not your problem".
+    // all, and then is this reader one the door would take the decision from. Two of the four
+    // answers come back and two go nowhere. A decidable row this reader may not answer is already
+    // in front of every session that CAN answer it; an undecidable row this reader did not file is
+    // already in front of the run that has to file the next revision. Either copy would be a row
+    // whose only possible reading is "not your problem", which is a broadcast however quietly it
+    // is worded.
     if (standing === null) {
       if (disqualification === null) pending.push(row);
-    } else if (disqualification === null) {
-      awaitingSubmitter.push(row);
-    } else {
+    } else if (disqualification !== null) {
       waitingOnYou.push(row);
     }
   }
@@ -298,7 +298,6 @@ export async function readPendingEvidenceJudgments(
   );
   pending.sort(oldestFirst);
   waitingOnYou.sort(oldestFirst);
-  awaitingSubmitter.sort(oldestFirst);
 
   return {
     readAt,
@@ -307,6 +306,5 @@ export async function readPendingEvidenceJudgments(
     oldestAgeSeconds: pending.length === 0 ? null : pending[0].ageSeconds,
     pending,
     waitingOnYou,
-    awaitingSubmitter,
   };
 }
