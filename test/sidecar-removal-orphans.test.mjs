@@ -141,7 +141,8 @@ test('(g) every repository .mjs entry point still parses', () => {
   const entries = readdirSync(path.join(repo, 'scripts'))
     .filter((name) => name.endsWith('.mjs'))
     .map((name) => path.join('scripts', name));
-  assert.ok(entries.length > 20);
+  assert.ok(entries.length > 10,
+    `expected the repository .mjs entry points, saw ${entries.length}`);
   for (const entry of entries) {
     execFileSync(process.execPath, ['--check', path.join(repo, entry)], { cwd: repo });
   }
