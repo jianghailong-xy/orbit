@@ -87,7 +87,9 @@ function controllerOver(query: () => Promise<unknown>, hub: Observable<unknown>,
   return new SessionsController(
     {} as never,
     prisma as never,
-    { streamForRun: () => hub } as never,
+    // Nothing was streamed before these connects; the mid-turn prefix is
+    // sse-mid-turn-prefix.spec.ts's subject.
+    { streamForRun: () => hub, turnPrefix: () => ({ text: '', thinking: '' }) } as never,
     {} as never,
     {} as never,
   );

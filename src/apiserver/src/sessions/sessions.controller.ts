@@ -104,6 +104,27 @@ const resyncEvent = (): StreamedEvent => ({
 });
 
 /**
+ * What this turn has already streamed, as the delta frames a client connecting now would otherwise
+ * never see.
+ *
+ * The deltas are broadcast-only: ingest drops them and the replay query filters them again, so the
+ * half-sentence a session has emitted before you opened it exists nowhere the replay can reach
+ * (RealtimeService.turnPrefix holds it). One frame carries the whole prefix — clients append delta
+ * text to the open bubble, so a single frame reads the same as the hundred it stands for.
+ *
+ * Seq 0 like every other live-only event: the prefix is animation, not history, and must not touch
+ * the client's resume cursor.
+ */
+function prefixEvents(held: { text: string; thinking: string }): StreamedEvent[] {
+  const frame = (type: string, text: string): StreamedEvent => ({ seq: 0, type, payload: { text } });
+  // Thinking first: it precedes the text it reasoned toward, and the two drive separate drafts.
+  return [
+    ...(held.thinking ? [frame(RunEventType.THINKING_DELTA as string, held.thinking)] : []),
+    ...(held.text ? [frame(RunEventType.TEXT_DELTA as string, held.text)] : []),
+  ];
+}
+
+/**
  * What the window collected, minus what the replay already delivered.
  *
  * Only persisted events can arrive down both halves, and they are the ones carrying a real seq:
@@ -137,10 +158,16 @@ function withoutReplayed(buffer: readonly StreamedEvent[], maxReplaySeq: number)
  *
  * The events are held as they came: the hub hands the *same* object to every subscriber on the
  * session, so writing through one would corrupt the other tabs' streams.
+ *
+ * The same handover is where the turn's already-streamed text is handed over (`streamedPrefix`).
+ * The replay cannot carry it — deltas are never persisted — so a client that opens a session
+ * mid-reply used to pick the text up from wherever the engine happened to be, i.e. mid-sentence,
+ * until the turn's `assistant` event self-healed it.
  */
 function replayThenLive(
   history$: Observable<StreamedEvent>,
   live$: Observable<StreamedEvent>,
+  streamedPrefix: () => { text: string; thinking: string },
 ): Observable<StreamedEvent> {
   return new Observable<StreamedEvent>((subscriber) => {
     let buffer: StreamedEvent[] = [];
@@ -173,6 +200,13 @@ function replayThenLive(
       },
     });
 
+    // Snapshotted here, on purpose: the hub subscription above is live and nothing can have been
+    // published through it yet (publish() runs on another task, never between two statements). That
+    // is what keeps the two halves disjoint — everything streamed BEFORE this line is in the
+    // snapshot and in no buffer, everything after is in the buffer and not the snapshot — so the
+    // prefix reaches the client exactly once.
+    const snapshot = streamedPrefix();
+
     const historySub = history$.subscribe({
       next: (event) => {
         if (event.seq > maxReplaySeq) maxReplaySeq = event.seq;
@@ -180,7 +214,23 @@ function replayThenLive(
       },
       error: (err) => subscriber.error(err),
       complete: () => {
-        const held = overflowed ? [resyncEvent()] : withoutReplayed(buffer, maxReplaySeq);
+        // Re-read before handing the snapshot over. An ingest commits its rows and broadcasts them
+        // a moment later, so a boundary event can be in the replay just delivered while the
+        // broadcast that drops this buffer has not run yet; sending the prefix then would leave a
+        // stray half-sentence under the full text the replay already carried. If the buffer no
+        // longer starts with what was snapshotted, something superseded it and it is not ours to
+        // send. (A turn past RealtimeService's cap reads as empty here, which fails the same test —
+        // the deliberate fallback to the old behaviour.)
+        const current = streamedPrefix();
+        const superseded =
+          !current.text.startsWith(snapshot.text) || !current.thinking.startsWith(snapshot.thinking);
+        // The prefix goes ahead of the buffer: it was streamed before any of it. On an overflowed
+        // buffer it is dropped with everything else — the client is re-seeding from a tail page, and
+        // a resync it will act on says more than a draft it is about to discard.
+        const prefix = superseded ? [] : prefixEvents(snapshot);
+        const held = overflowed
+          ? [resyncEvent()]
+          : [...prefix, ...withoutReplayed(buffer, maxReplaySeq)];
         buffer = [];
         buffering = false;
         for (const event of held) subscriber.next(event);
@@ -684,7 +734,7 @@ export class SessionsController {
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so
         // a replay never carries them and the history stream is left exactly as it was.
         const live$ = this.realtime.streamForRun(id).pipe(coalesceDeltas());
-        return replayThenLive(history$, live$);
+        return replayThenLive(history$, live$, () => this.realtime.turnPrefix(id));
       }),
       map((e: StreamedEvent) => {
         const cut = cap

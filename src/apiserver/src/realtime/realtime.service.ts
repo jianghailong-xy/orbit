@@ -45,6 +45,50 @@ const INBOX_CHANNEL = 'orbit_inbox';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 
+/**
+ * Cap on the mid-turn text one session holds for a client that connects while it is streaming (see
+ * `turnPrefix`); text and thinking are capped separately. A long reply is a few thousand
+ * characters, so this sits well above one turn's worth. Past it the prefix is abandoned rather than
+ * clipped: half of it would render as a reply starting mid-word, which is the very defect the
+ * backfill exists to remove, so the honest degradation is back to handing over nothing.
+ */
+const TURN_PREFIX_MAX_CHARS = 64_000;
+
+/** One session's streamed-but-unpersisted text for the turn in flight. `null` is a kind that blew
+ *  past TURN_PREFIX_MAX_CHARS and stays abandoned until the next boundary clears it. */
+type HeldTurnPrefix = { text: string | null; thinking: string | null };
+
+/**
+ * Which held prefixes an event supersedes — the server-side twin of the web client's
+ * `supersedesLiveDrafts` (src/web/src/lib/steerDelivery.ts) and the two cases beside it in
+ * WorkspaceView. The two must agree: this decides what a client connecting mid-turn is handed, the
+ * client decides what it keeps on screen, and any disagreement shows up as a half-sentence left
+ * above the reply that already superseded it.
+ */
+function supersededPrefixes(event: { type: string; payload?: unknown }): 'both' | 'thinking' | null {
+  const payload = (event.payload ?? {}) as { steer?: unknown; subtype?: unknown };
+  switch (event.type) {
+    case RunEventType.ASSISTANT:
+    case RunEventType.TURN_END:
+    case RunEventType.INTERRUPT:
+    case RunEventType.ERROR:
+      return 'both';
+    // A steer is the one `user` event that is NOT a boundary: it is delivered into the running
+    // turn, which goes on streaming into the same draft.
+    case RunEventType.USER:
+      return payload.steer === true ? null : 'both';
+    // The durable thinking block ends its own draft only — text may still be streaming.
+    case RunEventType.THINKING:
+      return 'thinking';
+    // A mid-turn crash skips turn_end and re-spawns with `resumed`; without this the partial text
+    // outlives its turn. Not every `system` event: the engines' stderr arrives as one too.
+    case RunEventType.SYSTEM:
+      return payload.subtype === 'resumed' ? 'both' : null;
+    default:
+      return null;
+  }
+}
+
 /** Normalize both the legacy `{id}` / `{taskId}` nudges and the incremental task-change payload.
  * Empty or malformed payloads fail closed to `resync`: a future incremental client must never turn
  * an event it cannot understand into "nothing changed". */
@@ -131,6 +175,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
   private readonly ownerCache = new Map<string, { ownerId: string; workspaceId: string | null }>();
   private static readonly OWNER_CACHE_MAX = 10_000;
+  /** sessionId → the current turn's streamed text (see `turnPrefix`). An entry exists only while a
+   *  turn is streaming: whatever supersedes the drafts drops it again. Bounded like ownerCache
+   *  because a runner killed mid-reply never sends the boundary that would. */
+  private readonly turnPrefixes = new Map<string, HeldTurnPrefix>();
+  private static readonly TURN_PREFIX_MAX_SESSIONS = 1_000;
   /** Hub key prefix for user-scoped events (see publishForUser). Session ids are UUIDs, so this
    *  namespace can never collide with one. */
   private static readonly USER_SCOPE = 'user:';
@@ -285,6 +334,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // ── run events (SSE) ────────────────────────────────────────────────────
 
   publish(runId: string, event: NormalizedRunEvent): void {
+    this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
     this.hub.next({ runId, event }); // same replica
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
@@ -327,6 +377,71 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       filter((m) => m.runId === runId && !isLifecycleType(m.event.type)),
       map((m) => m.event),
     );
+  }
+
+  /**
+   * What this session has streamed in the current turn but not persisted: the half-sentence a
+   * client connecting right now would otherwise never see.
+   *
+   * `text_delta` / `thinking_delta` are broadcast-only — ingest drops them
+   * (NON_REPLAYABLE_EVENT_TYPES) and the replay query filters them again — so until the turn's
+   * authoritative `assistant` lands there is no other record of what has already gone out. The SSE
+   * handler hands this over once, at the moment it takes over from the replay.
+   *
+   * Empty strings when there is nothing to hand over, including a turn that outgrew
+   * TURN_PREFIX_MAX_CHARS.
+   *
+   * SINGLE REPLICA, deliberately: events from other replicas arrive over the NOTIFY bridge straight
+   * into the hub (`onNotify`) and never pass through `publish`, so a replica accumulates only the
+   * turns it is itself streaming. A client that lands on another one falls back to today's
+   * behaviour — a reply that starts mid-sentence until the `assistant` event self-heals it.
+   * Bridging the buffer across replicas is out of scope here.
+   */
+  turnPrefix(runId: string): { text: string; thinking: string } {
+    const held = this.turnPrefixes.get(runId);
+    return { text: held?.text ?? '', thinking: held?.thinking ?? '' };
+  }
+
+  /** Accumulate one event into that buffer: deltas extend it, a boundary clears what it supersedes,
+   *  and the session ending releases it outright. */
+  private retainTurnPrefix(runId: string, event: NormalizedRunEvent): void {
+    if (event.type === RunEventType.SESSION_ENDED) {
+      this.turnPrefixes.delete(runId); // nothing will ever join this turn again
+      return;
+    }
+    const superseded = supersededPrefixes(event);
+    if (superseded !== null) {
+      const held = this.turnPrefixes.get(runId);
+      if (!held) return;
+      held.thinking = '';
+      if (superseded === 'both') held.text = '';
+      // Nothing left to hand anyone: drop the entry rather than keep an empty one per session.
+      if (held.text === '' && held.thinking === '') this.turnPrefixes.delete(runId);
+      return;
+    }
+    const kind =
+      event.type === RunEventType.TEXT_DELTA
+        ? 'text'
+        : event.type === RunEventType.THINKING_DELTA
+          ? 'thinking'
+          : null;
+    if (kind === null) return;
+    const chunk = (event.payload as { text?: unknown } | null | undefined)?.text;
+    if (typeof chunk !== 'string' || chunk === '') return;
+    const held = this.turnPrefixes.get(runId) ?? this.openTurnPrefix(runId);
+    const current = held[kind];
+    if (current === null) return; // this turn already gave this kind up
+    held[kind] = current.length + chunk.length > TURN_PREFIX_MAX_CHARS ? null : current + chunk;
+  }
+
+  private openTurnPrefix(runId: string): HeldTurnPrefix {
+    if (this.turnPrefixes.size >= RealtimeService.TURN_PREFIX_MAX_SESSIONS) {
+      const oldest = this.turnPrefixes.keys().next().value; // insertion order
+      if (oldest !== undefined) this.turnPrefixes.delete(oldest);
+    }
+    const held: HeldTurnPrefix = { text: '', thinking: '' };
+    this.turnPrefixes.set(runId, held);
+    return held;
   }
 
   // ── synthesized lifecycle signals (control plane only) ──────────────────

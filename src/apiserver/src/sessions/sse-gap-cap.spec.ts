@@ -37,7 +37,7 @@ function controllerOver(rows: ReturnType<typeof row>[]): SessionsController {
     $queryRaw: async () => rows,
   };
   // No live events: the test is about the replay half, and an endless live stream would hang it.
-  const realtime = { streamForRun: () => EMPTY };
+  const realtime = { streamForRun: () => EMPTY, turnPrefix: () => ({ text: '', thinking: '' }) };
   return new SessionsController({} as never, prisma as never, realtime as never, {} as never, {} as never);
 }
 

@@ -114,7 +114,7 @@ test('the SSE history replay applies the same fence while leaving its live half 
   const controller = new SessionsController(
     {} as never,
     prisma as never,
-    { streamForRun: () => EMPTY } as never,
+    { streamForRun: () => EMPTY, turnPrefix: () => ({ text: '', thinking: '' }) } as never,
     {} as never,
     {} as never,
   );
