@@ -270,6 +270,14 @@ func currentWorkSteerTurn(id, targetTurnID, text string) scriptedTurn {
 	}}
 }
 
+// refilableCurrentWorkSteerTurn is the same message from a control plane that will take it back
+// and run it as an ordinary turn if the runner can prove it never reached the engine.
+func refilableCurrentWorkSteerTurn(id, targetTurnID, text string) scriptedTurn {
+	s := currentWorkSteerTurn(id, targetTurnID, text)
+	s.turn.SteerRequeue = true
+	return s
+}
+
 // raceySteerTurn is a steer that reaches the runner after its turn is already over.
 func raceySteerTurn(id, text string) scriptedTurn {
 	s := steerTurn(id, text)
@@ -648,5 +656,79 @@ func TestSessionRefusesASteerWhenNoTurnIsRunning(t *testing.T) {
 	}
 	if !strings.Contains(settled.Result, "no turn was running") {
 		t.Errorf("the result %q does not say why the steer could not land", settled.Result)
+	}
+}
+
+// The same fence as above, answered by a control plane that can take the message back. The
+// generation still dies — a written frame cannot be retracted from Claude — but the message is
+// not lost with it: nothing read it, and that is exactly the proof re-filing requires.
+func TestSessionCurrentWorkSteerTargetFenceRefilesInsteadOfFailing(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Await: "user"}, // CURRENT_WORK bytes reached stdin, but Claude has not replayed them
+			{Emit: "result", Text: "A done"},
+			{Await: "user"}, // B must never reach this fenced process
+		},
+		[]scriptedTurn{
+			messageTurn("turn-A", "do A"),
+			refilableCurrentWorkSteerTurn("current-work", "turn-A", "adjust A only"),
+			messageTurn("turn-B", "do B"),
+		}, nil)
+
+	// The fence itself is unchanged: this generation is dead, and B is not written into it.
+	for _, frame := range run.fake.Stdin() {
+		if userFrameText(t, frame) == "do B" {
+			t.Fatal("B was written into the Claude generation fenced at A's result")
+		}
+	}
+	settled := run.turnResult("current-work")
+	if settled == nil || settled.Status != stSucceeded || settled.Subtype != subtypeSteerRequeue {
+		t.Fatalf("CURRENT_WORK settled as %+v, want a re-file, not a failure", settled)
+	}
+	// Said out loud: this message already has a bubble open, and leaving it on "Delivering…"
+	// until the re-delivery lands is the silence every one of these states exists to prevent.
+	states := run.deliveryStates("current-work")
+	if len(states) == 0 || states[len(states)-1] != string(deliveryRequeued) {
+		t.Fatalf("CURRENT_WORK delivery states = %v, want terminal requeued", states)
+	}
+	for _, state := range states {
+		if state == string(deliveryFailed) {
+			t.Fatalf("a re-filed message was also reported undelivered: %v", states)
+		}
+	}
+	if settled := run.turnResult("turn-A"); settled == nil || settled.Status != stSucceeded {
+		t.Fatalf("target A settled as %+v, want its valid result preserved", settled)
+	}
+}
+
+// A steer that arrives with nothing to join, from a control plane that can re-file it. Nothing
+// has been said about this message yet, so the re-file says nothing either: the delivery that
+// runs it writes the one bubble it gets, and a bubble here would show it twice.
+func TestSessionRefilesASteerWithNoTurnToJoinSilently(t *testing.T) {
+	steer := raceySteerTurn("steer-1", "too early")
+	steer.turn.SteerRequeue = true
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Emit: "system_init"},
+			{Await: "user"}, // never satisfied: the only turn offered is a steer
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{steer},
+		func(r *deliverySession) bool { return r.turnResult("steer-1") != nil })
+
+	settled := run.turnResult("steer-1")
+	if settled == nil || settled.Status != stSucceeded || settled.Subtype != subtypeSteerRequeue {
+		t.Fatalf("the re-filed steer settled as %+v, want a re-file receipt", settled)
+	}
+	if _, opened := run.userBubbles()["steer-1"]; opened {
+		t.Error("the re-file opened a bubble; the delivery that runs the message writes that one")
+	}
+	if reports := run.deliveryStates("steer-1"); len(reports) != 0 {
+		t.Errorf("the re-file reported delivery states %v, want none before it is delivered", reports)
+	}
+	if len(run.fake.Stdin()) != 0 {
+		t.Errorf("a steer with no turn to steer was written to the engine: %v", run.fake.Stdin())
 	}
 }

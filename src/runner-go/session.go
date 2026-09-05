@@ -1370,6 +1370,19 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 		emit(evUserDelivery, p)
 	})
+	// requeueSteer takes a steer back before it has been offered to anything and files it as the
+	// ordinary queued message it would have been had it arrived a moment later.
+	//
+	// Deliberately silent — no `user` event, no delivery report. Nothing has been said about this
+	// message yet (the refusal below is what would have opened its bubble), so the delivery that
+	// eventually runs it writes the one bubble it ever gets. Announcing it here would leave a
+	// second one behind, showing what the person sent twice. Same reasoning as codex's requeue.
+	requeueSteer := func(resp *RunInboxResponse) {
+		requeueSteerTurn(resp.TurnID, job, completeTurn)
+		inflightMu.Lock()
+		delete(inflight, resp.TurnID)
+		inflightMu.Unlock()
+	}
 	refuseSteer := func(resp *RunInboxResponse, cause error, retryable bool) {
 		emitFor(resp.TurnID, evUser, map[string]interface{}{
 			"text": resp.Content, "delivery": string(deliveryFailed), "steer": true,
@@ -1466,6 +1479,16 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				activeOrbitMu.Unlock()
 				if preflightCause != nil {
+					if resp.SteerRequeue {
+						// Both preflight causes are proof of non-delivery: there is no turn to
+						// join, or the one this message named is over. Nothing has read it, so
+						// it is not a failure to report — it is a message that turned out to be
+						// an ordinary one, and the control plane will run it as such.
+						logln("re-filing a steer for", job.SessionID, "as an ordinary message —",
+							preflightCause.Error())
+						requeueSteer(resp)
+						continue
+					}
 					logln("dropping a steer for", job.SessionID, "— no turn is running on", rt.String())
 					// A refused steer is the one refusal that has to enter the transcript. A
 					// refused message fails its session, which is loud; a steer settles only
@@ -1480,6 +1503,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// `pending` — pulled, promised nothing.
 				delivery := newMessageDelivery(resp.TurnID, steer)
 				delivery.targetTurnID = resp.TargetTurnID
+				delivery.requeueable = resp.SteerRequeue
 				// Build the claude user message by dispatching each attachment on its MIME
 				// type: images and PDFs are inlined as base64 content blocks; anything else is
 				// written to the session's uploads dir outside the worktree for claude to read
@@ -2041,6 +2065,20 @@ scanLoop:
 			}
 			activeOrbitMu.Unlock()
 			for _, d := range fenced {
+				if d.requeueable {
+					// The generation that could have read this frame is being killed above, so
+					// "unacknowledged at this boundary" is proof it never became part of the
+					// conversation — the same proof that used to justify calling it failed. It
+					// goes back to the queue and runs as its own turn instead.
+					//
+					// Said out loud, unlike the preflight re-file: this message's bubble is
+					// already open (it was accepted, and its bytes may have been written), so
+					// leaving it on "Delivering…" until the re-delivery lands would be the one
+					// thing every state in this vocabulary exists to prevent.
+					reportDelivery(d.turnID, deliveryRequeued, "", false)
+					requeueSteerTurn(d.turnID, job, completeTurn)
+					continue
+				}
 				reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetEnded.Error(), false)
 				settleSteerTurn(d.turnID, errCurrentWorkTargetEnded, job, completeTurn)
 			}

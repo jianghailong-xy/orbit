@@ -40,6 +40,9 @@ final class SteerDeliveryTests: XCTestCase {
         XCTAssertEqual(SteerDelivery.state("written").label, "Delivering…")
         XCTAssertEqual(SteerDelivery.state("acknowledged").label, "Sent into this turn")
         XCTAssertEqual(SteerDelivery.state("failed").label, "Not delivered")
+        // Same vocabulary as web: a message re-filed as its own turn is on its way, not lost.
+        XCTAssertEqual(SteerDelivery.state("requeued").label, "Queued for next turn instead")
+        XCTAssertEqual(SteerDelivery.state("requeued").tone, .progress)
     }
 
     func testSeparatesOnItsWayFromArrivedFromLost() {

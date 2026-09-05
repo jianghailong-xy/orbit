@@ -454,6 +454,21 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             mime: typeof a.mime === 'string' ? a.mime : undefined,
             name: typeof a.name === 'string' ? a.name : undefined,
           }));
+        // One message, one bubble. A steer the engine provably never read is handed back and
+        // re-delivered as the ordinary message it would have been — same row, same turn id — so
+        // its second `user` event is the same message arriving, not another one. Amend the bubble
+        // that is already there, in the place the person typed it, instead of showing what they
+        // sent twice. Only steer → message: nothing else re-announces a turn this way, and a
+        // re-leased message turn (which arrives as a continuation nudge) must keep its own line.
+        const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
+        if (priorSteer?.steer && p.steer !== true) {
+          priorSteer.steer = false;
+          priorSteer.delivery = typeof p.delivery === 'string' ? p.delivery : undefined;
+          priorSteer.deliveryReason = undefined;
+          if (p.text) priorSteer.text = String(p.text);
+          if (refs && refs.length) priorSteer.attachmentRefs = refs;
+          break;
+        }
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
           const node: TextNode = {
             kind: 'user',

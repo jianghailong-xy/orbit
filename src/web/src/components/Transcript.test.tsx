@@ -287,6 +287,44 @@ describe('message delivery', () => {
     expect(html).not.toContain('Not delivered');
   });
 
+  it('shows a re-filed message once, in the place it was typed', () => {
+    // A steer the engine provably never read is handed back and runs as an ordinary turn: the
+    // same row, the same turn id, delivered a second time. Two bubbles would show what the
+    // person sent twice and leave the first one looking like it failed.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'user', turnId: 't1', payload: { text: 'adjust this', delivery: 'enqueued', steer: true } },
+          deliveryEvent(2, 't1', 'written'),
+          deliveryEvent(3, 't1', 'requeued'),
+          userEvent(4, 't1', 'adjust this', 'enqueued'),
+        ]}
+      />,
+    );
+
+    expect(html.split('adjust this').length - 1).toBe(1);
+    // And it stops narrating a delivery it is no longer having: it is an ordinary queued
+    // message now, and an ordinary message's bubble says nothing about how it got there.
+    expect(html).not.toContain('Queued for next turn instead');
+    expect(html).not.toContain('Not delivered');
+  });
+
+  it('says a re-filed message is coming back before its delivery lands', () => {
+    // The window between the two: the bubble is open, the engine is not going to read it, and
+    // the turn that will is not here yet. Silence would read exactly like a dropped message.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'user', turnId: 't1', payload: { text: 'adjust this', delivery: 'enqueued', steer: true } },
+          deliveryEvent(2, 't1', 'requeued'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Queued for next turn instead');
+    expect(html).not.toContain('Not delivered');
+  });
+
   it('marks only the message that failed, not the one before it', () => {
     const html = renderToStaticMarkup(
       <Transcript
