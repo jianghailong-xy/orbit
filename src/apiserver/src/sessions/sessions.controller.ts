@@ -17,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma } from '@prisma/client';
-import { concat, concatMap, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
+import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
 import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
@@ -72,6 +72,131 @@ const SSE_REPLAY_CAP = 200;
  * it would have to hold in memory anyway.
  */
 const SSE_GAP_CAP = 1000;
+
+/**
+ * Cap the live events held while the replay query is in flight (see `replayThenLive`). The window
+ * is one DB round trip, so this sits far above anything a healthy one produces; it is here so a
+ * stalled query cannot turn a per-connection buffer into unbounded memory. Past it the buffer is
+ * abandoned for a `resync`, for the same reason an over-long gap is: handing over what survived
+ * would leave a hole the client cannot see.
+ */
+const SSE_LIVE_BUFFER_CAP = 500;
+
+/** What the two halves of the transcript stream have in common: a replayed row carries
+ *  `createdAt`, a live broadcast carries `ts`. */
+type StreamedEvent = {
+  seq: number;
+  type: string;
+  payload: unknown;
+  turnId?: string | null;
+  ts?: string;
+  createdAt?: Date;
+};
+
+/** The order to re-seed: drop the cached window, refetch a tail page, resume from its max seq.
+ *  Rides seq 0 like the other live-only control events, so it lands ahead of the client's dedup. */
+const resyncEvent = (): StreamedEvent => ({
+  seq: 0,
+  type: RunEventType.RESYNC as string,
+  payload: {},
+  turnId: null,
+  createdAt: new Date(),
+});
+
+/**
+ * What the window collected, minus what the replay already delivered.
+ *
+ * Only persisted events can arrive down both halves, and they are the ones carrying a real seq:
+ * every live-only kind (approval, resync, tool_output, and the deltas) rides seq 0 and is exempt
+ * from the comparison. A delta buffered *before* a duplicate goes with it — its text animates a
+ * reply the replay has already handed over whole, so releasing it afterwards would repopulate a
+ * streaming bubble nothing would clear again.
+ */
+function withoutReplayed(buffer: readonly StreamedEvent[], maxReplaySeq: number): StreamedEvent[] {
+  const replayed = (event: StreamedEvent): boolean => event.seq > 0 && event.seq <= maxReplaySeq;
+  const lastReplayed = buffer.reduce((last, event, i) => (replayed(event) ? i : last), -1);
+  return buffer.filter(
+    (event, i) => !replayed(event) && !(i < lastReplayed && isStreamingDelta(event.type)),
+  );
+}
+
+/**
+ * The replay, then the live hub — with the window between them closed.
+ *
+ * `concat` subscribed to the hub only once the history query had come back, so everything the
+ * runner published during that round trip landed on nobody and nothing ever brought it back: the
+ * hub is a bare Subject with no replay, and clients dedup by seq without assuming seq is
+ * contiguous, so the loss was invisible to them. One round trip is a narrow window, but a session
+ * mid-reply is exactly when events are densest — and losing the authoritative `assistant` there
+ * leaves a streaming draft nothing clears until the turn ends, with the tool cards that follow
+ * rendered underneath that half-finished bubble.
+ *
+ * So the hub is subscribed FIRST and what it emits is held; `history$` defers its query, which is
+ * therefore issued from here, underneath that subscription. The stream ends when both halves do,
+ * as it did under `concat`.
+ *
+ * The events are held as they came: the hub hands the *same* object to every subscriber on the
+ * session, so writing through one would corrupt the other tabs' streams.
+ */
+function replayThenLive(
+  history$: Observable<StreamedEvent>,
+  live$: Observable<StreamedEvent>,
+): Observable<StreamedEvent> {
+  return new Observable<StreamedEvent>((subscriber) => {
+    let buffer: StreamedEvent[] = [];
+    let buffering = true;
+    let overflowed = false;
+    let maxReplaySeq = 0;
+    let liveDone = false;
+    let historyDone = false;
+    const finish = (): void => {
+      if (liveDone && historyDone) subscriber.complete();
+    };
+
+    const liveSub = live$.subscribe({
+      next: (event) => {
+        if (!buffering) {
+          subscriber.next(event);
+          return;
+        }
+        if (buffer.length >= SSE_LIVE_BUFFER_CAP) {
+          overflowed = true;
+          buffer = [];
+          return;
+        }
+        buffer.push(event);
+      },
+      error: (err) => subscriber.error(err),
+      complete: () => {
+        liveDone = true;
+        finish();
+      },
+    });
+
+    const historySub = history$.subscribe({
+      next: (event) => {
+        if (event.seq > maxReplaySeq) maxReplaySeq = event.seq;
+        subscriber.next(event);
+      },
+      error: (err) => subscriber.error(err),
+      complete: () => {
+        const held = overflowed ? [resyncEvent()] : withoutReplayed(buffer, maxReplaySeq);
+        buffer = [];
+        buffering = false;
+        for (const event of held) subscriber.next(event);
+        historyDone = true;
+        finish();
+      },
+    });
+
+    // Reached however this ends — including a replay that throws, which must not leave this
+    // connection's hub subscription behind.
+    return () => {
+      historySub.unsubscribe();
+      liveSub.unsubscribe();
+    };
+  });
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('sessions')
@@ -528,10 +653,13 @@ export class SessionsController {
         const limit = capped
           ? Prisma.sql`LIMIT ${SSE_REPLAY_CAP}`
           : Prisma.sql`LIMIT ${SSE_GAP_CAP + 1}`;
-        const history$ = from(
-          this.prisma.$queryRaw<
-            { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
-          >`
+        // Deferred, not eager: `replayThenLive` subscribes the hub before it subscribes this, and
+        // that ordering is the whole point — a query issued here instead would reopen the window.
+        const history$ = defer(
+          () =>
+            this.prisma.$queryRaw<
+              { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
+            >`
             SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
             FROM run_event
             WHERE session_id = ${id}::uuid
@@ -549,33 +677,16 @@ export class SessionsController {
             // re-seed: drop the cached window, refetch a tail page, resume from its max seq. Rides
             // seq 0 like the other live-only control events, and lands before the dedup that would
             // otherwise swallow the second one.
-            if (rows.length > SSE_GAP_CAP) {
-              return from([
-                {
-                  seq: 0,
-                  type: RunEventType.RESYNC as string,
-                  payload: {},
-                  turnId: null,
-                  createdAt: new Date(),
-                },
-              ]);
-            }
+            if (rows.length > SSE_GAP_CAP) return from([resyncEvent()]);
             return from(rows);
           }),
         );
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so
         // a replay never carries them and the history stream is left exactly as it was.
         const live$ = this.realtime.streamForRun(id).pipe(coalesceDeltas());
-        return concat(history$, live$);
+        return replayThenLive(history$, live$);
       }),
-      map((e: {
-        seq: number;
-        type: string;
-        payload: unknown;
-        turnId?: string | null;
-        ts?: string;
-        createdAt?: Date;
-      }) => {
+      map((e: StreamedEvent) => {
         const cut = cap
           ? truncatePayload(e.type, e.payload, cap)
           : { payload: e.payload, truncated: false };
