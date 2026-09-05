@@ -223,7 +223,7 @@ pgTest('a steer is handed over mid-turn while the message behind it keeps waitin
   assert.equal(await dequeue(), null);
 });
 
-pgTest('explicit CURRENT_WORK is exact-targeted and never advertises legacy requeue', async () => {
+pgTest('explicit CURRENT_WORK is exact-targeted and may still be filed back if never read', async () => {
   await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
   const target = await client.query(
     `SELECT id FROM "conversation_turn" WHERE content = 'rename the widget'`,
@@ -240,7 +240,9 @@ pgTest('explicit CURRENT_WORK is exact-targeted and never advertises legacy requ
 
   const currentWork = await dequeue();
   assert.equal(currentWork?.kind, 'steer');
-  assert.equal(currentWork?.steerRequeue, false);
+  // Exact-targeted AND re-filable: the target binding is what makes the delivery precise, and
+  // the requeue permission is what happens when that precise delivery provably did not land.
+  assert.equal(currentWork?.steerRequeue, true);
   assert.equal(currentWork?.targetTurnId, target.rows[0].id);
 });
 

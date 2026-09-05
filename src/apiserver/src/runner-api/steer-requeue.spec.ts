@@ -217,15 +217,24 @@ test('an ordinary steer completion still acks, so re-filing is not what any of t
   assert.deepEqual(h.inboxWakes, []);
 });
 
-test('explicit CURRENT_WORK never takes the legacy steer-requeue fallback', async () => {
+test('explicit CURRENT_WORK is re-filed too, shedding the columns only a steer may carry', async () => {
+  // It used to be settled ANSWERED here — the fallback was reserved for legacy rows, so an
+  // explicit one that provably never reached the engine became a receipt the sender could
+  // answer only by retyping the message. The reservation is what changed; the proof standard
+  // did not, and it is still the runner's to meet.
   const h = harness({ sendIntent: 'CURRENT_WORK' });
 
   await report(h, TURN_COMPLETE_STEER_REQUEUE);
 
   assert.equal(h.turnWrites.length, 1);
-  assert.equal(h.turnWrites[0].data.status, 'ANSWERED');
-  assert.equal(h.turnWrites[0].data.kind, undefined);
-  assert.deepEqual(h.inboxWakes, []);
+  assert.equal(h.turnWrites[0].data.status, 'PENDING');
+  assert.equal(h.turnWrites[0].data.kind, 'message');
+  // NEXT_TURN with no target is the only message shape the row constraints accept.
+  assert.equal(h.turnWrites[0].data.sendIntent, 'NEXT_TURN');
+  assert.equal(h.turnWrites[0].data.targetTurnId, null);
+  // No receipt beside it: one row, one message, one place it can be answered.
+  assert.equal(h.turnWrites[0].data.deliveryStatus, undefined);
+  assert.deepEqual(h.inboxWakes, [SESSION_ID]);
 });
 
 test('the reserved requeue operation cannot settle an ordinary turn', async () => {

@@ -17,7 +17,12 @@ const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const TURN_ID = '33333333-3333-4333-8333-333333333333';
 const CURRENT_WORK_ID = '44444444-4444-4444-8444-444444444444';
 
-function harness(kind: 'steer' | 'message', pendingCurrentWork = false) {
+function harness(
+  kind: 'steer' | 'message',
+  pendingCurrentWork = false,
+  /** What the steer being completed was filed as. Null is the legacy no-intent row. */
+  steerIntent: 'CURRENT_WORK' | null = null,
+) {
   const sessionWrites: Record<string, unknown>[] = [];
   const turnWrites: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
   const inboxWakes: string[] = [];
@@ -30,7 +35,12 @@ function harness(kind: 'steer' | 'message', pendingCurrentWork = false) {
       findFirst: async ({ where }: { where: { kind?: string } }) => {
         if (where.kind === 'steer') {
           return kind === 'steer'
-            ? { id: TURN_ID, sendIntent: null, targetTurnId: null }
+            ? {
+                id: TURN_ID,
+                sendIntent: steerIntent,
+                targetTurnId: steerIntent === 'CURRENT_WORK' ? CURRENT_WORK_ID : null,
+                deliveryStatus: null,
+              }
             : null;
         }
         return {
@@ -187,4 +197,51 @@ test('lost dequeue response then target completion hands IN_FLIGHT CURRENT_WORK 
   // The queue view changed, so the clients are told: the bubble under the transcript stops
   // saying "Delivering…" and becomes the queued turn it now is.
   assert.deepEqual(h.queueChanges, [SESSION_ID]);
+});
+
+test('a CURRENT_WORK message the runner proves it never delivered is filed back, not failed', async () => {
+  // The other half of the same race. The target-completion boundary catches a steer the runner
+  // never came back for; this is the runner coming back to say it could not join the turn — the
+  // commoner of the two, and until now the one that still produced an unanswerable red bubble.
+  const h = harness('steer', false, 'CURRENT_WORK');
+
+  await h.controller.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
+    turnId: TURN_ID,
+    status: 'SUCCEEDED',
+    subtype: 'steer_requeue',
+    numTurns: 0,
+    costUsd: 0,
+  } as never);
+
+  const write = h.turnWrites.find((entry) => entry.where.id === TURN_ID);
+  assert.equal(write?.data.kind, 'message');
+  assert.equal(write?.data.status, 'PENDING');
+  // The two columns only a steer may carry have to go, or the row shape constraints reject it.
+  assert.equal(write?.data.sendIntent, 'NEXT_TURN');
+  assert.equal(write?.data.targetTurnId, null);
+  // Its lease belonged to a delivery that did not happen.
+  assert.equal(write?.data.deliveredAt, null);
+  assert.equal(write?.data.deliveryStatus, undefined);
+  // And the queue is woken: the turn it could not join may already have parked the session.
+  assert.deepEqual(h.inboxWakes, [SESSION_ID]);
+});
+
+test('a legacy re-filed steer keeps the row shape it always had', async () => {
+  // The explicit branch must not reach across and start stamping NEXT_TURN on rows that never
+  // carried an intent: a legacy row's absent intent is what tells the rest of the tree it
+  // predates routing-v1.
+  const h = harness('steer', false, null);
+
+  await h.controller.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
+    turnId: TURN_ID,
+    status: 'SUCCEEDED',
+    subtype: 'steer_requeue',
+    numTurns: 0,
+    costUsd: 0,
+  } as never);
+
+  const write = h.turnWrites.find((entry) => entry.where.id === TURN_ID);
+  assert.equal(write?.data.kind, 'message');
+  assert.equal(write?.data.sendIntent, undefined);
+  assert.equal(write?.data.targetTurnId, undefined);
 });
