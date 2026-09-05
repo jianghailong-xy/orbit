@@ -128,6 +128,51 @@ export function taskCompletionDeclarationError(
   }
 }
 
+/** The stored code and remedy for declaring the third criterion on work that is in no project. */
+export const EVIDENCE_JUDGMENT_REQUIRES_PROJECT_CODE = 'EVIDENCE_JUDGMENT_REQUIRES_PROJECT';
+export const EVIDENCE_JUDGMENT_REQUIRES_PROJECT_ACTION =
+  'FILE_UNDER_A_PROJECT_OR_DECLARE_ANOTHER_CRITERION';
+
+/**
+ * Why EVIDENCE_JUDGMENT cannot be DECLARED on work that is filed under no project, or null.
+ *
+ * This is a rule about what may be written, not about what may be decided. A task already in this
+ * state is decided against its own `acceptanceCriteria` (`task-evidence-envelope.ts`), and that
+ * lane keeps working — the rows on the deployed server depend on it, and it is why the two ways
+ * out named below are edits rather than a deletion.
+ *
+ * What it refuses is arriving there by default. EVIDENCE_JUDGMENT is the criterion an undeclared
+ * task falls back to, so standalone work an agent files lands on it without anybody choosing it,
+ * and it then holds only while the task ALSO carries acceptance criteria its evidence quotes
+ * verbatim — a second condition nothing at declaration time asks for. A task filed under a project
+ * has no such gap: the standard is one the project states and `project_get` hands out.
+ *
+ * Pure, and separate from `taskCompletionDeclarationError` above, because the fact it reads is not
+ * part of the declaration: where work is FILED is decided by the scope contract after the
+ * declaration has already been validated, and the three write doors have to ask this question
+ * about the project each of them actually lands in.
+ */
+export function criterionNeedsProjectRefusal(declaration: {
+  completionCriterion?: TaskCompletionCriterionValue | null;
+  projectId?: string | null;
+}): { code: string; kind: 'REFUSAL'; requiredAction: string; message: string } | null {
+  if (declaration.completionCriterion !== 'EVIDENCE_JUDGMENT') return null;
+  if (declaration.projectId) return null;
+  return {
+    code: EVIDENCE_JUDGMENT_REQUIRES_PROJECT_CODE,
+    kind: 'REFUSAL',
+    requiredAction: EVIDENCE_JUDGMENT_REQUIRES_PROJECT_ACTION,
+    message:
+      'EVIDENCE_JUDGMENT is settled by one CONFIRM measured against a stated acceptance criterion, '
+      + 'and this task is in no project, so the only standard it could be held to is whatever it '
+      + 'happens to have written in its own acceptanceCriteria — which nothing here requires it to '
+      + 'have, and which its evidence would then have to quote word for word. Give this work a '
+      + 'projectId, so the criterion it serves is one the project states and a decider can read; '
+      + 'or declare a criterion it can settle without one — EXECUTABLE with acceptanceCommand and '
+      + 'acceptanceExpectedExitCode, or VERIFICATION with an independent verification task.',
+  };
+}
+
 export interface TaskCompletionFacts {
   /** Required, and not nullable: evaluating a criterion begins with knowing which one was declared. */
   completionCriterion: TaskCompletionCriterionValue;

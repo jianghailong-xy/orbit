@@ -212,7 +212,13 @@ suite('the declaration is stored, editable, clearable and still enforced as a pa
   await empty(sql);
 
   const tasks = tasksService(db);
-  const f = await fixture(db, 'declaration', { command: 'test -f package.json', expectedExitCode: 0 });
+  // Filed under a project, because clearing the pair below re-resolves the criterion to
+  // EVIDENCE_JUDGMENT and that criterion is declared against a project's stated standard.
+  // What this case is about — the pair is stored, editable and clearable together — is
+  // unchanged by where the task lives.
+  const f = await fixture(
+    db, 'declaration', { command: 'test -f package.json', expectedExitCode: 0 }, true,
+  );
   const stored = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
   assert.equal(stored.completionCriterion, 'EXECUTABLE');
   assert.equal(stored.acceptanceCommand, 'test -f package.json');

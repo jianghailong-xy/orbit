@@ -288,7 +288,14 @@ test('a task’s criterion declaration can be made, corrected and taken back aft
   });
 
   await t.test('work in no project cannot declare a criterion', async () => {
-    const task = await fileTask('work in no project');
+    // EXECUTABLE rather than this file's usual EVIDENCE_JUDGMENT: that criterion is itself
+    // declared against a project's stated standard and can no longer be filed under nothing, and
+    // what is being observed here is the criterion DECLARATION door, not the completion one.
+    const task = await fileTask('work in no project', {
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    });
 
     const body = await refusalOf(() => service.update(
       ownerId, task.id, { criterionKey: served.key } as never,

@@ -74,18 +74,25 @@ suite('stored tasks expose one of the three criteria, and the database supplies 
     await sql.end();
   });
   await verifyCoordinatorPgIdentity(sql);
-  await sql.query(`TRUNCATE "task", "user" RESTART IDENTITY CASCADE`);
+  await sql.query(`TRUNCATE "task", "project", "user" RESTART IDENTITY CASCADE`);
 
   const ownerId = randomUUID();
   await db.user.create({
     data: { id: ownerId, email: `${ownerId}@n1.invalid`, name: 'n1', passwordHash: 'x' },
+  });
+  // EVIDENCE_JUDGMENT is declared against a project's stated criterion, so the task below that
+  // uses it is filed under one. This file is about which criterion a row can carry, not about
+  // where the work lives, and the two rows that declare the other peers stay in no project.
+  const projectId = randomUUID();
+  await db.project.create({
+    data: { id: projectId, ownerId, title: 'the goal the human-judged task serves' },
   });
   // 0179's compatibility value is still writable and still means exactly what it meant. What 0237
   // changed is that it has to be WRITTEN: this row states it rather than receiving it from a column
   // default, which is why the insert below still names the field it once could omit.
   const declaredHuman = await db.task.create({
     data: {
-      ownerId, title: 'a criterion stated rather than defaulted',
+      ownerId, projectId, title: 'a criterion stated rather than defaulted',
       creatorType: 'USER', creatorId: ownerId,
       completionCriterion: 'EVIDENCE_JUDGMENT',
     },
@@ -102,7 +109,7 @@ suite('stored tasks expose one of the three criteria, and the database supplies 
     completionPolicy: 'VERIFICATION_PASSED',
   });
   const human = await service.create(ownerId, {
-    title: 'human', completionCriterion: 'EVIDENCE_JUDGMENT',
+    title: 'human', projectId, completionCriterion: 'EVIDENCE_JUDGMENT',
   });
   assert.deepEqual(
     [executable, verification, human].map((task) => task.completionCriterion),

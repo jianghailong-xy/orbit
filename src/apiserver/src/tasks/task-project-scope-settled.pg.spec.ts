@@ -239,7 +239,15 @@ test('a session whose project has settled can still write down what it noticed',
   // ═══ 2. the dead angle ════════════════════════════════════════════════════════════════════
   await t.test('the coordinator of a settled project still records work that belongs to no project',
     async () => {
-      const task = await coordinatorFiles('a web-only finding, noticed after the goal was accepted');
+      // EXECUTABLE, because the work being recorded here lands under NO project and
+      // EVIDENCE_JUDGMENT is declared against a project's stated criterion. That is the same fact
+      // this case is about, seen from the write door: work a settled project cannot take is still
+      // recorded, and it says how it is checked instead of naming a standard nobody states.
+      const task = await coordinatorFiles('a web-only finding, noticed after the goal was accepted', {
+        completionCriterion: 'EXECUTABLE',
+        acceptanceCommand: 'npm run test:outcome-reconciler:fast-gate',
+        acceptanceExpectedExitCode: 0,
+      });
 
       assert.equal(task.projectId, null,
         'work the settled project cannot take is filed under no project, not refused');

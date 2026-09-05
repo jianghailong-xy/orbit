@@ -16,6 +16,8 @@ import { TasksService } from './tasks.service';
 // Verbatim task acceptance text filed in project 34Dn1kFVW8tKOQKcEfpDW on 2026-08-27. These are
 // evidence, not synthetic keyword examples: N18/N20 are the two mistaken EVIDENCE_JUDGMENT choices;
 // N17/N19/N21 are the legitimate exceptions this heuristic must never make impossible.
+/** The project the EVIDENCE_JUDGMENT tasks below are filed under; see the fake's `project` reader. */
+const PROJECT = '00000000-0000-7000-8000-0000000000f1';
 const TONIGHT = {
   N17: `1. pg spec：一个 \`EXECUTABLE\` 任务在执行会话完成工作回合后，验收命令**确实被执行**，命令、原始输出与实际退出码落库。
 2. pg spec：退出码等于期望值 → status 派生为 DONE；不等 → 派生为 FAILED（两条断言），全程无人写 status。
@@ -106,7 +108,13 @@ function serviceFixture() {
   const prisma = {
     task,
     taskDependency,
-    project: { findMany: async () => [] },
+    // EVIDENCE_JUDGMENT is declared against a project's stated criterion, so the tasks below have
+    // to be filed under one. Nothing in this file is about the filing; it is what that criterion
+    // now costs a fixture that uses it.
+    project: {
+      findFirst: async () => ({ id: PROJECT, ownerId: 'owner' }),
+      findMany: async () => [{ id: PROJECT, ownerId: 'owner' }],
+    },
     workspace: { findMany: async () => [] },
     modelProvider: { findMany: async () => [] },
     projectHandoffApproval: { findFirst: async () => null },
@@ -134,6 +142,7 @@ test('N17, N19 and N21 may keep EVIDENCE_JUDGMENT with an override reason that i
     const reason = `${name}: EVIDENCE_JUDGMENT is deliberate for this task's trust/authority boundary.`;
     const created = await fixture.service.create('owner', {
       title: name,
+      projectId: PROJECT,
       acceptanceCriteria: TONIGHT[name],
       completionCriterion: 'EVIDENCE_JUDGMENT',
       completionCriterionOverrideReason: `  ${reason}  `,

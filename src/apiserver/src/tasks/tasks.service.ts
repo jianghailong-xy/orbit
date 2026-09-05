@@ -197,6 +197,7 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import {
+  criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
   projectVerifierCarrierStatus,
   resolveTaskCompletionCriterion,
@@ -2474,6 +2475,36 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The one place all three write doors ask whether this declaration has a project to stand on.
+   *
+   * `criterionNeedsProjectRefusal` owns the rule and the words; this only says WHICH project each
+   * door is asking about, and the answer differs by door in a way that matters:
+   *
+   *  - `create` and the batch ask about the project the write was ADMITTED into, not the one the
+   *    caller spelled. A session holding a project scope may leave `projectId` out entirely and
+   *    have the server file the task under the project it coordinates, so a gate reading the DTO
+   *    would refuse a request that lands in a project after all;
+   *  - `update` asks about the filing the write LEAVES BEHIND, and only when the write touches the
+   *    completion declaration at all. That is what keeps the two ways out open on a row already in
+   *    this state: re-declaring EXECUTABLE lands on another criterion, and filing the work under a
+   *    project touches no declaration and is not asked.
+   *
+   * Deliberately about the criterion this write DECLARES rather than the one
+   * `resolveTaskCompletionCriterion` falls back to. Nothing can reach the service without naming
+   * one — `requireExplicitCompletionCriterion` refuses an omission at both HTTP doors — so the
+   * fallback is reachable only by code constructing this service directly, and judging it here
+   * would make this gate an opinion about the omission rather than about the declaration.
+   */
+  private assertCriterionHasAProject(
+    completionCriterion: TaskCompletionCriterionValue | null | undefined,
+    projectId: string | null | undefined,
+    itemIndex?: number,
+  ): void {
+    const refusal = criterionNeedsProjectRefusal({ completionCriterion, projectId });
+    if (refusal) throw new BadRequestException({ ...refusal, itemIndex: itemIndex ?? null });
+  }
+
+  /**
    * Ask about a plausible-but-not-certain criterion choice.
    *
    * This runs only after the deterministic declaration boundary above. A mismatch is a 409
@@ -2600,6 +2631,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if ((dto.projectId ?? null) !== scopedProjectId) {
       dto = { ...dto, projectId: scopedProjectId ?? undefined };
     }
+    // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
+    // that names no project still files its work under the one it coordinates, and refusing that
+    // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
+    this.assertCriterionHasAProject(dto.completionCriterion, scopedProjectId);
     // Unit T6: a single create is one item of a plan, judged by the same bound a fifty-item one is.
     await this.assertTaskOpeningAuthorized(
       ownerId,
@@ -3407,6 +3442,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? item
         : { ...item, projectId: admitted.projectId ?? undefined });
     }
+    // Item by item, over the project each one was ADMITTED into, and above the dry run for the
+    // same reason the bound below is. A frozen item is a replay whose row already exists:
+    // re-judging it could only refuse a write that already happened.
+    items.forEach((item, index) => {
+      if (frozen.has(index)) return;
+      this.assertCriterionHasAProject(item.completionCriterion, item.projectId, index);
+    });
     // Unit T6, over the items this call would WRITE: a replay is frozen and is not re-charged to
     // today's allowance, since the attempt that wrote it already paid for it.
     //
@@ -6830,6 +6872,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionPolicy,
         verifiesTaskId: verifiesTaskIdAfter,
       });
+      // And the same merged value against the filing this write leaves behind. Merged rather than
+      // as-spelled because on this door EVIDENCE_JUDGMENT is reachable without ever being named:
+      // `{acceptanceCommand: null, acceptanceExpectedExitCode: null}` clears the pair and
+      // re-resolves to it, which is the spelling a client can reach today. Ahead of the
+      // criterion-change door below, so a caller who cannot make this edit at all is told that
+      // rather than being asked to explain a change that is going to be refused anyway.
+      this.assertCriterionHasAProject(
+        completionCriterion,
+        dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
+      );
     }
     // The criterion-change door (`task-completion-criterion-change-guard.ts`).
     //

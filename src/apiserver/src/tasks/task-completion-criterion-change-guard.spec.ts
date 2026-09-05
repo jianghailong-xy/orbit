@@ -29,6 +29,9 @@ import { TasksService } from './tasks.service';
 const OWNER = '00000000-0000-7000-8000-00000000000a';
 const TASK = '00000000-0000-7000-8000-00000000000b';
 const SUBJECT = '00000000-0000-7000-8000-00000000000c';
+/** EVIDENCE_JUDGMENT is declared against a project's stated criterion, so this row has to be in
+ *  one. Nothing here is about the filing; it is the fixture's price for using that criterion. */
+const PROJECT = '00000000-0000-7000-8000-00000000000d';
 
 /** Every field `loadDetail`'s include produces, so `get` and `update` read one in-memory row. */
 function storedTask(overrides: Record<string, unknown> = {}) {
@@ -38,7 +41,7 @@ function storedTask(overrides: Record<string, unknown> = {}) {
     title: 'Wire the thing',
     description: null,
     status: 'OPEN',
-    projectId: null,
+    projectId: PROJECT,
     listId: null,
     parentTaskId: null,
     labels: [],
@@ -101,7 +104,10 @@ function updateFixture(overrides: Record<string, unknown> = {}) {
     taskCompletionEvidence: { findFirst: async () => null },
     taskList: { findMany: async () => [] },
     taskListEvent: { upsert: async () => ({}) },
-    project: { findFirst: async () => null, findMany: async () => [] },
+    project: {
+      findFirst: async () => ({ id: PROJECT, ownerId: OWNER }),
+      findMany: async () => [{ id: PROJECT, ownerId: OWNER }],
+    },
     projectHandoffApproval: { findFirst: async () => null },
     session: { findFirst: async () => null },
     workspace: { findMany: async () => [] },
@@ -158,7 +164,10 @@ test('declaring any criterion at creation is untouched by the change door', asyn
     const prisma = {
       task,
       taskDependency: { createMany: async () => ({ count: 0 }) },
-      project: { findMany: async () => [] },
+      project: {
+        findFirst: async () => ({ id: PROJECT, ownerId: OWNER }),
+        findMany: async () => [{ id: PROJECT, ownerId: OWNER }],
+      },
       workspace: { findMany: async () => [] },
       modelProvider: { findMany: async () => [] },
       projectHandoffApproval: { findFirst: async () => null },
@@ -173,6 +182,7 @@ test('declaring any criterion at creation is untouched by the change door', asyn
 
     const created = await service.create(OWNER, {
       title: `declare ${criterion}`,
+      projectId: PROJECT,
       completionCriterion: criterion,
       ...(criterion === 'EXECUTABLE'
         ? { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 }
