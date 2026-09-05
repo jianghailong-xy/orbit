@@ -71,6 +71,17 @@ describe("a machine's engine CLIs", () => {
   it("doesn't offer to update a machine that isn't there", () => {
     const html = render(runner({ online: false, engines: [health({})] }));
     expect(html).not.toContain('Update engines');
+    // Same argument for the models button: the request is delivered by a heartbeat, so a machine
+    // that isn't beating cannot be asked anything.
+    expect(html).not.toContain('Refresh models');
+  });
+
+  it('offers to re-read the model lists next to the update that makes them stale', () => {
+    // Installing a newer CLI does not re-read what it offers, and the runner's own pass is hours
+    // away — so the two controls belong together, on the section that owns the CLIs.
+    const html = render(runner({ engines: [health({ engine: 'codex', version: 'codex-cli 0.153.2' })] }));
+    expect(html).toContain('Refresh models');
+    expect(html).toContain('Update engines');
   });
 
   it('reports what a run actually did, including what it left alone', () => {

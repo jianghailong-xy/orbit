@@ -23,10 +23,12 @@ const (
 	heartbeatInterval                   = 30 * time.Second
 	selfUpdateCheckInterval             = 10 * time.Minute
 	runtimeDefaultRefreshHeartbeatTicks = 10 // ~5 minutes
-	// Refreshed once at startup and daily after that. Each pass spawns one `claude -p
-	// "/model <alias>"` per tier alias, so an hourly cadence was launching the engine
-	// four times an hour purely to re-read a list that changes on CLI releases.
-	modelCatalogRefreshHeartbeatTicks = 2880 // ~24 hours
+	// Refreshed once at startup and every four hours after that. Each pass spawns one `claude -p
+	// "/model <alias>"` per tier alias, so an hourly cadence was launching the engine four times
+	// an hour purely to re-read a list that changes on CLI releases — but a daily one meant a
+	// model released this morning stayed invisible until tomorrow. Four hours is the compromise;
+	// the control plane can also ask for a pass now (HeartbeatResponse.RefreshModelCatalog).
+	modelCatalogRefreshHeartbeatTicks = 480 // ~4 hours
 )
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
@@ -1073,6 +1075,14 @@ func runLoop(cfg *RunnerConfig) bool {
 				} else {
 					install.start(ir.Engine, report, engineHealth.refresh)
 				}
+			}
+			// Re-read the runtime CLIs' model lists because someone asked from the UI. On its
+			// own goroutine: a pass spawns several CLIs and can take seconds, and nothing here
+			// waits for it — the refreshed catalog rides a later heartbeat. The refresher's own
+			// TryLock makes a request that lands mid-pass a no-op rather than a second spawn.
+			if resp.RefreshModelCatalog {
+				logln("model catalog refresh requested by the control plane")
+				go refreshModelCatalog()
 			}
 			// Repair a shared checkout the user saw reported as wedged. Runs here, on the
 			// heartbeat's own goroutine, because it's short and must not overlap the next one:

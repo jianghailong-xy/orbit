@@ -544,6 +544,10 @@ export interface RunnerHeartbeatResponse {
    *  still waiting for its checkout. Absent on older control planes (an older runner ignores the
    *  field → the workspace stays CLONING until its runner is upgraded). */
   cloneRequests?: CloneCommand[];
+  /** Re-read the runtime CLIs' model lists now, instead of waiting for the runner's own periodic
+   *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
+   *  (offline, older build) costs nothing more than the wait it was already in. */
+  refreshModelCatalog?: boolean;
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */

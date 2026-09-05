@@ -275,6 +275,10 @@ type HeartbeatResponse struct {
 	// still waiting for its checkout. Redelivered every heartbeat until we report an outcome
 	// (see CloneCommand). Absent on older control planes → nothing to clone.
 	CloneRequests []CloneCommand `json:"cloneRequests,omitempty"`
+	// Re-read the runtime CLIs' model lists now instead of waiting for our own periodic pass.
+	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
+	// later heartbeat is the only outcome there is. False/absent on older control planes.
+	RefreshModelCatalog bool `json:"refreshModelCatalog,omitempty"`
 }
 
 // CloneCommand mirrors @orbit/shared: clone RepoURL onto this machine for WorkspaceID. The target

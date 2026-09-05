@@ -38,21 +38,44 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
   });
+  // The model picker lists what these CLIs report, re-read by the runner every few hours — so a
+  // model released today, or one a fresh CLI just learned about, is invisible until that pass.
+  // This asks for the pass now. There is no relay to watch: the refreshed catalog simply arrives
+  // on a heartbeat, which is why the toast promises a minute rather than showing progress.
+  const refreshModels = useMutation({
+    mutationFn: () => api(`/runners/${runner.id}/refresh-models`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success('Re-reading this machine’s model lists — the picker updates within a minute.');
+      void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
+    },
+    onError: (e: Error) => message.error(e.message || 'Could not refresh the model lists'),
+  });
 
   return (
     <section className="rd-section">
       <div className="rd-section-head">
         <div className="rd-section-title">Engines</div>
         {/* Understated on purpose: Orbit updates these every day, so this is the escape hatch for
-            when that isn't soon enough — not the way the CLIs are meant to stay current. */}
+            when that isn't soon enough — not the way the CLIs are meant to stay current. The
+            models button sits here for the same reason it exists: what a CLI offers is a fact
+            about this machine's engines, and updating one is exactly when the other goes stale. */}
         {runner.online && (
-          <Button
-            size="small"
-            disabled={inFlight || startUpdate.isPending}
-            onClick={() => startUpdate.mutate()}
-          >
-            {inFlight && updating ? 'Updating…' : 'Update engines'}
-          </Button>
+          <div className="rd-section-actions">
+            <Button
+              size="small"
+              disabled={refreshModels.isPending}
+              onClick={() => refreshModels.mutate()}
+            >
+              Refresh models
+            </Button>
+            <Button
+              size="small"
+              disabled={inFlight || startUpdate.isPending}
+              onClick={() => startUpdate.mutate()}
+            >
+              {inFlight && updating ? 'Updating…' : 'Update engines'}
+            </Button>
+          </div>
         )}
       </div>
 

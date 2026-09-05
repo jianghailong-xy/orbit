@@ -868,6 +868,7 @@ export class RunnerApiController {
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let cloneRequests: RunnerHeartbeatResponse['cloneRequests'] = [];
+    let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -890,6 +891,7 @@ export class RunnerApiController {
       loginRequest = await this.drainLoginRequest(runner.id);
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
+      refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
       cloneRequests = await this.pendingCloneRequests(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
@@ -920,7 +922,27 @@ export class RunnerApiController {
       agentDirs,
       repoCleanupRequest,
       cloneRequests,
+      refreshModelCatalog,
     };
+  }
+
+  /**
+   * Whether this runner should re-read its runtime CLIs' model lists on this beat.
+   *
+   * Claimed, not redelivered — unlike the repairs above, and for the opposite reason: there is no
+   * outcome to wait for. The refreshed catalog comes back as `modelCatalog` on a later heartbeat,
+   * so a request that is handed over and then lost costs the user one press, while a request left
+   * pending until an outcome arrived would re-trigger the CLI spawns on every beat forever.
+   *
+   * The clear IS the claim: one conditional UPDATE, so two heartbeats racing each other hand the
+   * request to exactly one of them instead of both re-reading the same lists.
+   */
+  private async drainModelCatalogRefresh(runnerId: string): Promise<true | undefined> {
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, modelCatalogRefreshAt: { not: null } },
+      data: { modelCatalogRefreshAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
   }
 
   /**

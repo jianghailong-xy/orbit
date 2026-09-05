@@ -118,6 +118,13 @@ export class RunnersController {
     return this.runners.startEngineUpdate(user.userId, id);
   }
 
+  // Re-read this machine's runtime model lists now, rather than waiting for the runner's own
+  // periodic pass. Owner-scoped like the controls above: it runs CLIs on that machine.
+  @Post(':id/refresh-models')
+  refreshModels(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.requestModelCatalogRefresh(user.userId, id);
+  }
+
   @Post(':id/rotate-token')
   rotateToken(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.rotateToken(user.userId, id);

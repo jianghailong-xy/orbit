@@ -492,6 +492,30 @@ export class RunnersService {
     return installStateOf(r);
   }
 
+  /**
+   * Ask this runner to re-read what models its runtime CLIs offer, now.
+   *
+   * The model picker lists what the machine's own CLIs report, refreshed by the runner on a timer.
+   * That timer is what makes a model released today invisible until tomorrow — and the same gap
+   * follows every CLI update, since installing a newer binary does not itself re-read the list.
+   * This is the escape hatch, in the same spirit as the engine update next to it.
+   *
+   * Nothing is reported back: the refreshed catalog arrives on a later heartbeat as
+   * `modelCatalog`, which is the answer. So this writes one timestamp and the next heartbeat
+   * clears it — no relay state to get stuck, and a second press before the first is picked up is
+   * simply the same single request with a newer date.
+   */
+  async requestModelCatalogRefresh(ownerId: string, id: string): Promise<{ requestedAt: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only refresh while connected');
+    }
+    const requestedAt = new Date();
+    await this.prisma.runner.update({ where: { id }, data: { modelCatalogRefreshAt: requestedAt } });
+    return { requestedAt: requestedAt.toISOString() };
+  }
+
   /** Current install-relay state, for the row to poll. */
   async getInstallState(ownerId: string, id: string): Promise<RunnerInstallState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });

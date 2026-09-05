@@ -1800,6 +1800,12 @@ body {
   justify-content: space-between;
   margin-bottom: 12px;
 }
+/* A section heading with more than one control: they stay one group at the right edge
+   rather than pushing the title around. */
+.rd-section-actions {
+  display: flex;
+  gap: 8px;
+}
 /* The runner's identity line: status/slots/version/host as one scannable row, so the
    agent list clears the fold instead of sitting under an eight-field grid. */
 .rd-metaline {

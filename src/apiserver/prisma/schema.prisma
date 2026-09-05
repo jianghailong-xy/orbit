@@ -421,6 +421,10 @@ model Runner {
   planUsage         Json?        @map("plan_usage")
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
   modelCatalog      Json?        @map("model_catalog")
+  // When the user last asked this machine to re-read those lists, cleared as the next heartbeat
+  // hands the request over. A one-slot relay like the sign-in/install ones, but with no reply:
+  // the refreshed catalog IS the answer, and it arrives on a heartbeat of its own.
+  modelCatalogRefreshAt DateTime? @map("model_catalog_refresh_at")
   // Declarative scheduler capabilities. NULL reported-at means an old runner: it remains eligible
   // for an empty requirement set, but can never prove a non-empty requirement.
   capabilities           String[]  @default([])

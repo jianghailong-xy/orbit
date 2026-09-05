@@ -20,10 +20,33 @@ func TestRuntimeModelRefreshCadence(t *testing.T) {
 	if got := time.Duration(runtimeDefaultRefreshHeartbeatTicks) * heartbeatInterval; got != 5*time.Minute {
 		t.Fatalf("runtime default refresh cadence = %s, want 5m", got)
 	}
-	// Daily, not hourly: each pass execs the engine once per tier alias, and the catalog it
-	// re-reads only moves when the CLI is upgraded.
-	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != 24*time.Hour {
-		t.Fatalf("model catalog refresh cadence = %s, want 24h", got)
+	// Four-hourly, not hourly and not daily: each pass execs the engine once per tier alias, so
+	// hourly spent four launches an hour re-reading a list that moves on CLI releases — while
+	// daily meant a model released this morning stayed invisible until tomorrow.
+	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != 4*time.Hour {
+		t.Fatalf("model catalog refresh cadence = %s, want 4h", got)
+	}
+}
+
+// The on-demand pass the control plane can ask for between those four-hour ones: a machine whose
+// CLI just learned about a new model shouldn't have to wait out the timer. Absent means no
+// request — an older control plane must not read as one, or every beat would respawn the CLIs.
+func TestHeartbeatResponseCarriesModelCatalogRefresh(t *testing.T) {
+	var resp HeartbeatResponse
+	if err := json.Unmarshal([]byte(`{
+		"cancelSessionIds": [], "maxConcurrent": 2, "refreshModelCatalog": true
+	}`), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.RefreshModelCatalog {
+		t.Fatalf("refreshModelCatalog = %v, want true", resp.RefreshModelCatalog)
+	}
+	resp = HeartbeatResponse{}
+	if err := json.Unmarshal([]byte(`{"cancelSessionIds":[],"maxConcurrent":2}`), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.RefreshModelCatalog {
+		t.Fatalf("refreshModelCatalog = %v on a response that omits it, want false", resp.RefreshModelCatalog)
 	}
 }
 
