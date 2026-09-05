@@ -5,6 +5,7 @@ import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
+import { CriterionReadyProducer } from './criterion-ready.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 
@@ -24,7 +25,8 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
  *
  * `TaskExceptionInputProducer` joins them for exactly that reason: it composes this module's
  * `CoordinatorConvergenceService` into the authorizer its facts may not be delivered without, and
- * the router the task write path already holds is what reaches it.
+ * the router the task write path already holds is what reaches it. `CriterionReadyProducer` is the
+ * third of the same shape, and the third to be constructed nowhere else.
  */
 @Module({
   imports: [SessionsModule],
@@ -35,6 +37,7 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
     CoordinatorJudgmentService,
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
+    CriterionReadyProducer,
   ],
   exports: [
     CoordinatorWakeService,
@@ -43,6 +46,7 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
     CoordinatorJudgmentService,
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
+    CriterionReadyProducer,
   ],
 })
 export class CoordinatorJudgmentModule {}

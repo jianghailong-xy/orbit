@@ -94,6 +94,17 @@ const SPEC = 'src/apiserver/src/projects/project-criterion-satisfaction.pg.spec.
 const REDECLARATION_SPEC = 'src/apiserver/src/tasks/task-criterion-redeclaration.pg.spec.ts';
 const PENDING_JUDGMENTS_SPEC = 'src/apiserver/src/tasks/pending-evidence-judgments.pg.spec.ts';
 /**
+ * The wake `CRITERION_READY` is, asserted against what this derivation says about the same
+ * criterion.
+ *
+ * `CriterionReadyProducer` does NOT read this module — it derives its fact from the serving set
+ * directly, the way `readCriterionSatisfaction` itself does, and `coordinator-wake.ts` owns the
+ * predicate. Its spec reads the answer here for one thing only: to show that the criterion it
+ * declines to wake on is the one this derivation reports as `NO_WORK_SERVES_IT`, rather than an
+ * emptiness the producer defined for itself. A read, and nothing is written on the strength of it.
+ */
+const CRITERION_READY_SPEC = 'src/apiserver/src/tasks/task-criterion-ready-delivery.pg.spec.ts';
+/**
  * The one reader that is not a test, and the spec that holds it to being a read.
  *
  * `ProjectsService.get` serves the answer beside the criterion it is about, so a person or a
@@ -521,9 +532,10 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       .sort();
     assert.deepEqual(
       mentions,
-      [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, SERVICE, SERVICE_SPEC].sort(),
+      [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
+        SERVICE, SERVICE_SPEC].sort(),
       'the readers of the derivation are exactly these, each named above with what it does with '
-        + 'the answer: three tests of it, one read endpoint that serves it, and that endpoint’s '
+        + 'the answer: four tests of it, one read endpoint that serves it, and that endpoint’s '
         + 'own test. Not one of them is a gate — nothing turns the answer into a status write, '
         + 'and a file arriving here is a consumer somebody has to come and write down');
 

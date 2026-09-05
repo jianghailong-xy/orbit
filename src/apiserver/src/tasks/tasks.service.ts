@@ -1371,19 +1371,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The same delivery for a door that knows which TASK settled rather than which project.
+   * Both project-scoped facts, for a door that knows which TASK settled rather than which project.
    *
    * The lookup is behind the router check rather than in front of it: the ~40 fixtures that build
    * this service directly wire no router, and a read they never asked for would be a query their
-   * doubles have to answer for a delivery that is not going to happen.
+   * doubles have to answer for a delivery that is not going to happen. One lookup serves both
+   * deliveries, because both are derived from the same committed project.
    */
-  private async deliverSettledProjectsOfTask(taskId: string): Promise<void> {
+  private async deliverProjectFactsOfTask(taskId: string): Promise<void> {
     if (!this.completionInputs) return;
     const settled = await this.prisma.task.findUnique({
       where: { id: taskId },
       select: { projectId: true },
     });
     await this.deliverSettledProjects([settled?.projectId]);
+    await this.deliverReadyCriteria([settled?.projectId]);
   }
 
   /**
@@ -1408,6 +1410,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!taskIds.some((id) => !!id)) return;
     await this.completionInputs.routeTaskExceptions(taskIds).catch((e) =>
       this.logger.warn(`task-exception delivery failed: ${e?.message ?? e}`),
+    );
+  }
+
+  /**
+   * Deliver the acceptance criteria a committed task write may have finished the work for.
+   *
+   * The third fact of the completion edge, and the only one cut per CRITERION rather than per task
+   * or per project. Project ids, and the same generosity as the settled delivery above: which
+   * criteria this write finished off is not something the write knows, and the producer answering
+   * it from the criterion's whole serving set is the point — a criterion nobody has filed any work
+   * against is not ready, and no door here gets to guess that from the shape of its own write.
+   *
+   * Logged rather than raised, for the same reason as its two siblings: the write is already
+   * committed, and the same fact is re-derived from the same rows by the next delivery.
+   */
+  private async deliverReadyCriteria(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    if (!this.completionInputs) return;
+    if (!projectIds.some((id) => !!id)) return;
+    await this.completionInputs.routeReadyCriteria(projectIds).catch((e) =>
+      this.logger.warn(`ready-criterion delivery failed: ${e?.message ?? e}`),
     );
   }
 
@@ -7785,6 +7809,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Both sides of a re-filing: this write can leave EITHER project with nothing outstanding —
     // the one the task left, and the one it arrived in with its status already terminal.
     await this.deliverSettledProjects([before.projectId, updated.projectId, dto.projectId]);
+    // And the criterion half, over the same two projects: this door is where an aggregate parent
+    // reaches DONE from a child's write, and that parent can be the last work serving a criterion.
+    await this.deliverReadyCriteria([before.projectId, updated.projectId, dto.projectId]);
     // And the exception half of the same committed write: this door is where a run files its own
     // conservative FAILED, and where a task whose attempt already ended is edited again.
     await this.deliverTaskExceptions([id]);
@@ -8006,7 +8033,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // — which is where most tasks actually settle — so the fact is delivered from here rather
       // than from each door's own idea of what it committed. In `finally` because a dispatch that
       // failed still leaves the completed row behind, and that row is the fact.
-      await this.deliverSettledProjectsOfTask(doneTaskId);
+      await this.deliverProjectFactsOfTask(doneTaskId);
     }
   }
 
@@ -9046,8 +9073,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`aggregation after delete of ${id} failed: ${e?.message ?? e}`),
       );
     }
-    // Deleting the last outstanding task settles what remains, exactly as completing it would.
+    // Deleting the last outstanding task settles what remains, exactly as completing it would —
+    // and leaves a criterion whose only unfinished work was that task served entirely by DONE.
     await this.deliverSettledProjects(projectIds);
+    await this.deliverReadyCriteria(projectIds);
     return { ok: true };
   }
 

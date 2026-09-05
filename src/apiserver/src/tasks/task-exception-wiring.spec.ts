@@ -15,6 +15,7 @@ import type {
   CoordinatorWakeService,
   WakeAuthorizer,
 } from '../projects/coordinator-wake.service';
+import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
 import { QueueService } from '../queue/queue.service';
@@ -63,6 +64,7 @@ function routerOver(
     wakes,
     { afterCommit: () => { throw new Error('not this door'); } } as unknown as ProjectTasksSettledProducer,
     exceptions,
+    { factsFor: () => { throw new Error('not this door'); } } as unknown as CriterionReadyProducer,
   );
 }
 

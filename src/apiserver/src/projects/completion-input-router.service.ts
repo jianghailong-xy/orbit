@@ -7,6 +7,11 @@ import {
 } from './coordinator-wake.service';
 import type { CompletionInputConsumer } from './completion-input';
 import {
+  CRITERION_READY_CONSUMER,
+  CriterionReadyProducer,
+  type CriterionReadyDelivery,
+} from './criterion-ready.producer';
+import {
   ProjectTasksSettledProducer,
   type SettledProjectDelivery,
 } from './project-tasks-settled.producer';
@@ -26,8 +31,9 @@ export type CompletionInputRouteOutcome =
  * `route`'s default: a committed input may wake its coordinator.
  *
  * Right for the one fact that eats it — an evidence revision an agent chose to submit is bounded by
- * the agent that submitted it. Wrong for every EXCEPTION, which is why `routeTaskExceptions` below
- * passes its producer's authorizer rather than letting this stand in for one.
+ * the agent that submitted it. Wrong for every fact DERIVED from a world that can go round again,
+ * which is why `routeTaskExceptions` and `routeReadyCriteria` below both pass their producer's
+ * authorizer rather than letting this stand in for one.
  */
 const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
 
@@ -44,6 +50,7 @@ export class CompletionInputRouter {
     private readonly wakes: CoordinatorWakeService,
     private readonly settled: ProjectTasksSettledProducer,
     private readonly exceptions: TaskExceptionInputProducer,
+    private readonly criteria: CriterionReadyProducer,
   ) {}
 
   async route(
@@ -119,6 +126,44 @@ export class CompletionInputRouter {
       deliveries.push({
         taskId: fact.subjectId,
         event: fact.event,
+        outcome: routed.outcome,
+        ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
+      });
+    }
+    return deliveries;
+  }
+
+  /**
+   * The fourth door: the acceptance criteria one committed task write may have finished the work
+   * for.
+   *
+   * Project ids in, for the reason `routeSettledProjects` takes them: what a write closed is not
+   * something the write knows. The producer re-reads every criterion those projects state, and
+   * derives at most one fact per criterion — which is the unit a coordinator reasons in. A door
+   * that took the settled TASK instead could never see the criterion nobody filed any work
+   * against, and that criterion is precisely the reason a project with every task settled can
+   * still be nowhere near done.
+   *
+   * The fourth argument is passed here too. Readiness is not an exception, but it is not an input
+   * an agent submitted either: work reopens and finishes again, and only the convergence ledger
+   * bounds how often that may wake anybody.
+   */
+  async routeReadyCriteria(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<CriterionReadyDelivery[]> {
+    const facts = await this.criteria.factsFor(projectIds);
+    const deliveries: CriterionReadyDelivery[] = [];
+    for (const fact of facts) {
+      const routed = await this.route(
+        fact,
+        CRITERION_READY_CONSUMER,
+        // No side effect beyond the ledger row, so `route`'s own no-op delivery is taken. The
+        // argument is named rather than dropped because the one after it may not be defaulted.
+        undefined,
+        this.criteria.authorize,
+      );
+      deliveries.push({
+        criterionSubjectId: fact.subjectId,
         outcome: routed.outcome,
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
       });

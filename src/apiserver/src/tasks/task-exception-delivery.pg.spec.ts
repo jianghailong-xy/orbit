@@ -31,6 +31,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import type { WakeFact } from '../projects/coordinator-wake';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
+import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import {
@@ -135,6 +136,7 @@ async function connect(options: {
       new CoordinatorConvergenceService(prisma),
     ),
     new TaskExceptionInputProducer(prisma, convergence),
+    new CriterionReadyProducer(prisma, convergence),
   );
   const router = options.wrapRouter ? options.wrapRouter(real) : real;
   const attempts = new SessionAttemptService(prisma, new ConvergenceLedgerService(prisma));

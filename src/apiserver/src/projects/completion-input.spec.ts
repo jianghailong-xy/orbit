@@ -109,6 +109,13 @@ test('the gates are wired through the router, and the hollowed-out attempt produ
   assert.match(moduleSource, /TaskExceptionInputProducer/);
   assert.doesNotMatch(tasksSource, /TaskExceptionInputProducer/);
 
+  // And the criterion-readiness gate, the third of the same shape. `CRITERION_READY` is cut per
+  // acceptance criterion rather than per task, but where it is CONSTRUCTED and who may hold it are
+  // the same two claims: one instance, in the module that owns its convergence service, reached
+  // from the write path through the router.
+  assert.match(moduleSource, /CriterionReadyProducer/);
+  assert.doesNotMatch(tasksSource, /CriterionReadyProducer/);
+
   assert.doesNotMatch(moduleSource, /AttemptEndedUnsettledProducer/);
   assert.doesNotMatch(runnerSource, /AttemptEndedUnsettledProducer|attemptEndedUnsettled/);
   assert.doesNotMatch(attemptSource, /ATTEMPT_WAKE_SESSION_PARKED|ATTEMPT_SESSION_PARKED/);

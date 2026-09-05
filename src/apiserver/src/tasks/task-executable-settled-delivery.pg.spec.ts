@@ -25,6 +25,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
+import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import {
   ProjectTasksSettledProducer,
   SETTLED_WAKE_COORDINATOR_DISABLED,
@@ -110,6 +111,7 @@ async function connect(): Promise<Stack> {
       new CoordinatorConvergenceService(prisma),
     ),
     new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new CriterionReadyProducer(prisma, new CoordinatorConvergenceService(prisma)),
   );
 
   // The real router, observed rather than replaced: a Proxy that records what each delivery
