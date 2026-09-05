@@ -124,6 +124,7 @@ import {
   CURRENT_WORK_SESSION_FINALIZED,
   CURRENT_WORK_TARGET_COMPLETED,
   acknowledgedRuntimeTurnIds,
+  requeueUnreadCurrentWorkSteers,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import {
@@ -3155,15 +3156,26 @@ export class RunnerApiController {
       // would make a shell-first session (claude never received a message) try to --resume a
       // conversation that was never established, failing with "No conversation found".
       const turnInc = completedTurn?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
-      // Explicit CURRENT_WORK is never upgraded into a next-turn executable. If its exact target
-      // wins the completion boundary before dequeue, retire the steer as undelivered; the durable
-      // row still audits the refused landing and, crucially, no ordinary message is manufactured.
+      // Explicit CURRENT_WORK whose exact target won the completion boundary before the engine
+      // read it goes back in the queue as an ordinary next turn, exactly like the legacy sweep
+      // below does for the no-intent rows it replaced. Nothing read the message, so nothing about
+      // it needs preserving — and the alternative, a durable "not delivered" the sender can only
+      // answer by retyping, is a worse account of what happened than simply saying it late.
+      //
+      // Dequeue commit is not a runtime ACK either: if its HTTP response was lost, the row is
+      // IN_FLIGHT and would stay that way forever, so this boundary settles those too.
       let currentWorkTerminalized = 0;
-      if (completedTurn) {
+      let currentWorkRequeued = 0;
+      if (completedTurn && !failSession) {
+        currentWorkRequeued = (
+          await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id])
+        ).length;
+      } else if (completedTurn) {
+        // A failing turn takes the session with it, and the drain below answers every queued row.
+        // Requeueing into a queue about to be emptied would lose the message with nothing said;
+        // the undelivered receipt is what survives that teardown.
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
           targetTurnIds: [completedTurn.id],
-          // Dequeue commit is not a runtime ACK. If its HTTP response was lost, the row is
-          // IN_FLIGHT forever unless the exact target-complete boundary settles it here.
           includeInFlight: true,
           code: CURRENT_WORK_TARGET_COMPLETED,
           reason: 'The target turn completed before CURRENT_WORK could be delivered.',
@@ -3269,6 +3281,7 @@ export class RunnerApiController {
           applied: false,
           steer: false,
           currentWorkTerminalized,
+          currentWorkRequeued,
           status: latest?.status ?? current.status,
           failSession,
           retryAt: current.retryAt,
@@ -3328,6 +3341,7 @@ export class RunnerApiController {
         steer: false,
         requeued: false,
         currentWorkTerminalized,
+        currentWorkRequeued,
         status: nextStatus,
         failSession,
         retryAt: current.retryAt,
@@ -3371,7 +3385,13 @@ export class RunnerApiController {
     ) {
       this.realtime.publishTaskChanged(sessionId, finalized.taskId);
     }
-    if ('currentWorkTerminalized' in finalized && (finalized.currentWorkTerminalized ?? 0) > 0) {
+    // Either way the queued tail changed: a message left it as an undelivered receipt, or
+    // re-entered it as the next turn. The waking is already unconditional at the end of a
+    // completion, so a requeued row needs nothing beyond being seen.
+    if (
+      ('currentWorkTerminalized' in finalized && (finalized.currentWorkTerminalized ?? 0) > 0)
+      || ('currentWorkRequeued' in finalized && (finalized.currentWorkRequeued ?? 0) > 0)
+    ) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }
     if (finalized.steer) {

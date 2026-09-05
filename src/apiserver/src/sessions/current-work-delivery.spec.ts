@@ -5,6 +5,7 @@ import {
   acknowledgedRuntimeTurnIds,
   CURRENT_WORK_INTERRUPTED,
   CurrentWorkSteerTransaction,
+  requeueUnreadCurrentWorkSteers,
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import {
@@ -129,6 +130,57 @@ test('a steer candidate receives its exact terminal receipt', async () => {
     deliveryFailureReason: reason,
     deliveryTerminalAt: steer.data.answeredAt,
   });
+});
+
+test('an unread message re-enters the queue as an ordinary next turn, carrying no receipt', async () => {
+  // The whole point of the conversion: one row, one message, one place it can be answered. Not a
+  // receipt saying it failed plus a copy of it somewhere else, and not a row that still describes
+  // itself as a steer aimed at a turn that is over.
+  const double = currentWorkTerminalizationDouble({
+    steers: [{ id: STEER_ID, targetTurnId: TARGET_ID, status: 'IN_FLIGHT' }],
+  });
+  const tx: CurrentWorkSteerTransaction = { conversationTurn: double.conversationTurn };
+
+  const requeued = await requeueUnreadCurrentWorkSteers(tx, SESSION_ID, [TARGET_ID]);
+
+  assert.deepEqual(requeued, [STEER_ID]);
+  assert.equal(double.calls.steerWrites.length, 1);
+  const write = double.calls.steerWrites[0] as {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  };
+  // A leased row is included: the same boundary that proves an unacknowledged steer was never
+  // read is what makes re-delivering it safe rather than a possible second copy.
+  assert.deepEqual(write.where, {
+    sessionId: SESSION_ID,
+    id: { in: [STEER_ID] },
+    kind: 'steer',
+    status: { in: ['PENDING', 'IN_FLIGHT'] },
+    sendIntent: 'CURRENT_WORK',
+    deliveryStatus: null,
+  });
+  assert.deepEqual(write.data, {
+    kind: 'message',
+    sendIntent: 'NEXT_TURN',
+    targetTurnId: null,
+    status: 'PENDING',
+    deliveredAt: null,
+    leaseDeadlineAt: null,
+    leaseGeneration: null,
+  });
+  // Only rows aimed at the turn that just ended. A steer bound to a still-running target has not
+  // missed anything yet, and requeueing it would take it out of the turn it is on its way into.
+  const read = double.calls.steerFinds[0] as { where: Record<string, unknown> };
+  assert.deepEqual(read.where.targetTurnId, { in: [TARGET_ID] });
+});
+
+test('nothing unread at the boundary reads once and writes nothing', async () => {
+  const double = currentWorkTerminalizationDouble();
+  const tx: CurrentWorkSteerTransaction = { conversationTurn: double.conversationTurn };
+
+  assert.deepEqual(await requeueUnreadCurrentWorkSteers(tx, SESSION_ID, [TARGET_ID]), []);
+  assert.equal(double.calls.steerFinds.length, 1);
+  assert.deepEqual(double.calls.steerWrites, []);
 });
 
 test('only engine-read acknowledged USER receipts enter the durable ACK ledger', () => {

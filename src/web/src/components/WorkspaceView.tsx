@@ -188,7 +188,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
+import { deliveryFailureExplanation, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
@@ -1006,24 +1006,33 @@ function TranscriptSkeleton() {
 
 /**
  * The line under a message in the queued tail — the one thing that says which of the two kinds
- * the server filed it as, and the only place the withdraw is offered.
+ * the server filed it as, and where the way out of it is offered.
  *
  * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
  * back. A steer is already on its way into the turn in progress, and the engine may be reading it
  * as we ask — the server refuses to withdraw one (409, "being written into the running turn"), so
- * offering the button would be offering one that always fails. `placement` is the server receipt,
+ * offering Cancel would be offering a button that always fails. `placement` is the server receipt,
  * never a local guess.
+ *
+ * Once delivery has settled undelivered, both of those stop being true. Nothing read the message
+ * and nothing will; the row is a durable statement about a boundary that has passed. So it is the
+ * one state that needs the opposite of Cancel's caution: the text exists nowhere else, and with no
+ * action offered the bubble is a dead end that outlives the conversation it failed under.
  */
 export function QueuedTurnMeta({
   placement,
   delivery,
+  deliveryCode,
   deliveryReason,
   onCancel,
+  onPutBack,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
   delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
   deliveryReason?: string;
   onCancel: () => void;
+  onPutBack?: () => void;
 }) {
   const label = delivery === 'failed'
     ? 'Not delivered'
@@ -1032,12 +1041,18 @@ export function QueuedTurnMeta({
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
+  const why = delivery != null
+    ? deliveryFailureExplanation(deliveryCode, deliveryReason)
+    : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
       <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
         {label}
       </span>
-      {delivery == null && placement === 'queued' && <a onClick={onCancel}>Cancel</a>}
+      {why && <span className="chat-queued-why">{why}</span>}
+      {delivery == null
+        ? placement === 'queued' && <a onClick={onCancel}>Cancel</a>
+        : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
     </span>
   );
 }
@@ -4551,6 +4566,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           },
     [selectedTrashed, selectedMissing],
   );
+  // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
+  // the only copy of what was typed: hand it back the way the transcript's own undelivered card
+  // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
+  // red bubble under a conversation that has long since moved past it.
+  const takeBackUndelivered = async (turn: QueuedTurn): Promise<void> => {
+    if (!selectedId || !restoreUndelivered) return;
+    restoreUndelivered(turn.content);
+    setQueued((q) => q.filter((x) => x.turnId !== turn.turnId));
+    const droppedImages = turn.attachments?.length ?? turnImages[turn.turnId]?.length ?? 0;
+    if (droppedImages)
+      message.info(
+        `${droppedImages} image${droppedImages > 1 ? 's' : ''} from that message weren't restored — re-add if needed`,
+      );
+    try {
+      await cancelQueuedTurn(selectedId, turn.turnId);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Could not discard that message');
+    }
+  };
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
   // is a plain fire-and-forget: the detail query refetches on settle, and the card's own
   // countdown is driven by the value it reads back.
@@ -5501,8 +5535,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <QueuedTurnMeta
                     placement={q.placement}
                     delivery={q.delivery}
+                    deliveryCode={q.deliveryCode}
                     deliveryReason={q.deliveryReason}
                     onCancel={() => cancelQueued(q.turnId)}
+                    onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
                   />
                 </div>
               ))}

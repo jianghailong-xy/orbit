@@ -59,6 +59,36 @@ export function steerDeliveryState(delivery?: string | null): SteerDeliveryState
 }
 
 /**
+ * Why it did not land, in the sender's words rather than the protocol's.
+ *
+ * The durable reason stored on the row is written for whoever debugs the boundary that failed it
+ * ("the target turn completed before CURRENT_WORK could be delivered") and names an internal
+ * routing intent. What the person needs is the one fact that decides what they do next: what
+ * stopped reading, and whether anything here still can. The server's own text stays reachable as
+ * the tooltip, so nothing is hidden by saying it plainly first.
+ */
+export function deliveryFailureExplanation(
+  code?: string | null,
+  reason?: string | null,
+): string | undefined {
+  switch (code) {
+    case 'CURRENT_WORK_TARGET_COMPLETED':
+      return 'The turn finished before it was read.';
+    case 'CURRENT_WORK_INTERRUPTED':
+      return 'The turn was interrupted before it was read.';
+    case 'CURRENT_WORK_SESSION_ENDED':
+    case 'CURRENT_WORK_SESSION_FINALIZED':
+      return 'The session ended before it was read.';
+    case 'CURRENT_WORK_SESSION_REAPED':
+      return 'The runner disappeared while it was being delivered.';
+    case 'CURRENT_WORK_RUNTIME_REJECTED':
+      return 'The engine rejected it.';
+    default:
+      return reason ?? undefined;
+  }
+}
+
+/**
  * Whether this event supersedes the live streaming drafts, so they can be cleared without losing
  * anything. A durable `assistant` carries the authoritative full text; a turn/user/interrupt
  * boundary means whatever was streaming is over.

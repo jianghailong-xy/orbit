@@ -148,7 +148,7 @@ async function waitForBlockedSessionLocker(minimum: number): Promise<void> {
 const pgTest = (name: string, body: () => Promise<void>) =>
   test(name, { skip: PG_URL ? false : 'set COORDINATOR_PG_URL to run the routing race' }, body);
 
-pgTest('steer dequeue commit with a lost response reaches a visible terminal receipt at target completion', async () => {
+pgTest('steer dequeue commit with a lost response re-enters the queue at target completion', async () => {
   await seedStartingWindow();
   await admin.query(
     `UPDATE "runner" SET capabilities = $2::text[], capabilities_reported_at = clock_timestamp()
@@ -219,24 +219,42 @@ pgTest('steer dequeue commit with a lost response reaches a visible terminal rec
     numTurns: 1,
     costUsd: 0,
   } as never);
-  const terminal = await admin.query<{
+  // Against a real database, because the shape it lands in is the thing the row constraints have
+  // an opinion about: `send_intent_shape_check` accepts NEXT_TURN only on a message with no
+  // target, and `delivery_terminal_check` only with every delivery column clear. A double would
+  // have accepted any of the near-misses.
+  const requeued = await admin.query<{
+    kind: string;
     status: string;
+    sendIntent: string | null;
+    targetTurnId: string | null;
     deliveryStatus: string | null;
     failureCode: string | null;
-    acknowledgedAt: Date | null;
+    deliveredAt: Date | null;
   }>(
-    `SELECT status, delivery_status AS "deliveryStatus",
-            delivery_failure_code AS "failureCode",
-            delivery_acknowledged_at AS "acknowledgedAt"
+    `SELECT kind, status, send_intent AS "sendIntent", target_turn_id AS "targetTurnId",
+            delivery_status AS "deliveryStatus", delivery_failure_code AS "failureCode",
+            delivered_at AS "deliveredAt"
        FROM "conversation_turn" WHERE id = $1::uuid`,
     [receipt.turnId],
   );
-  assert.deepEqual(terminal.rows[0], {
-    status: 'ANSWERED',
-    deliveryStatus: 'FAILED',
-    failureCode: 'CURRENT_WORK_TARGET_COMPLETED',
-    acknowledgedAt: null,
+  assert.deepEqual(requeued.rows[0], {
+    kind: 'message',
+    status: 'PENDING',
+    sendIntent: 'NEXT_TURN',
+    targetTurnId: null,
+    deliveryStatus: null,
+    failureCode: null,
+    // The lease is cleared with it: this row is waiting to be delivered, not already delivered.
+    deliveredAt: null,
   });
+  // And it is genuinely claimable — an executable turn the session is now RUNNING for, rather
+  // than a PENDING row parked behind an idle session nothing will come back for.
+  const session = await admin.query<{ status: string }>(
+    'SELECT status FROM "session" WHERE id = $1::uuid',
+    [SESSION_ID],
+  );
+  assert.equal(session.rows[0].status, 'RUNNING');
 });
 
 pgTest('database constraints reject malformed intent/target rows', async () => {

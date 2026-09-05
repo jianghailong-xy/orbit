@@ -44,6 +44,35 @@ describe('the server-placement labels in the pending tail', () => {
     expect(html).not.toContain('Cancel');
   });
 
+  it('offers the way back into the composer, and says what stopped reading', () => {
+    // The bubble is the only copy of what was typed: nothing read the message, and it is not in
+    // the transcript. Without an action it is a dead end that outlives the turn it failed under.
+    const html = renderToStaticMarkup(
+      <QueuedTurnMeta
+        placement="steer"
+        delivery="failed"
+        deliveryCode="CURRENT_WORK_TARGET_COMPLETED"
+        deliveryReason="The target turn completed before CURRENT_WORK could be delivered."
+        onCancel={() => {}}
+        onPutBack={() => {}}
+      />,
+    );
+    expect(html).toContain('Not delivered');
+    // Said in the sender's terms, not the protocol's — the routing intent is not a fact about
+    // their message, and the durable wording stays in the row's tooltip.
+    expect(html).toContain('The turn finished before it was read.');
+    expect(html).toContain('Put back in the composer');
+  });
+
+  it('offers nothing to take back while a steer is still on its way', () => {
+    const html = renderToStaticMarkup(
+      <QueuedTurnMeta placement="steer" onCancel={() => {}} onPutBack={() => {}} />,
+    );
+    expect(html).toContain('Sending…');
+    expect(html).not.toContain('Put back in the composer');
+    expect(html).not.toContain('Cancel');
+  });
+
   it('renders runner-loss ambiguity as unconfirmed rather than claiming non-delivery', () => {
     const html = renderToStaticMarkup(
       <QueuedTurnMeta

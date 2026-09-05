@@ -823,6 +823,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'sessions/sessions.service.ts#insertTurnLocked', under: 'sessions.insertTurn, .createTurn, .resume' },
   { at: 'sessions/sessions.service.ts#linkAttachments', under: 'sessions.createTurn, .resume' },
   { at: 'sessions/sessions.service.ts#taskWorkRefusalFor', under: 'sessions.resume, queue.buildSession' },
+  { at: 'sessions/current-work-delivery.ts#requeueUnreadCurrentWorkSteers', under: 'runnerApi turn-complete — inside the same rank-30 Session transaction that settles the target turn; it converts only that target\'s unacknowledged steer children, so it adds no row outside the lock its caller already holds' },
   { at: 'sessions/current-work-delivery.ts#terminalizePendingCurrentWorkSteers', under: 'runnerApi turn-complete/finalize/release, sessions interrupt/end and realtime reaper — each caller already owns the rank-30 Session transaction; this participant settles only matching unacknowledged turn children' },
   { at: 'task-lists/list-events.service.ts#blockFor', under: 'taskLists.writePolicy' },
   { at: 'tasks/reclaim-stalled-task.ts#reclaimStalledTask', under: 'runnerApi.finalize, reaper.forceFinalize' },

@@ -25,7 +25,10 @@ function makeService(
   rows: Array<Record<string, unknown>>,
   announcedTurnIds: string[] = [],
   failedDeliveryTurnIds: string[] = [],
+  /** What each successive deleteMany matches, in call order. Default: nothing, anywhere. */
+  deleteCounts: number[] = [],
 ) {
+  let deletes = 0;
   const filters: Record<string, unknown>[] = [];
   const orderings: Record<string, unknown>[] = [];
   const eventFilters: Record<string, unknown>[] = [];
@@ -45,7 +48,7 @@ function makeService(
     conversationTurn: {
       deleteMany: async ({ where }: { where: Record<string, unknown> }) => {
         deleteFilters.push(where);
-        return { count: 0 };
+        return { count: deleteCounts[deletes++] ?? 0 };
       },
       // What the delete matched nothing BECAUSE of: a steer row, or nothing at all.
       findFirst: async () => (rows.some((r) => r.kind === 'steer') ? { id: rows[0].id } : null),
@@ -428,4 +431,42 @@ test('a steer is not withdrawable, however it got onto that list', async () => {
 
   const where = h.deleteFilters[0] as { kind: { in: string[] } };
   assert.deepEqual([...where.kind.in].sort(), ['message', 'shell']);
+});
+
+test('a message that settled undelivered can be discarded, unlike a steer in flight', async () => {
+  // The exception that keeps "Not delivered" from being a dead end. Nothing read this message —
+  // that is what the durable receipt says — so the reason a steer cannot be withdrawn does not
+  // apply to it, and without this the only copy of what was typed sits under the conversation
+  // for good. The withdraw door is asked first and matches nothing (the row is ANSWERED, not
+  // PENDING); the settled-undelivered delete is what carries it.
+  const h = makeService(
+    [
+      row('t1', 'steer', 'actually, call it gadget', {
+        status: 'ANSWERED',
+        sendIntent: 'CURRENT_WORK',
+        deliveryStatus: 'FAILED',
+        deliveryFailureCode: 'CURRENT_WORK_TARGET_COMPLETED',
+        deliveryFailureReason: 'The target turn completed before CURRENT_WORK could be delivered.',
+      }),
+    ],
+    [],
+    [],
+    [0, 1],
+  );
+
+  assert.deepEqual(
+    await h.service.cancelQueuedTurn(OWNER_ID, SESSION_ID, '33333333-3333-4333-8333-333333333333'),
+    { ok: true },
+  );
+
+  const where = h.deleteFilters[1] as {
+    kind: string;
+    sendIntent: string;
+    deliveryStatus: { in: string[] };
+  };
+  assert.equal(where.kind, 'steer');
+  assert.equal(where.sendIntent, 'CURRENT_WORK');
+  // UNCONFIRMED too: "we cannot prove the engine read it" is still not a message the person can
+  // reach any other way, and leaving it is the same dead end.
+  assert.deepEqual([...where.deliveryStatus.in].sort(), ['FAILED', 'UNCONFIRMED']);
 });
