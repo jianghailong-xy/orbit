@@ -118,7 +118,6 @@ const runs = ledgerRaw.trim().split('\n').filter(Boolean).map((line) => {
 });
 const declaredSuites = [
   ...contract.namedSuites,
-  ...contract.restoredSuites,
   ...contract.fullMatrices,
 ];
 const expectedRunNames = [
@@ -240,7 +239,6 @@ const supportingFiles = [
 const sources = [
   'contracts/outcome-reconciler-release-frontier.json',
   'package.json',
-  'scripts/outcome-reconciler-release-frontier.sh',
   'scripts/outcome-reconciler-release-frontier-manifest.mjs',
   'scripts/outcome-reconciler-release-live-state.mjs',
 ];
@@ -259,16 +257,14 @@ const body = {
   targetRef: contract.repository.targetRef,
   declared: {
     namedSuites: contract.namedSuites.length,
-    restoredSuites: contract.restoredSuites.length,
     fullMatrices: contract.fullMatrices.length,
   },
   executions: runs,
   manifests: manifestRows,
   supportingManifests: supportingFiles.map(fileEvidence),
   aggregate: {
-    entrypointsExecuted: contract.namedSuites.length + contract.restoredSuites.length,
+    entrypointsExecuted: contract.namedSuites.length,
     namedSuitesExecuted: contract.namedSuites.length,
-    restoredSuitesExecuted: contract.restoredSuites.length,
     fullApi: fullApi.summary,
     clients: Object.fromEntries(['shared', 'web', 'go', 'swift']
       .map((name) => [name, fullClients[name].summary])),

@@ -234,7 +234,8 @@ test('(b) the payload redaction the canary borrowed survived the module it lived
   assert.match(read(relocated), /export function sanitizeWatchdogPayload\(/);
   assert.match(read('src/apiserver/src/outcome-reconciler/outcome-canary.ts'),
     /from '\.\/outcome-payload-redaction'/);
-  assert.match(read('scripts/outcome-reconciler-canary.sh'), /outcome-payload-redaction\.ts/);
+  assert.match(read('scripts/outcome-reconciler-full-api.sh'),
+    /OUTCOME_API_CASE_CANARY_MODULE=.*outcome-canary\.js/);
 });
 
 // (c) ---------------------------------------------------------------------------------------------
@@ -272,7 +273,8 @@ test('(c) the four named suites that only tested this machinery are gone with it
     'test:outcome-reconciler:watchdog-current-binding:regression']) {
     assert.equal(alias in scripts, false, `${alias} still names a script that does not exist`);
   }
-  // Every remaining suite alias has to resolve to a file, or the release DAG schedules a ghost.
+  // Every remaining suite alias has to resolve to a file, or `npm run` names a script that is
+  // not there.
   for (const [alias, command] of Object.entries(scripts)) {
     if (!alias.startsWith('test:outcome-reconciler:')) continue;
     for (const token of command.split(/\s+/)) {
@@ -282,31 +284,21 @@ test('(c) the four named suites that only tested this machinery are gone with it
   }
 });
 
-test('(c) the release DAG no longer schedules the four removed suites', () => {
-  const plan = JSON.parse(read('contracts/outcome-reconciler-release-dag.json')) as {
-    nodes: Array<{ id: string; dependsOn: string[]; command: string[] }>;
-    legacyEntrypoints: Array<{ nodeId: string }>;
-    timeoutCalibration: { observedMaximumSeconds: Record<string, number> };
-    postgresIsolation: { nodes: Record<string, unknown> };
-  };
+test('(c) nothing still schedules the four removed suites', () => {
+  // This used to ask two schedulers: the release frontier contract and the Release DAG plan. The
+  // DAG has since been deleted outright -- plan, scripts and npm entry points -- so it can no
+  // longer schedule anything at all, and the frontier is the one that is left to ask. Every
+  // suite it names must also still resolve to a script that exists, which is what would have
+  // caught the DAG scheduling a ghost.
   const frontier = JSON.parse(read('contracts/outcome-reconciler-release-frontier.json')) as {
     namedSuites: Array<{ name: string; packageScript: string }>;
   };
-  const ids = new Set(plan.nodes.map((node) => node.id));
-  for (const removed of ['suite-watchdog-111k', 'suite-coordinator',
-    'suite-watchdog-current-binding', 'suite-watchdog-current-binding-regression']) {
-    assert.equal(ids.has(removed), false, `${removed} is still a node`);
-    assert.equal(removed in plan.timeoutCalibration.observedMaximumSeconds, false);
-    assert.equal(removed in plan.postgresIsolation.nodes, false);
-  }
-  for (const node of plan.nodes) {
-    for (const dependency of node.dependsOn) {
-      assert.ok(ids.has(dependency), `${node.id} depends on missing ${dependency}`);
-    }
-  }
-  for (const entry of plan.legacyEntrypoints) assert.ok(ids.has(entry.nodeId), entry.nodeId);
+  const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>;
   assert.deepEqual(
     frontier.namedSuites.filter((suite) => /watchdog|coordinator/.test(suite.name)), []);
+  for (const suite of frontier.namedSuites) {
+    assert.ok(scripts[suite.packageScript], `${suite.name} names missing ${suite.packageScript}`);
+  }
 });
 
 // (i) ---------------------------------------------------------------------------------------------

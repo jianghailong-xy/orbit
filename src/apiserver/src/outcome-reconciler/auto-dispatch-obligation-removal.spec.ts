@@ -107,8 +107,6 @@ const REMOVED_SUITE_ALIASES = [
   'test:outcome-reconciler:auto-dispatch:integration',
 ];
 
-const REMOVED_DAG_NODES = ['suite-auto-dispatch', 'suite-auto-dispatch-integration'];
-
 /** Every `project_acceptance_*` relation. None of them is this task's to touch. */
 /** What 0224 issued no statement against. The four judgment relations that stood here were
  *  dropped by 0229, on a later and separate account-owner decision; the declaration outlived it. */
@@ -289,7 +287,8 @@ test('(b) both modules and the suite that only tested them are deleted', () => {
   for (const alias of REMOVED_SUITE_ALIASES) {
     assert.equal(alias in scripts, false, `${alias} still names a script that does not exist`);
   }
-  // Every remaining suite alias has to resolve to a file, or the release DAG schedules a ghost.
+  // Every remaining suite alias has to resolve to a file, or `npm run` names a script that is
+  // not there.
   for (const [alias, command] of Object.entries(scripts)) {
     if (!alias.startsWith('test:outcome-reconciler:')) continue;
     for (const token of command.split(/\s+/)) {
@@ -299,29 +298,19 @@ test('(b) both modules and the suite that only tested them are deleted', () => {
   }
 });
 
-test('(b) the release DAG no longer schedules either removed node', () => {
-  const plan = JSON.parse(read('contracts/outcome-reconciler-release-dag.json')) as {
-    nodes: Array<{ id: string; dependsOn: string[]; kind: string }>;
-    legacyEntrypoints: Array<{ nodeId: string }>;
-    timeoutCalibration: { observedMaximumSeconds: Record<string, number> };
-    postgresIsolation: { nodes: Record<string, unknown> };
-  };
+test('(b) nothing still schedules either removed suite', () => {
+  // The two schedulers this asked were the release frontier contract and the Release DAG plan.
+  // The DAG has since been deleted outright -- plan, scripts and npm entry points -- so it
+  // schedules nothing at all, and the frontier is the one left to ask. Every suite it names must
+  // also still resolve to a script that exists, which is what would have caught a scheduled ghost.
   const frontier = JSON.parse(read('contracts/outcome-reconciler-release-frontier.json')) as {
-    namedSuites: Array<{ name: string }>;
+    namedSuites: Array<{ name: string; packageScript: string }>;
   };
-  const ids = new Set(plan.nodes.map((node) => node.id));
-  for (const removed of REMOVED_DAG_NODES) {
-    assert.equal(ids.has(removed), false, `${removed} is still a node`);
-    assert.equal(removed in plan.timeoutCalibration.observedMaximumSeconds, false);
-    assert.equal(removed in plan.postgresIsolation.nodes, false);
-  }
-  for (const node of plan.nodes) {
-    for (const dependency of node.dependsOn) {
-      assert.ok(ids.has(dependency), `${node.id} depends on missing ${dependency}`);
-    }
-  }
-  for (const entry of plan.legacyEntrypoints) assert.ok(ids.has(entry.nodeId), entry.nodeId);
+  const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>;
   assert.deepEqual(frontier.namedSuites.filter((suite) => /auto-dispatch/.test(suite.name)), []);
+  for (const suite of frontier.namedSuites) {
+    assert.ok(scripts[suite.packageScript], `${suite.name} names missing ${suite.packageScript}`);
+  }
 });
 
 test('(b) task and project reads no longer project a control-plane obligation', () => {

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # One Full API spec, in a database and role that exist only for it.
 #
-# This is the standalone acceptance's case runner. Its sibling
-# outcome-reconciler-full-api-case.sh belongs to the Release DAG and stamps each case with that
+# This is the acceptance's case runner. It had a sibling that stamped each case with a release
 # run's binding and attempt; a standalone run has neither, and inventing them would put a release
 # binding's name on a receipt no release produced. So this one keeps every property the acceptance
 # actually asserts -- a unique pcc* identity per case, that identity verified before the spec may

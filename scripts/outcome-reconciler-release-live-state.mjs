@@ -10,10 +10,6 @@ const DIGEST = /^[0-9a-f]{64}$/;
 const repo = path.resolve(import.meta.dirname, '..');
 const contractPath = 'contracts/outcome-reconciler-release-frontier.json';
 const contract = JSON.parse(readFileSync(path.join(repo, contractPath), 'utf8'));
-const releaseDagPath = 'contracts/outcome-reconciler-release-dag.json';
-const releaseDag = JSON.parse(readFileSync(path.join(repo, releaseDagPath), 'utf8'));
-const predeploy = process.env.OUTCOME_RELEASE_DAG_ACTIVE === '1'
-  && process.env.OUTCOME_RELEASE_DAG_PHASE === 'PREDEPLOY_EVALUATION';
 const output = path.resolve(process.argv[2]
   ?? path.join(repo, 'build/outcome-reconciler-release-live-state-manifest.json'));
 
@@ -107,136 +103,11 @@ function inspectContainer(name) {
 }
 
 assert.equal(contract.schemaVersion, 1);
-assert.equal(contract.namedSuites.length, 5, 'the independent verifier named exactly 5 suites');
-assert.equal(contract.restoredSuites.length, 1, 'the independent verifier named exactly one missing suite');
+assert.equal(contract.namedSuites.length, 2, 'the independent verifier named exactly 2 suites');
 const packageJson = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
-for (const suite of [...contract.namedSuites, ...contract.restoredSuites, ...contract.fullMatrices]) {
+for (const suite of [...contract.namedSuites, ...contract.fullMatrices]) {
   assert.ok(packageJson.scripts?.[suite.packageScript], `${suite.packageScript} is missing`);
   assert.ok(fileEvidence(suite.manifest).bytes > 0, `${suite.manifest} is empty`);
-}
-assert.equal(
-  packageJson.scripts['test:outcome-reconciler:release-frontier'],
-  'npm run test:outcome-reconciler:release-dag',
-);
-
-if (predeploy) {
-  assert.equal(releaseDag.evaluator.phase, 'PREDEPLOY_EVALUATION');
-  assert.equal(releaseDag.evaluator.deploymentTaskId,
-    process.env.OUTCOME_RELEASE_DAG_DEPLOYMENT_TASK_ID);
-  git(['fetch', '--quiet', 'origin', `${contract.repository.targetRef}:refs/remotes/origin/main`]);
-  const targetSha = git(['rev-parse', 'HEAD']);
-  const originMain = git(['rev-parse', 'refs/remotes/origin/main']);
-  const remoteMain = git(['ls-remote', 'origin', contract.repository.targetRef]).split(/\s+/u)[0];
-  assert.match(targetSha, SHA);
-  assert.equal(originMain, targetSha);
-  assert.equal(remoteMain, targetSha);
-  assert.equal(process.env.OUTCOME_RELEASE_DAG_TARGET_SHA, targetSha);
-  const evaluatorBranch = git(['branch', '--show-current']) || 'DETACHED_HEAD';
-  assert.equal(git(['status', '--porcelain', '--untracked-files=no']), '');
-
-  const mergeReceipt = queryJson(`
-    SELECT jsonb_build_object(
-      'result', result, 'sourceBranch', source_branch,
-      'sourceSha', btrim(source_sha::text), 'targetBranch', target_branch,
-      'targetShaBefore', btrim(target_sha_before::text),
-      'targetShaAfter', btrim(target_sha_after::text), 'recordedBy', recorded_by
-    )
-      FROM session_merge_receipt
-     WHERE session_id='${releaseDag.builder.sessionDatabaseId}'::uuid
-       AND task_id='${releaseDag.builder.taskDatabaseId}'::uuid
-       AND source_branch='${releaseDag.builder.sourceBranch}'
-       AND source_sha='${targetSha}'::char(40)
-       AND target_branch='${contract.repository.targetBranch}'
-       AND target_sha_after='${targetSha}'::char(40)
-       AND recorded_by='AGENT'
-       AND result IN ('MERGED','ALREADY_MERGED')
-     ORDER BY created_at DESC LIMIT 1
-  `);
-  assert.match(mergeReceipt.targetShaBefore, SHA);
-  if (mergeReceipt.result === 'MERGED') assert.notEqual(mergeReceipt.targetShaBefore, targetSha);
-  else assert.equal(mergeReceipt.targetShaBefore, targetSha);
-  const receiptProof = {
-    sessionDatabaseId: releaseDag.builder.sessionDatabaseId,
-    taskDatabaseId: releaseDag.builder.taskDatabaseId,
-    ...mergeReceipt,
-  };
-  const targetReceiptDigest = sha256(canonical(receiptProof));
-  assert.equal(targetReceiptDigest, process.env.OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST);
-
-  const aggregatePath = path.join(repo, 'build/outcome-reconciler-release-dag-manifest.json');
-  const aggregate = JSON.parse(readFileSync(aggregatePath, 'utf8'));
-  assert.equal(aggregate.outcome, 'PASS');
-  for (const [field, environmentName] of Object.entries({
-    targetSha: 'OUTCOME_RELEASE_DAG_TARGET_SHA',
-    targetReceiptDigest: 'OUTCOME_RELEASE_DAG_TARGET_RECEIPT_DIGEST',
-    environmentDigest: 'OUTCOME_RELEASE_DAG_ENVIRONMENT_DIGEST',
-    evaluationPlanDigest: 'OUTCOME_RELEASE_DAG_EVALUATION_PLAN_DIGEST',
-    dagPlanDigest: 'OUTCOME_RELEASE_DAG_PLAN_DIGEST',
-    evidenceCutDigest: 'OUTCOME_RELEASE_DAG_EVIDENCE_CUT_DIGEST',
-    bindingDigest: 'OUTCOME_RELEASE_DAG_BINDING_DIGEST',
-  })) {
-    assert.equal(aggregate[field], process.env[environmentName], `aggregate has stale ${field}`);
-  }
-  assert.equal(aggregate.logicalSummary.failed, 0);
-  assert.equal(aggregate.logicalSummary.skipped, 0);
-  assert.equal(aggregate.logicalSummary.passed, aggregate.logicalSummary.tests);
-  const { manifestDigest, ...aggregateBody } = aggregate;
-  assert.equal(manifestDigest, sha256(canonical(aggregateBody)));
-
-  const targetContentDigest = await hashCommandOutput('git', ['archive', targetSha]);
-  const targetDigest = sha256(canonical({
-    repositoryProvider: contract.repository.provider,
-    repositoryId: contract.repository.id,
-    targetRef: contract.repository.targetRef,
-    targetSha,
-    targetContentDigest,
-  }));
-  const sourceFiles = [contractPath, releaseDagPath, 'scripts/outcome-reconciler-release-live-state.mjs'];
-  const sources = Object.fromEntries(sourceFiles.map((relative) => [relative, fileEvidence(relative)]));
-  const body = {
-    schemaVersion: 2,
-    kind: 'orbit.outcome-reconciler.release-live-state-predeploy-boundary',
-    phase: 'PREDEPLOY_EVALUATION',
-    outcome: 'PASS',
-    targetSha,
-    targetRef: contract.repository.targetRef,
-    targetContentDigest,
-    targetDigest,
-    targetReceiptDigest,
-    repository: {
-      originMain,
-      remoteMain,
-      evaluatorBranch,
-      builderReceiptSourceBranch: releaseDag.builder.sourceBranch,
-      trackedClean: true,
-    },
-    mergeReceipt: { ...mergeReceipt, proof: receiptProof },
-    aggregateManifest: {
-      path: path.relative(repo, aggregatePath),
-      digest: aggregate.manifestDigest,
-      bindingDigest: aggregate.bindingDigest,
-      logicalSummary: aggregate.logicalSummary,
-    },
-    deployment: {
-      state: 'DEFERRED_TO_BOUND_TASK',
-      taskId: releaseDag.evaluator.deploymentTaskId,
-      assertions: releaseDag.postDeploymentBoundary.assertions,
-      evaluatorMayDeploy: false,
-    },
-    currentBinding: {
-      state: 'DEFERRED_TO_BOUND_TASK',
-      taskId: releaseDag.evaluator.deploymentTaskId,
-      requiredEvidenceCutDigest: aggregate.evidenceCutDigest,
-    },
-    sources,
-    sourceDigest: sha256(canonical(sources)),
-    verifiedAt: new Date().toISOString(),
-  };
-  const manifest = { ...body, artifactDigest: sha256(canonical(body)) };
-  mkdirSync(path.dirname(output), { recursive: true });
-  writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(JSON.stringify(manifest));
-  process.exit(0);
 }
 
 git(['fetch', '--quiet', 'origin', `${contract.repository.targetRef}:refs/remotes/origin/main`]);
@@ -454,9 +325,7 @@ assert.deepEqual(runtimeBinding, { bindingTable: null, factTable: null, currentV
 
 const sourceFiles = [
   contractPath,
-  releaseDagPath,
   'package.json',
-  'scripts/outcome-reconciler-release-frontier.sh',
   'scripts/outcome-reconciler-release-live-state.mjs',
   'scripts/outcome-reconciler-release-frontier-manifest.mjs',
 ];

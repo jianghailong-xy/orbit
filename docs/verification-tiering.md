@@ -13,7 +13,6 @@ is at the merge.
 |---|---|---|---|
 | **Fast gate** | `tsc --noEmit`, build-orphan detection, and the specs this change is answerable for | **≤ 90s** | Every task, as often as you like |
 | **Full run** | `npm run test:outcome-reconciler:full-api` — every compiled spec, one disposable database and role per case | ~25–30 min | **Once at the merge boundary**, by whoever merges — not once per task |
-| **Release DAG** | `npm run test:outcome-reconciler:release-dag` | hours | Once, after the whole line of work is finished |
 
 ## The fast gate
 

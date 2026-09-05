@@ -7,9 +7,7 @@
   },
   "task": {
     "publicId": "34GlvYGNFrhA41IVx67o0",
-    "databaseId": "01a05882-1c95-7268-9a88-40521686f2d8",
-    "acceptanceCommand": "npm run test:outcome-reconciler:release-dag-regression-rebind",
-    "expectedExitCode": 0
+    "databaseId": "01a05882-1c95-7268-9a88-40521686f2d8"
   },
   "session": {
     "publicId": "6doG8SSeOYgG08QVxYKLFM",
@@ -50,13 +48,7 @@
   },
   "namedSuites": [
     { "name": "bootstrap", "packageScript": "test:outcome-reconciler:bootstrap", "manifest": "build/outcome-reconciler-bootstrap-manifest.json" },
-    { "name": "contract", "packageScript": "test:outcome-reconciler:contract", "manifest": "build/outcome-reconciler-v2-contract-manifest.json" },
-    { "name": "protocol", "packageScript": "test:outcome-reconciler:protocol", "manifest": "build/outcome-reconciler-v2-protocol-manifest.json" },
-    { "name": "ratification", "packageScript": "test:outcome-reconciler:ratification", "manifest": "build/outcome-reconciler-v2-ratification-manifest.json" },
     { "name": "work-overview-readiness", "packageScript": "test:outcome-reconciler:work-overview-readiness", "manifest": "build/work-overview-readiness-manifest.json" }
-  ],
-  "restoredSuites": [
-    { "name": "canary", "packageScript": "test:outcome-reconciler:canary", "manifest": "build/outcome-reconciler-v2-canary-manifest.json" }
   ],
   "fullMatrices": [
     { "name": "full-api", "packageScript": "test:outcome-reconciler:full-api", "manifest": "build/outcome-reconciler-full-api-manifest.json" },

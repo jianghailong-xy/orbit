@@ -91,10 +91,6 @@ test('(c) the whole repository is free of references to the dropped table and co
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
     // This spec and its sibling are where the absence is asserted, so they must name it.
     if (file.includes('startup-removal')) continue;
-    // The Release DAG contract's `reason` fields are an immutable record of attempts that already
-    // happened. One of them narrates the day a transaction double stopped modelling this delegate.
-    // Rewriting audit history to make a scan pass would be the more expensive mistake.
-    if (file === 'contracts/outcome-reconciler-release-dag.json') continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
     let source: string;
     try {

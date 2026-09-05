@@ -304,7 +304,6 @@ test('(j) the tiers are written down, and say the full run still happens before 
   assert.match(tiers, /Once at the merge boundary\*\*, by whoever merges — not once per task/u);
   assert.match(tiers, /Before merging, run the full acceptance once/u);
   assert.match(tiers, /The fast gate is not a merge gate/u);
-  assert.match(tiers, /npm run test:outcome-reconciler:release-dag/u);
   // Tiering changes when the full run happens, not how much of it runs.
   assert.match(tiers, /The case count never goes down/u);
   assert.match(tiers, /Parallelism stays at 4/u);

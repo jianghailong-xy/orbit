@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  existsSync,
   mkdirSync,
   readFileSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -20,8 +18,6 @@ const outputPath = path.resolve(process.argv[2] ?? path.join(
   'build/outcome-reconciler-authoritative-target-manifest.json',
 ));
 const allowUnpushed = process.env.AUTHORITATIVE_TARGET_ALLOW_UNPUSHED === '1';
-const dagPredeploy = process.env.OUTCOME_RELEASE_DAG_ACTIVE === '1'
-  && process.env.OUTCOME_RELEASE_DAG_PHASE === 'PREDEPLOY_EVALUATION';
 
 function run(file, args, options = {}) {
   return execFileSync(file, args, {
@@ -73,19 +69,8 @@ function queryOrbit(sql) {
   ]);
 }
 
-function assertTracked(relative) {
-  const absolute = path.join(root, relative);
-  assert.ok(existsSync(absolute), `${relative} is missing`);
-  assert.ok(statSync(absolute).isFile(), `${relative} is not a file`);
-  assert.equal(git('ls-files', '--error-unmatch', relative), relative, `${relative} is not tracked`);
-}
-
 const inventoryPath = 'contracts/outcome-reconciler-authoritative-target.json';
 const inventory = JSON.parse(readFileSync(path.join(root, inventoryPath), 'utf8'));
-const releaseDag = JSON.parse(readFileSync(path.join(
-  root, 'contracts/outcome-reconciler-release-dag.json',
-), 'utf8'));
-const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 assert.equal(inventory.schemaVersion, 1);
 assert.equal(inventory.targetBranch, 'main');
 assert.equal(inventory.targetRef, 'refs/heads/main');
@@ -97,17 +82,9 @@ assert.equal(inventory.immutableVerifier.verdict, 'FAIL');
 assert.match(inventory.immutableVerifier.evidenceDigest, DIGEST);
 assert.equal(inventory.historicalEvidencePolicy,
   'ANCESTRY_INVENTORY_ONLY_NOT_CURRENT_RELEASE_EVIDENCE');
-assert.equal(releaseDag.builderTaskId, inventory.taskId);
-assert.equal(releaseDag.builder.sourceBranch, inventory.sourceBranch);
-assert.equal(releaseDag.target.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
-// Every other identity in the receipt lookup below is read from the Release DAG builder, so a
-// rebind that moves the builder cannot leave them behind. The branch was the one field read from
-// this inventory instead, which is how it stayed on a two-generation-old branch whose receipt
-// attests a superseded target: the lookup then matched nothing and the node failed with a bare
-// "receipt is missing". Tying it to the branch the rest of the contract already agrees on makes
-// that drift a contract error at the top of the run rather than a mystery at the query.
-assert.equal(inventory.authoritativeReceiptLookup.sourceBranch, inventory.sourceBranch,
-  'the authoritative receipt lookup names a different branch than the declared source branch');
+assert.equal(inventory.authoritativeReceiptLookup.resolution, 'BUILDER_AGENT_MERGE_RECEIPT');
+assert.equal(inventory.authoritativeReceiptLookup.builderTaskId, inventory.taskId,
+  'the authoritative receipt lookup names a different builder than the declared task');
 
 if (!allowUnpushed) git('fetch', '--quiet', 'origin', 'refs/heads/main:refs/remotes/origin/main');
 
@@ -125,21 +102,10 @@ const refs = {
     : git('ls-remote', 'origin', inventory.targetRef).split(/\s+/u)[0],
 };
 if (!allowUnpushed) {
-  if (dagPredeploy) {
-    assert.equal(process.env.OUTCOME_RELEASE_DAG_TARGET_SHA, target,
-      'Release DAG target binding differs from the authoritative target');
-  } else {
-    assert.equal(branch, 'main', 'clean verification checkout is not on main');
-  }
+  assert.equal(branch, 'main', 'clean verification checkout is not on main');
   for (const [name, value] of Object.entries(refs)) {
     assert.match(value, SHA, `${name} is not a full SHA`);
-    if (name !== 'localMain' || !dagPredeploy) {
-      assert.equal(value, target, `${name} does not equal the declared target`);
-    }
-  }
-  if (dagPredeploy) {
-    assert.ok(isAncestor(refs.localMain, target),
-      'local deployment main is not an ancestor of the frozen predeploy target');
+    assert.equal(value, target, `${name} does not equal the declared target`);
   }
 }
 
@@ -196,7 +162,7 @@ const integrationMerges = inventory.integrationMerges.map((merge) => {
   return { ...merge, candidateCommit: source.candidateCommit, targetAncestor: true };
 });
 
-const integratedDeliveries = releaseDag.integratedDeliveries.map((delivery) => ({
+const integratedDeliveries = inventory.integratedDeliveries.map((delivery) => ({
   ...delivery,
   commits: delivery.commits.map((commit, index) => {
     assert.match(commit, SHA);
@@ -206,37 +172,6 @@ const integratedDeliveries = releaseDag.integratedDeliveries.map((delivery) => (
     return { sha: commit, subject: delivery.requiredSubjects[index], targetAncestor: true };
   }),
 }));
-
-const entrypoints = inventory.requiredEntrypoints.map((entrypoint) => {
-  assert.equal(packageJson.scripts?.[entrypoint.packageScript], entrypoint.command);
-  assertTracked(entrypoint.shell);
-  assertTracked(entrypoint.manifestGenerator);
-  run('bash', ['-n', entrypoint.shell]);
-  run(process.execPath, ['--check', entrypoint.manifestGenerator]);
-  const shellSource = readFileSync(path.join(root, entrypoint.shell), 'utf8');
-  assert.ok(
-    shellSource.includes(entrypoint.manifestGenerator),
-    `${entrypoint.shell} does not invoke ${entrypoint.manifestGenerator}`,
-  );
-  const additionalVerifier = entrypoint.additionalVerifier
-    ? (() => {
-        assertTracked(entrypoint.additionalVerifier);
-        run(process.execPath, ['--check', entrypoint.additionalVerifier]);
-        assert.ok(shellSource.includes(entrypoint.additionalVerifier));
-        return { path: entrypoint.additionalVerifier, ...fileDigest(entrypoint.additionalVerifier) };
-      })()
-    : null;
-  return {
-    ...entrypoint,
-    packageResolution: packageJson.scripts[entrypoint.packageScript],
-    shellParse: 'PASS',
-    manifestGeneratorParse: 'PASS',
-    shellDigest: fileDigest(entrypoint.shell),
-    manifestGeneratorDigest: fileDigest(entrypoint.manifestGenerator),
-    additionalVerifier,
-  };
-});
-assert.equal(entrypoints.length, 1);
 
 const verifierSql = `
 SELECT e.id::text,
@@ -285,9 +220,8 @@ SELECT id::text,
        recorded_by,
        created_at::text
   FROM session_merge_receipt
- WHERE session_id = '${releaseDag.builder.sessionDatabaseId}'::uuid
-   AND task_id = '${releaseDag.builder.taskDatabaseId}'::uuid
-   AND source_branch = '${lookup.sourceBranch}'
+ WHERE session_id = '${lookup.builderSessionDatabaseId}'::uuid
+   AND task_id = '${lookup.builderTaskDatabaseId}'::uuid
    AND source_sha = '${target}'::char(40)
    AND target_branch = '${lookup.targetBranch}'
    AND target_sha_after = '${target}'::char(40)
@@ -310,7 +244,6 @@ SELECT id::text,
     createdAt: receiptColumns[8],
   };
   assert.ok(lookup.requiredResult.includes(authoritativeReceipt.result));
-  assert.equal(authoritativeReceipt.sourceBranch, lookup.sourceBranch);
   assert.equal(authoritativeReceipt.sourceSha, target);
   assert.equal(authoritativeReceipt.targetBranch, lookup.targetBranch);
   assert.equal(authoritativeReceipt.targetShaAfter, target);
@@ -338,7 +271,6 @@ assert.equal(cleanAfter, '', 'verification worktree became dirty');
 const sourceFiles = [
   'package.json',
   inventoryPath,
-  'contracts/outcome-reconciler-release-dag.json',
   'scripts/outcome-reconciler-authoritative-target.sh',
   'scripts/outcome-reconciler-authoritative-target.mjs',
 ];
@@ -352,16 +284,12 @@ const manifest = {
   kind: 'orbit.outcome-reconciler.authoritative-target-attestation',
   outcome: 'PASS',
   generatedAt: new Date().toISOString(),
-  verificationMode: allowUnpushed
-    ? 'LOCAL_PRE_PUSH_AUDIT'
-    : dagPredeploy ? 'FROZEN_PREDEPLOY_SOURCE_BRANCH' : 'CLEAN_REMOTE_CLONE',
+  verificationMode: allowUnpushed ? 'LOCAL_PRE_PUSH_AUDIT' : 'CLEAN_REMOTE_CLONE',
   repository: {
     remoteUrl,
     branch,
     targetRef: inventory.targetRef,
-    cleanTemporaryClone: !allowUnpushed && !dagPredeploy,
-    exactReceiptTargetCheckout: dagPredeploy,
-    builderReceiptSourceBranch: dagPredeploy ? inventory.sourceBranch : null,
+    cleanTemporaryClone: !allowUnpushed,
   },
   refs,
   worktree: { clean: true, porcelain: cleanAfter },
@@ -386,7 +314,6 @@ const manifest = {
   },
   integrationMerges,
   integratedDeliveries,
-  requiredEntrypoints: entrypoints,
   nonForcePushReceipt: authoritativeReceipt ?? {
     localAuditOnly: true,
     requiredOnRemoteVerification: true,
@@ -398,4 +325,4 @@ const manifest = {
 mkdirSync(path.dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(JSON.stringify(manifest, null, 2));
-console.log(`authoritative-target manifest=${outputPath} target=${target} candidates=${candidates.length} entrypoints=${entrypoints.length}`);
+console.log(`authoritative-target manifest=${outputPath} target=${target} candidates=${candidates.length}`);

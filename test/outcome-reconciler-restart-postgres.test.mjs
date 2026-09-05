@@ -21,9 +21,9 @@ function remove(container) {
   docker(['rm', '-fv', container]);
 }
 
-// Exactly the storage, address and identity shape scripts/outcome-reconciler-release-dag-prepare.sh
-// provisions, so what this proves is what the release DAG actually runs. `publish` is the one knob:
-// the shape it used to have is the argument the old one-shot fixtures pass.
+// The storage, address and identity shape a bound PostgreSQL fixture is provisioned with, so what
+// this proves is what the restart helper is actually pointed at. `publish` is the one knob: the
+// shape it used to have is the argument the old one-shot fixtures pass.
 function provision(container, { storage = [], publish = ['127.0.0.1:' + pinnedPort + ':5432'] } = {}) {
   remove(container);
   const created = docker(['run', '-d', '--name', container,
@@ -118,7 +118,7 @@ test('a server that will not come back fails closed with evidence', () => {
   const container = 'orbit-restart-probe-exits';
   remove(container);
   const created = docker(['run', '-d', '--name', container, '--entrypoint', '/bin/sh', image,
-    '-c', 'echo release-dag-probe-marker; exit 9']);
+    '-c', 'echo restart-probe-marker; exit 9']);
   assert.equal(created.status, 0, created.stderr);
   try {
     const result = runRestart(container);
@@ -127,7 +127,7 @@ test('a server that will not come back fails closed with evidence', () => {
     assert.match(result.stderr, /waited \d+s of a \d+s budget over \d+ probe\(s\)/u);
     assert.match(result.stderr, /container: status=exited running=false restarting=false exit=9/u);
     assert.match(result.stderr, /docker logs --tail 20:/u);
-    assert.match(result.stderr, /release-dag-probe-marker/u);
+    assert.match(result.stderr, /restart-probe-marker/u);
     // Answered from the container's own state, not waited out against the budget.
     assert.ok(result.elapsedMs < 30_000, `fast failure took ${result.elapsedMs}ms`);
   } finally {

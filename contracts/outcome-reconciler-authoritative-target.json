@@ -3,7 +3,6 @@
   "kind": "orbit.outcome-reconciler.authoritative-target-inventory",
   "projectId": "34EVnSK4xSBvXox6Za9AA",
   "taskId": "34IIlMpTCdcS3Xdl1QOXZ",
-  "sourceBranch": "orbit/release-dag-27-634e76",
   "targetBranch": "main",
   "targetRef": "refs/heads/main",
   "targetDeclaration": {
@@ -417,18 +416,103 @@
       "conflictResolution": "package script conflict resolved as a strict union; canary contract, verifier and sources were otherwise additive"
     }
   ],
-  "requiredEntrypoints": [
+  "integratedDeliveries": [
     {
-      "suite": "canary",
-      "packageScript": "test:outcome-reconciler:canary",
-      "command": "bash scripts/outcome-reconciler-canary.sh",
-      "shell": "scripts/outcome-reconciler-canary.sh",
-      "manifestGenerator": "scripts/outcome-reconciler-canary-manifest.mjs",
-      "additionalVerifier": "scripts/outcome-reconciler-canary-verify.mjs"
+      "taskId": "34FvZL9JNez5O9vLVYd8h",
+      "commits": [
+        "b9d27c8d2561ebedc05bc367466302389a4685e6",
+        "7eb3eb3628186b89a2c8e869da66deff5bbb6473"
+      ],
+      "requiredSubjects": [
+        "fix: route only actionable owner ratifications",
+        "test: resolve shared package from current worktree"
+      ],
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8A6vhR6pVdPigwFU",
+      "successfulSessionId": "7SgJ8IF41zzAkMGwTgF9Dl",
+      "successfulCommit": "d523222e2c42d29de1dcde782cd01967c6171515",
+      "validatedTargetSha": "0c6e2da94f27a4efa7c07a13b382d5d38c54864e",
+      "manifest": "build/outcome-reconciler-failure-continuation-trigger-manifest.json",
+      "resultDigest": "0bd88a27562c4df5c97cc43b80fd25d346bba19cb3c43b78c80469bff341273c",
+      "commits": [
+        "f129029567f280ae5b89996ec1771808ff0b72a6"
+      ],
+      "requiredSubjects": [
+        "test: add failure-continuation-trigger reconciler verification"
+      ],
+      "patchEquivalence": {
+        "sourceCommit": "ce97d43c1b51bc13c2bd93791c03025b3692eebd",
+        "integratedCommit": "f129029567f280ae5b89996ec1771808ff0b72a6",
+        "stablePatchId": "a47a518e60d554ddeebfb5a896e3c4c19f223522"
+      },
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8Q012TDNY0TrFQs8",
+      "successfulSessionId": "40MUG4Egk58aWr59d1pftK",
+      "validatedTargetSha": "d81c2a59bdab9e2a46827cee81e5154fa86bf51e",
+      "manifest": "build/outcome-reconciler-failure-routing-manifest.json",
+      "resultDigest": "897aa1891fc99c8e3d181ec8d39323dbea3a2e63a39a7d41266ecba2f3289499",
+      "commits": [
+        "e0cb652c0ae4e1f9a6fe1805433bdefda90aeb9a"
+      ],
+      "requiredSubjects": [
+        "feat: add deterministic failure continuation routing"
+      ],
+      "patchEquivalence": {
+        "sourceCommit": "d81c2a59bdab9e2a46827cee81e5154fa86bf51e",
+        "integratedCommit": "e0cb652c0ae4e1f9a6fe1805433bdefda90aeb9a",
+        "stablePatchId": "3a264c52cd8c2aee634e7cb23e4a3093d1c0dc45"
+      },
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8XtdyVjJkkT8kxlx",
+      "successfulSessionId": "o8eFJOal2UppRwpWfIo7L",
+      "validatedTargetSha": "2b943120fe5c58661603ec2af60a8c44b076217c",
+      "manifest": "build/outcome-reconciler-failure-successor-handoff-manifest.json",
+      "resultDigest": "619a3e82d14e65d3e58ee4abc7ac939af7fc8c549e9b408a3affcc8cbba1d0f3",
+      "commits": [
+        "c76126892c7129cff63d6e739fba7b35e8ba0737"
+      ],
+      "requiredSubjects": [
+        "feat: atomically hand off failed continuations"
+      ],
+      "patchEquivalence": {
+        "sourceCommit": "2b943120fe5c58661603ec2af60a8c44b076217c",
+        "integratedCommit": "c76126892c7129cff63d6e739fba7b35e8ba0737",
+        "stablePatchId": "130280cfc93bdfe9ee88098a9ac4f28ef5e077c7"
+      },
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
+    },
+    {
+      "taskId": "34GBC8bVICSuRcT7XZht3",
+      "successfulSessionId": "6cQKuZqxcW4OiS8xuFvsBK",
+      "validatedTargetSha": "cb42e0d4498fbe5f420ff6597cde237eb9aa8442",
+      "manifest": "build/outcome-reconciler-failure-coordination-e2e-manifest.json",
+      "resultDigest": "c4d3b711fd1bbcec3cc1aa08bd92bf3cd0aca6534e6e418df32a184939f3fd20",
+      "commits": [
+        "e19f2f147fd15a21c06dd6d6e9bc95658a3b8915",
+        "baeea0018ab5abc7842d6b8e1eef5f4368015e81",
+        "9298d915d46cfe05a9c78ff9f9bded932c0332a8",
+        "cb42e0d4498fbe5f420ff6597cde237eb9aa8442"
+      ],
+      "requiredSubjects": [
+        "feat: unify failure coordination surfaces",
+        "fix: resolve isolated Prisma client generation",
+        "test: align project attention regression coverage",
+        "test: cover runner failure coordination route"
+      ],
+      "evidencePolicy": "RECHECK_COMMIT_ANCESTRY_AND_CURRENT_STRUCTURAL_REGRESSION"
     }
   ],
   "authoritativeReceiptLookup": {
-    "sourceBranch": "orbit/release-dag-27-634e76",
+    "resolution": "BUILDER_AGENT_MERGE_RECEIPT",
+    "builderTaskId": "34IIlMpTCdcS3Xdl1QOXZ",
+    "builderTaskDatabaseId": "01a06654-0ea9-73ff-8fd9-dbd52d904021",
+    "builderSessionDatabaseId": "fcfeac86-c87d-5db3-b930-745564c33437",
     "targetBranch": "main",
     "requiredResult": ["MERGED", "ALREADY_MERGED"],
     "requiredRecordedBy": "AGENT",

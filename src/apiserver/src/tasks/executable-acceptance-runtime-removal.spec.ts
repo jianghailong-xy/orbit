@@ -355,18 +355,12 @@ test('(b) every module and harness that only served this runtime is gone', () =>
     'test:outcome-reconciler:acceptance-deadline']) {
     assert.equal(script in pkg.scripts, false, `${script} still exists in package.json`);
   }
+  // The Release DAG plan asserted about here has since been deleted outright, so it schedules
+  // nothing; the release frontier contract is the scheduler that is left to check.
   const frontier = JSON.parse(read('contracts/outcome-reconciler-release-frontier.json')) as {
     namedSuites: Array<{ name: string }>;
   };
   assert.equal(frontier.namedSuites.some(({ name }) => name === 'acceptance-runtime'), false);
-  const plan = JSON.parse(read('contracts/outcome-reconciler-release-dag.json')) as {
-    nodes: Array<{ id: string; dependsOn: string[] }>;
-  };
-  assert.equal(plan.nodes.some(({ id }) => id === 'suite-acceptance-runtime'), false);
-  for (const node of plan.nodes) {
-    assert.equal(node.dependsOn.includes('suite-acceptance-runtime'), false,
-      `${node.id} still depends on the removed suite`);
-  }
 });
 
 // (c) ---------------------------------------------------------------------------------------------

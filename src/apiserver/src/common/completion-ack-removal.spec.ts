@@ -42,9 +42,9 @@ function read(relative: string): string {
  * siblings, and the run was green; the identical bytes went red on the next run, after the commit.
  * An assertion whose answer depends on whether someone has run `git add` yet binds its conclusion to
  * nothing, which is the one thing a removal proof has to do.
- * `scripts/outcome-reconciler-release-dag-lib.mjs` reaches for the same three flags for the same
- * reason. Parameterised by root so the enumeration itself can be tested against a throwaway
- * repository rather than asserted about this one.
+ * `scripts/outcome-reconciler-fast-gate.sh` reaches for the same three flags for the same reason.
+ * Parameterised by root so the enumeration itself can be tested against a throwaway repository
+ * rather than asserted about this one.
  */
 export function sourceFiles(root: string = ROOT): string[] {
   const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
