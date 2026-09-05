@@ -891,13 +891,12 @@ export class RunnerApiController {
       loginRequest = await this.drainLoginRequest(runner.id);
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
-      refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
       cloneRequests = await this.pendingCloneRequests(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
-      // runner never has to hold a workspace list of its own. Last of the block on purpose: it is
-      // the only entry here that is a plain listing rather than a one-slot relay, and everything
-      // after a throw in this try is skipped until the next heartbeat.
+      // runner never has to hold a workspace list of its own. After the relays on purpose: it is
+      // a plain listing rather than a one-slot relay, and everything after a throw in this try is
+      // skipped until the next heartbeat.
       agentDirs = (
         await this.prisma.workspace.findMany({
           where: { runnerId: runner.id, deletedAt: null, workDir: { not: null } },
@@ -905,6 +904,11 @@ export class RunnerApiController {
           take: 200,
         })
       ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
+      // Last, after everything this beat owes the runner anyway. It is the one entry here whose
+      // request survives being skipped — the timestamp stays on the row until a beat claims it —
+      // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
+      // would have cost the clone list and the directory listing behind it.
+      refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }

@@ -231,6 +231,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        constraints the read leans on are neither created nor changed here. It carries no
   //        `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion` labels
   //        survive, and it names none of the six preserved triggers/functions above.
+  //   0240 added `runner.model_catalog_refresh_at`, one nullable column recording that someone
+  //        asked a machine to re-read what models its CLIs offer. Read against every claim above:
+  //        it is a single `ALTER TABLE "runner" ADD COLUMN` and `runner` is not a relation this
+  //        file preserves, nor is it reachable from one — it names no `task` object, neither 0177
+  //        relation, `task_executable_acceptance_pair` nor any `project_acceptance_*` object. It
+  //        creates no table, index, enum or trigger, drops nothing, carries no `ALTER TYPE` and no
+  //        `DROP TYPE`, has no `CREATE OR REPLACE FUNCTION` at all — so it is not a fourth writer
+  //        of the DONE fence — and has no INSERT/UPDATE/DELETE, so no preserved row is read or
+  //        written. Every existing runner reads NULL for the new column, which is exactly "nobody
+  //        has asked", so it needs no backfill.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -240,7 +250,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0236_executable_acceptance_budget',
       '0237_task_completion_criterion_explicit_declaration',
       '0238_task_evidence_decision',
-      '0239_evidence_judgment_confirm_lane'],
+      '0239_evidence_judgment_confirm_lane',
+      '0240_runner_model_catalog_refresh_request'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
