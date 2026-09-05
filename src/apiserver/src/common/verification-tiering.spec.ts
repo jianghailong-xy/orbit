@@ -239,14 +239,12 @@ test('(e) this very case is running under an identity of its own', () => {
   const url = process.env.DATABASE_URL;
   const empty = process.env.ORBIT_TEST_PG_URL;
   if (!process.env.OUTCOME_API_CASE_TOTAL || !url || !empty) return;
-  // Two runners produce these names, and only one of them was in front of this when it was
-  // written. The standalone runner prefixes every case with a bare `pccrf` and exports it as
-  // OUTCOME_API_CASE_PREFIX; the Release DAG's sharded runner derives its own longer prefix from
-  // the binding, attempt and shard -- `pccrd_b<binding>_a<attempt>_sp<n>` -- and exports no such
-  // variable. A character class without `_` and an equality against an unset variable made this
-  // assertion unsatisfiable inside a DAG shard, where it had never run. The invariant is the same
-  // either way and is what is asserted here: one database, one empty database and one role, all
-  // three carrying the same prefix and this case's own index.
+  // Written when a second, sharded runner also produced these names and derived a longer prefix
+  // of its own -- `pccrd_b<binding>_a<attempt>_sp<n>` -- while exporting no OUTCOME_API_CASE_PREFIX.
+  // A character class without `_` and an equality against an unset variable made this assertion
+  // unsatisfiable there. Only the runner that prefixes every case with a bare `pccrf` is left, but
+  // the invariant asserted is the one that held either way: one database, one empty database and
+  // one role, all three carrying the same prefix and this case's own index.
   const identity = /^postgresql:\/\/(pcc[0-9a-z_]*)_c(\d{4})_u:[^@]*@[^/]+\/(pcc[0-9a-z_]*)_c(\d{4})_d$/u
     .exec(url);
   assert.ok(identity, `this case's database URL is not a per-case pcc* identity: ${url}`);

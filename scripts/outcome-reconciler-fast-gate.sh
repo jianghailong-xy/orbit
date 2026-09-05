@@ -6,9 +6,8 @@
 # minutes -- to learn something about a change that touched one directory, while the failures that
 # actually happened were merge-boundary failures the branch run could not see anyway.
 #
-# So the tiers are: this gate answers "is my own change coherent", the full run answers "is the
-# tree still good", and the release DAG answers "is this releasable". It is NOT a substitute for
-# the full run, and it says so in its own output, every time, because the whole risk of having a
+# So the tiers are: this gate answers "is my own change coherent" and the full run answers "is the
+# tree still good". It is NOT a substitute for the full run, and it says so in its own output, every time, because the whole risk of having a
 # cheap gate is that somebody merges on it.
 #
 #   npm run test:outcome-reconciler:fast-gate            run it

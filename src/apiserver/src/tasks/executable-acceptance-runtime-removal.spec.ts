@@ -493,8 +493,8 @@ test('(aa) the ability to tell a timeout from a failure is gone, and nothing rep
   // And no new vocabulary stands in for the distinction they carried. These four spellings were
   // this runtime's alone -- the wire fields a runner used to report a typed termination, and the
   // type that named the six kinds. A source that spells one is proposing to reintroduce it.
-  // (`TIMED_OUT` and `INFRASTRUCTURE_LOST` are deliberately NOT on this list: the release DAG's
-  // own node terminal states use those words for something else entirely.)
+  // (`TIMED_OUT` and `INFRASTRUCTURE_LOST` are deliberately NOT on this list: the acceptance run's
+  // own case terminal states use those words for something else entirely.)
   for (const invented of ['acceptanceTerminationKind', 'acceptanceAdmissionId',
     'acceptanceAttemptId', 'ExecutableAttemptTerminationKind']) {
     const offenders = sourceFiles()

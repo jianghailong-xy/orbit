@@ -49,9 +49,9 @@ assert.match(sourceSha, /^[0-9a-f]{40}$/);
 // number in this manifest moved when they were absent or when they arrived. Each case leaves a
 // receipt named for its index; this is the list of them, in the order the run scheduled them.
 //
-// Given a directory, never guessed at one: the standalone run hands over the directory its cases
-// wrote into, and the Release DAG's aggregate step -- which reduces per-shard results in a process
-// that never saw a case -- has no such directory to hand over and publishes no census.
+// Given a directory, never guessed at one: the run hands over the directory its cases wrote into,
+// so a caller that reduces results in a process which never saw a case has none to hand over and
+// publishes no census, rather than inventing one.
 function census(directory) {
   const receipts = readdirSync(directory).filter((name) => /^\d{4}\.json$/u.test(name)).sort()
     .map((name) => JSON.parse(readFileSync(path.join(directory, name), 'utf8')));

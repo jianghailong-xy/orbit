@@ -1,6 +1,6 @@
 // The one-shot PostgreSQL restart the serial full-api partition hands to the specs that assert what
 // survives a real server restart. Two properties are load-bearing and neither was covered: the
-// container the release DAG provisions has to still be the same cluster afterwards, and the wait
+// container the run provisions has to still be the same cluster afterwards, and the wait
 // for it has to fail closed, with evidence, instead of calling a slow server a dead one.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -9,7 +9,7 @@ import test from 'node:test';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const restart = path.join(repo, 'scripts/outcome-reconciler-restart-postgres.sh');
-const image = process.env.OUTCOME_RELEASE_DAG_PG_IMAGE ?? 'postgres:16-alpine';
+const image = process.env.OUTCOME_RESTART_PROBE_PG_IMAGE ?? 'postgres:16-alpine';
 const role = 'pccrd_restart_probe_u';
 const password = 'pccrd_disposable_password';
 const database = 'pccrd_restart_probe_db';
