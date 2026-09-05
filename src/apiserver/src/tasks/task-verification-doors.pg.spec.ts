@@ -357,8 +357,14 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         },
       );
     });
+    // Attaching a verifier derives VERIFICATION, which is a criterion change, so the reason is
+    // sent to get PAST that door: the refusal under test is the one about evidence, and a request
+    // stopped a step earlier would prove nothing about it.
     await assert.rejects(
-      tasks.update(w.ownerId, formerlyDone.id, { verifiesTaskId: subject.id }),
+      tasks.update(w.ownerId, formerlyDone.id, {
+        verifiesTaskId: subject.id,
+        completionCriterionOverrideReason: 'Reinterpreting this task as a check of another.',
+      }),
       /already has completion evidence.*File a new verification task instead/,
       'a task that recorded completion evidence cannot be reinterpreted as a verifier',
     );
@@ -385,7 +391,10 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       },
     });
     assert.match(
-      await message(() => tasks.update(w.ownerId, evidenced.id, { verifiesTaskId: subject.id })),
+      await message(() => tasks.update(w.ownerId, evidenced.id, {
+        verifiesTaskId: subject.id,
+        completionCriterionOverrideReason: 'Reinterpreting this task as a check of another.',
+      })),
       /already has completion evidence.*File a new verification task instead/,
     );
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: evidenced.id } })).verifiesTaskId,
@@ -481,6 +490,8 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     await tasks.update(w.ownerId, plain.id, {
       verifiesTaskId: subject.id,
       verdict: TaskVerdict.PASS,
+      completionCriterionOverrideReason:
+        'This task now exists to check another, so its verdict is what settles it.',
     });
     const after = await db.task.findUniqueOrThrow({ where: { id: plain.id } });
     assert.equal(after.verdict, TaskVerdict.PASS);
@@ -679,11 +690,16 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     assert.equal(await statusOf(db, phase.id), TaskStatus.DONE, 'CANCELLED settles, unlike FAILED');
     await tasks.update(w.ownerId, phase.id, {
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      completionCriterionOverrideReason:
+        'The phase settles on an independent check from here, not on its own evidence.',
     });
     assert.equal(await statusOf(db, phase.id), TaskStatus.OPEN, 'no check yet, so nothing to stand on');
 
     // Deleting the last outstanding subtask is the third input, and the one that COMPLETES.
-    await tasks.update(w.ownerId, phase.id, { completionPolicy: TaskCompletionPolicy.ALL_CHILDREN_DONE });
+    await tasks.update(w.ownerId, phase.id, {
+      completionPolicy: TaskCompletionPolicy.ALL_CHILDREN_DONE,
+      completionCriterionOverrideReason: 'The phase goes back to settling on its children.',
+    });
     const blocker = await tasks.create(w.ownerId, {
       title: 'blocker',
       projectId: w.projectId,

@@ -143,6 +143,24 @@ func (e *transportHTTPError) code() string {
 	return body.Code
 }
 
+// requiredAction is the executable next step the control plane named for this refusal, and "" for
+// a body that named none.
+//
+// Read beside the code rather than folded into it because one code covers several rules:
+// `PROJECT_SCOPE_MISMATCH` is both "you wrote into somebody else's project" and "you crossed
+// without saying so", and what a client can usefully add is a function of the ACTION the server
+// named, not of the code alone. Keying on the pair also means the day a new rule answers with this
+// code and a different action, advice written for this one does not follow it there.
+func (e *transportHTTPError) requiredAction() string {
+	var body struct {
+		RequiredAction string `json:"requiredAction"`
+	}
+	if err := json.Unmarshal([]byte(e.body), &body); err != nil {
+		return ""
+	}
+	return body.RequiredAction
+}
+
 // Transport is an outbound-only HTTP client to the control plane.
 type Transport struct {
 	baseURL    string
@@ -1238,13 +1256,27 @@ const (
 	crossProjectApprovalPending  = "APPROVAL_PENDING"
 )
 
-// crossProjectCrossingGuidance is the one thing the server's refusal cannot say: WHERE the crossing
-// it names can be read. Appended to the refusal, never in place of it — the code and the body are
-// what a caller matches on, and a client that replaced them with prose of its own would be a second
-// vocabulary for a boundary that already has one.
+// And the refusal that comes BEFORE either of them: a write that named another project and said
+// nothing about crossing. Its own requiredAction names the remedy — file it at home, or REQUEST the
+// handoff — and the request half is a `handoff` on the write itself, which is what the guidance
+// below spells out. Matched as a pair: this code is R6 and R7 together, and only the action says
+// that asking is on the table at all.
+const (
+	projectScopeMismatch         = "PROJECT_SCOPE_MISMATCH"
+	requestHandoffRequiredAction = "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF"
+)
+
+// crossProjectCrossingGuidance is the two things the server's refusal cannot say: WHERE the crossing
+// it names can be read, and — one refusal earlier — HOW to declare one at all. Appended to the
+// refusal, never in place of it: the code and the body are what a caller matches on, and a client
+// that replaced them with prose of its own would be a second vocabulary for a boundary that already
+// has one.
 //
-// It is deliberately not a retry hint. The approver of a cross-project crossing is the account
-// owner, and there is no tool that answers for them, so the next step is a person and this says so.
+// Neither line is a retry hint. R7 names the remedy in its own requiredAction
+// (FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF) and a caller that cannot see how to REQUEST one reads it
+// as "give up or retry", which is how a boundary with a legal door ends up being met by neither.
+// And the approver on the far side of that door is the account owner, with no tool that answers for
+// them — so both lines end at a person, and say so.
 func crossProjectCrossingGuidance(err error) string {
 	httpErr, answered := err.(*transportHTTPError)
 	if !answered {
@@ -1256,6 +1288,19 @@ func crossProjectCrossingGuidance(err error) string {
 			"(orbit project crossings PROJECT_ID) — read it to see whether the crossing has been " +
 			"asked, is still waiting, or was already answered. Only the ACCOUNT OWNER can answer " +
 			"it: no tool does, by design, so point them at the project page."
+	case projectScopeMismatch:
+		// Only when the server itself named asking as the remedy. The code alone would decorate
+		// refusals whose answer is something else entirely.
+		if httpErr.requiredAction() != requestHandoffRequiredAction {
+			return ""
+		}
+		return "\n  how:     to ASK rather than retry, send this same write again with a handoff " +
+			"declaration beside the projectId it names — {\"handoff\":{\"reason\":\"why this " +
+			"belongs over there\"}} over MCP, --handoff-reason TEXT at a terminal. The declaration " +
+			"carries no authority: it files the crossing as a question the ACCOUNT OWNER answers, " +
+			"which orbit project crossings PROJECT_ID reads back. It reaches that question from " +
+			"task_create and task_create_batch; MOVING a task that already exists is refused here " +
+			"declared or not, so take that one to the owner yourself."
 	}
 	return ""
 }

@@ -526,7 +526,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		if err := requireHandoffNamesItsDestination(body); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -537,7 +540,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
-			return toolResult("create task failed: "+err.Error(), true)
+			// Verbatim, plus how to ASK when the refusal is the one whose own requiredAction says
+			// a handoff may be requested. This is the door where asking gets somewhere.
+			return toolResult("create task failed: "+err.Error()+
+				crossProjectCrossingGuidance(err), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -560,7 +566,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			// Per item, because a crossing is per item: one plan can file most of its work at home
+			// and one piece of it over the line, and the item that crosses is the one that has to
+			// name where it is going.
+			if err := requireHandoffNamesItsDestination(body); err != nil {
+				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
+			}
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -589,9 +601,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
+		}
+		if err := requireHandoffNamesItsDestination(body); err != nil {
+			return toolResult(err.Error(), true)
 		}
 		raw, err := s.t.updateTask(s.sessionID, id, body)
 		if err != nil {
@@ -1034,7 +1049,8 @@ func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map
 func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]interface{} {
 	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, body)
 	if err != nil {
-		return toolResult("create tasks failed: "+err.Error(), true)
+		return toolResult("create tasks failed: "+err.Error()+
+			crossProjectCrossingGuidance(err), true)
 	}
 	return toolResult(prettyJSON(raw), false)
 }
@@ -1303,6 +1319,38 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"or neither. Omit it when the work belongs to no project; a project that does not exist, or " +
 			"belongs to somebody else, is rejected rather than filed nowhere.",
 	}
+	// The one field on a task write whose only possible user is an AGENT: §4 R1 exempts the account
+	// owner from the whole scope contract, so a crossing is never something they have to declare.
+	// It is also the field the server names in its own refusal — R7's requiredAction is
+	// FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF — and until it was declarable from here the second
+	// half of that sentence pointed at nothing.
+	//
+	// Three things the description has to carry, because a tool description is the whole contract a
+	// model reads before it writes: it is meaningless without an explicit projectId, it grants
+	// nothing, and the answer comes from a person.
+	handoffProp := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"reason": map[string]interface{}{
+				"type":      "string",
+				"maxLength": 1000,
+				"description": "Why this work belongs over there, in one sentence. Shown to whoever " +
+					"answers the crossing; read by no gate, so it persuades a person and nothing else.",
+			},
+		},
+		"description": "DECLARE that this write crosses into another project. Send it together with " +
+			"the projectId it crosses into — a crossing has to name where it is going, and a handoff " +
+			"with no destination is refused before the request is made. PRESENCE is the declaration, " +
+			"so `{}` declares one as loudly as a reason does; without it a write into another " +
+			"project is refused PROJECT_SCOPE_MISMATCH and no amount of retrying changes that, " +
+			"because \"I did not realise it was another project\" and \"I am asking to move work " +
+			"between two goals\" must not be the same request. It CARRIES NO AUTHORITY: it does not " +
+			"grant the crossing, it makes it askable — the server files the question against the " +
+			"crossing itself and refuses this write until it is answered. The answer is the ACCOUNT " +
+			"OWNER's (or their standing policy when both projects are on AUTO); no agent, and no " +
+			"coordinator of either project, can give it. Read the row back with project_crossings, " +
+			"and re-send this write once it says APPROVED.",
+	}
 	// Makes the new task a subtask of one that already exists, on task_create and every
 	// task_create_batch item alike. Not nullable for the same reason as projectId: on a create
 	// there is no existing link to clear.
@@ -1341,6 +1389,34 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"subtasks, or verifications pointing at it, that the move would leave in another " +
 			"project, and while it carries a criterion declaration this same write does not take " +
 			"back (criterionKey: null) — a criterion is one project's statement of what it wants.",
+	}
+	// The same declaration on the edit door — and deliberately NOT the same sentence. `UpdateTaskDto`
+	// takes `handoff`, but the move gate does not read it: that write is admitted as UPDATE_TASK,
+	// and §4 R7 refuses any crossing whose operation is not HANDOFF_TASK, so a DECLARED move is
+	// refused exactly like an undeclared one. A description that promised "this makes it askable"
+	// here would send a model round a loop the server cannot break — declare, be refused, be told to
+	// declare — so this one says which door files the question and where a move actually goes.
+	updateHandoffProp := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"reason": map[string]interface{}{
+				"type":      "string",
+				"maxLength": 1000,
+				"description": "Why this work belongs over there, in one sentence. Shown to whoever " +
+					"answers the crossing; read by no gate.",
+			},
+		},
+		"description": "DECLARE that this write crosses into another project. Send it together with " +
+			"the projectId it moves the task into — a crossing has to name where it is going, and a " +
+			"handoff with no destination is refused before the request is made. Presence is the " +
+			"declaration and it CARRIES NO AUTHORITY: it never performs the crossing, it only asks. " +
+			"What it reaches differs by door, so read this before relying on it: filing NEW work over " +
+			"the line (task_create, task_create_batch) files the question and comes back " +
+			"CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, which project_crossings then reads " +
+			"and the ACCOUNT OWNER answers — while MOVING a task that already exists is refused " +
+			"PROJECT_SCOPE_MISMATCH whether or not it is declared, because this door files no " +
+			"question yet. A re-filing is therefore the owner's to make directly (§4 R1 exempts " +
+			"them); asking them is the step, not retrying.",
 	}
 	// The same link on the edit door, where it also has to be removable. A decomposition is
 	// usually understood after the tasks exist — a step turns out to belong under a different
@@ -1546,6 +1622,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 			"projectId":          projectIDProp,
+			"handoff":            handoffProp,
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
 			"criterionKey":       criterionKeyProp,
@@ -2035,6 +2112,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"status":             taskUpdateStatus,
 				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 				"projectId":          updateProjectIDProp,
+				"handoff":            updateHandoffProp,
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 				"parentTaskId":       updateParentTaskIDProp,
 				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},

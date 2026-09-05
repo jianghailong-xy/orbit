@@ -238,9 +238,15 @@ suite('the declaration is stored, editable, clearable and still enforced as a pa
   });
   assert.equal(edited.acceptanceCommand, 'npm run build');
   assert.equal(edited.acceptanceExpectedExitCode, 0);
+  // Clearing the pair MOVES the criterion, so since 2026-09-05 it costs a sentence: the door in
+  // `task-completion-criterion-change-guard.ts` is judged on the criterion a write LANDS on, and
+  // this write lands on EVIDENCE_JUDGMENT without ever naming it. Saying why is the whole price.
   const cleared = await tasks.update(f.ownerId, f.taskId, {
     acceptanceCommand: null,
     acceptanceExpectedExitCode: null,
+    completionCriterionOverrideReason:
+      'The command is being withdrawn, so EXECUTABLE has nothing left to run and this task '
+      + 'settles on its evidence instead.',
   });
   assert.equal(cleared.acceptanceCommand, null);
   assert.equal(cleared.acceptanceExpectedExitCode, null);
@@ -253,6 +259,7 @@ suite('the declaration is stored, editable, clearable and still enforced as a pa
     completionCriterion: 'EXECUTABLE',
     acceptanceCommand: 'test -f package.json',
     acceptanceExpectedExitCode: 0,
+    completionCriterionOverrideReason: 'The command is back, and it is what settles this task.',
   });
   assert.equal(redeclared.completionCriterion, 'EXECUTABLE');
   assert.equal(redeclared.acceptanceCommand, 'test -f package.json');

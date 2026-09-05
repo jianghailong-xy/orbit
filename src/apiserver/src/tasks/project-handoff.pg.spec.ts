@@ -574,6 +574,89 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.deepEqual(await tasksIn(w.projectB), [...before, 'the crossing'].sort());
   });
 
+  // §4 R7, as the pair of writes that differ in one thing.
+  //
+  // The two calls below are the same create — same title, same target project, same session — and
+  // the second one says it is crossing. They come back with DIFFERENT refusal codes, and that is
+  // the entire claim: the declaration is what carries a request past R7 and into R9-R14, where
+  // there is somebody to ask. Until an agent-facing client could send `handoff` at all, this was a
+  // claim about a field nobody could set — R7 named the remedy (FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF)
+  // and no MCP tool and no CLI flag could perform it, so every crossing an agent attempted stopped
+  // at the first of these two answers and `project_handoff_approval` stayed empty in production.
+  await t.test('declaring the crossing is what carries it from R7 to the approval rules', async () => {
+    const w = await seed('r7-to-r10');
+    const title = 'the same write, twice';
+    const create = (handoff?: { reason: string }) => tasks.create(w.ownerId, {
+      title, projectId: w.projectB, ...(handoff ? { handoff } : {}),
+    } as never, AGENT(w.ownerId), w.sessionA);
+
+    // Undeclared. R7, and nothing was asked of anybody — which is the honest answer, since a write
+    // that did not know it was crossing is not a request to move work between two goals.
+    const undeclared = await refusalOf(() => create()) as Record<string, unknown>;
+    assert.equal(undeclared.code, 'PROJECT_SCOPE_MISMATCH');
+    assert.equal(undeclared.rule, 'R7_UNDECLARED_CROSSING');
+    assert.equal(undeclared.requiredAction, 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF');
+    assert.deepEqual(await rows(w.ownerId), [], 'an undeclared crossing asks nobody anything');
+
+    // Declared, and judged BEFORE any question is filed: the preview door admits with
+    // `declare: false`, so what answers is R10 itself, by name — the first rule R7 was standing in
+    // front of. A preview that filed one would leave a person a question about a plan nobody sent.
+    const previewed = await refusalOf(() => tasks.previewPlan(w.ownerId, {
+      tasks: [{ title, projectId: w.projectB, handoff: { reason: 'it belongs over there' } }],
+    } as never, AGENT(w.ownerId), w.sessionA)) as Record<string, unknown>;
+    assert.equal(previewed.code, 'CROSS_PROJECT_APPROVAL_REQUIRED');
+    assert.equal(previewed.rule, 'R10_NO_APPROVAL');
+    assert.equal(previewed.requiredAction, 'AWAIT_HANDOFF_APPROVAL');
+    assert.deepEqual(await rows(w.ownerId), [], 'a preview declares nothing');
+
+    // And for real. Same write, one declaration, a different refusal — and now a row somebody can
+    // answer, carrying the sentence the caller wrote for whoever answers it.
+    const declared = await refusalOf(() => create({ reason: 'it belongs over there' })) as Record<string, unknown>;
+    assert.notEqual(declared.code, undeclared.code);
+    assert.equal(declared.code, 'APPROVAL_PENDING');
+    assert.equal(declared.requiredAction, 'AWAIT_HANDOFF_APPROVAL');
+    const [question] = await rows(w.ownerId);
+    assert.equal(question.state, 'PENDING');
+    assert.equal(question.kind, 'FILE_TASK');
+    assert.equal(question.from_project_id, w.projectA);
+    assert.equal(question.to_project_id, w.projectB);
+    assert.equal(question.reason, 'it belongs over there');
+    assert.equal(declared.handoffId, question.id, 'the refusal names the question it filed');
+    assert.ok(!(await tasksIn(w.projectB)).includes(title), 'a question is not a write');
+
+    // The owner answers on their own channel — no agent can — and the same write goes through under
+    // R14, landing in the project it named.
+    await handoffs.decide(w.ownerId, w.ownerId, question.id, 'APPROVE', new Date());
+    const landed = await create({ reason: 'it belongs over there' });
+    assert.equal(landed.projectId, w.projectB);
+    assert.ok((await tasksIn(w.projectB)).includes(title), 'the approved write landed over there');
+    const spent = (await rows(w.ownerId))[0];
+    assert.equal(spent.state, 'APPLIED');
+    assert.equal(spent.applied_task_id, landed.id);
+  });
+
+  // The asymmetry every client surface now has to describe honestly, pinned so the prose cannot rot.
+  //
+  // `UpdateTaskDto` accepts `handoff` and the move gate does not read it: `TasksService.update`
+  // admits a re-filing as `UPDATE_TASK`, so §4 R7 refuses a DECLARED move exactly as it refuses an
+  // undeclared one, and files nothing anybody could answer. That is why `task_update`'s tool
+  // description says asking reaches the CREATE doors and a move goes to the account owner instead —
+  // and the day `MOVE_TASK` gets a writer, this test is the one that says those words have to change
+  // with it.
+  await t.test('a declared MOVE is still R7: the edit door files no question', async () => {
+    const w = await seed('declared-move');
+    const refusal = await refusalOf(() => tasks.update(w.ownerId, w.taskInA, {
+      projectId: w.projectB, handoff: { reason: 'it belongs over there' },
+    } as never, w.sessionA)) as Record<string, unknown>;
+    assert.equal(refusal.code, 'PROJECT_SCOPE_MISMATCH');
+    assert.equal(refusal.rule, 'R7_UNDECLARED_CROSSING');
+    assert.deepEqual(await rows(w.ownerId), [], 'the edit door declared nothing');
+    // And the task did not move.
+    const { rows: [row] } = await admin.query<{ project_id: string }>(
+      'SELECT "project_id" FROM "task" WHERE "id" = $1::uuid', [w.taskInA]);
+    assert.equal(row.project_id, w.projectA);
+  });
+
   await t.test('a spent yes does not authorise a second crossing', async () => {
     const w = await seed('spend-once');
     const create = (title: string) => tasks.create(w.ownerId, {

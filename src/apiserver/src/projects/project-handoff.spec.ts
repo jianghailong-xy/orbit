@@ -8,6 +8,8 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -300,4 +302,31 @@ test('the closed sets are closed', () => {
   assert.deepEqual([...HANDOFF_STORED_STATES], ['PENDING', 'APPROVED', 'DENIED', 'APPLIED']);
   assert.throws(() => nextHandoffState('NOPE' as never, 'APPROVE'), /unknown handoff state/);
   assert.throws(() => nextHandoffState('PENDING', 'NOPE' as never), /unknown handoff event/);
+});
+
+// The unit's own header is contract text, and contract text has to describe the implementation that
+// EXISTS — not the one that existed when it was written.
+//
+// It used to open with "make `HANDOFF_TASK` reachable. Today it is not", which was true of a tree
+// with neither half of the crossing built. The answer half landed first (the table, its two routes,
+// the card), the asking half after it (`handoff` on the agent-facing writes), and a header still
+// telling readers that R7 is a dead end would send the next person to build a door that is already
+// there — or to conclude the boundary is broken and route around it.
+test('the header describes the crossing channel that exists', () => {
+  const source = readFileSync(
+    path.resolve(__dirname, '../../src/projects/project-handoff.ts'),
+    'utf8',
+  );
+  const header = source.slice(0, source.indexOf('*/'));
+
+  assert.ok(
+    !/Today it is not/.test(header),
+    'the header still asserts HANDOFF_TASK is unreachable; both halves of the crossing are built',
+  );
+  // The answer side, by the names a reader can go and find.
+  assert.match(header, /project_handoff_approval/);
+  assert.match(header, /handoffs\/:handoffId\/decision/);
+  // And the asking side, which is what made the answer side worth having.
+  assert.match(header, /`handoff`/);
+  assert.match(header, /--handoff-reason/);
 });

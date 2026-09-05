@@ -1,11 +1,30 @@
 /**
  * Unit L4: the explicit cross-project handoff — its three `HANDOFF_*` states, landed.
  *
- * L1 froze the rules and left this unit one job (§10): make `HANDOFF_TASK` reachable. Today it is
- * not — `decideProjectScopeWrite` has R9–R14 and nothing in the product can produce the approval
- * they read, so every crossing an agent attempts dies at R7 and the only cross-project work that
- * happens is the kind L1 exists to prevent. The gap is not a missing endpoint. It is a missing
- * FACT: "the user said yes to THIS crossing" is not derivable from any column the schema has.
+ * L1 froze the rules and left this unit one job (§10): make `HANDOFF_TASK` reachable. It is, and it
+ * took both halves of one sentence. The ANSWER half landed here: `project_handoff_approval`, the
+ * two routes that read and decide it (`GET /projects/:id/handoffs`, `POST
+ * /projects/:id/handoffs/:handoffId/decision`) and the card that puts it in front of the account
+ * owner. The ASKING half is a client surface: an agent declares a crossing by sending `handoff` on
+ * the write itself — `task_create`, `task_create_batch` and `task_update` over MCP, `--handoff-reason`
+ * at a terminal — which is what `TasksService.declaredCrossing` reads.
+ *
+ * Neither half was worth anything without the other, and for a while only the answer existed: R7
+ * refused every crossing an agent attempted with a requiredAction naming a request no client could
+ * make, so the only cross-project work that happened was the kind L1 exists to prevent, and this
+ * table stayed empty in production. A rule whose remedy is unreachable is not a boundary; it is an
+ * outage nobody logs.
+ *
+ * WHAT IS REACHABLE, EXACTLY. `FILE_TASK` — new work filed over the line — and the `DEPEND_ON_TASK`
+ * edge a plan asks for: both are declared on a create, and both file a question. `MOVE_TASK` is
+ * still declared by no writer: `TasksService.update` admits a re-filing as `UPDATE_TASK` and builds
+ * no declaration from the `handoff` its DTO accepts, so §4 R7 refuses a declared move exactly as it
+ * refuses an undeclared one, and moving work between two goals stays the account owner's own write
+ * (§4 R1 exempts them). The kind is defined here because the approval it would need is the same row;
+ * what is missing is the writer, not the rule.
+ *
+ * The gap this unit closed was never a missing endpoint. It was a missing FACT: "the user said yes
+ * to THIS crossing" is not derivable from any column the schema has.
  *
  * WHY THIS IS A ROW AND NOT A DERIVATION (§8 CM3)
  * ----------------------------------------------
