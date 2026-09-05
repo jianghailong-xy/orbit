@@ -10,6 +10,10 @@ describe('steer delivery states', () => {
     expect(steerDeliveryState('written').label).toBe('Delivering…');
     expect(steerDeliveryState('acknowledged').label).toBe('Sent into this turn');
     expect(steerDeliveryState('failed').label).toBe('Not delivered');
+    // The one non-delivery that is not a loss: it missed the turn it was aimed at and is
+    // coming back as a turn of its own, so it reads as progress rather than failure.
+    expect(steerDeliveryState('requeued').label).toBe('Queued for next turn instead');
+    expect(steerDeliveryState('requeued').tone).toBe('progress');
   });
 
   it('separates on-its-way from arrived from lost', () => {

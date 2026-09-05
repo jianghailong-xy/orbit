@@ -20,6 +20,8 @@ import (
 //	enqueued      the runtime accepted it — it will be written, in this order
 //	written       its bytes are in the CLI's stdin
 //	acknowledged  the CLI echoed it back (--replay-user-messages): it is in the conversation
+//	requeued      it never arrived AND that is provable, so it goes back to being an ordinary
+//	              queued message — the one non-delivery that is not a loss
 //	failed        it will never arrive, and why
 //
 // enqueued and written are genuinely different: a `claude` inside a tool call stops
@@ -33,6 +35,7 @@ const (
 	deliveryEnqueued     deliveryState = "enqueued"
 	deliveryWritten      deliveryState = "written"
 	deliveryAcknowledged deliveryState = "acknowledged"
+	deliveryRequeued     deliveryState = "requeued"
 	deliveryFailed       deliveryState = "failed"
 )
 
@@ -49,7 +52,12 @@ type messageDelivery struct {
 	// steer: this message was written into a turn that was already running, so it has no
 	// `result` of its own. Its turn settles on the engine's echo instead — the one moment
 	// that says the message became part of the conversation it was aimed at.
-	steer   bool
+	steer bool
+	// requeueable: this control plane will take the message back and re-file it as an ordinary
+	// queued turn if delivery provably did not happen (RunInboxResponse.SteerRequeue). Read off
+	// the delivery rather than stored globally, because it answers for THIS message on THIS
+	// control plane; a runner that assumed it would lose a message to an older one.
+	requeueable bool
 	receipt *writeReceipt
 	state   deliveryState
 }

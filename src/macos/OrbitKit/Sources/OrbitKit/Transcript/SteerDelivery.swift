@@ -63,6 +63,11 @@ public enum SteerDelivery {
             // The engine echoed it back (claude's --replay-user-messages, codex's userMessage
             // item). It is in the conversation.
             return SteerDeliveryState(label: "Sent into this turn", tone: .delivered)
+        case "requeued":
+            // It missed the turn it was aimed at, and the runner can prove nothing read it, so
+            // it goes back to being an ordinary queued message. The one non-delivery that still
+            // ends with the message being read — progress, not failure.
+            return SteerDeliveryState(label: "Queued for next turn instead", tone: .progress)
         case "failed":
             return SteerDeliveryState(label: "Not delivered", tone: .failed)
         default:

@@ -25,7 +25,7 @@ describe('steer delivery labels, web vs OrbitKit', () => {
   it('says the same word for every stage the runner reports', () => {
     // Undefined is the window before any event exists: accepted by the control plane, not yet
     // leased. It reads as the runner's own acceptance, which is the same promise.
-    for (const delivery of [undefined, 'enqueued', 'written', 'acknowledged', 'failed']) {
+    for (const delivery of [undefined, 'enqueued', 'written', 'acknowledged', 'requeued', 'failed']) {
       const { label, tone } = steerDeliveryState(delivery);
       expect(
         SWIFT.includes(`label: "${label}"`),

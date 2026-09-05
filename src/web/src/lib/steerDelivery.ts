@@ -49,6 +49,11 @@ export function steerDeliveryState(delivery?: string | null): SteerDeliveryState
       // The engine echoed it back (claude's --replay-user-messages, codex's userMessage item).
       // The message is in the conversation.
       return { label: 'Sent into this turn', tone: 'delivered' };
+    case 'requeued':
+      // It missed the turn it was aimed at, and that is provable, so nothing about it was lost:
+      // the runner handed it back and it runs as a turn of its own. Progress, not failure — the
+      // only non-delivery in this vocabulary that still ends with the message being read.
+      return { label: 'Queued for next turn instead', tone: 'progress' };
     case 'failed':
       return { label: 'Not delivered', tone: 'failed' };
     case 'unconfirmed':
