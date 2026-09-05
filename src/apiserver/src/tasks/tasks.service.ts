@@ -3948,7 +3948,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * Returns the project id the caller must write — the server-derived binding this whole unit
    * exists for. A coordinator write that names no project is filed under the project the server
-   * says that session coordinates; one that names another project does not happen.
+   * says that session coordinates, for as long as that project can take new work, and under no
+   * project once it cannot; one that names another project does not happen.
    *
    * Synchronous and total, so a batch can admit every item BEFORE opening its transaction: a
    * refusal then costs no row, no lock and no partial batch (AC1, AC2).
@@ -4029,8 +4030,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }>>();
     for (const item of items) {
       // An item bound to no project is not on this bound: there is no goal for it to serve and no
-      // budget it spends. It does not reach here in practice — a judgment session holds a scope,
-      // so §4 R4 has already refused a create that explicitly asks for no project — and skipping
+      // budget it spends. It arrives one way only — a judgment session holds a scope, so §4 R4 has
+      // already refused a create that explicitly asks for no project, and what is left is the
+      // create the binding aimed nowhere because the scope's project is already settled. Skipping
       // it is what keeps this gate about authority rather than a second opinion on attribution.
       if (!item.projectId) continue;
       const group = byProject.get(item.projectId) ?? [];

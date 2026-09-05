@@ -9,8 +9,9 @@
  *   1. **Which project does the write actually land in.** The decision is handed a
  *      `targetProjectId`; somebody has to derive it. That somebody is here, and the derivation is
  *      the whole point of the unit — a coordinator write that names no project is filed under the
- *      project the SERVER says that session coordinates, never under one the model chose, the
- *      prompt suggested or the last browsed page happened to be.
+ *      project the SERVER says that session coordinates (for as long as that project can take new
+ *      work), never under one the model chose, the prompt suggested or the last browsed page
+ *      happened to be.
  *   2. **Is this write on the write surface at all.** §2 defines the surface as writes that change
  *      which goal a piece of work counts towards. A create that names no project, from a session
  *      that holds no scope, changes nothing about any goal — there is no goal — so it is not a
@@ -119,7 +120,7 @@ export interface ScopeAdmission {
  * disagreeing about which project a coordinator writes into:
  *
  *   - the caller named a project (including naming none)  → that is the target, and it is decided;
- *   - a CREATE that said nothing                          → the scope the server derived;
+ *   - a CREATE that said nothing                          → the scope, while it can take new work;
  *   - an UPDATE that said nothing                         → whatever owns the task today.
  *
  * An update that leaves the project alone still reaches the decision, and has to: `from` and `to`
@@ -127,12 +128,39 @@ export interface ScopeAdmission {
  * goal — a write that never mentions `projectId` and moves nothing is still a write into a project.
  */
 export function admitProjectScopeWrite(request: ScopeAdmissionRequest): ScopeAdmission {
+  // The project a create the caller said nothing about is filed under: the scope the server
+  // derived, WHILE that project can still take new work.
+  //
+  // The second half is not a rule about authority, it is what the first half means. A settled
+  // project takes no new work (§4 R8), so aiming a create at one produces a write that is refused
+  // for a target the writer never asked for — and the writer this hits is the coordinator of a
+  // project that has just been accepted, which is exactly the session most likely to have noticed
+  // something that has nothing to do with it. Every exit R8 names is shut from there: reopening a
+  // correctly settled project to record an unrelated finding corrupts the record it settled (and
+  // starts a new acceptance epoch to do it), and filing into another project is R7 for the same
+  // session. So it could file nothing at all, which is how a finding stops being written down.
+  //
+  // Answered HERE, in the derivation, rather than in the rules: R8 is right — a settled project
+  // takes no new work — and so is R4, which still refuses a scoped session that asks to file work
+  // under no goal while its goal is open. What was wrong is that a create nobody aimed anywhere
+  // was aimed at a project that cannot take it. Aimed nowhere, it is filed under no project, which
+  // is what an unscoped session's work has always done, and the owner can file it where it belongs.
+  //
+  // The alternative — teaching the decision's `from` not to fall back to the scope for a create —
+  // moves the conflation instead of removing it: `to` would still be the settled project, so R8
+  // would still refuse, and a create that DID name its own project would become a crossing out of
+  // null and be refused by R7 instead. The fallback is also load bearing on the update side, where
+  // `from` really is the project losing the work.
+  const filingScope =
+    request.scope && request.projectStatus[request.scope.projectId] === 'OPEN'
+      ? request.scope.projectId
+      : null;
   const target =
     request.requestedProjectId !== undefined
       ? request.requestedProjectId
       : request.operation === 'UPDATE_TASK'
         ? request.currentProjectId
-        : (request.scope?.projectId ?? null);
+        : filingScope;
   // §2's surface: a write claims ownership when it lands in a project, or when it moves work out
   // of one. Everything else — an agent filing work under no goal, or editing a task that belongs
   // to no goal — changes nothing about which goal counts what, and §1 leaves the control loop's
@@ -144,10 +172,12 @@ export function admitProjectScopeWrite(request: ScopeAdmissionRequest): ScopeAdm
   // wrong as a test of whether a write is a claim at all: an UPDATE of a task that belongs to no
   // project would read as work LEAVING the writer's scope, and R4 would refuse every coordinator
   // edit of an unfiled task. So a create anchors on the scope that would own the result, and an
-  // update anchors on what actually owns the task.
+  // update anchors on what actually owns the task. A scope that cannot own the result owns nothing
+  // here either, for the same reason it is not the target: the write claims no goal, so there is no
+  // goal for §2 to protect and the surface is the one an unscoped session's create has.
   const anchor =
     request.currentProjectId
-    ?? (request.operation === 'UPDATE_TASK' ? null : (request.scope?.projectId ?? null));
+    ?? (request.operation === 'UPDATE_TASK' ? null : filingScope);
   if (target === null && anchor === null) {
     return { projectId: target, onWriteSurface: false, outcome: null };
   }
