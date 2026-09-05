@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { type RunEvent, StreamingDraftsCtx, Transcript } from './Transcript';
+import { streamAnchorAfter } from '../lib/streamAnchor';
 
 /**
  * Where the half-written reply sits among the events around it.
@@ -68,6 +69,41 @@ describe('the live drafts sit where the generation started', () => {
     );
 
     expect(html.indexOf('weighing it up')).toBeLessThan(html.indexOf(MID_TURN));
+  });
+
+  it('keeps a tool call the model ran above the reply that explains it', () => {
+    // Reproduces what a user saw on 2026-09-05 (session 01a07092): a Bash call, a closing
+    // thinking block, a second Bash call, and then the answer describing what the second call
+    // found — drawn between the two calls. The thinking block anchored the drafts and nothing
+    // moved that anchor past the tool call that came after it.
+    const durable: RunEvent[] = [
+      ev(2900, 'tool_use', { id: 't1', name: 'Bash', input: { command: 'git commit --amend' } }),
+      ev(2901, 'tool_result', { toolUseId: 't1', content: 'blocked', isError: true }),
+      ev(2931, 'thinking', { text: '' }),
+      ev(2932, 'system', { subtype: 'context' }),
+      ev(2933, 'tool_use', { id: 't2', name: 'Bash', input: { command: 'git status --short' } }),
+      ev(2934, 'tool_result', { toolUseId: 't2', content: ' M package.json' }),
+      ev(2935, 'system', { subtype: 'status' }),
+    ];
+    // The deltas ride the same stream (with seqs of their own that are never persisted), so the
+    // anchor has to come from replaying all of it, not just what the transcript keeps.
+    const stream = [
+      ev(2925, 'thinking_delta', { text: '…' }),
+      ...durable,
+      ev(2936, 'thinking_delta', { text: '…' }),
+      ev(2937, 'text_delta', { text: DRAFT }),
+    ];
+    let anchor: number | null = null;
+    let cursor = 0;
+    for (const e of stream) {
+      cursor = Math.max(cursor, e.seq);
+      anchor = streamAnchorAfter(anchor, e, cursor);
+    }
+
+    const html = render(durable, anchor);
+
+    expect(html).toContain(DRAFT);
+    expect(html.lastIndexOf('chat-tool-card')).toBeLessThan(html.indexOf(DRAFT));
   });
 
   it('keeps a run of tool calls folded when nothing is streaming', () => {

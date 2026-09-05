@@ -189,6 +189,7 @@ import {
   sessionRunStatusOf,
 } from '../lib/sessionState';
 import { deliveryFailureExplanation, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
+import { streamAnchorAfter } from '../lib/streamAnchor';
 import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
@@ -2718,12 +2719,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // carries the authoritative full text and finalizes the bubble.
         //
         // The first chunk of a stretch also fixes where that bubble sits: at the cursor as it
-        // stands now, so an event that arrives later (a mid-turn message the runner echoes back)
-        // renders below it rather than above.
+        // stands now, so a mid-turn message the runner echoes back renders below it rather than
+        // above. See streamAnchorAfter for what moves that anchor afterwards.
         if (ev.type === 'text_delta') {
           const chunk = ev.payload?.text;
           if (typeof chunk === 'string') {
-            if (streamAnchorRef.current === null) streamAnchorRef.current = lastSeq;
+            streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
             setStreamingText((p) => p + chunk);
           }
           return;
@@ -2731,7 +2732,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         if (ev.type === 'thinking_delta') {
           const chunk = ev.payload?.text;
           if (typeof chunk === 'string') {
-            if (streamAnchorRef.current === null) streamAnchorRef.current = lastSeq;
+            streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
             setStreamingThink((p) => p + chunk);
           }
           return;
@@ -2767,22 +2768,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // bubble can't outlive its turn. (Don't clear on every system event: claude's
         // stderr also arrives as `system` and would wipe an in-progress bubble.)
         // A steer is the one `user` event that is NOT a boundary — see supersedesLiveDrafts.
-        // Whatever cleared the drafts also ended the stretch they were anchored to: the next
-        // chunk starts a new one and re-anchors at the cursor it finds. The `thinking` case
-        // keeps a draft (the text may still be streaming) so it re-anchors HERE instead — that
-        // block is now a durable node, and anything still being generated follows it.
+        // Where the drafts belong afterwards is streamAnchorAfter's call: a boundary ends the
+        // stretch they were anchored to, while the model's own output (a closed thinking block,
+        // a tool call) moves the anchor past itself so what is still being generated follows it.
         if (supersedesLiveDrafts(ev)) {
           setStreamingText('');
           setStreamingThink('');
-          streamAnchorRef.current = null;
         } else if (ev.type === 'thinking') {
           setStreamingThink('');
-          streamAnchorRef.current = ev.seq;
         } else if (ev.type === 'system' && ev.payload?.subtype === 'resumed') {
           setStreamingText('');
           setStreamingThink('');
-          streamAnchorRef.current = null;
         }
+        streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
         // Track turn boundaries live so the composer re-enables the instant a turn
         // ends, rather than waiting for the 4s session poll.
         if (ev.type === 'turn_end') {
