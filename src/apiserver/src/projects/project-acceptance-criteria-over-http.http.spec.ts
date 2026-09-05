@@ -112,7 +112,12 @@ function fakePrisma() {
     projectAcceptanceCriterionDefinition: {
       findMany: async ({ where }: { where: { projectId: string } }) => state.criteria
         .filter((row) => row.projectId === where.projectId)
-        .sort((a, b) => a.ordinal - b.ordinal),
+        .sort((a, b) => a.ordinal - b.ordinal)
+        // The detail read asks this same relation for each criterion's serving work. This probe
+        // writes no tasks at all, so every criterion comes back served by nobody, which is what
+        // the read is then answered with. Copies, so nothing downstream can write through them
+        // into the store — everything that changes a criterion here goes through `update`.
+        .map((row) => ({ ...row, servingTasks: [] })),
       updateMany: async (
         { where, data }: { where: { projectId: string }; data: { ordinal: { increment: number } } },
       ) => {

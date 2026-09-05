@@ -77,9 +77,9 @@ const REPO_ROOT = path.resolve(__dirname, '../../../..');
 const MODULE = 'src/apiserver/src/projects/project-criterion-satisfaction.ts';
 const SPEC = 'src/apiserver/src/projects/project-criterion-satisfaction.pg.spec.ts';
 /**
- * Two other readers, and both are tests. Neither is admitted by a pattern: the list being exact
- * is what makes a new consumer something somebody has to come and write down, and on 2026-09-04
- * two of them arrived at once from tasks that never touched each other's files.
+ * The other readers, named one at a time. None is admitted by a pattern: the list being exact is
+ * what makes a new consumer something somebody has to come and write down, and on 2026-09-04 two
+ * of them arrived at once from tasks that never touched each other's files.
  *
  * `UpdateTaskDto.criterionKey` exists to put clause 3 out, so its spec reads clause 3 back through
  * this derivation rather than re-implementing the comparison and proving only that it can subtract
@@ -93,6 +93,22 @@ const SPEC = 'src/apiserver/src/projects/project-criterion-satisfaction.pg.spec.
  */
 const REDECLARATION_SPEC = 'src/apiserver/src/tasks/task-criterion-redeclaration.pg.spec.ts';
 const PENDING_JUDGMENTS_SPEC = 'src/apiserver/src/tasks/pending-evidence-judgments.pg.spec.ts';
+/**
+ * The one reader that is not a test, and the spec that holds it to being a read.
+ *
+ * `ProjectsService.get` serves the answer beside the criterion it is about, so a person or a
+ * coordinator looking at a project can see WHICH clause is missing and WHICH task is holding it
+ * up. That is the visibility this derivation was written for, and it is the whole of what the
+ * service does with it: the answer is projected onto `acceptanceCriteriaItems` and returned. It
+ * reaches no `WHERE`, no compare-and-set and no refusal — in particular not `project.status =
+ * 'DONE'`, which 0223 and 0229 left unguarded on purpose and which is not re-guarded by a read
+ * being able to see what a guard would have looked at.
+ *
+ * So this case says what it always said, only it can no longer say it by there being nobody: the
+ * readers are exactly these, each is named with its reason, and none of them is a gate.
+ */
+const SERVICE = 'src/apiserver/src/projects/projects.service.ts';
+const SERVICE_SPEC = 'src/apiserver/src/projects/project-get-criterion-satisfaction.pg.spec.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -494,7 +510,7 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.deepEqual(rows.map((row) => row.column_name), [...NON_IDENTITY_COLUMNS].sort());
   });
 
-  // ═══ it is a read, and nothing consumes it ═══════════════════════════════════════════════════
+  // ═══ it is a read, and every reader of it is named ═══════════════════════════════════════════
   await t.test('nothing wires the derived answer into a status write or any gate', async () => {
     // Walked from the filesystem rather than from `git ls-files`, which reports nothing about a
     // file that has not been committed yet — the one state in which a new gate would be invisible.
@@ -503,8 +519,13 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       .filter((file) => readFileSync(file, 'utf8').includes('project-criterion-satisfaction'))
       .map((file) => path.relative(REPO_ROOT, file))
       .sort();
-    assert.deepEqual(mentions, [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC].sort(),
-      'every reader of the derivation is a test of it: no gate, no status write, consumes it');
+    assert.deepEqual(
+      mentions,
+      [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, SERVICE, SERVICE_SPEC].sort(),
+      'the readers of the derivation are exactly these, each named above with what it does with '
+        + 'the answer: three tests of it, one read endpoint that serves it, and that endpoint’s '
+        + 'own test. Not one of them is a gate — nothing turns the answer into a status write, '
+        + 'and a file arriving here is a consumer somebody has to come and write down');
 
     const source = readFileSync(path.join(REPO_ROOT, MODULE), 'utf8');
     assert.doesNotMatch(

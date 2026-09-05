@@ -68,6 +68,10 @@ import {
   ProjectBlockingLeaderboard,
   readProjectBlockingLeaderboard,
 } from './project-panorama-blocking';
+import {
+  type CriterionSatisfaction,
+  readCriterionSatisfaction,
+} from './project-criterion-satisfaction';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -360,6 +364,29 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
       }),
     })),
   };
+}
+
+/**
+ * What the work side says about one stated criterion, carried onto the item that states it.
+ *
+ * Beside the criterion rather than in a list of its own: they are two answers about the same row,
+ * and a caller holding one would otherwise have to join the other by id. The derivation's own two
+ * fields come across under their own names, which is the point — a second vocabulary for the same
+ * answer is a second thing to keep in step, and there is nothing here for the API to add.
+ *
+ * `satisfied` is NOT a fourth fact standing beside the three clauses and able to disagree with
+ * them: it is `unmet` being empty, decided once where the clauses are folded. So the two are
+ * copied together off the row that derived them and neither is recomputed here.
+ *
+ * A criterion the derivation did not answer for — one written or removed between this read's two
+ * queries, since both name the same rows under the same predicate — is projected without an
+ * answer rather than with an invented one, the same way the semantic-digest lane above omits
+ * itself rather than reporting a digest nobody stored.
+ */
+function criterionAnswer(
+  derived: CriterionSatisfaction | undefined,
+): Partial<Pick<CriterionSatisfaction, 'satisfied' | 'unmet'>> {
+  return derived === undefined ? {} : { satisfied: derived.satisfied, unmet: derived.unmet };
 }
 
 /**
@@ -1269,8 +1296,12 @@ export class ProjectsService {
    * `acceptanceCriteriaItems` is the other half of "is this project done", and since 0229 it is
    * only the half that STATES it: `tasksByStatus` measures the PROCESS and can read 100% while
    * nothing the project was for has been checked, and the criteria say what being checked would
-   * mean. Nothing here concludes anything about them — that evaluator was removed, and a tally
-   * that always read zero would be a worse answer than no tally.
+   * mean. Beside each stated criterion this now also says whether the WORK filed under it has met
+   * it — `criterionSatisfaction`'s three clauses, and for each one that does not hold, the tasks
+   * holding it up. That is a reading of work rows, not a verdict on the criterion's text: nothing
+   * judges what a criterion says, and this read remains the only consumer of the answer. It is
+   * served, not acted on: `project.status = 'DONE'` is not gated by it here or anywhere, which is
+   * the decision 0223 and 0229 recorded and is not quietly reopened by making the answer visible.
    */
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
@@ -1282,15 +1313,28 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const byStatus = await this.prisma.task.groupBy({
-      by: ['status'],
-      where: { projectId: id },
-      _count: { _all: true },
-    });
-    return withAcceptanceDefinitions({
+    const [byStatus, satisfaction] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['status'],
+        where: { projectId: id },
+        _count: { _all: true },
+      }),
+      // One more query, not one per criterion: the derivation is a single findMany whose nested
+      // select carries every serving task's settlement facts with it.
+      readCriterionSatisfaction(this.prisma, ownerId, id),
+    ]);
+    const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
+    const stated = withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
     });
+    return {
+      ...stated,
+      acceptanceCriteriaItems: stated.acceptanceCriteriaItems.map((item) => ({
+        ...item,
+        ...criterionAnswer(answered.get(item.id)),
+      })),
+    };
   }
 
   /**

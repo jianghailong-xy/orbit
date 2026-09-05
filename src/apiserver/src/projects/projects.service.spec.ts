@@ -351,6 +351,11 @@ test('the detail read reports progress without loading the project’s tasks', a
       },
       findMany: async () => assert.fail('the detail read must not load the project’s tasks'),
     },
+    // A project with no stated criteria has nothing for the satisfaction read to answer about.
+    // It is still asked, and it is asked once: the serving work it folds arrives as a nested
+    // select on this one query rather than as a task read, which is why the refusal above still
+    // holds with it in place.
+    projectAcceptanceCriterionDefinition: { findMany: async () => [] },
   });
 
   const project = await service.get(OWNER_ID, PROJECT_ID);
@@ -385,6 +390,9 @@ test('the detail read serves the authored criteria and no second representation 
       }),
     },
     task: { groupBy: async () => [] },
+    projectAcceptanceCriterionDefinition: {
+      findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
+    },
   });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
@@ -419,16 +427,25 @@ test('the detail item is the authored declaration, with no derived verdict besid
       }),
     },
     task: { groupBy: async () => [] },
+    projectAcceptanceCriterionDefinition: {
+      findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
+    },
   });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
 
-  // Exactly the stored row, plus the one thing the projection derives: `key`, the name a caller
-  // uses for this criterion, which is its own id and not a reading of its text. `currentStatus`
-  // was a projection over acceptance conclusions, and 0229 removed those: reporting a constant
-  // 'UNDECIDED' forever would be a verdict pretending to be a reading.
-  assert.deepEqual(project.acceptanceCriteriaItems[0],
-    { ...definition, key: criterionKeyOf(CRITERION_A_ID) });
+  // Exactly the stored row, plus what the projection derives: `key`, the name a caller uses for
+  // this criterion, which is its own id and not a reading of its text; and the work side's answer
+  // about it, which is a reading of TASK rows and still not of this one. `currentStatus` was a
+  // projection over acceptance conclusions, and 0229 removed those: reporting a constant
+  // 'UNDECIDED' forever would be a verdict pretending to be a reading. Nothing below judges what
+  // the criterion says — no work is filed against it, so no work has met it.
+  assert.deepEqual(project.acceptanceCriteriaItems[0], {
+    ...definition,
+    key: criterionKeyOf(CRITERION_A_ID),
+    satisfied: false,
+    unmet: [{ clause: 'NO_WORK_SERVES_IT', heldUpBy: [] }],
+  });
   assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
 });
 
