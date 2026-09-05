@@ -34,8 +34,21 @@ const TIERS = 'docs/verification-tiering.md';
  */
 const SPEC_BASELINE = 360;
 
+/**
+ * The repository-root V2 suites on `origin/main` at `d17b5c48`: canary, contract, protocol and
+ * ratification, 424 assertions between them, none of which any full run had ever executed. A
+ * floor, like SPEC_BASELINE, and for the same reason.
+ */
+const V2_SUITE_BASELINE = 4;
+
 function read(relative: string): string {
   return readFileSync(path.join(ROOT, relative), 'utf8');
+}
+
+/** Every repository-root V2 suite, at the depth and by the shape the full run enumerates. */
+function v2Suites(): string[] {
+  return readdirSync(path.join(ROOT, 'test'))
+    .filter((name) => /^outcome-reconciler-v2\..+\.test\.mjs$/u.test(name)).sort();
 }
 
 /** Every spec source the full run compiles into a case, at the depth the run enumerates. */
@@ -154,6 +167,17 @@ test('(d) the full run still enumerates every spec, unconditionally', () => {
   assert.match(full,
     /mapfile -t SPECS < <\(find "\$API\/build" -mindepth 2 -maxdepth 2 -type f -name '\*\.spec\.js' \| sort\)/u);
   assert.match(full, /\[ "\$\{#SPECS\[@\]\}" -gt 0 \] \|\| \{ echo 'no compiled API specs found'/u);
+  // And the second enumeration, for the same reason. The V2 suites are repository-root ESM, so the
+  // find above cannot see them: they were outside every full run for as long as the run existed,
+  // and no count in the manifest moved while they were missing. Found by shape rather than by
+  // name, so a fifth suite is scheduled the day it is written rather than the day somebody
+  // remembers to list it here.
+  assert.match(full,
+    /mapfile -t SUITES < <\(find "\$REPO\/test" -mindepth 1 -maxdepth 1 -type f -name 'outcome-reconciler-v2\.\*\.test\.mjs' \| sort\)/u);
+  assert.match(full, /\[ "\$\{#SUITES\[@\]\}" -gt 0 \] \|\| \{ echo 'no repository-root V2 suites found'/u);
+  assert.match(full, /SPECS\+=\("\$\{SUITES\[@\]\}"\)/u);
+  assert.ok(v2Suites().length >= V2_SUITE_BASELINE,
+    `the tree has ${v2Suites().length} V2 suites; the baseline is ${V2_SUITE_BASELINE}`);
   // The one narrowing that exists is the single-spec diagnostic mode, and it exits before it can
   // publish a manifest -- so a narrowed run cannot be handed in as an acceptance.
   assert.match(full, /if \[ -n "\$\{OUTCOME_RELEASE_API_SPEC_REGEX:-\}" \]; then\n\s+echo '==> full-api: selected diagnostic specs passed'\n\s+exit 0/u);
@@ -173,6 +197,13 @@ test('(d) the full run still enumerates every spec, unconditionally', () => {
     assert.match(manifest, new RegExp(`assert\\.equal\\(summary\\.${zero}, 0\\)`),
       `the manifest must still refuse a run with any ${zero} test`);
   }
+  // The counts alone cannot say WHICH suites produced them, which is exactly how four suites
+  // stayed outside the run without a number moving. So the run hands its case directory to the
+  // manifest, and the manifest publishes one entry per case and refuses a census that is short of
+  // the cases the run scheduled.
+  assert.match(full, /outcome-reconciler-full-api-manifest\.mjs" "\$TAP" "\$MANIFEST" "\$CASE_DIR"/u);
+  assert.match(manifest, /assert\.equal\(receipts\.length, scheduled,/u);
+  assert.match(manifest, /cases: census\(caseDirectory\)/u);
 });
 
 test('(d) this very run enumerated the whole tree, and was not narrowed', () => {

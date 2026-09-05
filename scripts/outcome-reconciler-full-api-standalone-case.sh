@@ -59,6 +59,7 @@ for IDENTITY in "$CASE_DB" "$EMPTY_DB" "$CASE_ROLE"; do
 done
 
 RELATIVE_SPEC="${SPEC#"$API"/}"
+RELATIVE_SPEC="${RELATIVE_SPEC#"$REPO"/}"
 LOG="$OUTCOME_API_CASE_DIR/$(printf '%04d' "$INDEX").tap"
 RECEIPT="$OUTCOME_API_CASE_DIR/$(printf '%04d' "$INDEX").json"
 ROLE_CREATED=0
@@ -155,6 +156,37 @@ EMPTY_URL="postgresql://$CASE_ROLE:$PASSWORD@$PG_HOST:$PG_PORT/$EMPTY_DB"
 CONFLICT_ORIGIN=service
 [[ "$RELATIVE_SPEC" == *.pg.spec.js ]] && CONFLICT_ORIGIN=fault_injection
 
+# A compiled spec reads its database out of DATABASE_URL and needs nothing else. The two
+# repository-root V2 suites that touch anything outside their own file take theirs under their own
+# names, and both need something only this case knows: ratification runs real row-lock races and
+# has to be pointed at the database THIS case owns rather than at a shared one, and the canary
+# seals 111k rows of telemetry that have to land somewhere no other case is writing. Everything
+# run-wide -- the compiled module, the contract, the upstream evidence, the revision -- is exported
+# once by the orchestrator; only the per-case half is decided here.
+SUITE_ENV=()
+case "$RELATIVE_SPEC" in
+  test/outcome-reconciler-v2.canary.test.mjs)
+    SUITE_ENV=(
+      "OUTCOME_CANARY_MODULE=${OUTCOME_API_CASE_CANARY_MODULE:?}"
+      "OUTCOME_CANARY_CONTRACT_PATH=${OUTCOME_API_CASE_CANARY_CONTRACT:?}"
+      "OUTCOME_CANARY_UPSTREAM_EVIDENCE_PATH=${OUTCOME_API_CASE_CANARY_UPSTREAM_EVIDENCE:?}"
+      "OUTCOME_CANARY_UPSTREAM_TASK_PATH=${OUTCOME_API_CASE_CANARY_UPSTREAM_TASK:?}"
+      "OUTCOME_CANARY_COLLECTOR_SHA=${OUTCOME_API_CASE_SOURCE_SHA:?}"
+      "OUTCOME_CANARY_TARGET_SHA=${OUTCOME_API_CASE_SOURCE_SHA:?}"
+      "OUTCOME_CANARY_TELEMETRY_PATH=$OUTCOME_API_CASE_DIR/$(printf '%04d' "$INDEX").canary-telemetry.jsonl"
+    )
+    ;;
+  test/outcome-reconciler-v2.ratification.test.mjs)
+    SUITE_ENV=(
+      "OWNER_RATIFICATION_PG_URL=$CASE_URL"
+      "OWNER_RATIFICATION_PG_EXPECTED_DATABASE=$CASE_DB"
+      "OWNER_RATIFICATION_PG_EXPECTED_USER=$CASE_ROLE"
+      "OWNER_RATIFICATION_PG_EXPECTED_SYSTEM_IDENTIFIER=$SYSTEM_ID"
+      "OWNER_RATIFICATION_EVIDENCE_PATH=$OUTCOME_API_CASE_DIR/$(printf '%04d' "$INDEX").ratification-evidence.json"
+    )
+    ;;
+esac
+
 CASE_STARTED_AT="$(date +%s)"
 set +e
 (
@@ -177,6 +209,7 @@ set +e
   ORBIT_DB_CONFLICT_ORIGIN="$CONFLICT_ORIGIN" \
   PROVIDER_SECRET_KEY=release-frontier-test-key \
   JWT_SECRET=release-frontier-test-jwt \
+  env ${SUITE_ENV[@]+"${SUITE_ENV[@]}"} \
   timeout -k 20 "$OUTCOME_API_CASE_TIMEOUT" node --test --test-concurrency=1 --test-reporter=tap "$SPEC"
 ) >"$LOG" 2>&1
 SPEC_RC=$?

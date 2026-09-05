@@ -19,6 +19,13 @@ MANIFEST="$BUILD/outcome-reconciler-full-api-manifest.json"
 # case directory on purpose: that is deleted when the run exits, and this is the one place a
 # failure can be read WHILE the run is still going.
 FAILURES="$BUILD/outcome-reconciler-full-api-failures.log"
+ORBIT="${OUTCOME_RELEASE_API_ORBIT_CLI:-/usr/local/bin/orbit}"
+# The task whose completed Watchdog attempt the canary suite reduces. Evidence rows are immutable
+# and this one is on a task that finished on 2026-08-28, so what is fetched here is a fact with a
+# date on it rather than a reading of the system as it happens to be right now.
+CANARY_UPSTREAM_TASK_ID="${OUTCOME_RELEASE_API_CANARY_UPSTREAM_TASK:-34Ex0SFCY6DpfvW2I4ydE}"
+CANARY_EVIDENCE="$BUILD/outcome-reconciler-full-api-canary-upstream-evidence.json"
+CANARY_TASK="$BUILD/outcome-reconciler-full-api-canary-upstream-task.json"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CASE_DIR=''
 
@@ -32,6 +39,10 @@ trap cleanup EXIT
 
 command -v docker >/dev/null || { echo 'docker is required for full API acceptance' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo 'docker daemon is unavailable' >&2; exit 1; }
+# The canary suite reduces immutable upstream Watchdog evidence read from Orbit itself. Asserted
+# here rather than inside the case: a missing CLI is then one line at second zero, instead of one
+# red case twelve minutes into a twenty-minute run.
+command -v "$ORBIT" >/dev/null || { echo "$ORBIT is required for the canary suite" >&2; exit 1; }
 [[ "$JOBS" =~ ^[1-8]$ ]] || { echo 'OUTCOME_RELEASE_API_JOBS must be an integer from 1 through 8' >&2; exit 1; }
 mkdir -p "$BUILD"
 CASE_DIR="$(mktemp -d "$BUILD/outcome-reconciler-full-api-cases.XXXXXX")"
@@ -121,10 +132,22 @@ REPOSITORY_MIGRATIONS="$(find "$API/prisma/migrations" -mindepth 1 -maxdepth 1 -
 }
 echo "==> full-api: postgres=$PG_VERSION migrations=$MIGRATIONS system_identifier=$SYSTEM_ID"
 
+echo '==> full-api: fetch the immutable upstream Watchdog evidence the canary suite reduces'
+"$ORBIT" task evidence-list "$CANARY_UPSTREAM_TASK_ID" --json > "$CANARY_EVIDENCE"
+"$ORBIT" task get "$CANARY_UPSTREAM_TASK_ID" --json > "$CANARY_TASK"
+
 echo "==> full-api: run every API spec in isolated clones (parallelism=$JOBS)"
 : > "$TAP"
 mapfile -t SPECS < <(find "$API/build" -mindepth 2 -maxdepth 2 -type f -name '*.spec.js' | sort)
 [ "${#SPECS[@]}" -gt 0 ] || { echo 'no compiled API specs found' >&2; exit 1; }
+# The V2 suites are repository-root ESM rather than compiled artifacts, so the enumeration above
+# cannot see them: "the full run" quietly meant "every compiled spec" instead, and four suites --
+# 424 assertions -- were in no full run for as long as this script has existed, while the tasks
+# that declare this command as what proves them had no way to know. Enumerated by shape and not by
+# name, so a fifth suite is scheduled the day somebody writes it.
+mapfile -t SUITES < <(find "$REPO/test" -mindepth 1 -maxdepth 1 -type f -name 'outcome-reconciler-v2.*.test.mjs' | sort)
+[ "${#SUITES[@]}" -gt 0 ] || { echo 'no repository-root V2 suites found' >&2; exit 1; }
+SPECS+=("${SUITES[@]}")
 if [ -n "${OUTCOME_RELEASE_API_SPEC_REGEX:-}" ]; then
   mapfile -t SPECS < <(printf '%s\n' "${SPECS[@]}" | grep -E "$OUTCOME_RELEASE_API_SPEC_REGEX")
   [ "${#SPECS[@]}" -gt 0 ] || { echo 'API spec regex selected no files' >&2; exit 1; }
@@ -145,6 +168,15 @@ export OUTCOME_API_CASE_TOTAL="${#SPECS[@]}"
 # isolation cannot quietly borrow the shared one.
 export OUTCOME_API_CASE_TEMPLATE="$DATABASE"
 export OUTCOME_API_CASE_PREFIX="$PREFIX"
+# What the repository-root V2 suites take that a compiled spec does not, and all of it run-wide:
+# the module this run compiled, the contract it is read against, the upstream evidence fetched
+# above, and the revision under test. The half that belongs to one case -- the database it owns and
+# where it may write -- is decided by the case runner, beside the rest of that case's identity.
+export OUTCOME_API_CASE_CANARY_MODULE="$API/build/outcome-reconciler/outcome-canary.js"
+export OUTCOME_API_CASE_CANARY_CONTRACT="$REPO/contracts/outcome-reconciler-v2-canary.json"
+export OUTCOME_API_CASE_CANARY_UPSTREAM_EVIDENCE="$CANARY_EVIDENCE"
+export OUTCOME_API_CASE_CANARY_UPSTREAM_TASK="$CANARY_TASK"
+export OUTCOME_API_CASE_SOURCE_SHA="$(git -C "$REPO" rev-parse HEAD)"
 : > "$FAILURES"
 export OUTCOME_API_CASE_FAILURE_LOG="$FAILURES"
 echo "==> full-api: failures are appended to $FAILURES as they happen; the run does not stop at the first one"
@@ -220,4 +252,4 @@ OUTCOME_FULL_API_STARTED_AT="$STARTED_AT" \
 OUTCOME_FULL_API_PG_VERSION="$PG_VERSION" \
 OUTCOME_FULL_API_MIGRATIONS="$MIGRATIONS" \
 OUTCOME_FULL_API_SYSTEM_IDENTIFIER="$SYSTEM_ID" \
-node "$REPO/scripts/outcome-reconciler-full-api-manifest.mjs" "$TAP" "$MANIFEST"
+node "$REPO/scripts/outcome-reconciler-full-api-manifest.mjs" "$TAP" "$MANIFEST" "$CASE_DIR"

@@ -2,11 +2,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-const [tapPath, outputPath] = process.argv.slice(2);
-assert.ok(outputPath, 'usage: outcome-reconciler-full-api-manifest.mjs TAP OUTPUT');
+const [tapPath, outputPath, caseDirectory] = process.argv.slice(2);
+assert.ok(outputPath, 'usage: outcome-reconciler-full-api-manifest.mjs TAP OUTPUT [CASES]');
 const repo = path.resolve(import.meta.dirname, '..');
 const tap = readFileSync(tapPath, 'utf8');
 
@@ -43,6 +43,23 @@ assert.equal(summary.todo, 0);
 
 const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
 assert.match(sourceSha, /^[0-9a-f]{40}$/);
+
+// WHICH suites produced those numbers, and not only how many tests passed. A count cannot answer
+// that question: four V2 suites were outside every full run for as long as the run existed, and no
+// number in this manifest moved when they were absent or when they arrived. Each case leaves a
+// receipt named for its index; this is the list of them, in the order the run scheduled them.
+//
+// Given a directory, never guessed at one: the standalone run hands over the directory its cases
+// wrote into, and the Release DAG's aggregate step -- which reduces per-shard results in a process
+// that never saw a case -- has no such directory to hand over and publishes no census.
+function census(directory) {
+  const receipts = readdirSync(directory).filter((name) => /^\d{4}\.json$/u.test(name)).sort()
+    .map((name) => JSON.parse(readFileSync(path.join(directory, name), 'utf8')));
+  const scheduled = Number(process.env.OUTCOME_API_CASE_TOTAL);
+  assert.equal(receipts.length, scheduled,
+    `${receipts.length} cases left a receipt out of ${scheduled} scheduled`);
+  return receipts.map((receipt) => ({ spec: receipt.spec, tests: receipt.summary.tests }));
+}
 const payload = {
   schemaVersion: 1,
   suite: 'outcome-reconciler-full-api',
@@ -52,6 +69,7 @@ const payload = {
   startedAt: process.env.OUTCOME_FULL_API_STARTED_AT,
   finishedAt: new Date().toISOString(),
   summary,
+  ...(caseDirectory ? { cases: census(caseDirectory) } : {}),
   postgres: {
     version: process.env.OUTCOME_FULL_API_PG_VERSION,
     migrations: Number(process.env.OUTCOME_FULL_API_MIGRATIONS),
