@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { EventsModule } from './events/events.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { HealthModule } from './health/health.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -30,6 +31,7 @@ import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconc
     RealtimeModule,
     EventsModule,
     MetricsModule,
+    HealthModule,
     QueueModule,
     AuthModule,
     UsersModule,
