@@ -71,7 +71,21 @@ test('the four judgment-request completion inputs are retired, not silently drop
   }
 });
 
-test('production wiring has no parked-session or whole-task-set completion gate', () => {
+/**
+ * The whole-task-set gate is deliberately back, and the attempt gate is deliberately not.
+ *
+ * This case used to assert that NEITHER was wired, which was true of the tree it was written
+ * against: both producers existed and nothing in production reached either. `PROJECT_TASKS_SETTLED`
+ * is now delivered by the task write path, so the half of that claim about T7 has stopped being
+ * true and is replaced here by the SHAPE of the wiring instead of its absence — a wall that goes
+ * on asserting a removal after the thing was deliberately restored is a wall that has to be
+ * deleted rather than read.
+ *
+ * The rest is untouched and still says what it said. The attempt producer is still unreached, the
+ * refusal codes and bootstrap hook its removed version had are still gone, and the router still
+ * has no clock and opens no session of its own.
+ */
+test('the task-set gate is wired through the router, and no attempt gate is wired at all', () => {
   const root = path.resolve(__dirname, '../../src');
   const read = (relative: string) => readFileSync(path.join(root, relative), 'utf8');
   const moduleSource = read('projects/coordinator-judgment.module.ts');
@@ -80,9 +94,14 @@ test('production wiring has no parked-session or whole-task-set completion gate'
   const attemptSource = read('projects/attempt-ended-unsettled.producer.ts');
   const routerSource = read('projects/completion-input-router.service.ts');
 
-  assert.doesNotMatch(moduleSource, /ProjectTasksSettledProducer|AttemptEndedUnsettledProducer/);
+  // One construction site, and it is the module that owns the producer's two collaborators.
+  assert.match(moduleSource, /ProjectTasksSettledProducer/);
+  // The task write path holds a router, not a producer: a second holder is a second instance, and
+  // "which object delivered it" is not a question the wake ledger can answer afterwards.
+  assert.doesNotMatch(tasksSource, /ProjectTasksSettledProducer/);
+
+  assert.doesNotMatch(moduleSource, /AttemptEndedUnsettledProducer/);
   assert.doesNotMatch(runnerSource, /AttemptEndedUnsettledProducer|attemptEndedUnsettled/);
-  assert.doesNotMatch(tasksSource, /ProjectTasksSettledProducer|deliverSettledProjectFacts/);
   assert.doesNotMatch(attemptSource, /ATTEMPT_WAKE_SESSION_PARKED|ATTEMPT_SESSION_PARKED/);
   assert.doesNotMatch(attemptSource, /OnApplicationBootstrap/);
   assert.doesNotMatch(routerSource, /SessionsService|CoordinatorJudgmentService|setInterval|setTimeout/);

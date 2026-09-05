@@ -24,8 +24,20 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { CoordinatorWakeService } from './coordinator-wake.service';
+import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 
 const URL = process.env.COORDINATOR_PG_URL;
+
+/**
+ * The router's other door, which nothing in this file goes through. A double that throws rather
+ * than a real producer, so a test that reached the settled path by accident would say so instead
+ * of quietly opening a judgment session against this database.
+ */
+const noSettledDeliveries = {
+  afterCommit: () => {
+    throw new Error('N7 evidence routing must not deliver project-settled facts');
+  },
+} as unknown as ProjectTasksSettledProducer;
 const suite = URL ? test : test.skip;
 
 suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input routing',
@@ -132,7 +144,9 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       gaps,
     });
     const prisma = db as unknown as PrismaService;
-    const router = new CompletionInputRouter(new CoordinatorWakeService(prisma));
+    const router = new CompletionInputRouter(
+      new CoordinatorWakeService(prisma), noSettledDeliveries,
+    );
     const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, router);
     const actor = { type: CreatorType.USER, id: ownerId };
     const first = await evidenceService.submit(ownerId, taskId, actor, {
@@ -234,7 +248,7 @@ suite('result/verdict inputs consume once; refusal releases the exact fact for r
       },
     });
     const router = new CompletionInputRouter(
-      new CoordinatorWakeService(db as unknown as PrismaService),
+      new CoordinatorWakeService(db as unknown as PrismaService), noSettledDeliveries,
     );
     // The key is computed/claimed before authorization. REFUSED rows remain audit, but leave the
     // partial unique index so the repaired authorization can consume this same immutable fact.

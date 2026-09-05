@@ -1343,6 +1343,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (change) this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, change);
   }
 
+  /**
+   * Deliver the committed task-set fact of every project this write may have closed.
+   *
+   * AFTER the commit, and after the aggregate recomputation that can settle a parent this write
+   * only settled indirectly: the fact's version is a digest of the rows that ACTUALLY committed,
+   * so deriving it from inside the transaction would key it on a task set no reader can see. The
+   * delivery may also open a judgment session, which is heavy enough to queue a runner — not
+   * something a task edit may hold a row lock across.
+   *
+   * Ids are passed generously; the router's producer de-duplicates them, re-reads each project's
+   * complete task set and decides whether anything settled. Nothing here excludes a project it
+   * thinks is unfinished, because this write is not the only one that committed.
+   *
+   * A failed delivery is logged rather than raised. The task write is already committed and is
+   * not undone by a wake that could not be recorded, and the same fact is re-derived from the same
+   * rows by the next write — redelivery is what the ledger's partial unique index is for.
+   */
+  private async deliverSettledProjects(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    if (!this.completionInputs) return;
+    if (!projectIds.some((id) => !!id)) return;
+    await this.completionInputs.routeSettledProjects(projectIds).catch((e) =>
+      this.logger.warn(`settled-project delivery failed: ${e?.message ?? e}`),
+    );
+  }
+
+  /**
+   * The same delivery for a door that knows which TASK settled rather than which project.
+   *
+   * The lookup is behind the router check rather than in front of it: the ~40 fixtures that build
+   * this service directly wire no router, and a read they never asked for would be a query their
+   * doubles have to answer for a delivery that is not going to happen.
+   */
+  private async deliverSettledProjectsOfTask(taskId: string): Promise<void> {
+    if (!this.completionInputs) return;
+    const settled = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { projectId: true },
+    });
+    await this.deliverSettledProjects([settled?.projectId]);
+  }
+
   /** An invalidation whose complete fetchable row set is unknown, deleted, or too wide. */
   private publishTaskResync(ownerId: string): void {
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
@@ -3794,6 +3837,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ],
       [...created.map((task) => task.verifiesTaskId), ...predecessors],
     );
+    // A batch usually leaves its projects further from settled, not closer. It is delivered all
+    // the same: the predecessors it retired are terminal rows it just committed, and whether the
+    // remaining set is closed is the producer's question to answer from the rows, not this
+    // caller's to guess from the shape of its own write.
+    await this.deliverSettledProjects(created.map((task) => task.projectId));
     return created;
   }
 
@@ -7696,6 +7744,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? [id, before.verifiesTaskId, verifiesTaskId]
         : [],
     );
+    // Both sides of a re-filing: this write can leave EITHER project with nothing outstanding —
+    // the one the task left, and the one it arrived in with its status already terminal.
+    await this.deliverSettledProjects([before.projectId, updated.projectId, dto.projectId]);
     const changedFields = Object.keys(dto).sort();
     const updateIdentity = createHash('sha256')
       .update(JSON.stringify(changedFields.map((field) => [
@@ -7906,6 +7957,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * marking that dependent DONE re-enters update() and triggers the next layer.
    */
   async dispatchDependentsAfterCompletion(ownerId: string, doneTaskId: string): Promise<void> {
+    try {
+      await this.dispatchDependentsOf(ownerId, doneTaskId);
+    } finally {
+      // The completion edge every criterion shares. `update` reaches it for a verified subject and
+      // the runner door reaches it for a task whose declared acceptance command just derived DONE
+      // — which is where most tasks actually settle — so the fact is delivered from here rather
+      // than from each door's own idea of what it committed. In `finally` because a dispatch that
+      // failed still leaves the completed row behind, and that row is the fact.
+      await this.deliverSettledProjectsOfTask(doneTaskId);
+    }
+  }
+
+  /** The dependency dispatch itself, separated so the completion edge above always delivers. */
+  private async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
     // that relation in PostgreSQL, using the same fail-closed function as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
@@ -8924,7 +8989,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.loadDetail(ownerId, id);
-    const { survivingLinks } = await this.deleteAndStopRuns(ownerId, [id]);
+    const { survivingLinks, projectIds } = await this.deleteAndStopRuns(ownerId, [id]);
     // Cascades may remove prerequisite edges from other open DAGs, so the deleted id is not an
     // incremental answer: it cannot be fetched, and it does not name all surviving rows affected
     // by the cascades. Say explicitly that the owner's task snapshots must be reconciled.
@@ -8940,6 +9005,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`aggregation after delete of ${id} failed: ${e?.message ?? e}`),
       );
     }
+    // Deleting the last outstanding task settles what remains, exactly as completing it would.
+    await this.deliverSettledProjects(projectIds);
     return { ok: true };
   }
 
