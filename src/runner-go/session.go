@@ -1107,13 +1107,20 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
+	// A finalize that could not put the work on the branch reports no diff — which is
+	// indistinguishable on the wire from a session that changed nothing, and is why the checkout
+	// must not be dropped on the server's say-so afterwards.
+	var captureErr error
 	if job.WT != nil {
 		finalizeRequest.Branch = job.WT.Branch
 		// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
 		// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
 		// it / offer Adopt.
 		finalizeRequest.WorktreeBranch = currentBranch(job.WT)
-		finalizeRequest.ChangedFiles, finalizeRequest.ChangedDiff = finalizeWorktree(job.WT, status == stCancelled)
+		finalizeRequest.ChangedFiles, finalizeRequest.ChangedDiff, captureErr = finalizeWorktree(job.WT, status == stCancelled)
+		if captureErr != nil {
+			logln("worktree finalization failed for", job.SessionID+":", captureErr)
+		}
 		// finalizeWorktree may heal a stale fork point while computing this snapshot.
 		finalizeRequest.BaseSha = job.WT.baseSha()
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
@@ -1135,9 +1142,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	} else {
 		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
 	}
-	if job.WT != nil && !keepCheckout {
-		removeWorktree(job.WT)
-	}
+	dropFinalizedCheckout(job.WT, keepCheckout, captureErr)
 }
 
 // builtinTaskTools are Claude's built-in task/todo tools. They are disabled for

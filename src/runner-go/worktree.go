@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -73,11 +74,36 @@ func (wt *Worktree) heartbeatCopy() *Worktree {
 	}
 }
 
-// git runs `git -C dir <args...>` and returns trimmed stdout. On a non-zero exit the
-// returned error is an *exec.ExitError whose .Stderr carries git's message.
+// git runs `git -C dir <args...>` and returns trimmed stdout. On a non-zero exit the returned
+// error carries git's message in its text (see gitError) and still unwraps to the *exec.ExitError
+// whose .Stderr holds it verbatim.
 func git(dir string, args ...string) (string, error) {
 	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
-	return strings.TrimSpace(string(out)), err
+	return strings.TrimSpace(string(out)), gitFailure(err)
+}
+
+// gitError makes git's stderr part of what a failed git call *says*. Output() parks it on
+// exec.ExitError.Stderr, which nothing that merely logs the error ever reads, so a failure is
+// reported as a bare "exit status 128" — a code that cannot distinguish an index.lock from a
+// pruned admin dir from a full disk, and leaves the next occurrence just as untraceable as the
+// last one. The ExitError stays reachable through Unwrap, so gitStderr and any exit-code
+// inspection keep seeing exactly what they saw before.
+type gitError struct{ err error }
+
+func (e *gitError) Error() string {
+	if detail := gitStderr(e.err); detail != "" && detail != e.err.Error() {
+		return e.err.Error() + ": " + clip(detail, 1000)
+	}
+	return e.err.Error()
+}
+
+func (e *gitError) Unwrap() error { return e.err }
+
+func gitFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &gitError{err: err}
 }
 
 // gitCtx is reserved for bounded, best-effort probes such as heartbeat telemetry.
@@ -89,7 +115,7 @@ func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
 	// descendant survives the direct Git process cancellation.
 	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.Output()
-	return strings.TrimSpace(string(out)), err
+	return strings.TrimSpace(string(out)), gitFailure(err)
 }
 
 type worktreeGitOps struct {
@@ -705,14 +731,23 @@ const parkCheckpointTrailer = "Orbit-Park-Checkpoint"
 // the checkout dir may then be removed. `checkpoint` tags the commit as an undo-on-resume park
 // checkpoint (see parkCheckpointTrailer) rather than a permanent end commit.
 //
+// A non-nil error means the work did NOT reach the branch, and the returned empty diff is
+// "unknown", not "the session changed nothing" — the caller must keep the checkout, which is
+// then the only copy of it.
+//
 // The commit subject is derived from the diff, never the session title/prompt: a permanent end
 // gets an LLM-summarized Conventional-Commits message (diffstat fallback, same as the manual
 // Commit button), while a transient park checkpoint gets only the cheap deterministic diffstat
 // (no LLM call on the frequent park path). This keeps a raw first prompt out of git history when
 // session-naming produced no clean title.
-func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch) {
+func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch, error) {
+	// Staging is what puts the session's work under git's control, so a failure here makes every
+	// later question meaningless: nothing is staged, `diff --cached --quiet` reads that as "no
+	// changes to commit", and finalize would report a session that changed nothing while its whole
+	// output sits uncommitted in a checkout about to be deleted. An empty diff may only be
+	// reported when staging actually succeeded.
 	if _, err := git(wt.Path, "add", "-A"); err != nil {
-		logln("worktree add failed for", wt.Session+":", err)
+		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
@@ -730,18 +765,18 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		if _, err := git(wt.Path,
 			"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
 			"commit", "--no-verify", "-m", msg); err != nil {
-			logln("worktree commit failed for", wt.Session+":", err)
+			return nil, nil, fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
 		}
 	}
 	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
 	freshenBaseSha(wt)
 	baseSha := wt.baseSha()
 	if baseSha == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	files := diffFiles(wt.Path, baseSha, "HEAD")
 	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
-	return files, buildFilePatches(files, splitPatch(patchOut))
+	return files, buildFilePatches(files, splitPatch(patchOut)), nil
 }
 
 // uncommitParkCheckpoint undoes a park checkpoint (see parkCheckpointTrailer) at the start of a
@@ -768,7 +803,7 @@ func gitEnv(dir string, env []string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = env
 	out, err := cmd.Output()
-	return strings.TrimSpace(string(out)), err
+	return strings.TrimSpace(string(out)), gitFailure(err)
 }
 
 func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
@@ -776,7 +811,7 @@ func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (s
 	cmd.Env = env
 	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.Output()
-	return strings.TrimSpace(string(out)), err
+	return strings.TrimSpace(string(out)), gitFailure(err)
 }
 
 // diffFiles returns the per-file change summary for the committed `git diff base..head`.
@@ -1004,6 +1039,15 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 // ref. Called only when the server reports the session as non-resumable (Completed/in Trash);
 // a resumable end keeps its checkout, and any stale one is later reaped by gcWorktrees.
 func removeWorktree(wt *Worktree) {
+	// The checkout is dropped on the belief that finalizeWorktree already put its contents on the
+	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
+	// `worktree remove --force` is then the step that destroys the session's only copy of its
+	// work. A status we cannot read counts as unconfirmed for exactly the same reason.
+	if !checkoutWorkIsCaptured(wt) {
+		logln("worktree remove refused for", wt.Session+": work is not on", wt.Branch+
+			"; keeping the checkout", wt.Path)
+		return
+	}
 	teardownWorktreeProcesses(wt.Path)
 	if _, err := git(wt.RepoDir, "worktree", "remove", "--force", wt.Path); err != nil {
 		logln("worktree remove failed for", wt.Session+":", err)
@@ -1011,6 +1055,35 @@ func removeWorktree(wt *Worktree) {
 		_, _ = git(wt.RepoDir, "worktree", "prune")
 	}
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
+}
+
+// checkoutWorkIsCaptured reports whether everything in the checkout is already on the branch:
+// `git status --porcelain` ran and came back empty (.gitignore'd build output and the runner's
+// own scratch never counted as work, and still don't). A checkout that is already gone has
+// nothing left to lose and counts as captured. Anything else — pending changes, or a status that
+// could not be read at all — does not.
+func checkoutWorkIsCaptured(wt *Worktree) bool {
+	if _, err := os.Stat(wt.Path); os.IsNotExist(err) {
+		return true
+	}
+	out, err := git(wt.Path, "status", "--porcelain")
+	return err == nil && out == ""
+}
+
+// dropFinalizedCheckout removes a finished session's checkout when the server said not to keep
+// it (keepCheckout=false: Complete, Move to Trash, or a successfully completed task). It refuses
+// when finalize could not confirm the work reached the branch: that verdict was reached by a
+// server told the session changed nothing, which is the very thing a failed finalize cannot
+// establish, and the checkout is then the only copy there is.
+func dropFinalizedCheckout(wt *Worktree, keepCheckout bool, captureErr error) {
+	if wt == nil || keepCheckout {
+		return
+	}
+	if captureErr != nil {
+		logln("keeping the checkout for", wt.Session+": its work never reached", wt.Branch+":", captureErr)
+		return
+	}
+	removeWorktree(wt)
 }
 
 // mergeLock serializes merges so two "merge to main" requests can't race on the same repo's
@@ -1828,8 +1901,11 @@ func diffstatFallbackMessage(wtPath, branch string) string {
 }
 
 // gitStderr extracts git's stderr from a failed git() call (Output() puts it on ExitError).
+// errors.As, not a type assertion: git() wraps that ExitError in a gitError, and callers that
+// want just git's own words must still get them rather than the wrapper's text.
 func gitStderr(err error) string {
-	if ee, ok := err.(*exec.ExitError); ok {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
 		return strings.TrimSpace(string(ee.Stderr))
 	}
 	if err != nil {
@@ -1851,8 +1927,9 @@ func clip(s string, n int) string {
 // a session the user completed or moved to Trash, or one that no longer exists. `live` is the set of
 // session ids the runner is currently driving (never candidates). A checkout for a session
 // that is merely parked/failed but still resumable is KEPT, so an idle-parked session's
-// worktree survives a runner restart. Branches are always preserved. On any query failure the
-// candidates are left untouched — GC never destroys a checkout it couldn't confirm removable.
+// worktree survives a runner restart, as is one still holding uncommitted work. Branches are
+// always preserved. On any query failure the candidates are left untouched — GC never destroys
+// a checkout it couldn't confirm removable.
 func gcWorktrees(t *Transport, live map[string]bool) {
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
@@ -1872,6 +1949,16 @@ func gcWorktrees(t *Transport, live map[string]bool) {
 	}
 	for _, name := range removable {
 		path := filepath.Join(root, name)
+		// Removable says the SESSION is over, not that its work is safe: a finalize whose staging
+		// or commit failed leaves everything it produced uncommitted right here (see
+		// removeWorktree, which refuses for the same reason). Sweeping it then destroys the only
+		// copy just as surely — a day later instead of a second later. Only a status that ran and
+		// came back non-empty holds the checkout back: unlike removeWorktree this sweep also
+		// faces entries that are not checkouts at all, and those still have to be collectable.
+		if out, err := git(path, "status", "--porcelain"); err == nil && out != "" {
+			logln("gc: keeping orphan worktree", name, "— it still holds work no branch has")
+			continue
+		}
 		teardownWorktreeProcesses(path)
 		// Resolve the main repo via the checkout's common git dir (<repo>/.git), so we can
 		// `worktree remove` it cleanly; fall back to a plain dir removal otherwise.
