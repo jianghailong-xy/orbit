@@ -93,3 +93,96 @@ export function taskCriterionChangeRefusalBody(change: TaskCriterionChange) {
       'value this task already carries.',
   } as const;
 }
+
+// ── The second question this door asks: not why the standard moved, but WHO moved it ──────────
+
+/**
+ * The parts of a completion declaration that say WHAT COUNTS as this task being done.
+ *
+ * Four of the six fields of the declaration, and the two that are left out are left out for
+ * different reasons. `acceptanceTimeoutSeconds` is a bound on the run rather than a statement
+ * about the answer: raising it cannot make a failing command pass, it can only let one that was
+ * going to pass finish saying so. `completionCriterionOverrideReason` is prose about the standard,
+ * not the standard.
+ *
+ * `completionPolicy` and `verifiesTaskId` are in, even though a change to either usually drags
+ * `completionCriterion` with it, because "usually" is not "always": ALL_CHILDREN_DONE on a task
+ * that keeps EVIDENCE_JUDGMENT moves no criterion and still replaces the question with a different
+ * one, and so does re-pointing a verifier at another subject.
+ */
+export interface TaskCompletionStandard {
+  completionCriterion: TaskCompletionCriterionValue;
+  acceptanceCommand: string | null;
+  acceptanceExpectedExitCode: number | null;
+  completionPolicy: string | null;
+  verifiesTaskId: string | null;
+}
+
+export type TaskCompletionStandardField = keyof TaskCompletionStandard;
+
+const STANDARD_FIELDS: readonly TaskCompletionStandardField[] = [
+  'completionCriterion',
+  'acceptanceCommand',
+  'acceptanceExpectedExitCode',
+  'completionPolicy',
+  'verifiesTaskId',
+];
+
+/**
+ * Which parts of the standard this write actually moves — empty when it moves none.
+ *
+ * Compared field by field between the stored row and the MERGED result, for the same reason the
+ * criterion-change door judges the merged criterion: a caller who re-sends the value a task
+ * already carries has restated the standard, not rewritten it, and a door that fired on the
+ * mention rather than on the change would refuse a request that changes nothing.
+ */
+export function taskCompletionStandardRewrite(
+  before: TaskCompletionStandard,
+  after: TaskCompletionStandard,
+): readonly TaskCompletionStandardField[] {
+  return STANDARD_FIELDS.filter((field) => before[field] !== after[field]);
+}
+
+export const TASK_SELF_REWRITTEN_STANDARD_CODE = 'TASK_COMPLETION_STANDARD_SELF_REWRITE_REFUSED';
+export const TASK_SELF_REWRITTEN_STANDARD_ACTION =
+  'HAVE_AN_INDEPENDENT_SESSION_RESTATE_THE_STANDARD';
+
+/**
+ * The refusal a task's own run reads when it rewrites the standard it is about to be measured by.
+ *
+ * The rule the rest of completion is built on is that a task is settled by somebody who did not do
+ * the work: a verdict may not be concluded from the run of the task it verifies, and an evidence
+ * decision may not be made by the session that produced the evidence. Both of those are walls
+ * around the ANSWER. Neither was a wall around the QUESTION, so a run that could not have itself
+ * judged done could change what being done meant instead — declare EXECUTABLE, name a command of
+ * its own choosing, and have the exit code of that command settle its own task a minute later.
+ * That is not a way around one door; it is a way around the idea both doors implement.
+ *
+ * So this refusal is a wall and not a price. The criterion-change door beside it deliberately is a
+ * price — a mis-declared criterion is ordinary and has to stay repairable — and the two compose:
+ * anybody who could rewrite this standard before still can, at the cost of saying why, EXCEPT the
+ * one run whose own completion the answer decides. What the refusal has to carry, therefore, is
+ * who that leaves: any session that is not this task's run, and the account owner acting through
+ * the user API with no run at all.
+ */
+export function taskSelfRewrittenStandardRefusalBody(
+  rewritten: readonly TaskCompletionStandardField[],
+) {
+  return {
+    code: TASK_SELF_REWRITTEN_STANDARD_CODE,
+    kind: 'REFUSAL',
+    requiredAction: TASK_SELF_REWRITTEN_STANDARD_ACTION,
+    rewritten: [...rewritten],
+    message:
+      `This edit changes ${rewritten.join(', ')}, and it is being made from the run of the very `
+      + 'task those fields decide, so it would let this run choose the standard it is about to be '
+      + 'measured against — a task is completed by a judgement its own work did not make. The '
+      + 'edit itself is not the problem and is not refused to anybody else: any session other '
+      + 'than this task\'s run, and the account owner acting with no run at all, can make exactly '
+      + 'this request (a change of completionCriterion additionally needs '
+      + `${TASK_CRITERION_OVERRIDE_REASON_FIELD}, which is a separate door). This run may still `
+      + 'say what it found — it can write status FAILED as its own conservative outcome, and it '
+      + 'can still raise acceptanceTimeoutSeconds, which bounds how long the declared command may '
+      + 'run without changing what that command has to report.',
+  } as const;
+}

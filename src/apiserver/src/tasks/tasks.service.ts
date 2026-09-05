@@ -215,7 +215,9 @@ import {
 import {
   formatTaskCriterionChange,
   readTaskCriterionChange,
+  taskCompletionStandardRewrite,
   taskCriterionChangeRefusalBody,
+  taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
@@ -6992,6 +6994,51 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion,
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
       );
+    }
+    // The independence door, and the third question on this path that turns on WHO is writing.
+    //
+    // §13.2 walls off the ANSWER: a verdict cannot be concluded from the run of the task it
+    // verifies, and an evidence decision cannot be made by the session that produced the evidence.
+    // Nothing walled off the QUESTION, so a run that could not have itself judged done could
+    // rewrite what done MEANT instead — declare EXECUTABLE, name a command of its own choosing,
+    // and have that command's exit code settle its own task a minute later, with nothing on the
+    // row afterwards to say the standard had moved at all.
+    //
+    // Only a real move is refused, and only the parts of the declaration that state the answer:
+    // `acceptanceTimeoutSeconds` stays this run's to raise, because a budget bounds how long the
+    // declared command may run without changing what it has to report.
+    //
+    // The session read is behind that test rather than beside it: an ordinary edit from a run —
+    // a rename, a FAILED self-report, a dependency change — must not pay for a query about a rule
+    // it cannot be breaking. Before the transaction, like every refusal on this path, and after
+    // the two pure checks above so a request that is incoherent or that no caller could make is
+    // told THAT rather than being told who is asking.
+    if (actingSessionId && touchesCompletionDeclaration) {
+      const rewritten = taskCompletionStandardRewrite(
+        {
+          completionCriterion: before.completionCriterion as TaskCompletionCriterionValue,
+          acceptanceCommand: before.acceptanceCommand ?? null,
+          acceptanceExpectedExitCode: before.acceptanceExpectedExitCode ?? null,
+          completionPolicy: before.completionPolicy ?? null,
+          verifiesTaskId: before.verifiesTaskId ?? null,
+        },
+        {
+          completionCriterion,
+          acceptanceCommand,
+          acceptanceExpectedExitCode,
+          completionPolicy,
+          verifiesTaskId: verifiesTaskIdAfter,
+        },
+      );
+      if (rewritten.length > 0) {
+        const actingSession = await this.prisma.session.findFirst({
+          where: { id: actingSessionId, ownerId },
+          select: { taskId: true },
+        });
+        if (actingSession?.taskId === id) {
+          throw new ForbiddenException(taskSelfRewrittenStandardRefusalBody(rewritten));
+        }
+      }
     }
     // The criterion-change door (`task-completion-criterion-change-guard.ts`).
     //
