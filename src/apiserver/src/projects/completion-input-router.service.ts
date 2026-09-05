@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import type { WakeFact } from './coordinator-wake';
+import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
   CoordinatorWakeService,
   type WakeAuthorizer,
@@ -10,6 +10,10 @@ import {
   ProjectTasksSettledProducer,
   type SettledProjectDelivery,
 } from './project-tasks-settled.producer';
+import {
+  TASK_EXCEPTION_CONSUMER,
+  TaskExceptionInputProducer,
+} from './task-exception-input.producer';
 
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
 
@@ -18,6 +22,13 @@ export type CompletionInputRouteOutcome =
   | { outcome: 'ALREADY_AWAKE'; idempotencyKey: string }
   | { outcome: 'REFUSED'; wakeId: string; idempotencyKey: string; refusalCode: string };
 
+/**
+ * `route`'s default: a committed input may wake its coordinator.
+ *
+ * Right for the one fact that eats it — an evidence revision an agent chose to submit is bounded by
+ * the agent that submitted it. Wrong for every EXCEPTION, which is why `routeTaskExceptions` below
+ * passes its producer's authorizer rather than letting this stand in for one.
+ */
 const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
 
 /**
@@ -32,6 +43,7 @@ export class CompletionInputRouter {
   constructor(
     private readonly wakes: CoordinatorWakeService,
     private readonly settled: ProjectTasksSettledProducer,
+    private readonly exceptions: TaskExceptionInputProducer,
   ) {}
 
   async route(
@@ -78,4 +90,47 @@ export class CompletionInputRouter {
   ): Promise<SettledProjectDelivery[]> {
     return this.settled.afterCommit(projectIds);
   }
+
+  /**
+   * The third door: the exception facts one committed task write leaves behind.
+   *
+   * Same post-commit position and same generosity as `routeSettledProjects` — ids in, the producer
+   * re-reads the committed rows and decides what they justify — and one difference that is the
+   * whole reason this door exists rather than a fourth `route` call site somewhere else: the
+   * fourth argument is passed. `ALLOW_COMMITTED_INPUT` is a defensible default for an input an
+   * agent submitted on purpose; for a failure it is the hole "failed → open a successor → fail
+   * again" lives in, so the convergence ledger — not this file's default — decides whether the
+   * coordinator may be woken again.
+   */
+  async routeTaskExceptions(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<TaskExceptionDelivery[]> {
+    const facts = await this.exceptions.factsFor(taskIds);
+    const deliveries: TaskExceptionDelivery[] = [];
+    for (const fact of facts) {
+      const routed = await this.route(
+        fact,
+        TASK_EXCEPTION_CONSUMER,
+        // No side effect beyond the ledger row, so `route`'s own no-op delivery is taken. The
+        // argument is named rather than dropped because the one after it may not be defaulted.
+        undefined,
+        this.exceptions.authorize,
+      );
+      deliveries.push({
+        taskId: fact.subjectId,
+        event: fact.event,
+        outcome: routed.outcome,
+        ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
+      });
+    }
+    return deliveries;
+  }
+}
+
+/** What one exception fact's delivery answered, for a caller that has to say what happened. */
+export interface TaskExceptionDelivery {
+  taskId: string;
+  event: CoordinatorWakeEvent;
+  outcome: CompletionInputRouteOutcome['outcome'];
+  refusalCode?: string;
 }

@@ -28,6 +28,7 @@ import {
   SETTLED_WAKE_COORDINATOR_DISABLED,
   type SettledProjectDelivery,
 } from '../projects/project-tasks-settled.producer';
+import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -97,6 +98,7 @@ async function connect(): Promise<Stack> {
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
       new CoordinatorConvergenceService(prisma),
     ),
+    new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
   );
 
   // The real router, observed rather than replaced: a Proxy that records what each delivery
@@ -235,6 +237,10 @@ test('the delivery is handed rows the transaction has already committed',
           observed.push({ projectIds: named, statuses: rows.map((row) => row.status) });
           return [];
         },
+        // The write path delivers its exception facts through the same router. This case is about
+        // the settled door only, so the other one answers with nothing rather than being absent —
+        // a double missing a method the subject calls fails for a reason that is not the subject's.
+        routeTaskExceptions: async () => [],
       } as unknown as CompletionInputRouter;
 
       // `dependsOnTaskIds` puts this write on `update`'s interactive-transaction branch, which is

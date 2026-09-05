@@ -1386,6 +1386,44 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.deliverSettledProjects([settled?.projectId]);
   }
 
+  /**
+   * Deliver the exception facts a committed task write leaves behind.
+   *
+   * The other half of the completion edge. `deliverSettledProjects` above answers "is there
+   * anything left running under this goal"; this one answers the question a coordinator is woken
+   * for far more often — a task that FAILED, or an attempt that ended with its task still open.
+   *
+   * Ids are passed generously and nothing is decided here: the router's producer re-reads the
+   * committed task and the attempt that ended on it, and a task that settled, that is filed under
+   * no project, or whose run has not ended justifies no fact at all. Restating that predicate at
+   * this door would be a second opinion about what "unsettled" means.
+   *
+   * Logged rather than raised, for the same reason as the settled delivery: the write is already
+   * committed, and the same fact is re-derived from the same rows by the next delivery.
+   */
+  private async deliverTaskExceptions(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    if (!this.completionInputs) return;
+    if (!taskIds.some((id) => !!id)) return;
+    await this.completionInputs.routeTaskExceptions(taskIds).catch((e) =>
+      this.logger.warn(`task-exception delivery failed: ${e?.message ?? e}`),
+    );
+  }
+
+  /**
+   * The same delivery for the runner door, whose committed task write is a FAILURE.
+   *
+   * `dispatchDependentsAfterCompletion` is the DONE half of that callback's post-commit edge and
+   * reports `taskCompleted` only for a derived DONE, so an acceptance code that derived FAILED —
+   * or a result that could not be compared at all — reaches none of it. This is the edge those
+   * take, and it is deliberately the same router and the same producer rather than a second
+   * delivery built beside them.
+   */
+  async deliverTaskExceptionsAfterCommit(taskId: string): Promise<void> {
+    await this.deliverTaskExceptions([taskId]);
+  }
+
   /** An invalidation whose complete fetchable row set is unknown, deleted, or too wide. */
   private publishTaskResync(ownerId: string): void {
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
@@ -7747,6 +7785,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Both sides of a re-filing: this write can leave EITHER project with nothing outstanding —
     // the one the task left, and the one it arrived in with its status already terminal.
     await this.deliverSettledProjects([before.projectId, updated.projectId, dto.projectId]);
+    // And the exception half of the same committed write: this door is where a run files its own
+    // conservative FAILED, and where a task whose attempt already ended is edited again.
+    await this.deliverTaskExceptions([id]);
     const changedFields = Object.keys(dto).sort();
     const updateIdentity = createHash('sha256')
       .update(JSON.stringify(changedFields.map((field) => [

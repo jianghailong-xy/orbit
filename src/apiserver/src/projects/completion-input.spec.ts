@@ -72,7 +72,7 @@ test('the four judgment-request completion inputs are retired, not silently drop
 });
 
 /**
- * The whole-task-set gate is deliberately back, and the attempt gate is deliberately not.
+ * The gates that are deliberately back, and the producer that is deliberately still not.
  *
  * This case used to assert that NEITHER was wired, which was true of the tree it was written
  * against: both producers existed and nothing in production reached either. `PROJECT_TASKS_SETTLED`
@@ -81,11 +81,15 @@ test('the four judgment-request completion inputs are retired, not silently drop
  * on asserting a removal after the thing was deliberately restored is a wall that has to be
  * deleted rather than read.
  *
- * The rest is untouched and still says what it said. The attempt producer is still unreached, the
- * refusal codes and bootstrap hook its removed version had are still gone, and the router still
- * has no clock and opens no session of its own.
+ * The rest is untouched and still says what it said, with one word of it now carrying more weight
+ * than it did: the attempt PRODUCER is still unreached — `ATTEMPT_ENDED_UNSETTLED` reaches the
+ * ledger through the router's own exception door and `TaskExceptionInputProducer`, which is the
+ * same "add to the router's vocabulary rather than start a second mechanism" this file is about.
+ * What remains asserted is that the hollowed-out producer is not what got wired back: neither the
+ * judgment module nor the runner door names it, the refusal codes and bootstrap hook its removed
+ * version had are still gone, and the router still has no clock and opens no session of its own.
  */
-test('the task-set gate is wired through the router, and no attempt gate is wired at all', () => {
+test('the gates are wired through the router, and the hollowed-out attempt producer is not', () => {
   const root = path.resolve(__dirname, '../../src');
   const read = (relative: string) => readFileSync(path.join(root, relative), 'utf8');
   const moduleSource = read('projects/coordinator-judgment.module.ts');
@@ -99,6 +103,11 @@ test('the task-set gate is wired through the router, and no attempt gate is wire
   // The task write path holds a router, not a producer: a second holder is a second instance, and
   // "which object delivered it" is not a question the wake ledger can answer afterwards.
   assert.doesNotMatch(tasksSource, /ProjectTasksSettledProducer/);
+
+  // The exception gate arrived the same way and is held the same way: constructed where its
+  // convergence service is a provider, and reached from the task write path through the router.
+  assert.match(moduleSource, /TaskExceptionInputProducer/);
+  assert.doesNotMatch(tasksSource, /TaskExceptionInputProducer/);
 
   assert.doesNotMatch(moduleSource, /AttemptEndedUnsettledProducer/);
   assert.doesNotMatch(runnerSource, /AttemptEndedUnsettledProducer|attemptEndedUnsettled/);

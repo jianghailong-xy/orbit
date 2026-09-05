@@ -6,6 +6,7 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
+import { TaskExceptionInputProducer } from './task-exception-input.producer';
 
 /**
  * The clock-independent fact → judgment reducer, shared by synchronous producers and the
@@ -20,6 +21,10 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
  * and a producer provided where they are not visible is a producer nobody can construct. Exported
  * so the task write paths that must deliver AFTER their commit — TasksModule directly, the runner
  * door through ProjectsModule's re-export — reach the one instance rather than making a second.
+ *
+ * `TaskExceptionInputProducer` joins them for exactly that reason: it composes this module's
+ * `CoordinatorConvergenceService` into the authorizer its facts may not be delivered without, and
+ * the router the task write path already holds is what reaches it.
  */
 @Module({
   imports: [SessionsModule],
@@ -29,6 +34,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
     ProjectTasksSettledProducer,
+    TaskExceptionInputProducer,
   ],
   exports: [
     CoordinatorWakeService,
@@ -36,6 +42,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
     ProjectTasksSettledProducer,
+    TaskExceptionInputProducer,
   ],
 })
 export class CoordinatorJudgmentModule {}

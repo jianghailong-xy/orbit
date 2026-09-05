@@ -3374,6 +3374,27 @@ export class RunnerApiController {
         + `${error instanceof Error ? error.message : error}`,
       ));
     }
+    // The exception half of that same edge. `taskCompleted` is true only for a DERIVED DONE, so
+    // three real endings reach nothing above: an acceptance code that disagreed and derived FAILED,
+    // a reserved acceptance turn whose result could not be compared at all (the task stays open and
+    // the session does not), and an ordinary task turn that failed and reclaimed its task. All
+    // three are this transaction ENDING the session, which is exactly what `failSession` says, and
+    // what an attempt ending with its task unsettled means. Nothing is decided here: the producer
+    // behind this door re-reads what committed and owes the coordinator nothing for a task that
+    // settled after all.
+    if (
+      finalized.applied
+      && !finalized.steer
+      && finalized.failSession
+      && 'taskId' in finalized
+      && finalized.taskId
+    ) {
+      await this.tasks?.deliverTaskExceptionsAfterCommit(finalized.taskId)
+        .catch((error) => this.logger.warn(
+          `task exception delivery after turn completion ${finalized.taskId} failed: `
+          + `${error instanceof Error ? error.message : error}`,
+        ));
+    }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.

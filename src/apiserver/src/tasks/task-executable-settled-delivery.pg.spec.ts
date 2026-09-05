@@ -30,6 +30,7 @@ import {
   SETTLED_WAKE_COORDINATOR_DISABLED,
   type SettledProjectDelivery,
 } from '../projects/project-tasks-settled.producer';
+import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -108,6 +109,7 @@ async function connect(): Promise<Stack> {
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
       new CoordinatorConvergenceService(prisma),
     ),
+    new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
   );
 
   // The real router, observed rather than replaced: a Proxy that records what each delivery
