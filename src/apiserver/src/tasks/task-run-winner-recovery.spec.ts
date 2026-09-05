@@ -99,6 +99,9 @@ function fixture(opts: {
       }),
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     session: {
       findUnique: async (args: any) => {
         seen.findUnique.push(args);

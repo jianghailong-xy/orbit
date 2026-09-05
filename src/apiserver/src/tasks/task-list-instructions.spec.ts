@@ -45,6 +45,9 @@ function promptFor(task: {
       }),
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     // A paused run's delivery is read by its own turn key before it is written (H2F).
     conversationTurn: { findUnique: async () => null },
     session: {

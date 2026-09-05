@@ -1,5 +1,6 @@
 import { CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
+import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
 import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -1042,6 +1043,11 @@ export function TaskDetailPanel({
               </div>
             </section>
           )}
+
+          {/* The files the WORK needs, directly under the description that refers to them. Above
+              the runs for the same reason the attribution card is: an input is a property of the
+              task, and a run that was dispatched without one is what seeing them here prevents. */}
+          <TaskInputs taskId={taskId} inputs={q.data?.attachments ?? []} />
 
           {/* Unit L7: where this work counts, who noticed it, which acceptance reads it and what
               is being asked or refused about it. Above the runs because it is about the WORK

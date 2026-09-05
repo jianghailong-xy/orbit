@@ -83,6 +83,9 @@ test('update is three-state: omitted preserves, an instant reschedules, null can
       count: async () => 0,
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
   });
 
   await service.update(OWNER_ID, TASK_ID, { title: 'renamed' } as any);
@@ -142,6 +145,9 @@ test('a prerequisite finishing does not start a task scheduled for later', async
   const service = serviceWith({
     $queryRaw: raw.$queryRaw,
     taskDependency: { findMany: async () => [{ taskId: TASK_ID }, { taskId: OTHER_TASK_ID }] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     task: {
       findMany: async () => [
         {
@@ -196,6 +202,9 @@ test('a dependent whose schedule has already passed is started by its prerequisi
   const service = serviceWith({
     $queryRaw: raw.$queryRaw,
     taskDependency: { findMany: async () => [{ taskId: TASK_ID }] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     task: {
       findMany: async () => [
         {
@@ -401,6 +410,9 @@ function executeFixture(runAt: Date | null, options: { cleared?: number } = {}) 
       updateMany: async (args: any) => (writes.push(args), { count: options.cleared ?? 1 }),
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findFirst: async () => null },
@@ -495,6 +507,9 @@ test('a dispatch that never happened leaves the schedule alone', async () => {
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
       },
       taskDependency: { findMany: async () => [] },
+      // A dispatch copies the task's input files into the run it opens
+      // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+      attachment: { findMany: async () => [] },
       session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findFirst: async () => null },
@@ -545,6 +560,9 @@ test('a bulk run keeps the appointment the same way a single run does', async ()
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
       },
       taskDependency: { findMany: async () => [] },
+      // A dispatch copies the task's input files into the run it opens
+      // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+      attachment: { findMany: async () => [] },
       session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findMany: async () => [] },
@@ -843,6 +861,9 @@ function raceFixture(scanEpoch: bigint, readEpoch: bigint, runAt: Date | null = 
     taskDependency: {
       findMany: async () => [{ taskId: TASK_ID, dependsOnTaskId: OTHER_TASK_ID }],
     },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findFirst: async () => null },

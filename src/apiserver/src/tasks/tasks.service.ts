@@ -6534,6 +6534,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             },
           },
         },
+        // The task's input files. Metadata only — the bytes are fetched per id from
+        // `GET /attachments/:id`, exactly as the transcript fetches a message's images, so
+        // hydrating a task detail never carries a design mock through this response.
+        attachments: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, mimeType: true, sizeBytes: true, fileName: true, createdAt: true },
+        },
         sessions: {
           orderBy: { createdAt: 'desc' },
           select: {
@@ -9112,55 +9119,129 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
       return { id: served.id };
     }
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        return await this.sessions.create(ownerId, dto, { ...opts, id: desiredSessionId, fence });
-      } catch (e) {
-        // A NOWAIT fence, and the one two deliveries of ONE press reach: 0122's capacity
-        // serialization takes the PROJECT row, so the loser is refused before its insert can
-        // collide with the winner's — and "retry" is the entire remedy, which a request with a
-        // stable name can act on itself. Bounded, and every attempt re-reads this request's own row
-        // first, so the retry either finds the Session the contention was about or lands its own.
-        if (isRetryableTaskFence(e) && attempt < TASK_RUN_FENCE_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, TASK_RUN_FENCE_BACKOFF_MS << attempt));
-          const landed = await this.readOwnRun(ownerId, task, desiredSessionId);
-          if (landed) return { id: landed.id };
-          continue;
+    // The task's inputs, copied UNSCOPED so `sessions.create` adopts them onto the session it
+    // makes and links them to the seeded first turn — the same path a compose-page upload takes,
+    // so nothing downstream needs to know these came from a task.
+    //
+    // Made after the served-check (a request that is over makes no copies) and once for the whole
+    // retry loop: a `create` that loses the fence leaves them unscoped, because adoption happens
+    // after the session INSERT it did not reach, so the next attempt re-uses these same rows
+    // rather than making a second set.
+    const copies = await this.copyTaskAttachments(task.id, null);
+    const dtoWithInputs = copies.length > 0
+      ? { ...dto, attachmentIds: [...(dto.attachmentIds ?? []), ...copies] }
+      : dto;
+    let landed = false;
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const created = await this.sessions.create(
+            ownerId, dtoWithInputs, { ...opts, id: desiredSessionId, fence });
+          landed = true;
+          return created;
+        } catch (e) {
+          // A NOWAIT fence, and the one two deliveries of ONE press reach: 0122's capacity
+          // serialization takes the PROJECT row, so the loser is refused before its insert can
+          // collide with the winner's — and "retry" is the entire remedy, which a request with a
+          // stable name can act on itself. Bounded, and every attempt re-reads this request's own row
+          // first, so the retry either finds the Session the contention was about or lands its own.
+          if (isRetryableTaskFence(e) && attempt < TASK_RUN_FENCE_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, TASK_RUN_FENCE_BACKOFF_MS << attempt));
+            const landed = await this.readOwnRun(ownerId, task, desiredSessionId);
+            if (landed) return { id: landed.id };
+            continue;
+          }
+          if (!this.isDuplicateKey(e) || !isTaskRunClaimConflict(e)) throw e;
+        // 1. This request's own row, written by whoever won the race with this call.
+        const mine = await this.readOwnRun(ownerId, task, desiredSessionId);
+        if (mine) {
+          this.logger.log(
+            `task ${uuidToBase62(task.id)}: lost the race for this run request to session ` +
+              `${uuidToBase62(mine.id)} (${mine.status}); returning it`,
+          );
+          return { id: mine.id };
         }
-        if (!this.isDuplicateKey(e) || !isTaskRunClaimConflict(e)) throw e;
-      // 1. This request's own row, written by whoever won the race with this call.
-      const mine = await this.readOwnRun(ownerId, task, desiredSessionId);
-      if (mine) {
-        this.logger.log(
-          `task ${uuidToBase62(task.id)}: lost the race for this run request to session ` +
-            `${uuidToBase62(mine.id)} (${mine.status}); returning it`,
-        );
-        return { id: mine.id };
+        // 2. Somebody else's claim. The unique index means there is at most one such row, so this is
+        // an exact read rather than a pick — no `orderBy`, because there is nothing to order. It
+        // carries no `owner_id` and no `workspace_id` filter for the same reason: the index carries
+        // neither, and a reader narrower than the index it is explaining answers "nothing holds the
+        // claim" for rows that do.
+        const holder = await this.prisma.session.findFirst({
+          where: { taskId: task.id, deletedAt: null, status: { in: TASK_OCCUPYING } },
+          select: {
+            id: true, status: true, workspaceId: true, provider: true, model: true,
+            startsTaskWork: true, cancelRequestedAt: true,
+          },
+        });
+        if (holder) throw this.foreignClaimRefusal(task, workspace, holder);
+        // 3. The insert collided and neither row is there now — the claim was released, or the id
+        // this request derives was briefly taken by something that has since gone. Nothing of this
+        // request is running, and saying so is the only honest answer: adopting a row would report a
+        // start that did not happen, and rethrowing would put a duplicate-key error in front of a
+        // person who asked for a task to run. A retry re-derives the same id.
+          throw new ConflictException(
+            `task ${uuidToBase62(task.id)} could not be started: its execution claim was taken and ` +
+              'released while this request was writing, so nothing of it is running. Start the task ' +
+              'again',
+          );
+        }
       }
-      // 2. Somebody else's claim. The unique index means there is at most one such row, so this is
-      // an exact read rather than a pick — no `orderBy`, because there is nothing to order. It
-      // carries no `owner_id` and no `workspace_id` filter for the same reason: the index carries
-      // neither, and a reader narrower than the index it is explaining answers "nothing holds the
-      // claim" for rows that do.
-      const holder = await this.prisma.session.findFirst({
-        where: { taskId: task.id, deletedAt: null, status: { in: TASK_OCCUPYING } },
-        select: {
-          id: true, status: true, workspaceId: true, provider: true, model: true,
-          startsTaskWork: true, cancelRequestedAt: true,
+    } finally {
+      // Every way out of that loop except a session of this request's own making: the winner-read
+      // returning somebody else's row, a foreign claim, a released claim, a rethrown error. In all
+      // of them these bytes were adopted by nothing, and the session that WAS returned already has
+      // its own copies from the request that made it — so leaving them would add a set of the
+      // task's design mocks per losing delivery, attached to nothing and deleted by nothing.
+      if (!landed) await this.discardTaskAttachmentCopies(copies);
+    }
+  }
+
+  /**
+   * Copy a task's input attachments (design mocks, specs) for one run of it.
+   *
+   * COPIES, never moves. A task outlives every session that runs it — a retry, a successor and a
+   * verification each open their own — so the task-scoped rows are a template that stays put, and
+   * what a run receives is its own set. Moving them would hand the second run an empty task, and
+   * would put the only copy of the user's picture behind whichever session's lifecycle claimed it
+   * first; `auto-retry.service.ts#copyAttachments` copies for the same reason at a smaller scale.
+   *
+   * `sessionId` null yields unscoped rows for `sessions.create` to adopt; a session id yields rows
+   * already scoped to it, which is what `createTurn`/`resume` require of an attachment they link.
+   * Returns [] for a task with no inputs, so a caller pays one indexed read and nothing else.
+   */
+  private async copyTaskAttachments(taskId: string, sessionId: string | null): Promise<string[]> {
+    const inputs = await this.prisma.attachment.findMany({
+      where: { taskId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const copies: string[] = [];
+    for (const a of inputs) {
+      const copy = await this.prisma.attachment.create({
+        data: {
+          ownerId: a.ownerId,
+          sessionId,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          fileName: a.fileName,
+          data: a.data,
         },
+        select: { id: true },
       });
-      if (holder) throw this.foreignClaimRefusal(task, workspace, holder);
-      // 3. The insert collided and neither row is there now — the claim was released, or the id
-      // this request derives was briefly taken by something that has since gone. Nothing of this
-      // request is running, and saying so is the only honest answer: adopting a row would report a
-      // start that did not happen, and rethrowing would put a duplicate-key error in front of a
-      // person who asked for a task to run. A retry re-derives the same id.
-        throw new ConflictException(
-          `task ${uuidToBase62(task.id)} could not be started: its execution claim was taken and ` +
-            'released while this request was writing, so nothing of it is running. Start the task ' +
-            'again',
-        );
-      }
+      copies.push(copy.id);
+    }
+    return copies;
+  }
+
+  /** Drop copies made for a dispatch that did not happen. `turnId: null` is the whole guard: one
+   *  that did reach a turn is that turn's image now, not this dispatch's to delete. */
+  private async discardTaskAttachmentCopies(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      await this.prisma.attachment.deleteMany({ where: { id: { in: ids }, turnId: null } });
+    } catch {
+      // Bytes nobody will ever see, in the failure path of a dispatch that has its own answer to
+      // give. Losing the cleanup must not replace that answer; the session's deletion collects
+      // an adopted copy, and an unadopted one is unreachable by every read.
     }
   }
 
@@ -10305,19 +10386,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // on the same key anyway — the unique index is what makes it exactly-once — but reading first
       // keeps a takeover out of the whole resume path for a turn that is already on the row.
       if (await this.hasTurn(plan.sessionId, plan.turnId)) return plan.sessionId;
-      await this.sessions.resume(
-        ownerId,
-        plan.sessionId,
-        {
-          clientTurnId: plan.turnId,
-          content: prompt,
-          ...(task.model != null ? { model: task.model } : {}),
-        },
-        // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
-        // row says so — otherwise a session first opened to look at the task keeps the salvage
-        // exemption while executing it, and the reaper never follows the task's lifecycle for it.
-        { batch: batch ?? null, startsTaskWork: true, fence },
-      );
+      // The task's inputs, copied into THIS session before the turn that carries them. After the
+      // hasTurn check, so a redelivery of a turn already on the row makes no second copy.
+      const resumeAttachments = await this.copyTaskAttachments(task.id, plan.sessionId);
+      try {
+        await this.sessions.resume(
+          ownerId,
+          plan.sessionId,
+          {
+            clientTurnId: plan.turnId,
+            content: prompt,
+            ...(resumeAttachments.length > 0 ? { attachmentIds: resumeAttachments } : {}),
+            ...(task.model != null ? { model: task.model } : {}),
+          },
+          // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
+          // row says so — otherwise a session first opened to look at the task keeps the salvage
+          // exemption while executing it, and the reaper never follows the task's lifecycle for it.
+          { batch: batch ?? null, startsTaskWork: true, fence },
+        );
+      } catch (error) {
+        // The turn never landed, so these are not a message's pictures — just bytes. Dropped on
+        // every way out of here (this path both rethrows and is retried by callers), which is what
+        // keeps a refused dispatch from leaving a copy of every design mock behind each time.
+        await this.discardTaskAttachmentCopies(resumeAttachments);
+        throw error;
+      }
       return plan.sessionId;
     }
     const session = await this.createTaskSessionOrReadWinner(

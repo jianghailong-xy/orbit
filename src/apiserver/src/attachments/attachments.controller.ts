@@ -1,6 +1,8 @@
 import {
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -30,8 +32,23 @@ export class AttachmentsController {
     @CurrentUser() user: AuthUser,
     @UploadedFileParam() file: UploadedFile | undefined,
     @Query('sessionId', PublicIdPipe) sessionId?: string,
+    // The task an input belongs to (a design mock, a spec). Mutually exclusive with sessionId:
+    // one scopes a blob to a conversation, the other to the work, and a row that claimed both
+    // would be handed to a runner AND listed as the task's input (see migration 0241's CHECK).
+    @Query('taskId', PublicIdPipe) taskId?: string,
   ): Promise<{ id: string }> {
-    return this.attachments.create(user.userId, sessionId, file);
+    return this.attachments.create(user.userId, sessionId, file, taskId);
+  }
+
+  // Task inputs only — see AttachmentsService.removeTaskInput for why a transcript's image is
+  // not deletable through here.
+  @Delete(':id')
+  @HttpCode(204)
+  removeTaskInput(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ): Promise<void> {
+    return this.attachments.removeTaskInput(user.userId, id);
   }
 
   @Get(':id')

@@ -23,6 +23,9 @@ test('a fresh task run creates an Active-list session', async () => {
       }),
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     // A paused run's delivery is read by its own turn key before it is written (H2F).
     conversationTurn: { findUnique: async () => null },
     session: {
@@ -83,6 +86,9 @@ test('an automatic Task List run carries distinct auditable provenance', async (
       }),
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findFirst: async () => null },
@@ -134,6 +140,9 @@ test('automatic dispatch runs a coordinated Project\'s task like any other', asy
       }),
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     session: { findUnique: async () => null, findFirst: async () => null },
   } as never, {
     create: async () => { creates += 1; return { id: 'session-1' }; },

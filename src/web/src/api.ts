@@ -361,10 +361,19 @@ export const sendTurn = (
  *  only does JSON). With `sessionId` the blob is scoped to that session (live/resume turns);
  *  omitted (composing a new session) it's uploaded unscoped and the create call scopes it.
  *  Returns the new attachment id; reference it via createInteractiveSession/sendTurn/resume. */
-export const uploadAttachment = async (file: File, sessionId?: string): Promise<{ id: string }> => {
+export const uploadAttachment = async (
+  file: File,
+  sessionId?: string,
+  taskId?: string,
+): Promise<{ id: string }> => {
   const form = new FormData();
   form.append('file', file);
-  const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+  // A blob belongs to a conversation OR to the work; the server refuses both together. With
+  // `taskId` it becomes one of that task's inputs — copied into every run of it — rather than
+  // an image in one session's transcript.
+  const qs = sessionId
+    ? `?sessionId=${encodeURIComponent(sessionId)}`
+    : taskId ? `?taskId=${encodeURIComponent(taskId)}` : '';
   const res = await authedFetch(`/api/attachments${qs}`, {
     method: 'POST',
     // No content-type header: the browser sets the multipart boundary itself.
@@ -375,6 +384,17 @@ export const uploadAttachment = async (file: File, sessionId?: string): Promise<
     throw new Error(msg.message || res.statusText);
   }
   return (await res.json()) as { id: string };
+};
+
+/** Remove one of a task's input files. Task inputs only — the server refuses a transcript's
+ *  image, because a sent message is a record. Runs already dispatched keep their own copies, so
+ *  this changes what future runs are given. */
+export const deleteAttachment = async (id: string): Promise<void> => {
+  const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new Error(msg.message || res.statusText);
+  }
 };
 
 /** Fetch an attachment's bytes as a blob object URL, for rendering a past turn's image in

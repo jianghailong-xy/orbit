@@ -34,6 +34,9 @@ function retryFixture(status: string, updated = 1) {
       },
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     $queryRaw: async () => [{ id: null, requiresResync: false }],
     // A paused run's delivery is read by its own turn key before it is written (H2F).
     conversationTurn: { findUnique: async () => null },
@@ -125,6 +128,9 @@ test('batch-running a FAILED task clears it the same way', async () => {
       },
     },
     taskDependency: { findMany: async () => [] },
+    // A dispatch copies the task's input files into the run it opens
+    // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
+    attachment: { findMany: async () => [] },
     $queryRaw: async () => [{ id: null, requiresResync: false }],
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).

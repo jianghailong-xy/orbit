@@ -1614,6 +1614,14 @@ model Attachment {
   // cascades with the turn (withdrawing a queued turn or ending the session drops it).
   turnId    String?           @map("turn_id") @db.Uuid
   turn      ConversationTurn? @relation(fields: [turnId], references: [id], onDelete: Cascade)
+  // Optional task scope: set when uploaded against a task (a design mock, a spec PDF) so the blob
+  // is an input to the WORK rather than to one conversation about it. A task-scoped row is a
+  // template and is never handed to a runner directly — each dispatch COPIES it into that run's
+  // session (`copyTaskAttachments`), because a task outlives any one of its sessions and moving
+  // the row would hand the second run an empty task. Mutually exclusive with sessionId/turnId,
+  // which is what makes "is this a template or a sent image" a question about one column.
+  taskId    String?           @map("task_id") @db.Uuid
+  task      Task?             @relation(fields: [taskId], references: [id], onDelete: Cascade)
   mimeType  String            @map("mime_type")
   sizeBytes Int               @map("size_bytes")
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
@@ -1625,6 +1633,7 @@ model Attachment {
   @@index([ownerId])
   @@index([sessionId])
   @@index([turnId])
+  @@index([taskId])
   @@map("attachment")
 }
 
@@ -3127,6 +3136,9 @@ model Task {
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
   comments     TaskComment[]
+  /// Files the task carries as INPUT to its work (design mocks, specs). Copied into each run's
+  /// session at dispatch; cascade-deleted with the task.
+  attachments  Attachment[]
   completionEvidence TaskCompletionEvidence[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]

@@ -936,6 +936,7 @@ export interface StatementUnit {
  */
 export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "attachments/attachments.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "attachments/attachments.service.ts#removeTaskInput", class: "MANY_ROWS", statements: 1, note: "Deletes at most one row — the id is a primary key — but written as a filtered deleteMany because the tenancy and scope predicates (`owner_id`, `task_id IS NOT NULL`) are what make a foreign id and a transcript's image indistinguishable 404s. The selection can overlap no other writer: a task input is deleted by its owner or by its task's CASCADE, and both remove the same row." },
   { at: "auth/auth.service.ts#bootstrap", class: "INSERT", statements: 1 },
   { at: "auth/auth.service.ts#changePassword", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "auth/auth.service.ts#issueRefreshToken", class: "INSERT", statements: 1 },
@@ -1028,6 +1029,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "tasks/tasks.service.ts#bindMentionTarget", class: "RAW_FENCE", statements: 1 },
   { at: "tasks/tasks.service.ts#clearFailedForRetry", class: "ONE_ROW_CAS", statements: 1, note: "The documented residual (docs/postgres-lock-order.md §6): it writes `status`, so an AFTER trigger takes the project FOR NO KEY UPDATE while the task row is held — the project/task inversion. Left as one statement deliberately: the inversion is not resolvable from this side, and wrapping four of the fifteen single-statement status writers in transactions would buy the appearance of coverage rather than the property." },
   { at: "tasks/tasks.service.ts#consumeRunAt", class: "ONE_ROW_CAS", statements: 1, note: "`run_at` is in no trigger's column list, so this takes exactly one row lock and waits for nothing." },
+  { at: "tasks/tasks.service.ts#copyTaskAttachments", class: "INSERT", statements: 1, note: "One INSERT per input file the task carries, in a loop — N files, N statements, not atomic with each other. The same trade `auto-retry.service.ts#copyAttachments` makes and for the same reason: a copy stranded by the next one's failure is scope-less bytes that `discardTaskAttachmentCopies` deletes on every non-landing exit, so there is nothing for atomicity to protect. Reads the task-scoped templates and writes copies; it never touches the templates, so a concurrent dispatch of the same task takes no lock this one wants." },
+  { at: "tasks/tasks.service.ts#discardTaskAttachmentCopies", class: "MANY_ROWS", statements: 1, note: "Deletes only ids this dispatch just created and never linked to a turn (`turn_id IS NULL`), so the selection cannot overlap another writer's rows — the shape MANY_ROWS is otherwise exposed to. Mirrors `auto-retry.service.ts#discardCopies`." },
   { at: "tasks/tasks.service.ts#deliverMentions", class: "RAW_FENCE", statements: 3 },
   { at: "tasks/tasks.service.ts#deliverOneMention", class: "RAW_FENCE", statements: 1 },
   { at: "tasks/tasks.service.ts#dispatchStalledListForemen", class: "INSERT", statements: 1 },
