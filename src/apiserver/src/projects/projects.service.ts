@@ -42,16 +42,8 @@ import {
   REMOVED_CRITERION_WIRING_FIELDS,
   removedCriterionWiring,
   UpdateProjectDto,
-  type CreateProjectCodebaseDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
-import {
-  notYoursToState,
-  projectCodebaseCreateColumns,
-  codebaseAuthorityInvalid,
-  PRIMARY_SLOT,
-  PROJECT_CODEBASE_SELECT,
-} from './project-codebase';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { criterionKeyOf, sha256 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
@@ -643,92 +635,6 @@ export class ProjectsService {
       select: { id: true },
     });
     if (!task) throw new NotFoundException('task not found');
-  }
-
-  /**
-   * Bind this project to one code line — the write side of acceptance criterion 1.
-   *
-   * The account owner's door and only theirs. What a binding decides is where EVERY task in the
-   * project takes its code from, so an agent that could write one could change the starting point
-   * of every other session in the project, including the ones already queued. That is the same
-   * reasoning `coordinatorEnabled` and `task.projectId` are the owner's, and this route lives
-   * beside them for the same reason: the runner door refuses it by name rather than 404ing, so an
-   * agent that tries is told who may (see `RunnerProjectsController.bindCodebase`).
-   *
-   * One binding per project in v1 — `(project_id, slot)` is UNIQUE and `slot` is not spellable, so
-   * a second call is a 409 rather than a silent second code line. Deliberately NOT unique on
-   * `(canonical_repo_url, root_commit_sha)`: two projects may name the same repository, and they
-   * routinely do.
-   *
-   * There is no edit and no delete here, and that is scope rather than oversight: the capability
-   * this unit owes is "a binding can be created and read back". `config_revision`'s monotonic
-   * advance exists in the trigger for whatever adds an edit surface later, and the shape of a
-   * re-pointing — which the trigger refuses outright — is a decision that has to be made with the
-   * frozen snapshots in view.
-   */
-  async bindCodebase(ownerId: string, projectId: string, dto: CreateProjectCodebaseDto) {
-    await this.assertOwned(ownerId, projectId);
-    // The three the database owns, refused before anything else: a caller who stated one has
-    // misunderstood what this row is, and answering that first is more useful than telling them
-    // their ref is short.
-    for (const field of ['configRevision', 'rootCommitSha', 'slot'] as const) {
-      if ((dto as unknown as Record<string, unknown>)[field] !== undefined) {
-        throw codebaseAuthorityInvalid(notYoursToState(field));
-      }
-    }
-    const columns = projectCodebaseCreateColumns(dto);
-    if (columns.authorityRunnerId !== null) {
-      // The composite foreign key would refuse another owner's machine, but as an engine error
-      // with no status. Asking here turns "that is not a machine of yours" into an answer, and it
-      // is the same 404-shaped silence every other cross-tenant id gets: naming the difference
-      // between "no such runner" and "not yours" would confirm ids this caller may not read.
-      const runner = await this.prisma.runner.findFirst({
-        where: { id: columns.authorityRunnerId, ownerId },
-        select: { id: true },
-      });
-      if (!runner) {
-        throw codebaseAuthorityInvalid(
-          'authorityRunnerId must name a runner of this account — the authority for a '
-          + 'RUNNER_LOCAL binding is one named machine (SR31)',
-        );
-      }
-    }
-    try {
-      return await this.prisma.projectCodebase.create({
-        // Every column named, none spread: `configRevision` and `rootCommitSha` are absent from
-        // this object by construction, so no widening of the DTO type elsewhere can smuggle one
-        // in. The trigger sets `config_revision` to 0 on INSERT whatever arrives (SR8), and
-        // `root_commit_sha` stays NULL, which is what "not observed yet" IS.
-        data: { ...columns, projectId, ownerId },
-        select: PROJECT_CODEBASE_SELECT,
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException(
-          `this project is already bound to a code line in the '${PRIMARY_SLOT}' slot — a binding `
-          + 'is created and deleted, never re-pointed',
-        );
-      }
-      throw e;
-    }
-  }
-
-  /**
-   * Read this project's binding back, or `null` when it has none.
-   *
-   * `null` is an ANSWER, not an absence: SR5 says a Project may have no code line, and one that
-   * has none is not broken — its tasks resolve `UNBOUND` and run exactly as they always did. A 404
-   * here would say "no such thing to look at" about a project that is simply not a code project,
-   * and a client would have to tell that apart from "no such project", which is the 404
-   * `assertOwned` already makes.
-   */
-  async codebase(ownerId: string, projectId: string) {
-    await this.assertOwned(ownerId, projectId);
-    const codebase = await this.prisma.projectCodebase.findFirst({
-      where: { projectId, ownerId, slot: PRIMARY_SLOT },
-      select: PROJECT_CODEBASE_SELECT,
-    });
-    return { codebase };
   }
 
   /**

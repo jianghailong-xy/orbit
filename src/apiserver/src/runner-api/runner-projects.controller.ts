@@ -188,29 +188,6 @@ export class RunnerProjectsController {
     });
   }
 
-  /**
-   * Binding a project to a code line, refused — the whole route, not a field on one.
-   *
-   * A binding decides where every task in this project takes its code from, so an agent that could
-   * write one could move the ground under every other session in the project, including sessions
-   * already queued and sessions belonging to work it was never given. That is a strictly larger
-   * grant than the five fields `refuseGovernance` already keeps on the owner's side, so it stays
-   * there too, with `task.projectId` and `coordinatorEnabled`.
-   *
-   * Answered rather than left to 404, for `refuseGovernance`'s own reason: the caller here is a
-   * model, and a bare 404 reads as "wrong URL, try another spelling" instead of "this is not
-   * yours to write". Naming the door that CAN do it is the difference between a refusal and a
-   * dead end.
-   */
-  @Post('projects/:id/codebase')
-  bindCodebase(): never {
-    throw new ForbiddenException(
-      'a project’s code binding is the account owner’s to set, not this session’s — it decides '
-      + 'where every task in the project takes its code from, so change it from the Orbit web app '
-      + 'or the user API',
-    );
-  }
-
   @Patch('projects/:id')
   updateProject(
     @CurrentRunner() runner: Runner,

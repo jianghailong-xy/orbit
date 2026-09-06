@@ -458,14 +458,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
-    // A POST that only ever refuses, and it is on this list for the same reason the writes are:
-    // adding it was a decision. Binding a project to a code line decides where every task in that
-    // project takes its code from, so an agent that could write one could move the ground under
-    // every other session in the project — a strictly larger grant than the five fields
-    // `refuseGovernance` already keeps on the owner's side. It is a route rather than a 404 so an
-    // agent is told WHOSE it is; the verb assertion below is what keeps it from ever growing a
-    // body it acts on.
-    'bindCodebase',
     'createProject',
     'getProject',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
@@ -485,7 +477,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     ]),
   );
   assert.deepEqual(verbs, {
-    bindCodebase: RequestMethod.POST,
     createProject: RequestMethod.POST,
     getProject: RequestMethod.GET,
     // Unit L7: GET. The verb is the assertion — a POST appearing here would be a coordinator
