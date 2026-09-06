@@ -60,8 +60,8 @@
  * §3 — WHY "NOTHING TO SAY" IS NOT "NOTHING WRONG"
  * ================================================
  * `null` means this fold recognised nothing, exactly as its sibling's `null` does. It is not a
- * clearance. The delivery in §4's control returns `null` because all five observations came back
- * ordinary, and what happens to it next is the other table's answer.
+ * clearance. An ordinary delivery — one whose five observations all came back ordinary — answers
+ * `null` here, and what happens to it next is the other table's answer.
  */
 
 /** Which of the four this is. The reason a person is being asked, in one word. */
