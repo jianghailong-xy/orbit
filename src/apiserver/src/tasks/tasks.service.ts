@@ -4066,7 +4066,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     if (!session) return null;
     const projectId = session.coordinatorForProject?.id
-      ?? session.coordinatorWakes[0]?.projectId
+      // `?.` on the list itself, not only on its first member: the read it replaced was a to-one
+      // relation, so every hand-built double of this row that has no wake simply omits the field —
+      // six of them do — and `judgmentForWake?.projectId` answered `undefined` for all of them.
+      // Indexing an omitted list would throw instead, which would make a mechanical rename stricter
+      // than the read it renamed. Prisma returns `[]` here, so this chain never fires in production.
+      ?? session.coordinatorWakes?.[0]?.projectId
       ?? session.task?.projectId
       ?? null;
     if (!projectId) return null;
