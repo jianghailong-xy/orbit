@@ -46,6 +46,7 @@ import {
   CriterionUnlandedProducer,
   type CriterionUnlandedDelivery,
 } from './criterion-unlanded.producer';
+import { mechanicalAction } from './mechanical-disposition';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -646,10 +647,28 @@ test('four deliveries a machine may not settle — an argued exemption, a moved 
         'two of the four deliveries raised the same kind');
 
       // 5 — and none of them chose an action. This is the whole of "the two tables never both
-      // answer": every one of these rounds exited the code it declared, so the mechanical table
-      // would otherwise have merged all four.
+      // answer", and it is not a vacuous statement about deliveries nothing was going to be done
+      // with: every one of these four rounds exited the code it declared, which is the one reading
+      // the mechanical table answers with a merge. Case (b)'s control is the same round with a
+      // different file set, and it DOES settle that action.
+      assert.equal(
+        mechanicalAction({ round: 'PASSED', concurrentRounds: 0, mainTip: 'UNKNOWN' }),
+        'MERGE_AND_RELEASE_NEXT',
+        'the other table no longer merges a round that passed, so this non-overlap says nothing',
+      );
       assert.deepEqual(stops.map((d) => d?.action), [undefined, undefined, undefined, undefined],
         'a delivery that raised a blocker also chose an action a coordinator would act on');
+
+      // And the four words are words the vocabulary already had: no migration, no new member of
+      // the closed set, nothing for the censuses that keep that set and the code agreeing.
+      const [constraint] = await stack.db.$queryRaw<Array<{ def: string }>>`
+        SELECT pg_get_constraintdef(oid) AS def
+          FROM pg_constraint WHERE conname = 'project_blocker_kind_chk'`;
+      assert.ok(constraint?.def, 'the closed set of kinds is not enforced by that constraint');
+      for (const which of four) {
+        assert.ok(constraint!.def.includes(`'${EXPECTED_KIND[which]}'`),
+          `${which}: its kind is not a member of the live closed set`);
+      }
 
       // The two rows that are about paths name them: a question that cannot say WHICH files is
       // not a question anybody can answer.
