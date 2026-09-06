@@ -10230,7 +10230,11 @@ html[data-theme='dark'] .session-tag-chip {
   flex: none;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  justify-content: flex-end;
+  /* Wide enough for mark + gap + number, and the numbers hang off its right edge, so the row the
+     read did not answer for — which has no mark to draw — keeps its number in the same column as
+     every other row instead of sliding left into the empty slot. */
+  width: 36px;
   padding-top: 0.15em;
 }
 .acceptance-dot {
@@ -10444,6 +10448,7 @@ html[data-theme='dark'] .session-tag-chip {
   .acceptance-row-gutter {
     grid-column: 1;
     align-items: center;
+    width: 54px;
     padding-top: 0;
   }
   .acceptance-dot {
