@@ -5,6 +5,7 @@ import { test } from 'node:test';
 
 import {
   COORDINATOR_WAKE_EVENTS,
+  COORDINATOR_WAKE_STATUSES,
   RETIRED_COORDINATOR_WAKE_EVENTS,
   SETTLED_TASK_STATUSES,
   WAKE_KEY_VERSION,
@@ -228,6 +229,40 @@ test('the events this unit knows about are exactly those the latest migration ac
       `${retired} is history and must not be written by a current path`);
     assert.ok(source.includes(retired), 'a retired spelling is named where it is retired');
   }
+});
+
+test('the ends this unit knows about are exactly those the latest migration accepts', () => {
+  const sql = readFileSync(
+    path.resolve(
+      __dirname,
+      '../../prisma/migrations/0243_coordinator_wake_delivered/migration.sql',
+    ),
+    'utf8',
+  );
+  const check = /"status" IN \(([^)]*)\)/.exec(sql);
+  assert.ok(check, 'migration 0243 no longer constrains the status column');
+  const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
+  assert.deepEqual(
+    accepted,
+    [...COORDINATOR_WAKE_STATUSES].sort(),
+    'a wake terminal was added in one place only — the CHECK and the closed set have to move '
+    + 'together, exactly as the event set and its own CHECK do',
+  );
+
+  // A terminal that may NAME a session is a second claim, and the same migration states it: two
+  // ways to reach one (0175's judgment session, 0243's standing conversation) and no third.
+  const named = /"session_id" IS NULL OR "status" IN \(([^)]*)\)/.exec(sql);
+  assert.ok(named, 'migration 0243 no longer says which ends may name a session');
+  assert.deepEqual(
+    [...named[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort(),
+    ['DELIVERED', 'SESSION_OPENED'],
+  );
+  // And the pointer's uniqueness is now partial over the first of them: many facts may name the
+  // one standing conversation, no two may name one judgment session.
+  assert.match(
+    sql,
+    /CREATE UNIQUE INDEX[\s\S]*?"project_coordinator_wake_session_id_key"[\s\S]*?WHERE "status" = 'SESSION_OPENED'/,
+  );
 });
 
 /**

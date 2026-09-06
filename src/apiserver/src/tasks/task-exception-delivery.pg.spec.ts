@@ -24,6 +24,7 @@ import { ConvergenceLedgerService } from '../projects/convergence-ledger.service
 import { EMPTY_PROGRESS_VECTOR, scopeHash } from '../projects/convergence-progress';
 import { PROJECT_NOT_CONVERGING } from '../projects/coordinator-convergence';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
+import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -142,6 +143,7 @@ async function connect(options: {
     new WakeDispositionService(
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
     new CriterionUnlandedProducer(prisma, convergence),
   );

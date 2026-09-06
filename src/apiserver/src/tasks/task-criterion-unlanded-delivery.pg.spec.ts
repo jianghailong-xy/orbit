@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { PROJECT_NOT_CONVERGING } from '../projects/coordinator-convergence';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
+import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -152,6 +153,7 @@ async function connect(options: {
     new WakeDispositionService(
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
     new CriterionUnlandedProducer(prisma, convergence),
   );
@@ -185,6 +187,8 @@ interface Fixture {
   projectId: string;
   /** The task that serves no criterion and never finishes, so the project cannot settle. */
   choreTaskId: string;
+  /** The standing conversation this project is coordinated from, parked between turns. */
+  coordinatorSessionId: string;
 }
 
 async function fixture(
@@ -219,6 +223,40 @@ async function fixture(
   await db.workspace.create({
     data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true },
   });
+  // The conversation a person opened to drive this project, parked between turns at
+  // AWAITING_INPUT — one of `SessionsService.LIVE`, so a delivery to it appends a turn rather than
+  // reviving anything. `dispatch_origin` USER is what `ProjectsService.coordinator` writes, and is
+  // what tells it apart from a judgment session in every count below.
+  const coordinatorSessionId = randomUUID();
+  await db.session.create({
+    data: {
+      id: coordinatorSessionId,
+      ownerId,
+      creatorId: ownerId,
+      workspaceId,
+      assignedRunnerId: runnerId,
+      title: `协调：${label}`,
+      prompt: `协调：${label}`,
+      provider: 'claude',
+      status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      titleManagedByProject: true,
+    },
+  });
+  // A conversation that has been running has its opening prompt on the row as a turn: the first
+  // thing `createTurn` does for a session with none is seed one (`ensurePromptSeeded`). Written
+  // here so that the state under test is a coordinator somebody has actually been talking to,
+  // and so that the delivery below is not the thing that seeds it.
+  await db.conversationTurn.create({
+    data: {
+      sessionId: coordinatorSessionId,
+      seq: 1,
+      clientTurnId: SessionsService.initialTurnClientId(coordinatorSessionId),
+      kind: 'message',
+      content: `协调：${label}`,
+      status: 'ANSWERED',
+    },
+  });
   await db.project.create({
     data: {
       id: projectId,
@@ -226,6 +264,7 @@ async function fixture(
       title: `${label} 落地项目`,
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: workspaceId,
+      coordinatorSessionId,
     },
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
@@ -241,7 +280,29 @@ async function fixture(
     // the run this fixture then creates for that task collides with the one already claiming it.
     autoRunWhenReady: false,
   } as never);
-  return { ownerId, runnerId, workspaceId, projectId, choreTaskId: chore.id };
+  return {
+    ownerId, runnerId, workspaceId, projectId, choreTaskId: chore.id, coordinatorSessionId,
+  };
+}
+
+/**
+ * Every message this project's standing conversation has been SENT, oldest first.
+ *
+ * The seeded opening turn is excluded, exactly as `SessionsService`'s own queued-turn reader
+ * excludes it: it is the conversation's own prompt rather than something anybody told it, and
+ * counting it would make "was this coordinator told about the merge" answer yes for a conversation
+ * nobody has said a word to.
+ */
+function coordinatorMessages(db: PrismaClient, f: Fixture) {
+  return db.conversationTurn.findMany({
+    where: {
+      sessionId: f.coordinatorSessionId,
+      kind: 'message',
+      clientTurnId: { not: SessionsService.initialTurnClientId(f.coordinatorSessionId) },
+    },
+    select: { clientTurnId: true },
+    orderBy: { seq: 'asc' },
+  });
 }
 
 /** State the whole collection through the owner's own path, and read the stable keys back. */
@@ -453,11 +514,14 @@ test('finished work off main wakes the coordinator, and the same work on main do
         assert.notEqual(row.subjectId, taskId, 'the subject is a criterion, not a task');
       }
       // The terminal a finished-but-unlanded criterion gets: `wake-disposition.ts` §2.1 sends this
-      // one event to a judgment session, so the row names that session instead of a consumer.
-      assert.equal(row.status, 'SESSION_OPENED');
+      // one event to a coordinator, and §2.2 sends it to the one the project already has — so the
+      // row names that standing conversation instead of a consumer, and no session was created.
+      assert.equal(row.status, 'DELIVERED');
       assert.equal(row.consumerType, null);
       assert.notEqual(row.consumerType, CRITERION_UNLANDED_CONSUMER);
-      assert.notEqual(row.sessionId, null);
+      assert.equal(row.sessionId, f.coordinatorSessionId);
+      assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
+      assert.equal((await coordinatorMessages(stack.db, f)).length, 1);
 
       // Both criteria are READY — the work is finished on both — which is what makes the row above
       // a statement about landing rather than about completion.
@@ -475,6 +539,10 @@ test('finished work off main wakes the coordinator, and the same work on main do
       assert.equal(
         (await unlandedWakes(stack.db, f.projectId)).length, 1,
         'a criterion every serving task of which now has a receipt woke the coordinator again',
+      );
+      assert.equal(
+        (await coordinatorMessages(stack.db, f)).length, 1,
+        'the standing conversation was told a second time about a merge that had happened',
       );
       // And the delivery that produced nothing DID run over a moved serving set: readiness is
       // derived from the same rows at the same moment by the same predicate minus the landing
@@ -516,6 +584,7 @@ test('an unlanded criterion is refused by convergence, not waved through by a de
       assert.equal(wakes[0]!.refusalCode, PROJECT_NOT_CONVERGING);
       assert.equal(wakes[0]!.consumerType, null);
       assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
+      assert.deepEqual(await coordinatorMessages(stack.db, f), []);
     } finally {
       await stack.db.$disconnect();
     }
@@ -541,9 +610,14 @@ test('an unlanded criterion under a switched-off coordinator produces nothing an
       assert.equal(wakes[0]!.sessionId, null);
       assert.equal(wakes[0]!.consumerType, null);
       assert.notEqual(wakes[0]!.status, 'SESSION_OPENED');
+      assert.notEqual(wakes[0]!.status, 'DELIVERED');
       assert.deepEqual(
         await judgmentSessions(stack.db, f.ownerId), [],
         'a switched-off coordinator was woken',
+      );
+      assert.deepEqual(
+        await coordinatorMessages(stack.db, f), [],
+        'a switched-off project\'s standing conversation was written to anyway',
       );
 
       // The switch is not read by the door that delivers: the work settled exactly as it would

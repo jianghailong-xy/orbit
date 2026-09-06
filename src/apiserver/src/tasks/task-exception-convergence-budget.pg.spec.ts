@@ -28,6 +28,7 @@ import {
   noProgressDedupeKey,
 } from '../projects/coordinator-convergence';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
+import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -137,6 +138,7 @@ async function connect(): Promise<Stack> {
     new WakeDispositionService(
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
     new CriterionUnlandedProducer(prisma, convergence),
   );

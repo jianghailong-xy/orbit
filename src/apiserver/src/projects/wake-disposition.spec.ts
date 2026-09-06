@@ -234,7 +234,7 @@ test('an empty serving set is stranded, not vacuously backed', () => {
   }
 });
 
-test('a stranded criterion is worth waking somebody for, and so is finished work off the branch',
+test('a stranded criterion opens a judgment, and finished work off the branch goes to the standing coordinator',
   () => {
     assert.equal(wakeDisposition('CRITERION_READY', [{ coverage: 'STRANDED', landing: 'LANDED' }]),
       'OPEN_JUDGMENT');
@@ -248,10 +248,18 @@ test('a stranded criterion is worth waking somebody for, and so is finished work
 
     // §2: a backed claim owes nobody a judgment. Whether it HOLDS is not a question Orbit answers.
     // What §2.1 adds is the other half of that sentence: it can still owe a MERGE, and the fact
-    // reporting where the work is is the one that gets asked.
+    // reporting where the work is is the one that gets asked. §2.2 is who gets asked — the merge
+    // is owed once, so it goes to the conversation already coordinating this project rather than
+    // to a session opened for it. The two decisive answers are DIFFERENT values, which is what
+    // stops the caller having to ask the event a second time to find out which one it meant.
     assert.equal(
       wakeDisposition('CRITERION_UNLANDED', [{ coverage: 'BACKED', landing: 'UNKNOWN' }]),
-      'OPEN_JUDGMENT',
+      'DELIVER_TO_COORDINATOR',
+    );
+    assert.notEqual(
+      wakeDisposition('CRITERION_UNLANDED', [{ coverage: 'BACKED', landing: 'UNKNOWN' }]),
+      wakeDisposition('CRITERION_UNLANDED', [{ coverage: 'STRANDED', landing: 'UNKNOWN' }]),
+      'work that is merely off the branch is answered the same way as work nothing will deliver',
     );
     assert.equal(
       wakeDisposition('CRITERION_UNLANDED', [{ coverage: 'BACKED', landing: 'LANDED' }]),
@@ -282,6 +290,15 @@ test('a stranded criterion is worth waking somebody for, and so is finished work
       wakeDisposition('CRITERION_UNLANDED', [
         { coverage: 'BACKED', landing: 'LANDED' },
         { coverage: 'BACKED', landing: 'UNKNOWN' },
+      ]),
+      'DELIVER_TO_COORDINATOR',
+    );
+    // And STRANDED is asked first, so a project with both kinds of trouble opens the judgment its
+    // stranded criterion needs rather than sending a merge instruction about the other one.
+    assert.equal(
+      wakeDisposition('CRITERION_UNLANDED', [
+        { coverage: 'BACKED', landing: 'UNKNOWN' },
+        { coverage: 'STRANDED', landing: 'UNKNOWN' },
       ]),
       'OPEN_JUDGMENT',
     );

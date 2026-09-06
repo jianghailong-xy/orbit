@@ -337,7 +337,7 @@ function taskUpdateFixture(
         taskId: null,
         task: null,
         coordinatorForProject: null,
-        judgmentForWake: { projectId: PROJECT },
+        coordinatorWakes: [{ projectId: PROJECT }],
         dispatchOrigin,
       }),
     },
@@ -449,8 +449,10 @@ function createFixture(options: {
         task: null,
         coordinatorForProject: null,
         // What makes this a judgment session rather than a USER-origin conversation: it is
-        // bound to the wake it was opened for, and to nothing else.
-        judgmentForWake: { projectId: PROJECT },
+        // bound to the wake it was opened for, and to nothing else. A list since 0243, because the
+        // same column also names every fact delivered to a standing coordinator; the read filters
+        // to the wake that OPENED a session, so this double holds exactly that one.
+        coordinatorWakes: [{ projectId: PROJECT }],
         dispatchOrigin: options.dispatchOrigin ?? SessionDispatchOrigin.PROJECT_COORDINATOR,
       }),
     },

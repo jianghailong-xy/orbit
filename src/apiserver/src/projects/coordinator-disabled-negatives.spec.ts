@@ -213,13 +213,21 @@ const WIRED: readonly WiredWakeFact[] = [
         test: 'an unlanded criterion under a switched-off coordinator produces nothing and wakes nobody',
       },
       // A second control for the same kind, and not a duplicate of the one above it: since
-      // `wake-disposition.ts` §2.1 this fact is the one kind whose ordinary terminal is a judgment
-      // SESSION, so "the switch stopped it" now has a half the first control could not have
+      // `wake-disposition.ts` §2.1 this fact is the one kind whose ordinary terminal reaches a
+      // coordinator, so "the switch stopped it" now has a half the first control could not have
       // stated. Its paired positive is in the same case, and it is what went red before the rule
       // read a landing at all.
       {
         spec: 'tasks/task-landing-wake-disposition.pg.spec.ts',
         test: 'finished work off main under a switched-off coordinator is refused once and wakes nobody',
+      },
+      // A third, over the half §2.2 added: the terminal this fact reaches is a MESSAGE to the
+      // conversation the project already has, so "the switch stopped it" gained a claim neither of
+      // the two above can make — that the standing conversation was told nothing. Its paired
+      // positive is in the same case and is what went red before the delivery point was wired.
+      {
+        spec: 'tasks/task-coordinator-session-delivery.pg.spec.ts',
+        test: 'a switched-off coordinator is refused once, told nothing, and opened nothing',
       },
     ],
   },

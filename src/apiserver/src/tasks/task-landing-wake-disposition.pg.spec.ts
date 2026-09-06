@@ -18,6 +18,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
+import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -127,6 +128,7 @@ async function connect(options: { silent?: boolean } = {}): Promise<Stack> {
   const disposition = new WakeDispositionService(
     prisma,
     new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+    new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
   );
   const wired = new CompletionInputRouter(
     new CoordinatorWakeService(prisma),
@@ -174,6 +176,8 @@ interface Fixture {
   projectId: string;
   /** The task that serves no criterion and never finishes, so the project cannot settle. */
   choreTaskId: string;
+  /** The standing conversation this project is coordinated from, parked between turns. */
+  coordinatorSessionId: string;
 }
 
 async function fixture(
@@ -208,6 +212,41 @@ async function fixture(
   await db.workspace.create({
     data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true },
   });
+  // The conversation a person opened to drive this project, in the state a standing coordinator is
+  // in between turns: AWAITING_INPUT, which is one of `SessionsService.LIVE`, so a delivery to it
+  // APPENDS a turn instead of reviving anything. `dispatch_origin` is USER because that is what
+  // `ProjectsService.coordinator` writes — it is the column that tells this conversation apart
+  // from a judgment session, and every count of judgment sessions below depends on the difference.
+  const coordinatorSessionId = randomUUID();
+  await db.session.create({
+    data: {
+      id: coordinatorSessionId,
+      ownerId,
+      creatorId: ownerId,
+      workspaceId,
+      assignedRunnerId: runnerId,
+      title: `协调：${label}`,
+      prompt: `协调：${label}`,
+      provider: 'claude',
+      status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      titleManagedByProject: true,
+    },
+  });
+  // A conversation that has been running has its opening prompt on the row as a turn: the first
+  // thing `createTurn` does for a session with none is seed one (`ensurePromptSeeded`). Written
+  // here so that the state under test is a coordinator somebody has actually been talking to,
+  // and so that the delivery below is not the thing that seeds it.
+  await db.conversationTurn.create({
+    data: {
+      sessionId: coordinatorSessionId,
+      seq: 1,
+      clientTurnId: SessionsService.initialTurnClientId(coordinatorSessionId),
+      kind: 'message',
+      content: `协调：${label}`,
+      status: 'ANSWERED',
+    },
+  });
   await db.project.create({
     data: {
       id: projectId,
@@ -216,6 +255,7 @@ async function fixture(
       goal: '干完了但没落 main，也值得唤醒',
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: workspaceId,
+      coordinatorSessionId,
     },
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
@@ -226,7 +266,29 @@ async function fixture(
     projectId,
     completionCriterion: 'EVIDENCE_JUDGMENT',
   } as never);
-  return { ownerId, runnerId, workspaceId, projectId, choreTaskId: chore.id };
+  return {
+    ownerId, runnerId, workspaceId, projectId, choreTaskId: chore.id, coordinatorSessionId,
+  };
+}
+
+/**
+ * Every message this project's standing conversation has been SENT, oldest first.
+ *
+ * The seeded opening turn is excluded, exactly as `SessionsService`'s own queued-turn reader
+ * excludes it: it is the conversation's own prompt rather than something anybody told it, and
+ * counting it would make "was this coordinator told about the merge" answer yes for a conversation
+ * nobody has said a word to.
+ */
+function coordinatorMessages(db: PrismaClient, f: Fixture) {
+  return db.conversationTurn.findMany({
+    where: {
+      sessionId: f.coordinatorSessionId,
+      kind: 'message',
+      clientTurnId: { not: SessionsService.initialTurnClientId(f.coordinatorSessionId) },
+    },
+    select: { clientTurnId: true, content: true },
+    orderBy: { seq: 'asc' },
+  });
 }
 
 /** State the whole collection through the owner's own path, and read the stable keys back. */
@@ -450,10 +512,21 @@ async function endpointOf(
   const row = rows[0]!;
   const opened = await judgmentSessions(stack.db, f.ownerId);
   if (row.sessionId !== null) {
-    assert.ok(
-      opened.some((session) => session.id === row.sessionId),
-      'the ledger row names a session that is not one of this owner\'s judgment sessions',
+    // Which session a row may name depends on how it reached one, and the two are not
+    // interchangeable: a judged fact names the conversation opened FOR it, a delivered one names
+    // the conversation that was already there. A row naming the other one would satisfy every
+    // count below while meaning the opposite thing.
+    assert.equal(
+      row.status === 'DELIVERED' ? row.sessionId : null,
+      row.status === 'DELIVERED' ? f.coordinatorSessionId : null,
+      'a delivered fact names a session that is not this project\'s standing coordinator',
     );
+    if (row.status !== 'DELIVERED') {
+      assert.ok(
+        opened.some((session) => session.id === row.sessionId),
+        'the ledger row names a session that is not one of this owner\'s judgment sessions',
+      );
+    }
   }
   return {
     event: row.event,
@@ -481,21 +554,32 @@ test('finished work off main, finished work on main and stranded work end in thr
       assert.deepEqual(offEnd, {
         event: 'CRITERION_UNLANDED',
         subjectType: 'CRITERION',
-        status: 'SESSION_OPENED',
+        status: 'DELIVERED',
         consumerType: null,
         namesItsSession: true,
-        judgmentSessions: 1,
+        judgmentSessions: 0,
       });
+      // §2.2: the session it names is the one that was already there, and NO session was created.
+      // Both halves matter — a row naming the standing conversation while a judgment session was
+      // opened beside it would be two coordinators told about one merge.
+      assert.equal(
+        (await coordinatorMessages(stack.db, off)).length, 1,
+        'the standing coordinator was told about the merge exactly once',
+      );
 
-      // TWO facts about this one criterion reached the ledger, and exactly one session came of
+      // TWO facts about this one criterion reached the ledger, and exactly one message came of
       // them. That is §2.1 in the live path: readiness is recorded as it always was, the landing
-      // fact is what gets judged, and a merge that is owed once is not asked for twice.
+      // fact is what reaches a coordinator, and a merge that is owed once is not asked for twice.
       const offReady = await endpointOf(
         stack, off, 'CRITERION_READY', criterionSubjectId(off.projectId, offMain!.key),
       );
       assert.equal(offReady.status, 'CONSUMED');
       assert.equal(offReady.consumerType, CRITERION_READY_CONSUMER);
-      assert.equal(offReady.judgmentSessions, 1, 'the readiness fact opened a second session');
+      assert.equal(offReady.judgmentSessions, 0, 'the readiness fact opened a session');
+      assert.equal(
+        (await coordinatorMessages(stack.db, off)).length, 1,
+        'the readiness fact sent the standing coordinator a second message',
+      );
       await assertProjectNeverSettled(stack, off);
 
       // ── input 2: the same shape, and a receipt ────────────────────────────────────────────────
@@ -523,6 +607,10 @@ test('finished work off main, finished work on main and stranded work end in thr
         namesItsSession: false,
         judgmentSessions: 0,
       });
+      assert.deepEqual(
+        await coordinatorMessages(stack.db, on), [],
+        'a criterion already on main spent a turn of the standing coordinator\'s context',
+      );
       await assertProjectNeverSettled(stack, on);
 
       // ── input 3: nothing is going to deliver this criterion ───────────────────────────────────
@@ -543,6 +631,14 @@ test('finished work off main, finished work on main and stranded work end in thr
       assert.deepEqual(
         await unlandedWakes(stack.db, lost.projectId), [],
         'a criterion whose work FAILED is not a criterion whose finished work is off main',
+      );
+      // §2.2 is about the ONE fact that reports a landing. Work nothing will deliver still opens
+      // the judgment session it always did, in a project that has a standing conversation sitting
+      // right there — which is what makes the delivery a property of the fact and not of the
+      // project's wiring.
+      assert.deepEqual(
+        await coordinatorMessages(stack.db, lost), [],
+        'a stranded criterion was sent to the standing coordinator instead of judged',
       );
       await assertProjectNeverSettled(stack, lost);
 
@@ -592,9 +688,13 @@ test('the only thing that moves between waking somebody and recording it is wher
       const allowed = async () => ({ allowed: true as const });
 
       const first = await stack.disposition.openIfDecisive(fact as WakeFact, allowed);
-      assert.deepEqual(first, { outcome: 'OPENED' }, 'finished work off main woke nobody');
-      const opened = await judgmentSessions(stack.db, f.ownerId);
-      assert.equal(opened.length, 1);
+      assert.deepEqual(first, { outcome: 'DELIVERED' }, 'finished work off main woke nobody');
+      const said = await coordinatorMessages(stack.db, f);
+      assert.equal(said.length, 1);
+      assert.deepEqual(
+        await judgmentSessions(stack.db, f.ownerId), [],
+        'the delivery opened a judgment session as well as writing to the standing one',
+      );
 
       // The second delivery is what makes the third one readable. It is the SAME fact over the
       // SAME world, and the ledger's answer to that is ALREADY_AWAKE — so `null` is not what a
@@ -612,13 +712,14 @@ test('the only thing that moves between waking somebody and recording it is wher
       );
 
       assert.deepEqual(
-        await judgmentSessions(stack.db, f.ownerId), opened,
-        'the recorded answer opened a second session anyway',
+        await coordinatorMessages(stack.db, f), said,
+        'the recorded answer said it again anyway',
       );
+      assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
       const rows = await unlandedWakes(stack.db, f.projectId);
       assert.equal(rows.length, 1, 'three deliveries of one fact are one ledger row');
-      assert.equal(rows[0]!.status, 'SESSION_OPENED');
-      assert.equal(rows[0]!.sessionId, opened[0]!.id);
+      assert.equal(rows[0]!.status, 'DELIVERED');
+      assert.equal(rows[0]!.sessionId, f.coordinatorSessionId);
       await assertProjectNeverSettled(stack, f);
     } finally {
       await stack.db.$disconnect();
@@ -639,10 +740,10 @@ test('finished work off main under a switched-off coordinator is refused once an
 
       const control = await unlandedWakes(stack.db, on.projectId);
       assert.equal(control.length, 1, 'the control never reached the wake ledger');
-      assert.equal(control[0]!.status, 'SESSION_OPENED');
+      assert.equal(control[0]!.status, 'DELIVERED');
       assert.equal(
-        (await judgmentSessions(stack.db, on.ownerId)).length, 1,
-        'the control never opened a session, so the negative below proves nothing',
+        (await coordinatorMessages(stack.db, on)).length, 1,
+        'the control never reached a coordinator, so the negative below proves nothing',
       );
       await assertProjectNeverSettled(stack, on);
 
@@ -663,9 +764,14 @@ test('finished work off main under a switched-off coordinator is refused once an
       assert.equal(refused[0]!.sessionId, null);
       assert.equal(refused[0]!.consumerType, null);
       assert.notEqual(refused[0]!.status, 'SESSION_OPENED');
+      assert.notEqual(refused[0]!.status, 'DELIVERED');
       assert.deepEqual(
         await judgmentSessions(stack.db, off.ownerId), [],
         'a switched-off coordinator was woken about a merge',
+      );
+      assert.deepEqual(
+        await coordinatorMessages(stack.db, off), [],
+        'a switched-off project\'s standing conversation was written to anyway',
       );
 
       // The switch is not read by the door that delivers: the work finished exactly as it would
