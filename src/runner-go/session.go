@@ -639,7 +639,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Watches background-shell output files for live output and turns Claude's
 	// <task-notification> messages into durable completion events. Shared across respawns;
 	// all tails stop when this session run returns.
-	bg := newBgTailer(sessionCtx, emit)
+	// The pool is told about every shell tailed here: a background shell writes
+	// this session's checkout for as long as it runs, and a merge/commit/GC that
+	// only looked at the turn permit would rewrite the checkout under it.
+	bg := newBgTailer(sessionCtx, emit, pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
 	// Stage-0 stopgap: the pool's only notion of "this session is doing something" is
 	// the active turn permit, which a parked session with a live Bash(run_in_background)

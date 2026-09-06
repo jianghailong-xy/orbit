@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -104,6 +106,23 @@ type worktreeOperationState struct {
 	done    chan struct{}
 }
 
+// worktreeHolder is one reason a session's checkout is not free right now. The
+// set of them is what a destructive operation — merge, commit, GC — is fenced
+// against; the turn permit alone used to stand in for it, which made every
+// writer that outlives its turn invisible.
+type worktreeHolder struct {
+	kind string // one of the worktreeHeldBy* kinds
+	name string // what a refusal calls this holder
+}
+
+const (
+	worktreeHeldByEngine        = "engine"
+	worktreeHeldByBackgroundJob = "background job"
+	worktreeHeldByOperation     = "worktree operation"
+)
+
+func (h worktreeHolder) String() string { return h.kind + " " + h.name }
+
 // sessionPool owns both concurrency resources:
 //   - at most max active turn permits;
 //   - at most max resident engines (active + warm).
@@ -118,7 +137,11 @@ type sessionPool struct {
 	clock       poolClock
 	sessions    map[string]*liveSession
 	worktreeOps map[string]*worktreeOperationState
-	changed     chan struct{}
+	// bgJobs is sessionID → live background shell id → the name a refusal calls
+	// it. A shell is a writer of the checkout for exactly as long as it runs, and
+	// it routinely outlives the turn that launched it.
+	bgJobs  map[string]map[string]string
+	changed chan struct{}
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -134,6 +157,7 @@ func newSessionPoolWithClock(max int, clock poolClock) *sessionPool {
 		clock:       clock,
 		sessions:    map[string]*liveSession{},
 		worktreeOps: map[string]*worktreeOperationState{},
+		bgJobs:      map[string]map[string]string{},
 		changed:     make(chan struct{}),
 	}
 }
@@ -145,6 +169,138 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 		p.worktreeOps[id] = state
 	}
 	return state
+}
+
+// worktreeHoldersLocked enumerates everything that holds this session's
+// checkout: the resident engine, every live background job, and a manual
+// operation that has already linearized. Each kind is fenced by its own
+// mechanism — the engine by the fence itself, an operation by `running`, a
+// background job by worktreeWritersLocked below — so this set is the whole
+// answer to "may something rewrite this checkout right now".
+//
+// The engine counts only while it can actually write: a turn is running, or one
+// of its background shells is still alive. A parked engine with neither writes
+// nothing — being a warm process waiting for the next turn is its entire job —
+// and counting it anyway would fence every merge on a warm session for the four
+// hours of warmEngineTTL.
+func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
+	names := make([]string, 0, len(p.bgJobs[id]))
+	for _, name := range p.bgJobs[id] {
+		names = append(names, name)
+	}
+	sort.Strings(names) // a receipt reads the same twice
+	var holders []worktreeHolder
+	if s := p.sessions[id]; s != nil && s.resident && (s.active || len(names) > 0) {
+		holders = append(holders, worktreeHolder{kind: worktreeHeldByEngine, name: id})
+	}
+	for _, name := range names {
+		holders = append(holders, worktreeHolder{kind: worktreeHeldByBackgroundJob, name: name})
+	}
+	if state := p.worktreeOps[id]; state != nil && state.running {
+		holders = append(holders, worktreeHolder{kind: worktreeHeldByOperation, name: id})
+	}
+	return holders
+}
+
+// worktreeHolders answers "who holds this checkout" from outside the pool.
+func (p *sessionPool) worktreeHolders(id string) []worktreeHolder {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.worktreeHoldersLocked(id)
+}
+
+// worktreeWritersLocked reports whether a writer that no other mechanism already
+// fences is still working in this checkout. That is exactly the live background
+// jobs: the engine writes through them (see worktreeHoldersLocked), and a
+// linearized manual operation carries its own `running` flag and done barrier.
+func (p *sessionPool) worktreeWritersLocked(id string) bool {
+	return len(p.bgJobs[id]) > 0
+}
+
+// holdWorktreeForBackgroundJob records one background shell as a live writer of
+// the session's checkout, and raises the fence on its account. jobID is the
+// launching tool_use id; name is what a refusal will call it.
+func (p *sessionPool) holdWorktreeForBackgroundJob(sessionID, jobID, name string) {
+	if sessionID == "" || jobID == "" {
+		return
+	}
+	if name == "" {
+		name = jobID
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	jobs := p.bgJobs[sessionID]
+	if jobs == nil {
+		jobs = map[string]string{}
+		p.bgJobs[sessionID] = jobs
+	}
+	jobs[jobID] = name
+	// A shell launched mid-turn already sits behind that turn's fence. Raising it
+	// here is for the shell that starts, or survives, past the turn: park is about
+	// to hand the permit back, and the fence must not go down with it.
+	p.worktreeOpLocked(sessionID).fenced = true
+}
+
+// releaseWorktreeBackgroundJob retires one background shell's hold. The last
+// writer leaving is what lowers a fence park could not.
+func (p *sessionPool) releaseWorktreeBackgroundJob(sessionID, jobID string) {
+	if sessionID == "" || jobID == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	jobs := p.bgJobs[sessionID]
+	if _, held := jobs[jobID]; !held {
+		return
+	}
+	delete(jobs, jobID)
+	if len(jobs) == 0 {
+		delete(p.bgJobs, sessionID)
+	}
+	// An active turn keeps its own fence; only an idle checkout is handed back.
+	if s := p.sessions[sessionID]; s == nil || !s.active {
+		p.releaseWorktreeFenceLocked(sessionID, s)
+	}
+}
+
+// worktreeHoldsFor binds this registry to one session, so a component that knows
+// shells but not sessions can declare its writers.
+func (p *sessionPool) worktreeHoldsFor(sessionID string) worktreeHoldRegistry {
+	return sessionWorktreeHolds{pool: p, sessionID: sessionID}
+}
+
+type sessionWorktreeHolds struct {
+	pool      *sessionPool
+	sessionID string
+}
+
+func (h sessionWorktreeHolds) holdWorktree(jobID, name string) {
+	h.pool.holdWorktreeForBackgroundJob(h.sessionID, jobID, name)
+}
+
+func (h sessionWorktreeHolds) releaseWorktree(jobID string) {
+	h.pool.releaseWorktreeBackgroundJob(h.sessionID, jobID)
+}
+
+// worktreeOperationRefusal is the sentence a refused destructive operation sends
+// back to the control plane in place of doing the work. It is read immediately
+// after the refusal, in the same goroutine: a holder that ended in between only
+// downgrades the message to the supersession wording — it can never turn a
+// refusal into a pass, because beginHeartbeatWorktreeOperation already decided.
+func (p *sessionPool) worktreeOperationRefusal(id, operation string) string {
+	p.mu.Lock()
+	holders := p.worktreeHoldersLocked(id)
+	p.mu.Unlock()
+	if len(holders) == 0 {
+		// Nothing holds it: the server claimed this exact epoch before returning
+		// the heartbeat, which is a different fact and reads differently.
+		return operation + " was superseded before local execution"
+	}
+	names := make([]string, 0, len(holders))
+	for _, h := range holders {
+		names = append(names, h.String())
+	}
+	return operation + " was refused: this checkout is still held by " + strings.Join(names, ", ")
 }
 
 func (p *sessionPool) fenceWorktreeOperationLocked(id string) <-chan struct{} {
@@ -171,6 +327,12 @@ func (p *sessionPool) releaseWorktreeFenceLocked(id string, expected *liveSessio
 	}
 	state := p.worktreeOps[id]
 	if state == nil {
+		return
+	}
+	// The permit is not the holder. A background shell outlives the turn that
+	// launched it, so the fence comes down when the last writer leaves — not when
+	// the turn ends.
+	if p.worktreeWritersLocked(id) {
 		return
 	}
 	state.fenced = false
@@ -201,11 +363,17 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 		p.mu.Unlock()
 		return nil, false
 	}
-	state := p.worktreeOpLocked(id)
-	if state.fenced || state.running {
+	if state := p.worktreeOps[id]; state != nil && (state.fenced || state.running) {
 		p.mu.Unlock()
 		return nil, false
 	}
+	// Belt to the fence's braces: a writer that appeared without anything having
+	// re-raised the fence still owns the checkout this operation would rewrite.
+	if p.worktreeWritersLocked(id) {
+		p.mu.Unlock()
+		return nil, false
+	}
+	state := p.worktreeOpLocked(id)
 	state.running = true
 	state.done = make(chan struct{})
 	p.mu.Unlock()
@@ -868,6 +1036,12 @@ func (p *sessionPool) ids() map[string]bool {
 	defer p.mu.Unlock()
 	ids := make(map[string]bool, len(p.sessions))
 	for id := range p.sessions {
+		ids[id] = true
+	}
+	// GC is the third destructive operation, and the bluntest: it deletes the
+	// directory. A checkout with a live writer is never a candidate, supervisor
+	// or no supervisor.
+	for id := range p.bgJobs {
 		ids[id] = true
 	}
 	return ids

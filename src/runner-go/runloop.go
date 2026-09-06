@@ -902,13 +902,15 @@ func runLoop(cfg *RunnerConfig) bool {
 							false,
 						)
 						if !admitted {
-							// The server already claimed this exact epoch before returning
-							// the heartbeat. Close it explicitly; a silent drop would leave
-							// Resume permanently blocked on its operation owner.
-							res = mergeOutcome{
-								Status:  "error",
-								Message: "merge was superseded before local execution",
-							}
+							// Either the server already claimed this exact epoch before
+							// returning the heartbeat, or something is still writing the
+							// checkout. Close it explicitly, naming which: a silent drop
+							// would leave Resume permanently blocked on its operation owner,
+							// and a refusal that names the wrong reason reads as a
+							// control-plane race rather than as "wait for the writer".
+							reason := pool.worktreeOperationRefusal(req.SessionID, "merge")
+							logln("not merging", req.SessionID+":", reason)
+							res = mergeOutcome{Status: "error", Message: reason}
 						} else {
 							res = mergeToMain(req)
 							// Record where this session's work went before opening the gate.
@@ -986,10 +988,9 @@ func runLoop(cfg *RunnerConfig) bool {
 							true,
 						)
 						if !admitted {
-							res = commitOutcome{
-								Status:  "error",
-								Message: "commit was superseded before local execution",
-							}
+							reason := pool.worktreeOperationRefusal(req.SessionID, "commit")
+							logln("not committing", req.SessionID+":", reason)
+							res = commitOutcome{Status: "error", Message: reason}
 						} else {
 							res = commitWorktree(req)
 							release()

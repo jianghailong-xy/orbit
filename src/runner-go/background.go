@@ -48,10 +48,20 @@ const (
 	transcriptRelevantLineCap = 1024 * 1024
 )
 
+// worktreeHoldRegistry is where something that starts a long-lived writer
+// declares it, so a destructive worktree operation can see it. A background
+// shell holds the checkout for as long as it runs, which is routinely past the
+// end of the turn that launched it.
+type worktreeHoldRegistry interface {
+	holdWorktree(jobID, name string)
+	releaseWorktree(jobID string)
+}
+
 type bgTailer struct {
 	ctx    context.Context    // session lifetime; all tails + the transcript watcher stop when cancelled
 	cancel context.CancelFunc // cancels ctx (invoked by stopAll on session teardown)
 	emit   emitFn
+	holds  worktreeHoldRegistry // nil only where no checkout is at stake (parsing tests)
 	mu     sync.Mutex
 	wg     sync.WaitGroup
 	// stopping is protected by mu and closes the WaitGroup registration gate.
@@ -71,7 +81,7 @@ type liveShell struct {
 	engineOwned bool
 }
 
-func newBgTailer(ctx context.Context, emit emitFn) *bgTailer {
+func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *bgTailer {
 	// Own a cancellable child so stopAll reliably ends the watcher goroutine even when the
 	// parent context outlives a normally-ended session run.
 	ctx, cancel := context.WithCancel(ctx)
@@ -79,9 +89,25 @@ func newBgTailer(ctx context.Context, emit emitFn) *bgTailer {
 		ctx:      ctx,
 		cancel:   cancel,
 		emit:     emit,
+		holds:    holds,
 		live:     map[string]liveShell{},
 		seen:     map[string]bool{},
 		terminal: map[string]bool{},
+	}
+}
+
+// holdFor / releaseHold declare this tailer's shells to whoever fences the
+// checkout. Both are called under b.mu, alongside the b.live edit they describe,
+// so the registry never disagrees with what is actually running.
+func (b *bgTailer) holdFor(toolUseID, shellID string) {
+	if b.holds != nil {
+		b.holds.holdWorktree(toolUseID, shellID)
+	}
+}
+
+func (b *bgTailer) releaseHold(toolUseID string) {
+	if b.holds != nil {
+		b.holds.releaseWorktree(toolUseID)
 	}
 }
 
@@ -144,6 +170,7 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string, engineOwned bool) 
 	}
 	ctx, cancel := context.WithCancel(b.ctx)
 	b.live[toolUseID] = liveShell{cancel: cancel, shellID: shellID, engineOwned: engineOwned}
+	b.holdFor(toolUseID, shellID)
 	b.wg.Add(1)
 	b.mu.Unlock()
 	go func() {
@@ -265,6 +292,7 @@ func (b *bgTailer) stop(toolUseID string) {
 	if s, ok := b.live[toolUseID]; ok {
 		s.cancel()
 		delete(b.live, toolUseID)
+		b.releaseHold(toolUseID)
 	}
 }
 
@@ -301,6 +329,7 @@ func (b *bgTailer) killEngineShells() {
 		}
 		s.cancel()
 		delete(b.live, id)
+		b.releaseHold(id)
 		killed = append(killed, killedShell{toolUseID: id, shellID: s.shellID})
 	}
 	b.mu.Unlock()
@@ -326,6 +355,7 @@ func (b *bgTailer) stopAll() {
 	for id, s := range b.live {
 		s.cancel()
 		delete(b.live, id)
+		b.releaseHold(id)
 	}
 	b.mu.Unlock()
 	if b.cancel != nil {

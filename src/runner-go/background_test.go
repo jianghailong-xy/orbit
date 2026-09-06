@@ -45,7 +45,7 @@ func bgCollector() (emitFn, *[]string) {
 
 func TestScanTranscriptEmitsAndDedupes(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	content := jsonlLine(t, taskNotif("bok", "toolu_A", "completed")) +
 		jsonlLine(t, taskNotif("bei", "toolu_B", "running")) +
@@ -67,7 +67,7 @@ func TestScanTranscriptEmitsAndDedupes(t *testing.T) {
 
 func TestScanTranscriptIncremental(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	if err := os.WriteFile(path, []byte(jsonlLine(t, taskNotif("a", "toolu_A", "completed"))), 0o644); err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestScanTranscriptIncremental(t *testing.T) {
 // tail must produce exactly one event.
 func TestNotificationDedupeAcrossSources(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	n := taskNotif("bok", "toolu_A", "completed")
 
 	bgTaskFromNotification(n, emit, bg) // stdout path
@@ -111,7 +111,7 @@ func TestNotificationDedupeAcrossSources(t *testing.T) {
 // A partial trailing line (mid-write, no newline yet) must not be consumed until it completes.
 func TestScanTranscriptPartialLine(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	full := jsonlLine(t, taskNotif("a", "toolu_A", "completed")) // trailing '\n'
 
@@ -133,7 +133,7 @@ func TestScanTranscriptPartialLine(t *testing.T) {
 
 func TestScanTranscriptBoundsHugeIrrelevantLinesAndContinues(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	huge := strings.Repeat("x", transcriptRelevantLineCap+transcriptReadBuffer) + "\n"
 	content := huge + jsonlLine(t, taskNotif("a", "toolu_A", "completed"))
@@ -167,7 +167,7 @@ func TestReadCappedReturnsOnlyTheFileTail(t *testing.T) {
 // the rest of the session. Runner-owned `!`-shells outlive the engine and are left alone.
 func TestKillEngineShellsReportsOnlyEngineOwnedShells(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	defer bg.stopAll()
 	dir := t.TempDir()
 	bg.startTail("toolu_A", "bei1", filepath.Join(dir, "bei1.output"), true)
@@ -187,7 +187,7 @@ func TestKillEngineShellsReportsOnlyEngineOwnedShells(t *testing.T) {
 // (the transcript tail re-reads the whole file) must not report the same shell twice.
 func TestLateNotificationDoesNotRelitigateAKilledShell(t *testing.T) {
 	emit, got := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	defer bg.stopAll()
 	bg.startTail("toolu_A", "bei1", filepath.Join(t.TempDir(), "bei1.output"), true)
 
@@ -202,7 +202,7 @@ func TestLateNotificationDoesNotRelitigateAKilledShell(t *testing.T) {
 // watchJSONL must return once the session run ends (stopAll), not leak a goroutine.
 func TestWatchJSONLStopsOnStopAll(t *testing.T) {
 	emit, _ := bgCollector()
-	bg := newBgTailer(context.Background(), emit)
+	bg := newBgTailer(context.Background(), emit, nil)
 	bg.startTranscriptWatcher("no-such-session-uuid")
 	bg.stopAll()
 }
