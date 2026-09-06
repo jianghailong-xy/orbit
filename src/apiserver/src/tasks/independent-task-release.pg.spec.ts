@@ -299,6 +299,19 @@ test("the release does not exceed the project's concurrency budget",
       const finished = await seedTask(s.db, ids, projectId, 'finished', {
         status: TaskStatus.DONE,
       });
+      // The shape production actually hands this pass: the run that derived DONE is parked at
+      // AWAITING_INPUT — live, resumable, and still pointing at the task it finished. A budget
+      // that counted it would be full of finished work, and this project's whole point would stop
+      // working after `max_concurrent_tasks` completions.
+      await s.db.session.create({
+        data: {
+          id: randomUUID(), ownerId: ids.ownerId, creatorId: ids.ownerId, taskId: finished,
+          workspaceId: ids.agentId, assignedRunnerId: ids.runnerId,
+          title: 'the run that finished it', prompt: 'do the work', provider: 'claude',
+          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true,
+        },
+      });
       // Two ready tasks and one slot. The older one goes first, which is what makes the assertions
       // below a controlled comparison rather than a coin toss.
       const older = await seedTask(s.db, ids, projectId, 'older', {
@@ -309,7 +322,8 @@ test("the release does not exceed the project's concurrency budget",
       });
 
       await completionEdge(s, ids.ownerId, finished);
-      assert.equal(await sessionCount(s.db, older), 1, 'the one free slot went unused');
+      assert.equal(await sessionCount(s.db, older), 1,
+        'the one free slot went unused — a settled task\'s parked run was counted as occupying it');
       assert.equal(await sessionCount(s.db, newer), 0,
         'both tasks started on a project whose budget is one — the cap was bypassed');
 

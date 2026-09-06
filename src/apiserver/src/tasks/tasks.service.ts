@@ -8253,10 +8253,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // permission and the budget are read off the same row and a second round trip would let them
       // be answered at two different instants. A Project whose coordinator is off returns no row at
       // all, which is the difference between "no room" and "not mine to fill".
+      //
+      // A slot is held by work that is still OUTSTANDING, which is why the count skips the settled
+      // tasks rather than every task with a live session. A task's run does not end when the task
+      // does: `statusAfterTurnCompleted` parks the session that just derived DONE at
+      // AWAITING_INPUT, which is live and resumable — so counting it would have this pass find the
+      // budget filled by the very completion that woke it, and a Project would stop releasing
+      // anything for good once it had finished `max_concurrent_tasks` tasks.
       const [room] = await this.prisma.$queryRaw<Array<{ free: number }>>(Prisma.sql`
         SELECT p.max_concurrent_tasks - (
                  SELECT count(*)::int FROM task o
                   WHERE o.project_id = p.id
+                    AND o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
                     AND EXISTS (
                       SELECT 1 FROM session s
                        WHERE s.task_id = o.id
