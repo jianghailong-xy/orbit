@@ -229,6 +229,13 @@ const WIRED: readonly WiredWakeFact[] = [
         spec: 'tasks/task-coordinator-session-delivery.pg.spec.ts',
         test: 'a switched-off coordinator is refused once, told nothing, and opened nothing',
       },
+      // A fourth, over the guardrail half: this fact's authorizer ends at the convergence ledger,
+      // so "the switch stopped it" gained one more claim — that no convergence pass was charged
+      // and no blocker was raised for a person. Its paired positive is in the same case.
+      {
+        spec: 'tasks/task-unlanded-merge-guardrails.pg.spec.ts',
+        test: 'a switched-off coordinator charges no budget, raises no blocker, and leaves one refusal',
+      },
     ],
   },
 ];
